@@ -31,12 +31,18 @@ public sealed class ProjectIdsRepairCommands
     public const string TemplateFileName = "project-id-map.template.json";
 
     /// <summary>
-    ///     P3 status note on the converged/pinned-only verdicts. The durable alias map plus the
-    ///     refuse/fold-through write gate landed in packages D+E and package G proved them
-    ///     end-to-end, so the loop claims "P3 armed" — backed by the persisted map and the
-    ///     post-fix probe, never by aspiration.
+    ///     The D6 (iv) P3 clause, read off the bank the census just scanned rather than asserted:
+    ///     the durable alias map is what the choke points enforce, so an empty map means no id
+    ///     folds through and none is refused — "armed" would be a claim nothing backs. The counts
+    ///     are the evidence: they match the rows in <c>project_id_aliases</c>.
     /// </summary>
-    public const string P3ArmedNote = "P3 armed";
+    public static string P3Note(ProjectIdCensusReport report)
+    {
+        Guard.IsNotNull(report);
+        return report.P3Armed
+            ? $"P3 armed ({report.DurableAliasCount} alias, {report.DurableDroppedCount} dropped)"
+            : "P3 inert (durable alias map empty — no id folds through, none is refused)";
+    }
 
     private readonly IRepairStore _repair;
 
@@ -219,7 +225,7 @@ public sealed class ProjectIdsRepairCommands
                 }
                 else
                 {
-                    await WriteSettledSummaryAsync(plan, streams);
+                    await WriteSettledSummaryAsync(plan, report, streams);
                 }
 
                 return 0;
@@ -229,7 +235,7 @@ public sealed class ProjectIdsRepairCommands
             return 0;
         }
 
-        await WriteSettledSummaryAsync(plan, streams);
+        await WriteSettledSummaryAsync(plan, report, streams);
         return 0;
     }
 
@@ -277,7 +283,7 @@ public sealed class ProjectIdsRepairCommands
             var actionable = ActionableCount(plan);
             if (actionable == 0)
             {
-                await WriteSettledSummaryAsync(plan, streams);
+                await WriteSettledSummaryAsync(plan, report, streams);
                 return;
             }
 
@@ -354,7 +360,8 @@ public sealed class ProjectIdsRepairCommands
     ///     one D6-vocabulary grammar, always the last line: converged | pinned-only | repair needed |
     ///     attention needed, each with explicit zero-inclusive counts (F2 supersedes the 1.40.2 strings).
     /// </summary>
-    private static async Task WriteSettledSummaryAsync(ProjectIdsFoldPlan plan, StandardStreams streams)
+    private static async Task WriteSettledSummaryAsync(ProjectIdsFoldPlan plan, ProjectIdCensusReport report,
+        StandardStreams streams)
     {
         var actionable = ActionableCount(plan);
         if (actionable > 0)
@@ -378,12 +385,12 @@ public sealed class ProjectIdsRepairCommands
         if (plan.Pinned.Count > 0)
         {
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: summary — pinned-only: {CountsLine(plan)}, {P3ArmedNote}.");
+                $"project-ids repair: summary — pinned-only: {CountsLine(plan)}, {P3Note(report)}.");
             return;
         }
 
         await streams.WriteOutputLineAsync(
-            $"project-ids repair: summary — converged: {CountsLine(plan)}, {P3ArmedNote}.");
+            $"project-ids repair: summary — converged: {CountsLine(plan)}, {P3Note(report)}.");
     }
 
     /// <summary>D6 counts fragment shared by every closing line: explicit zeros, inline pin list.</summary>

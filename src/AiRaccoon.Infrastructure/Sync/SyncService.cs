@@ -81,18 +81,6 @@ public partial class SyncService(
     /// <summary>SQL string-literal escape for fold arms: the table is compile-time constants today, but an unescaped quote would break the merge or worse.</summary>
     internal static string EscapeSqlString(string value) => value.Replace("'", "''");
 
-    /// <summary>
-    ///     Local-bank fold CASE over an explicit map (Package E2 push symmetry): alias arms only —
-    ///     canonical self-arms would be identity rewrites. The caller skips the UPDATE entirely when
-    ///     the map is empty, so a mapless snapshot carries exactly what the bank holds.
-    /// </summary>
-    internal static string FoldLocalProjectId(string column, ProjectIdAliasMap map)
-    {
-        var arms = map.Aliases
-            .Select(entry => $"WHEN '{EscapeSqlString(entry.Alias)}' THEN '{EscapeSqlString(entry.Canonical)}'");
-        return $"CASE {column} {string.Join(" ", arms)} ELSE {column} END";
-    }
-
     private static async Task<bool> AliasTableExistsAsync(SqliteConnection conn, string schema,
         CancellationToken cancellationToken)
     {
@@ -408,16 +396,24 @@ public partial class SyncService(
                     await AliasTableExistsAsync(conn, "remote", cancellationToken).ConfigureAwait(false))
                 {
                     await ThrowOnAliasConflictAsync(conn, cancellationToken).ConfigureAwait(false);
+                    int mergedAliases;
                     await using (var mergeAliases = conn.CreateCommand())
                     {
                         mergeAliases.CommandText = """
                             INSERT OR IGNORE INTO project_id_aliases (alias, winner, kind, applied_at)
                             SELECT alias, winner, kind, applied_at FROM remote.project_id_aliases
                             """;
-                        await mergeAliases.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        mergedAliases = await mergeAliases.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                     }
 
-                    await ProjectIdAliases.LoadAndCacheAsync(conn, logger, cancellationToken).ConfigureAwait(false);
+                    // Reload on map CHANGE, not on every pull: the cache is process-wide, so a
+                    // no-op merge that replaced it anyway would stomp a map another caller had
+                    // just installed — and most pulls merge nothing (INSERT OR IGNORE against a
+                    // remote that carries the same rows, or none).
+                    if (mergedAliases > 0)
+                    {
+                        await ProjectIdAliases.LoadAndCacheAsync(conn, logger, cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 // Merge entries: content-addressed near-union (skip duplicates). OR IGNORE also
@@ -430,13 +426,16 @@ public partial class SyncService(
                 await using (var mergeEntries = conn.CreateCommand())
                 {
                     var foldedRemoteProject = FoldRemoteProjectId("r.project_id", ResolveAliasMap());
-                    // d-426 SHOULD-4: the pull fold matches the repair's domain (project-scope rows
-                    // only) — custom/shared rows merge verbatim, exactly as the repair leaves them.
+                    // The pull fold matches the repair's executable domain — committed rows,
+                    // project + custom, any label (D1 broadened it past d-426 SHOULD-4's
+                    // project-scope-only shape). A narrower pull fold re-seeds loser-keyed custom
+                    // rows on every pull from an unrepaired peer, so a repaired bank could never
+                    // stay converged (D6 iii). Shared rows are cross-project and never fold.
                     // The tombstone-suppression check below stays folded: identity compares in
                     // fold-space while storage stays verbatim, so a winner-keyed tombstone still
                     // suppresses the content it describes.
                     var scopedFold =
-                        $"CASE WHEN {ProjectRows.ScopeIsProject("r.")} THEN {foldedRemoteProject} ELSE r.project_id END";
+                        $"CASE WHEN {ProjectRows.Scope("r.")} THEN {foldedRemoteProject} ELSE r.project_id END";
                     mergeEntries.CommandText = $"""
                                                INSERT OR IGNORE INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                                                workspace_id, agent_id, created_at, updated_at,
@@ -675,9 +674,18 @@ public partial class SyncService(
     /// <summary>
     ///     Package E2 push symmetry: an unrepaired replica's loser-keyed entries and tombstones
     ///     land canonical in the uploaded snapshot — the same fold the pull applies on receipt, so
-    ///     both directions converge without a repair on the pushing side. Empty map: no CASE, no
-    ///     UPDATE, the snapshot carries exactly what the bank holds. Dropped-keyed rows stay verbatim
+    ///     both directions converge without a repair on the pushing side. Empty map: no rewrite at
+    ///     all, the snapshot carries exactly what the bank holds. Dropped-keyed rows stay verbatim
     ///     here; the receiving pull's tombstone suppression removes what the repair deleted.
+    ///     <para>
+    ///         Domain and dedup both mirror <c>ProjectIdsRepair</c>, because a snapshot is a bank:
+    ///         only committed rows fold (<see cref="ProjectRows.Scope" /> — shared rows are
+    ///         cross-project and folding them would steal content off-machine), and a loser row
+    ///         whose winner twin already sits in the same bucket is dropped rather than renamed
+    ///         onto it. A bare rename would hit <c>uq_entries_committed_bucket</c> (or the
+    ///         <c>sync_tombstones</c> primary key) and abort the whole push — the ordinary shape
+    ///         once this bank has pulled a repaired peer's winner-keyed rows.
+    ///     </para>
     /// </summary>
     private async Task FoldSnapshotProjectIdsAsync(SqliteConnection snap, CancellationToken cancellationToken)
     {
@@ -687,22 +695,110 @@ public partial class SyncService(
             return;
         }
 
-        var fold = FoldLocalProjectId("project_id", map);
-        var losers = string.Join(", ", map.Aliases.Select(entry => $"'{EscapeSqlString(entry.Alias)}'"));
-        foreach (var table in new[] { "entries", "sync_tombstones" })
+        var hasEntries = await SnapshotTableExistsAsync(snap, "entries", cancellationToken).ConfigureAwait(false);
+        var hasTombstones =
+            await SnapshotTableExistsAsync(snap, "sync_tombstones", cancellationToken).ConfigureAwait(false);
+        // One alias at a time, in map order: two losers folding to the same winner collide with
+        // each other exactly as they collide with a pre-existing winner row, and the second pass
+        // sees the first one's result.
+        foreach (var entry in map.Aliases)
         {
-            await using var exists = snap.CreateCommand();
-            exists.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @table";
-            exists.Parameters.AddWithValue("@table", table);
-            if ((long)(await exists.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))! == 0)
+            if (hasEntries)
             {
-                continue;
+                await FoldSnapshotEntriesAsync(snap, entry, cancellationToken).ConfigureAwait(false);
             }
 
-            await using var foldIds = snap.CreateCommand();
-            foldIds.CommandText = $"UPDATE {table} SET project_id = {fold} WHERE project_id IN ({losers})";
-            await foldIds.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            if (hasTombstones)
+            {
+                await FoldSnapshotTombstonesAsync(snap, entry, cancellationToken).ConfigureAwait(false);
+            }
         }
+    }
+
+    private static async Task<bool> SnapshotTableExistsAsync(SqliteConnection snap, string table,
+        CancellationToken cancellationToken)
+    {
+        await using var exists = snap.CreateCommand();
+        exists.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @table";
+        exists.Parameters.AddWithValue("@table", table);
+        return (long)(await exists.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))! > 0;
+    }
+
+    /// <summary>
+    ///     Drops loser rows the winner already holds in the same committed bucket
+    ///     (<c>uq_entries_committed_bucket</c>'s exact key), then renames what is left — the
+    ///     dedup-then-move the repair's own <c>FoldEntriesAsync</c> performs, and no tombstone for
+    ///     a dedup collapse (the content survives under the winner).
+    /// </summary>
+    private static async Task FoldSnapshotEntriesAsync(SqliteConnection snap, ProjectIdAliasEntry entry,
+        CancellationToken cancellationToken)
+    {
+        await using (var dedup = snap.CreateCommand())
+        {
+            dedup.CommandText = $"""
+                DELETE FROM entries
+                WHERE {ProjectRows.CommittedScope("", "loser")}
+                  AND EXISTS (
+                      SELECT 1 FROM entries w
+                      WHERE {ProjectRows.CommittedScope("w.", "winner")}
+                        AND w.path = entries.path AND w.hash = entries.hash AND w.scope = entries.scope
+                        AND COALESCE(w.context_label, '') = COALESCE(entries.context_label, ''))
+                """;
+            dedup.Parameters.AddWithValue("@loser", entry.Alias);
+            dedup.Parameters.AddWithValue("@winner", entry.Canonical);
+            await dedup.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var move = snap.CreateCommand();
+        move.CommandText = $"UPDATE entries SET project_id = @winner WHERE {ProjectRows.CommittedScope("", "loser")}";
+        move.Parameters.AddWithValue("@loser", entry.Alias);
+        move.Parameters.AddWithValue("@winner", entry.Canonical);
+        await move.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     The tombstone half, mirroring the repair's <c>FoldTombstonesAsync</c>: the surviving
+    ///     winner row keeps the later <c>deleted_at</c> of the pair, the collapsed loser row is
+    ///     deleted, and the rest rename onto the winner.
+    /// </summary>
+    private static async Task FoldSnapshotTombstonesAsync(SqliteConnection snap, ProjectIdAliasEntry entry,
+        CancellationToken cancellationToken)
+    {
+        await using (var merge = snap.CreateCommand())
+        {
+            merge.CommandText = """
+                UPDATE sync_tombstones AS w
+                SET deleted_at = MAX(w.deleted_at, (SELECT l.deleted_at FROM sync_tombstones l
+                                                    WHERE l.project_id = @loser
+                                                      AND l.hash = w.hash AND l.scope = w.scope))
+                WHERE w.project_id = @winner
+                  AND EXISTS (SELECT 1 FROM sync_tombstones l
+                              WHERE l.project_id = @loser AND l.hash = w.hash AND l.scope = w.scope)
+                """;
+            merge.Parameters.AddWithValue("@loser", entry.Alias);
+            merge.Parameters.AddWithValue("@winner", entry.Canonical);
+            await merge.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var dedup = snap.CreateCommand())
+        {
+            dedup.CommandText = """
+                DELETE FROM sync_tombstones
+                WHERE project_id = @loser
+                  AND EXISTS (SELECT 1 FROM sync_tombstones w
+                              WHERE w.project_id = @winner
+                                AND w.hash = sync_tombstones.hash AND w.scope = sync_tombstones.scope)
+                """;
+            dedup.Parameters.AddWithValue("@loser", entry.Alias);
+            dedup.Parameters.AddWithValue("@winner", entry.Canonical);
+            await dedup.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var move = snap.CreateCommand();
+        move.CommandText = "UPDATE sync_tombstones SET project_id = @winner WHERE project_id = @loser";
+        move.Parameters.AddWithValue("@loser", entry.Alias);
+        move.Parameters.AddWithValue("@winner", entry.Canonical);
+        await move.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Runs PRAGMA quick_check against a snapshot file and throws SyncCorruptFileException when the result is not "ok". Every path that pushes a snapshot must call this.</summary>

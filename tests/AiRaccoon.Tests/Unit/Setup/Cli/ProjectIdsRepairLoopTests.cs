@@ -43,7 +43,7 @@ public sealed class ProjectIdsRepairLoopTests
         stdout.ShouldContain("moved");
         LastNonEmptyLine(stdout).ShouldBe(
             "project-ids repair: summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, " +
-            ProjectIdsRepairCommands.P3ArmedNote + ".");
+            P3Armed + ".");
     }
 
     /// <summary>
@@ -91,7 +91,7 @@ public sealed class ProjectIdsRepairLoopTests
         LastNonEmptyLine(stdout).ShouldBe(
             "project-ids repair: summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, " +
             "2 pinned (pinned-shared-only: 'a', pinned-telemetry-only: 't'), " +
-            ProjectIdsRepairCommands.P3ArmedNote + ".");
+            P3Armed + ".");
     }
 
     /// <summary>
@@ -190,10 +190,21 @@ public sealed class ProjectIdsRepairLoopTests
     ///     A census row owning project-scope entries under the test map's aliases: the alias
     ///     target 'w' is canonical (needs nothing), every other id folds to it.
     /// </summary>
+    /// <summary>
+    ///     The durable map an applied bank holds under the test map ('a' and 'b' fold to 'w'):
+    ///     every fake census carries it, so the D6 (iv) clause reads real rows instead of a
+    ///     constant — the same two aliases <see cref="TempScope" /> writes to disk.
+    /// </summary>
+    private static readonly ProjectIdAliasEntry[] DurableAliases =
+        [new ProjectIdAliasEntry("a", "w"), new ProjectIdAliasEntry("b", "w")];
+
+    /// <summary>The P3 clause those two alias rows produce, spelled out where the verdicts assert it.</summary>
+    private const string P3Armed = "P3 armed (2 alias, 0 dropped)";
+
     private static ProjectIdCensusReport Report(params (string Id, long Entries)[] rows) => new(
         rows.Select(entry => new ProjectIdCensusRow(
             entry.Id, false, null, entry.Entries, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])).ToList(),
-        0, 0, 0, 0, []);
+        0, 0, 0, 0, [], DurableAliases, []);
 
     /// <summary>
     ///     Pinned-only under the test map: 'w' canonical, 'a' shared-only, 't' telemetry-only —
@@ -204,7 +215,7 @@ public sealed class ProjectIdsRepairLoopTests
         new ProjectIdCensusRow("w", false, null, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, []),
         new ProjectIdCensusRow("a", false, null, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, []),
         new ProjectIdCensusRow("t", false, null, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, [])
-    ], 0, 0, 0, 0, []);
+    ], 0, 0, 0, 0, [], DurableAliases, []);
 
     private static string LastNonEmptyLine(string stdout) =>
         stdout.Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0).Last();

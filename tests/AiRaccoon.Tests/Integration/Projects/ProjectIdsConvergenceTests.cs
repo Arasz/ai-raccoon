@@ -139,10 +139,13 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
         live.Drains.ShouldBe(2, "each committed request applies the job AND drains, like the maintenance poll would");
 
         // The closing D6 line, asserted last: every RED mutation below funnels here when its
-        // own assert does not fire first, so this stays the funnel, never the only check.
+        // own assert does not fire first, so this stays the funnel, never the only check. The P3
+        // clause carries the durable map's own row counts — the fixture map's two aliases and one
+        // dropped id, read back off project_id_aliases — so "armed" names what is armed.
         LastNonEmptyLine(stdout).ShouldBe(
             "project-ids repair: summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, " +
-            "2 pinned (pinned-telemetry-only: 'g-metrics', pinned-shared-only: 'g-shared'), P3 armed.");
+            "2 pinned (pinned-telemetry-only: 'g-metrics', pinned-shared-only: 'g-shared'), " +
+            "P3 armed (2 alias, 1 dropped).");
     }
 
     /// <summary>

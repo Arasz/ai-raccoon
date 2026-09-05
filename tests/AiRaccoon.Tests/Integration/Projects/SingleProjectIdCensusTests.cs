@@ -35,6 +35,9 @@ namespace AiRaccoon.Tests.Integration.Projects;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+// Running the real job reloads the process-wide alias cache (Package E1's job leg), so this class
+// serializes with every other Default reader and puts the cache back on the way out.
+[Collection(AiRaccoon.Tests.Unit.Projects.ProjectIdAliasDefaultCollection.Name)]
 public sealed class SingleProjectIdCensusTests : IDisposable
 {
     private const string Winner = "jsaa";
@@ -57,7 +60,11 @@ public sealed class SingleProjectIdCensusTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
     }
 
-    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
+    public void Dispose()
+    {
+        ProjectIdAliasMap.ResetDefault();
+        TestData.DeleteTempRoot(_dataRoot);
+    }
 
     public static TheoryData<string, string[]> PopulatedClusters() => new()
     {
