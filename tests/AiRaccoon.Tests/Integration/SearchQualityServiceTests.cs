@@ -493,8 +493,8 @@ public sealed class SearchQualityServiceTests : IDisposable
             "P4 is codec-only — follow_through_files carries ranks as JSON, no column may be added " +
             "by rank work. result_features is the separate Stage-1 evidence column (M1 tolerant-ensure); " +
             "this test still pins that rank work adds nothing further.");
-        (await connection.ExecuteScalarAsync<long>("PRAGMA user_version")).ShouldBe(12,
-            "P4 owns no ladder rung — P3's v12 is current");
+        (await connection.ExecuteScalarAsync<long>("PRAGMA user_version")).ShouldBe(MemorySchema.CurrentVersion,
+            "P4 owns no ladder rung — v13 is current (ADR-0099)");
     }
 
     private async Task<string?> ReadFollowThroughFilesAsync(string correlationId)

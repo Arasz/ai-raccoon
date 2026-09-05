@@ -127,6 +127,63 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
     }
 
     /// <summary>
+    ///     ADR-0099: a request row with a null map behaves as the empty map — entries and drops
+    ///     stay put, but the content-free registry retire still fires (the only mutation an empty
+    ///     map can schedule) and the run still stamps the finished marker (an --apply without
+    ///     --map on a clean bank is a legal no-op, never a crash).
+    /// </summary>
+    [RetryFact]
+    public async Task RequestedRun_WithNullMapJson_PlansEmptyButStampsFinished()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var retiredGuid = "01a03024-0000-7000-8000-000000000099";
+        await using var connection = await _factory.OpenBankAsync(ct);
+        await SeedClusterAsync(connection, ct);
+        await connection.ExecuteAsync(
+            "INSERT INTO projects (id, name, created_at) VALUES (@id, 'retired-zero-row', @now)",
+            new { id = retiredGuid, now = FixedNow.ToUnixTimeSeconds() });
+        await connection.ExecuteAsync(MemorySql.RequestRepair,
+            new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = (string?)null });
+
+        var changed = await NewJob().RunAsync(connection, ct);
+
+        _ = changed; // chunk re-derivation may still report work; the map assertions are below.
+        (await CountAsync(connection, "entries", Loser, "scope = 'project' AND context_label IS NOT NULL", ct))
+            .ShouldBeGreaterThan(0, "loser rows stay put without a map");
+        (await CountAsync(connection, "entries", DroppedQa, "1 = 1", ct))
+            .ShouldBeGreaterThan(0, "dropped rows especially must never delete without a map");
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM projects WHERE id = @id", new { id = retiredGuid }, cancellationToken: ct)))
+            .ShouldBe(0, "the content-free registry row still retires under the empty map");
+        (await ScalarAsync(connection,
+                "SELECT finished_at FROM repair_requests WHERE kind = 'project-ids'", ct))
+            .ShouldNotBeNull();
+    }
+
+    /// <summary>
+    ///     A stored map that bypassed endpoint validation (direct SQL) must not crash the poll:
+    ///     the run refuses to fold, leaves the request open (a corrected --apply re-runs it),
+    ///     and stamps nothing.
+    /// </summary>
+    [RetryFact]
+    public async Task RequestedRun_WithGarbageMapJson_RefusesWithoutStamping()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+        await SeedClusterAsync(connection, ct);
+        await connection.ExecuteAsync(MemorySql.RequestRepair,
+            new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = "{ not json" });
+
+        (await NewJob().RunAsync(connection, ct)).ShouldBeFalse();
+        (await CountAsync(connection, "entries", Loser, "scope = 'project' AND context_label IS NOT NULL", ct))
+            .ShouldBeGreaterThan(0, "loser rows stay put when the map is garbage");
+        (await ScalarAsync(connection,
+                "SELECT finished_at FROM repair_requests WHERE kind = 'project-ids'", ct))
+            .ShouldBeNull("no stamp — the corrected request must still be owed");
+        (await NewJob().HasWorkAsync(connection, ct)).ShouldBeTrue();
+    }
+
+    /// <summary>
     ///     First run folds every moveable surface and reports it; the immediate second run changes
     ///     nothing. Fixture: ≥2 ids × ≥2 rows, both queue fragments populated, plus the
     ///     tombstone/code/quality/watch/settings legs so an entries-only rewrite still fails.
@@ -316,9 +373,15 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         positions.Select(p => p.TotalChunks).ShouldBe([2L, 2L]);
     }
 
-    private static async Task RequestRepairAsync(SqliteConnection connection) =>
+    private static string FixtureMapJson() =>
+        new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+                ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+                ["qa-noise-project", "manual-sweep"]).ToJson();
+
+    private static async Task RequestRepairAsync(SqliteConnection connection, string? mapJson = null) =>
         await connection.ExecuteAsync(MemorySql.RequestRepair,
-            new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+            new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = mapJson ?? FixtureMapJson() });
 
     private static async Task<long> CountAsync(SqliteConnection connection, string table, string projectId,
         string predicate, CancellationToken ct) =>

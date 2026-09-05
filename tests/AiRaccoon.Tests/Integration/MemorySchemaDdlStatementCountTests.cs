@@ -59,9 +59,11 @@ public sealed class MemorySchemaDdlStatementCountTests
         // vec_code, their trigger families, indexes, and the idx_code_entries_path DROP), +1 the
         // ADR-0089 projects table, +1 the WP12 watch_digest_claims table, +1 the Stage-1
         // search_quality.result_features ensure (P6b — fires only when the column is absent;
-        // its probes are excluded from the count above). The project-scoped
+        // its probes are excluded from the count above), +3 the v13 repair_requests.map_json
+        // ensure (ADR-0099: sqlite_master probe + pragma_table_info probe + ALTER TABLE when
+        // the column is absent). The project-scoped
         // tombstone repair (5 statements) moved to MigrateToV11Async in the version ladder.
-        CountDdl(statements).ShouldBe(59, Report(statements));
+        CountDdl(statements).ShouldBe(62, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)

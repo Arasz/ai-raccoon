@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Hosting.Node;
 
 namespace AiRaccoon.Settings;
@@ -49,7 +50,20 @@ internal static partial class RepairEndpoint
                             $"ai-raccoon: unknown repair kind '{request.Kind}' (expected reingest, chunk-index or project-ids)");
                     }
 
-                    await store.RequestRepairAsync(parsed, ctx);
+                    if (request.MapJson is not null && parsed == RepairKind.ProjectIds)
+                    {
+                        try
+                        {
+                            ProjectIdAliasMap.FromJson(request.MapJson);
+                        }
+                        catch (Exception ex) when (ex is ArgumentException or System.Text.Json.JsonException or NotSupportedException)
+                        {
+                            return Results.BadRequest(
+                                $"ai-raccoon: project-ids map_json is not a valid alias map: {ex.Message}");
+                        }
+                    }
+
+                    await store.RequestRepairAsync(parsed, ctx, request.MapJson);
                     Log.RepairRequested(logger, request.Kind);
                     return Results.NoContent();
                 });

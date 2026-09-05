@@ -53,5 +53,6 @@ public interface IRepairStore
 
     Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default);
 
-    Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default);
+    /// <summary>Requests a repair apply. <paramref name="projectIdsMapJson" /> carries the one-shot project-ids alias map (ADR-0099) — null/empty means the empty map; non-project-ids callers leave it null.</summary>
+    Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null);
 }

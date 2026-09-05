@@ -100,7 +100,7 @@ public sealed class ChunkIndexRepairJobTests : IDisposable
 
     private static Task RequestRepairAsync(SqliteConnection connection) =>
         connection.ExecuteAsync(MemorySql.RequestRepair,
-            new { kind = RepairKinds.ChunkIndex, requestedAt = FixedNow.ToUnixTimeSeconds() });
+            new { kind = RepairKinds.ChunkIndex, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = (string?)null });
 
     private static async Task<Dictionary<string, long>> PositionsByValueAsync(SqliteConnection connection, string sourceFile) =>
         (await connection.QueryAsync<(string Value, long ChunkIndex)>(

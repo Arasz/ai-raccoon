@@ -256,10 +256,17 @@ public sealed class SingleProjectIdCensusTests : IDisposable
         report.UnattributedSettingsKeys.ShouldContain("sync.provider");
     }
 
+
+    private static string FixtureMapJson() =>
+        new ProjectIdAliasMap(
+            [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+            ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+            ["qa-noise-project", "manual-sweep"]).ToJson();
+
     private async Task RequestAndRunRepairAsync(SqliteConnection connection, CancellationToken ct)
     {
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-            new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() }, cancellationToken: ct));
+            new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() }, cancellationToken: ct));
         var job = new ProjectIdsRepairJob(
             new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
             TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow));

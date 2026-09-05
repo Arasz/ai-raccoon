@@ -15,10 +15,12 @@ public partial class SyncService(
     Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
     TimeProvider timeProvider,
     ILogger<SyncService> logger,
-    ISyncBlobAuthenticator? blobAuthenticator = null) : ISyncService
+    ISyncBlobAuthenticator? blobAuthenticator = null,
+    ProjectIdAliasMap? aliasMap = null) : ISyncService
 {
     private const int MaxPushRetries = 3;
     private readonly ISyncBlobAuthenticator _authenticator = blobAuthenticator ?? new SyncBlobAuthenticator();
+    private readonly ProjectIdAliasMap _aliasMap = aliasMap ?? ProjectIdAliasMap.Default;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Tables that never leave the machine via sync — DROPped from every pushed snapshot
@@ -30,32 +32,43 @@ public partial class SyncService(
     ];
 
     /// <summary>
-    ///     Air-merge P2 convergence: folds a remote id an unrepaired replica still pushes into its
-    ///     canonical winner. The id is resolved first through the REMOTE projects-row name — the
-    ///     live guid losers are registered under their pre-guid names and the alias map deliberately
-    ///     never hardcodes a guid (P1 decision), so the name is the only attribution channel — then
-    ///     through the static verbatim alias CASE, falling back to the raw id when neither resolves
-    ///     (an unknown guid, or a verbatim id whose projects row is missing, passes through exactly
-    ///     as the old static fold left it). Built from the durable <see cref="ProjectIdAliasMap" />
-    ///     (same table the repair and the ToolGate fold consume), inlined as a CASE because the merge
-    ///     is SQL — the aliases are compile-time constants, never bank content. The remote.projects
+    ///     Pull-time id fold: resolves the remote id through the REMOTE projects-row name first — a
+    ///     guid loser registered under its pre-guid name is attributed through that name, never a
+    ///     hardcoded guid — then through the caller-supplied alias CASE, falling back to the raw id
+    ///     when neither resolves (an unknown guid, or an id whose projects row is missing, passes
+    ///     through untouched). Built from the one-shot repair map (same content the CLI dry-run
+    ///     planner and the repair job consume), inlined as a CASE because the merge is SQL — the
+    ///     entries are operator-supplied per repair, never bank content. The remote.projects
     ///     table is always ATTACHed (the merge attaches the whole snapshot, and projects never strips).
     ///     <para>
-    ///         d-426 SHOULD-3: canonical self-arms (<c>WHEN 'jsaa' THEN 'jsaa'</c>) catch a remote
+    ///         d-426 SHOULD-3: canonical self-arms (<c>WHEN 'new-id' THEN 'new-id'</c>) catch a remote
     ///         guid row whose projects-row name resolves to a canonical winner rather than an alias
     ///         — without one the CASE falls to ELSE and the raw guid leaks back as canonical.
     ///         Alias arms stay ahead of the self-arms: the sets are disjoint today, but an overlap
     ///         must resolve to the alias winner. Every interpolated literal passes through
     ///         <see cref="EscapeSqlString" /> so a future quote in the table cannot break the merge.
     ///     </para>
+    ///     <para>
+    ///         ADR-0099: an empty map degrades to the name-resolution alone (no CASE wrapper — SQLite
+    ///         rejects a CASE with zero WHEN arms). Steady state with the empty default is
+    ///         pass-through by definition.
+    ///     </para>
     /// </summary>
-    internal static string FoldRemoteProjectId(string column)
+    internal static string FoldRemoteProjectId(string column) => FoldRemoteProjectId(column, ProjectIdAliasMap.Default);
+
+    /// <summary>Folds through an explicit one-shot repair map instead of the steady-state default.</summary>
+    internal static string FoldRemoteProjectId(string column, ProjectIdAliasMap map)
     {
         var named =
             $"COALESCE((SELECT p.name FROM remote.projects p WHERE p.id = {column}), {column})";
-        var arms = ProjectIdAliasMap.Default.Aliases
+        if (map.IsEmpty)
+        {
+            return named;
+        }
+
+        var arms = map.Aliases
             .Select(entry => $"WHEN '{EscapeSqlString(entry.Alias)}' THEN '{EscapeSqlString(entry.Canonical)}'");
-        var selfArms = ProjectIdAliasMap.Default.Canonicals
+        var selfArms = map.Canonicals
             .Select(canonical => $"WHEN '{EscapeSqlString(canonical)}' THEN '{EscapeSqlString(canonical)}'");
         return $"CASE {named} {string.Join(" ", arms)} {string.Join(" ", selfArms)} ELSE {column} END";
     }
@@ -67,8 +80,8 @@ public partial class SyncService(
     public SyncService(ICloudStore cloud, Func<CancellationToken, Task<SqliteConnection>> openBank,
         Func<string, CancellationToken, Task<SqliteConnection>> openSnapshot,
         Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
-        TimeProvider timeProvider, ILogger<SyncService> logger)
-        : this(_ => Task.FromResult(cloud), openBank, openSnapshot, openReadOnly, timeProvider, logger)
+        TimeProvider timeProvider, ILogger<SyncService> logger, ProjectIdAliasMap? aliasMap = null)
+        : this(_ => Task.FromResult(cloud), openBank, openSnapshot, openReadOnly, timeProvider, logger, null, aliasMap)
     {
     }
 
@@ -343,7 +356,7 @@ public partial class SyncService(
                 // loser pushes stay suppressed by the repair's rewritten (winner-keyed) tombstones.
                 await using (var mergeEntries = conn.CreateCommand())
                 {
-                    var foldedRemoteProject = FoldRemoteProjectId("r.project_id");
+                    var foldedRemoteProject = FoldRemoteProjectId("r.project_id", _aliasMap);
                     // d-426 SHOULD-4: the pull fold matches the repair's domain (project-scope rows
                     // only) — custom/shared rows merge verbatim, exactly as the repair leaves them.
                     // The tombstone-suppression check below stays folded: identity compares in
@@ -417,7 +430,7 @@ public partial class SyncService(
                 // loser tombstone meets the repair's rewritten winner-keyed one (OR IGNORE dedups).
                 await using (var mergeTombstones = conn.CreateCommand())
                 {
-                    var foldedTombstoneProject = FoldRemoteProjectId("project_id");
+                    var foldedTombstoneProject = FoldRemoteProjectId("project_id", _aliasMap);
                     mergeTombstones.CommandText = $"""
                                                   INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at)
                                                   SELECT {foldedTombstoneProject}, hash, scope, deleted_at FROM remote.sync_tombstones
@@ -430,7 +443,7 @@ public partial class SyncService(
                 // folded winner row.
                 await using (var applyTombstones = conn.CreateCommand())
                 {
-                    var foldedApplyProject = FoldRemoteProjectId("project_id");
+                    var foldedApplyProject = FoldRemoteProjectId("project_id", _aliasMap);
                     applyTombstones.CommandText = $"""
                                                   DELETE FROM entries
                                                   WHERE (hash, COALESCE(scope, 'workspace'), project_id)

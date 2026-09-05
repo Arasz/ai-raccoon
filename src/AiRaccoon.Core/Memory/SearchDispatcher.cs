@@ -44,7 +44,7 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
 
         // ADR-0094: every kind records. The pre-0094 exclusion (code/both never record)
         // designed the quality signal away from the default path the day PR #580 flipped the
-        // default kind to both (rows stop Aug 24; hermes-default ran 307 searches with 0 rows).
+        // default kind to both (rows stop Aug 24; one project ran 307 searches with 0 rows).
         // Privacy shape: the row describes the memory leg for memory/both (code paths are never
         // stored -- code_entries never leaves the machine per ADR-0085, and search_quality never
         // leaves it either -- StripNonSyncableAsync DROPs it from every pushed snapshot per ADR-0098); a code

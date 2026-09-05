@@ -127,7 +127,7 @@ public sealed class CwdDefaultProjectIdE2ETests : IAsyncLifetime
                 [new EnvEncryptionKeyProvider()]));
         await using var connection = await factory.OpenBankAsync(ct);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-            new { kind = RepairKinds.ProjectIds, requestedAt = 1L }, cancellationToken: ct));
+            new { kind = RepairKinds.ProjectIds, requestedAt = 1L, mapJson = (string?)null }, cancellationToken: ct));
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
             new { kind = RepairKinds.ProjectIds, finishedAt = 2L }, cancellationToken: ct));
     }

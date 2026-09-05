@@ -51,7 +51,7 @@ public sealed class ProjectIdsMigrationGateTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         await using var connection = await _factory.OpenBankAsync(ct);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-            new { kind = RepairKinds.ProjectIds, requestedAt = 1L }, cancellationToken: ct));
+            new { kind = RepairKinds.ProjectIds, requestedAt = 1L, mapJson = (string?)null }, cancellationToken: ct));
 
         // Ledger — finished-NULL-check : --filter IsMigratedAsync_WithOpenRequest_IsFalse : requested (open) bank.
         (await NewGate().IsMigratedAsync(ct)).ShouldBeFalse("an open request is not a completed migration");
@@ -63,7 +63,7 @@ public sealed class ProjectIdsMigrationGateTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         await using var connection = await _factory.OpenBankAsync(ct);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-            new { kind = RepairKinds.ProjectIds, requestedAt = 1L }, cancellationToken: ct));
+            new { kind = RepairKinds.ProjectIds, requestedAt = 1L, mapJson = (string?)null }, cancellationToken: ct));
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
             new { kind = RepairKinds.ProjectIds, finishedAt = 2L }, cancellationToken: ct));
 
@@ -77,14 +77,14 @@ public sealed class ProjectIdsMigrationGateTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         await using var connection = await _factory.OpenBankAsync(ct);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-            new { kind = RepairKinds.ProjectIds, requestedAt = 1L }, cancellationToken: ct));
+            new { kind = RepairKinds.ProjectIds, requestedAt = 1L, mapJson = (string?)null }, cancellationToken: ct));
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
             new { kind = RepairKinds.ProjectIds, finishedAt = 2L }, cancellationToken: ct));
 
         // A second request re-opens the kind (ON CONFLICT resets finished_at): a re-migration in
         // flight must not read as migrated.
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-            new { kind = RepairKinds.ProjectIds, requestedAt = 3L }, cancellationToken: ct));
+            new { kind = RepairKinds.ProjectIds, requestedAt = 3L, mapJson = (string?)null }, cancellationToken: ct));
 
         // Ledger — ignore-reopen : --filter IsMigratedAsync_AfterASecondRequest_ReopensToFalse : finished then re-requested bank.
         (await NewGate().IsMigratedAsync(ct)).ShouldBeFalse();

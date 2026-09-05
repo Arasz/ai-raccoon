@@ -48,20 +48,11 @@ internal static partial class CandidateFeatureExtractor
 
     /// <summary>
     ///     Alternate spellings a project's id is written under in free text — content matching
-    ///     is otherwise a bare-substring check that misses e.g. "airaccoon" for "ai-raccoon" (ported from
-    ///     scorer.py's PROJECT_ALIASES).
+    ///     is otherwise a bare-substring check that misses e.g. "my-project-x" for "my-project"
+    ///     (ADR-0099: no machine-local synonym table ships in the public binary — matching falls
+    ///     back to the bare id itself; operators with local synonyms extend this per deployment).
     /// </summary>
-    private static readonly IReadOnlyDictionary<string, string[]> ProjectAliases =
-        new Dictionary<string, string[]>(StringComparer.Ordinal)
-        {
-            ["ai-badger"] = ["ai-badger", "ai_badger", "badger_lib", "welcome-ai-badger"],
-            ["ai-raccoon"] = ["ai-raccoon", "airaccoon", "ai_raccoon"],
-            ["jsaa"] = ["jsaa", "job-search-ai-assistant", "jobsearchaiassistant"],
-            ["hermes-default"] = ["hermes"],
-            ["arasz-home-page"] = ["arasz-home-page", "arasz.dev", "home-page"]
-        };
-
-    private static IReadOnlyList<string> AliasesFor(string projectId) => ProjectAliases.TryGetValue(projectId, out var aliases) ? aliases : [projectId];
+    private static IReadOnlyList<string> AliasesFor(string projectId) => [projectId];
 
     internal static CandidateFeatures Extract(string value, string projectId, IReadOnlyList<string> allProjectIds)
     {

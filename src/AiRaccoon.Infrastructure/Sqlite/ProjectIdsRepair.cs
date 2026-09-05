@@ -422,7 +422,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     }
 
     /// <summary>
-    ///     Settings keys embed the raw id (AI-RACCOON vs ai-raccoon own disjoint keys while sharing
+    ///     Settings keys embed the raw id (Old-Id vs old-id own disjoint keys while sharing
     ///     entries — lane A finding c). Only the five id-keyed prefixes rename; on a collision the
     ///     winner's value stands and the loser key deletes.
     /// </summary>

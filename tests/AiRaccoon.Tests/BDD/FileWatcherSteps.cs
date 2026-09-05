@@ -1587,7 +1587,10 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
 
         var plan = ProjectIdsFoldPlan.FromCensus(
-            await ProjectIdCensus.CollectAsync(connection, CancellationToken.None), ProjectIdAliasMap.Default);
+            await ProjectIdCensus.CollectAsync(connection, CancellationToken.None), new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+                ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+                ["qa-noise-project", "manual-sweep"]));
         plan.IsEmpty.ShouldBeFalse("the seeded losers must schedule folds");
         await new ProjectIdsRepair(Ctx.TimeProvider).ApplyAsync(connection, plan, CancellationToken.None);
         // Model elapsed time between the repair and later edits: catch-up changed-since scans

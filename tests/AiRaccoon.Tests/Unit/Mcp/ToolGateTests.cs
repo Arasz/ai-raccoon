@@ -169,13 +169,14 @@ public sealed class ToolGateTests
     }
 
     /// <summary>
-    ///     P3 activation (review M1): once the P2 finished marker exists, a known loser folds to
-    ///     its winner at the choke — every downstream guard and store sees jsaa, never the loser.
-    ///     Ledger — skip-alias-fold : --filter RequireAsync_WhenMigrated_FoldsAKnownAliasToTheWinner :
+    ///     ADR-0099 steady state: the public binary ships the empty map, so even a migrated bank
+    ///     passes former alias spellings through unfolded — every downstream guard and store sees
+    ///     the id the caller named. Folding needs a one-shot <c>--map</c> repair, never the choke.
+    ///     Ledger — skip-alias-fold : --filter RequireAsync_WhenMigrated_PassesFormerAliasesThrough :
     ///     job-search-ai-assistant write.
     /// </summary>
     [Fact]
-    public async Task RequireAsync_WhenMigrated_FoldsAKnownAliasToTheWinner()
+    public async Task RequireAsync_WhenMigrated_PassesFormerAliasesThrough()
     {
         var (guard, _, _, registration, _) = NewStack();
         var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
@@ -184,9 +185,9 @@ public sealed class ToolGateTests
         var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
             "memory_write", TestContext.Current.CancellationToken);
 
-        canonical.ShouldBe("jsaa");
-        guard.Calls.ShouldBe([("jsaa", AccessRequirement.Write, "memory_write")]);
-        registration.Calls.ShouldBe([("jsaa", AccessRequirement.Write)]);
+        canonical.ShouldBe("job-search-ai-assistant");
+        guard.Calls.ShouldBe([("job-search-ai-assistant", AccessRequirement.Write, "memory_write")]);
+        registration.Calls.ShouldBe([("job-search-ai-assistant", AccessRequirement.Write)]);
     }
 
     /// <summary>

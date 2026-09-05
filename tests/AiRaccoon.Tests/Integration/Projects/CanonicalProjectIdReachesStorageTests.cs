@@ -32,7 +32,7 @@ namespace AiRaccoon.Tests.Integration.Projects;
 ///         <c>ResolveAndAddAsync</c> (watches; same spelling-only rule, no alias fold at the store).
 ///         Alias losers are folded upstream at the <c>ToolGate</c> choke once migrated, so the
 ///         alias legs are pinned there instead: entries by
-///         <c>OrphanVerbatimRefusalTests.AliasFold_ToCanonical</c> (+ the migrated rows below) and
+///         <c>OrphanVerbatimRefusalTests.AliasWrite_ThreadsTheVerbatimPartition</c> (+ the migrated rows below) and
 ///         watches by the watch-create loser test (no-resurrection) — a new writer that bypasses
 ///         the gate must either fold or trip, and this list names where.
 ///     </para>
@@ -177,22 +177,22 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     P3/P4 alias leg of the canonical-reaches-storage rule: a write under the loser spelling
-    ///     lands in the winner's entries partition AND its vec ctx once migrated — the storage
-    ///     half of OrphanVerbatimRefusalTests.AliasFold_ToCanonical, extended to the vec leg.
-    ///     Ledger — skip-gate-fold : --filter MemoryWrite_UnderAnAliasLoser_WritesTheWinnerPartition_AndVecCtx :
+    ///     ADR-0099 steady state: a write under a former loser spelling lands in the verbatim
+    ///     entries partition AND its vec ctx even when migrated — the storage half of
+    ///     OrphanVerbatimRefusalTests.AliasWrite_ThreadsTheVerbatimPartition, extended to the vec leg.
+    ///     Ledger — skip-gate-fold : --filter MemoryWrite_UnderAnAliasLoser_WritesTheVerbatimPartition_AndVecCtx :
     ///     migrated loser write + embed drain.
     /// </summary>
     [RetryFact]
-    public async Task MemoryWrite_UnderAnAliasLoser_WritesTheWinnerPartition_AndVecCtx()
+    public async Task MemoryWrite_UnderAnAliasLoser_WritesTheVerbatimPartition_AndVecCtx()
     {
         var tools = BuildMigratedTools();
 
         var written = await tools.Write("job-search-ai-assistant", "alias fold reaches the narwhal partition",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        (await ReadStoredProjectIdAsync(written.Data!.Hash)).ShouldBe("jsaa");
-        await _store.EmbedPendingAsync("jsaa", null, TestContext.Current.CancellationToken);
+        (await ReadStoredProjectIdAsync(written.Data!.Hash)).ShouldBe("job-search-ai-assistant");
+        await _store.EmbedPendingAsync("job-search-ai-assistant", null, TestContext.Current.CancellationToken);
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var vecRows = (await connection.QueryAsync<(long RowId, string Ctx)>(
                 new CommandDefinition(
@@ -203,16 +203,16 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
 
         vecRows.ShouldNotBeEmpty("the drain must have embedded the row before this assertion runs");
         vecRows.ShouldAllBe(r =>
-            r.Ctx == MemorySql.ContextKeyFor(ContextNaming.ProjectContext("jsaa"), "jsaa"));
+            r.Ctx == MemorySql.ContextKeyFor(ContextNaming.ProjectContext("job-search-ai-assistant"), "job-search-ai-assistant"));
     }
 
     /// <summary>
-    ///     The queue leg of the alias fold: listing under the loser queries the winner's queue.
-    ///     Ledger — skip-gate-fold : --filter MemoryPromotionList_UnderAnAliasLoser_ListsUnderTheWinner :
+    ///     ADR-0099: the queue leg passes through — listing under the former loser queries its own queue.
+    ///     Ledger — skip-gate-fold : --filter MemoryPromotionList_UnderAnAliasLoser_ListsUnderTheVerbatimId :
     ///     migrated loser list.
     /// </summary>
     [RetryFact]
-    public async Task MemoryPromotionList_UnderAnAliasLoser_ListsUnderTheWinner()
+    public async Task MemoryPromotionList_UnderAnAliasLoser_ListsUnderTheVerbatimId()
     {
         var queue = new FakePromotionQueue();
         var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(),
@@ -221,16 +221,16 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
 
         await tools.List("job-search-ai-assistant", cancellationToken: TestContext.Current.CancellationToken);
 
-        queue.LastListProject.ShouldBe("jsaa");
+        queue.LastListProject.ShouldBe("job-search-ai-assistant");
     }
 
     /// <summary>
-    ///     The share-extract leg of the alias fold: the runner is threaded the winner, never the loser.
-    ///     Ledger — skip-gate-fold : --filter MemoryShareExtract_UnderAnAliasLoser_ThreadsTheWinner :
+    ///     ADR-0099: the share-extract leg passes through — the runner is threaded the named id.
+    ///     Ledger — skip-gate-fold : --filter MemoryShareExtract_UnderAnAliasLoser_ThreadsTheVerbatimId :
     ///     migrated loser extract.
     /// </summary>
     [RetryFact]
-    public async Task MemoryShareExtract_UnderAnAliasLoser_ThreadsTheWinner()
+    public async Task MemoryShareExtract_UnderAnAliasLoser_ThreadsTheVerbatimId()
     {
         var extraction = new RecordingExtractionRunner();
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(),
@@ -239,7 +239,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
 
         await tools.ShareExtract(["job-search-ai-assistant"], cancellationToken: TestContext.Current.CancellationToken);
 
-        extraction.LastProjectId.ShouldBe("jsaa");
+        extraction.LastProjectId.ShouldBe("job-search-ai-assistant");
     }
 
     private async Task<string?> ReadStoredProjectIdAsync(string hash)

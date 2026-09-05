@@ -7,23 +7,31 @@ namespace AiRaccoon.Core.Projects;
 /// <summary>A loser id and the canonical winner its rows fold into.</summary>
 public sealed record ProjectIdAliasEntry(string Alias, string Canonical);
 
-/// <summary>Durable loser-to-winner map for the single-project-id merge (air-merge plan P1): compiled into the binary and JSON-round-trippable, so pull-time fold and the ToolGate fold consume the same table with no bank FK.</summary>
+/// <summary>One-shot loser-to-winner map for the project-ids repair: file-loaded per invocation and JSON-round-trippable, so the CLI dry-run planner and the server apply job consume the same table with no bank FK and no compiled-in ids.</summary>
 /// <remarks>
 ///     d-425 SHOULD-5: every lookup is <see cref="StringComparison.Ordinal" /> — case-SENSITIVE
 ///     by decision, recorded here as a non-goal rather than normalized. A mixed-case id that is
-///     not an explicit entry (e.g. <c>JSAA</c>) is a distinct id and passes through untouched;
-///     only an explicit alias entry folds (e.g. <c>AI-RACCOON</c> → <c>ai-raccoon</c>). The sync
+///     not an explicit entry (e.g. <c>OLD-ID</c>) is a distinct id and passes through untouched;
+///     only an explicit alias entry folds (e.g. <c>Old-Id</c> → <c>old-id</c>). The sync
 ///     CASE inherits the same semantics (built from <see cref="Aliases" /> verbatim).
+///     <para>
+///         ADR-0099: the public binary ships no machine-local ids — <see cref="Default" /> is
+///         empty by design (steady-state folds are pass-through). Operators with fragment ids
+///         supply their own map per repair via <c>repair project-ids --map &lt;path&gt;</c>;
+///         the dry run without <c>--map</c> writes an editable template beside the bank.
+///     </para>
 /// </remarks>
 public sealed class ProjectIdAliasMap
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
 
-    /// <summary>The plan's canonical-wins table: jsaa and ai-raccoon casing folds; single-fragment verbatims register as their own canonicals; qa-noise-project and manual-sweep delete (never fold).</summary>
-    public static ProjectIdAliasMap Default { get; } = new(
-        [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
-        ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
-        ["qa-noise-project", "manual-sweep"]);
+    private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
+
+    /// <summary>The empty map: no aliases, no canonicals, no drops. <see cref="Fold" /> degrades to guid D-form normalization only.</summary>
+    public static ProjectIdAliasMap Empty { get; } = new([], [], []);
+
+    /// <summary>The steady-state map consumed by every choke point (ToolGate, watch boundaries, key helpers, sync). Empty by design — see remarks.</summary>
+    public static ProjectIdAliasMap Default { get; } = Empty;
 
     private readonly Dictionary<string, string> _aliases;
     private readonly HashSet<string> _canonicals;
@@ -45,6 +53,9 @@ public sealed class ProjectIdAliasMap
     public IReadOnlyList<string> Canonicals => [.. _canonicals];
 
     public IReadOnlyList<string> Dropped => [.. _dropped];
+
+    /// <summary>True when the map carries no aliases, canonicals, or drops — steady-state pass-through.</summary>
+    public bool IsEmpty => _aliases.Count == 0 && _canonicals.Count == 0 && _dropped.Count == 0;
 
     /// <summary>True and the winner when the id is a known loser or a canonical itself (self-mapped); false for dropped ids and true typos.</summary>
     public bool TryResolve(string projectId, [NotNullWhen(true)] out string? canonical)
@@ -90,17 +101,64 @@ public sealed class ProjectIdAliasMap
     /// <summary>Serializes the map for durable hand-off (plan artifact, settings snapshot); no bank schema involved.</summary>
     public string ToJson()
     {
-        var payload = new AliasMapPayload([.. Aliases], [.. Canonicals], [.. Dropped]);
-        return JsonSerializer.Serialize(payload, JsonOptions);
+        return ToJson(indented: false);
     }
 
-    /// <summary>Deserializes a map written by <see cref="ToJson" />.</summary>
+    /// <summary>Serializes the map; <paramref name="indented" /> selects the human-editable template shape.</summary>
+    public string ToJson(bool indented)
+    {
+        var payload = new AliasMapPayload([.. Aliases], [.. Canonicals], [.. Dropped]);
+        return JsonSerializer.Serialize(payload, indented ? IndentedJsonOptions : JsonOptions);
+    }
+
+    /// <summary>Deserializes a map written by <see cref="ToJson" />. Null alias entries and null alias/canonical spellings are refused — a null winner would otherwise fold an id to null downstream.</summary>
     public static ProjectIdAliasMap FromJson(string json)
     {
         Guard.IsNotNullOrWhiteSpace(json);
         var payload = JsonSerializer.Deserialize<AliasMapPayload>(json, JsonOptions);
         Guard.IsNotNull(payload);
-        return new ProjectIdAliasMap(payload.Aliases, payload.Canonicals, payload.Dropped);
+        if (payload.Aliases is null || payload.Canonicals is null || payload.Dropped is null)
+        {
+            throw new ArgumentException("ai-raccoon: project-ids alias map holds a null aliases, canonicals, or dropped section.");
+        }
+
+        foreach (var entry in payload.Aliases)
+        {
+            if (entry is null || entry.Alias is null || entry.Canonical is null)
+            {
+                throw new ArgumentException("ai-raccoon: project-ids alias map holds a null alias entry or null alias/canonical spelling.");
+            }
+        }
+
+        return new ProjectIdAliasMap(payload.Aliases!, payload.Canonicals, payload.Dropped);
+    }
+
+    /// <summary>Loads a map written by <see cref="ToJson" /> (or the dry-run template) from disk. Missing files throw <see cref="FileNotFoundException" /> naming the path; malformed JSON throws <see cref="JsonException" /> naming the path.</summary>
+    public static ProjectIdAliasMap LoadFromFile(string path)
+    {
+        Guard.IsNotNullOrWhiteSpace(path);
+        string json;
+        try
+        {
+            json = File.ReadAllText(path);
+        }
+        catch (FileNotFoundException ex)
+        {
+            throw new FileNotFoundException($"project-ids alias map not found: '{path}'", path, ex);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            throw new FileNotFoundException($"project-ids alias map not found: '{path}'", path, ex);
+        }
+
+        try
+        {
+            return FromJson(json);
+        }
+        catch (JsonException ex)
+        {
+            throw new JsonException($"project-ids alias map at '{path}' is not valid JSON: {ex.Message}", ex);
+        }
     }
 
     private sealed record AliasMapPayload(ProjectIdAliasEntry[] Aliases, string[] Canonicals, string[] Dropped);

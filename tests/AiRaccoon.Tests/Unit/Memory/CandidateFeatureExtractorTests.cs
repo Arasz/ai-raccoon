@@ -4,9 +4,9 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 
-/// <summary>Foreign-project detection must recognize known alias spellings, not just the live
-/// project id's exact string (scorer.py's PROJECT_ALIASES), and the portability features (tech
-/// breadth, cross-reference density) that scorer.py's round-3 lane-A features() adds.</summary>
+/// <summary>Foreign-project detection matches the live project id's exact string and the portability features (tech
+/// breadth, cross-reference density) that scorer.py's round-3 lane-A features() adds. ADR-0099: no machine-local
+/// synonym table ships — an alias spelling without the bare id no longer counts.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class CandidateFeatureExtractorTests
@@ -14,13 +14,14 @@ public sealed class CandidateFeatureExtractorTests
     private static readonly string[] AllProjects = ["ai-badger", "ai-raccoon"];
 
     [Fact]
-    public void Extract_AliasSpellingOfAnotherProject_CountsAsForeignSubject()
+    public void Extract_AliasSpellingWithoutBareId_NoLongerCountsAsForeignSubject()
     {
-        // "airaccoon" (no hyphen) is a known alias of "ai-raccoon" but not a substring of it.
+        // ADR-0099: the machine-local synonym table is gone — "airaccoon" (no hyphen) is not a
+        // substring of "ai-raccoon", so it no longer counts. The bare id still does (next test).
         var features = CandidateFeatureExtractor.Extract(
             "the airaccoon deployment holds one bank per install", "ai-badger", AllProjects);
 
-        features.ForeignSubject.ShouldBeTrue();
+        features.ForeignSubject.ShouldBeFalse();
     }
 
     [Fact]

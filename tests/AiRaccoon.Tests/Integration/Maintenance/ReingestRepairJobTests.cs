@@ -107,7 +107,7 @@ public sealed class ReingestRepairJobTests : IDisposable
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(MemorySql.RequestRepair,
-            new { kind = RepairKinds.Reingest, requestedAt = FixedNow.ToUnixTimeSeconds() });
+            new { kind = RepairKinds.Reingest, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = (string?)null });
     }
 
     /// <summary>Seeds one ingested file, then corrupts its hash the way a chunker-version change would — returns the corrupted hash so a caller can assert it is gone after the repair.</summary>

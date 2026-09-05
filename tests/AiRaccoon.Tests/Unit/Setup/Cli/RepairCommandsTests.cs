@@ -104,11 +104,14 @@ public sealed class RepairCommandsTests
     ///     Formatter row (review MUST-4: dispatcher/formatter only, never the diagnose gate — that is
     ///     Diagnose_ListsJsaaCluster alone): dry-run output names the loser, the winner, and the fold.
     ///     Ledger — drop-folds-to-line : --filter ProjectIds_DryRun_FormatsTheFoldPlan : jsaa-cluster report.
+    ///     ADR-0099: folds need an explicit --map; machine ids are fixture data only.
     /// </summary>
     [Fact]
     public async Task ProjectIds_DryRun_FormatsTheFoldPlan()
     {
-        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, ClusterReport());
+        using var scope = new TempScope();
+        var mapPath = scope.WriteFixtureMap();
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, ClusterReport(), scope.DataRoot, mapPath);
 
         stdout.ShouldContain("job-search-ai-assistant");
         stdout.ShouldContain("jsaa");
@@ -122,9 +125,11 @@ public sealed class RepairCommandsTests
     [Fact]
     public async Task ProjectIds_DiagnoseFlag_ReportsWithoutRequesting()
     {
+        using var scope = new TempScope();
         var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+        var mapPath = scope.WriteFixtureMap();
 
-        var stdout = await RunProjectIdsDiagnoseAsync(inner);
+        var stdout = await RunProjectIdsDiagnoseAsync(inner, scope.DataRoot, mapPath);
 
         stdout.ShouldContain("job-search-ai-assistant");
         inner.LastRepairRequest.ShouldBeNull();
@@ -137,9 +142,10 @@ public sealed class RepairCommandsTests
     [Fact]
     public async Task ProjectIds_DryRun_NeverRequestsARepair()
     {
+        using var scope = new TempScope();
         var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
 
-        await RunProjectIdsAsync(apply: false, inner);
+        await RunProjectIdsAsync(apply: false, inner, scope.DataRoot);
 
         inner.LastRepairRequest.ShouldBeNull();
     }
@@ -151,11 +157,14 @@ public sealed class RepairCommandsTests
     [Fact]
     public async Task ProjectIds_Apply_RequestsTheProjectIdsKind()
     {
+        using var scope = new TempScope();
         var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+        var mapPath = scope.WriteFixtureMap();
 
-        var stdout = await RunProjectIdsAsync(apply: true, inner);
+        var stdout = await RunProjectIdsAsync(apply: true, inner, scope.DataRoot, mapPath);
 
         inner.LastRepairRequest.ShouldBe(RepairKind.ProjectIds);
+        inner.LastRepairMapJson.ShouldBe(File.ReadAllText(mapPath));
         stdout.ShouldContain("maintenance poll");
     }
 
@@ -168,13 +177,15 @@ public sealed class RepairCommandsTests
     [Fact]
     public async Task ProjectIds_DryRun_PrintsPerLoserNullContextCounts()
     {
+        using var scope = new TempScope();
         var report = new ProjectIdCensusReport(
         [
             new ProjectIdCensusRow("jsaa", false, null, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, []),
             new ProjectIdCensusRow("job-search-ai-assistant", false, null, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
         ], 0, 0, 0, 0, []);
+        var mapPath = scope.WriteFixtureMap();
 
-        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report);
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report, scope.DataRoot, mapPath);
 
         stdout.ShouldContain("1 NULL-context");
     }
@@ -188,12 +199,98 @@ public sealed class RepairCommandsTests
     [Fact]
     public async Task ProjectIds_Apply_NamesQuiesceOrRerun()
     {
+        using var scope = new TempScope();
         var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+        var mapPath = scope.WriteFixtureMap();
 
-        var stdout = await RunProjectIdsAsync(apply: true, inner);
+        var stdout = await RunProjectIdsAsync(apply: true, inner, scope.DataRoot, mapPath);
 
         stdout.ShouldContain("quiesce");
         stdout.ShouldContain("re-run");
+    }
+
+    /// <summary>ADR-0099 AC2: a map-less dry run plans with the empty map (no folds), writes an editable template beside the bank, and names its path.</summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_WithoutMap_WritesTemplateAndPlansNoFolds()
+    {
+        using var scope = new TempScope();
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        var stdout = await RunProjectIdsAsync(apply: false, inner, scope.DataRoot);
+
+        stdout.ShouldNotContain("folds to");
+        var templatePath = Path.Combine(scope.DataRoot, ProjectIdsRepairCommands.TemplateFileName);
+        stdout.ShouldContain(templatePath);
+        File.Exists(templatePath).ShouldBeTrue();
+        ProjectIdAliasMap.FromJson(File.ReadAllText(templatePath)).IsEmpty.ShouldBeTrue();
+        inner.LastRepairRequest.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ProjectIds_DryRun_WithoutMap_NeverOverwritesAnExistingTemplate()
+    {
+        using var scope = new TempScope();
+        var templatePath = Path.Combine(scope.DataRoot, ProjectIdsRepairCommands.TemplateFileName);
+        Directory.CreateDirectory(scope.DataRoot);
+        File.WriteAllText(templatePath, "sentinel-operator-edits");
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        await RunProjectIdsAsync(apply: false, inner, scope.DataRoot);
+
+        File.ReadAllText(templatePath).ShouldBe("sentinel-operator-edits");
+    }
+
+    [Fact]
+    public async Task ProjectIds_DryRun_WithMap_DoesNotWriteATemplate()
+    {
+        using var scope = new TempScope();
+        var mapPath = scope.WriteFixtureMap();
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        await RunProjectIdsAsync(apply: false, inner, scope.DataRoot, mapPath);
+
+        File.Exists(Path.Combine(scope.DataRoot, ProjectIdsRepairCommands.TemplateFileName)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task ProjectIds_Apply_WithoutMap_ForwardsANullMap()
+    {
+        using var scope = new TempScope();
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        var stdout = await RunProjectIdsWithExitAsync(apply: true, inner, scope.DataRoot);
+
+        stdout.Exit.ShouldBe(0);
+        inner.LastRepairRequest.ShouldBe(RepairKind.ProjectIds);
+        inner.LastRepairMapJson.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ProjectIds_WithMissingMap_ReturnsInvalidArgument_AndNeverRequests()
+    {
+        using var scope = new TempScope();
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+        var missing = Path.Combine(scope.DataRoot, "no-such-map.json");
+
+        var stdout = await RunProjectIdsWithExitAsync(apply: false, inner, scope.DataRoot, missing);
+
+        stdout.Exit.ShouldBe(AiRaccoon.ExitCode.InvalidArgument);
+        inner.LastRepairRequest.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ProjectIds_WithMalformedMap_ReturnsInvalidArgument_AndNeverRequests()
+    {
+        using var scope = new TempScope();
+        var bad = Path.Combine(scope.DataRoot, "bad-map.json");
+        Directory.CreateDirectory(scope.DataRoot);
+        File.WriteAllText(bad, "{ not json");
+        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+
+        var stdout = await RunProjectIdsWithExitAsync(apply: false, inner, scope.DataRoot, bad);
+
+        stdout.Exit.ShouldBe(AiRaccoon.ExitCode.InvalidArgument);
+        inner.LastRepairRequest.ShouldBeNull();
     }
 
     private static ProjectIdCensusReport ClusterReport() => new(
@@ -201,6 +298,37 @@ public sealed class RepairCommandsTests
             new ProjectIdCensusRow("jsaa", false, null, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, []),
             new ProjectIdCensusRow("job-search-ai-assistant", false, null, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
         ], 0, 0, 0, 0, []);
+
+    private sealed class TempScope : IDisposable
+    {
+        public string DataRoot { get; } = Path.Combine(Path.GetTempPath(), $"repair-test-{Guid.CreateVersion7():N}");
+
+        public string WriteFixtureMap()
+        {
+            Directory.CreateDirectory(DataRoot);
+            var map = new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+                ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+                ["qa-noise-project", "manual-sweep"]);
+            var path = Path.Combine(DataRoot, $"map-{Guid.CreateVersion7():N}.json");
+            File.WriteAllText(path, map.ToJson(indented: true));
+            return path;
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                if (Directory.Exists(DataRoot))
+                {
+                    Directory.Delete(DataRoot, recursive: true);
+                }
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
 
     /// <summary>
     ///     One row of each of the five real outcomes FromCensus produces: a fold (job-search-ai-assistant
@@ -229,7 +357,8 @@ public sealed class RepairCommandsTests
     [Fact]
     public async Task ProjectIds_DryRun_ScoreboardCountsEveryOutcomeSeparately()
     {
-        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, MixedOutcomeReport());
+        using var scope = new TempScope();
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, MixedOutcomeReport(), scope.DataRoot, scope.WriteFixtureMap());
 
         stdout.ShouldContain("5 id(s) censused");
         stdout.ShouldContain("1 fold,");
@@ -247,7 +376,8 @@ public sealed class RepairCommandsTests
     [Fact]
     public async Task ProjectIds_DryRun_NamesEachRetiredProject()
     {
-        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, MixedOutcomeReport());
+        using var scope = new TempScope();
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, MixedOutcomeReport(), scope.DataRoot, scope.WriteFixtureMap());
 
         stdout.ShouldContain("empty-registered-project");
         stdout.ShouldContain("retires");
@@ -264,7 +394,8 @@ public sealed class RepairCommandsTests
     [InlineData(true)]
     public async Task ProjectIds_IdNeedingAttention_StatesRerunningWontClearIt(bool apply)
     {
-        var stdout = await RunProjectIdsAsync(apply, diagnose: false, MixedOutcomeReport());
+        using var scope = new TempScope();
+        var stdout = await RunProjectIdsAsync(apply, diagnose: false, MixedOutcomeReport(), scope.DataRoot, scope.WriteFixtureMap());
 
         stdout.ShouldContain("re-running will not clear");
     }
@@ -276,10 +407,10 @@ public sealed class RepairCommandsTests
     [Fact]
     public async Task ProjectIds_Converged_OmitsTheRerunClarifier()
     {
-        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, ClusterReport());
+        using var scope = new TempScope();
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, ClusterReport(), scope.DataRoot, scope.WriteFixtureMap());
 
-        stdout.ShouldNotContain("re-running will not clear");
-    }
+        stdout.ShouldNotContain("re-running will not clear");    }
 
     private static Task<string> RunProjectIdsAsync(bool apply, bool diagnose, ProjectIdCensusReport report) =>
         RunProjectIdsAsync(apply, diagnose, new InMemorySettings { ProjectIdsReport = report });
@@ -287,25 +418,51 @@ public sealed class RepairCommandsTests
     private static Task<string> RunProjectIdsAsync(bool apply, InMemorySettings store) =>
         RunProjectIdsAsync(apply, false, store);
 
+    private static Task<string> RunProjectIdsAsync(bool apply, bool diagnose, ProjectIdCensusReport report, string dataRoot, string? mapPath = null) =>
+        RunProjectIdsAsync(apply, diagnose, new InMemorySettings { ProjectIdsReport = report }, dataRoot, mapPath);
+
+    private static Task<string> RunProjectIdsAsync(bool apply, InMemorySettings store, string dataRoot, string? mapPath = null) =>
+        RunProjectIdsAsync(apply, false, store, dataRoot, mapPath);
+
     private static async Task<string> RunProjectIdsDiagnoseAsync(InMemorySettings store) =>
         await RunProjectIdsAsync(false, true, store);
 
+    private static async Task<string> RunProjectIdsDiagnoseAsync(InMemorySettings store, string dataRoot, string? mapPath = null) =>
+        await RunProjectIdsAsync(false, true, store, dataRoot, mapPath);
+
     private static async Task<string> RunProjectIdsAsync(bool apply, bool diagnose, InMemorySettings store)
     {
+        using var scope = new TempScope();
+        return await RunProjectIdsAsync(apply, diagnose, store, scope.DataRoot);
+    }
+
+    private sealed record RunOutcome(string Stdout, int Exit);
+
+    private static async Task<RunOutcome> RunProjectIdsWithExitAsync(bool apply, InMemorySettings store, string dataRoot, string? mapPath = null) =>
+        await RunProjectIdsWithExitAsync(apply, false, store, dataRoot, mapPath);
+
+    private static async Task<RunOutcome> RunProjectIdsWithExitAsync(bool apply, bool diagnose, InMemorySettings store, string dataRoot, string? mapPath = null)
+    {
         var argv = apply
-            ? new[] { "repair", "project-ids", "--apply" }
+            ? (mapPath is null ? new[] { "repair", "project-ids", "--apply" } : ["repair", "project-ids", "--apply", "--map", mapPath])
             : diagnose
-                ? ["repair", "project-ids", "--diagnose"]
-                : ["repair", "project-ids"];
+                ? (mapPath is null ? ["repair", "project-ids", "--diagnose"] : ["repair", "project-ids", "--diagnose", "--map", mapPath])
+                : (mapPath is null ? ["repair", "project-ids"] : ["repair", "project-ids", "--map", mapPath]);
         CliArgs.TryParse(argv, out var parsed).ShouldBeTrue();
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ProjectIdsRepairCommands(store).RunAsync(parsed!.ParsedCliArgs,
+        var exit = await new ProjectIdsRepairCommands(store).RunAsync(parsed!.ParsedCliArgs, dataRoot,
             new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(0, $"stderr: {stderr}");
-        return stdout.ToString();
+        return new RunOutcome(stdout.ToString(), exit);
+    }
+
+    private static async Task<string> RunProjectIdsAsync(bool apply, bool diagnose, InMemorySettings store, string dataRoot, string? mapPath = null)
+    {
+        var outcome = await RunProjectIdsWithExitAsync(apply, diagnose, store, dataRoot, mapPath);
+        outcome.Exit.ShouldBe(0);
+        return outcome.Stdout;
     }
 
     [Fact]

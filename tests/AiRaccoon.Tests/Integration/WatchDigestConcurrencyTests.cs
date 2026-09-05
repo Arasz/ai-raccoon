@@ -176,7 +176,10 @@ public sealed class WatchDigestConcurrencyTests
         await using (var connection = await one.Factory.OpenBankAsync(token))
         {
             var plan = ProjectIdsFoldPlan.FromCensus(
-                await ProjectIdCensus.CollectAsync(connection, token), ProjectIdAliasMap.Default);
+                await ProjectIdCensus.CollectAsync(connection, token), new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+                ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+                ["qa-noise-project", "manual-sweep"]));
             await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection, plan, token);
         }
 
@@ -214,7 +217,10 @@ public sealed class WatchDigestConcurrencyTests
         {
             var plan = ProjectIdsFoldPlan.FromCensus(
                 await ProjectIdCensus.CollectAsync(connection: redrive, cancellationToken: token),
-                ProjectIdAliasMap.Default);
+                new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+                ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+                ["qa-noise-project", "manual-sweep"]));
             await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(redrive, plan, token);
             (await redrive.ExecuteScalarAsync<long>(new CommandDefinition(
                     "SELECT count(*) FROM watch_files WHERE project_id = @l",

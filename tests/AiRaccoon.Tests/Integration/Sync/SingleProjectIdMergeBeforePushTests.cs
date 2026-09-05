@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -35,6 +36,11 @@ public sealed class SingleProjectIdMergeBeforePushTests : IDisposable
     private const string GuidLoser = "01a062f4-0000-7000-8000-000000000001";
     private const string ObjectKey = "test-object";
 
+    private static ProjectIdAliasMap FixtureMap() => new(
+        [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+        ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+        ["qa-noise-project", "manual-sweep"]);
+
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly string _localRoot = TestData.CreateTempRoot("single-project-id-push-local");
@@ -55,6 +61,13 @@ public sealed class SingleProjectIdMergeBeforePushTests : IDisposable
     ///     A 2 winner rows, B 2 loser + 1 unique winner rows, real sync both directions with a local
     ///     repair on B between (unfolded loser rows survive on A and in the cloud → red).
     /// </summary>
+
+    private static string FixtureMapJson() =>
+        new ProjectIdAliasMap(
+            [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
+            ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
+            ["qa-noise-project", "manual-sweep"]).ToJson();
+
     [RetryFact]
     public async Task TwoReplicas_OfflinePushAfterRepair_Converges()
     {
@@ -84,7 +97,7 @@ public sealed class SingleProjectIdMergeBeforePushTests : IDisposable
         await using (var remote = await remoteFactory.OpenBankAsync(ct))
         {
             await remote.ExecuteAsync(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() });
             (await RepairJob().RunAsync(remote, ct)).ShouldBeTrue("B holds labeled loser rows to fold");
         }
 
@@ -146,7 +159,7 @@ public sealed class SingleProjectIdMergeBeforePushTests : IDisposable
                 new { guid = GuidLoser });
             await EntryAsync(remote, "h-live", Loser, "ctx-a", "live loser content", ct);
             await remote.ExecuteAsync(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds() });
+                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() });
             (await RepairJob().RunAsync(remote, ct)).ShouldBeTrue("the offline replica folds before pushing");
         }
 
@@ -209,7 +222,8 @@ public sealed class SingleProjectIdMergeBeforePushTests : IDisposable
             ct => localFactory.OpenBankAsync(ct),
             OpenSnapshotWithVectorAsync,
             OpenSnapshotWithVectorAsync,
-            new FakeTimeProvider(FixedNow), NullLogger<SyncService>.Instance); // QA F2: SyncService shares the repair FakeTimeProvider — merge watermark and tombstone GC stay deterministic.
+            new FakeTimeProvider(FixedNow), NullLogger<SyncService>.Instance,
+            aliasMap: FixtureMap()); // QA F2: SyncService shares the repair FakeTimeProvider — merge watermark and tombstone GC stay deterministic.
 
     private static async Task<SqliteConnection> OpenSnapshotWithVectorAsync(string path, CancellationToken ct)
     {
