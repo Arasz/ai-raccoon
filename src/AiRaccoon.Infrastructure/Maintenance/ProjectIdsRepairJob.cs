@@ -103,6 +103,10 @@ public sealed partial class ProjectIdsRepairJob(
         // alias-PK first-writer-wins, rows immutable thereafter (see ProjectIdAliases).
         await ProjectIdAliases.PersistAppliedAsync(connection, map,
                 timeProvider.GetUtcNow().ToUnixTimeSeconds(), cancellationToken).ConfigureAwait(false);
+        // Package E1 (reload on map change): the same process's choke-point cache must see the
+        // just-applied map — otherwise the post-apply probe (D6 iv) hits a stale Default and a
+        // retired id is accepted until a restart. LoadAndCache reads the table we just wrote.
+        await ProjectIdAliases.LoadAndCacheAsync(connection, _logger, cancellationToken).ConfigureAwait(false);
         Log.PassApplied(_logger, plan.Folds.Count, plan.Dropped.Count, plan.RetiredProjects.Count,
             moved, chunks.RowsRepositioned + chunks.RowsSetToUnknown);
 

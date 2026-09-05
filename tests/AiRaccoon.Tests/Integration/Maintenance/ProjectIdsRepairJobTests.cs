@@ -33,6 +33,7 @@ namespace AiRaccoon.Tests.Integration.Maintenance;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(AiRaccoon.Tests.Unit.Projects.ProjectIdAliasDefaultCollection.Name)]
 public sealed class ProjectIdsRepairJobTests : IDisposable
 {
     private const string Winner = "jsaa";

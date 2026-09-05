@@ -21,6 +21,7 @@ namespace AiRaccoon.Tests.Integration.Projects;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(AiRaccoon.Tests.Unit.Projects.ProjectIdAliasDefaultCollection.Name)]
 public sealed class ProjectIdAliasesDurableTests
 {
     /// <summary>D-AC(3): a fresh bank gains the table with the contracted columns and the current stamp.</summary>

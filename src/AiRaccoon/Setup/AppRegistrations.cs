@@ -216,6 +216,9 @@ public static partial class AppRegistrations
                 new CodeReindexJob(sp.GetRequiredService<ICodeEmbedder>(), sp.GetRequiredService<IEventPump<EmbedDrainRequest>>())
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
+            // Package E1: warm the choke-point alias cache from project_id_aliases once per
+            // process — without it P3 enforcement silently disarms on every restart.
+            services.AddHostedService<ProjectIdAliasCacheHostedService>();
         }
 
         /// <summary>
