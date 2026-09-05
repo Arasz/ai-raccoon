@@ -36,10 +36,10 @@ public sealed record ProjectIdCensusRow(
     /// <summary>Owns entries but has no projects row — the research record's orphan shape.</summary>
     public bool Orphan => !Registered && EntryTotal > 0;
 
-    /// <summary>Non-entry attachments that must be reviewed before any retire/delete decision.</summary>
+    /// <summary>Non-entry attachments that must be reviewed before any retire/delete decision. Telemetry (metrics/noise) is excluded: regenerable derived data, never verdict-blocking (D3).</summary>
     public long AttachmentCount =>
         Queued + Discards + QualityRows + Watches + WatchFiles + DigestClaims +
-        Tombstones + Workspaces + WorkspaceEntries + CodeEntries + MetricsRows + NoiseRows + SettingsKeys.Count;
+        Tombstones + Workspaces + WorkspaceEntries + CodeEntries + SettingsKeys.Count;
 }
 
 /// <summary>Bank-wide census report: one row per id found on any id-keyed surface, plus NULL counters.</summary>

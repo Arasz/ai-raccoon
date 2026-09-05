@@ -23,13 +23,16 @@ public sealed record ProjectIdsRepairResult(
     int TombstonesRewritten,
     int TombstonesCreated,
     int VecInvalidated,
-    int CodeVecInvalidated)
+    int CodeVecInvalidated,
+    int MetricsMoved = 0,
+    int NoiseMoved = 0)
 {
     /// <summary>Zero after a converged run — the second-run-no-op assertion reads this.</summary>
     public int TotalChanges =>
         EntriesMoved + EntriesDeduped + CodeMoved + CodeDeduped + QueueMerged + QueueMoved + QueueRemoved +
         DiscardsMoved + QualityMoved + WatchesMoved + SettingsRenamed + ProjectsEnsured + ProjectsRemoved +
-        TombstonesRewritten + TombstonesCreated + VecInvalidated + CodeVecInvalidated;
+        TombstonesRewritten + TombstonesCreated + VecInvalidated + CodeVecInvalidated +
+        MetricsMoved + NoiseMoved;
 }
 
 /// <summary>
@@ -51,9 +54,10 @@ public sealed record ProjectIdsRepairResult(
 ///         keys on (project_id, NULL-label) stability. Shared rows are cross-project content (H9:
 ///         the shared write path keeps the writer's project_id, so shared-keyed loser rows are
 ///         genuine) and never fold; they pin with a reason in the plan instead. Dropped ids delete
-///         to preserve them under). Metrics, noise, workspaces and workspace scratch are never
-///         touched; <c>source_id</c> rides along untouched (memory_source is content-keyed and
-///         local-only). Chunk renumber is NOT here — <see cref="Maintenance.ProjectIdsRepairJob" />
+///         to preserve them under). Metrics and noise re-key to the winner with the fold (D3;
+///         no vec/FTS shadows on either table, so no invalidation leg runs); workspaces and
+///         workspace scratch never move across projects; <c>source_id</c> rides along untouched
+///         (memory_source is content-keyed and local-only). Chunk renumber is NOT here — <see cref="Maintenance.ProjectIdsRepairJob" />
 ///         runs <see cref="Ingestion.ChunkIndexRepair" /> as an ordered job step after this, and the
 ///         existing PendingEmbedJob/CodeReindexJob drain the rows this invalidates.
 ///     </para>
@@ -84,6 +88,8 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var (codeMoved, codeDeduped) = await FoldCodeAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var discardsMoved = await FoldDiscardsAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var qualityMoved = await FoldQualityAsync(connection, plan, cancellationToken).ConfigureAwait(false);
+        var (metricsMoved, noiseMoved) =
+            await FoldTelemetryAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var watchesMoved = await FoldWatchesAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var settingsRenamed = await FoldSettingsAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var (projectsEnsured, projectsRemoved) =
@@ -93,7 +99,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         return new ProjectIdsRepairResult(entriesMoved, entriesDeduped, codeMoved, codeDeduped,
             queueMerged, queueMoved, queueRemoved, discardsMoved, qualityMoved, watchesMoved, settingsRenamed,
             projectsEnsured, projectsRemoved, tombstonesRewritten, entriesTombstoned,
-            vecInvalidated, codeVecInvalidated);
+            vecInvalidated, codeVecInvalidated, metricsMoved, noiseMoved);
     }
 
     /// <summary>
@@ -380,6 +386,39 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         }
 
         return total;
+    }
+
+    /// <summary>
+    ///     Telemetry follows the fold (D3): metrics and noise rows re-key to the winner with a
+    ///     trivial UPDATE. No vec/FTS shadows exist on either table (H4: triggers and shadow
+    ///     indexes verified absent), so no invalidation leg runs. Telemetry alone never schedules
+    ///     a fold — the planner pins telemetry-only ids instead — and the dropped path never
+    ///     deletes it, so this step handles folds only.
+    /// </summary>
+    private static async Task<(int Metrics, int Noise)> FoldTelemetryAsync(SqliteConnection connection,
+        ProjectIdsFoldPlan plan, CancellationToken cancellationToken)
+    {
+        var metrics = 0;
+        var noise = 0;
+        foreach (var fold in plan.Folds)
+        {
+            var step = await InWriteTransactionAsync(connection, async () =>
+            {
+                var stepMetrics = await connection.ExecuteAsync(new CommandDefinition(
+                        "UPDATE metrics SET project_id = @winner WHERE project_id = @loser",
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                var stepNoise = await connection.ExecuteAsync(new CommandDefinition(
+                        "UPDATE noise_entries SET project_id = @winner WHERE project_id = @loser",
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                return (Metrics: stepMetrics, Noise: stepNoise);
+            }, cancellationToken).ConfigureAwait(false);
+            metrics += step.Metrics;
+            noise += step.Noise;
+        }
+
+        return (metrics, noise);
     }
 
     /// <summary>

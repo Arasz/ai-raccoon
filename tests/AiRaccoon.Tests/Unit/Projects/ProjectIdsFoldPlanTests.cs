@@ -334,21 +334,23 @@ public sealed class ProjectIdsFoldPlanTests
         plan.Unresolved.ShouldBeEmpty();
     }
 
-    // Ledger — attributed-never-silent : --filter FromCensus_GuidLoserByName_WithOnlyTelemetry_PinsInsteadOfSilentlyContinuing : guid via registered name.
+    // Ledger — telemetry-ownership (C1 supersedes the A pin for this shape) : --filter FromCensus_GuidLoserByName_WithOnlyTelemetry_RetiresInsteadOfPinning : guid via registered name, metrics only.
     [Fact]
-    public void FromCensus_GuidLoserByName_WithOnlyTelemetry_PinsInsteadOfSilentlyContinuing()
+    public void FromCensus_GuidLoserByName_WithOnlyTelemetry_RetiresInsteadOfPinning()
     {
-        // The registered-name fold branch pins by the same rule: attribution without
-        // executable rows is waiting work with a reason, not an invisible skip.
+        // C1: telemetry is verdict-invisible, so a registered id owning only it is the
+        // registered-empty shape — the retire verdict owns it (per the attributed-branch rule),
+        // not the telemetry pin, which is for ids retire cannot own (unregistered losers and
+        // unresolvable ids). Still never a silent continue: every verdict here is visible.
         var guid = "01a062f4-0000-7000-8000-000000000001";
         var report = Report(Row(guid, registered: true, registeredName: "job-search-ai-assistant", metricsRows: 1));
 
         var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
         plan.Folds.ShouldBeEmpty();
-        var pin = plan.Pinned.ShouldHaveSingleItem();
-        pin.ProjectId.ShouldBe(guid);
-        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedTelemetryOnly);
+        plan.Pinned.ShouldBeEmpty();
+        plan.Unresolved.ShouldBeEmpty();
+        plan.RetiredProjects.ShouldBe([guid]);
     }
 
     // Ledger — canonical-self-silent : --filter FromCensus_CanonicalSelf_WithEntries_PlansNeitherFoldNorPin : winner-only bank.
@@ -364,6 +366,61 @@ public sealed class ProjectIdsFoldPlanTests
         plan.Folds.ShouldBeEmpty();
         plan.Pinned.ShouldBeEmpty();
         plan.IsEmpty.ShouldBeTrue();
+    }
+
+    // Ledger — telemetry-ownership : --filter AttachmentCount_ExcludesMetricsAndNoiseRows : metrics+noise row.
+    [Fact]
+    public void AttachmentCount_ExcludesMetricsAndNoiseRows()
+    {
+        // D3: telemetry is regenerable derived data, never an attachment that blocks a
+        // retire/unresolved verdict — a metrics-only b0e32c16-shaped id must read as empty.
+        Row("b0e32c16", metricsRows: 2, noiseRows: 1).AttachmentCount.ShouldBe(0);
+    }
+
+    // Ledger — telemetry-ownership : --filter FromCensus_RegisteredMetricsOnlyId_Retires : registered metrics-only id, empty map.
+    [Fact]
+    public void FromCensus_RegisteredMetricsOnlyId_Retires()
+    {
+        // AC(1): telemetry no longer blocks the retire verdict — a registered id owning
+        // only metrics is the registered-empty shape and retires.
+        var report = Report(Row("b0e32c16", registered: true, metricsRows: 3));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Empty);
+
+        plan.RetiredProjects.ShouldBe(["b0e32c16"]);
+        plan.Unresolved.ShouldBeEmpty();
+        plan.Pinned.ShouldBeEmpty();
+    }
+
+    // Ledger — telemetry-ownership : --filter FromCensus_UnregisteredMetricsOnlyId_PinsTelemetryOnly : unattributed metrics+noise id, empty map.
+    [Fact]
+    public void FromCensus_UnregisteredMetricsOnlyId_PinsTelemetryOnly()
+    {
+        // AC(1) + D3: an unresolvable metrics-only id leaves the unresolved verdict alone —
+        // it pins telemetry-only (convergence-neutral) instead of needing a human.
+        var report = Report(Row("b0e32c16", metricsRows: 2, noiseRows: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Empty);
+
+        plan.Unresolved.ShouldBeEmpty();
+        plan.RetiredProjects.ShouldBeEmpty();
+        plan.Folds.ShouldBeEmpty();
+        var pin = plan.Pinned.ShouldHaveSingleItem();
+        pin.ProjectId.ShouldBe("b0e32c16");
+        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedTelemetryOnly);
+    }
+
+    // Ledger — workspace-retire-block : --filter FromCensus_RegisteredIdWithOpenWorkspaces_NeverRetires : registered + workspaces, empty map.
+    [Fact]
+    public void FromCensus_RegisteredIdWithOpenWorkspaces_NeverRetires()
+    {
+        // AC(2): retire never fires while open workspaces exist — workspace scratch is live
+        // user state, and the C1 AttachmentCount change must not unblock this verdict.
+        var report = Report(Row("01a03024-0000-7000-8000-000000000001", registered: true, workspaces: 1, workspaceEntries: 2));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Empty);
+
+        plan.RetiredProjects.ShouldBeEmpty("open workspaces block retire — the id waits, it is not empty");
     }
 
     // Explicit fixture: machine ids as TEST DATA (allowed). Production Default is empty (ADR-0099).

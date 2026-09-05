@@ -161,6 +161,14 @@ public sealed class ProjectIdsFoldPlan(
                 continue;
             }
 
+            // D3: an unresolvable id owning only regenerable telemetry never needs a human —
+            // it pins telemetry-only (convergence-neutral) instead of blocking the unresolved verdict.
+            if ((row.MetricsRows > 0 || row.NoiseRows > 0) && row.EntryTotal == 0 && row.AttachmentCount == 0)
+            {
+                pinned.Add(PinTelemetryOnly(row.ProjectId, row));
+                continue;
+            }
+
             if (row.EntryTotal > 0 || row.AttachmentCount > 0)
             {
                 unresolved.Add(row.ProjectId);
@@ -174,7 +182,8 @@ public sealed class ProjectIdsFoldPlan(
     ///     True when the row owns a surface the dropped path actually deletes: committed entries
     ///     (project/custom/shared, including null-context bulk rows — the dropped delete has no
     ///     context predicate), code, queue, discards, quality, watches, or id-embedding settings
-    ///     keys. Metrics, noise, workspaces and workspace scratch are never touched, so owning only
+    ///     keys. Metrics, noise, workspaces and workspace scratch are never deleted by the dropped
+    ///     path (folds re-key telemetry to the winner; workspaces never move), so owning only
     ///     those must not schedule a delete that re-plans forever as a no-op (review SHOULD-3).
     ///     Tombstones alone don't schedule either: no dropped step deletes them — repair-created
     ///     tombstones for dropped hashes are load-bearing suppression and must linger.
@@ -207,8 +216,9 @@ public sealed class ProjectIdsFoldPlan(
     ///     scope, any label including NULL-context bulk rows — D1, exactly the broadened applier's
     ///     executable predicate, so a planned fold can never execute as zero moves), code, queue,
     ///     discards, quality, watches, or id-embedding settings keys. Shared-scope rows are
-    ///     cross-project content the repair never folds; metrics, noise, workspaces and workspace
-    ///     scratch are never touched — owning only those pins with a reason (D2 planner honesty).
+    ///     cross-project content the repair never folds; telemetry rides along with a fold but never
+    ///     schedules one, and workspace scratch never moves — owning only those pins with a reason
+    ///     (D2 planner honesty).
     /// </summary>
     private static bool OwnsMoveableContent(ProjectIdCensusRow row)
     {
@@ -224,6 +234,12 @@ public sealed class ProjectIdsFoldPlan(
             || row.Tombstones > 0
             || row.SettingsKeys.Count > 0;
     }
+
+    /// <summary>Telemetry-only pin: regenerable derived data the repair never moves (D3, convergence-neutral).</summary>
+    private static ProjectIdPin PinTelemetryOnly(string projectId, ProjectIdCensusRow row) =>
+        new(projectId, PinnedTelemetryOnly,
+            $"owns only telemetry ({row.MetricsRows} metrics + {row.NoiseRows} noise rows) — " +
+            "regenerable derived data the repair never moves");
 
     /// <summary>True when the row owns live workspace scratch that never moves across projects (D3 block).</summary>
     private static bool HasOpenWorkspaces(ProjectIdCensusRow row) =>
@@ -251,9 +267,7 @@ public sealed class ProjectIdsFoldPlan(
 
         if (row.MetricsRows > 0 || row.NoiseRows > 0)
         {
-            return new ProjectIdPin(loser, PinnedTelemetryOnly,
-                $"owns only telemetry ({row.MetricsRows} metrics + {row.NoiseRows} noise rows) — " +
-                "regenerable derived data the repair never moves");
+            return PinTelemetryOnly(loser, row);
         }
 
         return new ProjectIdPin(loser, PinnedNoMoveableContent,
