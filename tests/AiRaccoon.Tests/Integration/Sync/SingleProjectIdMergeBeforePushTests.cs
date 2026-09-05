@@ -12,6 +12,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using AiRaccoon.Tests.Unit.Projects;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
@@ -29,6 +30,7 @@ namespace AiRaccoon.Tests.Integration.Sync;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class SingleProjectIdMergeBeforePushTests : IDisposable
 {
     private const string Winner = "jsaa";
@@ -48,6 +50,9 @@ public sealed class SingleProjectIdMergeBeforePushTests : IDisposable
 
     public void Dispose()
     {
+        // SyncService loads the durable map into process-wide Default during merges (E);
+        // reset so later collection members start from the empty steady state.
+        ProjectIdAliasMap.ResetDefault();
         TestData.DeleteTempRoot(_localRoot);
         TestData.DeleteTempRoot(_remoteRoot);
     }
