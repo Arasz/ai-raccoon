@@ -47,14 +47,6 @@ internal static class ProjectRows
         $"{Scope(alias)} AND {alias}project_id = @{param}";
 
     /// <summary>
-    ///     Foldable project rows: <see cref="ProjectScope" /> plus a context label. The pre-D1 repair
-    ///     fold moved only labelled rows (d-426 keep); the fold now works <see cref="CommittedScope" />
-    ///     and this helper remains for callers that genuinely need the labeled-only shape.
-    /// </summary>
-    public static string LabeledProjectScope(string alias = "", string param = "projectId") =>
-        $"{ProjectScope(alias, param)} AND {alias}context_label IS NOT NULL";
-
-    /// <summary>
     ///     Orders the committed row ahead of a context-labelled sibling of the same hash. A hash is
     ///     not a unique row — identical content written twice under different labels shares one — so
     ///     any single-row update or read of "the entry for this hash" needs a deterministic winner.

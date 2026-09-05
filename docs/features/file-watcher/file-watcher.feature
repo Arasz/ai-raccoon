@@ -449,15 +449,14 @@ Feature: File watcher
             And loser scope and config rows for "job-search-ai-assistant" and "AI-RACCOON"
             And labeled project rows for the loser ids
             When the project-ids repair folds loser ids into their winners
-            Then no loser rows remain except byte-identical file mirrors
+            Then no loser rows remain and file mirrors folded byte-identical under the winners
             And the scope and config rows moved to the winner keys
             And the "jsaa" watch keeps scan owner "scanner-1" with its lease
             And the "ai-raccoon" watch still owns "c.md"
             When "a.md" and "b.md" change
             Then memory_search for "jsaa" returns both new contents
-            # g.md is asserted searchable only AFTER a post-repair change: its untouched rows
-            # stay byte-identical under the guid partition (review S2), so an unchanged g.md
-            # can never be searchable for the winner — same treatment a.md/b.md get above.
+            # g.md's NULL-context rows fold byte-identical under the winner with the repair
+            # itself (D1) — and stay searchable after a post-repair change like a.md/b.md.
             When "/repo/g/g.md" content changes
             Then "g.md" is searchable for "jsaa"
-            And still no loser rows remain and mirrors are unchanged
+            And still no loser rows remain after post-repair edits
