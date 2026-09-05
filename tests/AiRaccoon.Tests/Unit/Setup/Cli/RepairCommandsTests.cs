@@ -214,7 +214,7 @@ public sealed class RepairCommandsTests
         stdout.ShouldContain(
             "summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, 2 pinned " +
             "(pinned-shared-only: 'job-search-ai-assistant', pinned-telemetry-only: 'AI-RACCOON'), " +
-            ProjectIdsRepairCommands.P3PendingNote + ".");
+            ProjectIdsRepairCommands.P3ArmedNote + ".");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
@@ -261,7 +261,7 @@ public sealed class RepairCommandsTests
         stdout.ShouldContain(
             "summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, 2 pinned " +
             "(pinned-shared-only: 'job-search-ai-assistant', pinned-telemetry-only: 'AI-RACCOON'), " +
-            ProjectIdsRepairCommands.P3PendingNote + ".");
+            ProjectIdsRepairCommands.P3ArmedNote + ".");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
@@ -615,7 +615,7 @@ public sealed class RepairCommandsTests
 
         stdout.ShouldContain(
             "summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, " +
-            ProjectIdsRepairCommands.P3PendingNote + ".");
+            ProjectIdsRepairCommands.P3ArmedNote + ".");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
