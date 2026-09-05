@@ -300,6 +300,23 @@ public sealed class ProjectIdsFoldPlanTests
         plan.Unresolved.ShouldBeEmpty();
     }
 
+    // Ledger — workspace-blocks-mixed-shape : alias loser with committed rows AND open
+    // workspaces (review #614: folding first would strand live scratch under the loser id,
+    // and F's loop would then pin the workspace-only remainder as if D3 had held all along).
+    [Fact]
+    public void FromCensus_MixedCommittedAndWorkspaceLoser_PinsOpenWorkspaces()
+    {
+        var report = Report(Row("job-search-ai-assistant", projectEntries: 2, workspaces: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBeEmpty();
+        var pin = plan.Pinned.ShouldHaveSingleItem();
+        pin.ProjectId.ShouldBe("job-search-ai-assistant");
+        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedOpenWorkspaces);
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
     // Ledger — attributed-never-silent : --filter FromCensus_EmptyAliasLoser_PinsGenericInsteadOfSilentlyContinuing : alias loser, zero everywhere.
     [Fact]
     public void FromCensus_EmptyAliasLoser_PinsGenericInsteadOfSilentlyContinuing()

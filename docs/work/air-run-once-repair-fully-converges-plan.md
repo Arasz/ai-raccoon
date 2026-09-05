@@ -49,7 +49,7 @@ Broaden the applier from `LabeledProjectScope` (project-scope + non-NULL label) 
 ### Package A — planner honesty + pinned buckets (Core; D2 foundation, unblocks all)
 - A1: `OwnsMoveableContent` ≡ applier executable predicate (post-D1: owns committed rows, project+custom); shared-keyed-only ids pin with a reason (pending H9), never fold; add `Pinned` list with reason lines to `ProjectIdsFoldPlan`; attributed-but-unmovable ids never silently `continue`.
 - A2: CLI scoreboard distinguishes converged / pinned-only / actionable; per-pin reason lines printed.
-- **ACs**: (1) NULL-only + custom-labeled fixture ids from the research record produce folds plannable with zero-move-impossible (truth-table); full-drain proof deferred to G (broadened applier is B, lands after A); (2) open-workspace / telemetry-only / shared-keyed-only fixtures produce pins with reasons, never folds; (3) summary line matches D6 vocabulary.
+- **ACs**: (1) NULL-only + custom-labeled fixture ids from the research record produce folds plannable with zero-move-impossible (truth-table); full-drain proof deferred to G (broadened applier is B, lands after A); (2) open-workspace / telemetry-only / shared-keyed-only fixtures produce pins with reasons, never folds — incl. the mixed committed+workspace shape (pins first, never folds; review #614); (3) summary line matches D6 vocabulary — STAGED: the `pinned-only` word lands in A, the full D6 line (incl. `P3 armed`) is F2's.
 - **Tests** (fail first): `FromCensus` truth-table tests over synthetic `ProjectIdCensusReport`s (zero-move fold impossible by construction); CLI scoreboard golden-output tests. **Run**: `dotnet test --filter ProjectIdsFoldPlan`.
 
 ### Package B — fold applier broadening (Sqlite; D1)
@@ -76,7 +76,7 @@ Broaden the applier from `LabeledProjectScope` (project-scope + non-NULL label) 
 - **Tests**: gate unit/integration tests incl. empty-map pass-through; sync-conflict test. **Run**: `dotnet test --filter "ToolGate|P3|Enforcement"`.
 
 ### Package F — run-until-fixed loop + closing summary (CLI/job; D5+D6; after A+B+C)
-- F1: `--apply` loop with bounded passes, per-pass receipts, stuck vs writers-active distinction from moved-counts/census totals, `--queue-only` escape.
+- F1: `--apply` loop with bounded passes, per-pass receipts, stuck vs writers-active distinction from moved-counts/census totals, `--queue-only` escape. The loop re-derives first: a pinned-only plan reports pinned-only WITHOUT committing a blind (possibly empty) `repair_requests` row (review #614).
 - F2: D6 verdict + closing-summary line (converged|pinned-only…P3 armed); quiesce guidance text. #613 already ships a closing-summary line + 4 `RepairCommandsTests` asserting exact strings — F2 deliberately supersedes them and updates those 4 tests to D6 vocabulary in the same PR.
 - **ACs**: (1) single invocation converges a quiesced multi-pass fixture; (2) live-writer fixture ends writers-active with quiesce guidance, not a false converged; (3) ADR-0075 holds (CLI issues requests+reads only — assert no bank open for write in CLI process).
 - **Tests**: loop-state-machine tests with fake `IRepairStore`/census sequences; CLI golden-output tests. **Run**: `dotnet test --filter "RepairLoop|ProjectIdsRepairCommands"`.

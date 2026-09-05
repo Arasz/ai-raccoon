@@ -85,6 +85,14 @@ public sealed class ProjectIdsFoldPlan(
                     continue;
                 }
 
+                // D3: open workspaces block before anything moves — folding committed rows
+                // while they exist would strand live scratch under the loser id (review #614).
+                if (HasOpenWorkspaces(row))
+                {
+                    pinned.Add(PinUnmoveable(row.ProjectId, winner!, row));
+                    continue;
+                }
+
                 if (OwnsMoveableContent(row))
                 {
                     folds.Add(new ProjectIdFold(row.ProjectId, winner!));
@@ -108,6 +116,13 @@ public sealed class ProjectIdsFoldPlan(
                 && map.TryResolve(row.RegisteredName, out var named)
                 && !string.Equals(named, row.ProjectId, StringComparison.Ordinal))
             {
+                // D3: same workspace block on the name-attributed path (review #614).
+                if (HasOpenWorkspaces(row))
+                {
+                    pinned.Add(PinUnmoveable(row.ProjectId, named!, row));
+                    continue;
+                }
+
                 if (OwnsMoveableContent(row))
                 {
                     folds.Add(new ProjectIdFold(row.ProjectId, named!));
@@ -210,6 +225,10 @@ public sealed class ProjectIdsFoldPlan(
             || row.SettingsKeys.Count > 0;
     }
 
+    /// <summary>True when the row owns live workspace scratch that never moves across projects (D3 block).</summary>
+    private static bool HasOpenWorkspaces(ProjectIdCensusRow row) =>
+        row.Workspaces > 0 || row.WorkspaceEntries > 0;
+
     /// <summary>
     ///     Classifies an attributed-but-unmovable id into its waiting bucket with an ownership
     ///     reason. Workspaces block first (live user state), then shared-only (cross-project,
@@ -217,7 +236,7 @@ public sealed class ProjectIdsFoldPlan(
     /// </summary>
     private static ProjectIdPin PinUnmoveable(string loser, string winner, ProjectIdCensusRow row)
     {
-        if (row.Workspaces > 0 || row.WorkspaceEntries > 0)
+        if (HasOpenWorkspaces(row))
         {
             return new ProjectIdPin(loser, PinnedOpenWorkspaces,
                 $"owns {row.Workspaces} open workspace(s) with {row.WorkspaceEntries} scratch row(s) — " +
