@@ -163,6 +163,31 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
                 "'repair project-ids' until it reports no folds.");
         }
 
+        // f: the report never closed with a verdict — one summary line, always last, naming
+        // the overall state: repair in progress (--apply queued it), repair needed (a dry run
+        // with folds/drops/retires waiting), or nothing to do (converged). A pending
+        // human-attribution count qualifies the line but never multiplies the states.
+        var actionable = plan.Folds.Count + plan.Dropped.Count + plan.RetiredProjects.Count;
+        if (apply)
+        {
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: summary — repair in progress ({actionable} change(s) queued for the server).");
+        }
+        else if (actionable > 0)
+        {
+            await streams.WriteOutputLineAsync(
+                needsAttention > 0
+                    ? $"project-ids repair: summary — repair needed ({actionable} change(s) waiting on --apply; {needsAttention} id(s) still need a human)."
+                    : $"project-ids repair: summary — repair needed ({actionable} change(s) waiting on --apply).");
+        }
+        else
+        {
+            await streams.WriteOutputLineAsync(
+                needsAttention > 0
+                    ? $"project-ids repair: summary — nothing to queue ({needsAttention} id(s) still need a human to attribute)."
+                    : "project-ids repair: summary — nothing to do (no folds, drops, or retires pending).");
+        }
+
         return 0;
     }
 
