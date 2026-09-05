@@ -57,11 +57,53 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    private ProjectIdsRepairJob NewJob() =>
+    private ProjectIdsRepairJob NewJob(Microsoft.Extensions.Logging.ILogger<ProjectIdsRepairJob>? logger = null) =>
         new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
-            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow));
+            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow), logger);
 
-    /// <summary>Outbox probe: no request row, no work. Ledger — drop-HasWork-check : --filter HasWorkAsync_WithNoOpenRequest_IsFalse : empty bank.</summary>
+    /// <summary>
+    ///     Package F result-reporting hunk: a requested run logs a per-pass receipt naming the
+    ///     applied plan counts and the rows the applier moved — the server-side half of the
+    ///     CLI loop's per-pass receipts (the CLI re-derives its own half from census reads).
+    ///     Mutation ledger — drop-pass-receipt-log : --filter RequestedRun_LogsPerPassReceiptWithMovedCounts : seeded cluster + open request.
+    /// </summary>
+    [RetryFact]
+    public async Task RequestedRun_LogsPerPassReceiptWithMovedCounts()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+        await SeedClusterAsync(connection, ct);
+        await RequestRepairAsync(connection);
+        var sink = new CapturingLogger<ProjectIdsRepairJob>();
+
+        var created = await NewJob(sink).RunAsync(connection, ct);
+
+        created.ShouldBeTrue("the seeded bank owns loser rows on every moveable surface");
+        var receipt = sink.Entries.Single(
+            entry => entry.EventId == ProjectIdsRepairJob.PassReceiptEventId);
+        receipt.Message.ShouldContain("moved");
+    }
+
+    /// <summary>Captures <see cref="Microsoft.Extensions.Logging.ILogger{T}" /> output for receipt assertions.</summary>
+    private sealed class CapturingLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
+    {
+        public List<(int EventId, string Message)> Entries { get; } = [];
+
+        IDisposable? Microsoft.Extensions.Logging.ILogger.BeginScope<TState>(TState state) => null;
+
+        bool Microsoft.Extensions.Logging.ILogger.IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        void Microsoft.Extensions.Logging.ILogger.Log<TState>(
+            Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add((eventId.Id, formatter(state, exception)));
+        }
+    }
+
     [RetryFact]
     public async Task HasWorkAsync_WithNoOpenRequest_IsFalse()
     {

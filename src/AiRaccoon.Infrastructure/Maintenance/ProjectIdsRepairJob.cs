@@ -41,6 +41,9 @@ public sealed partial class ProjectIdsRepairJob(
 
     public const string JobName = "repair-project-ids";
 
+    /// <summary>Event id of the per-pass result receipt <see cref="Log.PassApplied" /> stamps per requested run (Package F).</summary>
+    public const int PassReceiptEventId = 711;
+
     public string Name => JobName;
 
     public string DisplayName => "apply a CLI-requested project-ids repair";
@@ -84,16 +87,20 @@ public sealed partial class ProjectIdsRepairJob(
             await ProjectIdCensus.CollectAsync(connection, cancellationToken).ConfigureAwait(false),
             map);
         var createdWork = false;
+        var moved = 0;
         if (!plan.IsEmpty)
         {
             var result = await new ProjectIdsRepair(timeProvider)
                 .ApplyAsync(connection, plan, cancellationToken).ConfigureAwait(false);
-            createdWork = result.TotalChanges > 0;
+            moved = result.TotalChanges;
+            createdWork = moved > 0;
         }
 
         var chunks = await new ChunkIndexRepair(fileTypeMatcher, embeddingService)
             .RunAsync(connection, true, cancellationToken).ConfigureAwait(false);
         createdWork = createdWork || chunks.RowsRepositioned > 0 || chunks.RowsSetToUnknown > 0;
+        Log.PassApplied(_logger, plan.Folds.Count, plan.Dropped.Count, plan.RetiredProjects.Count,
+            moved, chunks.RowsRepositioned + chunks.RowsSetToUnknown);
 
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
                 new { kind = RepairKinds.ProjectIds, finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
@@ -118,5 +125,9 @@ public sealed partial class ProjectIdsRepairJob(
         [LoggerMessage(EventId = 710, Level = LogLevel.Warning,
             Message = "ai-raccoon: project-ids repair request carries an invalid stored map; leaving the request open ({Reason})")]
         public static partial void InvalidStoredMap(ILogger logger, string reason);
+
+        [LoggerMessage(EventId = 711, Level = LogLevel.Information,
+            Message = "ai-raccoon: project-ids repair pass applied {Folds} fold(s), {Drops} drop(s), {Retires} retire(s) — moved {Moved} row(s), repositioned {Chunks} chunk row(s)")]
+        public static partial void PassApplied(ILogger logger, int folds, int drops, int retires, int moved, int chunks);
     }
 }
