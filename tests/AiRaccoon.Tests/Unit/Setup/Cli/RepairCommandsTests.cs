@@ -195,8 +195,8 @@ public sealed class RepairCommandsTests
 
     /// <summary>
     ///     Package A golden test (D2/D6): a pinned-only dry run prints the pinned count on the
-    ///     scoreboard, one reason line per pin, and a pinned-only closing summary — never the
-    ///     converged "nothing to do" line, which would hide the waiting pins.
+    ///     scoreboard, one reason line per pin, and a pinned-only closing summary in D6
+    ///     vocabulary — never the converged line, which would hide the waiting pins.
     ///     Ledger — pinned-only-scoreboard : --filter ProjectIds_DryRun_PinnedOnly_PrintsReasonsAndPinnedOnlySummary : shared-only + telemetry-only losers.
     /// </summary>
     [Fact]
@@ -211,13 +211,17 @@ public sealed class RepairCommandsTests
         stdout.ShouldContain("2 pinned (waiting with reasons below)");
         stdout.ShouldContain("pinned-shared-only: 'job-search-ai-assistant'");
         stdout.ShouldContain("pinned-telemetry-only: 'AI-RACCOON'");
-        stdout.ShouldContain("summary — pinned-only (0 change(s) waiting on --apply; 2 pinned with reasons above).");
+        stdout.ShouldContain(
+            "summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, 2 pinned " +
+            "(pinned-shared-only: 'job-search-ai-assistant', pinned-telemetry-only: 'AI-RACCOON'), " +
+            ProjectIdsRepairCommands.P3PendingNote + ".");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
     /// <summary>
     ///     Package A: an actionable run with pins extends the repair-needed summary instead of
     ///     hiding the pins behind the fold count — the scoreboard still sums to the censused total.
+    ///     F2 restates it in D6 vocabulary (explicit zero counts, inline pin list).
     ///     Ledger — actionable-with-pins : --filter ProjectIds_DryRun_ActionableWithPins_ExtendsRepairNeededSummary : fold + telemetry pin.
     /// </summary>
     [Fact]
@@ -236,24 +240,28 @@ public sealed class RepairCommandsTests
         stdout.ShouldContain("1 pinned (waiting with reasons below)");
         stdout.ShouldContain("0 need nothing (already correct or empty)");
         stdout.ShouldContain("pinned-telemetry-only: 'AI-RACCOON'");
-        stdout.ShouldContain("summary — repair needed (1 change(s) waiting on --apply; 1 pinned with reasons above).");
+        stdout.ShouldContain("summary — repair needed: 1 fold, 0 drop, 0 retire, 0 unresolved, " +
+            "1 pinned (pinned-telemetry-only: 'AI-RACCOON') — pass --apply to run the loop until it reports converged.");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
     /// <summary>
-    ///     Package A: --apply on a pinned-only plan still commits the (empty) request, and the
-    ///     in-progress summary carries the pinned count instead of reading as fully done.
-    ///     Ledger — apply-with-pins : --filter ProjectIds_Apply_WithPins_ExtendsInProgressSummary : pinned-only report, --apply.
+    ///     F1 no-blind-request rule overturns the Package A behaviour: --apply on a pinned-only
+    ///     plan commits NO request row and reports pinned-only in D6 vocabulary.
+    ///     Ledger — apply-with-pins : --filter ProjectIds_Apply_PinnedOnly_CommitsNoRequest_ReportsPinnedOnly : pinned-only report, --apply.
     /// </summary>
     [Fact]
-    public async Task ProjectIds_Apply_WithPins_ExtendsInProgressSummary()
+    public async Task ProjectIds_Apply_PinnedOnly_CommitsNoRequest_ReportsPinnedOnly()
     {
         using var scope = new TempScope();
         var inner = new InMemorySettings { ProjectIdsReport = PinnedOnlyReport() };
         var stdout = await RunProjectIdsAsync(apply: true, inner, scope.DataRoot, scope.WriteFixtureMap());
 
-        inner.LastRepairRequest.ShouldBe(RepairKind.ProjectIds);
-        stdout.ShouldContain("summary — repair in progress (0 change(s) queued for the server; 2 pinned with reasons above).");
+        inner.LastRepairRequest.ShouldBeNull("a pinned-only first derive commits no blind request row");
+        stdout.ShouldContain(
+            "summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, 2 pinned " +
+            "(pinned-shared-only: 'job-search-ai-assistant', pinned-telemetry-only: 'AI-RACCOON'), " +
+            ProjectIdsRepairCommands.P3PendingNote + ".");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
@@ -374,7 +382,11 @@ public sealed class RepairCommandsTests
     public async Task ProjectIds_Apply_WithoutMap_ForwardsANullMap()
     {
         using var scope = new TempScope();
-        var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
+        // A registered-empty id retires under the empty map, so the plan is actionable and the
+        // loop commits (F1 no-blind-request rule: an empty plan would commit nothing).
+        var report = new ProjectIdCensusReport(
+            [.. ClusterReport().Rows, Row("empty-registered-project", registered: true)], 0, 0, 0, 0, []);
+        var inner = new InMemorySettings { ProjectIdsReport = report };
 
         var stdout = await RunProjectIdsWithExitAsync(apply: true, inner, scope.DataRoot);
 
@@ -545,7 +557,8 @@ public sealed class RepairCommandsTests
     /// <summary>
     ///     f: a dry run ended without a verdict line — a log grep could not tell converged
     ///     from actionable without re-reading the whole report. The last line is always the
-    ///     one-line summary. Dry run with folds/drops/retires waiting: repair needed.
+    ///     one-line summary, in D6 vocabulary. Dry run with folds/drops/retires waiting:
+    ///     repair needed with explicit counts.
     ///     Ledger — missing-closing-summary : MixedOutcome dry run (3 actionable + 1 attention).
     /// </summary>
     [Fact]
@@ -554,29 +567,43 @@ public sealed class RepairCommandsTests
         using var scope = new TempScope();
         var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, MixedOutcomeReport(), scope.DataRoot, scope.WriteFixtureMap());
 
-        stdout.ShouldContain("summary — repair needed (3 change(s) waiting on --apply; 1 id(s) still need a human).");
+        stdout.ShouldContain(
+            "summary — repair needed: 1 fold, 1 drop, 1 retire, 1 unresolved, 0 pinned — " +
+            "pass --apply to run the loop until it reports converged; 1 id(s) still need a human to attribute.");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
     /// <summary>
-    ///     f: same verdict-line gap on the --apply path — a queued request reads as
-    ///     in-progress, never as done, until a re-run reports no folds.
-    ///     Ledger — missing-closing-summary : MixedOutcome --apply (3 queued).
+    ///     f: the fire-and-forget path — --apply --queue-only queues the request and exits
+    ///     without waiting, so a queued request reads as in-progress in D6 vocabulary, never
+    ///     as done, until a loop run reports converged.
+    ///     Ledger — missing-closing-summary : MixedOutcome --queue-only (3 queued).
     /// </summary>
     [Fact]
-    public async Task ProjectIds_Apply_EndsWithRepairInProgressSummary()
+    public async Task ProjectIds_QueueOnly_EndsWithRepairInProgressSummary()
     {
         using var scope = new TempScope();
         var inner = new InMemorySettings { ProjectIdsReport = MixedOutcomeReport() };
-        var stdout = await RunProjectIdsAsync(apply: true, inner, scope.DataRoot, scope.WriteFixtureMap());
+        var mapPath = scope.WriteFixtureMap();
+        CliArgs.TryParse(["repair", "project-ids", "--apply", "--queue-only", "--map", mapPath], out var parsed).ShouldBeTrue();
+        var stdoutWriter = new StringWriter();
+        var stderrWriter = new StringWriter();
+        var exit = await new ProjectIdsRepairCommands(inner, ProjectIdsRepairCommands.RepairLoopOptions.Test).RunAsync(
+            parsed!.ParsedCliArgs, scope.DataRoot,
+            new StandardStreams(TextReader.Null, stdoutWriter, stderrWriter), TestContext.Current.CancellationToken);
+        var stdout = stdoutWriter.ToString();
 
-        stdout.ShouldContain("summary — repair in progress (3 change(s) queued for the server).");
+        exit.ShouldBe(0);
+        inner.LastRepairRequest.ShouldBe(RepairKind.ProjectIds);
+        stdout.ShouldContain(
+            "summary — repair in progress: 3 change(s) queued for the server — " +
+            "the server applies it on its next maintenance poll (~15s).");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
     /// <summary>
-    ///     f: the converged run's verdict — nothing to do — must print too, or the
-    ///     summary's absence reads as a truncated report.
+    ///     f: the converged run's verdict in D6 vocabulary — explicit zero counts plus the P3
+    ///     note — must print too, or the summary's absence reads as a truncated report.
     ///     Ledger — missing-closing-summary : single canonical id, map supplied.
     /// </summary>
     [Fact]
@@ -586,14 +613,15 @@ public sealed class RepairCommandsTests
         var report = new ProjectIdCensusReport([Row("jsaa", entries: 1)], 0, 0, 0, 0, []);
         var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report, scope.DataRoot, scope.WriteFixtureMap());
 
-        stdout.ShouldContain("summary — nothing to do (no folds, drops, or retires pending).");
+        stdout.ShouldContain(
+            "summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, " +
+            ProjectIdsRepairCommands.P3PendingNote + ".");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
     /// <summary>
-    ///     f: attention-only runs (no folds/drops/retires, but ids a human must place)
-    ///     are neither "nothing to do" nor "repair needed" — the summary says what is
-    ///     actually true: nothing to queue.
+    ///     f: attention-only runs (no folds/drops/retires, but ids a human must place) get the
+    ///     D6 attention verdict with explicit zero counts — neither converged nor repair needed.
     ///     Ledger — missing-closing-summary : single unknown id, no map.
     /// </summary>
     [Fact]
@@ -603,7 +631,9 @@ public sealed class RepairCommandsTests
         var report = new ProjectIdCensusReport([Row("mystery-guid-0001", entries: 1)], 0, 0, 0, 0, []);
         var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report, scope.DataRoot);
 
-        stdout.ShouldContain("summary — nothing to queue (1 id(s) still need a human to attribute).");
+        stdout.ShouldContain(
+            "summary — attention needed: 0 fold, 0 drop, 0 retire, 1 unresolved, 0 pinned — " +
+            "1 id(s) still need a human to attribute.");
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
     }
 
@@ -650,7 +680,7 @@ public sealed class RepairCommandsTests
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
-        var exit = await new ProjectIdsRepairCommands(store).RunAsync(parsed!.ParsedCliArgs, dataRoot,
+        var exit = await new ProjectIdsRepairCommands(store, ProjectIdsRepairCommands.RepairLoopOptions.Test).RunAsync(parsed!.ParsedCliArgs, dataRoot,
             new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
 
         return new RunOutcome(stdout.ToString(), exit);
