@@ -53,6 +53,15 @@ python3 .ai-badger/skills/send-message/scripts/send_message.py \
 Sender identity derives from the working directory, so run it from the project checkout.
 A refused send names its reason — read `send-message` when a send refuses.
 
+Under pi with the message-bus extension installed, use the tool instead of the
+subprocess — same rows, same shapes: a project broadcast is a `message-bus`
+`send` with the project id (`/messages send [<taskId>] <event>: <detail>` from
+the project checkout does the same), a 1:1 is a `send` with `sessionId`, and an
+ack is a `message-bus` `ack` with the message id (the tool enforces inbox
+membership and refuses an ack-of-an-ack). `/messages` lists the inbox,
+`/messages check` delivers now. Without the extension, the script above stays
+the transport.
+
 ## Message shape
 
 One announcement, one line when possible:

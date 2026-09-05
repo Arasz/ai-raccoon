@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "task" / "scripts"))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "task" / "scripts"))
     import tracker_lib as lib
 except ImportError:  # the task skill never shipped; the legacy files stay the surface
     lib = None

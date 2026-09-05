@@ -4,7 +4,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon
-> Scaffolded by ai-badger 0.162.1. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
+> Scaffolded by ai-badger 0.163.1. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
 
 ## Commands
 

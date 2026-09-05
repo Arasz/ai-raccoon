@@ -104,6 +104,32 @@ This script is the transport; the protocol lives in `multi-agent-communication` 
 when two or more sessions share the project (what to announce, the message shape, and the
 ack-without-reply rule).
 
+## pi native transport: the message-bus extension
+
+Under pi, do not shell out to the script above: use the native `message-bus`
+tool. It speaks to the same user-DB bus (same rows, same session-wins
+precedence, same refusal shapes as error results), with sender identity derived
+automatically — the session id from the session manager, the project id from
+`AI_BADGER_PROJECT_ID` or the project-id walk — so there are no `--sender-*`
+flags to pass and no identity derivation to get wrong:
+
+| Need | Tool call | Human equivalent |
+| --- | --- | --- |
+| 1:1 send | `message-bus` action `send`, `content` + `sessionId` | `/messages send-to <session-id> <text>` |
+| project broadcast | `message-bus` action `send`, `content` + `projectId` | `/messages send <text>` (from the project checkout) |
+| machine broadcast | `message-bus` action `send`, `content` only | — |
+| read the inbox | action `list` (grouped, no cursor advance) | `/messages` |
+| deliver now | action `check` (posts a card when there is mail) | `/messages check` |
+| ack once | action `ack`, `id` (inbox membership + never-ack-an-ack enforced) | `/messages ack <id>` |
+
+The extension ships with pi-badger-integration (`bun run publish` installs it
+to `~/.pi/agent/extensions/message-bus/`). No `message-bus` tool in your
+context means the extension is not installed — fall back to the script above,
+which stays the transport for every other harness (plus cron jobs, humans
+running sends by hand, and tests). `PI_BADGER_MESSAGE_BUS=0` disables the
+delivery hooks; the tool stays. A broken bus is fail-open either way: an
+error result, never a broken session.
+
 ## Gotchas
 
 - No environment-specific gotchas known.
