@@ -2,6 +2,7 @@ using System.Data;
 using System.Text.Json;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
@@ -221,8 +222,10 @@ public sealed class ProjectIdCensusTests
     }
 
     /// <summary>
-    ///     Materializing the vec0 CTE must attribute rows to the exact same ids as before: two ids each
-    ///     owning one content-embedded and one structure-embedded row, a project_id-NULL embedded row
+    ///     Materializing the vec0 CTE must attribute rows to the exact same ids as before: alpha and
+    ///     beta each own content- and structure-embedded rows (alpha asymmetric 2/1, so a leg-swap
+    ///     mutation between VecEntriesCountSql/VecStructureCountSql flips a count and is caught — a
+    ///     1/1 split on both ids could not distinguish the legs), a project_id-NULL embedded row
     ///     excluded from every count, and an entry with no vec row at all left at zero.
     ///     Ledger — vec0-cte-misattribution : --filter Collect_WithMaterializedVecLegs_AttributesVectorRowsExactlyAsBefore :
     ///     alpha/beta split legs + null-project embedded row + vec-less gamma row.
@@ -233,12 +236,12 @@ public sealed class ProjectIdCensusTests
         var ct = TestContext.Current.CancellationToken;
         await using var connection = await OpenAsync(ct);
         await MemorySchema.EnsureAsync(connection, ct);
-        await SeedVecLegsAsync(connection, ct);
+        await VecLegSeeder.SeedAsync(connection, ct);
 
         var report = await ProjectIdCensus.CollectAsync(connection, ct);
 
         var alpha = report.Row("alpha");
-        alpha.VecEntryRows.ShouldBe(1);
+        alpha.VecEntryRows.ShouldBe(2);
         alpha.VecStructureRows.ShouldBe(1);
 
         var beta = report.Row("beta");
@@ -266,6 +269,9 @@ public sealed class ProjectIdCensusTests
         plan.Count(l => l.Contains($"SCAN {vecTable}", StringComparison.Ordinal) &&
                         l.Contains("VIRTUAL TABLE", StringComparison.Ordinal))
             .ShouldBe(1, $"expected exactly one full scan of {vecTable} as a virtual table:\n{planText}");
+        // "VIRTUAL TABLE INDEX 1:" is sqlite-vec's own idxNum for its point/KNN plan (0 is its
+        // fullscan plan) -- not SQLite's numbering, and specific to the pinned sqlite-vec version
+        // (Directory.Packages.props). Re-run this assertion if that package version moves.
         plan.Any(l => l.Contains("VIRTUAL TABLE INDEX 1:", StringComparison.Ordinal))
             .ShouldBeFalse($"plan must not probe the vec0 table per row via a rowid-constrained virtual table index:\n{planText}");
     }
@@ -428,48 +434,4 @@ public sealed class ProjectIdCensusTests
             new { correlationId, projectId, now }, cancellationToken: ct));
     }
 
-    /// <summary>Isolated seed for the two vec0 legs: two ids each own one content-embedded and one
-    /// structure-embedded row (kept on separate entries so the legs cannot cross-contaminate), a
-    /// project_id-NULL embedded row, and a vec-less entry — everything the T2 hand-computed counts need
-    /// and nothing the multi-cluster seed's own vec0 rows would confuse them with.</summary>
-    private static async Task SeedVecLegsAsync(SqliteConnection connection, CancellationToken ct)
-    {
-        var now = FixedNow.ToUnixTimeSeconds();
-        var vector = EmbeddingBlob.ToBytes(new float[384]);
-
-        async Task<long> InsertEntry(string hash, string? projectId, string scope = "project")
-        {
-            return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label, created_at, updated_at, embed_state) " +
-                "VALUES (@hash, @hash, @hash, 'seed.md', 's', @scope, @projectId, 'ctx', @now, @now, 'pending') RETURNING id",
-                new { hash, scope, projectId, now }, cancellationToken: ct));
-        }
-
-        async Task EmbedContent(long id)
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "UPDATE entries SET embedding = @embedding, embed_state = 'embedded' WHERE id = @id",
-                new { embedding = vector, id }, cancellationToken: ct));
-        }
-
-        async Task EmbedStructure(long id)
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "UPDATE entries SET structure_embedding = @embedding WHERE id = @id",
-                new { embedding = vector, id }, cancellationToken: ct));
-        }
-
-        await EmbedContent(await InsertEntry("vec-alpha-content", "alpha"));
-        await EmbedContent(await InsertEntry("vec-beta-content", "beta"));
-        await EmbedStructure(await InsertEntry("vec-alpha-structure", "alpha"));
-        await EmbedStructure(await InsertEntry("vec-beta-structure", "beta"));
-
-        // Embedded but project_id IS NULL: must be excluded from every count. Scope is 'shared' —
-        // ContextKeyExpression's 'project'/'custom' branches concatenate project_id and go NULL
-        // (rejected by vec0's TEXT metadata column) when project_id itself is NULL.
-        await EmbedContent(await InsertEntry("vec-null-content", null, "shared"));
-
-        // Never embedded at all: must not appear in either vec leg's counts.
-        await InsertEntry("vec-gamma-no-vec", "gamma");
-    }
 }

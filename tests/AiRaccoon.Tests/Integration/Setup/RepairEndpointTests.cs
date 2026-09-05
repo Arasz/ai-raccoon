@@ -1,4 +1,3 @@
-using System.Data;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
@@ -6,11 +5,11 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Data.Sqlite;
@@ -213,11 +212,11 @@ public sealed class RepairEndpointTests : IAsyncLifetime
 
     /// <summary>
     ///     WP3/T7: the materialized-CTE vec0 fix (ac72f4f8) survives real HTTP + Dapper mapping +
-    ///     endpoint serialization once planner statistics exist, mirroring
-    ///     ProjectIdCensusTests' seeded-vec-legs shape (T2) and its planted sqlite_stat1 recipe (T1).
-    ///     The plan assertion itself stays owned by T1 — this only checks the numbers the real
-    ///     pipeline hands back: alpha and beta each own one content- and one structure-embedded row;
-    ///     the NULL-project row and the vec-less gamma row contribute to neither.
+    ///     endpoint serialization, mirroring ProjectIdCensusTests' seeded-vec-legs shape (T2). This
+    ///     is a correctness-through-the-pipeline test only — the two join forms are
+    ///     result-equivalent, so no seeded fixture can distinguish them by output, and the query-plan
+    ///     regression the fix actually targets stays owned by ProjectIdCensusTests' T1
+    ///     (EXPLAIN QUERY PLAN under planted live-shaped statistics).
     /// </summary>
     [RetryFact]
     public async Task GetProjectIdsReport_OnAStatisticsBearingBank_ReturnsTheSameCensus()
@@ -227,21 +226,7 @@ public sealed class RepairEndpointTests : IAsyncLifetime
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         await using (var connection = await factory.OpenBankAsync(ct))
         {
-            await SeedVecLegsAsync(connection, ct);
-
-            // Order is load-bearing: a later plain ANALYZE recomputes real stats and silently
-            // overwrites the planted row, making this test vacuously pass.
-            // commandType is forced to Text: Dapper otherwise treats a bare single-identifier
-            // command text (e.g. "ANALYZE") as a stored-procedure name.
-            await connection.ExecuteAsync(new CommandDefinition(
-                "ANALYZE", commandType: CommandType.Text, cancellationToken: ct));
-            await connection.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM sqlite_stat1 WHERE tbl = 'entries'", cancellationToken: ct));
-            await connection.ExecuteAsync(new CommandDefinition(
-                "INSERT INTO sqlite_stat1(tbl, idx, stat) VALUES ('entries','idx_entries_embed_state','48257 48257 3017')",
-                cancellationToken: ct));
-            await connection.ExecuteAsync(new CommandDefinition(
-                "ANALYZE sqlite_master", commandType: CommandType.Text, cancellationToken: ct));
+            await VecLegSeeder.SeedAsync(connection, ct);
         }
 
         var response = await _client.GetAsync("/repair?kind=project-ids", ct);
@@ -249,7 +234,7 @@ public sealed class RepairEndpointTests : IAsyncLifetime
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var report = await response.Content.ReadFromJsonAsync<ProjectIdCensusReport>(ct);
         report.ShouldNotBeNull();
-        report.Row("alpha").VecEntryRows.ShouldBe(1);
+        report.Row("alpha").VecEntryRows.ShouldBe(2);
         report.Row("alpha").VecStructureRows.ShouldBe(1);
         report.Row("beta").VecEntryRows.ShouldBe(1);
         report.Row("beta").VecStructureRows.ShouldBe(1);
@@ -289,50 +274,6 @@ public sealed class RepairEndpointTests : IAsyncLifetime
         await lockHeld.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
 
         return (writer, releaseWriter);
-    }
-
-    /// <summary>
-    ///     T7's vec0 seed (mirrors ProjectIdCensusTests.SeedVecLegsAsync): two ids each own one
-    ///     content-embedded and one structure-embedded row (kept on separate entries so the legs
-    ///     cannot cross-contaminate), a project_id-NULL embedded row, and a vec-less entry.
-    /// </summary>
-    private static async Task SeedVecLegsAsync(SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var vector = EmbeddingBlob.ToBytes(new float[384]);
-
-        async Task<long> InsertEntry(string hash, string? projectId, string scope = "project")
-        {
-            return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label, created_at, updated_at, embed_state) " +
-                "VALUES (@hash, @hash, @hash, 'seed.md', 's', @scope, @projectId, 'ctx', @now, @now, 'pending') RETURNING id",
-                new { hash, scope, projectId, now }, cancellationToken: cancellationToken));
-        }
-
-        async Task EmbedContent(long id)
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "UPDATE entries SET embedding = @embedding, embed_state = 'embedded' WHERE id = @id",
-                new { embedding = vector, id }, cancellationToken: cancellationToken));
-        }
-
-        async Task EmbedStructure(long id)
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                "UPDATE entries SET structure_embedding = @embedding WHERE id = @id",
-                new { embedding = vector, id }, cancellationToken: cancellationToken));
-        }
-
-        await EmbedContent(await InsertEntry("vec-alpha-content", "alpha"));
-        await EmbedContent(await InsertEntry("vec-beta-content", "beta"));
-        await EmbedStructure(await InsertEntry("vec-alpha-structure", "alpha"));
-        await EmbedStructure(await InsertEntry("vec-beta-structure", "beta"));
-
-        // Embedded but project_id IS NULL: must be excluded from every count.
-        await EmbedContent(await InsertEntry("vec-null-content", null, "shared"));
-
-        // Never embedded at all: must not appear in either vec leg's counts.
-        await InsertEntry("vec-gamma-no-vec", "gamma");
     }
 
     private async Task<string?> MapJsonAsync(string kind)

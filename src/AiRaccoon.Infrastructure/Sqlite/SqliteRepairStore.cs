@@ -16,9 +16,11 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     (the precedent is <see cref="SqliteProjectIdsMigrationGate" />): a report must never wait on
 ///     another connection's write lock, but <c>OpenBankAsync</c>'s full ladder runs an unconditional
 ///     write (<c>MigrateIngestScopeKeysAsync</c>) whenever a legacy bank still carries
-///     <c>watch.scope.*</c> rows. A legacy bank's ingest-scope/watch migration is therefore no
-///     longer applied by a report call specifically — every other bank-opening path still applies
-///     it.
+///     <c>watch.scope.*</c> rows. A legacy bank's ingest-scope migration, and the ladder's other
+///     unconditional-but-write-free-on-a-report steps (the promotion-queue trigger guard,
+///     overlapping-watch pruning), are therefore skipped by a report call specifically — harmless
+///     here because every report runs with <c>apply: false</c> and never deletes; every other
+///     bank-opening path still applies all of them.
 /// </summary>
 public sealed class SqliteRepairStore(
     ISqliteConnectionFactory factory,
