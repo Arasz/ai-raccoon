@@ -32,11 +32,11 @@ public sealed class ProjectIdsRepairCommands
 
     /// <summary>
     ///     P3 status note on the converged/pinned-only verdicts. The durable alias map plus the
-    ///     refuse/fold-through write gate land in packages D+E — until then the loop reports the
-    ///     D6 counts honestly and names what is still pending, instead of claiming "P3 armed".
-    ///     Package G flips this note once the end-to-end proof exists.
+    ///     refuse/fold-through write gate landed in packages D+E and package G proved them
+    ///     end-to-end, so the loop claims "P3 armed" — backed by the persisted map and the
+    ///     post-fix probe, never by aspiration.
     /// </summary>
-    public const string P3PendingNote = "P3 pending (durable map + write-gate land in packages D+E)";
+    public const string P3ArmedNote = "P3 armed";
 
     private readonly IRepairStore _repair;
 
@@ -378,12 +378,12 @@ public sealed class ProjectIdsRepairCommands
         if (plan.Pinned.Count > 0)
         {
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: summary — pinned-only: {CountsLine(plan)}, {P3PendingNote}.");
+                $"project-ids repair: summary — pinned-only: {CountsLine(plan)}, {P3ArmedNote}.");
             return;
         }
 
         await streams.WriteOutputLineAsync(
-            $"project-ids repair: summary — converged: {CountsLine(plan)}, {P3PendingNote}.");
+            $"project-ids repair: summary — converged: {CountsLine(plan)}, {P3ArmedNote}.");
     }
 
     /// <summary>D6 counts fragment shared by every closing line: explicit zeros, inline pin list.</summary>

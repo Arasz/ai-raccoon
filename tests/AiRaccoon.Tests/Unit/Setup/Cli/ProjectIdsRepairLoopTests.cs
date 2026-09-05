@@ -43,7 +43,7 @@ public sealed class ProjectIdsRepairLoopTests
         stdout.ShouldContain("moved");
         LastNonEmptyLine(stdout).ShouldBe(
             "project-ids repair: summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, " +
-            ProjectIdsRepairCommands.P3PendingNote + ".");
+            ProjectIdsRepairCommands.P3ArmedNote + ".");
     }
 
     /// <summary>
@@ -91,7 +91,7 @@ public sealed class ProjectIdsRepairLoopTests
         LastNonEmptyLine(stdout).ShouldBe(
             "project-ids repair: summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, " +
             "2 pinned (pinned-shared-only: 'a', pinned-telemetry-only: 't'), " +
-            ProjectIdsRepairCommands.P3PendingNote + ".");
+            ProjectIdsRepairCommands.P3ArmedNote + ".");
     }
 
     /// <summary>
