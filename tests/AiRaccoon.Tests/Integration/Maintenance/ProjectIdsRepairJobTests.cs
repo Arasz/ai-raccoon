@@ -56,7 +56,13 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
     }
 
-    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
+    public void Dispose()
+    {
+        // The job reloads process-wide Default after persisting the applied map (E reload leg);
+        // reset so later collection members start from the empty steady state.
+        ProjectIdAliasMap.ResetDefault();
+        TestData.DeleteTempRoot(_dataRoot);
+    }
 
     private ProjectIdsRepairJob NewJob(Microsoft.Extensions.Logging.ILogger<ProjectIdsRepairJob>? logger = null) =>
         new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
