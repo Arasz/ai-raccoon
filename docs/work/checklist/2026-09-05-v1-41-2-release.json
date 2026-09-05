@@ -1,0 +1,139 @@
+{
+ "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+ "run": {
+  "date": "2026-09-05",
+  "branch": "main",
+  "commit": "061aea3a (merge of #624; VERSION 1.41.2)",
+  "data-root": "/tmp/air-1412-run (scratch server :65397, pids 28269->29361, project 01a073d6-57a8-7ab1-bf66-609321a6b8f2). Scratch only, never ~/.ai-raccoon; default port 7721 never bound by checklist steps (user server pid 26610 verified untouched, answers HTTP 401 on /mcp as before).",
+  "note": "Release checklist for published ai-raccoon 1.41.2 (PR #624 tool-telemetry bank fold). Global tool updated from nuget.org artifact, not a local pack; Release build+pack proven by CI publish run 33997068201 (6 pack jobs + publish, all success)."
+ },
+ "derived": {
+  "version": "1.41.2",
+  "mcp-tool-count": "29",
+  "mcp-prompt-count": "2",
+  "note": "Produced at run time by python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . (prints version=1.41.2, mcp-tool-count=29, mcp-prompt-count=2)."
+ },
+ "findings-against-prior-runs": [],
+ "items": [
+  {
+   "item": "build-and-install-global-package",
+   "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+   "command": "dotnet tool update -g ai-raccoon --version 1.41.2 && ai-raccoon --version && curl nuget flatcontainer index && gh run view 33997068201 --json jobs",
+   "evidence": "Tool 'ai-raccoon' was successfully updated from version '1.41.0' to version '1.41.2'. / ai-raccoon --version -> 1.41.2+061aea3aa048c4150f631c9a33a576923b22ed02 (commit == merge commit of #624). / nuget index 1.41.x: ['1.41.0','1.41.2'] (1.41.1 never published; publish is human-gated). / publish run 33997068201: 6x pack + publish, all success; push at ~22:57Z, listed ~23:07Z (index lag, not a defect).",
+   "observed-result": "NuGet artifact installed; running binary == derived.version 1.41.2 at the merged commit. Release build+pack proven by CI, not a local build.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "server-lifecycle",
+   "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+   "command": "ai-raccoon --data-root /tmp/air-1412-run serve --port 0 --idle-timeout 0 (nohup) ; ai-raccoon --data-root /tmp/air-1412-run serve --port 65397 --restart",
+   "evidence": "serve.log: 'Now listening on: http://127.0.0.1:65397' (port read back, not assumed). / restart.log: 'Now listening on: http://127.0.0.1:65397'; scratch pid 28269 -> 29361, same port. / user server pid 26610 unchanged throughout; 7721 answers (HTTP 401 on /mcp, same as before the restart).",
+   "observed-result": "Ephemeral port bound and read back; --restart cycled exactly the server it found on the scratch port; default port untouched.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "memory-write-stores-and-reports-truthfully",
+   "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+   "command": "tools/call memory_write {projectId 01a073d6-..., content harbor-lighthouse probe, sourceFile /tmp/air-1412-run/probe/harbor.md} ; tools/call memory_write {content '[IMPORTANT: Background process completed normally]'}",
+   "evidence": "stored:true hash 6ae65f3e2d62af5d142240c5f5efdb02d9e9aed4dd90ad032596dc706ecaa32b. / rejected: stored:false hash:'' reason \"rejected by noise policy 'HermesBackgroundProcessLog'\" \u2014 no fabricated hash.",
+   "observed-result": "Store returns a hash; rejection reports Stored=false with the policy reason (ADR-0032).",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "memory-search-hybrid-retrieval",
+   "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+   "command": "tools/call memory_search {query 'a coastal beacon steering evening boats to safety' (zero literal overlap with stored 'harbor lighthouse guides night ferries'), limit 5}",
+   "evidence": "rank 1 == written hash 6ae65f3e; evidenceByHash legs:[{vector,rank:1}] cosine 0.3292958438396454 \u2014 the vector leg alone carried a query FTS could not match. (Code-section warning 'code engine not configured' is expected on a scratch bank without a code model; memory result unaffected.)",
+   "observed-result": "Hybrid retrieval proven at the leg level: a no-overlap query resolves via the vector leg (local bundled ONNX engine, set via model embedding set local).",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "memory-get-returns-content-by-hash",
+   "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+   "command": "tools/call memory_get {hash 6ae65f3e...} ; tools/call memory_get {hash 000...0}",
+   "evidence": "Full value returned for the known hash (harbor-lighthouse text, correct context/project). / unknown hash -> isError:true 'unknown-hash: No entry with hash ... in project ...'.",
+   "observed-result": "Get-by-hash returns content; unknown hash refuses with unknown-hash, never empty (ADR-0035).",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "source-path-anchor-resolves-its-chunk",
+   "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+   "command": "tools/call memory_write {content anchor probe, sourceFile /tmp/air-1412-run/probe/dome.md, section 'Dusk Operations'} (hash 332e23a3...); tools/call memory_search {query 'dome.md#Dusk Operations'}",
+   "evidence": "Anchor query returns hash 332e23a3 at rank 1 with the exact chunk text (dome opens at dusk), chunkIndex 0/1.",
+   "observed-result": "file#section resolves its exact chunk inside the production result window.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "write-path-noise-filtering",
+   "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+   "command": "grep AppRegistrations.cs for INoiseFilterPolicy registrations; clean write (item 2); rejected write (item 2); ai-raccoon --data-root ... --port 65397 noise entries",
+   "evidence": "Tree registers exactly one write-path policy: HermesProcessNoisePolicy (AppRegistrations.cs:320, deterministic only per ADR-0033) \u2014 no deleted-feature steps. / clean content stored; machine-output write rejected with policy name. / noise entries -> 'total: 1 / HermesBackgroundProcessLog: 1'.",
+   "observed-result": "The one registered policy rejects what it claims; rejection is reported; rejected content is retrievable from the noise store (ADR-0039). Negative control (clean write stores) included.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "read-path-query-guard",
+   "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+   "command": "settings queryguard list; settings queryguard structural --help; refuse probe (verbatim background-process notification query); annotate probe (verbatim multi-line stack-trace paste from QueryGuardPolicyTests fixture)",
+   "evidence": "list -> enabled:True shadow:False structural:False. / structural --help: 'Off by default - it only ever adds an annotation, never a refusal'. / refuse probe -> isError:true 'invalid-params: This looks like tool output rather than a question... Refused query: ...'. / annotate probe -> search proceeds WITH warning 'This query contains what looks like log or stack-trace output...'. (A collapsed single-line variant did not trip the warn tier; the verbatim multi-line fixture did \u2014 shape matters, recorded here.)",
+   "observed-result": "Refuse and annotate tiers behave per ADR-0040; structural detector off by default and annotate-only per ADR-0041.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "file-watch-status",
+   "expected-result": "memory_watch_status lists live registrations and their sync state",
+   "command": "settings ingest scope add <pid> /tmp/air-1412-run/probe; settings watch enable <pid> true; tools/call memory_watch_add {path}; tools/call memory_watch_status",
+   "evidence": "scope added; watch enabled; watch_add registered {projectId, path, pruned:[]}. / watch_status -> watches:[{projectId, path:/tmp/air-1412-run/probe, state:'Scanning'}].",
+   "observed-result": "Live registration listed with its sync state (non-empty assertion, not an empty-list shape).",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "promotion-queue-state",
+   "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+   "command": "tools/call memory_share_extract {projectIds, mode propose, limit 5}; tools/call memory_promotion_list {projectId}",
+   "evidence": "propose -> 2 candidates with hash identity, score 1.07 each, reasons [organic-note, very-short-penalty], sourceFile, rating, accessCount; waitingPromotionsCount:2. / promotion_list -> both rows with full value/score/reasons/createdAt/updatedAt; capacity reserved:1000 used:2.",
+   "observed-result": "Propose-tier candidates reported with score/reasons/identity (content asserted, not list shape); queue state accurate.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "full-mcp-surface",
+   "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+   "command": "tools/list and prompts/list over POST /mcp JSON-RPC with X-AiRaccoon-Token; ~10 successful tools/call round-trips this session across 9 distinct tools",
+   "evidence": "tools/list -> 29 tools == derived.mcp-tool-count. / prompts/list -> 2 prompts [workspace-consolidation-guide, memory-usage-guide] == derived.mcp-prompt-count. / reachability: memory_write/search/get, project_id_token_get, memory_share_extract, memory_promotion_list, memory_watch_add/status all returned live results this run.",
+   "observed-result": "Every derived tool and prompt listed; reachability proven by live calls, not by listing alone.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  },
+  {
+   "item": "observability-event-ids",
+   "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+   "command": "grep -rhoE '\\[[0-9]{3,4}\\]' /tmp/air-1412-run/serve.log /tmp/air-1412-run/restart.log | sort | uniq -c; resolve each against docs/reference/logging-event-ids.md",
+   "evidence": "12 distinct ids, all resolve: 525 MaintenanceJobRunner 525-528; 510 BankMaintenanceHostedService 510-524; 673/672/674 SettingsEndpoint 670-675; 1003 EmbedDrainReporter 1002-1013; 911/910 ToolRefusals 910-912; 674 model-migration outbox commit; 660 ShutdownEndpoint; 651/650 ServerRestart 650-656; 610 IdleWatchdog 610-612.",
+   "observed-result": "Every emitted event id resolves against the reference; no undocumented ids.",
+   "status": "pass",
+   "accepted": true,
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above."
+  }
+ ]
+}
