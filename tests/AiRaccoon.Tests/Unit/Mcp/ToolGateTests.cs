@@ -4,6 +4,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Projects;
 using AiRaccoon.Tests;
+using AiRaccoon.Tests.Unit.Projects;
 using AiRaccoon.Tools;
 using ModelContextProtocol;
 using Shouldly;
@@ -14,6 +15,7 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 /// <summary>The rules every MCP tool shares: reject a blank project id before the access check, refuse every call while a model migration is open (ADR-0076), refuse an unregistered id on a write (ADR-0089), and carry the queue meta on every envelope.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class ToolGateTests
 {
     private static (RecordingGuard Guard, FakePromotionQueue Queue, RecordingMigrations Migrations,

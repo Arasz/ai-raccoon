@@ -30,8 +30,47 @@ public sealed class ProjectIdAliasMap
     /// <summary>The empty map: no aliases, no canonicals, no drops. <see cref="Fold" /> degrades to guid D-form normalization only.</summary>
     public static ProjectIdAliasMap Empty { get; } = new([], [], []);
 
-    /// <summary>The steady-state map consumed by every choke point (ToolGate, watch boundaries, key helpers, sync). Empty by design — see remarks.</summary>
-    public static ProjectIdAliasMap Default { get; } = Empty;
+    private static readonly Lock DefaultGate = new();
+
+    private static ProjectIdAliasMap _default = Empty;
+
+    /// <summary>
+    ///     The steady-state map consumed by every choke point (ToolGate, watch boundaries, key
+    ///     helpers, sync). Empty by design (ADR-0099) until a map change reloads it via
+    ///     <see cref="ReplaceDefault" /> — the sync pull arm reloads after merging a replica's rows;
+    ///     a repair apply persists the one-shot map to the durable table for hosts to pick up.
+    ///     An empty map is pass-through by definition — every choke behaves exactly as before the
+    ///     durable map existed.
+    /// </summary>
+    public static ProjectIdAliasMap Default
+    {
+        get
+        {
+            lock (DefaultGate)
+            {
+                return _default;
+            }
+        }
+    }
+
+    /// <summary>Reloads the choke-point cache after the durable map changed (repair apply, sync pull).</summary>
+    public static void ReplaceDefault(ProjectIdAliasMap map)
+    {
+        Guard.IsNotNull(map);
+        lock (DefaultGate)
+        {
+            _default = map;
+        }
+    }
+
+    /// <summary>Restores the empty steady state. Tests own this: every test that replaces the cache resets it.</summary>
+    public static void ResetDefault()
+    {
+        lock (DefaultGate)
+        {
+            _default = Empty;
+        }
+    }
 
     private readonly Dictionary<string, string> _aliases;
     private readonly HashSet<string> _canonicals;

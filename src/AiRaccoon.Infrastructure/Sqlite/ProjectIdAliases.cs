@@ -2,6 +2,7 @@ using AiRaccoon.Core.Projects;
 using CommunityToolkit.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
@@ -28,7 +29,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///         must converge on.
 ///     </para>
 /// </summary>
-public static class ProjectIdAliases
+public static partial class ProjectIdAliases
 {
     /// <summary>Alias-map row kinds: a loser id folding to its winner, or a dropped id deleted with a tombstone.</summary>
     public const string KindAlias = "alias";
@@ -99,5 +100,35 @@ public static class ProjectIdAliases
             .Select(row => row.Alias)
             .ToList();
         return new ProjectIdAliasMap(aliases, [], dropped);
+    }
+
+    /// <summary>
+    ///     Reloads the choke-point cache off the durable table after a map change (Package E1:
+    ///     the sync pull arm calls this after merging a replica's rows). Null-winner <c>alias</c>
+    ///     rows are skipped exactly as in <see cref="LoadAsync" /> and logged — a direct-SQL row
+    ///     the cache refuses to honor must stay visible (review #618 minor).
+    /// </summary>
+    public static async Task LoadAndCacheAsync(
+        SqliteConnection connection, ILogger logger, CancellationToken cancellationToken)
+    {
+        Guard.IsNotNull(connection);
+        Guard.IsNotNull(logger);
+        var rows = (await connection.QueryAsync<(string Alias, string? Winner, string Kind)>(
+                new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).ToList();
+        var skipped = rows.Count(row => row.Kind == KindAlias && row.Winner is null);
+        if (skipped > 0)
+        {
+            Log.SkippedNullWinnerAliasRows(logger, skipped);
+        }
+
+        ProjectIdAliasMap.ReplaceDefault(await LoadAsync(connection, cancellationToken).ConfigureAwait(false));
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 712, Level = LogLevel.Warning,
+            Message = "ai-raccoon: project_id_aliases holds {Skipped} 'alias' row(s) with a NULL winner; skipping them on cache reload (a null winner would fold an id to null downstream)")]
+        public static partial void SkippedNullWinnerAliasRows(ILogger logger, int skipped);
     }
 }

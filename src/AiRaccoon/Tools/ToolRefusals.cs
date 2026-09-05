@@ -44,6 +44,10 @@ internal static partial class ToolRefusals
         [typeof(ContextOutsideProjectException)] = "context-outside-project",
         // ADR-0089 decision 3: a write to an id with no registry row and no existing rows.
         [typeof(UnregisteredProjectException)] = "project-not-registered",
+        // Package E (D4 enforcement): a write named a dropped id — refused with the repair attribution.
+        [typeof(RetiredProjectException)] = "project-retired",
+        // Package E2: the pull merged a same-alias-different-winner map row — a human must pick the winner.
+        [typeof(SyncAliasConflictException)] = "sync-alias-conflict",
         // The install this process started from was replaced/removed under it (e.g. 'dotnet tool
         // update'); a plain InvalidOperationException still means the asset is genuinely missing
         // and stays unmapped (docs/reference/agent-memory-server.md Error shapes).
