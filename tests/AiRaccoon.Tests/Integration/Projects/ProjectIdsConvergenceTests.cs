@@ -69,6 +69,10 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
+        // Package E1 (review #619): every repair apply reloads the process-static choke-point
+        // cache (job-side reload after persisting) — reset it so the next collection test sees
+        // the empty steady state, same hygiene as SingleProjectIdE2E.DisposeAsync.
+        ProjectIdAliasMap.ResetDefault();
         await _embeddingEndpoint.DisposeAsync();
         TestData.DeleteTempRoot(_dataRoot);
     }
@@ -173,12 +177,13 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
     ///     refused naming the repair attribution, and a re-derive stays clean (zero actionable,
     ///     same pins) through the probe.
     ///     <para>
-    ///         Known E double-check #1, named explicitly: the repair job persists the durable map
-    ///         but does NOT refresh the in-process <see cref="ProjectIdAliasMap.Default" /> — the
-    ///         probe performs the explicit <see cref="ProjectIdAliases.LoadAndCacheAsync" /> reload
-    ///         (the exact call the sync-pull arm makes after merging) standing in for the
-    ///         host-restart boundary. Without it the same-process probe observes the pre-E
-    ///         pass-through and both probe asserts fail — witnessed in the RED ledger.
+    ///         Known E double-check #1, closed by the E1 reload legs (review #619): the repair job
+    ///         reloads the choke-point cache right after persisting the applied map, so the
+    ///         same-process probe observes the PIPELINE's reload — there is no hand reload here by
+    ///         design. A hand reload would mask a job-reload regression and prove nothing about the
+    ///         pipeline; the RED ledger strips the job leg instead and watches this probe fail.
+    ///         The startup-warm leg (ProjectIdAliasCacheHostedService) covers real restarts and is
+    ///         not exercised in-process.
     ///     </para>
     /// </summary>
     [RetryFact]
@@ -189,11 +194,8 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
         var before = ProjectIdsFoldPlan.FromCensus(await live.ReportProjectIdsAsync(ct), map);
         try
         {
-            await using (var reloadConnection = await _factory.OpenBankAsync(ct))
-            {
-                await ProjectIdAliases.LoadAndCacheAsync(reloadConnection, NullLogger.Instance, ct);
-            }
-
+            // No hand reload: the job's own reload leg (Package E1) already refreshed Default
+            // off the persisted map during the run above — asserting here proves the pipeline.
             ProjectIdAliasMap.Default.TryResolve(Loser, out var resolved).ShouldBeTrue();
             resolved.ShouldBe(Winner, "the reloaded durable map drives the chokes — no file map in this process");
             (await new SqliteProjectIdsMigrationGate(_factory).IsMigratedAsync(ct))
