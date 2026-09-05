@@ -14,6 +14,12 @@ namespace AiRaccoon.Tests.Unit.Projects;
 ///     until a map change reloads it; every choke (ToolGate, key helpers, watch boundaries, sync)
 ///     reads it through <c>Default.Fold</c>, so an empty map must pass ids through byte-identical.
 /// </summary>
+/// <para>
+///     RED-proof ledger (Package E lane): the file was written test-first against missing
+///     production APIs — the initial build failed on ReplaceDefault/ResetDefault and the
+///     retired/conflict exception types (all 4 tests demanded nonexistent surface).
+///     Per-test behavior mutations were not recorded by the lane.
+/// </para>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 [Collection(ProjectIdAliasDefaultCollection.Name)]

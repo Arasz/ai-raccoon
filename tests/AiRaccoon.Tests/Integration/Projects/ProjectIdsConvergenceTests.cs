@@ -82,6 +82,12 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
     ///     writer racing the first pass converge in ONE --apply invocation to the D6 verdict:
     ///     zero folds/drops/retires/unresolved, the remaining non-canonical rows pinned with
     ///     reasons, the durable map persisted, the drain empty, P3 armed on the closing line.
+    ///     RED-proof ledger (Package G lane, each witnessed failing then restored): RED-0 verdict
+    ///     tail on the pre-flip tree (expected P3 armed, got P3 pending); B-RED pre-B applier +
+    ///     LabeledProjectScope shim (3 requests not 2, 1 actionable derive, 4 stranded loser rows
+    ///     — the exact D1 shapes); C-RED pre-D3 plan (metrics unresolved, 1 pinned shared-only);
+    ///     D-RED pre-persist job (durable table empty); E-RED dropped write unrefused and probe
+    ///     blind without the job-reload leg (strip it → TryResolve False).
     /// </summary>
     [RetryFact]
     public async Task RunOnce_ConvergesToPinnedOnlyVerdict_WithP3Armed()
@@ -152,6 +158,8 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
     ///     G1-iii: two consecutive derives off the converged bank are identical — same pinned
     ///     sets with the same reasons, zero actionable, zero moved rows — and a further job run
     ///     is a no-op (no open request).
+    ///     RED-proof ledger: covered by the B-RED leg (pre-B applier leaves actionable derives
+    ///     and moved rows between passes — zero-actionable/zero-moved asserts fail first).
     /// </summary>
     [RetryFact]
     public async Task ConsecutiveDerives_AreIdenticalWithZeroMoves()
@@ -187,6 +195,11 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
     ///         pipeline; the RED ledger strips the job leg instead and watches this probe fail.
     ///         The startup-warm leg (ProjectIdAliasCacheHostedService) covers real restarts and is
     ///         not exercised in-process.
+    ///     </para>
+    ///     <para>
+    ///         RED-proof ledger (Package G lane): E-RED dropped leg (pre-choke ToolGate lets the
+    ///         write through instead of throwing RetiredProjectException) and E-RED reload leg
+    ///         (job-reload hunk stripped → probe TryResolve False) — both witnessed failing.
     ///     </para>
     /// </summary>
     [RetryFact]
