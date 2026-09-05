@@ -463,6 +463,74 @@ public sealed class RepairCommandsTests
 
         stdout.ShouldNotContain("re-running will not clear");    }
 
+    /// <summary>
+    ///     f: a dry run ended without a verdict line — a log grep could not tell converged
+    ///     from actionable without re-reading the whole report. The last line is always the
+    ///     one-line summary. Dry run with folds/drops/retires waiting: repair needed.
+    ///     Ledger — missing-closing-summary : MixedOutcome dry run (3 actionable + 1 attention).
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_EndsWithRepairNeededSummary()
+    {
+        using var scope = new TempScope();
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, MixedOutcomeReport(), scope.DataRoot, scope.WriteFixtureMap());
+
+        stdout.ShouldContain("summary — repair needed (3 change(s) waiting on --apply; 1 id(s) still need a human).");
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
+    }
+
+    /// <summary>
+    ///     f: same verdict-line gap on the --apply path — a queued request reads as
+    ///     in-progress, never as done, until a re-run reports no folds.
+    ///     Ledger — missing-closing-summary : MixedOutcome --apply (3 queued).
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_Apply_EndsWithRepairInProgressSummary()
+    {
+        using var scope = new TempScope();
+        var inner = new InMemorySettings { ProjectIdsReport = MixedOutcomeReport() };
+        var stdout = await RunProjectIdsAsync(apply: true, inner, scope.DataRoot, scope.WriteFixtureMap());
+
+        stdout.ShouldContain("summary — repair in progress (3 change(s) queued for the server).");
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
+    }
+
+    /// <summary>
+    ///     f: the converged run's verdict — nothing to do — must print too, or the
+    ///     summary's absence reads as a truncated report.
+    ///     Ledger — missing-closing-summary : single canonical id, map supplied.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_Converged_EndsWithNothingToDoSummary()
+    {
+        using var scope = new TempScope();
+        var report = new ProjectIdCensusReport([Row("jsaa", entries: 1)], 0, 0, 0, 0, []);
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report, scope.DataRoot, scope.WriteFixtureMap());
+
+        stdout.ShouldContain("summary — nothing to do (no folds, drops, or retires pending).");
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
+    }
+
+    /// <summary>
+    ///     f: attention-only runs (no folds/drops/retires, but ids a human must place)
+    ///     are neither "nothing to do" nor "repair needed" — the summary says what is
+    ///     actually true: nothing to queue.
+    ///     Ledger — missing-closing-summary : single unknown id, no map.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_AttentionOnly_EndsWithNothingToQueueSummary()
+    {
+        using var scope = new TempScope();
+        var report = new ProjectIdCensusReport([Row("mystery-guid-0001", entries: 1)], 0, 0, 0, 0, []);
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, report, scope.DataRoot);
+
+        stdout.ShouldContain("summary — nothing to queue (1 id(s) still need a human to attribute).");
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary");
+    }
+
+    private static string LastNonEmptyLine(string stdout) =>
+        stdout.Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0).Last();
+
     private static Task<string> RunProjectIdsAsync(bool apply, bool diagnose, ProjectIdCensusReport report) =>
         RunProjectIdsAsync(apply, diagnose, new InMemorySettings { ProjectIdsReport = report });
 
