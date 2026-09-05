@@ -294,6 +294,62 @@ public class ToolExecutionActivityTests
         measurement.ProjectId.ShouldNotBe("acme");
     }
 
+    /// <summary>Option-1 fold: the bank measurement follows the folded id while the counter keeps the raw caller-sent id.</summary>
+    [Fact]
+    public void RecordInvocation_RecordsBankMeasurementUnderBankId_CounterKeepsRaw()
+    {
+        var metrics = new ToolCallMetrics();
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
+        var recorder = new RecordingRecorder();
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_search", "old-slug", recorder: recorder, bankProjectId: "new-slug");
+        activity.RecordInvocation();
+
+        recorder.Recorded.ShouldHaveSingleItem().ProjectId.ShouldBe("new-slug");
+        collector.GetMeasurementSnapshot().ShouldHaveSingleItem().Tags["project_id"].ShouldBe("old-slug");
+    }
+
+    /// <summary>Without a bank id the measurement falls back to the metric id, then the raw id — pre-fold behavior, byte-identical.</summary>
+    [Fact]
+    public void RecordInvocation_WithoutBankId_MeasurementKeepsMetricThenRawId()
+    {
+        var metrics = new ToolCallMetrics();
+        var recorder = new RecordingRecorder();
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_search", "old-slug", "metric-slug", recorder: recorder);
+        activity.RecordInvocation();
+
+        recorder.Recorded.ShouldHaveSingleItem().ProjectId.ShouldBe("metric-slug");
+    }
+
+    /// <summary>Error path without an explicit override: the bank measurement follows the bank id while the counter keeps the raw id.</summary>
+    [Fact]
+    public void RecordError_WithoutOverride_RecordsBankMeasurementUnderBankId_CounterKeepsRaw()
+    {
+        var metrics = new ToolCallMetrics();
+        using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
+        var recorder = new RecordingRecorder();
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_search", "old-slug", recorder: recorder, bankProjectId: "new-slug");
+        activity.RecordError(new InvalidOperationException("boom"));
+
+        recorder.Recorded.ShouldHaveSingleItem().ProjectId.ShouldBe("new-slug");
+        collector.GetMeasurementSnapshot().ShouldHaveSingleItem().Tags["project_id"].ShouldBe("old-slug");
+    }
+
+    /// <summary>Error path with an explicit refused sentinel: the sentinel still wins for the bank measurement too.</summary>
+    [Fact]
+    public void RecordError_WithRefusedOverride_BankMeasurementKeepsSentinel()
+    {
+        var metrics = new ToolCallMetrics();
+        var recorder = new RecordingRecorder();
+
+        using var activity = new ToolExecutionActivity(metrics, "memory_search", "old-slug", recorder: recorder, bankProjectId: "new-slug");
+        activity.RecordError(new InvalidOperationException("boom"), ToolTelemetry.RefusedProjectId);
+
+        recorder.Recorded.ShouldHaveSingleItem().ProjectId.ShouldBe(ToolTelemetry.RefusedProjectId);
+    }
+
     /// <summary>No recorder given (e.g. a host with telemetry disabled) must never throw — best-effort per IMeasurementRecorder's contract.</summary>
     [Fact]
     public void RecordInvocation_DoesNotThrow_WhenNoRecorderGiven()
