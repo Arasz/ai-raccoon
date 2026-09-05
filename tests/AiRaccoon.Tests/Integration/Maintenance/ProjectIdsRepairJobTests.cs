@@ -266,6 +266,8 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
     ///     (a null winner would fold an id to null downstream) refuses exactly like garbage JSON —
     ///     the existing <see cref="ProjectIdsRepairJob.ResolveMap" /> guard stays wired, the bank
     ///     is untouched, and the request stays open for a corrected --apply.
+    ///     Ledger — sabotage/restore (Package D lane: guard narrowed so ArgumentException escapes
+    ///     → FAILED; GREEN on restore).
     /// </summary>
     [RetryFact]
     public async Task RequestedRun_WithNullWinnerMapJson_RefusesWithoutStamping()

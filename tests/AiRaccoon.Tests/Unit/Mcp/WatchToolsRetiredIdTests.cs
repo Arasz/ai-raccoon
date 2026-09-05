@@ -17,6 +17,12 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 ///     add/remove under a dropped id refuse before the service is touched, while an alias loser
 ///     reaches the service already folded to the winner.
 /// </summary>
+/// <para>
+///     RED-proof ledger (Package E lane): the file was written test-first against the missing
+///     retired-id refusal surface — the initial build failed on the nonexistent refusal
+///     wiring (all 3 tests demanded nonexistent behavior). Per-test behavior mutations were
+///     not recorded by the lane.
+/// </para>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 [Collection(ProjectIdAliasDefaultCollection.Name)]
