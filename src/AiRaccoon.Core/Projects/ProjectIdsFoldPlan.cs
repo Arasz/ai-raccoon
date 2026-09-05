@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Projects;
@@ -9,8 +10,10 @@ public sealed record ProjectIdFold(string Loser, string Winner);
 ///     The project-ids repair's work order, derived from a <see cref="ProjectIdCensusReport" />
 ///     plus the durable <see cref="ProjectIdAliasMap" /> (air-merge P2): alias losers fold into
 ///     their winners, drop-listed ids delete with a tombstone per removed hash, zero-entry
-///     projects rows with no attachments anywhere retire, and ids the map cannot attribute stay
-///     unresolved — P3 refuses their future writes, but P2 neither moves nor deletes them.
+///     projects rows with no attachments anywhere retire, registered ids and the bank-wide
+///     self-metrics sentinel are already placed (their own canonicals), and only
+///     unregistered ids the map cannot attribute stay unresolved — P3 refuses their future
+///     writes, but P2 neither moves nor deletes them.
 /// </summary>
 public sealed class ProjectIdsFoldPlan(
     IReadOnlyList<ProjectIdFold> folds,
@@ -75,6 +78,23 @@ public sealed class ProjectIdsFoldPlan(
             if (row.Registered && row.EntryTotal == 0 && row.AttachmentCount == 0)
             {
                 retired.Add(row.ProjectId);
+                continue;
+            }
+
+            // The bank-wide self-metrics sentinel is a real id on every deployment, not
+            // machine-local attribution — the map never needs to list it to place it.
+            // Explicit map entries still win: drop/alias branches above run first.
+            if (string.Equals(row.ProjectId, MetricsConfigKeys.SelfMetricsProjectId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // A registered id is already attributed by the live projects table — its own
+            // canonical whether or not the map lists it, so it never needs a human.
+            // The name-fold above still runs first: a registered loser the map knows
+            // by its projects-row name still folds to its winner.
+            if (row.Registered)
+            {
                 continue;
             }
 

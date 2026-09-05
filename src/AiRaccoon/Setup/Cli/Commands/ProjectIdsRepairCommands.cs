@@ -101,22 +101,36 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
                 $"project-ids repair: '{dropped}' is test residue — deletes with a tombstone per removed hash");
         }
 
-        foreach (var unresolved in plan.Unresolved)
+        if (plan.Unresolved.Count > 0)
         {
-            var row = report.Rows.SingleOrDefault(r => r.ProjectId == unresolved);
-            var hint = row?.RegisteredName is not null ? $" (registered as '{row.RegisteredName}')" : string.Empty;
+            // One line, not one line per id: the scoreboard above already carries the count,
+            // so repeating the prefix per id is noise. Registered-name hints stay inline per id.
+            var listed = plan.Unresolved.Select(id =>
+            {
+                var row = report.Rows.SingleOrDefault(r => r.ProjectId == id);
+                return row?.RegisteredName is not null ? $"'{id}' (registered as '{row.RegisteredName}')" : $"'{id}'";
+            });
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: '{unresolved}' matches no known id{hint} — left alone for a human to attribute");
+                $"project-ids repair: {plan.Unresolved.Count} id(s) match no known id — left alone for a human to attribute: {string.Join(", ", listed)}");
         }
 
         if (mapPath is null && !apply)
         {
             var templatePath = TemplatePathFor(dataRoot);
-            var template = TryWriteTemplate(templatePath);
+            // Template-only runs always plan with the empty map, so no fold/drop can exist here:
+            // registered non-retired ids are exactly the canonical-branch rows worth seeding.
+            var canonicalSeed = report.Rows
+                .Where(row => row.Registered && !plan.RetiredProjects.Contains(row.ProjectId, StringComparer.Ordinal))
+                .Select(row => row.ProjectId)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            var template = TryWriteTemplate(templatePath, plan.Unresolved, canonicalSeed);
             await streams.WriteOutputLineAsync(
                 template.Wrote
                     ? $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
-                      $"Wrote an editable alias-map template to '{templatePath}'; fill in your folds and re-run with --map."
+                      $"Wrote an editable alias-map template to '{templatePath}' (example alias shape, " +
+                      $"__self_metrics__ + {canonicalSeed.Count} registered canonical(s), {plan.Unresolved.Count} unattributed id(s) " +
+                      $"pre-filled in Dropped for review); edit Aliases/Dropped and re-run with --map."
                     : template.Failure is not null
                         ? $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
                           $"Could not write the alias-map template to '{templatePath}': {template.Failure}; create it by hand or pass --map."
@@ -154,8 +168,15 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
     /// <summary>The outcome of attempting the template write: created, already present, or failed.</summary>
     internal sealed record TemplateWrite(bool Wrote, string? Failure);
 
-    /// <summary>Writes the empty-map template unless the file already exists (never overwrites operator edits).</summary>
-    internal static TemplateWrite TryWriteTemplate(string templatePath)
+    /// <summary>
+    ///     Writes the seed template unless the file already exists (never overwrites operator edits).
+    ///     The seed is an editing starting point, not a verdict: one example alias shape, the bank-wide
+    ///     self-metrics canonical (a real id on every deployment), the census's registered ids as
+    ///     further canonicals, and the current unresolved ids pre-filled into Dropped for the
+    ///     operator to review — move true folds to Aliases, keep true residue in Dropped,
+    ///     never --apply the seed blindly.
+    /// </summary>
+    internal static TemplateWrite TryWriteTemplate(string templatePath, IReadOnlyList<string> droppedSeed, IReadOnlyList<string> canonicalSeed)
     {
         try
         {
@@ -165,9 +186,13 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
                 Directory.CreateDirectory(dir);
             }
 
+            var seed = new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("old-project-id", "new-project-id")],
+                [MetricsConfigKeys.SelfMetricsProjectId, .. canonicalSeed],
+                droppedSeed);
             using var stream = new FileStream(templatePath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             using var writer = new StreamWriter(stream);
-            writer.Write(ProjectIdAliasMap.Empty.ToJson(indented: true));
+            writer.Write(seed.ToJson(indented: true));
             return new TemplateWrite(Wrote: true, Failure: null);
         }
         catch (IOException ex) when (ex.HResult == unchecked((int)0x80070050))

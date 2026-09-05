@@ -123,6 +123,36 @@ public sealed class ProjectIdsFoldPlanTests
         plan.IsEmpty.ShouldBeTrue();
     }
 
+    // Ledger — registered-is-canonical : --filter FromCensus_RegisteredIdWithEntries_IsCanonical_NeverUnresolved : registered + entries, empty map.
+    [Fact]
+    public void FromCensus_RegisteredIdWithEntries_IsCanonical_NeverUnresolved()
+    {
+        // Registered means the live projects table already attributes the id — its own
+        // canonical whether or not any map lists it, so it never needs a human.
+        var report = Report(Row("my-project", projectEntries: 2, registered: true, registeredName: "my-project"));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Empty);
+
+        plan.Folds.ShouldBeEmpty();
+        plan.Dropped.ShouldBeEmpty();
+        plan.RetiredProjects.ShouldBeEmpty();
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
+    // Ledger — self-metrics-is-canonical : --filter FromCensus_SelfMetricsSentinel_IsCanonical_WithoutAnyMapEntry : sentinel + content, empty map.
+    [Fact]
+    public void FromCensus_SelfMetricsSentinel_IsCanonical_WithoutAnyMapEntry()
+    {
+        // The bank-wide sentinel is a real id on every deployment, not machine-local
+        // attribution — no map entry needed to place it.
+        var report = Report(Row(MetricsConfigKeys.SelfMetricsProjectId, qualityRows: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Empty);
+
+        plan.IsEmpty.ShouldBeTrue();
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
     // Ledger — empty-bank-plans-work : --filter FromCensus_OnACleanBank_IsEmpty : zero rows.
     [Fact]
     public void FromCensus_OnACleanBank_IsEmpty()

@@ -222,8 +222,52 @@ public sealed class RepairCommandsTests
         var templatePath = Path.Combine(scope.DataRoot, ProjectIdsRepairCommands.TemplateFileName);
         stdout.ShouldContain(templatePath);
         File.Exists(templatePath).ShouldBeTrue();
-        ProjectIdAliasMap.FromJson(File.ReadAllText(templatePath)).IsEmpty.ShouldBeTrue();
+        // The template is a seed, not the empty map: one example alias shape, the bank-wide
+        // self-metrics canonical, and this run's unattributed ids pre-filled in Dropped for review.
+        var seed = ProjectIdAliasMap.FromJson(File.ReadAllText(templatePath));
+        seed.Aliases.ShouldBe([new ProjectIdAliasEntry("old-project-id", "new-project-id")]);
+        seed.Canonicals.ShouldBe([MetricsConfigKeys.SelfMetricsProjectId]);
+        seed.Dropped.ShouldBe(["jsaa", "job-search-ai-assistant"]);
         inner.LastRepairRequest.ShouldBeNull();
+    }
+
+    /// <summary>
+    ///     Unattributed ids print as one comma-separated line, not one prefixed line per id —
+    ///     the scoreboard already carries the count, so per-id prefixes are noise.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_PrintsUnresolvedAsASingleLine()
+    {
+        using var scope = new TempScope();
+        var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, MixedOutcomeReport(), scope.DataRoot, scope.WriteFixtureMap());
+
+        stdout.ShouldContain("'mystery-guid-0001'");
+        stdout.Split("match no known id").Length.ShouldBe(2);
+    }
+
+    /// <summary>
+    ///     Registered ids are already attributed by the live bank: they never ask for a human
+    ///     and the template seeds them as canonicals next to the self-metrics sentinel.
+    /// </summary>
+    [Fact]
+    public async Task ProjectIds_DryRun_SeedsRegisteredIdsAsCanonicals_NeverUnresolved()
+    {
+        using var scope = new TempScope();
+        var report = new ProjectIdCensusReport(
+        [
+            Row("my-project", registered: true, entries: 1),
+            Row("mystery-guid-0001", entries: 1)
+        ], 0, 0, 0, 0, []);
+        var inner = new InMemorySettings { ProjectIdsReport = report };
+
+        var stdout = await RunProjectIdsAsync(apply: false, inner, scope.DataRoot);
+
+        stdout.ShouldContain("1 need a human to attribute");
+        stdout.ShouldContain("'mystery-guid-0001'");
+        stdout.ShouldNotContain("'my-project'");
+        var seed = ProjectIdAliasMap.FromJson(File.ReadAllText(Path.Combine(scope.DataRoot, ProjectIdsRepairCommands.TemplateFileName)));
+        seed.Canonicals.ShouldBe([MetricsConfigKeys.SelfMetricsProjectId, "my-project"]);
+        seed.Dropped.ShouldBe(["mystery-guid-0001"]);
     }
 
     [Fact]
