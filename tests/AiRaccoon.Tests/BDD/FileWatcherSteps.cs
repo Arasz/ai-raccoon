@@ -1510,8 +1510,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     // Ledger — skip-watch-rewrite : WatchRenameBDD scenario : loser+UPPER+guid watches with
     // claims, leases, scope rows and ingested files; skip-settings-rename : same : loser scope
     // rows; delete-insert-instead-of-update : same : rowid-stability asserts; unchanged-file-stays-put :
-    // same : g.md is asserted searchable only after a post-repair change (untouched mirrors stay
-    // byte-identical under the loser per review S2 — asserting it before the change fails).
+    // same : g.md is asserted searchable after the fold moves its NULL rows (D1) and again after
+    // a post-repair change (mirrors fold byte-identical under the winner — asserting stay fails).
 
     private const string RenameLoser = "job-search-ai-assistant";
     private const string RenameWinner = "jsaa";
@@ -1521,6 +1521,16 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
 
     private readonly Dictionary<(string Project, string Path), long> _watchRowIds = new();
     private readonly Dictionary<string, long> _nullContextBefore = new();
+    private readonly Dictionary<string, List<(string Hash, string Path)>> _nullKeysBefore = new();
+    private readonly Dictionary<string, HashSet<(string Hash, string Path)>> _nullWinnerKeysBefore = new();
+    private bool _mirrorsAssertedOnce;
+    private static readonly Dictionary<string, string> LoserToWinner = new(StringComparer.Ordinal)
+    {
+        [RenameLoser] = RenameWinner,
+        [RenameLoserUpper] = RenameWinnerLower,
+        // The guid folds via its registered pre-guid name (job-search-ai-assistant), like live 01a062f4.
+        [RenameGuidLoser] = RenameWinner,
+    };
     private long _expectedLease;
 
     [Given("^a digest claim for \"([^\"]*)\" at \"([^\"]*)\" with scan owner \"([^\"]*)\"$")]
@@ -1579,11 +1589,22 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         await using var connection = await Ctx.OpenBankAsync();
         _nullContextBefore.Clear();
+        _nullKeysBefore.Clear();
+        _nullWinnerKeysBefore.Clear();
         foreach (var loser in new[] { RenameLoser, RenameLoserUpper, RenameGuidLoser })
         {
             _nullContextBefore[loser] = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "SELECT count(*) FROM entries WHERE project_id = @loser AND scope = 'project' AND context_label IS NULL",
                 new { loser }));
+            _nullKeysBefore[loser] = (await connection.QueryAsync<(string Hash, string Path)>(new CommandDefinition(
+                "SELECT hash AS Hash, path AS Path FROM entries WHERE project_id = @loser AND scope = 'project' AND context_label IS NULL",
+                new { loser }))).ToList();
+        }
+        foreach (var winner in new[] { RenameWinner, RenameWinnerLower })
+        {
+            _nullWinnerKeysBefore[winner] = (await connection.QueryAsync<(string Hash, string Path)>(new CommandDefinition(
+                "SELECT hash AS Hash, path AS Path FROM entries WHERE project_id = @winner AND scope = 'project' AND context_label IS NULL",
+                new { winner }))).ToHashSet();
         }
 
         var plan = ProjectIdsFoldPlan.FromCensus(
@@ -1604,8 +1625,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     [Given("^labeled project rows for the loser ids$")]
     public async Task GivenLabeledProjectRowsForLosers()
     {
-        // The P2 move-shape (scope project + non-null label): the only entries the repair moves.
-        // File-mirrored rows are NULL-context by digest construction and stay byte-identical.
+        // Committed rows the repair folds (D1: project+custom scopes, any label) plus labeled
+        // examples; file-mirrored NULL-context rows fold byte-identical under the winner.
         await using var connection = await Ctx.OpenBankAsync();
         var now = MemoryFeatureContext.FixedNow.ToUnixTimeSeconds();
         foreach (var (hash, loser) in new[]
@@ -1621,8 +1642,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
     }
 
-    [Then("^no loser rows remain except byte-identical file mirrors$")]
-    [Then("^still no loser rows remain and mirrors are unchanged$")]
+    [Then("^no loser rows remain and file mirrors folded byte-identical under the winners$")]
+    [Then("^still no loser rows remain after post-repair edits$")]
     public async Task ThenNoLoserRowsRemain()
     {
         await using var connection = await Ctx.OpenBankAsync();
@@ -1644,9 +1665,53 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
             (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                     "SELECT count(*) FROM entries WHERE project_id = @loser AND scope = 'project' AND context_label IS NULL",
                     new { loser })))
-                .ShouldBe(_nullContextBefore[loser],
-                    $"file mirrors under {loser} changed — they stay byte-identical (review S2)");
+                .ShouldBe(0,
+                    $"D1: NULL-context mirrors fold with the labeled rows — nothing stays under {loser}");
+            // Per-key survival runs only on the first invocation: later invocations follow
+            // re-ingested file changes, which replace rows (new hashes) by design — asserting
+            // pre-repair hashes then would mistake re-ingest replacement for fold loss.
+            if (!_mirrorsAssertedOnce)
+            {
+            foreach (var (hash, path) in _nullKeysBefore[loser])
+            {
+                var winner = LoserToWinner[loser];
+                (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                        "SELECT count(*) FROM entries WHERE hash = @hash AND path = @path AND project_id = @loser AND scope IN ('project', 'custom')",
+                        new { hash, path, loser })))
+                    .ShouldBe(0,
+                        $"mirror {hash} ({path}) leaves no committed row under {loser} (shared/workspace legs pin by design)");
+                (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                        "SELECT count(*) FROM entries WHERE hash = @hash AND path = @path AND project_id = @winner",
+                        new { hash, path, winner })))
+                    .ShouldBeGreaterThanOrEqualTo(1,
+                        $"mirror {hash} ({path}) survives byte-identical under {winner} (dedup-collapse onto a winner twin counts)");
+            }
+            }
         }
+        // Mirror-key asserts run only on the first invocation: post-repair file changes are
+        // re-ingested with new hashes by design, so pre-repair keys legitimately vanish after
+        // edits. The second invocation keeps the no-resurrection core (loser-zero everywhere).
+        if (!_mirrorsAssertedOnce)
+        {
+        // Winner NULL-mirrors are the pre-repair winner keys plus every folded mirror key:
+        // the committed bucket cannot hold two copies, so cross-loser duplicates fold once and
+        // pre-existing twins absorb their loser copy — either way the union is the exact set.
+        foreach (var winner in new[] { RenameWinner, RenameWinnerLower })
+        {
+            var expected = new HashSet<(string Hash, string Path)>(_nullWinnerKeysBefore[winner]);
+            foreach (var key in LoserToWinner.Where(kv => kv.Value == winner).SelectMany(kv => _nullKeysBefore[kv.Key]))
+            {
+                expected.Add(key);
+            }
+            var actual = (await connection.QueryAsync<(string Hash, string Path)>(new CommandDefinition(
+                "SELECT hash AS Hash, path AS Path FROM entries WHERE project_id = @winner AND scope = 'project' AND context_label IS NULL",
+                new { winner }))).ToHashSet();
+            actual.SetEquals(expected).ShouldBeTrue(
+                $"folded mirrors land under {winner} with their content intact " +
+                $"(expected {expected.Count} distinct keys, found {actual.Count})");
+        }
+        }
+        _mirrorsAssertedOnce = true;
 
         (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "SELECT count(*) FROM entries WHERE project_id = 'jsaa' AND scope = 'project' AND context_label IS NOT NULL")))

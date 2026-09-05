@@ -56,17 +56,19 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
         var plan = ProjectIdsFoldPlan.FromCensus(report, map);
 
         // Every censused id lands in exactly one bucket: FromCensus's `continue`s are exhaustive
-        // (fold, drop, retire) or the id needs nothing further (already canonical under the map,
+        // (fold, drop, retire, pin) or the id needs nothing further (already canonical under the map,
         // or genuinely empty and unregistered) — `needsAttention` is the one bucket the operator
-        // must act on; the rest either changes on its own or was never a problem.
+        // must act on; pins wait with reasons below; the rest either changes on its own or was never
+        // a problem.
         var needsAttention = plan.Unresolved.Count;
         var needsNothing = report.Rows.Count - plan.Folds.Count - plan.Dropped.Count -
-            plan.RetiredProjects.Count - needsAttention;
+            plan.RetiredProjects.Count - needsAttention - plan.Pinned.Count;
         var verb = apply ? "Request will be queued for the server." : "Dry run — pass --apply to run this.";
+        var pinnedSegment = plan.Pinned.Count > 0 ? $", {plan.Pinned.Count} pinned (waiting with reasons below)" : string.Empty;
         await streams.WriteOutputLineAsync(
             $"project-ids repair: {report.Rows.Count} id(s) censused — {plan.Folds.Count} fold, " +
             $"{plan.Dropped.Count} drop (test residue), {plan.RetiredProjects.Count} retire (registered, empty), " +
-            $"{needsAttention} need a human to attribute, {needsNothing} need nothing (already correct or empty). {verb}");
+            $"{needsAttention} need a human to attribute{pinnedSegment}, {needsNothing} need nothing (already correct or empty). {verb}");
 
         var orphans = report.Rows.Count(row => row.Orphan);
         if (orphans > 0)
@@ -78,15 +80,24 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
         foreach (var fold in plan.Folds)
         {
             var loser = report.Rows.SingleOrDefault(row => row.ProjectId == fold.Loser);
-            // d-426 SHOULD-2: expose each loser's NULL-context count at the pre-apply surface.
-            // The repair's keep predicate (project-scope + non-NULL label) deliberately leaves
-            // those rows behind — decided: keep predicate, expose counts, P-INT asserts — so the
-            // count here is the operator's verify-zero-or-broaden instrument before --apply: a
-            // nonzero count stays loser-keyed by design, never a surprise orphan afterwards.
+            // D1 overturns the d-426 keep: NULL-context rows are committed rows and fold to the
+            // winner with every other committed row. The count stays visible pre-apply as the
+            // verify-they-move instrument: a nonzero count folds by design, never a surprise orphan.
             await streams.WriteOutputLineAsync(
                 $"project-ids repair: '{fold.Loser}' owns {loser?.EntryTotal ?? 0} entries " +
-                $"({loser?.NullContextEntries ?? 0} NULL-context, stay), " +
+                $"({loser?.NullContextEntries ?? 0} NULL-context, fold), " +
                 $"{loser?.Queued ?? 0} queued — folds to '{fold.Winner}'");
+        }
+
+        if (plan.Pinned.Count > 0)
+        {
+            // One id per line, like the unresolved bucket: the scoreboard above carries the count.
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: {plan.Pinned.Count} id(s) pinned — waiting with reasons below:");
+            foreach (var pin in plan.Pinned)
+            {
+                await streams.WriteOutputLineAsync($"  {pin.Bucket}: '{pin.ProjectId}' — {pin.Reason}");
+            }
         }
 
         foreach (var retired in plan.RetiredProjects)
@@ -165,27 +176,32 @@ public sealed class ProjectIdsRepairCommands(IRepairStore repair)
 
         // f: the report never closed with a verdict — one summary line, always last, naming
         // the overall state: repair in progress (--apply queued it), repair needed (a dry run
-        // with folds/drops/retires waiting), or nothing to do (converged). A pending
-        // human-attribution count qualifies the line but never multiplies the states.
+        // with folds/drops/retires waiting), pinned-only (a dry run with nothing actionable but
+        // waiting pins — D6 vocabulary), or nothing to do (converged). A pending
+        // human-attribution count qualifies the line but never multiplies the states; a pinned
+        // count extends it the same way. All three 1.40.2 lines stay byte-identical when no pins exist.
         var actionable = plan.Folds.Count + plan.Dropped.Count + plan.RetiredProjects.Count;
+        var pinnedQualifier = plan.Pinned.Count > 0 ? $"; {plan.Pinned.Count} pinned with reasons above" : string.Empty;
         if (apply)
         {
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: summary — repair in progress ({actionable} change(s) queued for the server).");
+                $"project-ids repair: summary — repair in progress ({actionable} change(s) queued for the server{pinnedQualifier}).");
         }
         else if (actionable > 0)
         {
             await streams.WriteOutputLineAsync(
                 needsAttention > 0
-                    ? $"project-ids repair: summary — repair needed ({actionable} change(s) waiting on --apply; {needsAttention} id(s) still need a human)."
-                    : $"project-ids repair: summary — repair needed ({actionable} change(s) waiting on --apply).");
+                    ? $"project-ids repair: summary — repair needed ({actionable} change(s) waiting on --apply; {needsAttention} id(s) still need a human{pinnedQualifier})."
+                    : $"project-ids repair: summary — repair needed ({actionable} change(s) waiting on --apply{pinnedQualifier}).");
         }
         else
         {
             await streams.WriteOutputLineAsync(
                 needsAttention > 0
-                    ? $"project-ids repair: summary — nothing to queue ({needsAttention} id(s) still need a human to attribute)."
-                    : "project-ids repair: summary — nothing to do (no folds, drops, or retires pending).");
+                    ? $"project-ids repair: summary — nothing to queue ({needsAttention} id(s) still need a human to attribute{pinnedQualifier})."
+                    : plan.Pinned.Count > 0
+                        ? $"project-ids repair: summary — pinned-only (0 change(s) waiting on --apply{pinnedQualifier})."
+                        : "project-ids repair: summary — nothing to do (no folds, drops, or retires pending).");
         }
 
         return 0;

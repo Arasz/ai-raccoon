@@ -145,37 +145,46 @@ public sealed class SingleProjectIdCensusTests : IDisposable
             .ShouldBe(0, "dropped and retired ids leave no registry rows");    }
 
     /// <summary>
-    ///     The S2 byte-identical partitions: NULL-context bulk rows and NULL-scope rows survive the
-    ///     repair under their original keys with identical counts. Ledger — widen-the-rewrite-predicate :
-    ///     --filter "FullyQualifiedName~SingleProjectIdCensusTests.NullContextAndNullScope_Preserved" :
-    ///     1 NULL-ctx + 1 NULL-scope row (a widened predicate would fold or drop them).
-    ///     <para>
-    ///         d-427 SHOULD-6: no LOSER NULL-context row is seeded here on purpose — a loser NULL-ctx
-    ///         row stays loser-keyed by design (keep predicate) and would surface as an orphan,
-    ///         breaking OrphanCensus_ZeroAcrossEverySurface above. The loser keep-leg is covered by
-    ///         P2's l-bulk fixture (ProjectIdsRepairJobTests) and the E2E bulk row
-    ///         (SingleProjectIdE2E.MergedClusterSearch) — cited, not duplicated.
-    ///     </para>
+    ///     D1 committed predicate: winner NULL-context bulk rows and NULL-scope workspace scratch survive
+    ///     the repair under their original keys, while LOSER NULL-context bulk rows and custom rows fold
+    ///     to the winner (the d-426 keep is overturned). Ledger — widen-the-rewrite-predicate :
+    ///     --filter "FullyQualifiedName~SingleProjectIdCensusTests.CommittedNullAndCustom_FoldWhileWinnerBulkAndScratchStay" :
+    ///     winner bulk + workspace scratch (stay) + loser bulk + loser custom (fold).
     /// </summary>
     [RetryFact]
-    public async Task NullContextAndNullScope_Preserved()
+    public async Task CommittedNullAndCustom_FoldWhileWinnerBulkAndScratchStay()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var connection = await _factory.OpenBankAsync(ct);
         await SeedAsync(connection, ct);
+        // d-427 SHOULD-6 inverted by D1: the loser keep-leg now folds, so it is seeded here —
+        // a loser NULL-ctx row and a loser custom row join the winner bulk + scratch fixtures.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label, created_at, updated_at, embed_state) " +
+            "VALUES ('l-bulk', 'l-bulk', 'l-bulk', 'seed.md', 's', 'project', @loser, NULL, 1, 1, 'pending'), " +
+            "('l-custom', 'l-custom', 'l-custom', 'seed.md', 's', 'custom', @loser, 'ctx-a', 1, 1, 'pending')",
+            new { loser = Loser }, cancellationToken: ct));
         var before = await ProjectIdCensus.CollectAsync(connection, ct);
 
         await RequestAndRunRepairAsync(connection, ct);
 
         var after = await ProjectIdCensus.CollectAsync(connection, ct);
         after.NullContextEntries.ShouldBe(before.NullContextEntries);
-        after.NullContextEntries.ShouldBe(2, "the jsaa NULL-context bulk row plus the workspace scratch row are counted, not touched");
+        after.NullContextEntries.ShouldBe(3, "bulk rows re-key, they never vanish: winner bulk + scratch + folded loser bulk");
         after.NullScopeEntries.ShouldBe(before.NullScopeEntries);
         after.NullScopeEntries.ShouldBe(1, "the NULL-scope workspace scratch row is counted, not touched");
         (await ScalarAsync(connection, "SELECT project_id FROM entries WHERE hash = 'w-bulk'", ct))
             .ShouldBe(Winner);
         (await ScalarAsync(connection, "SELECT project_id FROM entries WHERE hash = 'ws-1'", ct))
             .ShouldBe(Winner);
+        (await ScalarAsync(connection, "SELECT project_id FROM entries WHERE hash = 'l-bulk'", ct))
+            .ShouldBe(Winner, "D1: the loser NULL-context bulk row folds to the winner");
+        (await ScalarAsync(connection, "SELECT project_id FROM entries WHERE hash = 'l-custom'", ct))
+            .ShouldBe(Winner, "D1: the loser custom row folds to the winner");
+        (await ScalarAsync(connection, "SELECT scope FROM entries WHERE hash = 'l-custom'", ct))
+            .ShouldBe("custom", "the fold re-keys the id — the scope rides along untouched");
+        (await ScalarAsync(connection, "SELECT count(*) FROM entries WHERE project_id = @loser", ct, new { loser = Loser }))
+            .ShouldBe(0, "no loser entry row survives on any committed scope");
     }
 
     /// <summary>

@@ -46,9 +46,11 @@ public sealed record ProjectIdsRepairResult(
 ///         writers or loop derive→apply until a run reports no folds (the --apply receipt states this).
 ///     </para>
 ///     <para>
-///         Entries scope rule (review S2): only <c>scope = 'project'</c> rows with a non-NULL
-///         context_label move — NULL-context bulk rows and custom/shared partitions stay
-///         byte-identical. Dropped ids delete all committed-scope rows instead (there is no winner
+///         Entries scope rule (D1): every committed row (<c>scope IN ('project', 'custom')</c>, any
+///         label including NULL-context bulk rows) folds — the d-426 keep is overturned, no consumer
+///         keys on (project_id, NULL-label) stability. Shared rows are cross-project content (H9:
+///         the shared write path keeps the writer's project_id, so shared-keyed loser rows are
+///         genuine) and never fold; they pin with a reason in the plan instead. Dropped ids delete
 ///         to preserve them under). Metrics, noise, workspaces and workspace scratch are never
 ///         touched; <c>source_id</c> rides along untouched (memory_source is content-keyed and
 ///         local-only). Chunk renumber is NOT here — <see cref="Maintenance.ProjectIdsRepairJob" />
@@ -67,10 +69,14 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var vecInvalidated = await InvalidateVecAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var codeVecInvalidated = await InvalidateCodeVecAsync(connection, plan, cancellationToken).ConfigureAwait(false);
-        // Queue BEFORE entries (review MUST-1): the entries-dedup DELETE below fires
-        // promotion_queue_entries_ad, which eats queue rows still keyed by the loser id — the
-        // normal production shape is a queue hash that IS an entries hash, so folding entries
-        // first silently drops candidates the queue fold would have merged.
+        // Queue BEFORE entries (review MUST-1, H5 under the broadened predicate): the entries-dedup
+        // DELETE below fires promotion_queue_entries_ad, which eats queue rows still keyed by the
+        // loser id — the normal production shape is a queue hash that IS an entries hash, so folding
+        // entries first silently drops candidates the queue fold would have merged. Within the queue
+        // step the order is merge-into-winner, then move, then delete-loser-leftovers; within the
+        // entries step each fold is one txn running UPDATE-rekey before DELETE-dedup, so by the time
+        // the trigger fires every surviving candidate is winner-keyed and its OLD.project_id = loser
+        // predicate matches nothing.
         var (queueMerged, queueMoved, queueRemoved) =
             await FoldQueueAsync(connection, plan, cancellationToken).ConfigureAwait(false);
         var (entriesMoved, entriesDeduped, entriesTombstoned) =
@@ -112,7 +118,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                         SET embed_state = 'pending', embedding = NULL,
                             structure_embedding = NULL, heading_path = NULL
                         WHERE embed_state = 'embedded'
-                          AND {ProjectRows.LabeledProjectScope("", "loser")}
+                          AND {ProjectRows.CommittedScope("", "loser")}
                         """,
                         new { loser = fold.Loser }, cancellationToken: cancellationToken)),
                 cancellationToken).ConfigureAwait(false);
@@ -163,17 +169,18 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                 var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
                         $"""
                         UPDATE entries SET project_id = @winner
-                        WHERE {ProjectRows.LabeledProjectScope("", "loser")}
+                        WHERE {ProjectRows.CommittedScope("", "loser")}
                           AND NOT EXISTS (
                               SELECT 1 FROM entries w
-                              WHERE {ProjectRows.ProjectScope("w.", "winner")}
+                              WHERE {ProjectRows.CommittedScope("w.", "winner")}
                                 AND w.path = entries.path AND w.hash = entries.hash
+                                AND w.scope = entries.scope
                                 AND COALESCE(w.context_label, '') = COALESCE(entries.context_label, ''))
                         """,
                         new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
                 var stepDeleted = await connection.ExecuteAsync(new CommandDefinition(
-                        "DELETE FROM entries WHERE " + ProjectRows.LabeledProjectScope("", "loser"),
+                        "DELETE FROM entries WHERE " + ProjectRows.CommittedScope("", "loser"),
                         new { loser = fold.Loser }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
                 return (Moved: stepMoved, Deleted: stepDeleted);
