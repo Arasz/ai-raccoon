@@ -3,6 +3,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Projects;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Access;
@@ -13,6 +14,7 @@ namespace AiRaccoon.Tests.Unit.Access;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class AccessModeGuardTests
 {
     private readonly MemoryAccessGuard _guard;

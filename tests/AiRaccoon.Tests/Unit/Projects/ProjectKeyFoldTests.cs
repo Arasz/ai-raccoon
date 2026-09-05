@@ -18,6 +18,7 @@ namespace AiRaccoon.Tests.Unit.Projects;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class ProjectKeyFoldTests
 {
     [Theory]

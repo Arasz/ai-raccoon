@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Watch;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Projects;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Watch;
@@ -11,6 +12,7 @@ namespace AiRaccoon.Tests.Unit.Watch;
 /// <summary>Replace-by-path digest: hash-skip (R5), delete-by-source-path, rename semantics (D2).</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class WatchDigestExecutorTests
 {
     private const string Project = "acme";

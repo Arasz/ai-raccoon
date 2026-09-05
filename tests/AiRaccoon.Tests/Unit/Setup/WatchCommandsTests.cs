@@ -3,6 +3,7 @@ using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Projects;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Setup;
@@ -14,6 +15,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public class WatchCommandsTests
 {
     /// <summary>Calls the component method directly — no dispatcher, that is the seam under test.</summary>

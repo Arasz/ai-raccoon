@@ -8,6 +8,7 @@ using FluentValidation;
 using ModelContextProtocol;
 using NSubstitute;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Projects;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Mcp;
@@ -29,6 +30,7 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class ShareToolsTests
 {
     private static (RecordingShareExtractService Service, ShareTools Tools) NewStack(bool migrated)

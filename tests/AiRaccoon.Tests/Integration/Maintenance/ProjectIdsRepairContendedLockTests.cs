@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Core.Projects;
+using AiRaccoon.Tests.Unit.Projects;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Time.Testing;
@@ -35,6 +36,7 @@ namespace AiRaccoon.Tests.Integration.Maintenance;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class ProjectIdsRepairContendedLockTests : IDisposable
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
@@ -47,7 +49,12 @@ public sealed class ProjectIdsRepairContendedLockTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
     }
 
-    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
+    public void Dispose()
+    {
+        // A successful apply reloads process-wide Default (E reload leg); reset for the next member.
+        ProjectIdAliasMap.ResetDefault();
+        TestData.DeleteTempRoot(_dataRoot);
+    }
 
     /// <summary>How long the writer-held latch and the repair start are given before absence is believed.</summary>
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);

@@ -8,6 +8,7 @@ namespace AiRaccoon.Tests.Unit.Projects;
 /// <summary>ADR-0099: the public binary ships no machine-local ids — Default is empty by design. Machine ids live on only as explicit test-fixture data, never as production content.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class ProjectIdAliasMapTests
 {
     // Explicit fixture: machine ids as TEST DATA (allowed). Production Default must never contain them (AC1).

@@ -15,6 +15,7 @@ using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
+using AiRaccoon.Tests.Unit.Projects;
 using Xunit;
 using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
@@ -30,6 +31,7 @@ namespace AiRaccoon.Tests.Integration.Projects;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
+[Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class SingleProjectIdE2E : IAsyncLifetime
 {
     private const string Winner = "jsaa";
@@ -59,6 +61,10 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
+        // Package E1: the repair scenarios reload the process-static choke-point cache
+        // (job-side reload after persisting) — reset it so the next collection test sees
+        // the empty steady state the pass-through contract asserts on.
+        Core.Projects.ProjectIdAliasMap.ResetDefault();
         await _embeddingEndpoint.DisposeAsync();
         TestData.DeleteTempRoot(_dataRoot);
     }
@@ -98,7 +104,7 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
     ///     Content written under both spellings before the repair is searchable under the single
     ///     winner afterwards — with the D1 boundary pinned at the wire: labeled AND NULL-context bulk
     ///     loser rows fold and read under the winner (the d-426 keep is overturned: no consumer keys on
-    ///     (project_id, NULL-label) stability). Reads never refuse and scopes pass through (ADR-0099).
+    ///     (project_id, NULL-label) stability). Reads never refuse; an alias-loser read folds through to the winner (Package E), so a stale reader sees the converged scope.
     ///     Property intersection: labeled × unlabeled storage against winner-scoped × loser-scoped reads.
     ///     Ledger — revert-jsaa-fold : --filter "FullyQualifiedName~SingleProjectIdE2E.MergedClusterSearch" :
     ///     labeled loser wombat row (SQL) + NULL-ctx loser quokka row (wire) + winner capybara row,
@@ -140,8 +146,8 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
             "the winner's own content stays searchable");
         bulkUnderWinner.Data!.Results.ShouldContain(r => r.Hash == bulkWritten.Data!.Hash,
             "D1: NULL-context bulk rows fold — the winner scope serves the folded row");
-        bulkUnderLoser.Data!.Results.ShouldBeEmpty(
-            "the loser key owns nothing after the fold, so its scope serves nothing");
+        bulkUnderLoser.Data!.Results.ShouldContain(r => r.Hash == bulkWritten.Data!.Hash,
+            "Package E: a stale reader's loser spelling folds through at the gate — the converged winner scope serves it");
         await using var connection = await _factory.OpenBankAsync(ct);
         (await connection.ExecuteScalarAsync<long>(
                 new CommandDefinition("SELECT count(*) FROM entries WHERE project_id = @loser AND context_label IS NOT NULL",
@@ -154,9 +160,9 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
     }
 
     /// <summary>
-    ///     The split queue meets under the winner in storage; the wire passes ids through
-    ///     (ADR-0099): each spelling lists its own queue at the gate. The P4 boundary fold
-    ///     observed through the MCP list tool on a repaired bank.
+    ///     The split queue meets under the winner in storage, and the wire folds a loser
+    ///     spelling through to it (Package E): either spelling lists the merged queue. The P4
+    ///     boundary fold observed through the MCP list tool on a repaired bank.
     ///     Ledger — revert-jsaa-fold : --filter "FullyQualifiedName~SingleProjectIdE2E.QueueMeetsOnWire" :
     ///     winner + loser queue rows (2 × 2), real repair, wire List under both spellings.
     /// </summary>
@@ -184,7 +190,8 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
         queue.LastListProject.ShouldBe(Winner);
         await promotion.List(Loser, cancellationToken: ct);
 
-        queue.LastListProject.ShouldBe(Loser, "ADR-0099: the gate passes ids through — each spelling lists its own queue");
+        queue.LastListProject.ShouldBe(Winner,
+            "Package E: the loser spelling folds through at the gate — a stale client lists the merged queue");
         await using var verify = await _factory.OpenBankAsync(ct);
         (await verify.ExecuteScalarAsync<long>(
                 new CommandDefinition("SELECT count(*) FROM promotion_queue WHERE project_id = @winner",
