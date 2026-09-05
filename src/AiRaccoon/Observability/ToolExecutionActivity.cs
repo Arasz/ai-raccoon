@@ -27,6 +27,7 @@ public sealed class ToolExecutionActivity : IDisposable
 
     private readonly Activity? _activity;
     private readonly string _metricProjectId;
+    private readonly string _bankProjectId;
     private readonly ToolCallMetrics _metrics;
     private readonly IMeasurementRecorder? _recorder;
     private readonly Stopwatch _stopwatch;
@@ -38,18 +39,23 @@ public sealed class ToolExecutionActivity : IDisposable
     ///     The span always tags <paramref name="projectId" />. The counter tags
     ///     <paramref name="metricProjectId" /> when given, or <paramref name="projectId" /> otherwise —
     ///     callers whose span id is unbounded (e.g. a joined composite) must pass a bounded value.
+    ///     The bank measurement carries <paramref name="bankProjectId" /> when given, or
+    ///     <paramref name="metricProjectId" /> ?? <paramref name="projectId" /> otherwise — the
+    ///     telemetry filter passes the write-time-folded winner here, so the bank row correlates
+    ///     with the canonical project while the span and counter keep the raw caller-sent id.
     ///     <paramref name="recorder" /> is best-effort (<see cref="IMeasurementRecorder" />'s own
     ///     contract): a null recorder — telemetry disabled, or a host that never registered one —
     ///     simply records nothing. <paramref name="timeProvider" /> stamps the recorded measurement's
     ///     RecordedAt, defaulting to the system clock like every other timed component here.
     /// </summary>
     public ToolExecutionActivity(ToolCallMetrics metrics, string toolName, string projectId, string? metricProjectId = null,
-        IMeasurementRecorder? recorder = null, TimeProvider? timeProvider = null)
+        IMeasurementRecorder? recorder = null, TimeProvider? timeProvider = null, string? bankProjectId = null)
     {
         _metrics = metrics;
         _recorder = recorder;
         _toolName = toolName;
         _metricProjectId = metricProjectId ?? projectId;
+        _bankProjectId = bankProjectId ?? metricProjectId ?? projectId;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _activity = metrics.ActivitySource.StartActivity($"{ToolsCallMethodName} {toolName}");
         _activity?.SetTag(ToolActivityTag, toolName);
@@ -78,7 +84,7 @@ public sealed class ToolExecutionActivity : IDisposable
         _activity?.SetStatus(ActivityStatusCode.Ok);
         _activity?.SetTag(ResultActivityTag, ResultSuccess);
         _metrics.RecordInvocation(_toolName, _metricProjectId, _stopwatch.Elapsed, false);
-        RecordMeasurement(_metricProjectId);
+        RecordMeasurement(_bankProjectId);
     }
 
     /// <summary>
@@ -100,7 +106,7 @@ public sealed class ToolExecutionActivity : IDisposable
         _activity?.AddException(exception);
         var boundedProjectId = metricProjectId ?? _metricProjectId;
         _metrics.RecordInvocation(_toolName, boundedProjectId, _stopwatch.Elapsed, true, exception.GetType().Name);
-        RecordMeasurement(boundedProjectId);
+        RecordMeasurement(metricProjectId ?? _bankProjectId);
     }
 
     /// <summary>The tool-level measurement family (WP8) — no correlation id; that belongs to the search-phase family MemoryTools tags itself.</summary>
