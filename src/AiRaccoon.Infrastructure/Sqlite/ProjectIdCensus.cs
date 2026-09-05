@@ -8,6 +8,28 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// <summary>Read-only orphan/fragment census: SELECT-only over every id-keyed surface, grouped per id (air-merge P1).</summary>
 public static class ProjectIdCensus
 {
+    /// <summary>
+    ///     Once a bank has been ANALYZE'd, `entries` statistics can flip the planner from a full scan
+    ///     of vec_entries into scanning entries first and probing into the vec0 virtual table by rowid
+    ///     once per row (~4ms per probe — a 1024-dim vector decode). Materializing the vec0 rowids in a
+    ///     CTE before joining pins the cheap plan regardless of what entries' statistics say.
+    /// </summary>
+    internal const string VecEntriesCountSql =
+        "WITH v(rid) AS MATERIALIZED (SELECT rowid FROM vec_entries) " +
+        "SELECT e.project_id AS Id, COUNT(*) AS N FROM v JOIN entries e ON v.rid = e.id " +
+        "WHERE e.project_id IS NOT NULL GROUP BY e.project_id";
+
+    /// <summary>
+    ///     Once a bank has been ANALYZE'd, `entries` statistics can flip the planner from a full scan
+    ///     of vec_structure into scanning entries first and probing into the vec0 virtual table by
+    ///     rowid once per row (~4ms per probe — a 1024-dim vector decode). Materializing the vec0
+    ///     rowids in a CTE before joining pins the cheap plan regardless of what entries' statistics say.
+    /// </summary>
+    internal const string VecStructureCountSql =
+        "WITH v(rid) AS MATERIALIZED (SELECT rowid FROM vec_structure) " +
+        "SELECT e.project_id AS Id, COUNT(*) AS N FROM v JOIN entries e ON v.rid = e.id " +
+        "WHERE e.project_id IS NOT NULL GROUP BY e.project_id";
+
     /// <summary>Collects the census with SELECT statements only — safe under PRAGMA query_only.</summary>
     public static async Task<ProjectIdCensusReport> CollectAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -59,13 +81,9 @@ public static class ProjectIdCensus
             "SELECT e.project_id AS Id, COUNT(*) AS N FROM entries_fts f JOIN entries e ON f.rowid = e.id " +
             "WHERE e.project_id IS NOT NULL GROUP BY e.project_id",
             (row, n) => row.EntriesFtsRows += n, cancellationToken).ConfigureAwait(false);
-        await CountByIdAsync(connection,
-            "SELECT e.project_id AS Id, COUNT(*) AS N FROM vec_entries v JOIN entries e ON v.rowid = e.id " +
-            "WHERE e.project_id IS NOT NULL GROUP BY e.project_id",
+        await CountByIdAsync(connection, VecEntriesCountSql,
             (row, n) => row.VecEntryRows += n, cancellationToken).ConfigureAwait(false);
-        await CountByIdAsync(connection,
-            "SELECT e.project_id AS Id, COUNT(*) AS N FROM vec_structure v JOIN entries e ON v.rowid = e.id " +
-            "WHERE e.project_id IS NOT NULL GROUP BY e.project_id",
+        await CountByIdAsync(connection, VecStructureCountSql,
             (row, n) => row.VecStructureRows += n, cancellationToken).ConfigureAwait(false);
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM promotion_queue GROUP BY project_id",
             (row, n) => row.Queued += n, cancellationToken).ConfigureAwait(false);

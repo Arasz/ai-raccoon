@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using AiRaccoon.Core.Ingestion;
@@ -8,8 +9,10 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
@@ -171,6 +174,106 @@ public sealed class RepairEndpointTests : IAsyncLifetime
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await RequestCountAsync("project-ids")).ShouldBe(before);
+    }
+
+    /// <summary>
+    ///     WP3/T6: the write-lock-timeout regression proven end-to-end, not just at the store level
+    ///     (SqliteRepairStoreTests' T3 owns that proof). A legacy watch.scope.* row would otherwise
+    ///     force the read-only report's own bank open through the full migration ladder, which
+    ///     blocks on another connection's BEGIN IMMEDIATE — a read-only GET must never be able to
+    ///     fail or stall that way.
+    /// </summary>
+    [RetryFact]
+    public async Task GetProjectIdsReport_WhileAWriterHoldsTheBankLock_Answers200()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedProjectIdsAsync();
+
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User };
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var writerConnection = await factory.OpenBankAsync(ct);
+        var (writer, releaseWriter) = await HoldWriteLockOverLegacyScopeRowAsync(writerConnection, ct);
+
+        var stopwatch = Stopwatch.StartNew();
+        var response = await _client.GetAsync("/repair?kind=project-ids", ct);
+        stopwatch.Stop();
+
+        releaseWriter.TrySetResult(true);
+        await writer;
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var report = await response.Content.ReadFromJsonAsync<ProjectIdCensusReport>(ct);
+        report.ShouldNotBeNull();
+        report.Row("jsaa").ProjectEntries.ShouldBe(2);
+        report.Row("job-search-ai-assistant").ProjectEntries.ShouldBe(2);
+        stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(2),
+            "a read-only report must not wait on the bank's write lock");
+    }
+
+    /// <summary>
+    ///     WP3/T7: the materialized-CTE vec0 fix (ac72f4f8) survives real HTTP + Dapper mapping +
+    ///     endpoint serialization, mirroring ProjectIdCensusTests' seeded-vec-legs shape (T2). This
+    ///     is a correctness-through-the-pipeline test only — the two join forms are
+    ///     result-equivalent, so no seeded fixture can distinguish them by output, and the query-plan
+    ///     regression the fix actually targets stays owned by ProjectIdCensusTests' T1
+    ///     (EXPLAIN QUERY PLAN under planted live-shaped statistics).
+    /// </summary>
+    [RetryFact]
+    public async Task GetProjectIdsReport_OnAStatisticsBearingBank_ReturnsTheSameCensus()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User };
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using (var connection = await factory.OpenBankAsync(ct))
+        {
+            await VecLegSeeder.SeedAsync(connection, ct);
+        }
+
+        var response = await _client.GetAsync("/repair?kind=project-ids", ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var report = await response.Content.ReadFromJsonAsync<ProjectIdCensusReport>(ct);
+        report.ShouldNotBeNull();
+        report.Row("alpha").VecEntryRows.ShouldBe(2);
+        report.Row("alpha").VecStructureRows.ShouldBe(1);
+        report.Row("beta").VecEntryRows.ShouldBe(1);
+        report.Row("beta").VecStructureRows.ShouldBe(1);
+        report.Row("gamma").VecEntryRows.ShouldBe(0, "gamma has an entries row but no vec_entries row at all");
+        report.Row("gamma").VecStructureRows.ShouldBe(0, "gamma has an entries row but no vec_structure row at all");
+        report.Rows.ShouldNotContain(r => string.IsNullOrEmpty(r.ProjectId),
+            "the project_id-NULL embedded row must never surface as a row of its own");
+    }
+
+    /// <summary>
+    ///     Seeds a legacy watch.scope.* row through <paramref name="writerConnection" />, then holds
+    ///     BEGIN IMMEDIATE open on it until the returned <see cref="TaskCompletionSource{TResult}" />
+    ///     is completed — mirrors SqliteRepairStoreTests' HoldWriteLockOverLegacyScopeRowAsync, at
+    ///     the HTTP level.
+    /// </summary>
+    private static async Task<(Task Writer, TaskCompletionSource<bool> Release)> HoldWriteLockOverLegacyScopeRowAsync(
+        SqliteConnection writerConnection, CancellationToken cancellationToken)
+    {
+        await writerConnection.ExecuteAsync("INSERT INTO settings (key, value) VALUES ('watch.scope.jsaa', '[]')");
+
+        var lockHeld = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseWriter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var writer = Task.Run(async () =>
+        {
+            await writerConnection.ExecuteAsync("BEGIN IMMEDIATE");
+            try
+            {
+                await writerConnection.ExecuteAsync("UPDATE settings SET value = value WHERE key = 'watch.scope.jsaa'");
+                lockHeld.TrySetResult(true);
+                await releaseWriter.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+            }
+            finally
+            {
+                await writerConnection.ExecuteAsync("COMMIT");
+            }
+        }, cancellationToken);
+        await lockHeld.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+
+        return (writer, releaseWriter);
     }
 
     private async Task<string?> MapJsonAsync(string kind)

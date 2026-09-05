@@ -6,6 +6,10 @@ For current highlights, see [README.md](../../README.md#whats-new).
 
 ---
 
+- **The default code model installs with one command.** `ai-raccoon model code set default` downloads and activates `faxenoff/code-daemon-embed-v1` (187 MB, 768-dim) into `<data-root>/models/`. Re-running against an already-downloaded directory only re-activates. (1.32.0) [How-to](../how-to/configure-embedding-engines.md#recipe-5-activate-the-code-corpuss-embedding-engine)
+- **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** (1.31.0)
+- **A second corpus indexes your code, searchable via `memory_search kind=code`.** Never synced, never mixed with memory. Watches and file ingest feed it automatically; `code_get` reads a chunk's full source by hash. (1.30.0) [Feature](../features/code-corpus/) · [ADR-0085](../adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
+- **Bring your own embedding model.** Manifest-driven engines, `ai-raccoon model download` with SHA-256 pin verification, sentencepiece tokenizer support. (1.29.0) [ADR-0084](../adr/0084-arbitrary-embedding-models-are-manifest-described.md) · [How-to](../how-to/configure-embedding-engines.md)
 - **Every search parameter is now configurable per call and per bank, no rebuild needed.** (1.28.0) [ADR-0083](../adr/0083-search-parameters-unified-source.md)
 - **The CLI no longer opens the bank itself.** `noise entries` and `watch registered` reach the server too, completing the single-writer rule. (1.27.0) [ADR-0075](../adr/0075-only-the-server-writes-to-the-bank.md)
 - **A repair now finishes on its own.** It embeds what it re-ingested, instead of leaving it unsearchable. (1.26.0) [ADR-0075](../adr/0075-only-the-server-writes-to-the-bank.md)

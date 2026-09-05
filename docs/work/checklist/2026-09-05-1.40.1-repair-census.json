@@ -1,0 +1,28 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-09-05",
+    "branch": "task/air-repair-census-write-lock-timeout",
+    "commit": "8db4b233274d44f80ef385237fe7cb82d95d901b",
+    "data-root": "VACUUM INTO copy of ~/.ai-raccoon/memory.db (the real, live production bank, 1.39GB at copy time), watches/watch_files/watch_digest_claims cleared before serving so the copy never re-ingests real directories",
+    "note": "This is a targeted manual gate for one bug fix (PR #611), not a full release checklist -- only the item this task exists to prove is recorded here. Served with the locally built fix (this branch's native apphost binary, src/AiRaccoon/bin/Debug/net10.0/AiRaccoon), not the globally installed tool."
+  },
+  "derived": {
+    "version": "1.40.0+8db4b233274d44f80ef385237fe7cb82d95d901b",
+    "note": "VERSION file still reads 1.40.0 at this commit; the patch bump to 1.40.1 is the final commit on this PR, applied after this gate passes."
+  },
+  "findings-against-prior-runs": [],
+  "items": [
+    {
+      "item": "repair-project-ids-completes-at-real-scale",
+      "expected-result": "`ai-raccoon repair project-ids` (no --map, dry run) completes well within the CLI's 100s HttpClient timeout against a real-shaped, real-size copy of the live production bank (53,207 entries, ~1.4GB, vec_entries/vec_structure populated at production scale) -- the exact symptom reported: \"ai-raccoon: no settings server answered at http://127.0.0.1:7721/mcp (The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.)\"",
+      "command": "sqlite3 -readonly ~/.ai-raccoon/memory.db \"VACUUM INTO '<scratch>/memory-copy.db'\"; cleared watches/watch_files/watch_digest_claims on the copy; served it with this branch's fixed build on a scratch port (`AiRaccoon --data-root <scratch-data-root> serve --port 0 --idle-timeout 0`); `time AiRaccoon --data-root <scratch-data-root> --port <bound-port> repair project-ids`",
+      "evidence": "real time 3.025s total (user 0.17s, sys 0.04s). Output: \"project-ids repair: 47 id(s) censused -- 0 fold, 0 drop (test residue), 0 retire (registered, empty), 41 need a human to attribute, 6 need nothing (already correct or empty). Dry run -- pass --apply to run this.\" plus the full unattributed-id list and a written alias-map template -- a complete, correct report, not a partial/truncated one. Before this fix, the same query shape was measured directly against this same live bank during this task's investigation (raw EXPLAIN QUERY PLAN + timing against ~/.ai-raccoon/memory.db, not persisted as a separate file): 54.9-96.5s on the vec_entries leg alone and 14.4-41.9s on the vec_structure leg -- either alone exceeds the 100s client timeout; together with the census's other ~20 queries the reported failure is fully explained. This run exercises the exact fixed code path (ProjectIdCensus.CollectAsync via the real CLI -> HTTP -> RepairEndpoint -> SqliteRepairStore pipeline), at real production scale, end to end.",
+      "observed-result": "the reported CLI-timeout symptom does not reproduce against the real bank once this fix is applied; report is fast and complete",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": null
+    }
+  ],
+  "findings-not-fitting-a-single-item": []
+}

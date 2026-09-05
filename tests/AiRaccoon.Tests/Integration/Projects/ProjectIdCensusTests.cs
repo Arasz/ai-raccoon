@@ -1,6 +1,8 @@
+using System.Data;
 using System.Text.Json;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
@@ -183,6 +185,102 @@ public sealed class ProjectIdCensusTests
         report.UnattributedSettingsKeys.ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     A real production bank's <c>sqlite_stat1</c> flips the planner from a full vec0 scan to a
+    ///     per-entry rowid probe into the vec0 virtual table (~4ms per probe on a 1024-dim bank, 55-96s
+    ///     for ~50k rows). Planting the production bank's own stat1 shape reproduces the flip in a tiny
+    ///     seeded bank; materializing the vec0 rowids in a CTE before joining must pin the cheap plan
+    ///     regardless of what `entries` statistics say.
+    ///     Ledger — vec0-per-row-probe : --filter Collect_OnAStatisticsBearingBank_NeverProbesTheVectorTablesPerEntry :
+    ///     seeded bank + planted entries stat1 mirroring the live 1.37GB bank's own values.
+    /// </summary>
+    [RetryFact]
+    public async Task Collect_OnAStatisticsBearingBank_NeverProbesTheVectorTablesPerEntry()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await OpenSeededAsync(ct);
+
+        // Order is load-bearing: a later plain ANALYZE recomputes real stats and silently
+        // overwrites the planted row, making this test vacuously pass.
+        // commandType is forced to Text: Dapper otherwise treats a bare single-identifier
+        // command text (e.g. "ANALYZE") as a stored-procedure name.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "ANALYZE", commandType: CommandType.Text, cancellationToken: ct));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM sqlite_stat1 WHERE tbl = 'entries'", cancellationToken: ct));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO sqlite_stat1(tbl, idx, stat) VALUES ('entries','idx_entries_embed_state','48257 48257 3017')",
+            cancellationToken: ct));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "ANALYZE sqlite_master", commandType: CommandType.Text, cancellationToken: ct));
+
+        var entriesPlan = await ExplainAsync(connection, ProjectIdCensus.VecEntriesCountSql, ct);
+        AssertPinnedVecScan(entriesPlan, "vec_entries");
+
+        var structurePlan = await ExplainAsync(connection, ProjectIdCensus.VecStructureCountSql, ct);
+        AssertPinnedVecScan(structurePlan, "vec_structure");
+    }
+
+    /// <summary>
+    ///     Materializing the vec0 CTE must attribute rows to the exact same ids as before: alpha and
+    ///     beta each own content- and structure-embedded rows (alpha asymmetric 2/1, so a leg-swap
+    ///     mutation between VecEntriesCountSql/VecStructureCountSql flips a count and is caught — a
+    ///     1/1 split on both ids could not distinguish the legs), a project_id-NULL embedded row
+    ///     excluded from every count, and an entry with no vec row at all left at zero.
+    ///     Ledger — vec0-cte-misattribution : --filter Collect_WithMaterializedVecLegs_AttributesVectorRowsExactlyAsBefore :
+    ///     alpha/beta split legs + null-project embedded row + vec-less gamma row.
+    /// </summary>
+    [RetryFact]
+    public async Task Collect_WithMaterializedVecLegs_AttributesVectorRowsExactlyAsBefore()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await OpenAsync(ct);
+        await MemorySchema.EnsureAsync(connection, ct);
+        await VecLegSeeder.SeedAsync(connection, ct);
+
+        var report = await ProjectIdCensus.CollectAsync(connection, ct);
+
+        var alpha = report.Row("alpha");
+        alpha.VecEntryRows.ShouldBe(2);
+        alpha.VecStructureRows.ShouldBe(1);
+
+        var beta = report.Row("beta");
+        beta.VecEntryRows.ShouldBe(1);
+        beta.VecStructureRows.ShouldBe(1);
+
+        var gamma = report.Row("gamma");
+        gamma.VecEntryRows.ShouldBe(0, "gamma has an entries row but no vec_entries row at all");
+        gamma.VecStructureRows.ShouldBe(0, "gamma has an entries row but no vec_structure row at all");
+
+        report.Rows.ShouldNotContain(r => string.IsNullOrEmpty(r.ProjectId),
+            "the project_id-NULL embedded row must never surface as a row of its own");
+    }
+
+    private static async Task<List<string>> ExplainAsync(SqliteConnection connection, string sql, CancellationToken ct)
+    {
+        var rows = await connection.QueryAsync<PlanRow>(new CommandDefinition(
+            "EXPLAIN QUERY PLAN " + sql, cancellationToken: ct));
+        return rows.Select(r => r.Detail).ToList();
+    }
+
+    private static void AssertPinnedVecScan(List<string> plan, string vecTable)
+    {
+        var planText = string.Join('\n', plan);
+        plan.Count(l => l.Contains($"SCAN {vecTable}", StringComparison.Ordinal) &&
+                        l.Contains("VIRTUAL TABLE", StringComparison.Ordinal))
+            .ShouldBe(1, $"expected exactly one full scan of {vecTable} as a virtual table:\n{planText}");
+        // "VIRTUAL TABLE INDEX 1:" is sqlite-vec's own idxNum for its point/KNN plan (0 is its
+        // fullscan plan) -- not SQLite's numbering, and specific to the pinned sqlite-vec version
+        // (Directory.Packages.props). Re-run this assertion if that package version moves.
+        plan.Any(l => l.Contains("VIRTUAL TABLE INDEX 1:", StringComparison.Ordinal))
+            .ShouldBeFalse($"plan must not probe the vec0 table per row via a rowid-constrained virtual table index:\n{planText}");
+    }
+
+    private sealed class PlanRow
+    {
+        public string Detail { get; set; } = "";
+    }
+
     private static async Task<SqliteConnection> OpenSeededAsync(CancellationToken ct)
     {
         var connection = await OpenAsync(ct);
@@ -335,4 +433,5 @@ public sealed class ProjectIdCensusTests
             "INSERT INTO search_quality (correlation_id, query, project_id, created_at) VALUES (@correlationId, 'q', @projectId, @now)",
             new { correlationId, projectId, now }, cancellationToken: ct));
     }
+
 }
