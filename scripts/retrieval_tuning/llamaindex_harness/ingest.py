@@ -190,6 +190,19 @@ class StoreHandle:
         self.fts.close()
 
 
+# Chroma upsert batching: one call trips the server max-batch cap (5461 at
+# chromadb 1.5.9; production content holds 11,816 rows). 4000 leaves headroom
+# for payload variance; a future lower cap still fails loud (InternalError).
+_UPSERT_BATCH_SIZE = 4000
+
+
+def _upsert_in_batches(collection, ids, embeddings, documents, metadatas) -> None:
+    for i in range(0, len(ids), _UPSERT_BATCH_SIZE):
+        batch = slice(i, i + _UPSERT_BATCH_SIZE)
+        collection.upsert(ids=ids[batch], embeddings=embeddings[batch],
+                          documents=documents[batch], metadatas=metadatas[batch])
+
+
 _FTS_SCHEMA = """
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
     value, source_file, section,
@@ -234,18 +247,16 @@ def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
     vectors = embed_texts(embed_fn, texts, batch_size)
     ids = [d.id_ for d in docs]
     metadatas = [dict(d.metadata) for d in docs]
-    content.upsert(ids=ids, embeddings=vectors, documents=texts, metadatas=metadatas)
+    _upsert_in_batches(content, ids, vectors, texts, metadatas)
 
     headed = [(d, r) for d, r in zip(docs, rows) if heading_of(coerce_row(r))]
     if headed:
         struct_vectors = embed_texts(embed_fn, [heading_of(coerce_row(r)) for _, r in headed],
                                      batch_size)
-        structure.upsert(
-            ids=[d.id_ for d, _ in headed],
-            embeddings=struct_vectors,
-            documents=[heading_of(coerce_row(r)) for _, r in headed],
-            metadatas=[dict(d.metadata) for d, _ in headed],
-        )
+        struct_ids = [d.id_ for d, _ in headed]
+        struct_docs = [heading_of(coerce_row(r)) for _, r in headed]
+        struct_meta = [dict(d.metadata) for d, _ in headed]
+        _upsert_in_batches(structure, struct_ids, struct_vectors, struct_docs, struct_meta)
     for collection, wanted in ((content, set(ids)), (structure, {d.id_ for d, _ in headed})):
         stale = set(collection.get(include=[])["ids"]) - wanted
         if stale:

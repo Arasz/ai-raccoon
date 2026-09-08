@@ -165,3 +165,42 @@ def test_chroma_store_lives_under_store_dir_not_repo(tmp_path):
     _run_ingest(copy, store).close()
     assert (store / "chroma").is_dir()
     assert (store / "fts.db").is_file()
+
+
+def test_real_volume_upsert_exceeding_chroma_batch_cap(tmp_path):
+    # Production shape: 11,816 content rows tripped Chroma's max batch 5461
+    # (InternalError) — build_store must split upserts for BOTH collections.
+    # 6000 > 5461 trips the same cap with toy vectors (cap is a fixed constant).
+    conn = sqlite3.connect(tmp_path / "copy.db")
+    conn.executescript(
+        """
+        CREATE TABLE entries (
+            id INTEGER PRIMARY KEY, hash TEXT, path TEXT, value TEXT,
+            scope TEXT, project_id TEXT, source_file TEXT, section TEXT,
+            heading_path TEXT, chunk_index INTEGER, total_chunks INTEGER);
+        CREATE VIRTUAL TABLE entries_fts USING fts5(value, source_file, section);
+        CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+            INSERT INTO entries_fts(rowid, value, source_file, section)
+            VALUES (new.id, new.value, new.source_file, new.section);
+        END;
+        """
+    )
+    conn.executemany(
+        "INSERT INTO entries (hash, path, value, scope, project_id, source_file,"
+        " section, heading_path, chunk_index, total_chunks) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [(f"big{i:05d}", "b.md", f"bulk row {i} padding text for volume",
+          "project", "ai-raccoon", "docs:bulk.md", "context", "Bulk", i, 6000)
+         for i in range(6000)],
+    )
+    conn.commit()
+    conn.close()
+    store = tmp_path / "store"
+    assert ingest.main(["--copy", str(tmp_path / "copy.db"),
+                        "--store-dir", str(store)], embed=_toy_embed) == 0
+    handle = ingest.open_store(store)
+    try:
+        assert handle.content.count() == 6000
+        assert handle.structure.count() == 6000  # all headed: structure trips too
+        assert handle.fts_count() == 6000
+    finally:
+        handle.close()
