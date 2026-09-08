@@ -169,6 +169,28 @@ def _fixture_copy_with_vec(path: Path):
     conn.close()
 
 
+def test_slice_drops_null_scope_rows(tmp_path):
+    # Three-valued-logic trap: NOT(NULL) is NULL, and DELETE keeps NULL rows.
+    # A NULL-scope row must die unless force-listed (ingest load_rows can
+    # never see it, so keeping it splits the subset universe between legs).
+    src = tmp_path / "src.db"
+    _fixture_copy(src)
+    conn = sqlite3.connect(src)
+    conn.execute(
+        "INSERT INTO entries (hash, path, value, scope, project_id, source_file,"
+        " section, heading_path, chunk_index, total_chunks)"
+        " VALUES ('nullscope', 'n.md', 'null scope row', NULL, 'ai-raccoon',"
+        " 'docs:n.md', 'c', '', 0, 1)")
+    conn.commit()
+    conn.close()
+    corpus = tmp_path / "corpus.json"
+    _corpus(corpus, ["forced"])
+    dst = tmp_path / "slice.db"
+    assert slice_copy.main(["--source", str(src), "--target", str(dst),
+                            "--corpus", str(corpus), "--cap-per-bucket", "10"]) == 0
+    assert "nullscope" not in _hashes(dst)
+
+
 def test_slice_removes_vec_orphans(tmp_path):
     # ctx-partitioned KNN (MemorySql VectorSearchByFilter) scans orphans
     # pre-JOIN: dropped rows must leave vec_entries, not just entries.

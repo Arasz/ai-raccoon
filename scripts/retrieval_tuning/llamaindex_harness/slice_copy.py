@@ -76,16 +76,24 @@ def slice_copy(source: str, target: str, forced: list[str],
         conn = sqlite3.connect(stage)
         _ensure_vec0(conn)
         try:
+            # NULL-safe keep: NOT(keep) is NULL (not TRUE) for NULL-scope rows
+            # and DELETE spares NULL — so NULL scopes die explicitly unless
+            # force-listed. Mirrors ingest.load_rows (which can never see them).
             keep = ["scope = 'shared'"]
             params: list = []
-            if forced:
-                keep.append(f"hash IN ({','.join('?' for _ in forced)})")
-                params.extend(forced)
             for bucket in buckets:
                 keep.append("id IN (SELECT id FROM entries WHERE project_id = ?"
                             " AND scope IN ('project','custom') ORDER BY id LIMIT ?)")
                 params.extend([bucket, cap_per_bucket])
-            conn.execute(f"DELETE FROM entries WHERE NOT ({' OR '.join(keep)})", params)
+            if forced:
+                conn.execute(
+                    "DELETE FROM entries WHERE"
+                    " (scope IS NULL OR NOT (" + " OR ".join(keep) + "))"
+                    f" AND hash NOT IN ({','.join('?' for _ in forced)})", params + forced)
+            else:
+                conn.execute(
+                    "DELETE FROM entries WHERE"
+                    " (scope IS NULL OR NOT (" + " OR ".join(keep) + "))", params)
             conn.commit()
             conn.execute("VACUUM")
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
