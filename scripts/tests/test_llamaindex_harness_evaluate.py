@@ -118,6 +118,11 @@ def test_airaccoon_fn_sends_session_id_and_extracts_hashes():
     assert args["limit"] == 8 and args["kind"] == "memory"
 
 
+def test_missing_anchors_listed():
+    assert evaluate.missing_anchors([_entry(1), _entry(2)], {"hash001"}) == ["E002"]
+    assert evaluate.missing_anchors([_entry(1)], {"hash001"}) == []
+
+
 def test_run_eval_shape_is_n_rows_by_two_systems():
     entries = [_entry(1), _entry(2)]
     out = evaluate.run_eval(entries,

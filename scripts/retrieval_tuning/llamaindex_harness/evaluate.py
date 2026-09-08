@@ -126,11 +126,22 @@ def _self_paths() -> tuple[Path, Path]:
     return harness_dir, repo
 
 
-def build_harness_fn(store_dir: Path, offline: bool = False):
-    """Per-(project,scope) FusionRetrievers over an opened store, real query embeddings."""
+def build_harness_fn(store_dir: Path, offline: bool = False, anchor_entries=None):
+    """Per-(project,scope) FusionRetrievers over an opened store, real query embeddings.
+
+    anchor_entries (when given) are checked against the SAME open handle —
+    one open per process (two PersistentClients on one dir risk lock fights).
+    """
     from . import ingest, retrieve  # noqa: PLC0415 — lazy: keeps module import-safe
 
     handle = ingest.open_store(Path(store_dir))
+    if anchor_entries is not None:
+        missing = missing_anchors(
+            anchor_entries, set(handle.content.get(include=[])["ids"]))
+        if missing:
+            handle.close()
+            raise ValueError(f"anchors do not resolve against this store "
+                             f"(copy drifted?): {len(missing)} missing, first {missing[:5]}")
     model = ingest.create_embedding_model(offline=offline)
     cache: dict = {}
 
@@ -199,16 +210,20 @@ def build_airaccoon_fn(server, session_id: str) -> object:
     return fn
 
 
+def missing_anchors(entries: list[dict], stored_ids: set) -> list:
+    """Corpus-staleness gate (pure): entry ids whose expectedHash is not stored."""
+    return [e.get("id") for e in entries if e.get("expectedHash") not in stored_ids]
+
+
 def assert_anchors_resolve(entries: list[dict], store_dir: Path) -> None:
     """Corpus-staleness gate: every expectedHash must be served-able from the store."""
     from . import ingest  # noqa: PLC0415 — lazy: keeps module import-safe
 
     handle = ingest.open_store(Path(store_dir))
     try:
-        stored = set(handle.content.get(include=[])["ids"])
+        missing = missing_anchors(entries, set(handle.content.get(include=[])["ids"]))
     finally:
         handle.close()
-    missing = [e.get("id") for e in entries if e.get("expectedHash") not in stored]
     if missing:
         raise ValueError(f"anchors do not resolve against this store "
                          f"(copy drifted?): {len(missing)} missing, first {missing[:5]}")
@@ -234,10 +249,10 @@ def main(argv: list[str] | None = None) -> int:
     entries = json.loads(Path(args.corpus).read_text())
     if args.limit_queries is not None:
         entries = entries[:args.limit_queries]
-    assert_anchors_resolve(entries, Path(args.store_dir))
     session_id = f"llamaindex-harness-{uuid.uuid4().hex[:12]}"
 
-    harness_fn = build_harness_fn(Path(args.store_dir), offline=args.offline)
+    harness_fn = build_harness_fn(Path(args.store_dir), offline=args.offline,
+                                  anchor_entries=entries)
     try:
         with start_server(args.scratch_data_root, binary=args.binary) as server:
             print(f"scratch server on port {server.port} (never 7721)", flush=True)
