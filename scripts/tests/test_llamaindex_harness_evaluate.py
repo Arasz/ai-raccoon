@@ -87,6 +87,37 @@ def test_missing_expected_hash_fails_loud():
                           lambda e: {"hashes": []}, lambda e: {"hashes": []})
 
 
+class _FakeMcpClient:
+    """Seam-shaped stub: _call_tool returns a parsed tool payload, records args."""
+
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = []
+
+    def _call_tool(self, name, arguments):
+        self.calls.append((name, arguments))
+        return self.payload
+
+
+class _FakeServer:
+    def __init__(self, client):
+        self.client = client
+
+
+def test_airaccoon_fn_sends_session_id_and_extracts_hashes():
+    # The scripts/src seam predates the required sessionId argument: the fn
+    # must send it explicitly or the server refuses with invalid-argument.
+    client = _FakeMcpClient({"results": [{"hash": "abc123"}]})
+    fn = evaluate.build_airaccoon_fn(_FakeServer(client), session_id="sess-1")
+    out = fn({"query": "q", "targetProjectId": "ai-raccoon",
+              "targetScope": "project", "expectedHash": "abc123"})
+    assert out == {"hashes": ["abc123"], "error": None}
+    name, args = client.calls[0]
+    assert name == "memory_search"
+    assert args["sessionId"] == "sess-1"
+    assert args["limit"] == 8 and args["kind"] == "memory"
+
+
 def test_run_eval_shape_is_n_rows_by_two_systems():
     entries = [_entry(1), _entry(2)]
     out = evaluate.run_eval(entries,

@@ -30,6 +30,7 @@ import argparse
 import json
 import math
 import sys
+import uuid
 from pathlib import Path
 
 EVAL_LIMIT = 8
@@ -159,25 +160,32 @@ def build_harness_fn(store_dir: Path, offline: bool = False):
     return fn
 
 
-def build_airaccoon_fn(server) -> object:
+def build_airaccoon_fn(server, session_id: str) -> object:
     """The ai-raccoon leg through the scratch server's MCP client (M6 seam).
 
     server.search(entry) is NOT reused verbatim: it hardcodes the corpus
-    searchLimit (5); parity needs the uniform eval limit (8), so this calls
-    client.memory_search directly with per-query routing + limit 8 + memory
-    kind, otherwise the same settings-driven shape (minRelativeScore 0.0).
+    searchLimit (5), and the scripts/src client predates the server's required
+    sessionId argument (refused as invalid-argument without it). So this calls
+    client._call_tool directly with per-query routing + uniform limit 8 +
+    memory kind + an explicit session id, otherwise the same settings-driven
+    shape (minRelativeScore 0.0); extraction reuses MCPClient._extract_results.
     """
+    from retrieval_tuning.mcp import MCPClient  # noqa: PLC0415 — needs scripts/src
+
+    client = server.client
 
     def fn(entry: dict) -> dict:
         try:
-            results = server.client.memory_search(
-                project_id=entry.get("targetProjectId") or "ai-raccoon",
-                query=entry["query"],
-                scope=entry.get("targetScope") or "project",
-                limit=EVAL_LIMIT,
-                min_relative_score=0.0,
-                kind="memory",
-            )
+            parsed = client._call_tool("memory_search", {
+                "projectId": entry.get("targetProjectId") or "ai-raccoon",
+                "query": entry["query"],
+                "scope": entry.get("targetScope") or "project",
+                "limit": EVAL_LIMIT,
+                "minRelativeScore": 0.0,
+                "kind": "memory",
+                "sessionId": session_id,
+            })
+            results = MCPClient._extract_results(parsed, kind="memory")
             hashes = []
             for row in results:
                 h = row.get("hash") if isinstance(row, dict) else None
@@ -227,12 +235,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit_queries is not None:
         entries = entries[:args.limit_queries]
     assert_anchors_resolve(entries, Path(args.store_dir))
+    session_id = f"llamaindex-harness-{uuid.uuid4().hex[:12]}"
 
     harness_fn = build_harness_fn(Path(args.store_dir), offline=args.offline)
     try:
         with start_server(args.scratch_data_root, binary=args.binary) as server:
             print(f"scratch server on port {server.port} (never 7721)", flush=True)
-            out = run_eval(entries, harness_fn, build_airaccoon_fn(server))
+            out = run_eval(entries, harness_fn,
+                           build_airaccoon_fn(server, session_id))
     finally:
         harness_fn.close()  # type: ignore[attr-defined]
 
@@ -240,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     if harness_errors:
         print(f"FAIL: harness errors on {len(harness_errors)} queries: {harness_errors[:5]}")
         return 1
+    out["sessionId"] = session_id
     Path(args.out).write_text(json.dumps(out, indent=2))
     s = out["summary"]
     print(f"eval: n={s['n']} paired={s['n_paired']} "
