@@ -1,0 +1,52 @@
+{
+  "forms": [
+    {
+      "path": "forms/smoke-h1__off/1/grader-1.json",
+      "slotId": "smoke-h1__off",
+      "round": 1,
+      "grader": 1,
+      "kind": "form",
+      "sha256": "6386215ef9ace078c46a9cf1c0ad3d5c374a05d4423aa7f9e3285a67251339c9"
+    },
+    {
+      "path": "forms/smoke-h1__off/1/grader-1.payload.txt",
+      "slotId": "smoke-h1__off",
+      "round": 1,
+      "grader": 1,
+      "kind": "payload",
+      "sha256": "7f4a486b6fa1975061ac78147db72e2380dc2965662185d5e5bb3bd36a446a49"
+    },
+    {
+      "path": "forms/smoke-h1__off/1/grader-2.json",
+      "slotId": "smoke-h1__off",
+      "round": 1,
+      "grader": 2,
+      "kind": "form",
+      "sha256": "3866474371f3c8e977c13aa7f98cd6fd8119481d91e7f044e6fdcd1e58898a28"
+    },
+    {
+      "path": "forms/smoke-h1__off/1/grader-2.payload.txt",
+      "slotId": "smoke-h1__off",
+      "round": 1,
+      "grader": 2,
+      "kind": "payload",
+      "sha256": "99b09974e894fc9b4caf80fef5d7347553030cddc52eb859fc8379628cf3fbe5"
+    },
+    {
+      "path": "forms/smoke-h1__off/1/grader-3.invalid.txt",
+      "slotId": "smoke-h1__off",
+      "round": 1,
+      "grader": 3,
+      "kind": "invalid",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "forms/smoke-h1__off/1/grader-3.payload.txt",
+      "slotId": "smoke-h1__off",
+      "round": 1,
+      "grader": 3,
+      "kind": "payload",
+      "sha256": "5fa59ca9417340f210af76f55d9c9555d00f28c01112c3c6a5ac9d62c1170634"
+    }
+  ]
+}

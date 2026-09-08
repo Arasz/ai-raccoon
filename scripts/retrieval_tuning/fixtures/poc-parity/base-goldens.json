@@ -1,0 +1,252 @@
+{
+  "q1": {
+    "code": [
+      {
+        "chunkIndex": null,
+        "hash": "0bca1be5d025385f22c8bd09b3b51a32930cadaffda349b11ffbea889a116205",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/tests/AiRaccoon.Tests/Unit/Mcp/WatchToolsInventoryTests.cs",
+        "ranking": 1,
+        "snippet": "…own inventory test (docs/plans/file-watcher-implementation.md §6).\n/// </summary>\n[Trait…",
+        "sourceFile": null
+      }
+    ],
+    "memory": [
+      {
+        "chunkIndex": -1,
+        "hash": "7fed953446dc09abb0b1492902e39cc486dd92e9d5cf02c7302238901cede565",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/plans/file-watcher-implementation.md",
+        "ranking": 1,
+        "snippet": "…Task:** `file-watcher`\n**Source design:** `docs/features/file-watcher/spec.json` (manifest…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/plans/file-watcher-implementation.md"
+      },
+      {
+        "chunkIndex": 0,
+        "hash": "4d114f14b272ab2b918bc2839eb67b9c8921884628c28c0f0d240456f8ba05e3",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/features/file-watcher/spec.json",
+        "ranking": 0.9838709677419354,
+        "snippet": "{\n  \"name\": \"file-watcher\",\n  \"title\": \"File watcher — part 2 of native-memory: watch…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/features/file-watcher/spec.json"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "1de79b7352093fbb03846dd027ee513bc8438da66188d0f7a0691b332fcfe762",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/plans/file-watcher-implementation.md",
+        "ranking": 0.9682539682539681,
+        "snippet": "…is accepted; the catch-up watermark is the safety net (spec risk).\n",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/plans/file-watcher-implementation.md"
+      },
+      {
+        "chunkIndex": 0,
+        "hash": "6afce740a2bf625214075430d4875ce8b181b5250f290655f9305c5bec484587",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/work/archive/features-file-watcher/spec.json",
+        "ranking": 0.953125,
+        "snippet": "{\n  \"name\": \"file-watcher\",\n  \"title\": \"File watcher — part 2 of native-memory: watch…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/work/archive/features-file-watcher/spec.json"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "460dd558fc8517eeace858b768057e7fd1eeca4d3035833aedb7d49c21c01f2b",
+        "path": "shared/6a782fbaf56475cf15d8e3ec10b65b71ffbbd1b7e0292d991a1afb4d6ed72483.md",
+        "ranking": 0.9384615384615385,
+        "snippet": "…Accepted\n\n## Context\n\n`docs/work/features-agent-memory/spec-issue-1.md` §6…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/0013-extension-host-hook-surface.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "d2ba6f10be83d427825df698ab4fc0943e43017b5f4c21d5c2ac8d3bdc062026",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/plans/file-watcher-implementation.md",
+        "ranking": 0.9242424242424242,
+        "snippet": "…Overview\n\nImplement the file-watcher feature: three MCP tools (`memory_watch_add…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/plans/file-watcher-implementation.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "4985f62810335565960055a8db1dab34483e5f5ee93a2f455e37ae541b7af076",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/work/2026-08-07-moe-d-tests.md",
+        "ranking": 0.9104477611940298,
+        "snippet": "| **D12** | `docs/work/features-file-watcher/file-watcher.feature` (430 lines, 62…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/work/2026-08-07-moe-d-tests.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "86c48b1e7fea39b3c21fb1376f32f47dc8443e18f5168b5549b43ead301e87d8",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/features/README.md",
+        "ranking": 0.8970588235294117,
+        "snippet": "| [`file-watcher/`](file-watcher/)   | Implemented (merged to main 2026-08-05) | [spec…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/features/README.md"
+      }
+    ]
+  },
+  "q2": {
+    "code": [
+      {
+        "chunkIndex": null,
+        "hash": "db49c3001d7c2bd10cca90ee92cebf85cbf205e2ed6975a40355c8fd3fac2b3b",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/tests/AiRaccoon.Tests/Unit/Search/SearchResultMergerTests.cs",
+        "ranking": 1,
+        "snippet": "…it a second time, rebuilding every score\n///     from rank position and discarding…",
+        "sourceFile": null
+      },
+      {
+        "chunkIndex": null,
+        "hash": "fc3cf0309f52be8ae2ffb3a42be6e498be88db4c50728d57502708b5d0d1df0d",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/src/AiRaccoon.Core/Memory/Fusion/NoFusionRegression.cs",
+        "ranking": 0.9699433357969943,
+        "snippet": "…only thing that survives the second fusion (ADR-0058). A result sorts…",
+        "sourceFile": null
+      },
+      {
+        "chunkIndex": null,
+        "hash": "40bd22759daacf283f39f944a4db24c926a9f4fd89080a607241ced7aa632081",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/tests/AiRaccoon.Tests/Unit/Search/SearchResultMergerTests.cs",
+        "ranking": 0.8630381890346196,
+        "snippet": "…because the second fusion rebuilds both from rank position. When\n    ///     the redundant…",
+        "sourceFile": null
+      }
+    ],
+    "memory": [
+      {
+        "chunkIndex": -1,
+        "hash": "8f6be3de12cfa3f40443121fc8ea7a031e9c9b2571175c218ee6f6973e229725",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/0058-the-second-fusion-is-order-preserving-and-its-removal-is-not-yet-measurable.md",
+        "ranking": 1,
+        "snippet": "…fusion rebuilds every score from rank position alone — `(k+1)/(k+rank…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/0058-the-second-fusion-is-order-preserving-and-its-removal-is-not-yet-measurable.md"
+      },
+      {
+        "chunkIndex": 15,
+        "hash": "739369ace338b16653a87a19cd0df56c8319d782f991d177c5adf6b45218e663",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/README.md",
+        "ranking": 0.9838709677419354,
+        "snippet": "…the second fusion is **byte-identical** — `(k+1)/(k+rank)` is strictly…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/README.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "96e16b7eb661779f7eeba0e459dbd71af5eb0715c616948f943b6cc38bf18ce2",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/0078-the-no-fusion-regression-rule-is-an-order-and-ships-default-off.md",
+        "ranking": 0.9682539682539681,
+        "snippet": "…distinct positions, and the\n  second fusion turns position into a distinct score…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/0078-the-no-fusion-regression-rule-is-an-order-and-ships-default-off.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "23347dd3c69f019010bf80519171917d58fc60825ac7889f737818372bfea3cf",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/0078-the-no-fusion-regression-rule-is-an-order-and-ships-default-off.md",
+        "ranking": 0.953125,
+        "snippet": "documented this second fusion and proved it order-preserving.\n\nSo **only position…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/0078-the-no-fusion-regression-rule-is-an-order-and-ships-default-off.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "eda1104f0e590e594ef51afe4e0c72f49c4c47cb4632a1285d236cc498606aa2",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/plans/2026-08-14-project-scope-improvement-plan.md",
+        "ranking": 0.9384615384615385,
+        "snippet": "…package becomes \"delete the redundant second fusion and document that `ranking`\nis…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/plans/2026-08-14-project-scope-improvement-plan.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "2243509d9d09e73d798b403362725de406057aa0497b73d66f4c60d0b8845be6",
+        "path": "shared/95feb1127569602c1e1e1d121395422d45de44eabc65e8179518f257ae5f634d.md",
+        "ranking": 0.9242424242424242,
+        "snippet": "…can be shadowed by its\nposition, so adding a rule cannot silently…",
+        "sourceFile": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/adr/0062-composed-channel-pipeline-extension-points.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "b086c9e6c38011bbc59f36c39372f4db6d178dc33dbd84d65ad34d13973793cd",
+        "path": "shared/2dbebf51caf112483d3a1ae3cedc45c80dca870e89aae7785e37cba5736b090f.md",
+        "ranking": 0.9104477611940298,
+        "snippet": "…extracting a country-neutral preferences contract is deferred until a\nsecond country…",
+        "sourceFile": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/adr/0042-compensation-refactor-and-synchronous-salary-endpoints.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "2aecc2996d7184f26477a9dbe646368352ada7b942761b457da60b0e98eb302a",
+        "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/0078-the-no-fusion-regression-rule-is-an-order-and-ships-default-off.md",
+        "ranking": 0.8970588235294117,
+        "snippet": "…this second fusion and proved it order-preserving.\n\nSo **only position survives…",
+        "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/adr/0078-the-no-fusion-regression-rule-is-an-order-and-ships-default-off.md"
+      }
+    ]
+  },
+  "q3": {
+    "code": [
+      {
+        "chunkIndex": null,
+        "hash": "9257b6e64983d546d5e91bb2943cb50a2d93e683c04cafc9633a684710f20633",
+        "path": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/research/2026-07-19-beta-epics-file-issues.py",
+        "ranking": 1,
+        "snippet": "…level spec fold-in\",\n     [\"documentation\"] + T,\n     \"\"\"**Scope:** `docs/features/gmail-monitoring/` dossier…",
+        "sourceFile": null
+      }
+    ],
+    "memory": [
+      {
+        "chunkIndex": -1,
+        "hash": "6238b6154ac2872bedbcdb25f80e5e123fb18dfa660511b38e060d55b8afd079",
+        "path": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/2026-07-24-gmail-monitoring-spec-issue-198.md",
+        "ranking": 1,
+        "snippet": "…197       |\n\n**Rules:**\n\n- Gmail requirements are **additive** to the channel-monitoring FR-CM…",
+        "sourceFile": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/2026-07-24-gmail-monitoring-spec-issue-198.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "d840be75f5add16838da6e2af99d0c9e1c51620e48af7f4c9574ef4a25dfa242",
+        "path": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/2026-07-24-gmail-monitoring-spec-issue-196.md",
+        "ranking": 0.9838709677419354,
+        "snippet": "…0026).\n- Gmail label management or `gmail.modify` scope.\n\n---\n\n## 2. Requirements\n\n> Requirement ids…",
+        "sourceFile": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/2026-07-24-gmail-monitoring-spec-issue-196.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "ea980eaa4820c333037d1f8773d37c99834682cd59075c09621e41a53a541f4f",
+        "path": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/2026-07-24-gmail-monitoring-spec-issue-196.md",
+        "ranking": 0.9682539682539681,
+        "snippet": "…user (ADR-0026).\n- Gmail label management or `gmail.modify` scope.\n\n---\n\n## 2. Requirements\n\n",
+        "sourceFile": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/2026-07-24-gmail-monitoring-spec-issue-196.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "7126e0b286112a9dae2ad218875c54d7c8a5a8df61803c9c0abf9dcdec109065",
+        "path": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/2026-07-24-gmail-monitoring-spec-issue-198.md",
+        "ranking": 0.953125,
+        "snippet": "…File Inventory\n\n| File                                                            | Change type | Description                                        |\n|-----------------------------------------------------------------|-------------|----------------------------------------------------|\n| `docs/features/gmail-monitoring/requirements.md…",
+        "sourceFile": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/2026-07-24-gmail-monitoring-spec-issue-198.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "5143fac01a7f52e1e4d2e33265a6e3e2827dd1700b8b139ef0ad693eac095a47",
+        "path": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/2026-07-24-gmail-monitoring-spec-issue-198.md",
+        "ranking": 0.9384615384615385,
+        "snippet": "\n```\n# Gmail Monitoring — requirements\n\n> **Status: Approved.** ...\n\n## 1. Scope\n  - In scope: Gmail transport adapter…",
+        "sourceFile": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/2026-07-24-gmail-monitoring-spec-issue-198.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "7460c0b9ec2224f0657e78e8c21ecc2b57222efb1494beb806c3ae87ba60e37d",
+        "path": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/plans/2026-07-24-beta-issues-sorted.md",
+        "ranking": 0.9242424242424242,
+        "snippet": "…parallel)\n\n### #198 — Gmail Documentation: dossier and top-level spec fold-in\n\n- **URL…",
+        "sourceFile": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/plans/2026-07-24-beta-issues-sorted.md"
+      },
+      {
+        "chunkIndex": -1,
+        "hash": "3adb58785d7c1c8c357b0260e8ae50d447a7098912e6c76f06f950f31c996995",
+        "path": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/meta/moves.json",
+        "ranking": 0.9104477611940298,
+        "snippet": "…07-24-gmail-monitoring-requirements.md\",\n    \"features/gmail-monitoring/spec-issue-196…",
+        "sourceFile": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/meta/moves.json"
+      },
+      {
+        "chunkIndex": 2,
+        "hash": "22f20a8ba7fc5feb4dcc934f78d3a8073d25bbf4c7fc9d274150a25cdb5fcd11",
+        "path": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/README.md",
+        "ranking": 0.8970588235294117,
+        "snippet": "…monitoring-requirements.md` | Gmail Monitoring — requirements |\n| `2026-07-24-gmail-monitoring-spec…",
+        "sourceFile": "/Users/arasz/RiderProjects/job-search-ai-assistant/docs/work/specs/README.md"
+      }
+    ]
+  }
+}
