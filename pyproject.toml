@@ -11,6 +11,10 @@ dependencies = [
     "scikit-learn",
     "pytest",
     "optuna>=4.9.0",
+    "chromadb",
+    "llama-index",
+    "llama-index-embeddings-huggingface",
+    "torch",
 ]
 
 [tool.pytest.ini_options]

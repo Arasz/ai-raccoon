@@ -24,6 +24,7 @@ PYPROJECT = SCRIPTS_ROOT.parent / "pyproject.toml"
 # where they differ (pyproject.toml declares distribution names).
 _IMPORT_TO_DISTRIBUTION = {
     "sklearn": "scikit-learn",
+    "llama_index": "llama-index",
 }
 
 
