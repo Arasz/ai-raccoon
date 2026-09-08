@@ -41,3 +41,15 @@ releases:
 
 > Nothing here is verified against a specific Copilot release. If you find the mapping is wrong
 > for your setup, that is a bug in this file — `feed-badger` it back.
+
+## Status-report enforcement (copilot)
+
+- Copilot ships no session source: every `task_tracker.py` verb that attributes a session
+  (`start`, `reattach`, `subagent`) needs an explicit `--session-id <id>` (plus
+  `--transcript-path` where the verb reads usage). Without it `start` exits 2 — STOP there,
+  do not work untracked.
+- One session runs all phases sequentially, so there are no lane worktrees to corroborate
+  delegation: `subagent` records (positional totalTokens) are the ONLY delegation evidence
+  status has. Write one per phase completion, not one at the end.
+- The plan-file contract (Phase 2: `plans/<date>-<taskId>.md`, taskId in filename, `**P<N>**`
+  headings, checkboxes) applies unchanged — it is the whole progress section.

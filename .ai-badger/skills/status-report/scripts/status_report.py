@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -45,6 +46,13 @@ NO_TASK = "(no task in progress)"
 NOT_FOUND = "(not found)"
 NO_PLAN = "(no plan file)"
 NO_LANES = "(no live lanes)"
+NO_UNTRACKED = "(none)"
+
+# States that count as an open task. STARTED is registered-but-not-yet-promoted: the
+# first Stop hook promotes it to IN_PROGRESS, and harnesses without that hook (or a
+# session that has not hit a turn boundary yet) keep it at STARTED indefinitely.
+# Only FINISHED is closed — a STARTED task already owns its branch/worktree/plan slot.
+OPEN_STATES = ("STARTED", "IN_PROGRESS")
 
 
 # ---------------------------------------------------------------- file reads
@@ -87,8 +95,12 @@ def _load_tasks(target: Path) -> List[Dict[str, Any]]:
 
 
 def _in_progress(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """The open tasks, latest-started first — the first of these is the current task."""
-    return [t for t in tasks if t.get("state") == "IN_PROGRESS"]
+    """The open tasks, latest-started first — the first of these is the current task.
+
+    STARTED counts: it is registered work whose Stop hook has not promoted it yet
+    (or whose harness has no Stop hook), not the absence of work. Excluding it is
+    what made freshly-started tasks report "(no task in progress)"."""
+    return [t for t in tasks if t.get("state") in OPEN_STATES]
 
 
 def _last_finished(tasks: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -174,6 +186,24 @@ def subagents_for(target: Path, task_id: str) -> List[Dict[str, Any]]:
     return []
 
 
+def _pid_alive(pid) -> bool:
+    """Whether `pid` names a live process — the report's own staleness check.
+
+    The sessions table prunes dead pids only on write, so a quiet project keeps
+    ghost rows indefinitely; the report marks rather than trusts them. A pid that
+    cannot be signalled for lack of permission (or is malformed) reads as alive —
+    existence, not ownership, is the question."""
+    if not pid:
+        return False
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except (PermissionError, OSError, ValueError):
+        return True
+    return True
+
+
 def live_lanes(target: Path, open_task_ids: List[str]) -> List[str]:
     """Worktrees belonging to open tasks, lane sub-worktrees included via taskId prefix.
 
@@ -196,8 +226,30 @@ def live_lanes(target: Path, open_task_ids: List[str]) -> List[str]:
     return sorted(set(lanes))
 
 
+def untracked_lanes(target: Path, known_task_ids: List[str]) -> List[str]:
+    """Worktree dirs matching no tracked task id in any state — work without tracking.
+
+    A worktree whose name is neither a known taskId nor a `{known}-lane-*` lane is
+    invisible to every other section: no open row claims it, and no FINISHED row
+    explains it as a leftover. That is the never-registered failure mode (the agent
+    worked the branch+PR without a tracker row): surfacing the names is what turns
+    a blind "(no task in progress)" into a pointer at the real work."""
+    root = target / WORKTREES_DIR
+    try:
+        names = sorted(p.name for p in root.iterdir() if p.is_dir())
+    except OSError:
+        return []
+    known = [k for k in known_task_ids if k]
+    return sorted(n for n in names
+                  if not any(n == k or n.startswith(k + "-lane-") for k in known))
+
+
 def live_sessions(target: Path) -> List[Dict[str, Any]]:
-    """Live sessions (pid/cwd/recordedAt) — store rows (dual-read, D5a); [] when unreadable."""
+    """Live sessions (pid/cwd/recordedAt) — store rows (dual-read, D5a); [] when unreadable.
+
+    Each row carries an `alive` flag from this process's own pid check: the table
+    prunes dead pids only when a new session is saved, so ghost rows otherwise
+    render as live lanes that lead nowhere."""
     sessions: Any = None
     if _tracking_ready(target):
         lib.DATA_DIR = target / TRACKING
@@ -208,7 +260,10 @@ def live_sessions(target: Path) -> List[Dict[str, Any]]:
     if sessions is None:
         data = _read_json(target / SESSIONS_FILE)
         sessions = data.get("sessions", {}) if isinstance(data, dict) else {}
-    return [dict(v, session_id=k) for k, v in sessions.items() if isinstance(v, dict)]
+    rows = [dict(v, session_id=k) for k, v in sessions.items() if isinstance(v, dict)]
+    for row in rows:
+        row["alive"] = _pid_alive(row.get("pid"))
+    return rows
 
 
 def next_note(target: Path) -> Optional[str]:
@@ -228,6 +283,7 @@ def report(target: Path) -> Dict[str, Any]:
     open_tasks = _in_progress(tasks)
     current = open_tasks[0] if open_tasks else None
     task_id = str(current.get("taskId", "")) if current else ""
+    known_ids = [str(t.get("taskId", "")) for t in tasks]
     return {
         "current_task": current,
         "other_open": [t.get("taskId") for t in open_tasks[1:]],
@@ -239,6 +295,7 @@ def report(target: Path) -> Dict[str, Any]:
         "subagents": {
             "recorded": subagents_for(target, task_id) if task_id else [],
             "live_lanes": live_lanes(target, [str(t.get("taskId", "")) for t in open_tasks]),
+            "untracked": untracked_lanes(target, known_ids),
             "sessions": live_sessions(target),
         },
     }
@@ -256,6 +313,8 @@ def render(data: Dict[str, Any]) -> str:
             out.append(f"last finished: {finished.get('taskId')} — {finished.get('title')}")
     else:
         out.append(f"{current.get('taskId')} — {current.get('title') or '(untitled)'}")
+        if current.get("state") == "STARTED":
+            out.append("(state STARTED — registered, Stop hook has not promoted it yet)")
         out.append(f"branch: {current.get('branch') or '?'}  "
                    f"started: {current.get('startedAt') or '?'}")
     for extra in data.get("other_open", []):
@@ -296,11 +355,20 @@ def render(data: Dict[str, Any]) -> str:
                    "completion only)")
     lanes = data["subagents"]["live_lanes"]
     out.append(f"live lanes: {', '.join(lanes) if lanes else NO_LANES}")
+    untracked = data["subagents"].get("untracked", [])
+    if untracked:
+        out.append(f"untracked worktrees (no tracker row — start/reattach needed): "
+                   f"{', '.join(untracked)}")
+    else:
+        out.append(f"untracked worktrees: {NO_UNTRACKED}")
     sessions = data["subagents"]["sessions"]
     if sessions:
         for session in sessions:
-            out.append(f"session: pid {session.get('pid')} cwd {session.get('cwd')} "
-                       f"(recorded {session.get('recordedAt')})")
+            line = (f"session: pid {session.get('pid')} cwd {session.get('cwd')} "
+                    f"(recorded {session.get('recordedAt')})")
+            if session.get("alive") is False:
+                line += " [STALE — pid dead, tracker hygiene: reattach or prune]"
+            out.append(line)
     return "\n".join(out)
 
 

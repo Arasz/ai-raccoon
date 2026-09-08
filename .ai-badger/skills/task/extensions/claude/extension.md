@@ -137,3 +137,14 @@ dispatch's actual model is in doubt, grep the session's `.jsonl` for the `Agent`
 `description` matches and check its paired `tool_result`'s `toolUseResult.resolvedModel`. Do not
 re-investigate this as a dispatch-code problem unless the transcript itself shows the wrong
 `resolvedModel`.
+
+## Status-report enforcement (claude)
+
+- Session identity is `CLAUDE_CODE_SESSION_ID`, then pid ancestry, then unique cwd — and the
+  fuzzy half is consulted only when no env claim exists in this process. A cwd hosting several
+  sessions never resolves by itself: pass `--session-id` explicitly instead of letting the
+  tracker guess.
+- The Stop hook promotes STARTED to IN_PROGRESS and refreshes `latest`; without the hooks
+  installed, tasks stay STARTED — still open to status, but checkpoints go stale. Keep them.
+- After every Agent completion, record it before the next dispatch (`subagent --delegation`
+  is transcript-backed). Unrecorded lanes are invisible to status.

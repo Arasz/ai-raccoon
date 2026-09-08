@@ -671,12 +671,27 @@ def _own_pid_ancestry(max_depth: int = 12) -> list[int]:
 def resolve_own_session() -> dict:
     """Ask every registered session source to identify the session invoking this process.
 
-    Each source owns its resolution (env var, hook-recorded sessions, process ancestry —
-    however that agent identifies its sessions); the first source that resolves wins, in
-    registration order. A source that cannot identify the session returns {} and the next
-    is asked. Returns {} when nothing resolves — callers should then require explicit
-    --session-id.
+    Two passes. Pass 1 is exact identity only: sources whose env var is set in this
+    process (PI_SESSION_ID, HERMES_SESSION_ID, CLAUDE_CODE_SESSION_ID) are asked
+    first, in registration order — an exact env claim always beats a fuzzy guess.
+    Pass 2 is the fuzzy fallbacks (pid ancestry, unique cwd) for harnesses with no
+    env identity in this process. The split exists because pass 2 once shadowed
+    pass 1: the claude source's unique-cwd fallback returned a stale recorded
+    session while PI_SESSION_ID named the real one, so `start` attached (or
+    refused) on the wrong identity and the agent worked untracked — invisible to
+    status. When env claims exist but none resolves, return {} rather than falling
+    through to a guess: a wrong session is worse than none (callers then require
+    explicit --session-id). Returns {} when nothing resolves.
     """
+    claimants = [name for name, source in SESSION_SOURCES.items()
+                 if source.get("env_var") and os.environ.get(source["env_var"])]
+    if claimants:
+        for name in claimants:
+            resolved = SESSION_SOURCES[name]["resolve"]()
+            if resolved.get("sessionId"):
+                resolved["source"] = name
+                return resolved
+        return {}
     for name, source in SESSION_SOURCES.items():
         resolved = source["resolve"]()
         if resolved.get("sessionId"):

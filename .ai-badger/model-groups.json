@@ -1,6 +1,6 @@
 {
   "$schema": "../../schemas/model-groups.schema.json",
-  "frameworkVersion": "0.166.0",
+  "frameworkVersion": "0.167.1",
   "registryVersion": 1,
   "measuredAt": "2026-09-05",
   "source": "task-brief 2026-09-05 (brief-range grounding; memory context model-tiers-research unavailable to lanes; verified in-session)",

@@ -182,6 +182,11 @@ research record gathered, taskId derived.
    **Preflight checklist** (Rule 1): confirm the brief has objective, constraints, known unknowns,
    output contract, and stop condition. Fill missing blocks from review or ask the user.
 3. Register: `python3 .ai-badger/skills/task/scripts/task_tracker.py start <taskId> --title "<title>" --branch task/<taskId>-<slug>`.
+   `start` must exit 0 — the tracker row is what makes this work visible to status. On exit 2
+   (session already claimed, or no session source resolved) STOP before any branch, worktree,
+   or commit: pass `--session-id` explicitly (copilot ships no session source, so it always
+   must), or `reattach` after a resume. Work done with no tracker row is invisible to status
+   except as an "untracked worktree" name — that is how a past task went blind mid-flight.
 4. Ask the user to rename the session to match the task (skip if autonomous).
 5. **Work in the worktree `start` just created** — it prints the path, and it is
    `.ai-badger/worktrees/<taskId>` on the branch you passed to `--branch`. Every command for
@@ -227,6 +232,12 @@ into packages and subpackages.
    before it can be built, produce one, and look for an installed skill that formalises that shape
    before writing a bespoke document. Before the first failing test, run `design-tests` on the
    acceptance criteria — the test list is part of the plan, not of the implementation.
+   The planning lane's output contract includes writing the plan to
+   `.ai-badger/task-tracking/plans/<YYYY-MM-DD>-<taskId>.md`: taskId in the filename, one
+   `**P<N> …**` heading per package, one `- [ ]` checkbox per acceptance point (checked as
+   points land). Status reads this file — a plan living only in a delegation brief reports
+   as "(no plan file)". Confirm the status script shows it matched (not fallback) before
+   dispatching implementation.
 2. **Plan review before dispatch.** In the **low-effort** variant, hand the drafted plan to a
    second high-reasoning agent for review. In the **high-effort** variant, delegate to an MoE
    panel (default 3 experts, at least one different from the plan-authoring experts) and have it
@@ -239,14 +250,20 @@ into packages and subpackages.
 ## Phase 3 — Execute
 
 1. Dispatch implementation subagents per `personaRouting`. Instruct every code subagent to write
-   the failing test first (TDD).
+   the failing test first (TDD). Lane worktrees are named `<taskId>-lane-*` under
+   `.ai-badger/worktrees/` — status recognises only that shape (plus the orchestrator's own
+   `<taskId>`); any other worktree name reports as untracked.
 
    **Operator contract** (Rule 4): each agent brief must include tool names, abort criteria,
    success predicate, and handoff conditions. Persona prose is optional, one short line only.
 2. Record the lane's `total_tokens`:
    `python3 .ai-badger/skills/task/scripts/task_tracker.py subagent <taskId> <n>` or `--delegation <id>`.
    Interactive pi delegations return receipts by default; the `delegation-result` followUp carries
-   `details.usage` (input+output); `background:false` blocks.
+   `details.usage` (input+output); `background:false` blocks. Record on EVERY delegation
+   completion before the next dispatch — a mid-flight lane is invisible to status until its
+   record lands. `--delegation <id>` wherever the harness keeps receipts (pi subagent-logs,
+   hermes async_delegations, claude transcripts); positional totalTokens otherwise (copilot,
+   mechanical lanes).
 3. Review each result at the seams (matches plan? acceptance criteria?). Send follow-ups back
    rather than rewriting, unless the fix is a few lines.
 4. Commit and push per work package (small commits). If the source-control extension is active,
@@ -339,6 +356,11 @@ project's docs against the merged code, fix small drift, and report gaps needing
   branch that does not exist.
 - **Interactive pi delegation = receipt, not answer.** Answers land as
   `delegation-result` followUps; review seams as they land.
+- **A stale session record makes `start` attach (or refuse) wrongly.** Exact env identity
+  (PI_/HERMES_/CLAUDE_ session id) wins over pid/cwd guesses inside the tracker, but a sessions
+  row whose pid is long dead is still a hygiene flag — status marks it STALE. On an "already
+  attached" refusal you do not recognise, re-resolve with explicit `--session-id` rather than
+  working untracked.
 - **`finish` refuses and keeps the worktree when it holds work that exists nowhere else.** Read the
   `worktree.keptBecause` field; a kept worktree is unmerged or uncommitted work, not failed cleanup.
 - **Never rewrite always-loaded context files (`CLAUDE.md`, `.ai-badger/state.json`) mid-task.** Cache
