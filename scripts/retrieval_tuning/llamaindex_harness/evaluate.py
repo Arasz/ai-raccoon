@@ -96,6 +96,8 @@ def run_eval(entries: list[dict], harness_fn, airaccoon_fn) -> dict:
             "harness": _score_side(expected, harness_fn(entry)),
             "airaccoon": _score_side(expected, airaccoon_fn(entry)),
         })
+        if len(rows) % 10 == 0:
+            print(f"eval: {len(rows)}/{len(entries)} queries scored", flush=True)
 
     def summarize(side: str) -> dict:
         ok = [r for r in rows if not r[side].get("error")]

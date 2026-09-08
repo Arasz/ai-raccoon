@@ -123,6 +123,15 @@ def test_missing_anchors_listed():
     assert evaluate.missing_anchors([_entry(1)], {"hash001"}) == []
 
 
+def test_run_eval_progress_heartbeat(capsys):
+    # Long-run heartbeat: 100 sequential server searches run ~30 min silent.
+    entries = [_entry(i) for i in range(1, 13)]
+    evaluate.run_eval(entries,
+                        lambda e: {"hashes": [e["expectedHash"]]},
+                        lambda e: {"hashes": []})
+    assert "10/12" in capsys.readouterr().out
+
+
 def test_run_eval_shape_is_n_rows_by_two_systems():
     entries = [_entry(1), _entry(2)]
     out = evaluate.run_eval(entries,

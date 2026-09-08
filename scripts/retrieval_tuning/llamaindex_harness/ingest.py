@@ -161,11 +161,19 @@ def create_embedding_model(model_name: str = MODEL_NAME, offline: bool = False):
     return model
 
 
-def embed_texts(embed_fn, texts: list[str], batch_size: int = 32) -> list[list[float]]:
-    """Batched embedding with a finiteness gate (a NaN vector poisons every cosine)."""
+def embed_texts(embed_fn, texts: list[str], batch_size: int = 32,
+                progress_every: int = 0) -> list[list[float]]:
+    """Batched embedding with a finiteness gate (a NaN vector poisons every cosine).
+
+    progress_every=N prints one heartbeat line every N batches (long-run
+    observability); 0 (default) stays silent for library/test callers."""
     out: list[list[float]] = []
-    for i in range(0, len(texts), batch_size):
+    total_batches = (len(texts) + batch_size - 1) // batch_size if texts else 0
+    for n, i in enumerate(range(0, len(texts), batch_size), 1):
         out.extend(embed_fn(texts[i:i + batch_size]))
+        if progress_every and n % progress_every == 0:
+            print(f"embed: batch {n}/{total_batches} ({len(out)}/{len(texts)} rows)",
+                  flush=True)
     for vec in out:
         if not all(v == v and abs(v) != float("inf") for v in vec):
             raise ValueError("non-finite embedding vector produced")
@@ -197,10 +205,13 @@ _UPSERT_BATCH_SIZE = 4000
 
 
 def _upsert_in_batches(collection, ids, embeddings, documents, metadatas) -> None:
-    for i in range(0, len(ids), _UPSERT_BATCH_SIZE):
+    total = (len(ids) + _UPSERT_BATCH_SIZE - 1) // _UPSERT_BATCH_SIZE if ids else 0
+    for n, i in enumerate(range(0, len(ids), _UPSERT_BATCH_SIZE), 1):
         batch = slice(i, i + _UPSERT_BATCH_SIZE)
         collection.upsert(ids=ids[batch], embeddings=embeddings[batch],
                           documents=documents[batch], metadatas=metadatas[batch])
+        print(f"upsert: batch {n}/{total} ({min(i + _UPSERT_BATCH_SIZE, len(ids))}/{len(ids)} ids)",
+              flush=True)
 
 
 _FTS_SCHEMA = """
@@ -236,7 +247,8 @@ def query_fts(handle: StoreHandle, expression: str, project_id: str, scope: str,
 
 
 def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
-                embed_fn, copy_entries: int, batch_size: int = 32) -> StoreHandle:
+                embed_fn, copy_entries: int, batch_size: int = 32,
+                progress_every: int = 0) -> StoreHandle:
     """Idempotent build: upsert current ids, delete stale ids, rewrite params.json."""
     store_dir.mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=str(store_dir / "chroma"))
@@ -244,7 +256,8 @@ def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
     structure = client.get_or_create_collection("structure", metadata={"hnsw:space": "cosine"})
 
     texts = [d.text for d in docs]
-    vectors = embed_texts(embed_fn, texts, batch_size)
+    print(f"embed: {len(texts)} content texts in batches of {batch_size}", flush=True)
+    vectors = embed_texts(embed_fn, texts, batch_size, progress_every)
     ids = [d.id_ for d in docs]
     metadatas = [dict(d.metadata) for d in docs]
     _upsert_in_batches(content, ids, vectors, texts, metadatas)
@@ -252,7 +265,7 @@ def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
     headed = [(d, r) for d, r in zip(docs, rows) if heading_of(coerce_row(r))]
     if headed:
         struct_vectors = embed_texts(embed_fn, [heading_of(coerce_row(r)) for _, r in headed],
-                                     batch_size)
+                                     batch_size, progress_every)
         struct_ids = [d.id_ for d, _ in headed]
         struct_docs = [heading_of(coerce_row(r)) for _, r in headed]
         struct_meta = [dict(d.metadata) for d, _ in headed]
@@ -402,7 +415,8 @@ def main(argv: list[str] | None = None, embed=None) -> int:
     else:
         model = create_embedding_model(args.model, args.offline)
         embed_fn = model.get_text_embedding_batch
-    handle = build_store(store_dir, docs, rows, embed_fn, copy_entries, args.embed_batch_size)
+    handle = build_store(store_dir, docs, rows, embed_fn, copy_entries, args.embed_batch_size,
+                         progress_every=10)
     problems = verify_store(args.copy, handle)
     fts_diff = fts_parity_probe(args.copy, handle, probe="memory")
     handle.close()

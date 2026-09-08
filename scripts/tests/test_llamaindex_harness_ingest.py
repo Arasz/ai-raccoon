@@ -158,6 +158,32 @@ def test_import_has_no_side_effects(tmp_path):
     assert set(tmp_path.iterdir()) == before
 
 
+def test_embed_texts_progress_logs_every_n_batches(tmp_path, capsys):
+    # Long-run heartbeat: the silent 2h ingest looked dead under delegation.
+    texts = [f"row {i} padding text" for i in range(8)]
+    ingest.embed_texts(_toy_embed, texts, batch_size=2, progress_every=2)
+    out = capsys.readouterr().out
+    assert "batch 2/4" in out and "batch 4/4" in out
+
+
+def test_embed_texts_silent_by_default(tmp_path, capsys):
+    ingest.embed_texts(_toy_embed, ["a", "b"], batch_size=1)
+    assert capsys.readouterr().out == ""
+
+
+def test_upsert_in_batches_logs_each_batch(capsys):
+    class FakeColl:
+        def __init__(self):
+            self.calls = []
+
+        def upsert(self, ids, embeddings, documents, metadatas):
+            self.calls.append(list(ids))
+
+    ingest._upsert_in_batches(FakeColl(), ["a", "b", "c"],
+                              [[0.1]] * 3, ["x", "y", "z"], [{}, {}, {}])
+    assert "upsert" in capsys.readouterr().out
+
+
 def test_chroma_store_lives_under_store_dir_not_repo(tmp_path):
     copy = tmp_path / "copy.db"
     _fixture_copy(copy)
