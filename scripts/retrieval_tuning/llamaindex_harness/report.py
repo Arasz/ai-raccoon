@@ -39,6 +39,10 @@ def render(results: dict, context: dict) -> str:
     if n < corpus_size:
         lines.append(f"Restriction: this is a documented SUBSET eval — {n} of "
                      f"{corpus_size} queries (integration gate / time-boxed run).")
+    stale = results.get("staleAnchors") or context.get("stale_anchors") or []
+    if stale:
+        lines.append(f"Stale anchors ({len(stale)}, re-chunked upstream — unhittable "
+                     f"by either leg, counted in d): {', '.join(stale)}.")
     lines += [
         "",
         "## Scope and routing",

@@ -39,6 +39,13 @@ def _context():
             "store_bytes": "99M", "structure_alpha": 0.5}
 
 
+def test_report_lists_stale_anchors():
+    out = _results()
+    out["staleAnchors"] = ["E009"]
+    text = report.render(out, _context())
+    assert "Stale anchors (1" in text and "E009" in text
+
+
 def test_report_has_all_five_required_sections():
     text = report.render(_results(), _context())
     for header in ("## Scope and routing", "## Method", "## Per-query results",

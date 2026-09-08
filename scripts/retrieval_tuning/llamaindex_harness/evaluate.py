@@ -126,22 +126,11 @@ def _self_paths() -> tuple[Path, Path]:
     return harness_dir, repo
 
 
-def build_harness_fn(store_dir: Path, offline: bool = False, anchor_entries=None):
-    """Per-(project,scope) FusionRetrievers over an opened store, real query embeddings.
-
-    anchor_entries (when given) are checked against the SAME open handle —
-    one open per process (two PersistentClients on one dir risk lock fights).
-    """
+def build_harness_fn(store_dir: Path, offline: bool = False):
+    """Per-(project,scope) FusionRetrievers over an opened store, real query embeddings."""
     from . import ingest, retrieve  # noqa: PLC0415 — lazy: keeps module import-safe
 
     handle = ingest.open_store(Path(store_dir))
-    if anchor_entries is not None:
-        missing = missing_anchors(
-            anchor_entries, set(handle.content.get(include=[])["ids"]))
-        if missing:
-            handle.close()
-            raise ValueError(f"anchors do not resolve against this store "
-                             f"(copy drifted?): {len(missing)} missing, first {missing[:5]}")
     model = ingest.create_embedding_model(offline=offline)
     cache: dict = {}
 
@@ -215,18 +204,18 @@ def missing_anchors(entries: list[dict], stored_ids: set) -> list:
     return [e.get("id") for e in entries if e.get("expectedHash") not in stored_ids]
 
 
-def assert_anchors_resolve(entries: list[dict], store_dir: Path) -> None:
-    """Corpus-staleness gate: every expectedHash must be served-able from the store."""
+def check_anchors_resolve(entries: list[dict], store_dir: Path) -> list:
+    """Corpus-staleness check: ids whose expectedHash is not in the store.
+
+    Returns the missing ids (warn-and-record upstream); a totally empty
+    intersection means a wrong store, which main() refuses to run against."""
     from . import ingest  # noqa: PLC0415 — lazy: keeps module import-safe
 
     handle = ingest.open_store(Path(store_dir))
     try:
-        missing = missing_anchors(entries, set(handle.content.get(include=[])["ids"]))
+        return missing_anchors(entries, set(handle.content.get(include=[])["ids"]))
     finally:
         handle.close()
-    if missing:
-        raise ValueError(f"anchors do not resolve against this store "
-                         f"(copy drifted?): {len(missing)} missing, first {missing[:5]}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -249,10 +238,15 @@ def main(argv: list[str] | None = None) -> int:
     entries = json.loads(Path(args.corpus).read_text())
     if args.limit_queries is not None:
         entries = entries[:args.limit_queries]
+    stale_anchors = check_anchors_resolve(entries, Path(args.store_dir))
+    if len(stale_anchors) == len(entries):
+        raise ValueError("no corpus anchor resolves against this store — wrong store/copy?")
+    if stale_anchors:
+        print(f"WARNING: {len(stale_anchors)} stale anchors (re-chunked upstream, "
+              f"unhittable by either leg): {stale_anchors}", flush=True)
     session_id = f"llamaindex-harness-{uuid.uuid4().hex[:12]}"
 
-    harness_fn = build_harness_fn(Path(args.store_dir), offline=args.offline,
-                                  anchor_entries=entries)
+    harness_fn = build_harness_fn(Path(args.store_dir), offline=args.offline)
     try:
         with start_server(args.scratch_data_root, binary=args.binary) as server:
             print(f"scratch server on port {server.port} (never 7721)", flush=True)
@@ -266,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"FAIL: harness errors on {len(harness_errors)} queries: {harness_errors[:5]}")
         return 1
     out["sessionId"] = session_id
+    out["staleAnchors"] = stale_anchors
     Path(args.out).write_text(json.dumps(out, indent=2))
     s = out["summary"]
     print(f"eval: n={s['n']} paired={s['n_paired']} "
