@@ -62,6 +62,21 @@ Anthropic clarifies which article is current.
   scarce for you. Either way: reserve it for a problem Opus has been tried on and failed, and
   say why when you dispatch `model: "fable"`.
 
+### Lane to model-tier defaults
+
+| Lane | Work | Model-tier default |
+|------|------|--------------------|
+| Planning | decomposition, plan review, quality gate | `high` |
+| Implementation | spec-driven code, docs, fix-ups | `medium` |
+| Mechanical | comment/doc touch-ups, rote refactors, probes | `low` |
+
+A `level` on the dispatch overrides the lane default.
+
+The `level` field is optional (`low`, `medium`, or `high`), resolved to that model tier's preferred registry entry.
+An explicit `model` always wins over `level`.
+With neither `level` nor `model`, the dispatch inherits the session (or parent) default model.
+The registry lives at `.ai-badger/model-groups.json`; it holds the IDs and prices, so this extension names neither.
+
 The orchestrating session must not assume it is already running the planning lane — the default
 model for new sessions changes. Get the reasoning by dispatching an explicit `Agent` call with
 the `model` override, not by doing the work in-session because the session "is" Opus today.

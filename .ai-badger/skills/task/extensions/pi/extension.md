@@ -16,6 +16,15 @@ pi --mode json -p --no-session --model <model> --tools <toolset> "<task>"
 
 The reference subagent implementation is at `examples/extensions/subagent/` in the pi repo.
 
+### Model tier forwarding
+
+The `level` field is optional (`low`, `medium`, or `high`), resolved to that model tier's preferred registry entry.
+An explicit `model` always wins over `level`.
+With neither `level` nor `model`, the dispatch inherits the session (or parent) default model.
+The registry lives at `.ai-badger/model-groups.json`; it holds the IDs and prices, so this extension names neither.
+
+Forward `--level <low|medium|high>` or an explicit `--model <id>` through to the subagent spawn; pi-badger-integration is normative for the exact argv.
+
 ## Session management
 
 - Resume work: `pi -p --session <session_id>` — `--resume, -r` takes no argument (it opens an

@@ -4,6 +4,7 @@ description: >
   Quality and security review gate. Read-only: reports findings with
   file/line/severity, never edits code.
 model: opus
+level: high
 disallowedTools: Write, Edit, MultiEdit, NotebookEdit
 ---
 

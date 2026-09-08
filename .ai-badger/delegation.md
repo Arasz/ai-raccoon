@@ -1,6 +1,6 @@
 # Delegation map — AiRaccoon
 
-> Scaffolded by ai-badger 0.163.1. Regenerated on every scaffold; do not edit.
+> Scaffolded by ai-badger 0.167.0. Regenerated on every scaffold; do not edit.
 
 ## Stacks
 
@@ -8,13 +8,13 @@ dotnet, mcp, python, github, ai-raccoon
 
 ## Personas available here
 
-- `architect` — Architecture and decomposition specialist. Lane: opus.
-- `code-reviewer` — Quality and security review gate. Lane: opus.
-- `delegator` — Work-routing lead for multi-package sessions. Lane: opus.
-- `dotnet-engineer` — .NET implementation engineer. Lane: sonnet.
-- `qa` — Test-quality authority. Lane: opus.
-- `qa-backend` — QA for .NET server-side code. Lane: opus.
-- `test-engineer` — Testing specialist. Lane: sonnet.
+- `architect` — Architecture and decomposition specialist. Level: high, Lane: opus.
+- `code-reviewer` — Quality and security review gate. Level: high, Lane: opus.
+- `delegator` — Work-routing lead for multi-package sessions. Level: high, Lane: opus.
+- `dotnet-engineer` — .NET implementation engineer. Level: medium, Lane: sonnet.
+- `qa` — Test-quality authority. Level: high, Lane: opus.
+- `qa-backend` — QA for .NET server-side code. Level: high, Lane: opus.
+- `test-engineer` — Testing specialist. Level: medium, Lane: sonnet.
 
 ## Routing (config.json personaRouting)
 
@@ -34,8 +34,26 @@ lanes are exempt. Worked cases live in `.ai-badger/skills/worktree-agent-isolati
 
 ## Reasoning-model dispatch
 
-When dispatching to a reasoning model (opus, o-series, Claude extended
-thinking, DeepSeek-R1), adjust the prompt:
+Each persona line above carries its routing intent (`Level: high|medium|low`)
+beside its Claude lane (`Lane: opus|sonnet|...`). Pick by the derivation the
+work needs, not its size:
+
+- **high** — the answer must be *derived*: decomposition, root cause with no
+  reproduction, arbitration, adversarial verification, a security judgment.
+- **medium** — the answer is *determined by a spec that already exists*: the
+  code the plan describes, the test whose expected value is given, an ADR.
+- **low** — a *transformation with no judgment*: changelog from a diff, rote
+  rename, "does file X contain Y". No catalog persona defaults here; name it
+  explicitly for mechanical work.
+
+A level resolves to a model pin through `.ai-badger/model-groups.json` (the
+PKG-1 registry). When an explicit model beats the level is stated in the task
+skill — PKG-2 owns that precedence and this map does not restate it. `level:`
+is gate/generator vocabulary only: it is stripped at `.claude/agents/`
+delivery, so a gate-declared level is never a runtime-routed one on Claude.
+
+When dispatching at **high** (opus, o-series, Claude extended thinking,
+DeepSeek-R1), adjust the prompt:
 
 - **State goals and success criteria only** — strip prescriptive step-by-step
   plans, CoT scaffolding, and few-shot examples. These constrain the model's
@@ -46,7 +64,7 @@ thinking, DeepSeek-R1), adjust the prompt:
 - **Use API parameters for depth control** — `reasoning_effort` (OpenAI) or
   `thinking_budget_tokens` (Anthropic) instead of prompt-side "think harder."
 
-For standard instruction-tuned models (sonnet, flash), the existing
+For **medium/low** instruction-tuned lanes (sonnet, flash), the existing
 prescriptive persona descriptions are appropriate.
 
 ## Verifiers

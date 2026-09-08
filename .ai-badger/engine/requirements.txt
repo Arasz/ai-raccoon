@@ -7,4 +7,4 @@ pyyaml>=6.0.3
 # the wrapper script is used to patch the upstream export_graph bug (0.6.5-0.6.6).
 # The wrapper runs inside semantica's own uv-tool env; this declaration satisfies
 # the dependency guard.
-semantica>=0.6.6
+semantica>=0.6.7

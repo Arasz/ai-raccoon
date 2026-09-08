@@ -1,0 +1,213 @@
+{
+  "$schema": "../../schemas/model-groups.schema.json",
+  "frameworkVersion": "0.166.0",
+  "registryVersion": 1,
+  "measuredAt": "2026-09-05",
+  "source": "task-brief 2026-09-05 (brief-range grounding; memory context model-tiers-research unavailable to lanes; verified in-session)",
+  "groups": {
+    "low": [
+      {
+        "id": "openrouter/z-ai/glm-5.3-flash",
+        "preferred": true,
+        "pricing": {
+          "inputPerM": 0.075,
+          "outputPerM": 0.25,
+          "currency": "USD"
+        },
+        "evidence": "Low-tier preferred: cheapest brief-range pin, verified this session (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/deepseek/deepseek-v4-flash-0731",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 0.0875,
+          "outputPerM": 0.175,
+          "currency": "USD"
+        },
+        "evidence": "Budget flash pin inside the brief range for mechanical work (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/xiaomi/mimo-v2.5",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 0.14,
+          "outputPerM": 0.28,
+          "currency": "USD"
+        },
+        "evidence": "Mid-low brief-range pin for routine spec-driven work (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/openai/gpt-5.6-luna",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 0.2,
+          "outputPerM": 1.2,
+          "currency": "USD"
+        },
+        "evidence": "Upper-low brief-range pin; reasoning step up before medium (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/anthropic/claude-haiku-4.5",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 1,
+          "outputPerM": 5,
+          "currency": "USD"
+        },
+        "evidence": "Low-tier ceiling: agent-native brief-range pin at the top of low (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      }
+    ],
+    "medium": [
+      {
+        "id": "openrouter/meta/muse-spark-1.3-contributor",
+        "preferred": true,
+        "pricing": {
+          "inputPerM": 0.1,
+          "outputPerM": 0.2,
+          "currency": "USD"
+        },
+        "evidence": "Medium-tier preferred: cheapest brief-range pin; contributor twin with identical weights (weightsId muse-spark-1.3-weights) (source: task-brief 2026-09-05).",
+        "weightsId": "muse-spark-1.3-weights",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/xiaomi/mimo-v2.5-pro",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 0.435,
+          "outputPerM": 0.87,
+          "currency": "USD"
+        },
+        "evidence": "Lower-medium brief-range pin for standard agentic work (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/deepseek/deepseek-v4-pro-0813",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 0.57948,
+          "outputPerM": 1.73844,
+          "currency": "USD"
+        },
+        "evidence": "Dated pro snapshot pin inside the brief range (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/deepseek/deepseek-v4-pro",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 0.9918,
+          "outputPerM": 1.9836,
+          "currency": "USD"
+        },
+        "evidence": "Rolling pro pin inside the brief range (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/meta/muse-spark-1.3",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 1.25,
+          "outputPerM": 4.25,
+          "currency": "USD"
+        },
+        "evidence": "Full-price twin of the contributor preferred; identical weights (weightsId muse-spark-1.3-weights) (source: task-brief 2026-09-05).",
+        "weightsId": "muse-spark-1.3-weights",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/z-ai/glm-5.3",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 1.4,
+          "outputPerM": 4.4,
+          "currency": "USD"
+        },
+        "evidence": "Upper-medium brief-range pin (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/openai/gpt-5.6-sol",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 2,
+          "outputPerM": 10,
+          "currency": "USD"
+        },
+        "evidence": "High-reasoning brief-range pin below the ceiling (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/openai/gpt-5.6-terra",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 2,
+          "outputPerM": 12,
+          "currency": "USD"
+        },
+        "evidence": "Medium-tier price ceiling among active pins; input-tied with sol, ordered by output (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/anthropic/claude-sonnet-5",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 2,
+          "outputPerM": 10,
+          "currency": "USD"
+        },
+        "evidence": "Evidence-demoted: display-only tail, never auto-failover; revisit before any other refresh (source: task-brief 2026-09-05).",
+        "aliases": [
+          "~anthropic/claude-sonnet-latest"
+        ],
+        "status": "demoted",
+        "revisionWatch": true,
+        "measuredAt": "2026-09-05"
+      }
+    ],
+    "high": [
+      {
+        "id": "openrouter/meta/muse-spark-1.3-contributor",
+        "preferred": true,
+        "pricing": {
+          "inputPerM": 0.1,
+          "outputPerM": 0.2,
+          "currency": "USD"
+        },
+        "evidence": "High-tier preferred: contributor twin with identical weights (weightsId muse-spark-1.3-weights); reused from medium by design (source: task-brief 2026-09-05).",
+        "weightsId": "muse-spark-1.3-weights",
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/anthropic/claude-opus-5",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 5,
+          "outputPerM": 25,
+          "currency": "USD"
+        },
+        "evidence": "Derivation-grade brief-range pin for the hardest work (source: task-brief 2026-09-05).",
+        "aliases": [
+          "~anthropic/claude-opus-latest"
+        ],
+        "measuredAt": "2026-09-05"
+      },
+      {
+        "id": "openrouter/anthropic/claude-fable-5.1",
+        "preferred": false,
+        "pricing": {
+          "inputPerM": 10,
+          "outputPerM": 50,
+          "currency": "USD"
+        },
+        "evidence": "High-tier ceiling: dearest brief-range pin, last by price order (source: task-brief 2026-09-05).",
+        "measuredAt": "2026-09-05"
+      }
+    ]
+  }
+}

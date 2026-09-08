@@ -16,6 +16,11 @@ from scaffold_context import ScaffoldContext
 # The lane a persona that names no `model:` runs in — whatever model the session already uses.
 SESSION_DEFAULT_LANE = "session default"
 
+# Routing intents a persona may declare in `level:`. Case-sensitive lowercase.
+# Canonical owner is PKG-1's model_groups.VALID_LEVELS; this read-only copy exists
+# because the generator is stdlib-only and must render with no registry present.
+VALID_LEVELS = ("low", "medium", "high")
+
 DELEGATION_TEMPLATE = "delegation.md.tmpl"
 
 # The config keys the scaffolder renders verbatim as free-form prose, with the template slot
@@ -203,10 +208,15 @@ class TemplateRendering:
     # -- the delegation map ---------------------------------------------------------
 
     def _persona_lines(self) -> str:
-        """One line per persona in `.ai-badger/agents/`: what it is for, and the lane it runs in.
+        """One line per persona in `.ai-badger/agents/`: intent, summary, and lane.
 
         Read from the scaffolded copies rather than the catalog, so a persona this project
-        added by hand is on the map too.
+        added by hand is on the map too. Dual-key (ADR-0027): a valid `level:` renders
+        as `Level: <level>` beside the existing `Lane: <model>`, unconditionally — every
+        line names intent, not just the ones a registry resolves. A missing `level:`
+        renders the legacy bare-lane shape (grandfather); an unknown one renders a loud
+        `UNKNOWN LEVEL` marker naming the bad value and the closed set, plus a scaffold
+        note — the run still renders (M5: loud marker + note, never a hard abort).
         """
         lines: List[str] = []
         for path in sorted((self.ctx.aib / "agents").glob("*.md"), key=lambda p: p.stem):
@@ -214,8 +224,20 @@ class TemplateRendering:
             name = fields.get("name") or path.stem
             summary = first_sentence(fields.get("description", ""))
             lane = fields.get("model") or SESSION_DEFAULT_LANE
-            lines.append(f"- `{name}`" + (f" — {summary}." if summary else " —")
-                         + f" Lane: {lane}.")
+            head = f"- `{name}`" + (f" — {summary}." if summary else " —")
+            raw_level = fields.get("level")
+            level = raw_level.strip() if isinstance(raw_level, str) else ""
+            if not level:
+                lines.append(head + f" Lane: {lane}.")
+                continue
+            if level not in VALID_LEVELS:
+                lines.append(head + f" Level: UNKNOWN LEVEL {level!r} "
+                             f"(valid: {', '.join(VALID_LEVELS)}). Lane: {lane}.")
+                self.ctx.notes.append(
+                    f"agents/{path.name} declares unknown level {level!r} "
+                    f"(valid: {', '.join(VALID_LEVELS)}) — rendered as a marker, not aborted")
+                continue
+            lines.append(head + f" Level: {level}, Lane: {lane}.")
         return "\n".join(lines) or "_None scaffolded._"
 
     def _mcp_server_lines(self, names: Sequence[str]) -> str:
