@@ -31,6 +31,26 @@ def _forced_hashes(corpus_path: str) -> list[str]:
             if isinstance(e.get("expectedHash"), str) and e["expectedHash"]]
 
 
+def _ensure_vec0(conn: sqlite3.Connection) -> None:
+    """Load the vec0 extension when the schema uses it (live-bank vec tables).
+
+    Virtual-table modules resolve lazily: plain entries SELECTs work without
+    vec0, but the vec_*_ad DELETE triggers fire it — without the module every
+    sliced DELETE dies with 'no such module: vec0' and orphans would poison
+    the ctx-partitioned KNN (MemorySql VectorSearchByFilter scans pre-JOIN)."""
+    uses_vec = conn.execute(
+        "SELECT count(*) FROM sqlite_master WHERE sql LIKE '%vec0%'").fetchone()[0]
+    if not uses_vec:
+        return
+    try:
+        import sqlite_vec  # noqa: PLC0415 — optional runtime dep (pyproject)
+    except ImportError as exc:
+        raise ValueError("slice source uses vec0 virtual tables but sqlite-vec is"
+                         " not installed (python3 -m pip install sqlite-vec)") from exc
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+
+
 def slice_copy(source: str, target: str, forced: list[str],
                buckets: tuple[str, ...] = DEFAULT_BUCKETS,
                cap_per_bucket: int = DEFAULT_CAP) -> dict:
@@ -54,6 +74,7 @@ def slice_copy(source: str, target: str, forced: list[str],
         src.close()
 
         conn = sqlite3.connect(stage)
+        _ensure_vec0(conn)
         try:
             keep = ["scope = 'shared'"]
             params: list = []

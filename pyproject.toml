@@ -15,6 +15,7 @@ dependencies = [
     "llama-index",
     "llama-index-embeddings-huggingface",
     "torch",
+    "sqlite-vec",
 ]
 
 [tool.pytest.ini_options]

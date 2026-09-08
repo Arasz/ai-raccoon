@@ -25,6 +25,7 @@ PYPROJECT = SCRIPTS_ROOT.parent / "pyproject.toml"
 _IMPORT_TO_DISTRIBUTION = {
     "sklearn": "scikit-learn",
     "llama_index": "llama-index",
+    "sqlite_vec": "sqlite-vec",
 }
 
 
