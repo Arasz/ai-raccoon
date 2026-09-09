@@ -235,12 +235,15 @@ def _scope_predicate(project_id: str, scope: str) -> tuple[str, tuple]:
 
 def query_fts(handle: StoreHandle, expression: str, project_id: str, scope: str,
               limit: int) -> list[tuple[str, float]]:
-    """FTS leg query: bm25(1.0,8.0,4.0) ascending — the bank's MemorySql weights."""
+    """FTS leg query: bm25(1.0,8.0,4.0) ascending — the bank's MemorySql weights.
+
+    Hash tiebreak mirrors the parity probe: a total order keeps RRF ranks
+    deterministic when bm25 scores tie."""
     predicate, args = _scope_predicate(project_id, scope)
     rows = handle.fts.execute(
         "SELECT hash, bm25(docs_fts, 1.0, 8.0, 4.0) AS rank FROM docs_fts"
         f" WHERE docs_fts MATCH ? AND {predicate}"
-        " ORDER BY rank LIMIT ?",
+        " ORDER BY rank, hash LIMIT ?",
         (expression, *args, limit),
     ).fetchall()
     return [(h, r) for h, r in rows]
@@ -355,29 +358,49 @@ def verify_store(copy_path: str, store: StoreHandle) -> list[str]:
     return problems
 
 
+def _bank_fts_order(conn: sqlite3.Connection, probe: str, predicate: str,
+                   args: tuple) -> list[str]:
+    """One bank FTS leg: 1-token probe, bank bm25 weights, rank ascending.
+
+    Hash tiebreak: bm25 ties are real (identical scores over short docs), and
+    without a total order the comparison against the harness leg is noise.
+    """
+    return [r[0] for r in conn.execute(
+        "SELECT e.hash FROM entries_fts"
+        " JOIN entries e ON e.id = entries_fts.rowid"
+        f" WHERE entries_fts MATCH ? AND {predicate}"
+        " ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0), e.hash",
+        (probe, *args),
+    ).fetchall()]
+
+
 def fts_parity_probe(copy_path: str, store: StoreHandle, probe: str) -> list[str]:
-    """S3 parity: same 1-token probe, same bm25 weights, same ORDER as bank FTS SQL."""
+    """S3 parity: same 1-token probe, same bm25 weights, same ORDER as bank FTS SQL.
+
+    Per-bucket: the ingest rule spans every project bucket plus the global
+    shared tier, so each leg is compared under its own predicate — a single
+    ai-raccoon-wide comparison silently drops other buckets' rows (a probe
+    hitting hermes-default reported skew at 0 with byte-identical stores).
+    """
+    legs = [("project", bucket, f"e.project_id = ? AND e.scope IN ('project','custom')",
+             (bucket,))
+            for bucket in _PROJECT_BUCKETS]
+    legs.append(("shared", "global", "e.scope = 'shared'", ()))
     conn = open_copy_readonly(copy_path)
     try:
-        placeholders = ",".join("?" for _ in _PROJECT_BUCKETS)
-        bank_rows = conn.execute(
-            "SELECT e.hash FROM entries_fts"
-            " JOIN entries e ON e.id = entries_fts.rowid"
-            " WHERE entries_fts MATCH ?"
-            f" AND ((e.project_id IN ({placeholders}) AND e.scope IN ('project','custom'))"
-            " OR e.scope = 'shared')"
-            " ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0)",
-            (probe, *_PROJECT_BUCKETS),
-        ).fetchall()
+        problems = []
+        for scope, project, predicate, args in legs:
+            bank_order = _bank_fts_order(conn, probe, predicate, args)
+            harness_order = [h for h, _ in query_fts(store, probe, project, scope, 100000)]
+            if bank_order != harness_order:
+                problems.extend(
+                    f"[{project}/{scope}] order skew at {i}: bank={b[:8]} "
+                    f"harness={harness_order[i][:8] if i < len(harness_order) else '-'}"
+                    for i, b in enumerate(bank_order)
+                    if i >= len(harness_order) or harness_order[i] != b)[:5]
+        return problems
     finally:
         conn.close()
-    bank_order = [r[0] for r in bank_rows]
-    harness_order = [h for h, _ in query_fts(store, probe, "ai-raccoon", "all", 100000)]
-    if bank_order == harness_order:
-        return []
-    return [f"order skew at {i}: bank={b[:8]} harness={harness_order[i][:8] if i < len(harness_order) else '-'}"
-            for i, b in enumerate(bank_order)
-            if i >= len(harness_order) or harness_order[i] != b][:5]
 
 
 def main(argv: list[str] | None = None, embed=None) -> int:

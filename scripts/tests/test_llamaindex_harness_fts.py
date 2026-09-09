@@ -27,7 +27,7 @@ def test_single_token_has_no_fallback():
 
 
 def test_tokens_are_lowercased():
-    assert build_plan("Hello WORLD").expression == "hello AND world" or True  # 2 tokens -> AND
+    assert build_plan("Hello WORLD").expression == "hello AND world"  # 2 tokens -> AND
     assert build_plan("Hello").expression == "hello"
 
 
@@ -36,7 +36,7 @@ def test_stopword_only_yields_empty_plan():
     assert (plan.expression, plan.fallback, plan.token_count) == ("", None, 0)
 
 
-def test_reserved_only_yields_empty_plan_via_different_path():
+def test_reserved_only_yields_empty_plan():
     # 'and'/'or'/'not'/'near' are dropped BEFORE stopwords (rawTokens empty),
     # while stopword-only keeps rawTokens: both empty plans, different routes.
     plan = build_plan("and or not near")

@@ -169,8 +169,9 @@ def build_airaccoon_fn(server, session_id: str) -> object:
     searchLimit (5), and the scripts/src client predates the server's required
     sessionId argument (refused as invalid-argument without it). So this calls
     client._call_tool directly with per-query routing + uniform limit 8 +
-    memory kind + an explicit session id, otherwise the same settings-driven
-    shape (minRelativeScore 0.0); extraction reuses MCPClient._extract_results.
+    memory kind + the harness floor (minRelativeScore 0.6) + an explicit
+    session id, otherwise the same settings-driven shape; extraction reuses
+    MCPClient._extract_results.
     """
     from retrieval_tuning.mcp import MCPClient  # noqa: PLC0415 — needs scripts/src
 
@@ -183,8 +184,8 @@ def build_airaccoon_fn(server, session_id: str) -> object:
                 "query": entry["query"],
                 "scope": entry.get("targetScope") or "project",
                 "limit": EVAL_LIMIT,
-                "minRelativeScore": 0.0,
-                "kind": "memory",
+                "minRelativeScore": 0.6,  # the harness floor: both legs serve
+                "kind": "memory",      # the same post-floor, post-limit shape
                 "sessionId": session_id,
             })
             results = MCPClient._extract_results(parsed, kind="memory")
@@ -199,6 +200,23 @@ def build_airaccoon_fn(server, session_id: str) -> object:
             return {"hashes": [], "error": f"{type(exc).__name__}: {exc}"}
 
     return fn
+
+
+def eval_gate_failures(out: dict) -> list[str]:
+    """Fail-loud gates over a run_eval result (pure; main() exits nonzero)."""
+    failures = []
+    harness_errors = [r["id"] for r in out["rows"] if r["harness"].get("error")]
+    if harness_errors:
+        failures.append(
+            f"harness errors on {len(harness_errors)} queries: {harness_errors[:5]}")
+    prod_errors = [r["id"] for r in out["rows"] if r["airaccoon"].get("error")]
+    if prod_errors:
+        # A silent prod leg would publish harness-only numbers as a comparison.
+        failures.append(
+            f"ai-raccoon errors on {len(prod_errors)} queries: {prod_errors[:5]}")
+    if out.get("summary", {}).get("n_paired", 0) == 0:
+        failures.append("zero paired rows: no query scored on both systems")
+    return failures
 
 
 def missing_anchors(entries: list[dict], stored_ids: set) -> list:
@@ -257,9 +275,10 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         harness_fn.close()  # type: ignore[attr-defined]
 
-    harness_errors = [r["id"] for r in out["rows"] if r["harness"].get("error")]
-    if harness_errors:
-        print(f"FAIL: harness errors on {len(harness_errors)} queries: {harness_errors[:5]}")
+    failures = eval_gate_failures(out)
+    if failures:
+        for failure in failures:
+            print(f"FAIL: {failure}")
         return 1
     out["sessionId"] = session_id
     out["staleAnchors"] = stale_anchors

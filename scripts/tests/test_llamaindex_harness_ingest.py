@@ -121,6 +121,20 @@ def test_fts_parity_probe_matches_bank_bm25_order(tmp_path):
         handle.close()
 
 
+def test_fts_parity_probe_covers_nondefault_project_bucket(tmp_path):
+    # The ingest rule spans every project bucket, so the parity probe must too:
+    # a probe hitting a hermes-default row must compare against the bank's
+    # hermes leg, not silently drop it via the ai-raccoon-only filter.
+    copy = tmp_path / "copy.db"
+    _fixture_copy(copy)
+    store = tmp_path / "store"
+    handle = _run_ingest(copy, store)
+    try:
+        assert ingest.fts_parity_probe(copy, handle, probe="hermes") == []
+    finally:
+        handle.close()
+
+
 def test_null_metadata_coerced_and_searchable(tmp_path):
     copy = tmp_path / "copy.db"
     _fixture_copy(copy)

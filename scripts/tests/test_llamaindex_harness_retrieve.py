@@ -137,7 +137,9 @@ def test_served_shape_floor_and_order_over_corpus_queries(store):
 
 
 def test_limit_is_respected(store):
-    assert len(_retriever(store).retrieve("common token", limit=2)) <= 2
+    # Fixture serves f1/f2/f3 above the floor for 'common token': Take(2)
+    # pins the count exactly, not just the upper bound.
+    assert len(_retriever(store).retrieve("common token", limit=2)) == 2
 
 
 def test_no_match_query_serves_vector_only_without_error(store):
@@ -155,3 +157,10 @@ def test_shared_scope_searches_global_shared_tier(store):
     r = _retriever(store, scope="shared")
     served = r.retrieve("shared note")
     assert [n.node.node_id for n in served] == ["s1"]
+
+
+def test_nonfinite_distances_are_dropped_from_vector_hits():
+    # A NaN/inf Chroma distance must not become a served similarity.
+    got = retrieve._finite_hits(["a", "b", "c", "d"],
+                                [0.2, float("nan"), float("inf"), 0.5])
+    assert got == {"a": pytest.approx(0.8), "d": pytest.approx(0.5)}

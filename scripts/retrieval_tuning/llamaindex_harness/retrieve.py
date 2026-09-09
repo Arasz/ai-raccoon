@@ -14,6 +14,7 @@ model.get_query_embedding; tests pass a deterministic toy.
 from __future__ import annotations
 
 import hashlib
+import math
 from typing import Any, Optional
 
 from llama_index.core.base.base_retriever import BaseRetriever
@@ -62,6 +63,18 @@ def _chroma_where(project_id: str, scope: str) -> dict:
     return {"$or": [{"$and": [{"project_id": {"$eq": project_id}},
                               {"scope": {"$in": ["project", "custom"]}}]},
                     {"scope": {"$eq": "shared"}}]}
+
+
+def _finite_hits(ids: list[str], distances: list[float]) -> dict[str, float]:
+    """Chroma distances -> cosine similarities; non-finite entries are dropped.
+
+    A NaN/inf similarity would poison every downstream RRF sum and floor
+    comparison, so the leg filters them instead of serving them."""
+    out = {}
+    for h, d in zip(ids, distances):
+        if isinstance(d, (int, float)) and not isinstance(d, bool) and math.isfinite(d):
+            out[h] = 1.0 - d
+    return out
 
 
 class FusionRetriever(BaseRetriever):
@@ -117,11 +130,9 @@ class FusionRetriever(BaseRetriever):
             n_results=min(window, self._handle.structure.count() or 1) if
             self._handle.structure.count() else 1,
             where=where, include=["distances"])
-        content = {h: 1.0 - d for h, d in
-                   zip(content_hits["ids"][0], content_hits["distances"][0])} \
+        content = _finite_hits(content_hits["ids"][0], content_hits["distances"][0]) \
             if content_hits["ids"] else {}
-        struct = {h: 1.0 - d for h, d in
-                  zip(structure_hits["ids"][0], structure_hits["distances"][0])} \
+        struct = _finite_hits(structure_hits["ids"][0], structure_hits["distances"][0]) \
             if structure_hits["ids"] and self._handle.structure.count() else {}
         return fusion.structure_rank(content, struct, self._alpha, window)
 

@@ -243,6 +243,30 @@ jobs:
           path: dumps/
           if-no-files-found: ignore
 
+  scripts-harness:
+    # The only CI coverage for scripts/tests: the `changes.code` filter above
+    # matches dotnet/docs paths only, so the dotnet lanes skip scripts-only
+    # PRs (like the llamaindex harness). This job runs unconditionally (~1 min).
+    # Scope is the stdlib-runnable subset — fts, fusion, evaluate, report, slice
+    # (vec0 tests importorskip sqlite_vec). Heavy files (ingest, retrieve, cli)
+    # need chromadb/torch/llama-index and stay a documented local gate:
+    #   python3 -m pytest scripts/tests/test_llamaindex_harness_ingest.py \
+    #       scripts/tests/test_llamaindex_harness_retrieve.py \
+    #       scripts/tests/test_llamaindex_harness_cli.py -q
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Install stdlib-test deps
+        # pytest runs the suite; httpx is imported by scripts/src retrieval_tuning/mcp.py,
+        # which the evaluate seam test exercises through build_airaccoon_fn.
+        run: python3 -m pip install pytest httpx
+      - name: Stdlib-runnable harness tests
+        run: python3 -m pytest scripts/tests/test_llamaindex_harness_fts.py scripts/tests/test_llamaindex_harness_fusion.py scripts/tests/test_llamaindex_harness_evaluate.py scripts/tests/test_llamaindex_harness_report.py scripts/tests/test_llamaindex_harness_slice.py -q
+
   build-nightly-gates:
     # Q2 (delta review fix plan, owner flag O1): nothing ran Speed=Nightly against a PR head.
     # This job runs only the Nightly-tagged tests, with no triage script, and

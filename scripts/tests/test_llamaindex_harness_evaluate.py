@@ -116,6 +116,8 @@ def test_airaccoon_fn_sends_session_id_and_extracts_hashes():
     assert name == "memory_search"
     assert args["sessionId"] == "sess-1"
     assert args["limit"] == 8 and args["kind"] == "memory"
+    # Prod leg serves the same post-floor shape as the harness leg (floor 0.6).
+    assert args["minRelativeScore"] == pytest.approx(0.6)
 
 
 def test_missing_anchors_listed():
@@ -143,4 +145,36 @@ def test_run_eval_shape_is_n_rows_by_two_systems():
         assert row["harness"]["hit"] == 1 and row["airaccoon"]["hit"] == 0
     assert out["summary"]["harness"]["hit_rate"] == pytest.approx(1.0)
     assert out["summary"]["airaccoon"]["hit_rate"] == pytest.approx(0.0)
-    assert out["summary"]["contingency"] == {"a": 0, "b": 2, "c": 0, "d": 0}
+
+
+def test_clean_eval_passes_the_gate():
+    entries = [_entry(1)]
+    out = evaluate.run_eval(entries,
+                            lambda e: {"hashes": [e["expectedHash"]]},
+                            lambda e: {"hashes": [e["expectedHash"]]})
+    assert evaluate.eval_gate_failures(out) == []
+
+
+def test_all_prod_errors_fail_the_gate():
+    # Every ai-raccoon leg erroring must fail the gate: otherwise a run
+    # with a dead prod leg would publish harness-only numbers as a comparison.
+    entries = [_entry(1), _entry(2)]
+    out = evaluate.run_eval(entries,
+                            lambda e: {"hashes": [e["expectedHash"]]},
+                            lambda e: {"hashes": [], "error": "ConnectionError: refused"})
+    failures = evaluate.eval_gate_failures(out)
+    assert any("ai-raccoon errors on 2 queries" in f for f in failures)
+    assert any("zero paired rows" in f for f in failures)
+
+
+def test_harness_errors_still_fail_the_gate():
+    entries = [_entry(1)]
+    out = evaluate.run_eval(entries,
+                            lambda e: {"hashes": [], "error": "IndexError: boom"},
+                            lambda e: {"hashes": [e["expectedHash"]]})
+    failures = evaluate.eval_gate_failures(out)
+    assert any("harness errors on 1 queries" in f for f in failures)
+    # Error rows are excluded from pairing, so a harness error also empties
+    # the contingency and trips the zero-paired gate.
+    assert out["summary"]["contingency"] == {"a": 0, "b": 0, "c": 0, "d": 0}
+    assert any("zero paired rows" in f for f in failures)
