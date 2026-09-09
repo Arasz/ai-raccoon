@@ -9,10 +9,14 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **179** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **175** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
+
+(Remeasured 2026-09-09, air-remove-stdio-full-server-mode: **175** — the `AppRunner.cs`
+10-12 block (`DirectRunAsync` log lines) and the `McpServerSetup.cs` 30 row went away with
+the stdio full-server host and the `CreateAppHost`/`McpServerSetup.Log` deletion.)
 
 Worth recording why this doc exists at all: colliding ids compile, log, and pass every
 assertion that isn't specifically checking for the collision — a duplicate is invisible
@@ -27,10 +31,8 @@ One block per source file that owns a `Log` class or equivalent:
 
 | Ids | File |
 |---|---|
-| 10-12 | `src/AiRaccoon/AppRunner.cs` (corrected 2026-08-16: this block said `Program.cs`, which is a four-line shim; the `[LoggerMessage]` methods are and were in `AppRunner.cs`) |
 | 13-14 | `src/AiRaccoon/Observability/BankEngineReporter.cs` (added 2026-08-15: the startup line naming the running binary against the bank's embedding engine, WP3 step 5) |
 | 20 | `src/AiRaccoon/Setup/Extensions/HostExtensions.cs` |
-| 30 | `src/AiRaccoon/Setup/McpServerSetup.cs` |
 | 40-41 | `src/AiRaccoon/Setup/Models/EmbeddingAvailability.cs` |
 | 100-103 | `src/AiRaccoon.Infrastructure/Sync/SyncService.cs` (101-103 added 2026-08-22: the remote-blob HMAC authenticity check, docs/work/2026-08-21-delta-review-fix-plan.md S2 — 101 skips the push-side tag for an unencrypted bank, 102 skips the pull-side check for the same reason, 103 warns on a legacy remote blob with no tag) |
 | 200-202 | `src/AiRaccoon.Infrastructure/Sync/S3CloudStore.cs` |
