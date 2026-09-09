@@ -1,6 +1,30 @@
 {
   "completedTasks": [
     {
+      "id": "air-promotion-scorer-rebalance-tdd-adr",
+      "title": "Promotion scorer rebalance (ablation pair) with ADR-0095, TDD",
+      "pr": 598,
+      "merged": true,
+      "date": "2026-09-04",
+      "summary": "Architect plan -> code-reviewer plan review (7 MUSTs, cut to ablation pair) -> dotnet-engineer impl TDD (9 tests, red witnessed per batch) -> code-reviewer APPROVE + test-engineer APPROVE-WITH-CHANGES (gate pinned at 0.6 edge). Merged as 3cc35769. P3 post-merge: partial ablation on v1-subset n=53 (directionless, parity green), recorded in ADR-0095 + report; follow-up docs PR #599. Round-3 splits still absent."
+    },
+    {
+      "id": "doctor-feature-match-cont",
+      "title": "follow-ups: refuse model reset during open migration (exit 25); complete the 1.36.0 checklist; derive the doctor exit table",
+      "pr": 593,
+      "merged": true,
+      "date": "2026-08-26",
+      "summary": "Plan -> 2-lane review -> brief -> impl (4 WPs, TDD, 2 RED witnesses) -> QA review (SHIP-AFTER-FIXES; 2 MAJOR checklist-SQL fixes landed). Guard in SettingsEndpoint.MapDelete (409 + frozen message verbatim, exit 25, embedding-set stays 15); 12-row manual checklist; HowToExitTableTests + HowToSettingsExitTableTests derive gates; 1.36.1. Fast 3375/0; guard gate 8/8; derive gate 4/4; VC 7/7; CI green; live E2E exit 25 verified."
+    },
+    {
+      "id": "doctor-feature-match",
+      "title": "doctor reports the memory embedding engine + migration verdict (exit 24); the embed relay's migration drain logs (1008-1013)",
+      "pr": 591,
+      "merged": true,
+      "date": "2026-08-26",
+      "summary": "MoE plan (4 lanes) -> 3-expert review -> integrated brief -> 2 parallel implementation lanes. Shared CorpusEngineProbe/State/Lines (AiRaccoon.Setup.Diagnostics) keyed on EmbedCorpus; EmbedDrainReporter takes the whole 1002-1007 block, adds 1008-1013; exit 24 only from the Healthy arm. Evidence bundle of the stuck bank captured pre-drain; 1GB blob kept out of history. Fast 3368/0, doctor 38/0, evtid 5/0, VC 7/0, CI green, merged by owner."
+    },
+    {
       "id": "migrate-tests-to-mcp",
       "title": "Migrate tests to Microsoft Testing Platform + xunit 4.0.0 (jsaa guide); retry for all slow/E2E/integration tests",
       "pr": 589,

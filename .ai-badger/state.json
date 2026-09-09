@@ -1,8 +1,26 @@
 {
-  "lastUpdated": "2026-09-08T21:40:00+02:00",
+  "lastUpdated": "2026-09-09T16:52:00+02:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-remove-stdio-full-server-mode",
+      "summary": "Removed stdio full-server mode (D2(b) also bare-http): bare=proxy-only, serve sole server; keep-enum 9+hint, Https shrink, 1.42.0, ADR-0104. PR #627 merged.",
+      "pr": 627,
+      "merged": true,
+      "date": "2026-09-09",
+      "hasNotes": true
+    },
+    {
+      "id": "air-threshold-filter-corpus-committee-eval",
+      "summary": "Closed unfinished per owner order 2026-09-09 to unblock the duplicate-server task; no merge record.",
+      "hasNotes": false
+    },
+    {
+      "id": "air-llamaindex-chroma-fusion-retrieval-harness",
+      "summary": "Closed unfinished per owner order 2026-09-09 to unblock the duplicate-server task; no merge record.",
+      "hasNotes": false
+    },
     {
       "id": "air-mmr-leg-level-poc-branch",
       "summary": "Leg-level MMR PoC branch + 4-cell eval: rho=0.1 vandalizes ours 29->11, python neutral",
@@ -36,33 +54,9 @@
       "merged": true,
       "date": "2026-09-05",
       "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
-    },
-    {
-      "id": "air-promotion-scorer-rebalance-tdd-adr",
-      "title": "Promotion scorer rebalance (ablation pair) with ADR-0095, TDD",
-      "pr": 598,
-      "merged": true,
-      "date": "2026-09-04",
-      "summary": "Architect plan -> code-reviewer plan review (7 MUSTs, cut to ablation pair) -> dotnet-engineer impl TDD (9 tests, red witnessed per batch) -> code-reviewer APPROVE + test-engineer APPROVE-WITH-CHANGES (gate pinned at 0.6 edge). Merged as 3cc35769. P3 post-merge: partial ablation on v1-subset n=53 (directionless, parity green), recorded in ADR-0095 + report; follow-up docs PR #599. Round-3 splits still absent."
-    },
-    {
-      "id": "doctor-feature-match-cont",
-      "title": "follow-ups: refuse model reset during open migration (exit 25); complete the 1.36.0 checklist; derive the doctor exit table",
-      "pr": 593,
-      "merged": true,
-      "date": "2026-08-26",
-      "summary": "Plan -> 2-lane review -> brief -> impl (4 WPs, TDD, 2 RED witnesses) -> QA review (SHIP-AFTER-FIXES; 2 MAJOR checklist-SQL fixes landed). Guard in SettingsEndpoint.MapDelete (409 + frozen message verbatim, exit 25, embedding-set stays 15); 12-row manual checklist; HowToExitTableTests + HowToSettingsExitTableTests derive gates; 1.36.1. Fast 3375/0; guard gate 8/8; derive gate 4/4; VC 7/7; CI green; live E2E exit 25 verified."
-    },
-    {
-      "id": "doctor-feature-match",
-      "title": "doctor reports the memory embedding engine + migration verdict (exit 24); the embed relay's migration drain logs (1008-1013)",
-      "pr": 591,
-      "merged": true,
-      "date": "2026-08-26",
-      "summary": "MoE plan (4 lanes) -> 3-expert review -> integrated brief -> 2 parallel implementation lanes. Shared CorpusEngineProbe/State/Lines (AiRaccoon.Setup.Diagnostics) keyed on EmbedCorpus; EmbedDrainReporter takes the whole 1002-1007 block, adds 1008-1013; exit 24 only from the Healthy arm. Evidence bundle of the stuck bank captured pre-drain; 1GB blob kept out of history. Fast 3368/0, doctor 38/0, evtid 5/0, VC 7/0, CI green, merged by owner."
     }
   ],
-  "next": "1.41.0 release flow (owner): tag v1.41.0 via release.yml, publish.yml dispatch + approval gate (1.40.x tools refuse v14 banks until it publishes), then the full manual checklist on the published build; then prove the task GOAL on the live bank with 1.41.0 (one --apply converges the 6 stuck folds). Still open from 1.39.0: map-less dry-run attribution UX call for the owner (non-defect).",
+  "next": "1.42.0 release flow (owner): tag v1.42.0 via release.yml, publish, then verify installable from feed and ping pi session 01a08579-8717-76ae-9f66-9641d9786807 1:1 (RAG re-enable + publish + instance census chain, bus rows 772/779/791). CliBankWrite repair-apply nightly red is pre-existing (proven identical on clean main) -> quick task next.",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
