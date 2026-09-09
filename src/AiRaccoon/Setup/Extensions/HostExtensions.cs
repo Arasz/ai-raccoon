@@ -14,7 +14,7 @@ public static partial class HostExtensions
         public async Task<int> RunAsync(ServerConfig config, CancellationToken cancellationToken = default)
         {
             await host.StartAsync(cancellationToken);
-            if (config.Transport == McpTransport.Http && host is WebApplication web)
+            if (host is WebApplication web)
             {
                 var urls = string.Join(", ", web.Urls.Select(url => $"{url.TrimEnd('/')}/mcp"));
                 Log.HttpTransportListening(web.Logger, urls);

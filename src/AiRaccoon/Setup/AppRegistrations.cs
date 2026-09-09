@@ -68,7 +68,7 @@ public static partial class AppRegistrations
             services.RegisterStores();
         }
 
-        public void RegisterMemoryServices(InfrastructureOptions options, IReadOnlyCollection<McpTransport> mcpTransport)
+        public void RegisterMemoryServices(InfrastructureOptions options)
         {
             services.RegisterEmbedDrainServices();
             services.RegisterPromotionQueue();
@@ -79,7 +79,7 @@ public static partial class AppRegistrations
             services.RegisterAccessGuardServices();
             services.RegisterObservabilityServices();
             services.RegisterExtractionServices();
-            services.RegisterLongLivedBackgroundServices(mcpTransport);
+            services.RegisterLongLivedBackgroundServices();
             services.RegisterBankMaintenanceBackgrounbdService();
             services.RegisterMetricsServices();
         }
@@ -391,14 +391,9 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<ICodeEmbedder, CodeEmbedder>();
         }
 
-        /// <summary>Loops that only pay off in a long-lived host; a pure-stdio process is per-connection and recycled.</summary>
-        private void RegisterLongLivedBackgroundServices(IReadOnlyCollection<McpTransport> mcpTransport)
+        /// <summary>Background loops for the long-lived web host — the sole surviving host shape, so always registered.</summary>
+        private void RegisterLongLivedBackgroundServices()
         {
-            if (!IsLongLivedHost(mcpTransport))
-            {
-                return;
-            }
-
             services.AddHostedService<ExtractionHostedService>();
             services.AddHostedService<SweepHostedService>();
         }
@@ -444,9 +439,6 @@ public static partial class AppRegistrations
             services.AddSingleton<IEncryptionKeyResolver>(sp => new EncryptionKeyResolver(sp.GetRequiredService<IEncryptionSourceSidecar>(), [.. sp.GetServices<IEncryptionKeyProvider>()]));
         }
     }
-
-    /// <summary>Transport that keeps the process alive past one client connection (HTTP/S).</summary>
-    private static bool IsLongLivedHost(IReadOnlyCollection<McpTransport> mcpTransport) => mcpTransport.Contains(McpTransport.Http) || mcpTransport.Contains(McpTransport.Https);
 
     private static partial class Log
     {
