@@ -120,6 +120,7 @@ no status exemption — and it becomes frozen only when it reaches `Accepted`.
 | [0101 — Repair verdicts ignore telemetry; open workspaces block](0101-repair-verdicts-ignore-telemetry-workspaces-block.md) | `AttachmentCount` excludes metrics/noise (re-keyed on fold); metrics-only ids pin telemetry-only; workspaces never move and block folds and retires. |
 | [0102 — The applied alias map persists; P3 refuses drops and folds through aliases](0102-durable-alias-map-with-p3-enforcement.md) | `project_id_aliases` v14, append-only, persist-before-finish; ToolGate refuses dropped / folds alias losers through; sync pull arm with fail-closed conflicts; job/startup/sync reload legs. Amends ADR-0099's no-new-table position. |
 | [0103 — One repair invocation runs until fixed, then says so falsifiably](0103-run-until-fixed-loop-with-falsifiable-verdict.md) | Bounded derive→apply→poll loop (10 passes / 10 min) with measured converged/pinned-only/stuck/writers-active stops; formal D6 fully-fixed predicate and summary grammar; CLI stays read-and-request-only. |
+| [0104 — Remove the stdio full-server mode](0104-remove-the-stdio-full-server-mode.md) | Bare launches always proxy and `serve` is the sole full server: the `stdio` value fails at parse (9+hint bare, 15 on verbs), `https` is rejected, bare `http` proxies; hermes and scripts move to the temp-port proxy recipe; compat floors are the removal release forward and 1.6.0 back |
 
 ## Numbers never used
 

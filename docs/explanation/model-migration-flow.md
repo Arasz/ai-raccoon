@@ -19,8 +19,9 @@ Three reasons it cannot be an in-process flag:
 
 1. **It must survive a crash.** That is the outbox's entire purpose; a flag dies with the process
    that set it.
-2. **More than one server process can exist.** ADR-0020 keeps a `--transport stdio` escape hatch, so
-   a flag in one process would not see a migration started by another.
+2. **More than one server process can exist.** A proxy-started backend and a manual
+   `serve` can hold the same bank from two processes at once, so a flag in one
+   process would not see a migration started by another.
 3. **A stale *"no migration open"* is the dangerous direction.** It serves searches against a
    half-migrated bank — precisely the silent degradation ADR-0076 exists to prevent. A stale *"yes"*
    merely refuses, which is recoverable and visible.

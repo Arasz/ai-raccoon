@@ -21,8 +21,8 @@ ai-raccoon encryption show
 
 The rekey needs exclusive access to the bank file — `PRAGMA rekey` drains the
 connection pool and rewrites every page. The MCP server must not be holding the bank
-open while you run it. Stop any running `ai-raccoon serve` process (or disconnect the
-stdio client) first.
+open while you run it. Stop any running `ai-raccoon serve` process (or disconnect every
+client, so the proxy-started backend can go idle) first.
 
 This is why the migration is a separate, explicit command rather than something that
 runs automatically on open: opening the bank while it is still on the old derivation
