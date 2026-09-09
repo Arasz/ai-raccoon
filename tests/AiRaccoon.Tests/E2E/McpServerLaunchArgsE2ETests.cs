@@ -14,8 +14,8 @@ using AiRaccoon.Tests.TestHelpers;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Proves the launch-identity flags end-to-end: --install-scope=project (injected via the
-///     factory's UseSetting, mirroring the real entry point's arg) makes the server build the
+///     Proves the launch-identity flags end-to-end: --install-scope=project (the factory's
+///     InstallScope ctor arg, mirroring the real entry point's flag) makes the server build the
 ///     bank for the project scope, not via env vars. Plus the removal gate (T8) and the
 ///     proxy-child full-surface oracle (T9): no in-process server exists anymore.
 /// </summary>
@@ -64,8 +64,9 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
 
     /// <summary>
     ///     T8 — the removal gate: --transport stdio is rejected with the ruled hint (exit 9) and
-    ///     starts nothing — no listener on the passed port, no fallback onto the default 7721,
-    ///     no bank, no token, nothing on stdout (drained pipes).
+    ///     starts nothing — no listener on the passed port, no bank, no token, nothing on stdout
+    ///     (drained pipes). No default-port probe: an always-on dev backend may legitimately hold
+    ///     7721, so that clause failed off the product's own behavior.
     /// </summary>
     [RetryFact]
     public async Task RemovedStdioTransport_IsRejectedWithHint_AndStartsNothing()
@@ -73,10 +74,6 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
         var dataRoot = TestData.CreateTempRoot("removed-stdio");
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
-        // A live server may own the default port on a dev box (the always-on backend): hold it
-        // when it is free so the fallback probe below is deterministic; when it is held, that
-        // probe is skipped — the dead-on-parse spawn below cannot have bound it either way.
-        using var defaultPort = LoopbackPort.TryOccupy(7721);
         try
         {
             lease.ReleaseForBind();
@@ -92,11 +89,6 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
             run.Stdout.ShouldBeEmpty();
             (await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken))
                 .ShouldBeFalse();
-            if (defaultPort is not null)
-            {
-                (await TestData.CreateServerProbe().RespondsAsync(7721, TestContext.Current.CancellationToken))
-                    .ShouldBeFalse();
-            }
 
             File.Exists(Path.Combine(dataRoot, "memory.db")).ShouldBeFalse();
             File.Exists(Path.Combine(dataRoot, McpTokenFile.FileName)).ShouldBeFalse();
