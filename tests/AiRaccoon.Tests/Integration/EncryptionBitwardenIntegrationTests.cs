@@ -509,10 +509,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     [RetryFact]
     public async Task Startup_BwsMissing_ServeExits2WithoutBinding()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return; // the child launches a shell-based fake; the PATH override is unix-shaped
-        }
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the child launches a shell-based fake; the PATH override is unix-shaped");
 
         WriteSidecar();
         var emptyPathDir = Path.Combine(_dataRoot, "empty-path");
@@ -541,10 +538,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     [RetryFact]
     public async Task Startup_WrongKey_ServeExits2LeavingTheBankUntouched()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return; // the child launches a shell-based fake; the PATH override is unix-shaped
-        }
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the child launches a shell-based fake; the PATH override is unix-shaped");
 
         InstallFakeBws();
         // Bank keyed with a passphrase absent from the child's environment; the sidecar routes the child's
