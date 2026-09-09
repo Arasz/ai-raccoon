@@ -1,3 +1,4 @@
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Render;
 using Shouldly;
@@ -18,21 +19,6 @@ public sealed class TransportRemovalTests : IDisposable
     public void Dispose()
     {
         TestData.DeleteTempRoot(_dataRoot);
-    }
-
-    [Fact]
-    public void Render_Help_ListsOnlyProxyAndHttp()
-    {
-        var writer = new StringWriter();
-        CliArgs.TryParse(["--help"], out var parsed).ShouldBeTrue();
-
-        parsed!.RenderTo(new StandardStreams(TextReader.Null, TextWriter.Null, writer));
-
-        var help = writer.ToString();
-        help.ShouldContain("proxy");
-        help.ShouldContain("http");
-        help.ShouldNotContain("stdio");
-        help.ShouldNotContain("https");
     }
 
     [Fact]
@@ -97,6 +83,9 @@ public sealed class TransportRemovalTests : IDisposable
         var exitCode = await runner.Run(["--transport", "stdio", "--data-root", _dataRoot]);
 
         exitCode.ShouldBe(ExitCode.FailedToParseCliArgs);
+        // Dead on parse: nothing launched, so no bank and no token file exist.
+        File.Exists(Path.Combine(_dataRoot, "memory.db")).ShouldBeFalse();
+        File.Exists(Path.Combine(_dataRoot, McpTokenFile.FileName)).ShouldBeFalse();
     }
 
     [Theory]

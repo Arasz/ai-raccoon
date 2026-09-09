@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Settings;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
@@ -35,5 +36,8 @@ public sealed class AppRunnerProxyRoutingTests : IDisposable
         // Secondary observable: the proxy path wires shutdown-signal cancellation; a launch that
         // returned early (parse failure, help, a verb) would leave this at zero.
         runner.ShutdownCancellationRegistrations.ShouldBe(1);
+        // The failed proxy started nothing: no bank, no token file under the data root.
+        File.Exists(Path.Combine(_dataRoot, "memory.db")).ShouldBeFalse();
+        File.Exists(Path.Combine(_dataRoot, McpTokenFile.FileName)).ShouldBeFalse();
     }
 }
