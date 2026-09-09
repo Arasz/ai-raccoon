@@ -113,7 +113,8 @@ def open_copy_readonly(copy_path: str) -> sqlite3.Connection:
     return conn
 
 
-def load_rows(copy_path: str, buckets: tuple[str, ...] | list[str]) -> tuple[list[dict], int]:
+def load_rows(copy_path: str, buckets: tuple[str, ...] | list[str]
+              ) -> tuple[list[dict], int, list[str]]:
     """All harness rows from a bank copy: resolved buckets + global shared tier.
 
     buckets comes from scopes.resolve_buckets (explicit --buckets or corpus
@@ -138,11 +139,37 @@ def load_rows(copy_path: str, buckets: tuple[str, ...] | list[str]) -> tuple[lis
     keys = ("hash", "path", "value", "scope", "project_id", "source_file",
             "section", "heading_path", "chunk_index", "total_chunks")
     docs = [dict(zip(keys, row)) for row in rows]
-    hashes = [d["hash"] for d in docs]
-    if len(set(hashes)) != len(hashes):
-        dupes = sorted({h for h in hashes if hashes.count(h) > 1})
-        raise ValueError(f"duplicate hashes in ingest set (Chroma ids must be unique): {dupes[:5]}")
-    return docs, copy_entries
+    kept, dropped = dedupe_rows(docs)
+    return kept, copy_entries, dropped
+
+
+def dedupe_rows(rows: list[dict]) -> tuple[list[dict], list[str]]:
+    """Multi-home dedupe: one Chroma id per hash (first-by-id wins).
+
+    The bank multi-homes identical rows under several projects (measured:
+    1 hash under hermes-default/project + jsaa/project, byte-identical).
+    Same values collapse to the lowest-id row and the drop is audited;
+    DIFFERING values under one hash are corruption — still fail loud, since
+    serving either silently would poison the store. Rows must arrive id-
+    ordered (load_rows ORDERs BY id) for the win to be deterministic."""
+    first_at: dict[str, int] = {}
+    by_hash: dict[str, list[dict]] = {}
+    for i, row in enumerate(rows):
+        first_at.setdefault(row["hash"], i)
+        by_hash.setdefault(row["hash"], []).append(row)
+    kept, dropped = [], []
+    for hash_, group in by_hash.items():
+        if len(group) == 1:
+            kept.append(group[0])
+        elif all(g["value"] == group[0]["value"] for g in group):
+            kept.append(group[0])
+            dropped.append(hash_)
+        else:
+            raise ValueError(
+                "duplicate hashes with differing values in ingest set "
+                f"(Chroma ids must be unique, either row would lie): {[hash_]}")
+    kept.sort(key=lambda r: first_at[r["hash"]])  # restore id order
+    return kept, sorted(dropped)
 
 
 def coerce_row(row: dict) -> dict:
@@ -299,7 +326,8 @@ def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
                 excluded: list[dict] | None = None,
                 corpus_name: str | None = None,
                 corpus_snapshot: str | None = None,
-                model_info: dict | None = None) -> StoreHandle:
+                model_info: dict | None = None,
+                dupes_dropped: int = 0) -> StoreHandle:
     """Idempotent build: upsert current ids, delete stale ids, rewrite params.json."""
     store_dir.mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=str(store_dir / "chroma"))
@@ -348,6 +376,7 @@ def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
     model_info = model_info or {"revision": "test-seam", "bytes": 0}
     params["modelRevision"] = model_info["revision"]
     params["modelBytes"] = model_info["bytes"]
+    params["dupesDropped"] = dupes_dropped
     params["counts"] = {
         "rows": len(docs),
         "content": content.count(),
@@ -509,7 +538,10 @@ def main(argv: list[str] | None = None, embed=None) -> int:
         header, _ = scopes.load_corpus(args.corpus)
         corpus_name = Path(args.corpus).name
         corpus_snapshot = (header or {}).get("snapshotSha256")
-    rows, copy_entries = load_rows(args.copy, buckets)
+    rows, copy_entries, dupes_dropped = load_rows(args.copy, buckets)
+    if dupes_dropped:
+        print(f"deduped: {len(dupes_dropped)} multi-homed hashes (first-by-id wins): "
+              f"{[h[:12] for h in dupes_dropped[:5]]}", flush=True)
     docs = to_documents(rows)
     if embed is not None:
         embed_fn = embed  # test seam: (texts) -> vectors
@@ -528,7 +560,7 @@ def main(argv: list[str] | None = None, embed=None) -> int:
     handle = build_store(store_dir, docs, rows, embed_fn, copy_entries, args.embed_batch_size,
                          progress_every=10, buckets=buckets, excluded=excluded,
                          corpus_name=corpus_name, corpus_snapshot=corpus_snapshot,
-                         model_info=model_info)
+                         model_info=model_info, dupes_dropped=len(dupes_dropped))
     problems = verify_store(args.copy, handle, buckets)
     fts_diff = fts_parity_probe(args.copy, handle, probe="memory", buckets=buckets)
     handle.close()

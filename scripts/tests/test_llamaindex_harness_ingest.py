@@ -334,8 +334,9 @@ def test_corpus_buckets_covered_or_excluded():
 def test_third_bucket_rows_ingested_not_silent(tmp_path):
     copy = tmp_path / "copy.db"
     _third_bucket_copy(copy)
-    rows, _ = ingest.load_rows(str(copy), ("ai-raccoon", "hermes-default", "jsaa"))
+    rows, _, dupes = ingest.load_rows(str(copy), ("ai-raccoon", "hermes-default", "jsaa"))
     assert "h6" in {r["hash"] for r in rows}
+    assert dupes == []
 
 
 def test_fts_parity_probe_covers_third_bucket(tmp_path):
@@ -417,3 +418,37 @@ def test_pinned_revision_mismatch_fails_loud():
     with pytest.raises(ValueError, match="[Pp]inned"):
         ingest.check_pinned_revision("00" * 20)
     ingest.check_pinned_revision(ingest.PINNED_MODEL_REVISION)  # must not raise
+
+
+def _dupe_copy(path: Path, second_value: str | None = None):
+    """Two-bucket fixture plus the same hash in a third bucket (multi-homed row)."""
+    _fixture_copy(path)
+    conn = sqlite3.connect(path)
+    base = conn.execute("SELECT path, value FROM entries WHERE hash='h1'").fetchone()
+    conn.execute(
+        "INSERT INTO entries (hash, path, value, scope, project_id, source_file,"
+        " section, heading_path, chunk_index, total_chunks) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("h1", base[0], base[1] if second_value is None else second_value,
+         "project", "jsaa", "docs:alpha.md", "context", "Alpha", 0, 2))
+    conn.commit()
+    conn.close()
+
+
+def test_duplicate_hash_same_value_keeps_first_by_id(tmp_path):
+    # Multi-homed rows exist in the bank (same hash+value under two projects);
+    # Chroma ids must be unique, so first-by-id wins and the drop is audited.
+    copy = tmp_path / "copy.db"
+    _dupe_copy(copy)
+    rows, _, dupes = ingest.load_rows(
+        str(copy), ("ai-raccoon", "hermes-default", "jsaa"))
+    assert [r["project_id"] for r in rows if r["hash"] == "h1"] == ["ai-raccoon"]
+    assert dupes == ["h1"]
+
+
+def test_duplicate_hash_differing_values_fails_loud(tmp_path):
+    # Same hash, different bytes: data corruption — serving either silently
+    # would poison the store, so the ingest refuses.
+    copy = tmp_path / "copy.db"
+    _dupe_copy(copy, second_value="tampered bytes under a reused hash")
+    with pytest.raises(ValueError, match="duplicate hashes"):
+        ingest.load_rows(str(copy), ("ai-raccoon", "hermes-default", "jsaa"))
