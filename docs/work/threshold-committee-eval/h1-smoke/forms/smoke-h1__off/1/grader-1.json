@@ -1,0 +1,18 @@
+{
+  "slotId": "smoke-h1__off",
+  "queryId": "smoke-h1",
+  "arm": "off",
+  "chunks": [
+    {
+      "hash": "smoke-hash-1",
+      "grade": "A",
+      "reason": "Chunk states SQLite via sqlite-memory backs the bank."
+    },
+    {
+      "hash": "smoke-hash-2",
+      "grade": "0",
+      "reason": "Chunk describes Hermes gateway routing, not storage engine."
+    }
+  ],
+  "overall": "Only the first chunk answers the storage engine query."
+}

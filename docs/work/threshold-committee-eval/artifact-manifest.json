@@ -1,0 +1,79 @@
+{
+ "artifacts": [
+  {
+   "path": "arm-off.json",
+   "bytes": 681080,
+   "sha256": "ced32dd0a8a6a2947796fcc282546986d944081314d8d752ffc721ca8fa1be63"
+  },
+  {
+   "path": "arm-off.stderr",
+   "bytes": 47800,
+   "sha256": "9ad36a0ec4faef36ab7569df56fe81bedd18e02061feefefe613b79be8b66385"
+  },
+  {
+   "path": "arm-threshold.json",
+   "bytes": 681417,
+   "sha256": "c63fbdb8dcb2ebef3e0e06968f6b94d499c5474531c26d6d4f360d1f0a4f21b4"
+  },
+  {
+   "path": "arm-threshold.stderr",
+   "bytes": 54107,
+   "sha256": "58978aad41f9923e64a0b30972747765689647e27c549256120fcaa9b32763e3"
+  },
+  {
+   "path": "corpus-regenerated.json",
+   "bytes": 128075,
+   "sha256": "b024b10e1b75a28b4bfa4c47a12757107f419385649f471eb5a45a966e283887"
+  },
+  {
+   "path": "fixtures/metrics-fixture.json",
+   "bytes": 41875,
+   "sha256": "94a7c984975c0c17eabe12e3ff6c52eaf44aa6f7f221731984fb07dd82687185"
+  },
+  {
+   "path": "h1-smoke/forms/smoke-h1__off/1/grader-1.json",
+   "bytes": 438,
+   "sha256": "6386215ef9ace078c46a9cf1c0ad3d5c374a05d4423aa7f9e3285a67251339c9"
+  },
+  {
+   "path": "h1-smoke/forms/smoke-h1__off/1/grader-1.payload.txt",
+   "bytes": 973,
+   "sha256": "7f4a486b6fa1975061ac78147db72e2380dc2965662185d5e5bb3bd36a446a49"
+  },
+  {
+   "path": "h1-smoke/forms/smoke-h1__off/1/grader-2.json",
+   "bytes": 475,
+   "sha256": "3866474371f3c8e977c13aa7f98cd6fd8119481d91e7f044e6fdcd1e58898a28"
+  },
+  {
+   "path": "h1-smoke/forms/smoke-h1__off/1/grader-2.payload.txt",
+   "bytes": 973,
+   "sha256": "99b09974e894fc9b4caf80fef5d7347553030cddc52eb859fc8379628cf3fbe5"
+  },
+  {
+   "path": "h1-smoke/forms/smoke-h1__off/1/grader-3.invalid.txt",
+   "bytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "path": "h1-smoke/forms/smoke-h1__off/1/grader-3.payload.txt",
+   "bytes": 973,
+   "sha256": "5fa59ca9417340f210af76f55d9c9555d00f28c01112c3c6a5ac9d62c1170634"
+  },
+  {
+   "path": "h1-smoke/forms-manifest.json",
+   "bytes": 1506,
+   "sha256": "b305ca98aff58cd43d1a35f72f529940b65732ea22c38a620bd21da87f638510"
+  },
+  {
+   "path": "metrics.json",
+   "bytes": 50694,
+   "sha256": "cef13a5f3f47ae5c13b9e164150f5eaaa9e34e542da15e3092a0c798d6168879"
+  },
+  {
+   "path": "run-metadata.json",
+   "bytes": 1736,
+   "sha256": "f0a29e620c4d1ce3733fa2aea20ade85705168d0d621dd9810f2dfefedce4904"
+  }
+ ]
+}
