@@ -34,12 +34,11 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 
 | Surface                    | What it does                                                                                                                                                                            | Who controls the input                        |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|
-| proxy transport (default)  | Reads MCP JSON-RPC from the client's stdin and forwards every message to one `ai-raccoon serve` backend over loopback HTTP, starting it if none is listening (ADR-0020). Opens no bank, holds no key, runs no tool | The MCP client that launched the process      |
-| stdio transport (`--transport stdio`) | Reads MCP JSON-RPC from the client's stdin, writes protocol messages to stdout, logs to stderr. A complete in-process server — the escape hatch when the backend cannot start           | The MCP client that launched the process      |
+| proxy transport (default)  | Reads MCP JSON-RPC from the client's stdin and forwards every message to one `ai-raccoon serve` backend over loopback HTTP, starting it if none is listening (ADR-0020). Opens no bank, holds no key, runs no tool. The only stdio shape left is this proxy wire: the `stdio` transport value was removed outright (ADR-0104) | The MCP client that launched the process      |
 | `serve` HTTP endpoint (autostarted) | Serves MCP over Streamable HTTP at `/mcp` on `localhost`. **Guarded by a loopback token** read from `<data-root>/mcp-token` (0600), presented as `X-AiRaccoon-Token` or `Authorization: Bearer`; on the default **proxy path** the proxy supplies it itself, so no client config carries a secret there — a client connected **directly** to this endpoint, bypassing the proxy, does carry one (e.g. in `~/.claude.json` or `~/.hermes/.env`) | Any local process that can read the token file |
-| HTTP transport (`--transport http`, manual) | The same endpoint started directly rather than through `serve`. **Ungated** — see below                                                                                       | Any process that can reach the listening port |
+| bare `--transport http` | Parses but launches the proxy like any bare run (ADR-0104). There is no ungated direct launch anymore | The MCP client that launched the process |
 | `/observability` endpoint (HTTP mode) | Returns the server's PID, binary version and OTLP export state on the same loopback port as `/mcp`                                                                          | Any process that can reach the listening port |
-| `/shutdown` endpoint (`serve` only) | Stops the server gracefully for `serve --restart` (ADR-0022). POST only, **guarded by the same loopback token as `/mcp`**, and mapped only when a token exists — an ungated `--transport http` host has no such endpoint | Any local process that can read the token file |
+| `/shutdown` endpoint (`serve` only) | Stops the server gracefully for `serve --restart` (ADR-0022). POST only, **guarded by the same loopback token as `/mcp`**, and mapped only on token-gated `serve` hosts | Any local process that can read the token file |
 | OTLP export (opt-in)       | Exports metrics and traces to the collector named by `OTEL_EXPORTER_OTLP_ENDPOINT`; off entirely when that variable is unset                                                           | Whoever sets the environment variable for the server process |
 | Memory tools (26 tools)    | Read/write/search/manage the SQLite memory bank; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to a cloud object store (S3 or Azure Blob) | The calling MCP client                        |
 | NuGet package / local feed | Ships the built tool via `dotnet pack` and the local `.nupkg-local/` feed                                                                                                               | The pack/push commands and feed contents      |
@@ -47,7 +46,7 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 | Cloud sync (opt-in)        | Pushes/pulls VACUUM snapshots to/from a cloud object store (S3-compatible or Azure Blob)                                                                                                | Credentials from the bank's settings table    |
 | SQLite encryption (opt-in) | Transparent page-level encryption via SQLite3MC (SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet); FTS5 and vec0 work unchanged                                              | Passphrase from `AIRACCOON_DB_PASSPHRASE`, or an ed25519 SSH key from Bitwarden Secrets Manager via `ai-raccoon encryption bitwarden` (HKDF-derived; ADR 0012) |
 
-**The dangerous direction is the client that launches the process.** A stdio MCP server
+**The dangerous direction is the client that launches the process.** The proxy child
 inherits the privileges of whatever starts it and trusts the protocol messages it reads —
 a malicious client can invoke tools, and anything a tool does runs with the server's
 privileges.
@@ -74,12 +73,13 @@ cross-origin `POST` can be a CORS *simple request* and reach the port unprefligh
 cannot carry a custom header without a preflight, and that preflight fails. It goes through
 the same `FixedTimeEquals` comparison as `/mcp`, answers every unauthorised call identically whether
 the header is absent, the wrong length or simply wrong, and is **not mapped at all** on a
-host with no token — an ungated `--transport http` launch exposes no shutdown.
+host with no token.
 
-**Two known gaps, stated rather than implied.** `--transport http` started directly is
-**not** token-gated — it is manual and opt-in, i.e. the posture this document already
-accepted before ADR-0020, so it is not a regression; but if you run it, the listener is
-open to any local process. And `UnixFileMode` is POSIX-only: on Windows the token file
+**One known gap, stated rather than implied, and one retired.** The ungated
+direct `--transport http` launch this section used to warn about is gone: a bare
+`--transport http` now proxies, and every HTTP endpoint is a token-gated `serve`
+host, so that listener no longer exists to be left open. What remains is platform:
+`UnixFileMode` is POSIX-only: on Windows the token file
 inherits the data-root directory's ACL rather than being owner-only.
 
 **Access modes provide a defence-in-depth layer:** `ro` mode allows only reads *of entry

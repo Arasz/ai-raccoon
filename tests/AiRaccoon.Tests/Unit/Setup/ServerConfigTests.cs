@@ -31,8 +31,6 @@ public class ServerConfigTests
     public void ToServerConfig_TransportFromFlag()
     {
         Cli(transport: "http").ToServerConfig().Transport.ShouldBe(McpTransport.Http);
-        Cli(transport: "https").ToServerConfig().Transport.ShouldBe(McpTransport.Https);
-        Cli(transport: "stdio").ToServerConfig().Transport.ShouldBe(McpTransport.Stdio);
         Cli().ToServerConfig().Transport.ShouldBe(McpTransport.Proxy);
     }
 
@@ -48,13 +46,15 @@ public class ServerConfigTests
         parsed!.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Proxy);
     }
 
-    /// <summary>The escape hatch of ADR-0020: --transport stdio keeps the complete in-process server.</summary>
+    /// <summary>P1 removal: --transport stdio is rejected with a hint (bare proxy / serve), still exit 9 via AppRunner.</summary>
     [Fact]
-    public void ExplicitStdio_StaysStdio()
+    public void ExplicitStdio_IsRejectedWithHint()
     {
         CliArgs.TryParse(["--transport", "stdio"], out var parsed).ShouldBeTrue();
 
-        parsed!.Options.ToServerConfig().Transport.ShouldBe(McpTransport.Stdio);
+        parsed!.Errors.ShouldNotBeEmpty();
+        parsed.Errors.ShouldContain(e => e.Contains("--transport") && e.Contains("stdio"));
+        parsed.Errors.ShouldContain(e => e.Contains("proxy") && e.Contains("serve"));
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class ServerConfigTests
     [Fact]
     public void ServerConfig_IdleTimeout_DefaultsToZero()
     {
-        var config = new ServerConfig(7721, McpTransport.Stdio, new InfrastructureOptions { DataRoot = "/x", Scope = InstallScope.User });
+        var config = new ServerConfig(7721, McpTransport.Proxy, new InfrastructureOptions { DataRoot = "/x", Scope = InstallScope.User });
 
         config.IdleTimeout.ShouldBe(TimeSpan.Zero);
     }

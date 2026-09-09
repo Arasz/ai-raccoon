@@ -1,3 +1,4 @@
+using AiRaccoon.Hosting.Node;
 using AiRaccoon.Setup;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
@@ -11,16 +12,17 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 public class LoggerMessageTests
 {
     [Fact]
-    public void HttpsTransportNotSupported_LogsWarning_WithEventId()
+    public void IgnoringTransport_LogsWarning_WithEventId()
     {
         var logger = new FakeLogger();
 
-        McpServerSetup.Log.HttpsTransportNotSupported(logger);
+        NodeRunner.Log.IgnoringTransport(logger, McpTransport.Proxy);
 
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
         record.Level.ShouldBe(LogLevel.Warning);
-        record.Id.Id.ShouldBe(30);
-        record.Message.ShouldContain("https transport is not supported");
+        record.Id.Id.ShouldBe(602);
+        record.Message.ShouldContain("serve always uses http");
+        record.Message.ShouldContain("Proxy");
     }
 }

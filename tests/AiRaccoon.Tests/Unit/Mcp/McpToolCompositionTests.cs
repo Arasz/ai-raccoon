@@ -2,7 +2,6 @@ using System.Reflection;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Tools;
-using DotNext.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 using Shouldly;
@@ -55,7 +54,7 @@ public sealed class McpToolCompositionTests : IDisposable
         {
             DataRoot = _dataRoot,
             Scope = InstallScope.User
-        }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
+        });
         return services.BuildServiceProvider();
     }
 }

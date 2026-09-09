@@ -3,7 +3,6 @@ using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Tools;
-using DotNext.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 using Shouldly;
@@ -88,7 +87,7 @@ public sealed class WatchToolsInventoryTests : IDisposable
         {
             DataRoot = _dataRoot,
             Scope = InstallScope.User
-        }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
+        });
 
         using var provider = services.BuildServiceProvider();
 

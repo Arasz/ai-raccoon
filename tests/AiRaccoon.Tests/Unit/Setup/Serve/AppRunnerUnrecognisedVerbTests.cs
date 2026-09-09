@@ -1,3 +1,4 @@
+using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using Shouldly;
 using Xunit;
@@ -55,7 +56,7 @@ public sealed class AppRunnerUnrecognisedVerbTests : IDisposable
         CliArgs.TryParse([], out var parsed).ShouldBeTrue();
 
         parsed!.Errors.ShouldBeEmpty();
-        parsed.IsProxyInput.ShouldBeTrue("a bare invocation is the proxy entry point (ADR-0020)");
+        parsed.ServerConfig.Transport.ShouldBe(McpTransport.Proxy, "a bare invocation is the proxy entry point (ADR-0020)");
     }
 
     /// <summary>And a real verb with real arguments must still parse clean.</summary>

@@ -1,58 +1,73 @@
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
+using AiRaccoon.Setup;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
+using Xunit;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Boots the real HTTP MCP server in-process via WebApplicationFactory and exposes an MCP
-///     client bound to it, each instance under its own temp data root. Launch identity flows
-///     through entry-point args (docs/plans/cli-args-parsing.md); access mode defaults to full before the first bank open.
+///     Boots the real HTTP MCP server in-process and exposes an MCP client bound to it, each
+///     instance under its own temp data root. P2/ADR-0020: bare launches proxy out-of-process, so
+///     the sole host is built directly (the same McpServerSetup.CreateWebHost production boots)
+///     on an ephemeral loopback port, and the client dials its bound URL over real HTTP — no
+///     WebApplicationFactory, no TestServer. Access mode defaults to full before the first bank open.
 /// </summary>
-public sealed class McpServerFactory : WebApplicationFactory<Program>
+public sealed class McpServerFactory : IDisposable, IAsyncDisposable
 {
-    private readonly Action<IServiceCollection>? _configureAdditionalServices;
     private readonly InstallScope _scope;
+    private WebApplication? _app;
     private bool _disposed;
 
-    /// <summary>configureAdditionalServices is a test seam (e.g. chaining AddInMemoryExporter onto
-    /// the OTel builder the real host already configures) — production boot never passes it.</summary>
-    public McpServerFactory(InstallScope scope = InstallScope.User, Action<IServiceCollection>? configureAdditionalServices = null)
+    public McpServerFactory(InstallScope scope = InstallScope.User)
     {
         _scope = scope;
-        _configureAdditionalServices = configureAdditionalServices;
     }
 
     /// <summary>The temp data root the server instance writes into.</summary>
     public string DataRoot { get; } = CreateTempRoot();
+
+    /// <summary>The live server's services (ForceFlush probes, log providers).</summary>
+    public IServiceProvider Services => _app?.Services
+        ?? throw new InvalidOperationException("CreateClientAsync builds the server; call it first.");
 
     public async Task<McpClient> CreateClientAsync()
     {
         // Full access mode keeps the workspace consolidate/discard E2E flows working under FR-NM-2
         // (docs/work/features-native-memory/native-memory.feature); the settings row is read per call.
         await SeedGlobalAccessModeAsync();
-        var httpClient = CreateClient();
+        var app = _app ??= await StartServerAsync(TestContext.Current.CancellationToken);
+        var endpoint = new Uri($"{app.Urls.First().TrimEnd('/')}/mcp");
+        var httpClient = new HttpClient();
         var transport = new HttpClientTransport(
             new HttpClientTransportOptions
             {
                 Name = "e2e-test",
-                Endpoint = new Uri("http://localhost/mcp"),
+                Endpoint = endpoint,
                 TransportMode = HttpTransportMode.StreamableHttp
             },
             httpClient,
             LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Warning)),
             true);
         return await McpClient.CreateAsync(transport);
+    }
+
+    private async Task<WebApplication> StartServerAsync(CancellationToken cancellationToken)
+    {
+        var options = new InfrastructureOptions { DataRoot = DataRoot, Scope = _scope };
+        var app = McpServerSetup.CreateWebHost(new ServerConfig(0, McpTransport.Http, options));
+        await app.StartAsync(cancellationToken);
+        return app;
     }
 
     private async Task SeedGlobalAccessModeAsync()
@@ -71,26 +86,7 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
             IngestScopeKeys.Serialize([Path.GetTempPath(), DataRoot]));
     }
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder)
-    {
-        builder.UseEnvironment("Development");
-        // WebApplicationFactory turns UseSetting into entry-point args (--key=value), the
-        // launch-identity channel the server reads after the env-merge removal.
-        builder.UseSetting("transport", "http");
-        builder.UseSetting("data-root", DataRoot);
-        if (_scope == InstallScope.Project)
-        {
-            builder.UseSetting("install-scope", "project");
-        }
-
-        builder.ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Warning));
-        if (_configureAdditionalServices is not null)
-        {
-            builder.ConfigureServices(_configureAdditionalServices);
-        }
-    }
-
-    protected override void Dispose(bool disposing)
+    public void Dispose()
     {
         if (_disposed)
         {
@@ -98,8 +94,26 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         }
 
         _disposed = true;
-        base.Dispose(disposing);
+        _app?.StopAsync().GetAwaiter().GetResult();
+        _app?.DisposeAsync().GetAwaiter().GetResult();
+        _app = null;
         TestData.DeleteTempRoot(DataRoot);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_app is not null)
+        {
+            await _app.StopAsync();
+            await _app.DisposeAsync();
+            _app = null;
+        }
+
+        if (!_disposed)
+        {
+            _disposed = true;
+            TestData.DeleteTempRoot(DataRoot);
+        }
     }
 
     private static string CreateTempRoot() => TestData.CreateTempRoot();
