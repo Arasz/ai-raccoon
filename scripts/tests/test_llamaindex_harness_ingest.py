@@ -452,3 +452,15 @@ def test_duplicate_hash_differing_values_fails_loud(tmp_path):
     _dupe_copy(copy, second_value="tampered bytes under a reused hash")
     with pytest.raises(ValueError, match="duplicate hashes"):
         ingest.load_rows(str(copy), ("ai-raccoon", "hermes-default", "jsaa"))
+
+
+def test_model_weights_info_defaults_to_hf_home(tmp_path, monkeypatch):
+    # The production branch (no hub_dir): HF_HOME is honored, no NameError.
+    hub = tmp_path / "hub" / "models--org--model"
+    snap = hub / "snapshots" / ("ef" * 20)
+    (snap / "w").mkdir(parents=True)
+    (hub / "refs").mkdir()
+    (hub / "refs" / "main").write_text("ef" * 20)
+    (snap / "w" / "a.bin").write_bytes(b"y" * 41)
+    monkeypatch.setenv("HF_HOME", str(tmp_path))
+    assert ingest.model_weights_info("org/model") == ("ef" * 20, 41)

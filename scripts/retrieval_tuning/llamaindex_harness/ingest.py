@@ -75,9 +75,8 @@ def model_weights_info(model_name: str = MODEL_NAME, hub_dir=None) -> tuple[str,
     hub_dir is the HF hub root (injected in tests; defaults to the real
     cache, honoring HF_HOME). Raises when the cache cannot resolve — an
     unresolvable weight set must fail loud, never embed silently."""
-    import os as _os  # noqa: PLC0415 — keep module import light
     root = Path(hub_dir) if hub_dir is not None else (
-        Path(_os.environ.get("HF_HOME", str(Path.home() / ".cache" / "huggingface"))) / "hub")
+        Path(os.environ.get("HF_HOME", str(Path.home() / ".cache" / "huggingface"))) / "hub")
     base = root / ("models--" + model_name.replace("/", "--"))
     try:
         revision = (base / "refs" / "main").read_text().strip()
