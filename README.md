@@ -63,7 +63,7 @@ Add AiRaccoon to your agent's `.mcp.json`:
 }
 ```
 
-> 📖 **Full Walkthrough:** See [Get started with AiRaccoon](docs/tutorials/get-started-with-ai-raccoon.md) for migration guides, transport options (proxy, stdio, http), and initial setup steps.
+> 📖 **Full Walkthrough:** See [Get started with AiRaccoon](docs/tutorials/get-started-with-ai-raccoon.md) for launch shapes (proxy, serve) and initial setup steps.
 
 ---
 
@@ -111,12 +111,11 @@ mindmap
 
 ## Configuration & Server Execution
 
-Run in proxy mode (default), stdio, or background HTTP serve mode:
+Run the proxy (default) or a background HTTP serve backend:
 
 ```bash
-ai-raccoon                    # Proxy mode (Default): relays to HTTP backend, auto-starting if needed
-ai-raccoon --transport stdio  # In-process standalone server
-ai-raccoon serve              # Long-lived daemon with idle watchdog and loopback token auth
+ai-raccoon        # Proxy (Default): relays to HTTP backend, auto-starting if needed
+ai-raccoon serve  # Long-lived daemon with idle watchdog and loopback token auth
 ```
 
 > 📖 **Configuration Recipe:** Learn about environment variables, port binding, database encryption passphrases, and zero-downtime updates in [Configure and run the AiRaccoon server](docs/how-to/configure-ai-raccoon-server.md).

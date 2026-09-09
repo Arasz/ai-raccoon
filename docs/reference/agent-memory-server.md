@@ -473,7 +473,7 @@ runs the server.
 
 | Option | Values | Default |
 |---|---|---|
-| `--transport` | `proxy`, `stdio`, `http`, `https` (https → warning) | `proxy` |
+| `--transport` | `proxy`, `http` (`stdio` and `https` are rejected at parse) | `proxy` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
 | `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only — the proxy has to dial a port it knows | `7721` |
@@ -487,18 +487,24 @@ answers, and forwards every JSON-RPC message to it, restoring the client's
 own request id on the response. No tool method is named in the proxy, so a
 new tool needs no proxy change. If the backend can neither be reached nor
 started within its budget, the process exits `ExitCode.ProxyBackendUnavailable`
-(6) with one stderr line naming the URL, the `serve` exit code, and the
-`--transport stdio` escape hatch — there is no in-process fallback.
-`--transport stdio` is that escape hatch: a complete in-process server, no
-proxy, no autostart — exactly how the server behaved before `proxy` became
-the default.
+(6) with one stderr line of this exact form (`BackendSessions.Unavailable()`,
+quoted verbatim from the P5 pass):
+`ai-raccoon: {reason}; no in-process fallback exists — start the backend first: ai-raccoon serve --port <port>`
+(`{reason}` names the failure: the URL, the serve exit code, and any captured
+backend stderr tail). There is no in-process fallback. The stdio and https transports were removed outright
+([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)): passing
+the removed `stdio` value fails at parse with exit 9 and a hint naming the proxy
+and `serve` on bare launches (exit 15, `InvalidArgument`, on verb paths, since
+`serve` takes no `--transport` at all); passing `https` fails at parse with
+exit 9. A bare `--transport http`
+still parses but launches the proxy like any bare run. Full servers come
+only from `serve`.
 
-`--quiet` sends every log level of a *server host* — the in-process `--transport stdio`
-server, `--transport http`, and `serve` — to a file beside the bank instead of
+`--quiet` sends every log level of the *serve* host to a file beside the bank instead of
 stdout/stderr: `~/.ai-raccoon/quiet.log` at the default user scope, or
 `<data-root>/.ai-raccoon/quiet.log` at project scope, the same directory `memory.db` lives
 in (`HostLogging.Configure`, `QuietLogging.LogFilePath`,
-`SqliteConnectionFactory.BankPathFor`). Nothing from those hosts, not even a warning,
+`SqliteConnectionFactory.BankPathFor`). Nothing from that host, not even a warning,
 reaches stdout or stderr in this mode, so a `--quiet` server that fails to start or
 misbehaves (e.g. an invalid `OTEL_EXPORTER_OTLP_ENDPOINT`) leaves no trace on the
 console — check `quiet.log` first. The file is append-only and never rotated; it
@@ -511,6 +517,20 @@ be reached nor started is *written* to stderr rather than logged, so `--quiet` c
 silence it. A proxy that cannot get a backend says so on the console either way. The
 `serve` backend it spawns does inherit `--quiet`, so the backend's own logs land in
 `quiet.log`.
+
+### Client compatibility
+
+Two floors bound the removal (see [ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)
+for the full contract). Going forward, a client must never pass the removed `stdio`
+or `https` values: the first release carrying the removal (after 1.41.2) rejects
+both at parse, so any launcher still passing them gets exit 9 with a hint on bare
+launches instead of a server. A bare spawn with no `--transport` at all speaks MCP
+over stdio through the proxy and needs no extra args. Going back, that same bare
+spawn works against any server from 1.6.0 on, the release that made bare launches
+proxy ([ADR-0020](../adr/0020-always-on-http-stdio-proxy.md)). Older servers predate
+the proxy and cannot serve a flagless child. The hermes provider plugin ships in
+this repo in lockstep with the server, so both of its floors are that same
+removal release.
 
 ### Serve mode
 
@@ -565,18 +585,19 @@ it was — the difference matters because an unexpanded `${AIRACCOON_MCP_TOKEN}`
 placeholder is a *present* credential, and the first wording would tell you to
 add the header you just added. Neither body names anything the other does not.
 `/observability` stays unauthenticated by design (it returns a PID, the binary
-version and OTLP on/off state, nothing that touches the bank). A direct
-`ai-raccoon --transport http` launch (no `serve` verb) is **not** gated, and
-gets no `/shutdown` at all — see [SECURITY.md](../../SECURITY.md) for the
-reasoning and the known gaps.
+version and OTLP on/off state, nothing that touches the bank). Every HTTP endpoint
+is a `serve` host now: a bare `--transport http` launch proxies instead of serving,
+so the ungated direct launch is gone with the removal, and `/shutdown` exists only
+on token-gated `serve` hosts (see [SECURITY.md](../../SECURITY.md)).
 
 `serve --mcp-entry [--format hermes|claude|all]` prints the client config
 entry for the actually-bound URL, now with a `headers` map carrying
 `X-AiRaccoon-Token: ${AIRACCOON_MCP_TOKEN}` alongside the URL — a
 placeholder, never a live token. Keep stderr out of the entry file:
 `ai-raccoon serve --mcp-entry > entry.json 2> serve.log &`. One long-lived
-HTTP server avoids the ~5-minute stdio recycle of per-connection processes and
-lets the background extraction and bank-maintenance hosted services actually
+HTTP server replaced the old per-connection stdio processes (removed outright,
+see [ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)) and lets the
+background extraction and bank-maintenance hosted services actually
 fire. Turning that entry, or `hermes mcp add`'s own auth prompt, into a
 connection that actually authenticates is the advanced path below.
 
@@ -586,9 +607,10 @@ Bare `ai-raccoon` (the proxy) is the default, handles the token itself, and
 needs none of what follows. Connecting a client straight to `serve`'s URL,
 bypassing the proxy, is still genuinely useful for two narrower cases: a
 client that cannot spawn a process at all (a containerised or remote client,
-a gateway reaching in over a tunnel), and bisecting a **proxy** failure —
-when bare `ai-raccoon` is what's broken, `--transport http` plus `curl` is
-the diagnostic you reach for exactly when the default is down.
+a gateway reaching in over a tunnel), and bisecting a **proxy** failure.
+When bare `ai-raccoon` itself is what is broken, start a `serve` on a scratch
+port and `curl` it directly. That split is the diagnostic you reach for exactly
+when the default is down.
 
 Every incantation below uses single quotes, or an unquoted `$(...)` meant to
 expand immediately, around the token — `--header "X: ${VAR}"` in double
@@ -667,9 +689,10 @@ but the server has no OTLP export configured. `--port 0` is a parse error — un
 `serve --port 0`, there is no "any free port" to dial. Failures write nothing to
 stdout, so command substitution yields an empty string rather than an error message.
 
-OTLP export is **serve/HTTP mode only** — a stdio server is a per-connection
-process on a ~5-minute recycle, too short-lived for a batch exporter to be worth
-its schedule delay and shutdown grace. Since ADR-0020 that scope covers nearly
+OTLP export is **serve mode only**. The removed stdio servers were per-connection
+processes on a short recycle, too short-lived for a batch exporter to be worth
+its schedule delay and shutdown grace; the `serve` backend that replaces them lives
+long enough for export to make sense. Since ADR-0020 that scope covers nearly
 all traffic: the default `proxy` transport forwards every call to a `serve`
 backend, so instrumentation now reaches whatever a client does, not only
 callers who opt into `serve` directly. The proxy itself wires no exporter and
@@ -764,8 +787,8 @@ ai-raccoon encryption show
 ai-raccoon encryption unset
 ai-raccoon encryption migrate
 
-# extract: background shared-extraction (HTTP/S hosts only — a stdio process is
-# per-connection and recycled before the loop can fire; default interval 30 min;
+# extract: background shared-extraction (serve hosts only — the loop needs a
+# long-lived host; default interval 30 min;
 # config changes apply live, no server restart needed; propose logs the ranked
 # candidates — path, preview, reasons — to the server log; prune reports/removes
 # promotion_queue rows orphaned by a deleted or re-chunked entries row (ADR-0023) —
@@ -783,7 +806,7 @@ ai-raccoon settings extract list
 ai-raccoon extract prune [--apply]
 
 # settings maintenance: bank housekeeping (every process checkpoints the WAL at startup
-# and shutdown — stdio included; the periodic timer runs on HTTP/S hosts,
+# and shutdown; the periodic timer runs on serve hosts,
 # default 60 min — and VACUUM + ANALYZE on the vacuum cadence, default 7 days;
 # embed-rows-per-run bounds the embed topic's single consumer's rows per drain
 # pass, for both corpora, default 128; config changes apply live, no server restart needed)
@@ -917,6 +940,10 @@ When a client points `command` at the repo instead of the installed tool (e.g. V
 `--no-launch-profile` matters: without it `dotnet run` prints its launch-settings
 notice to stdout, which corrupts the newline-delimited JSON-RPC stream strict MCP
 clients expect on stdio.
+
+`"type": "stdio"` here is the client's process-spawn convention (the proxy speaks
+MCP over stdio on that pipe). It is unrelated to the removed `stdio` server-transport
+value, which no launcher should pass anymore.
 
 Encrypted-bank setups set `AIRACCOON_DB_PASSPHRASE` in the client's user-scoped
 config, never in a shared or tracked file:

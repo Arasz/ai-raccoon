@@ -30,7 +30,14 @@ three queries and fails if the port perturbs the gated-off path.
 
 ## Capture protocol
 
-One server process per capture (`dotnet <dll> --data-root <root> --transport stdio`),
-newline-delimited JSON-RPC: `initialize` → `notifications/initialized` → batched
-`tools/call memory_search` with `sessionId="poc-parity-1"`. Env for capture and for the
+One serve backend plus one proxy child per capture: `<build>/AiRaccoon --data-root <root>
+serve --port <lease>` owns the bank while `<build>/AiRaccoon --data-root <root> --port <lease>`
+carries the newline-delimited JSON-RPC conversation (`initialize` →
+`notifications/initialized` → batched `tools/call memory_search` with
+`sessionId="poc-parity-1"`). Env for capture and for the
 parity replay: all `MMR_*` variables stripped, then `MMR_DISABLE=1`.
+
+Historical note: the committed goldens predate the stdio full-server removal (ADR-0104)
+and were captured with the then-current single-process stdio server. Only deterministic
+fields are kept (timings stripped by construction), so the transport shape is not part
+of what the parity gate pins — replay runs the composition above.

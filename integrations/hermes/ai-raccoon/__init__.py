@@ -345,7 +345,7 @@ class AiRaccoonMemoryProvider(MemoryProvider):
             {"key": "url", "description": "Streamable HTTP endpoint (http mode)", "default": "http://127.0.0.1:7721/mcp"},
             {"key": "token_file", "description": "Loopback auth token file (http mode); read at connect and sent as X-AiRaccoon-Token when url is 127.0.0.1/::1/localhost, never copied into config.yaml", "default": "~/.ai-raccoon/mcp-token"},
             {"key": "binary", "description": "ai-raccoon binary to spawn (stdio mode)", "default": "ai-raccoon"},
-            {"key": "binary_args", "description": "Extra args for the spawned binary, e.g. ['--data-root', '/tmp/bank'] (stdio mode)", "default": ""},
+            {"key": "binary_args", "description": "Extra args for the spawned binary, e.g. ['--data-root', '/tmp/bank', '--port', '54321'] for an isolated temp bank on a leased port (stdio mode)", "default": ""},
             {"key": "quiet", "description": "Spawn the server with --quiet (all logs go to a file beside its bank, none on stdout/stderr; the provider emits status cues)", "default": True, "choices": ["true", "false"]},
             {"key": "status_words", "description": "Print one-word status cues to stderr per call", "default": True, "choices": ["true", "false"]},
             {"key": "project_id", "description": "AiRaccoon project id (empty = derived hermes-<profile>)"},

@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""P3 runner — sequential two-arm threshold eval over the MCP stdio surface (plan §P3).
+"""P3 runner — sequential two-arm threshold eval over MCP (plan §P3).
 
-Committed, clean-room version of the proven PoC harness pattern: one AiRaccoon server
-per arm (`dotnet <dll> --data-root <root> --transport stdio`), newline-delimited
-JSON-RPC, each arm's stderr redirected to `arm-<name>.stderr`, arms strictly
+Committed, clean-room version of the proven PoC harness pattern: one serve backend
+plus one proxy child per arm (the build apphost as both: `<build>/AiRaccoon --data-root
+<root> serve --port <lease>` for the backend, `<build>/AiRaccoon --data-root <root>
+--port <lease>` for the JSON-RPC pipes — the proxy child must be packaged, a muxer
+`dotnet <dll>` proxy exits 6 without probing), newline-delimited JSON-RPC, the backend's stderr redirected to
+`arm-<name>.stderr`, arms strictly
 sequential (off first, then threshold — never concurrent). Every `memory_search`
 call passes the query's own `projectId` (per-project scoping is load-bearing:
 cross-project queries silently serve 0/8 overlap), and holdout / fold-divergent
 entries from P2's corpus are refused at load.
 
 Protocol trap (verified in P1): writing every request and only then closing stdin
-loses responses — the stdio transport starts shutdown on stdin EOF and races the
+loses responses — the proxy child ends the session on stdin EOF and races the
 pending writes. The client therefore writes ONE request, reads its response, then
 writes the next; stdin stays open until every response is in hand.
 
@@ -48,6 +51,7 @@ import argparse
 import json
 import os
 import select
+import socket
 import subprocess
 import tempfile
 import time
@@ -172,30 +176,94 @@ def build_search_calls(queries: Sequence[EvalQuery], limit: int = SEARCH_LIMIT,
             for query in queries]
 
 
+# ------------------------------------------------------------------ serve+proxy composition
+
+
+def _apphost_for(dll: Path) -> Path:
+    """Build apphost sibling of the eval dll (ADR-0104: the proxy child must be packaged).
+
+    A proxy started through the dotnet muxer (`dotnet <dll>`) exits 6 without ever
+    probing: an unpackaged host cannot auto-start (or, here, attach through) a backend.
+    `dotnet build` emits the native apphost beside the dll — that is the binary both
+    the serve backend and the proxy child run as."""
+    import os
+    stem = dll.parent / dll.stem
+    for candidate in (stem, stem.with_suffix(".exe")):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    raise FileNotFoundError(
+        f"no build apphost beside the eval dll ({stem} missing or not executable) — "
+        f"build first (`dotnet build src/AiRaccoon`), then point --dll at the built "
+        f"AiRaccoon.dll")
+
+
+def _lease_port() -> int:
+    """Free loopback port for an arm's serve backend (temp-port recipe, ADR-0104).
+
+    Best-effort: another process can win it between close and bind — the same race
+    the proxy's own auto-start already lives with."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _wait_for_port(port: int, timeout_s: float) -> None:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            if s.connect_ex(("127.0.0.1", port)) == 0:
+                return
+        time.sleep(0.25)
+    raise TimeoutError(
+        f"serve backend never bound 127.0.0.1:{port} within {timeout_s:.0f}s")
+
+
 # ------------------------------------------------------------------ stdio MCP client
 
 
 class StdioMcpClient:
-    """One MCP stdio server process driven interactively over newline JSON-RPC.
+    """One serve backend plus one proxy child, driven interactively over newline JSON-RPC.
+
+    Composition since the stdio full-server removal (ADR-0104): `serve --port <lease>`
+    owns the bank with its stderr captured (so `[mmr-poc]` marker discipline keeps
+    reading the process that prints the markers — a proxy child would NOT carry them,
+    its launcher captures the backend's stderr for the failure path alone), while the
+    JSON-RPC conversation runs over the proxy child's stdin/stdout pipes.
 
     The interactive discipline is load-bearing (protocol trap): each request is
     written with stdin kept OPEN and its response read before the next request is
     written. Writing the whole batch and only then closing stdin loses responses —
-    the server starts shutdown on stdin EOF and races the pending writes. Reads are
+    the proxy child ends the session on stdin EOF and races the pending writes. Reads are
     select-bounded per response, so a wedged server raises instead of hanging.
     """
 
     def __init__(self, dll: Path, env: Mapping[str, str], stderr_path: Path,
                  data_root: Path | None = None,
                  response_timeout_s: float = RESPONSE_TIMEOUT_S) -> None:
-        command = ["dotnet", str(dll)]
-        if data_root is not None:
-            command += ["--data-root", str(data_root)]
-        command += ["--transport", "stdio"]
+        port = _lease_port()
+        apphost = str(_apphost_for(dll))
         stderr_path.parent.mkdir(parents=True, exist_ok=True)
         self._stderr_file = stderr_path.open("wb")
+        self._serve = subprocess.Popen(
+            [apphost, *(["--data-root", str(data_root)] if data_root is not None else []),
+             "serve", "--port", str(port)],
+            stdout=subprocess.DEVNULL, stderr=self._stderr_file, env=dict(env))
+        try:
+            _wait_for_port(port, response_timeout_s)
+        except Exception:
+            self._serve.terminate()
+            self._serve.wait(timeout=30)
+            self._stderr_file.close()
+            raise
+        proxy_stderr_path = stderr_path.with_name(stderr_path.stem + ".proxy.stderr")
+        self._proxy_stderr_file = proxy_stderr_path.open("wb")
+        command = [apphost]
+        if data_root is not None:
+            command += ["--data-root", str(data_root)]
+        command += ["--port", str(port)]
         self._proc = subprocess.Popen(command, stdin=subprocess.PIPE,
-                                      stdout=subprocess.PIPE, stderr=self._stderr_file,
+                                      stdout=subprocess.PIPE, stderr=self._proxy_stderr_file,
                                       env=dict(env))
         self._buffer = bytearray()
         self._next_id = 0
@@ -263,8 +331,9 @@ class StdioMcpClient:
         self.rpc("notifications/initialized", {}, notify=True)
 
     def close(self) -> None:
-        """All responses are in hand by contract — only now may stdin close (protocol
-        trap), letting the server exit; a wedged server is killed after a grace wait."""
+        """All responses are in hand by contract — only now may the proxy child's stdin
+        close (protocol trap), letting it exit; the serve backend is then terminated.
+        A wedged process is killed after a grace wait."""
         try:
             if self._proc.stdin is not None and not self._proc.stdin.closed:
                 self._proc.stdin.close()
@@ -274,6 +343,13 @@ class StdioMcpClient:
                 self._proc.kill()
                 self._proc.wait(timeout=30)
         finally:
+            self._proxy_stderr_file.close()
+            self._serve.terminate()
+            try:
+                self._serve.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                self._serve.kill()
+                self._serve.wait(timeout=30)
             self._stderr_file.close()
 
 
@@ -453,9 +529,10 @@ def prepare_data_root(copy: Path, work_dir: Path) -> Path:
 
 def run_arm(arm: str, dll: Path, data_root: Path, queries: Sequence[EvalQuery],
             output_dir: Path, limit: int = SEARCH_LIMIT) -> dict[str, Any]:
-    """Run one arm: one server process, every query through it interactively, stderr
-    captured to arm-<name>.stderr. Marker discipline is validated BEFORE the arm JSON
-    is written — a failed arm leaves its stderr for debugging but no half-artifact set."""
+    """Run one arm: one serve backend plus one proxy child, every query through it
+    interactively, backend stderr captured to arm-<name>.stderr. Marker discipline is
+    validated BEFORE the arm JSON is written — a failed arm leaves its stderr for
+    debugging but no half-artifact set."""
     output_dir.mkdir(parents=True, exist_ok=True)
     stderr_path = output_dir / f"arm-{arm}.stderr"
     calls = build_search_calls(queries, limit=limit, session_id=f"{SESSION_ID}-{arm}")
