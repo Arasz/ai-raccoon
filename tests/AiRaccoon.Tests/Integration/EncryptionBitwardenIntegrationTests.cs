@@ -1,6 +1,7 @@
 using AiRaccoon.Tests.TestHelpers;
 using System.Data;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
@@ -498,8 +499,15 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         });
     }
 
+    /// <summary>
+    ///     serve semantics for a missing key source (P2/ADR-0020): the key probe runs before the
+    ///     bind, so a bws that cannot resolve ends the process with FailedToOpenEncryptedBank,
+    ///     silent streams and nothing listening — no in-process fallback, no partial bind.
+    ///     (The engine-version diagnostic the deleted test pinned died with DirectRunAsync in P2;
+    ///     restoring it is outside this lane's one-hunk allowance — reported, not re-pinned.)
+    /// </summary>
     [RetryFact]
-    public async Task Startup_BwsMissing_Exits1WithResolveError()
+    public async Task Startup_BwsMissing_ServeExits2WithoutBinding()
     {
         if (OperatingSystem.IsWindows())
         {
@@ -509,39 +517,29 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         WriteSidecar();
         var emptyPathDir = Path.Combine(_dataRoot, "empty-path");
         Directory.CreateDirectory(emptyPathDir);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
 
-        var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir);
+        var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir, port);
 
-        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
-        stderr.Contains("Failed to resolve encryption key", StringComparison.Ordinal)
-            .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
+        exit.ShouldBe(ExitCode.FailedToOpenEncryptedBank);
+        // The pre-P2 in-process server logged the resolve failure and the SQLite engine identity;
+        // serve reports key failures by exit code only — stdout and stderr stay empty.
+        stdout.ShouldBeEmpty();
+        stderr.ShouldBeEmpty();
+        (await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken))
+            .ShouldBeFalse();
+        File.Exists(BankPath()).ShouldBeFalse();
     }
 
+    /// <summary>
+    ///     serve semantics for a mismatched key (P2/ADR-0020): the decrypt probe fails SQLCipher
+    ///     code 26 before the bind — exit 2, silent streams, nothing listening, and the bank still
+    ///     opens with the passphrase that keyed it (the failed probe writes nothing).
+    /// </summary>
     [RetryFact]
-    public async Task Startup_BwsMissing_StillLogsSqliteEngineVersion()
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return; // the child launches a shell-based fake; the PATH override is unix-shaped
-        }
-
-        WriteSidecar();
-        var emptyPathDir = Path.Combine(_dataRoot, "empty-path");
-        Directory.CreateDirectory(emptyPathDir);
-
-        var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir);
-
-        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
-        // Diagnostics fire before key resolution, so the engine identity is visible even when startup fails
-        // (the 2.1.11 → 2.4.0 incident class, docs/work/archive/2026-08-06-sqlite3mc-2.4.0-upgrade.md).
-        stderr.Contains("SQLite engine 3.53", StringComparison.Ordinal)
-            .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
-        stderr.Contains("SQLite3 Multiple Ciphers 2.4", StringComparison.Ordinal)
-            .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
-    }
-
-    [RetryFact]
-    public async Task Startup_WrongKey_Exits2WithOpenError()
+    public async Task Startup_WrongKey_ServeExits2LeavingTheBankUntouched()
     {
         if (OperatingSystem.IsWindows())
         {
@@ -558,42 +556,45 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         }
 
         WriteSidecar();
-        var (exit, stderr, stdout) = await RunServerProcessAsync(Path.GetDirectoryName(_fakeBws)!);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
+        var (exit, stderr, stdout) = await RunServerProcessAsync(Path.GetDirectoryName(_fakeBws)!, port);
 
         exit.ShouldBe(ExitCode.FailedToOpenEncryptedBank);
-        stderr.Contains("Failed to open encrypted bank with bitwarden encryption source key", StringComparison.Ordinal)
-            .ShouldBeTrue($"stderr='{stderr}' stdout='{stdout}'");
+        stdout.ShouldBeEmpty();
+        stderr.ShouldBeEmpty();
+        (await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken))
+            .ShouldBeFalse();
+        // The bank is untouched: it still opens with the env passphrase that keyed it (pinned
+        // resolver, bypassing the sidecar that now points the shared resolver at bws).
+        var untouchedFactory = new SqliteConnectionFactory(Options(), FixedKeyResolver("env-passphrase"));
+        await using var untouched = await untouchedFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+        untouched.State.ShouldBe(ConnectionState.Open);
     }
 
     /// <summary>
-    ///     Runs the server binary with a hermetic PATH rooted at bwsDir (empty = bws missing, fake-bws dir =
-    ///     resolves) plus the system dirs the fake script needs. Only this process-level path exercises
-    ///     Program.cs's error mapping and exit codes 1/2 — and since ADR-0020 that mapping lives behind
-    ///     --transport stdio, because a bare launch proxies and never opens a bank of its own.
+    ///     Runs the built apphost as `serve --port &lt;lease&gt;` with a hermetic PATH rooted at
+    ///     bwsDir (empty = bws missing, fake-bws dir = resolves) plus the system dirs the fake
+    ///     script needs. Only this child-process path exercises serve's real startup sequence —
+    ///     pre-bind probe, token mint, key resolve/decrypt probes — and its exit codes: a bare
+    ///     launch would proxy and never open a bank of its own, and the deleted `--transport
+    ///     stdio` in-process server no longer exists to drive it.
     /// </summary>
-    private async Task<(int Exit, string Stderr, string Stdout)> RunServerProcessAsync(string bwsDir)
+    private async Task<(int Exit, string Stderr, string Stdout)> RunServerProcessAsync(string bwsDir, int port)
     {
-        var dll = Path.Combine(AppContext.BaseDirectory, "AiRaccoon.dll");
-        File.Exists(dll).ShouldBeTrue($"AiRaccoon.dll not found at {dll}");
-
-        var dotnetPath = Environment.GetEnvironmentVariable("PATH")!.Split(Path.PathSeparator)
-                             .Select(dir => Path.Combine(dir, "dotnet"))
-                             .FirstOrDefault(File.Exists)
-                         ?? throw new InvalidOperationException("dotnet not found on PATH");
-
-        var psi = new ProcessStartInfo(dotnetPath)
+        var psi = new ProcessStartInfo(RaccoonProcess.Executable)
         {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
             UseShellExecute = false,
             WorkingDirectory = _dataRoot
         };
-        psi.ArgumentList.Add("exec");
-        psi.ArgumentList.Add(dll);
-        psi.ArgumentList.Add("--transport");
-        psi.ArgumentList.Add("stdio");
         psi.ArgumentList.Add("--data-root");
         psi.ArgumentList.Add(_dataRoot);
+        psi.ArgumentList.Add("serve");
+        psi.ArgumentList.Add("--port");
+        psi.ArgumentList.Add(port.ToString(CultureInfo.InvariantCulture));
         // Hermetic: the child sees only the fake dir + /usr/bin + /bin — a real bws on the
         // dev machine's PATH can never leak into the run (the fake script needs cat/sh).
         psi.Environment["PATH"] = string.Join(Path.PathSeparator, [bwsDir, "/usr/bin", "/bin"]);
