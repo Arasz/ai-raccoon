@@ -204,8 +204,9 @@ class HttpClient(_MCPClient):
 
     ``token_file`` (default ``~/.ai-raccoon/mcp-token``) is read at connect time and, when
     ``url`` targets loopback, sent as ``X-AiRaccoon-Token`` — the header ``ai-raccoon serve``
-    (unlike the ungated ``--transport http``) requires. A missing, unreadable, empty or
-    whitespace-only file just means no header: the ungated case must keep working (D2).
+    requires. A missing, unreadable, empty or whitespace-only file just means no header is
+    sent, and serve is fail-closed: without the token the endpoint refuses instead of serving
+    ungated (the ungated ``--transport http`` posture retired with ADR-0104).
     """
 
     def __init__(self, url: str = DEFAULT_HTTP_URL, token_file: str = DEFAULT_TOKEN_FILE) -> None:
