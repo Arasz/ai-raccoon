@@ -23,6 +23,7 @@ import argparse
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -119,12 +120,24 @@ def resolve_hermes_python(override: str | None) -> str | None:
     return None
 
 
+def _lease_port() -> int:
+    """One free loopback port for the probe's temp backend (temp-port proxy recipe).
+
+    Best-effort: another process can win the port between this close and the
+    backend's bind — the same race the proxy's own auto-start already lives with."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 def run_probe(home: Path, plugins_dir: Path, python: str) -> None:
     """Load the plugin through Hermes discovery in an isolated HERMES_HOME.
 
-    The temp home's config points the spawned server at a temp --data-root
-    with --transport stdio, so the probe is an in-process stdio server that
-    never touches a port — or the real bank.
+    The temp home's config points the spawned proxy at a temp --data-root on a
+    leased --port (the temp-port proxy recipe, ADR-0104), so the probe never
+    touches the real bank — or the default 7721, even when another server owns
+    it. The proxy-started backend outlives the probe and idles out on its own
+    watchdog; setup runs rarely enough that no reaping is wired here.
     """
     with tempfile.TemporaryDirectory(prefix="hermes-setup-probe-") as tmp:
         tmp = Path(tmp)
@@ -132,9 +145,10 @@ def run_probe(home: Path, plugins_dir: Path, python: str) -> None:
         iso_home.mkdir()
         (iso_home / "plugins").symlink_to(plugins_dir, target_is_directory=True)
         bank = tmp / "bank"
+        port = _lease_port()
         (iso_home / "config.yaml").write_text(
             "plugins:\n  ai-raccoon:\n    transport: stdio\n"
-            f"    binary_args: ['--data-root', '{bank}', '--transport', 'stdio']\n",
+            f"    binary_args: ['--data-root', '{bank}', '--port', '{port}']\n",
             encoding="utf-8")
         env = {**os.environ, "HERMES_HOME": str(iso_home)}
         result = subprocess.run(

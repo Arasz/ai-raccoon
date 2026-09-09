@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import select
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -94,15 +95,59 @@ def _session_env(overrides: dict[str, str]) -> dict[str, str]:
 # ------------------------------------------------------------------ minimal MCP client
 
 
+def _apphost_for(dll: Path) -> Path:
+    """Build apphost sibling of the eval dll (ADR-0104: the proxy child must be packaged).
+
+    A proxy started through the dotnet muxer (`dotnet <dll>`) exits 6 without ever
+    probing: an unpackaged host cannot auto-start (or, here, attach through) a backend.
+    `dotnet build` emits the native apphost beside the dll — that is the binary both
+    the serve backend and the proxy child run as."""
+    stem = dll.parent / dll.stem
+    for candidate in (stem, stem.with_suffix(".exe")):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    raise FileNotFoundError(
+        f"no build apphost beside the eval dll ({stem} missing or not executable) — "
+        f"build the branch first (`dotnet build src/AiRaccoon`), then point "
+        f"AI_RACCOON_EVAL_DLL at the built AiRaccoon.dll")
+
+
+def _lease_port() -> int:
+    """Free loopback port for this session's serve backend (temp-port recipe, ADR-0104).
+
+    Best-effort: another process can win it between close and bind — the same race
+    the proxy's own auto-start already lives with."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _wait_for_port(port: int, timeout_s: float = 120.0) -> None:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            if s.connect_ex(("127.0.0.1", port)) == 0:
+                return
+        time.sleep(0.25)
+    raise TimeoutError(
+        f"serve backend never bound 127.0.0.1:{port} within {timeout_s:.0f}s")
+
+
 def _run_session(dll: Path, data_root: Path, env: dict[str, str], calls: list[dict],
                  stderr_path: Path) -> tuple[dict[int, dict], str]:
-    """One server process, batched calls: initialize -> notifications/initialized ->
-    tools/call memory_search per call. Interactive protocol (proven shape): each request is
+    """One serve backend plus one proxy child, batched calls: initialize -> notifications/initialized ->
+    tools/call memory_search per call. Composition since the stdio full-server removal
+    (ADR-0104): `serve --port <lease>` owns the bank with its stderr captured to
+    `stderr_path` (so `[mmr-poc]` marker gates keep reading the process that prints
+    them — a proxy child would NOT carry them, its launcher captures the backend's
+    stderr for the failure path alone), while the JSON-RPC conversation runs over the
+    proxy child's stdin/stdout pipes. Interactive protocol (proven shape): each request is
     written with stdin kept OPEN and its response read before the next request — closing
-    stdin early makes the stdio transport start shutdown and the in-flight responses are
+    stdin early ends the session and the in-flight responses are
     lost (verified this session: 'Application is shutting down' races the response write).
     Every read is select-bounded by SESSION_TIMEOUT_S overall, so a wedged server raises
-    instead of hanging pytest. Returns ({response id: response}, stderr text)."""
+    instead of hanging pytest. Returns ({response id: response}, serve stderr text)."""
     messages: list[dict] = [
         {"jsonrpc": "2.0", "id": 1, "method": "initialize",
          "params": {"protocolVersion": "2024-11-05", "capabilities": {},
@@ -114,10 +159,25 @@ def _run_session(dll: Path, data_root: Path, env: dict[str, str], calls: list[di
 
     responses: dict[int, dict] = {}
     buf = bytearray()
-    with stderr_path.open("wb") as err:
-        proc = subprocess.Popen(
-            ["dotnet", str(dll), "--data-root", str(data_root), "--transport", "stdio"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, env=env)
+    port = _lease_port()
+    apphost = str(_apphost_for(dll))
+    proxy_stderr_path = stderr_path.with_name(stderr_path.stem + ".proxy.stderr")
+    with stderr_path.open("wb") as err, proxy_stderr_path.open("wb") as proxy_err:
+        serve = subprocess.Popen(
+            [apphost, "--data-root", str(data_root),
+             "serve", "--port", str(port)],
+            stdout=subprocess.DEVNULL, stderr=err, env=env)
+        try:
+            _wait_for_port(port)
+            proc = subprocess.Popen(
+                [apphost, "--data-root", str(data_root),
+                 "--port", str(port)],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=proxy_err, env=env)
+        except Exception:
+            serve.terminate()
+            serve.wait(timeout=30)
+            raise
         try:
             assert proc.stdin is not None and proc.stdout is not None
             fd = proc.stdout.fileno()
@@ -161,7 +221,7 @@ def _run_session(dll: Path, data_root: Path, env: dict[str, str], calls: list[di
                 if message.get("id") is not None:
                     responses[message["id"]] = _read_response(message["id"])
 
-            # All responses collected — close stdin so the server exits, then drain.
+            # All responses collected — close the proxy child's stdin so it exits, then drain.
             proc.stdin.close()
             shutdown_deadline = time.monotonic() + 60.0
             while proc.poll() is None and time.monotonic() < shutdown_deadline:
@@ -177,6 +237,12 @@ def _run_session(dll: Path, data_root: Path, env: dict[str, str], calls: list[di
             if proc.poll() is None:
                 proc.kill()
             proc.wait(timeout=30)
+            serve.terminate()
+            try:
+                serve.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                serve.kill()
+                serve.wait(timeout=30)
 
     return responses, stderr_path.read_text(encoding="utf-8", errors="replace")
 
