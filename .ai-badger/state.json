@@ -1,8 +1,17 @@
 {
-  "lastUpdated": "2026-09-09T16:52:00+02:00",
+  "lastUpdated": "2026-09-09T17:58:12+02:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-handle-tool-cancellation-errors-gracefully",
+      "title": "Handle tool cancellation gracefully same as errors",
+      "pr": 630,
+      "merged": true,
+      "date": "2026-09-09",
+      "hasNotes": false,
+      "summary": "Live-token OCE answers IsError cancelled: (913) instead of escaping to SDK warn; telemetry on bounded sentinel; raw-HTTP isError:true SSE pin (checklist artifact disproven); VERSION 1.42.1. 3 commits + 1 review-fixup, subagent plan+implementation reviews."
+    },
     {
       "id": "air-remove-stdio-full-server-mode",
       "summary": "Removed stdio full-server mode (D2(b) also bare-http): bare=proxy-only, serve sole server; keep-enum 9+hint, Https shrink, 1.42.0, ADR-0104. PR #627 merged.",
@@ -18,7 +27,10 @@
     },
     {
       "id": "air-llamaindex-chroma-fusion-retrieval-harness",
-      "summary": "Closed unfinished per owner order 2026-09-09 to unblock the duplicate-server task; no merge record.",
+      "summary": "LlamaIndex+Chroma fusion-retrieval harness finished and merged as PR #625 (merge fd69a2d4, 2026-09-09): 8 BLOCK review items addressed post-close (prod floor 0.6, eval fail-gates, per-bucket FTS probe + hash tiebreak, dep pins, scripts-harness CI lane); 95/95 harness tests green.",
+      "pr": 625,
+      "merged": true,
+      "date": "2026-09-09",
       "hasNotes": false
     },
     {
@@ -37,7 +49,7 @@
       "pr": 621,
       "merged": true,
       "date": "2026-09-05",
-      "summary": "Root cause (traced before hypothesizing): planner/applier predicate mismatch \u2014 OwnsMoveableContent scheduled folds FoldEntriesAsync could not execute (project-scope+non-NULL-only applier vs project+custom+shared planner), so applies drained yet re-planned identical folds forever. Fix in 7 packages + integration + ledgers across PRs #614 (A planner honesty+pins, B committed-scope applier, D2 verdict), #616 (C telemetry/workspaces), #617 (F bounded loop + D6 verdict), #618 (D durable project_id_aliases v14), #619 (E P3 chokes + sync arm + 3 reload legs), #620 (G convergence E2E, P3 ARMED), #622 (integration: shared fold domain unity, honest P3-armed derivation, warm fail-open 714), #623 (red-proof ledgers), #621 (release 1.41.0 + ADRs 0100-0103). Pipeline: implementer lanes built partial PRs, session 01a070f9 reviewed + fixed each, session 8575f1fb did full integration review. Reviews caught real defects (workspace-strand, BDD S2 contract, EventId collisions, warm skip-ensure race, Default teardown leaks). Next: 1.41.0 tag/publish + manual checklist on published build, then prove the original GOAL on the live bank with 1.41.0."
+      "summary": "Root cause (traced before hypothesizing): planner/applier predicate mismatch — OwnsMoveableContent scheduled folds FoldEntriesAsync could not execute (project-scope+non-NULL-only applier vs project+custom+shared planner), so applies drained yet re-planned identical folds forever. Fix in 7 packages + integration + ledgers across PRs #614 (A planner honesty+pins, B committed-scope applier, D2 verdict), #616 (C telemetry/workspaces), #617 (F bounded loop + D6 verdict), #618 (D durable project_id_aliases v14), #619 (E P3 chokes + sync arm + 3 reload legs), #620 (G convergence E2E, P3 ARMED), #622 (integration: shared fold domain unity, honest P3-armed derivation, warm fail-open 714), #623 (red-proof ledgers), #621 (release 1.41.0 + ADRs 0100-0103). Pipeline: implementer lanes built partial PRs, session 01a070f9 reviewed + fixed each, session 8575f1fb did full integration review. Reviews caught real defects (workspace-strand, BDD S2 contract, EventId collisions, warm skip-ensure race, Default teardown leaks). Next: 1.41.0 tag/publish + manual checklist on published build, then prove the original GOAL on the live bank with 1.41.0."
     },
     {
       "id": "air-repair-census-write-lock-timeout",
@@ -56,7 +68,7 @@
       "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
     }
   ],
-  "next": "1.42.0 release flow (owner): tag v1.42.0 via release.yml, publish, then verify installable from feed and ping pi session 01a08579-8717-76ae-9f66-9641d9786807 1:1 (RAG re-enable + publish + instance census chain, bus rows 772/779/791). CliBankWrite repair-apply nightly red is pre-existing (proven identical on clean main) -> quick task next.",
+  "next": "1.42.1 release decision (owner): PR #630 merged (cancelled: envelope, SSE isError pin, VERSION bump); tag v1.42.1 via release.yml + publish + manual checklist on published build, then ping RAG/instance-census chain.",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
@@ -65,17 +77,17 @@
     "#497 repair for bge-m3 manifests downloaded before #496",
     "#504 embedding fallback-chain shapes",
     "#519 TestData.CreateMemoryStore optional Null defaults (from #518)",
-    "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable \u2014 1.33.0 checklist)",
+    "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable — 1.33.0 checklist)",
     "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement"
   ],
   "research": [],
   "stillTrue": [
     "dotnet_env=local must be set per-directory for the DeployToLocalSource build target to push to .nupkg-local",
     "Transport is the --transport flag (stdio|http|https|proxy), default proxy since ADR-0020. MCP_TRANSPORT and AIRACCOON_DATA_ROOT do NOT exist - ServerConfig records that the env layer was removed by the single-channel ruling, and McpServerFactory injects the data root via WebApplicationFactory.UseSetting, not the environment",
-    "sqlite-memory's content-hash dedup is global \u2014 cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
-    "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params \u2014 alias columns and use a settable DTO",
+    "sqlite-memory's content-hash dedup is global — cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
+    "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params — alias columns and use a settable DTO",
     "sqlite-memory/vector/sync are native SQLite extensions loaded via Microsoft.Data.Sqlite LoadExtension; deferred embeddings (defer_embeddings=1) let writes work before any model is configured",
-    "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure \u2014 assert ShouldNotBe(true), not ShouldBe(false)",
+    "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure — assert ShouldNotBe(true), not ShouldBe(false)",
     "Bare `ai-raccoon` is a proxy: it opens no bank, resolves no key and loads no ONNX model. `--transport stdio` is the in-process server and the escape hatch when a backend cannot start",
     "`serve` mints <data-root>/mcp-token (0600) BEFORE it binds, so a port that answers guarantees the file exists; the probe accepts 401 as proof of a live server so it still recognises one across data roots",
     "/mcp and /shutdown accept the loopback token in either envelope: X-AiRaccoon-Token or Authorization: Bearer *** one credential compared with FixedTimeEquals on both paths and neither shadowing the other. /mcp alone renders a second 401 body for a credential that was presented but did not match; /shutdown keeps one body for every failure because ADR-0022 pins the refusal not to reveal whether a token exists. `serve --mcp-entry` prints a headers map carrying ${AIRACCOON_MCP_TOKEN}, never a live token - Hermes resolves it from ~/.hermes/.env, Claude Code from the environment, and an unset variable in Claude Code warns in `claude mcp list` but still sends the literal placeholder."
