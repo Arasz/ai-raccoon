@@ -178,3 +178,67 @@ def test_harness_errors_still_fail_the_gate():
     # the contingency and trips the zero-paired gate.
     assert out["summary"]["contingency"] == {"a": 0, "b": 0, "c": 0, "d": 0}
     assert any("zero paired rows" in f for f in failures)
+
+
+# --- P1 eval gates: custom-scope bank leg, null-anchor filter, gap aggregates ---
+
+def test_airaccoon_fn_maps_custom_scope_to_project():
+    # Bank leg of the three-legged mapping: corpus scope=custom is sent as
+    # scope=project (bank scope=project covers custom labels per
+    # SearchContexts.cs; the bank refuses scope=custom as invalid-params).
+    client = _FakeMcpClient({"results": [{"hash": "abc123"}]})
+    fn = evaluate.build_airaccoon_fn(_FakeServer(client), session_id="sess-1")
+    out = fn({"query": "q", "targetProjectId": "ai-badger",
+              "targetScope": "custom", "expectedHash": "abc123"})
+    assert out == {"hashes": ["abc123"], "error": None}
+    assert client.calls[0][1]["scope"] == "project"
+    for scope, want in (("project", "project"), ("shared", "shared"), ("all", "all")):
+        client2 = _FakeMcpClient({"results": []})
+        evaluate.build_airaccoon_fn(_FakeServer(client2), session_id="s")(
+            {"query": "q", "targetProjectId": "p", "targetScope": scope,
+             "expectedHash": "h"})
+        assert client2.calls[0][1]["scope"] == want
+
+
+def test_null_expected_hash_fails_loud_in_run_eval():
+    # Contract pin: run_eval still refuses null anchors — so main() must filter
+    # them pre-run_eval (C034), never let them reach this raise.
+    import pytest as _pytest
+    with _pytest.raises(ValueError, match="expectedHash"):
+        evaluate.run_eval(
+            [_entry(1, expectedHash=None)],
+            lambda e: {"hashes": []}, lambda e: {"hashes": []})
+
+
+def test_partition_null_anchors():
+    entries = [_entry(1), _entry(2, expectedHash=None, id="C034"),
+               _entry(3, expectedHash="")]
+    scorable, null_ids = evaluate.partition_null_anchors(entries)
+    assert [e["id"] for e in scorable] == ["E001", "E003"]
+    assert null_ids == ["C034", "E003"]
+
+
+def test_aggregate_gaps_counts_sum_to_c_cell():
+    # Provisional P1 counts (P2 refines into the taxonomy reusing these numbers):
+    # every c-cell row (bank-hit/harness-miss) lands in exactly one bucket.
+    rows = [
+        {"id": "a", "harness": {"hit": 0, "fts_hit": 1, "vector_hit": 0},
+         "airaccoon": {"hit": 1}},  # legs split: embedding-gap evidence
+        {"id": "b", "harness": {"hit": 0, "fts_hit": 0, "vector_hit": 1},
+         "airaccoon": {"hit": 1}},  # legs had it, fusion lost it
+        {"id": "c", "harness": {"hit": 0, "fts_hit": 1, "vector_hit": 1},
+         "airaccoon": {"hit": 1}},  # both legs hit, fusion lost it
+        {"id": "d", "harness": {"hit": 0, "fts_hit": 0, "vector_hit": 0},
+         "airaccoon": {"hit": 1}},  # neither leg: unrecoverable by fusion
+        {"id": "e", "harness": {"hit": 0}, "airaccoon": {"hit": 1}},  # no leg cols
+        {"id": "f", "harness": {"hit": 1, "fts_hit": 1, "vector_hit": 1},
+         "airaccoon": {"hit": 1}},  # agreement: not a gap
+        {"id": "g", "harness": {"hit": 0, "error": "boom"},
+         "airaccoon": {"hit": 1}},  # unpaired: excluded, not a gap
+    ]
+    gaps = evaluate.aggregate_gaps(rows)
+    assert gaps["c_cell"] == 5
+    assert (gaps["c_fts_only"] + gaps["c_vec_only"] + gaps["c_both_legs"]
+            + gaps["c_neither_leg"] + gaps["c_unknown"]) == gaps["c_cell"]
+    assert (gaps["c_fts_only"], gaps["c_vec_only"], gaps["c_both_legs"],
+            gaps["c_neither_leg"], gaps["c_unknown"]) == (1, 1, 1, 1, 1)

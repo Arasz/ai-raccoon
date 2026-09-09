@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "retrieval_tuning")
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
 from llamaindex_harness import ingest
+from llamaindex_harness import scopes
 
 
 def _toy_embed(texts):
@@ -244,3 +245,168 @@ def test_real_volume_upsert_exceeding_chroma_batch_cap(tmp_path):
         assert handle.fts_count() == 6000
     finally:
         handle.close()
+
+
+# --- P1 bucket-extension gates (TDD RED) ---
+
+def _header_corpus(path: Path, projects=("ai-raccoon", "hermes-default"), queries=()):
+    path.write_text(json.dumps({
+        "header": {
+            "generator": "test",
+            "seed": 42,
+            "snapshotSha256": "ab" * 32,
+            "projects": {p: {"embeddedRows": 10} for p in projects},
+            "excludedProjects": [
+                {"projectId": "aib", "canonicalId": "ai-badger",
+                 "embeddedRows": 1, "reason": "alias fold"},
+            ],
+        },
+        "queries": list(queries),
+    }))
+
+
+def _third_bucket_copy(path: Path):
+    """Two-bucket fixture plus a third-bucket row the frozen rule blinds."""
+    _fixture_copy(path)
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "INSERT INTO entries (hash, path, value, scope, project_id, source_file,"
+        " section, heading_path, chunk_index, total_chunks) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("h6", "j.md", "jsaa quilting ledger compass rose", "project", "jsaa",
+         "docs:jsaa.md", "context", "Jsaa", 0, 1))
+    conn.commit()
+    conn.close()
+
+
+def test_resolve_buckets_derives_from_corpus_header(tmp_path):
+    corpus = tmp_path / "corpus.json"
+    _header_corpus(corpus, projects=("jsaa", "ai-raccoon"))
+    buckets, excluded = scopes.resolve_buckets(None, str(corpus), None)
+    assert buckets == ("ai-raccoon", "jsaa")
+    assert excluded == [{"projectId": "aib", "canonicalId": "ai-badger",
+                         "embeddedRows": 1, "reason": "alias fold"}]
+
+
+def test_resolve_buckets_explicit_beats_header(tmp_path):
+    corpus = tmp_path / "corpus.json"
+    _header_corpus(corpus, projects=("jsaa", "ai-raccoon"))
+    buckets, _ = scopes.resolve_buckets(None, str(corpus), "jsaa")
+    assert buckets == ("jsaa",)
+
+
+def test_resolve_buckets_fails_loud_without_source():
+    # No explicit buckets and no corpus header: fail, never a frozen fallback.
+    with pytest.raises(ValueError, match="buckets"):
+        scopes.resolve_buckets(None, None, None)
+
+
+def test_resolve_buckets_rejects_unknown_bucket_against_copy(tmp_path):
+    copy = tmp_path / "copy.db"
+    _fixture_copy(copy)
+    corpus = tmp_path / "corpus.json"
+    _header_corpus(corpus)
+    with pytest.raises(ValueError, match="no-such-bucket"):
+        scopes.resolve_buckets(str(copy), str(corpus), "ai-raccoon,no-such-bucket")
+
+
+def test_corpus_buckets_covered_or_excluded():
+    # AC1: every project-corpus-100 query projectId resolves into the ingest
+    # buckets or the seed-equal exclusion manifest — no query silently blind.
+    repo = Path(__file__).resolve().parents[1] / "retrieval_tuning"
+    corpus_path = repo / "corpora" / "project-corpus-100.json"
+    data = json.loads(corpus_path.read_text())
+    buckets, excluded = scopes.resolve_buckets(None, data, None)
+    manifest_ids = {e["projectId"] for e in excluded} | {e["canonicalId"] for e in excluded}
+    assert excluded == data["header"]["excludedProjects"]  # closed to seed-equality
+    uncovered = [q["id"] for q in data["queries"]
+                 if q["targetProjectId"] not in buckets
+                 and q["targetProjectId"] not in manifest_ids]
+    assert uncovered == []
+
+
+def test_third_bucket_rows_ingested_not_silent(tmp_path):
+    copy = tmp_path / "copy.db"
+    _third_bucket_copy(copy)
+    rows, _ = ingest.load_rows(str(copy), ("ai-raccoon", "hermes-default", "jsaa"))
+    assert "h6" in {r["hash"] for r in rows}
+
+
+def test_fts_parity_probe_covers_third_bucket(tmp_path):
+    copy = tmp_path / "copy.db"
+    _third_bucket_copy(copy)
+    store = tmp_path / "store"
+    buckets = ("ai-raccoon", "hermes-default", "jsaa")
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store),
+                        "--buckets", ",".join(buckets)], embed=_toy_embed) == 0
+    handle = ingest.open_store(store)
+    try:
+        assert "h6" in {h for h, _ in ingest.query_fts(handle, "quilting", "jsaa",
+                                                       "project", 100000)}
+        assert ingest.fts_parity_probe(str(copy), handle, probe="quilting",
+                                       buckets=buckets) == []
+    finally:
+        handle.close()
+
+
+def test_custom_scope_fts_matches_bank_project_order(tmp_path):
+    # Three-legged custom->project mapping, FTS leg: harness scope=custom must
+    # serve exactly the bank's scope=project order (SearchContexts.cs: project
+    # covers custom labels), never raise, never widen to all-scope.
+    copy = tmp_path / "copy.db"
+    _fixture_copy(copy)
+    store = tmp_path / "store"
+    _run_ingest(copy, store).close()
+    handle = ingest.open_store(store)
+    try:
+        custom = ingest.query_fts(handle, "custom", "ai-raccoon", "custom", 100)
+        project = ingest.query_fts(handle, "custom", "ai-raccoon", "project", 100)
+        assert custom == project and custom
+        conn = ingest.open_copy_readonly(str(copy))
+        try:
+            bank_order = [r[0] for r in conn.execute(
+                "SELECT e.hash FROM entries_fts"
+                " JOIN entries e ON e.id = entries_fts.rowid"
+                " WHERE entries_fts MATCH ?"
+                " AND e.project_id = ? AND e.scope IN ('project','custom')"
+                " ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0), e.hash",
+                ("custom", "ai-raccoon")).fetchall()]
+        finally:
+            conn.close()
+        assert [h for h, _ in custom] == bank_order
+    finally:
+        handle.close()
+
+
+def test_params_records_buckets_excluded_snapshot_and_model(tmp_path):
+    copy = tmp_path / "copy.db"
+    _fixture_copy(copy)
+    corpus = tmp_path / "corpus.json"
+    _header_corpus(corpus)
+    store = tmp_path / "store"
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store),
+                        "--corpus", str(corpus)], embed=_toy_embed) == 0
+    params = json.loads((store / "params.json").read_text())
+    assert params["resolvedBuckets"] == ["ai-raccoon", "hermes-default"]
+    assert params["excludedProjects"] == [
+        {"projectId": "aib", "canonicalId": "ai-badger",
+         "embeddedRows": 1, "reason": "alias fold"}]
+    assert params["corpusSnapshotSha256"] == "ab" * 32
+    assert params["modelRevision"] == "test-seam" and params["modelBytes"] == 0
+
+
+def test_model_weights_info_reads_cache_layout(tmp_path):
+    hub = tmp_path / "hub" / "models--org--model"
+    snap = hub / "snapshots" / ("cd" * 20)
+    (snap / "weights").mkdir(parents=True)
+    (hub / "refs").mkdir()
+    (hub / "refs" / "main").write_text("cd" * 20)
+    (snap / "weights" / "a.safetensors").write_bytes(b"x" * 100)
+    revision, nbytes = ingest.model_weights_info("org/model", hub_dir=hub.parent)
+    assert revision == "cd" * 20
+    assert nbytes == 100
+
+
+def test_pinned_revision_mismatch_fails_loud():
+    with pytest.raises(ValueError, match="[Pp]inned"):
+        ingest.check_pinned_revision("00" * 20)
+    ingest.check_pinned_revision(ingest.PINNED_MODEL_REVISION)  # must not raise

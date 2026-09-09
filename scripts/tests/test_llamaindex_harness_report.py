@@ -78,3 +78,45 @@ def test_main_writes_markdown(tmp_path):
     text = out_path.read_text()
     assert text.startswith("# LlamaIndex fusion harness")
     assert "## Aggregates" in text
+
+
+# --- P1 report gates: data-driven buckets, gaps, exclusions, recompute path ---
+
+def _results_with_gaps():
+    out = _results()
+    out["summary"]["gaps"] = {"n_paired": 2, "c_cell": 1, "c_fts_only": 1,
+                              "c_vec_only": 0, "c_both_legs": 0,
+                              "c_neither_leg": 0, "c_unknown": 0}
+    out["excludedProjects"] = [
+        {"projectId": "aib", "canonicalId": "ai-badger", "embeddedRows": 1,
+         "reason": "raw entries.project_id 'aib' folds to canonical 'ai-badger'"}]
+    return out
+
+
+def test_report_bucket_prose_is_data_driven():
+    # Today report.py hardcodes the 2-bucket rule in prose; the buckets must
+    # come from the context or a third bucket silently vanishes from the story.
+    ctx = _context()
+    ctx["buckets"] = ["jsaa/project", "ai-raccoon/project", "ai-raccoon/shared"]
+    text = report.render(_results(), ctx)
+    assert "jsaa" in text
+    assert "hermes-default" not in text
+
+
+def test_report_renders_gap_counts_table():
+    text = report.render(_results_with_gaps(), _context())
+    assert "c_fts_only" in text and "c_cell" in text
+    assert "1" in text  # the counted values are rendered, not just headers
+
+
+def test_report_discloses_exclusions():
+    text = report.render(_results_with_gaps(), _context())
+    assert "aib" in text and "ai-badger" in text
+    assert "excluded" in text.lower()
+
+
+def test_report_carries_recompute_path_line():
+    # The hash-preserving golden allows post-hoc relevance metrics; the report
+    # must say how a rerun recomputes from results.json without new retrieval.
+    text = report.render(_results(), _context())
+    assert "recompute" in text.lower()

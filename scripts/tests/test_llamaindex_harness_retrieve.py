@@ -164,3 +164,72 @@ def test_nonfinite_distances_are_dropped_from_vector_hits():
     got = retrieve._finite_hits(["a", "b", "c", "d"],
                                 [0.2, float("nan"), float("inf"), 0.5])
     assert got == {"a": pytest.approx(0.8), "d": pytest.approx(0.5)}
+
+
+# --- P1 custom-scope vector-leg gates (TDD RED) ---
+
+def test_custom_scope_chroma_where_matches_project():
+    # Vector leg: custom must compile to the project predicate (SearchContexts:
+    # scope=project covers custom labels), never the all-scope $or fallthrough.
+    from llamaindex_harness import retrieve as retrieve_mod
+    assert retrieve_mod._chroma_where("ai-badger", "custom") == \
+        retrieve_mod._chroma_where("ai-badger", "project")
+    assert retrieve_mod._chroma_where("ai-badger", "custom") != \
+        retrieve_mod._chroma_where("ai-badger", "all")
+
+
+def test_custom_scope_retrieve_matches_project_scope(tmp_path):
+    # End to end on a store with custom rows: custom serves exactly project.
+    import sqlite3 as _sqlite3
+    from llamaindex_harness import ingest as ingest_mod
+    from llamaindex_harness import retrieve as retrieve_mod
+    copy = tmp_path / "copy.db"
+    conn = _sqlite3.connect(copy)
+    conn.executescript(
+        """
+        CREATE TABLE entries (
+            id INTEGER PRIMARY KEY, hash TEXT, path TEXT, value TEXT,
+            scope TEXT, project_id TEXT, source_file TEXT, section TEXT,
+            heading_path TEXT, chunk_index INTEGER, total_chunks INTEGER);
+        CREATE VIRTUAL TABLE entries_fts USING fts5(value, source_file, section);
+        CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+            INSERT INTO entries_fts(rowid, value, source_file, section)
+            VALUES (new.id, new.value, new.source_file, new.section);
+        END;
+        """
+    )
+    conn.executemany(
+        "INSERT INTO entries (hash, path, value, scope, project_id, source_file,"
+        " section, heading_path, chunk_index, total_chunks) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [("c1", "c.md", "custom wardrobe tailoring ledger entry", "custom", "ai-badger",
+          "docs:c.md", "context", "Custom", 0, 1),
+         ("p1", "p.md", "project wardrobe standard pattern draft", "project", "ai-badger",
+          "docs:p.md", "context", "Project", 0, 1),
+         ("s9", "s.md", "shared wardrobe notion", "shared", "ai-badger",
+          None, None, "", -1, 0)],
+    )
+    conn.commit()
+    conn.close()
+    store_dir = tmp_path / "store"
+    assert ingest_mod.main(["--copy", str(copy), "--store-dir", str(store_dir),
+                            "--buckets", "ai-badger"], embed=_toy_embed) == 0
+    handle = ingest_mod.open_store(store_dir)
+    try:
+        vec_custom = retrieve_mod.FusionRetriever(
+            handle, query_embed=lambda t: _toy_embed([t])[0],
+            project_id="ai-badger", scope="custom").vector_leg("wardrobe", 8)
+        vec_project = retrieve_mod.FusionRetriever(
+            handle, query_embed=lambda t: _toy_embed([t])[0],
+            project_id="ai-badger", scope="project").vector_leg("wardrobe", 8)
+        assert vec_custom == vec_project and vec_custom
+        served_custom = retrieve_mod.FusionRetriever(
+            handle, query_embed=lambda t: _toy_embed([t])[0],
+            project_id="ai-badger", scope="custom").retrieve("wardrobe")
+        served_project = retrieve_mod.FusionRetriever(
+            handle, query_embed=lambda t: _toy_embed([t])[0],
+            project_id="ai-badger", scope="project").retrieve("wardrobe")
+        assert {n.node.node_id for n in served_custom} == \
+            {n.node.node_id for n in served_project} >= {"c1", "p1"}
+        assert "s9" not in {n.node.node_id for n in served_custom}  # not widened
+    finally:
+        handle.close()
