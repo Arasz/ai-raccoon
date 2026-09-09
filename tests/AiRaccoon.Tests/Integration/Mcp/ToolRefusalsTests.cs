@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AiRaccoon.Core.Access;
@@ -513,6 +514,66 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                 // No fail-level records — the bare refusal must not read as a crash.
                 fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error)
                     .ShouldBeEmpty();
+            }
+            finally
+            {
+                await host.StopAsync(TestContext.Current.CancellationToken);
+            }
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    /// <summary>
+    ///     Transport-provenance pin for the 1.42.0 checklist finding: a refused tools/call over
+    ///     raw StreamableHTTP must carry <c>"isError":true</c> in the SSE data bytes — not just
+    ///     on the McpClient object (which the McpClient-based cases above assert). A write under a
+    ///     fresh v7 id refuses in ToolGate before any bank mutation, so no seeding is needed and
+    ///     the temp bank stays untouched. Observed raw-HTTP (curl) and McpClient agree: refusals
+    ///     carry isError, successes omit the key.
+    /// </summary>
+    [RetryFact]
+    public async Task Refusal_OverRawHttp_CarriesIsErrorTrue_InTheSseBytes()
+    {
+        var dataRoot = TestData.CreateTempRoot("tool-refusals-raw-http-envelope");
+        try
+        {
+            var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
+            {
+                var started = McpServerSetup.CreateServerHost(
+                    new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
+                await started.StartAsync(TestContext.Current.CancellationToken);
+                return (candidate, started);
+            });
+            try
+            {
+                // Test hosts carry no McpToken (McpServerSetup gates only when one is set),
+                // so raw HTTP needs no credential here — production `serve` mints one.
+                using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
+                http.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/event-stream");
+
+                var freshId = Guid.CreateVersion7().ToString("N");
+                var call = JsonSerializer.Serialize(new
+                {
+                    jsonrpc = "2.0",
+                    id = 1,
+                    method = "tools/call",
+                    @params = new
+                    {
+                        name = "memory_write",
+                        arguments = new { projectId = freshId, content = "x" }
+                    }
+                });
+                using var response = await http.PostAsync("mcp",
+                    new StringContent(call, Encoding.UTF8, "application/json"),
+                    TestContext.Current.CancellationToken);
+                response.EnsureSuccessStatusCode();
+                var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+                body.ShouldContain("\"isError\":true");
+                body.ShouldContain("project-not-registered:");
             }
             finally
             {
