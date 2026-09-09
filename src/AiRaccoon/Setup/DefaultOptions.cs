@@ -6,7 +6,7 @@ public static class DefaultOptions
 {
     public const int Port = 7721;
 
-    /// <summary>ADR-0020: bare launches proxy to one HTTP backend; --transport stdio is the escape hatch.</summary>
+    /// <summary>ADR-0020: bare launches proxy to one HTTP backend; --transport is proxy|http only (stdio/https removed).</summary>
     public const McpTransport Transport = McpTransport.Proxy;
 
     public const InstallScope InstallScope = Infrastructure.Options.InstallScope.User;

@@ -34,14 +34,88 @@ internal static class CliArgs
 
         var commandPath = CommandPathOf(parseResult);
         var optionReadResult = ReadRootOptions(parseResult);
+        if (!showHelp && !showVersion)
+        {
+            AppendTransportRemovalHint(args, errors);
+        }
+
         if (optionReadResult.IsSuccess)
         {
+            if (!showHelp && !showVersion)
+            {
+                AppendTransportRemovalRejection(args, errors);
+            }
+
             result = new CliInput(optionReadResult.Options, commandPath, showHelp, showVersion, errors, parseResult);
             return true;
         }
 
         result = new CliInput(RootCliOptions.Null, commandPath, showHelp, showVersion, [.. errors.Union(optionReadResult.Errors)], parseResult);
         return false;
+    }
+
+    /// <summary>
+    ///     P1 CLI-surface removal: --transport is proxy|http only. When the raw args name a
+    ///     removed value, append one stderr line (still exit 9 for bare launches via the launch
+    ///     Errors check, 15 for verb paths via ConfigCommands). Raw-args scan, not enum-value
+    ///     check, so it survives the backend enum deletion (P2) without referencing removed members.
+    /// </summary>
+    private static void AppendTransportRemovalHint(string[] args, List<string> errors)
+    {
+        if (TransportValue(args) is not { } value)
+        {
+            return;
+        }
+
+        if (string.Equals(value, "stdio", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("Hint: --transport stdio was removed; run bare 'ai-raccoon' for the proxy or 'ai-raccoon serve' for HTTP.");
+        }
+    }
+
+    /// <summary>
+    ///     Rejects removed values that still parse today (backend enum retains them for P2 compat):
+    ///     with keep-enum there is no coercion error yet, so add one naming the allowed set.
+    ///     Raw-args only, so it survives the enum deletion (then it is a no-op for stdio, which
+    ///     already failed coercion, and still rejects https until P2 deletes it too).
+    /// </summary>
+    private static void AppendTransportRemovalRejection(string[] args, List<string> errors)
+    {
+        if (TransportValue(args) is not { } value)
+        {
+            return;
+        }
+
+        if (string.Equals(value, "https", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("Cannot parse argument 'https' as --transport: expected proxy|http.");
+        }
+    }
+
+    /// <summary>Raw --transport value (handles --transport v and --transport=v, case-preserved).</summary>
+    private static string? TransportValue(string[] args)
+    {
+        for (var i = 0; i < args.Length; i++)
+        {
+            var token = args[i];
+            if (token.StartsWith("--transport=", StringComparison.Ordinal))
+            {
+                return token["--transport=".Length..];
+            }
+
+            if (string.Equals(token, "--transport", StringComparison.Ordinal) && i + 1 < args.Length)
+            {
+                var next = args[i + 1];
+                if (!next.StartsWith("-", StringComparison.Ordinal))
+                {
+                    return next;
+                }
+
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>System.CommandLine 2.0.10 reports some parse errors (e.g. a missing required
