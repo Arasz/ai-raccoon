@@ -11,6 +11,15 @@ dependencies = [
     "scikit-learn",
     "pytest",
     "optuna>=4.9.0",
+    # Harness pins (review: 5 floating heavy deps). Exact pins recorded from the
+    # resolving env 2026-09-09 (chromadb 1.5.9, llama-index 0.14.24, hf-embed 0.8.0,
+    # torch 2.13.0, sqlite-vec 0.1.9): a tuning harness must resolve identically
+    # everywhere or its numbers are not comparable across machines.
+    "chromadb==1.5.9",
+    "llama-index==0.14.24",
+    "llama-index-embeddings-huggingface==0.8.0",
+    "torch==2.13.0",
+    "sqlite-vec==0.1.9",
 ]
 
 [tool.pytest.ini_options]
