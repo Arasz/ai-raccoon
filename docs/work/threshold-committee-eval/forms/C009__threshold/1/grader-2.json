@@ -1,0 +1,48 @@
+{
+  "slotId": "C009__threshold",
+  "queryId": "C009",
+  "arm": "threshold",
+  "chunks": [
+    {
+      "hash": "407ab320871af93171c4cf1cc74344476fa89db76922724126720c76aac5d5fa",
+      "grade": "0",
+      "reason": "Shows one Managed-by header instance in HERMES.md without explaining the convention."
+    },
+    {
+      "hash": "89269fc947f0769575ed33642f6274cf2d31d7aa4de5c9368948fb4312fa3ab8",
+      "grade": "0",
+      "reason": "Shows one Managed-by header instance for the generated changelog index without explaining the convention."
+    },
+    {
+      "hash": "fa97c8d6cccca49bffcabd4976f30cdb13f8e4d8c9065b876aea4ec8e8527de6",
+      "grade": "0",
+      "reason": "Discusses a changelog incident with no mention of the Managed-by convention."
+    },
+    {
+      "hash": "e6732f9447884e24acb9e92a8e2d48d3a09643e14f2d5a63bcbd1f6edec6f114",
+      "grade": "0",
+      "reason": "Mentions ai-badger precedent in a personal note without documenting the Managed-by marker."
+    },
+    {
+      "hash": "37222c0cc2d1a299dedd307c9a7f5b837f063714dd933f83b8ef045679061064",
+      "grade": "0",
+      "reason": "Lists documentation entry points without mentioning the Managed-by marker."
+    },
+    {
+      "hash": "7ebc94ff88e059975acbcbac4ec5247d408122dfc5d9b1cbbd70c66df9626bf0",
+      "grade": "0",
+      "reason": "Documents Azure managed identity, not the Managed-by ai-badger marker."
+    },
+    {
+      "hash": "93c92401e22959d3d78409fe2657d762fd6af232b12479827a8f94096d23d258",
+      "grade": "0",
+      "reason": "Introduces what ai-badger is without documenting the Managed-by marker."
+    },
+    {
+      "hash": "6caf10f7635fb2f7ecd5de1a30c2b8ca8ae3f166959f97b23f37ed30a8ce1551",
+      "grade": "0",
+      "reason": "Discusses an owner-managed secret store, not the Managed-by ai-badger marker."
+    }
+  ],
+  "overall": "No chunk documents the Managed-by convention; all are marker instances or lexical false friends."
+}

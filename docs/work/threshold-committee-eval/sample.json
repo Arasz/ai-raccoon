@@ -1,0 +1,118 @@
+{
+  "header": {
+    "seed": 42,
+    "sampleSize": 16,
+    "changedPick": 10,
+    "graders": [
+      {
+        "index": 1,
+        "provider": null,
+        "model": null,
+        "label": "session-default"
+      },
+      {
+        "index": 2,
+        "provider": "openrouter",
+        "model": "meta/muse-spark-1.3-contributor",
+        "label": "openrouter/meta/muse-spark-1.3-contributor"
+      },
+      {
+        "index": 3,
+        "provider": "openrouter",
+        "model": "xiaomi/mimo-v2.5-pro",
+        "label": "openrouter/xiaomi/mimo-v2.5-pro"
+      }
+    ],
+    "stratification": "top-8 SET overlap between arms: changed < 1.0, controls == 1.0 (mechanical diff only, never grades)",
+    "composition": {
+      "changedAvailable": 15,
+      "controlsAvailable": 85,
+      "pickedChanged": 10,
+      "pickedControls": 6,
+      "total": 16,
+      "backfilled": false
+    }
+  },
+  "queries": [
+    {
+      "queryId": "C050",
+      "stratum": "changed",
+      "top8SetOverlap": 0.875
+    },
+    {
+      "queryId": "C011",
+      "stratum": "changed",
+      "top8SetOverlap": 0.875
+    },
+    {
+      "queryId": "C009",
+      "stratum": "changed",
+      "top8SetOverlap": 0.875
+    },
+    {
+      "queryId": "C053",
+      "stratum": "changed",
+      "top8SetOverlap": 0.875
+    },
+    {
+      "queryId": "C024",
+      "stratum": "changed",
+      "top8SetOverlap": 0.875
+    },
+    {
+      "queryId": "C023",
+      "stratum": "changed",
+      "top8SetOverlap": 0.875
+    },
+    {
+      "queryId": "C049",
+      "stratum": "changed",
+      "top8SetOverlap": 0.875
+    },
+    {
+      "queryId": "C016",
+      "stratum": "changed",
+      "top8SetOverlap": 0.875
+    },
+    {
+      "queryId": "C028",
+      "stratum": "changed",
+      "top8SetOverlap": 0.875
+    },
+    {
+      "queryId": "C056",
+      "stratum": "changed",
+      "top8SetOverlap": 0.75
+    },
+    {
+      "queryId": "C084",
+      "stratum": "controls",
+      "top8SetOverlap": 1.0
+    },
+    {
+      "queryId": "C014",
+      "stratum": "controls",
+      "top8SetOverlap": 1.0
+    },
+    {
+      "queryId": "C090",
+      "stratum": "controls",
+      "top8SetOverlap": 1.0
+    },
+    {
+      "queryId": "C068",
+      "stratum": "controls",
+      "top8SetOverlap": 1.0
+    },
+    {
+      "queryId": "C005",
+      "stratum": "controls",
+      "top8SetOverlap": 1.0
+    },
+    {
+      "queryId": "C004",
+      "stratum": "controls",
+      "top8SetOverlap": 1.0
+    }
+  ]
+}

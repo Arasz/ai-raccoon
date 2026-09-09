@@ -35,6 +35,7 @@ import logging
 import random
 import re
 import shlex
+import os
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -79,7 +80,7 @@ class Grader:
 GRADER_TRIO = (
     Grader(1, None, None),
     Grader(2, "openrouter", "meta/muse-spark-1.3-contributor"),
-    Grader(3, "xiaomi", "mio-v2.5-pro"),
+    Grader(3, "openrouter", "xiaomi/mimo-v2.5-pro"),
 )
 
 
@@ -372,6 +373,7 @@ class SubprocessGraderRunner:
                 text=True,
                 check=False,
                 timeout=self._timeout_s,
+                env={**os.environ, "PI_BADGER_MEM_RAG": "0"},
             )
         except subprocess.TimeoutExpired:
             log.error(

@@ -1,0 +1,48 @@
+{
+  "slotId": "C050__threshold",
+  "queryId": "C050",
+  "arm": "threshold",
+  "chunks": [
+    {
+      "hash": "d0bf2a54c94fefe4f0a8d38db5521a8ff4193b68a5cfe522fa1581d33974643f",
+      "grade": "0",
+      "reason": "This chunk mentions claude-agent-sdk-darwin-arm64, not the darwin-x64 variant asked about in the query."
+    },
+    {
+      "hash": "5b11db44f7ce3edc0ac823031a08a7cd205be3bacf529ad77f79e469c7f28c57",
+      "grade": "0",
+      "reason": "This is a general package introduction in Chinese and does not address how the specific darwin-x64 package is handled."
+    },
+    {
+      "hash": "00c952c347ab8083b176f38ef1e8a49c437f637d38835837976062736bec08cc",
+      "grade": "A",
+      "reason": "This chunk explicitly references @anthropic-ai/claude-agent-sdk-darwin-x64 in THIRD_PARTY_NOTICES.md, directly answering the query."
+    },
+    {
+      "hash": "d420eed9db43acc809ad410ecb9d6a6daef4b10f28b28c0af95891610fd2bb7b",
+      "grade": "0",
+      "reason": "This is a general README introduction and does not address how the specific darwin-x64 package is handled."
+    },
+    {
+      "hash": "ad8b69a39a14b0c29fa35b9fc93abc0760faebf9b922473073d9cf753c3e59a9",
+      "grade": "0",
+      "reason": "This chunk references claude-agent-sdk-win32-x64, the Windows variant, not the darwin-x64 asked about."
+    },
+    {
+      "hash": "6c3aff35c60e3e8e664b6bffad3242b1feff0cf3a9d6b0c550207c46b156d3e9",
+      "grade": "0",
+      "reason": "This discusses the general SDK pinned version and native runtime but does not specifically address darwin-x64 handling."
+    },
+    {
+      "hash": "e85320a8fb51698f1eee891e2ddc0ca65d6677e1e53f41b95e3ed33d9dab7311",
+      "grade": "0",
+      "reason": "This is a package.json snippet showing repository metadata and does not address how the darwin-x64 package is handled."
+    },
+    {
+      "hash": "fcb4bd415653effb8b35d503f71efe12e41dd4fc75f4e614e79c7f15cda31f6e",
+      "grade": "0",
+      "reason": "This discusses the general SDK runtime dependency pinning but does not specifically address darwin-x64 handling."
+    }
+  ],
+  "overall": "Only chunk 3 from THIRD_PARTY_NOTICES.md directly addresses how @anthropic-ai/claude-agent-sdk-darwin-x64 is handled."
+}

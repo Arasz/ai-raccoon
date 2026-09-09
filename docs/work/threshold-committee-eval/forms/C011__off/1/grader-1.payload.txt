@@ -1,0 +1,48 @@
+You are grader #1 on a 3-grader retrieval-quality committee.
+
+Query (projectId=ai-badger):
+How is Managed by ai-badger handled?
+
+Chunks retrieved for arm "off" (rank order):
+1. hash=407ab320871af93171c4cf1cc74344476fa89db76922724126720c76aac5d5fa
+   file: /Users/arasz/RiderProjects/ai-badger/HERMES.md
+   <!-- Managed by ai-badger. Source of truth: .ai-badger/HERMES.md. Do…
+2. hash=aa6b11b8cc74c4690c4b3db1c1246ef49d5540d00b842709d05b91c70178205d
+   file: /Users/arasz/RiderProjects/ai-badger/CLAUDE.md
+   <!-- Managed by ai-badger. Source of truth: .ai-badger/CLAUDE.md. Do…
+3. hash=fb87aea5792d20f831c34920ff65189bc74951fc492464d4190022b8dff0fbc9
+   file: /Users/arasz/RiderProjects/ai-badger/docs/adr/0017-memory-first-gate.md
+   …only repo text search is gated; `read_file`,
+  `memory_search` itself, and…
+4. hash=e6732f9447884e24acb9e92a8e2d48d3a09643e14f2d5a63bcbd1f6edec6f114
+   file: /Users/arasz/RiderProjects/arasz-home-page/.remember/today-2026-07-31.done.md
+   …closing; findings→bullets) driven by ai-badger 87%-reach precedent & 2026 LinkedIn…
+5. hash=75e76a011c8087dd4383bbf7552dc471c4b4b492f09bcd39ad7a32cfe65b980e
+   file: /Users/arasz/RiderProjects/ai-raccoon/docs/work/2026-08-09-ai-raccoon-mem-test.md
+   …ai-raccoon/docs **Healthy** (lastSync
+19:54:00), jsaa/docs + ai-badger…
+6. hash=858c7c7f032d76c0f782169dfc4426045538d61c67bc9724f2fcfa96fbf99725
+   file: /Users/arasz/RiderProjects/job-search-ai-assistant/docs/adr/0073-recognition-and-actionability-are-two-axes.md
+   …by a user
+
+`SignalDisposition` becomes `Proposed | Applied | Dismissed | NotApplicable`. `NotApplicable` is
+terminal…
+7. hash=6e5389d93ec45025155b6d5c0703b07eac914899f166548164aa55254b91a4ba
+   file: /Users/arasz/RiderProjects/ai-raccoon/docs/explanation/agent-memory-architecture.md
+   …The agent
+works in a worktree (ai-badger's `worktree-agent-isolation…
+8. hash=37222c0cc2d1a299dedd307c9a7f5b837f063714dd933f83b8ef045679061064
+   file: /Users/arasz/RiderProjects/ai-badger/docs/README.md
+   … ai-badger documentation
+
+Everything written down about this project, grouped by what you came here to do. Start with
+[`../README.md`](../README.md) if you have not met the project yet.
+
+`docs/adr/` …
+
+Grade EACH chunk: "A" (A = 1: the chunk answers the query) or "0" (0: it does not) — PoC rubric.
+
+Output ONLY the JSON form below — no free-form verdict, no markdown, no commentary:
+{"slotId": "<slotId>", "queryId": "<queryId>", "arm": "<arm>", "chunks": [{"hash": "<hash>", "grade": "A"|"0", "reason": "<one sentence>"}, ...], "overall": "<one sentence>"}
+
+Use slotId="C011__off", queryId="C011", arm="off", and exactly the hashes listed above, each exactly once.

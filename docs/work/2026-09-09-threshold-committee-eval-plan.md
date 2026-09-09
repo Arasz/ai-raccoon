@@ -35,7 +35,8 @@ SHIPPABLE; this plan enforces it mechanically.
   (the eval report's 0.513 ceiling). Test asserts against that constant.
 - Headless graders: `pi -p --no-session --provider <p> --model <id>` exists (`pi --help`,
   `--model` accepts `provider/id`). Grader #2/#3 = `openrouter/meta/muse-spark-1.3-contributor`,
-  `xiaomi/mio-v2.5-pro` (H1: one smoke call per model before the fleet runs).
+  `openrouter/xiaomi/mimo-v2.5-pro` (H1: one smoke call per model before the fleet runs;
+  #3 re-picked by the owner after the H1 auth failure — native `xiaomi` provider had no key).
 - Test conventions: `pyproject.toml` → `testpaths=["scripts/tests"]`, `pythonpath=["scripts/src"]`;
   retrieval-tuning tests load generators via `importlib.util.spec_from_file_location`
   (see `test_retrieval_tuning_eval_corpus.py`), env-gate live artifacts with `pytest.skip`.
@@ -50,7 +51,8 @@ SHIPPABLE; this plan enforces it mechanically.
 | Arms = `off` + `threshold τ=0.95` only; MMR discarded (no MMR arm built) | P3 (P1 only ports the gated code) |
 | Committee: 3 graders, gated form, 3/3 unanimity, majority never accepted | P4 |
 | Nudge ≤3 rounds, replacement ≤3, ≤9 attempts/slot, exhausted reported never skipped | P4 |
-| Grader models #1 default, #2 muse-spark, #3 mio-v2.5-pro (trio composition) | P4 (P5 reuses this config by reference; the decision lives here) |
+| Grader models #1 default, #2 muse-spark, #3 openrouter/xiaomi/mimo-v2.5-pro (trio
+  composition; #3 substitute ratified after H1) | P4 (P5 reuses this config by reference; the decision lives here) |
 | Sample 16 = 10 changed + 6 controls, stratified on mechanical diff only | P4 |
 | Blind A/B: randomized unlabeled a/b, 1 pass, comp_score=x/3 | P5 |
 | Reasons distilled to core sentences by the calling orchestrator (not an agent) | P5 |

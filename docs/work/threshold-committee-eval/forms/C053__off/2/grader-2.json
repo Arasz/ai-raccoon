@@ -1,0 +1,48 @@
+{
+  "slotId": "C053__off",
+  "queryId": "C053",
+  "arm": "off",
+  "chunks": [
+    {
+      "hash": "10a5467dd286e18dc8745a6a53c5b109acf1964e8d84fb474215d8d35da99d54",
+      "grade": "0",
+      "reason": "Chinese README describes the pruner package but shows no mermaid node definition or handling edge."
+    },
+    {
+      "hash": "fa83f28b10694317bbeeec76bda2d8b879d983c90da82d0dfc292c6f56e9067d",
+      "grade": "0",
+      "reason": "English README explains replay-safe pruning but does not show the queried mermaid wiring."
+    },
+    {
+      "hash": "001307d09219d7a2b94f643935cc9b812f8eeddba553ecbc92e58006e29f9682",
+      "grade": "A",
+      "reason": "CLI composition contains the exact plugin_dsh_base_tool_result_pruner node with its cfg handling edge."
+    },
+    {
+      "hash": "0b58324c30984c338302ba86d77a9a0c62c77cc7f95dbe90320b00875f826f29",
+      "grade": "0",
+      "reason": "Config catalog documents the pruner options but not the mermaid composition handling."
+    },
+    {
+      "hash": "32e94fafbe701ca038345ec3fee666440f7097f603b32acd9c30ffd6b258aada",
+      "grade": "0",
+      "reason": "Chinese config catalog mirrors the options entry without the mermaid node or wiring."
+    },
+    {
+      "hash": "7b3346c2cc4dfff9ad09053fd4885fad47125b817160dda0cc1e05942bf27a1a",
+      "grade": "0",
+      "reason": "Package manifest gives only name and description with no composition handling."
+    },
+    {
+      "hash": "0f3900c7429b24487a3a7ca8602b652b077e5495178f9e3c5e46b13d946836d2",
+      "grade": "0",
+      "reason": "ACP example shows a different plugin graph and lacks the queried pruner node."
+    },
+    {
+      "hash": "473b26ed0926a54cad426a8af4780442fe4c32adad0fc75e0e3db8126bf3da43",
+      "grade": "0",
+      "reason": "ADR about MCP tool indexing is unrelated to compaction pruning or composition."
+    }
+  ],
+  "overall": "Only the CLI composition directly shows the queried node handling; others are same-name distractors or unrelated."
+}

@@ -1,0 +1,48 @@
+{
+  "slotId": "C053__off",
+  "queryId": "C053",
+  "arm": "off",
+  "chunks": [
+    {
+      "hash": "10a5467dd286e18dc8745a6a53c5b109acf1964e8d84fb474215d8d35da99d54",
+      "grade": "0",
+      "reason": "Describes the pruner service in Chinese but contains no mermaid node or cfg wiring."
+    },
+    {
+      "hash": "fa83f28b10694317bbeeec76bda2d8b879d983c90da82d0dfc292c6f56e9067d",
+      "grade": "0",
+      "reason": "Describes the pruner service in English but contains no mermaid node or cfg wiring."
+    },
+    {
+      "hash": "001307d09219d7a2b94f643935cc9b812f8eeddba553ecbc92e58006e29f9682",
+      "grade": "A",
+      "reason": "Contains the exact plugin_dsh_base_tool_result_pruner node with its cfg edge and plugin-id mapping."
+    },
+    {
+      "hash": "0b58324c30984c338302ba86d77a9a0c62c77cc7f95dbe90320b00875f826f29",
+      "grade": "0",
+      "reason": "Gives the pruner config schema and tokenMeter requirement but not the mermaid wiring."
+    },
+    {
+      "hash": "32e94fafbe701ca038345ec3fee666440f7097f603b32acd9c30ffd6b258aada",
+      "grade": "0",
+      "reason": "Same config-catalog entry in Chinese, with no mermaid node or cfg edge."
+    },
+    {
+      "hash": "7b3346c2cc4dfff9ad09053fd4885fad47125b817160dda0cc1e05942bf27a1a",
+      "grade": "0",
+      "reason": "Lists only package name, version and dependencies with no handling or wiring detail."
+    },
+    {
+      "hash": "0f3900c7429b24487a3a7ca8602b652b077e5495178f9e3c5e46b13d946836d2",
+      "grade": "0",
+      "reason": "Shows a different ACP composition without the tool-result-pruner node."
+    },
+    {
+      "hash": "473b26ed0926a54cad426a8af4780442fe4c32adad0fc75e0e3db8126bf3da43",
+      "grade": "0",
+      "reason": "Discusses MCP tool-index enrichment and is unrelated to the pruner composition."
+    }
+  ],
+  "overall": "Only the CLI composition answers the mermaid wiring; the rest are topical distractors or unrelated."
+}

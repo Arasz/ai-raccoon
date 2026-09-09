@@ -54,7 +54,7 @@ def _sample_json(n: int = N_QUERIES) -> dict:
                     "provider": "openrouter",
                     "model": "meta/muse-spark-1.3-contributor",
                 },
-                {"name": "grader-3", "provider": "xiaomi", "model": "mio-v2.5-pro"},
+                {"name": "grader-3", "provider": "openrouter", "model": "xiaomi/mimo-v2.5-pro"},
             ],
             "sampleSize": n,
         },
@@ -248,8 +248,8 @@ def test_ac5_3_fresh_sessions_48_calls(tmp_path):
             assert argv[argv.index("--provider") + 1] == "openrouter"
             assert argv[argv.index("--model") + 1] == "meta/muse-spark-1.3-contributor"
         else:
-            assert argv[argv.index("--provider") + 1] == "xiaomi"
-            assert argv[argv.index("--model") + 1] == "mio-v2.5-pro"
+            assert argv[argv.index("--provider") + 1] == "openrouter"
+            assert argv[argv.index("--model") + 1] == "xiaomi/mimo-v2.5-pro"
     # All three graders of one query see the identical payload.
     for qi in range(N_QUERIES):
         assert (

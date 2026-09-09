@@ -35,7 +35,15 @@ source; unverified claims are labelled hypotheses.
   grades"), ≤3 rounds → replace query, ≤3 replacements → ≤9 attempts/slot; exhausted slot
   reported, never skipped.
 - Grader models: #1 session default, #2 `openrouter/meta/muse-spark-1.3-contributor`,
-  #3 `xiaomi/mio-v2.5-pro` (owner's explicit pick). A/B fresh trio = same composition.
+  #3 `openrouter/xiaomi/mimo-v2.5-pro` (owner's explicit pick; re-picked as openrouter-hosted
+  after the first H1 attempt failed on missing native-xiaomi credentials). A/B fresh trio =
+  same composition.
+- OBSERVATION GRADER #4 (owner `e:` addition, post-fleet-dispatch): `openrouter/inception/mercury-2.5`.
+  **Not part of the committee consensus** — the ratified 3/3 unanimity, comp_score x/(3−a) and
+  all caps remain the trio's. Mercury replays the SAME archived round-1 payloads (committee)
+  and A/B payloads (seeded), one pass each, no nudges; its forms are archived separately and
+  the report carries an OBSERVATION-ARM appendix comparing per-chunk agreement vs each trio
+  grader + vs consensus, A/B pick agreement, and its own comp_score.
 - Blind A/B second pass on the sample: (query, A, B), randomized unlabeled order, 1 pass,
   comp_score = x/3 for threshold, reasons distilled to core sentences by the orchestrator.
 - Sample size: 16 queries = 10 threshold-changed + 6 identical-arm controls (stratified on
