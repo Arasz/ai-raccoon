@@ -30,6 +30,7 @@ flowchart LR
 
 ## What's new
 
+- **BREAKING: `--transport stdio` and `--transport https` are removed — bare `ai-raccoon` is proxy-only, full servers come only from `serve`.** (1.42.0) [ADR-0104](docs/adr/0104-remove-the-stdio-full-server-mode.md)
 - **Run-once project-ids repair with P3 enforcement.** (1.41.0) [ADR-0100](docs/adr/0100-repair-folds-all-committed-scopes.md) · [ADR-0101](docs/adr/0101-repair-verdicts-ignore-telemetry-workspaces-block.md) · [ADR-0102](docs/adr/0102-durable-alias-map-with-p3-enforcement.md) · [ADR-0103](docs/adr/0103-run-until-fixed-loop-with-falsifiable-verdict.md)
 - **Pre-filled project-ids repair template.** (1.40.0) [ADR-0099](docs/adr/0099-empty-default-alias-map.md)
 - **BREAKING: the public binary no longer folds any project id automatically — run one mapped repair.** (1.39.0) [ADR-0099](docs/adr/0099-empty-default-alias-map.md)

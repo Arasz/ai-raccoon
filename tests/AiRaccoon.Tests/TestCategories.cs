@@ -6,7 +6,7 @@ namespace AiRaccoon.Tests;
 /// <summary>
 ///     Trait values for filtering: `dotnet test --filter "Category=Unit&Speed=Fast"`.
 ///     Category: Unit (pure logic / fakes), Integration (real SQLite or native extensions),
-///     E2E (full server over HTTP via WebApplicationFactory). Speed: Fast, Slow or Nightly —
+///     E2E (full server over real HTTP on an ephemeral loopback port). Speed: Fast, Slow or Nightly —
 ///     Nightly is excluded from all three required gates (build-fast, build-bdd, build-slow).
 ///     Its only runner is build-nightly-gates, which is opt-in — the run-nightly-gates label or
 ///     a manual dispatch — and is not a required check, so a Nightly test can go red on main
