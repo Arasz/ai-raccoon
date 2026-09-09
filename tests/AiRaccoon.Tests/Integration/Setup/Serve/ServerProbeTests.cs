@@ -2,7 +2,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using AiRaccoon.Hosting.Common;
-using AiRaccoon.Tests.E2E;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
@@ -15,9 +17,27 @@ namespace AiRaccoon.Tests.Integration.Setup.Serve;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class ServerProbeTests : IDisposable
+public sealed class ServerProbeTests : IDisposable, IAsyncLifetime
 {
     private readonly List<TcpListener> _listeners = [];
+
+    private IAsyncDisposable? _envGate;
+
+    /// <summary>
+    ///     Holds the env gate as a reader: the JustRecognizes test below opens a bank through the
+    ///     real host, so an encryption test's window would make it open a plain bank with a key
+    ///     (docs/adr/0066).
+    /// </summary>
+    public async ValueTask InitializeAsync() =>
+        _envGate = await TestData.HoldEnvGateAsync(TestContext.Current.CancellationToken);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_envGate is not null)
+        {
+            await _envGate.DisposeAsync();
+        }
+    }
 
     public void Dispose()
     {
@@ -40,13 +60,34 @@ public sealed class ServerProbeTests : IDisposable
     [RetryFact]
     public async Task Probe_RecognizesAnAiRaccoonServer()
     {
-        using var factory = new McpServerFactory();
-        using var httpClient = factory.CreateClient();
+        // P2/ADR-0020: WebApplicationFactory no longer yields an in-memory client (the entry
+        // point builds no host), so the probe is exercised against a directly-built server on
+        // an ephemeral port — the same real socket a production client dials.
+        var dataRoot = TestData.CreateTempRoot("ai-raccoon-probe-recognizes");
+        try
+        {
+            using var lease = LoopbackPort.Reserve();
+            var port = lease.Port;
+            using var host = McpServerSetup.CreateServerHost(
+                new ServerConfig(port, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
+            lease.ReleaseForBind();
+            await host.StartAsync(TestContext.Current.CancellationToken);
+            try
+            {
+                var responds = await TestData.CreateServerProbe()
+                    .RespondsAsync(port, TestContext.Current.CancellationToken);
 
-        var responds = await new ServerProbe(httpClient)
-            .RespondsAsync(new Uri("http://localhost/mcp"), TestContext.Current.CancellationToken);
-
-        responds.ShouldBeTrue();
+                responds.ShouldBeTrue();
+            }
+            finally
+            {
+                await host.StopAsync(TestContext.Current.CancellationToken);
+            }
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
     }
 
     [RetryFact]

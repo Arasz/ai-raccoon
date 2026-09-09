@@ -1,0 +1,48 @@
+{
+  "slotId": "C050__threshold",
+  "queryId": "C050",
+  "arm": "threshold",
+  "chunks": [
+    {
+      "hash": "d0bf2a54c94fefe4f0a8d38db5521a8ff4193b68a5cfe522fa1581d33974643f",
+      "grade": "0",
+      "reason": "Names darwin-arm64, not darwin-x64, so it does not state the queried package handling."
+    },
+    {
+      "hash": "5b11db44f7ce3edc0ac823031a08a7cd205be3bacf529ad77f79e469c7f28c57",
+      "grade": "0",
+      "reason": "Introduces the subagent provider generally with no mention of darwin-x64."
+    },
+    {
+      "hash": "00c952c347ab8083b176f38ef1e8a49c437f637d38835837976062736bec08cc",
+      "grade": "A",
+      "reason": "Lists darwin-x64 with version 0.3.220 and declared license, its notices entry."
+    },
+    {
+      "hash": "d420eed9db43acc809ad410ecb9d6a6daef4b10f28b28c0af95891610fd2bb7b",
+      "grade": "0",
+      "reason": "Introduces the subagent provider generally with no mention of darwin-x64."
+    },
+    {
+      "hash": "ad8b69a39a14b0c29fa35b9fc93abc0760faebf9b922473073d9cf753c3e59a9",
+      "grade": "0",
+      "reason": "Names win32-x64, not darwin-x64, so it does not state the queried package handling."
+    },
+    {
+      "hash": "6c3aff35c60e3e8e664b6bffad3242b1feff0cf3a9d6b0c550207c46b156d3e9",
+      "grade": "0",
+      "reason": "States pinned SDK and native versus fixture use generally without naming darwin-x64."
+    },
+    {
+      "hash": "e85320a8fb51698f1eee891e2ddc0ca65d6677e1e53f41b95e3ed33d9dab7311",
+      "grade": "0",
+      "reason": "Shows package repository metadata with no platform payload handling."
+    },
+    {
+      "hash": "fcb4bd415653effb8b35d503f71efe12e41dd4fc75f4e614e79c7f15cda31f6e",
+      "grade": "0",
+      "reason": "States pinned SDK and payload-closure disclosure generally without naming darwin-x64."
+    }
+  ],
+  "overall": "Only the exact darwin-x64 notices row answers the query; siblings, generic SDK context, and metadata do not."
+}

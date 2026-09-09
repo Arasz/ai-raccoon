@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/model-groups.schema.json",
+  "title": "ai-badger model groups registry",
+  "description": "Level (low|medium|high) to ordered OpenRouter model list. Canonical source is features/common/data/model-groups.json, delivered to .ai-badger/model-groups.json. Index 0 of each group is the preferred pin. Structural shape only: preferred-first, lexicographic price order (with the demoted-tail exemption), per-group id uniqueness, tail position and the weights-identity evidence rule are enforced by the model_groups validator, which draft 2020-12 cannot express.",
+  "type": "object",
+  "required": ["frameworkVersion", "registryVersion", "measuredAt", "groups"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "frameworkVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "registryVersion": { "type": "integer", "minimum": 1 },
+    "measuredAt": {
+      "type": "string",
+      "format": "date",
+      "description": "YYYY-MM-DD pricing/evidence date for the whole file. Date-shaped values are enforced by the model_groups validator; a bare format keyword is advisory under this repo's validator."
+    },
+    "source": {
+      "type": "string",
+      "description": "Provenance pointer, e.g. the brief or memory context the seed was verified against."
+    },
+    "groups": {
+      "type": "object",
+      "required": ["low", "medium", "high"],
+      "additionalProperties": false,
+      "properties": {
+        "low": { "$ref": "#/$defs/group" },
+        "medium": { "$ref": "#/$defs/group" },
+        "high": { "$ref": "#/$defs/group" }
+      }
+    }
+  },
+  "$defs": {
+    "group": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/member" }
+    },
+    "member": {
+      "type": "object",
+      "required": ["id", "preferred", "pricing", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^openrouter/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "description": "Fully-qualified model id. Bare aliases never appear here."
+        },
+        "preferred": { "type": "boolean" },
+        "pricing": { "$ref": "#/$defs/pricing" },
+        "evidence": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One line saying why this member sits here. Entries sharing a weightsId state the relationship."
+        },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Always-latest pointers. Documentary; the resolver never follows them."
+        },
+        "weightsId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Capability-identity key: entries sharing one are the same weights."
+        },
+        "status": {
+          "enum": ["active", "demoted", "deprecated"],
+          "default": "active",
+          "description": "Demoted entries are display-only tail: skipped for price order, pinned last with revisionWatch."
+        },
+        "revisionWatch": {
+          "type": "boolean",
+          "default": false,
+          "description": "True flags an evidence-demoted entry needing revisit before any other refresh work."
+        },
+        "measuredAt": {
+          "type": "string",
+          "format": "date",
+          "description": "Per-entry override; defaults to the top-level measuredAt."
+        }
+      }
+    },
+    "pricing": {
+      "type": "object",
+      "required": ["inputPerM", "outputPerM"],
+      "additionalProperties": false,
+      "properties": {
+        "inputPerM": { "type": "number", "exclusiveMinimum": 0 },
+        "outputPerM": { "type": "number", "exclusiveMinimum": 0 },
+        "currency": { "type": "string", "const": "USD", "default": "USD" }
+      }
+    }
+  }
+}

@@ -15,9 +15,11 @@ internal static class CliCommandTree
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
-    /// <summary>Derived from McpTransport so a new transport cannot leave the help name stale.</summary>
+    /// <summary>CLI surface is proxy|http only (stdio/https removed, P1); a hand-maintained
+    /// allowlist of the surviving pair (ADR-0104) — a new McpTransport member stays out of help
+    /// until it is added here deliberately. nameof keeps the spelling tied to the enum.</summary>
     private static readonly string TransportHelpName =
-        string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant()));
+        string.Join('|', new[] { nameof(McpTransport.Proxy), nameof(McpTransport.Http) }.Select(name => name.ToLowerInvariant()));
 
     /// <summary>
     ///     The root launch --port (shared with the bare launch root); serve reads it instance-based
@@ -112,7 +114,7 @@ internal static class CliCommandTree
     {
         root.Add(new Option<McpTransport>("--transport")
         {
-            Description = "MCP transport; proxy (default) relays to one HTTP backend, https unsupported",
+            Description = "MCP transport; proxy (default) relays to one HTTP backend",
             HelpName = TransportHelpName
         });
         root.Add(new Option<string>("--data-root") { Description = "Bank data root (must precede the verb)", HelpName = "path" });

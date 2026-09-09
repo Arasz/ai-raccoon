@@ -17,7 +17,7 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     Full-stack tests over the real HTTP MCP server (WebApplicationFactory + MCP client): the
+///     Full-stack tests over the real HTTP MCP server (directly-built host + MCP client): the
 ///     tools, the managed store and the JSON-RPC transport all run together, embedding through
 ///     both the bundled ONNX model (local) and an in-process fake OpenAI-compatible endpoint.
 /// </summary>

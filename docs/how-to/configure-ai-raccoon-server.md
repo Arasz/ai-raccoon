@@ -19,10 +19,16 @@ AiRaccoon stores settings directly in the SQLite `memory.db` settings table. Env
 
 | Flag | Description | Allowed Values | Default |
 |---|---|---|---|
-| `--transport` | Communication transport | `proxy`, `stdio`, `http`, `https` | `proxy` |
+| `--transport` | Communication transport | `proxy`, `http` (`stdio` and `https` were removed, see below) | `proxy` |
 | `--data-root <path>` | Directory for `memory.db` and state | Any valid directory path | `~/.ai-raccoon` |
 | `--install-scope` | Scope partition for database storage | `user`, `project` | `user` |
 | `--port <n>` | HTTP listen port for serve mode | `1-65535` (`0` for random free port) | `7721` |
+
+Two `--transport` values were removed outright
+([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)). `stdio` fails at
+parse with exit 9 and a hint on bare launches (exit 15 on verb paths), and `https`
+fails at parse with exit 9. A bare `--transport http` still parses but launches the
+proxy like any bare run. Full servers come only from `serve`.
 
 ---
 

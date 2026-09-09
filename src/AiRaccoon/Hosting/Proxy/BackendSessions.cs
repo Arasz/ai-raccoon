@@ -125,6 +125,6 @@ public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClien
             cancellationToken: ctx);
     }
 
-    /// <summary>Every way the backend can be unusable ends on the same line, with the same escape hatch.</summary>
-    private static string Unavailable(string reason) => $"ai-raccoon: {reason}; to serve in-process instead, run: ai-raccoon --transport stdio";
+    /// <summary>Every way the backend can be unusable ends on the same line, with the same serve pointer.</summary>
+    private static string Unavailable(string reason) => $"ai-raccoon: {reason}; no in-process fallback exists — start the backend first: ai-raccoon serve --port <port>";
 }

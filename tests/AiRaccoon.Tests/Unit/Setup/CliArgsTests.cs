@@ -911,8 +911,8 @@ public class CliArgsTests
     }
 
     /// <summary>
-    ///     The --transport help name is derived from McpTransport, not hand-written: a transport
-    ///     the enum gains but the help name never mentions fails here rather than shipping a lie.
+    ///     P1 removal: the CLI surface is proxy|http only. Help lists the surviving set and
+    ///     --transport stdio/https fail parsing (T2 pairs help text with a negative parse assertion).
     /// </summary>
     [Fact]
     public void Render_Help_ListsTheProxyTransport()
@@ -924,6 +924,14 @@ public class CliArgsTests
 
         var help = writer.ToString();
         help.ShouldContain("proxy");
-        help.ShouldContain(string.Join('|', Enum.GetNames<McpTransport>().Select(name => name.ToLowerInvariant())));
+        help.ShouldContain("http");
+        help.ShouldContain("proxy|http");
+        help.ShouldNotContain("stdio");
+        help.ShouldNotContain("https");
+
+        CliArgs.TryParse(["--transport", "stdio"], out var stdio).ShouldBeTrue();
+        stdio!.Errors.ShouldNotBeEmpty();
+        CliArgs.TryParse(["--transport", "https"], out var https).ShouldBeTrue();
+        https!.Errors.ShouldNotBeEmpty();
     }
 }

@@ -4,6 +4,7 @@ description: >
   Test-quality authority. Judges whether a suite would catch real defects;
   verifies gaps by running mutations, never by reasoning alone.
 model: opus
+level: high
 ---
 
 # QA

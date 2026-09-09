@@ -3,7 +3,7 @@ name: task
 description: >-
   Use when the user wants to start, continue, or finish a backlog task — "/task <id>", "start
   task X", "work on the next task", "finish this task". Runs it end-to-end as a
-  token-tracked unit of work with two effort levels (low/high), plan packaging with
+  token-tracked unit of work with low/high effort, plan packaging with
   mandatory integration package, MoE panels for high-effort, and automated task-ID
   derivation ({repo-alias}-{key}). Delegates planning/review to high-reasoning models
   and implementation to persona-routed agents. Project specifics from
@@ -28,7 +28,7 @@ dead session can be resumed.
 
 **All project specifics come from `.ai-badger/config.json`** — never hardcode a build command,
 a persona name, or a repository. Tracking data lives in `.ai-badger/task-tracking/` (gitignored).
-Scripts live in this skill's `scripts/`. Read `references/file-schemas.md` before hand-writing or repairing any tracking store — it carries the exact shape of each one.
+Scripts live in this skill's `scripts/`. Before hand-writing any tracking store, read `references/file-schemas.md` for its exact shape.
 
 ## When NOT to Use
 
@@ -38,12 +38,11 @@ Scripts live in this skill's `scripts/`. Read `references/file-schemas.md` befor
 
 ## Default Loop
 
-Every task follows one of two effort-level loops. The loop is the spine; the phases below
-(Phase 0–6) detail how its steps are executed.
+Every task follows a low- or high-effort loop. The loop is the spine; the phases below
+(Phase 0–6) detail its steps.
 
-Before starting, **ask the user if this is a low-effort or high-effort task**. When autonomous
-(no user to ask), derive the effort after the analyze step — a best-effort estimate matching
-effort to task scope.
+Before starting, **ask the user whether this is a low- or high-effort task**. When autonomous,
+derive effort after analyze — a best-effort match of effort to scope.
 
 ### Low-effort loop
 
@@ -130,6 +129,16 @@ delegation, not by assuming your own model.
 
 Roles, not models. Which concrete model fills each is bound by the agent-specific extension.
 
+### Model tier contract
+
+`effort` (low/high) picks the loop; `level` picks the model tier — they are independent, never bare `level` for effort.
+
+The `level` field is optional (`low`, `medium`, or `high`), resolved to that model tier's preferred registry entry.
+An explicit `model` always wins over `level`.
+With neither `level` nor `model`, the dispatch inherits the session (or parent) default model.
+The registry lives at `.ai-badger/model-groups.json`; it holds the IDs and prices, so this skill names neither.
+See `.ai-badger/delegation.md` (reasoning-model dispatch).
+
 Subagent prompts must be self-contained: scope, ACs, files, TDD rules, report-back shape. Parallelise
 independent subagents. **Split work so it *can* run in parallel** — name shared-file sections
 (serialise) vs disjoint ones (parallel).
@@ -154,10 +163,10 @@ are not isolation — shared build output means a green run proves nothing. Two 
 ## Phase 1 — Start
 
 Entry: previous task finished or parked; clean-enough context.
-Exit: effort level chosen, tracker STARTED, worktree exists, five preflight blocks present,
+Exit: effort chosen, tracker STARTED, worktree exists, five preflight blocks present,
 research record gathered, taskId derived.
 
-1. **Determine effort level.** Ask user low or high. When autonomous, derive after analyze.
+1. **Determine effort.** Ask user low or high. When autonomous, derive after analyze.
 2. **Analyze the task.** Resolve the task (issue URL or freeform scope/title). Read referenced docs.
 
    **Derive the taskId** per the derivation formula. Determine repo alias
@@ -173,6 +182,11 @@ research record gathered, taskId derived.
    **Preflight checklist** (Rule 1): confirm the brief has objective, constraints, known unknowns,
    output contract, and stop condition. Fill missing blocks from review or ask the user.
 3. Register: `python3 .ai-badger/skills/task/scripts/task_tracker.py start <taskId> --title "<title>" --branch task/<taskId>-<slug>`.
+   `start` must exit 0 — the tracker row is what makes this work visible to status. On exit 2
+   (session already claimed, or no session source resolved) STOP before any branch, worktree,
+   or commit: pass `--session-id` explicitly (copilot ships no session source, so it always
+   must), or `reattach` after a resume. Work done with no tracker row is invisible to status
+   except as an "untracked worktree" name — that is how a past task went blind mid-flight.
 4. Ask the user to rename the session to match the task (skip if autonomous).
 5. **Work in the worktree `start` just created** — it prints the path, and it is
    `.ai-badger/worktrees/<taskId>` on the branch you passed to `--branch`. Every command for
@@ -184,12 +198,11 @@ research record gathered, taskId derived.
    milestones on the bus — read `multi-agent-communication` when parallel work is active.
 5. **Research before you plan, and plan the review first** (`evidence-first-research`
    formalises the method for non-trivial tasks; dispatch it rather than re-describing it).
-   Write down what has to be checked to answer the task — every point in the request, and
-   which of them need research rather than a guess. Then run that review and gather the
-   evidence into a research record where every finding cites its source path and every
-   unverified claim is labelled a hypothesis. A plan written before this record exists is a
-   guess with a table around it. When several independent angles need evidence, run them as
-   parallel read-only lanes and consolidate per `multi-lane-report-assembly`.
+   List what must be checked — every point in the request, marking which need research over
+   guess. Gather the evidence into a research record where every finding cites its source
+   path and every unverified claim is labelled a hypothesis. A plan before this record is a
+   guess with a table around it. Run independent angles as parallel read-only lanes and
+   consolidate per `multi-lane-report-assembly`.
 
 ## Phase 2 — PLANNING
 
@@ -219,26 +232,38 @@ into packages and subpackages.
    before it can be built, produce one, and look for an installed skill that formalises that shape
    before writing a bespoke document. Before the first failing test, run `design-tests` on the
    acceptance criteria — the test list is part of the plan, not of the implementation.
+   The planning lane's output contract includes writing the plan to
+   `.ai-badger/task-tracking/plans/<YYYY-MM-DD>-<taskId>.md`: taskId in the filename, one
+   `**P<N> …**` heading per package, one `- [ ]` checkbox per acceptance point (checked as
+   points land). Status reads this file — a plan living only in a delegation brief reports
+   as "(no plan file)". Confirm the status script shows it matched (not fallback) before
+   dispatching implementation.
 2. **Plan review before dispatch.** In the **low-effort** variant, hand the drafted plan to a
    second high-reasoning agent for review. In the **high-effort** variant, delegate to an MoE
    panel (default 3 experts, at least one different from the plan-authoring experts) and have it
    attack structure, feasibility, budget arithmetic, and testability. Fold MUST/SHOULD findings
-   back into the plan before any implementation dispatch. This is the same join discipline
-   Phase 4 applies later, applied early where a defect costs least. When consolidating reviewed
+   back into the plan before any implementation dispatch. Same join discipline as Phase 4,
+   applied early where defects cost least. When consolidating reviewed
    plan sections into lane briefs, follow `references/lane-dispatch-brief.md` — sections sharing
    a file serialise, the rest parallelise.
 
 ## Phase 3 — Execute
 
 1. Dispatch implementation subagents per `personaRouting`. Instruct every code subagent to write
-   the failing test first (TDD).
+   the failing test first (TDD). Lane worktrees are named `<taskId>-lane-*` under
+   `.ai-badger/worktrees/` — status recognises only that shape (plus the orchestrator's own
+   `<taskId>`); any other worktree name reports as untracked.
 
    **Operator contract** (Rule 4): each agent brief must include tool names, abort criteria,
    success predicate, and handoff conditions. Persona prose is optional, one short line only.
 2. Record the lane's `total_tokens`:
    `python3 .ai-badger/skills/task/scripts/task_tracker.py subagent <taskId> <n>` or `--delegation <id>`.
    Interactive pi delegations return receipts by default; the `delegation-result` followUp carries
-   `details.usage` (input+output); `background:false` blocks.
+   `details.usage` (input+output); `background:false` blocks. Record on EVERY delegation
+   completion before the next dispatch — a mid-flight lane is invisible to status until its
+   record lands. `--delegation <id>` wherever the harness keeps receipts (pi subagent-logs,
+   hermes async_delegations, claude transcripts); positional totalTokens otherwise (copilot,
+   mechanical lanes).
 3. Review each result at the seams (matches plan? acceptance criteria?). Send follow-ups back
    rather than rewriting, unless the fix is a few lines.
 4. Commit and push per work package (small commits). If the source-control extension is active,
@@ -276,8 +301,8 @@ the same version, one renames what another calls, a guard passes on each half an
 
 Run checks against the combined result, not the pieces.
 
-**Then stop checking.** Execute the plan rather than re-reading it. A third pass over your own
-reasoning finds less than the first and costs the same. Re-verify after integration only when
+**Then stop checking.** Execute the plan rather than re-reading it; a third self-pass costs as
+much and finds less. Re-verify after integration only when
 something changed, a claim is load-bearing, or a check has never been seen to fail. **Facts
 are the exception**: anything from docs, an earlier run, or another's research gets re-checked
 every time — that is what goes stale while your reasoning stays put.
@@ -314,13 +339,11 @@ Exit: merged, state updated, tracking closed.
 6. Ask the user to grade the skill 0–5: `python3 .ai-badger/skills/task/scripts/task_tracker.py grade <taskId> <0-5>`
    (skip/leave unset if autonomous).
 7. Report the task's token cost and recommend `/compact` or a fresh session before the next
-   task — this is the default ending. **Authorized auto-continue** (alternative path, only when
-   an observable condition holds: the `auto-wm` skill's autonomic/partner mode is active, or the
-   user's original invocation explicitly said to continue to the next task): after Phase 6
-   completes, compact per Phase 0 guidance, read the next task from `.ai-badger/state.json`'s
-   `next` field (or the next unclaimed item on your configured backlog source), and invoke this
-   skill again for that task. If neither condition holds and no user is available, start a fresh
-   session and tell the user to re-invoke the skill so the next task starts on a clean context.
+   task — this is the default ending. **Authorized auto-continue** (only when the `auto-wm`
+   skill's autonomic/partner mode is active, or the invocation explicitly said to continue):
+   after Phase 6, compact per Phase 0, read the next task from `.ai-badger/state.json`'s `next`
+   field (or the next unclaimed backlog item), and invoke this skill again. Otherwise start fresh
+   and tell the user to re-invoke for the next task.
 
 ## Phase 6 — Documentation-gap audit
 
@@ -333,6 +356,11 @@ project's docs against the merged code, fix small drift, and report gaps needing
   branch that does not exist.
 - **Interactive pi delegation = receipt, not answer.** Answers land as
   `delegation-result` followUps; review seams as they land.
+- **A stale session record makes `start` attach (or refuse) wrongly.** Exact env identity
+  (PI_/HERMES_/CLAUDE_ session id) wins over pid/cwd guesses inside the tracker, but a sessions
+  row whose pid is long dead is still a hygiene flag — status marks it STALE. On an "already
+  attached" refusal you do not recognise, re-resolve with explicit `--session-id` rather than
+  working untracked.
 - **`finish` refuses and keeps the worktree when it holds work that exists nowhere else.** Read the
   `worktree.keptBecause` field; a kept worktree is unmerged or uncommitted work, not failed cleanup.
 - **Never rewrite always-loaded context files (`CLAUDE.md`, `.ai-badger/state.json`) mid-task.** Cache
@@ -357,7 +385,7 @@ machine-run gates that close the task.
 - [ ] All work lives in the worktree `start` created — no stray commits on the main checkout's branch
 - [ ] Every plan point's acceptance gate ran; plan was split into packages with the last being integration
 - [ ] Task-ID derived per the `{repo-alias}-{key}` formula and is unique
-- [ ] Effort level was determined (low or high) before implementation began
+- [ ] Effort was determined (low or high) before implementation began
 - [ ] High-effort tasks ran QA test quality & coverage step
 - [ ] `reflect` step examined memory, semantica, and session history for learnings
 - [ ] `finish` left no worktree with unmerged or uncommitted work — `keptBecause` empty or resolved

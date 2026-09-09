@@ -887,7 +887,7 @@ src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
                             (28 tools in all, across the ten Tools/*.cs classes)
   Tools/PerformanceTools.cs memory_performance — thin over MetricsReportService (ADR-0065)
   Access/MemoryAccessGuard  Enforces access modes at the tool boundary
-  Setup/McpServerSetup.cs   --transport CLI flag → stdio/HTTP host selection
+  Setup/McpServerSetup.cs   launch routing (bare runs proxy, `serve` builds the HTTP host)
   Hosting/                  proxy (the default) and serve, moved out of Setup/Serve/ 2026-08-22:
                             Proxy/ (ProxyRunner, ProxyForwarder, BackendLauncher), Node/ (NodeRunner,
                             ServerRestart, ObservabilityRunner, McpTokenGate), Common/ (ServerProbe,

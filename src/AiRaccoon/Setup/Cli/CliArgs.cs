@@ -34,14 +34,91 @@ internal static class CliArgs
 
         var commandPath = CommandPathOf(parseResult);
         var optionReadResult = ReadRootOptions(parseResult);
+        if (!showHelp && !showVersion)
+        {
+            AppendTransportRemovalHint(args, errors);
+        }
+
         if (optionReadResult.IsSuccess)
         {
+            if (!showHelp && !showVersion)
+            {
+                AppendTransportRemovalRejection(args, errors, optionReadResult.Options);
+            }
+
             result = new CliInput(optionReadResult.Options, commandPath, showHelp, showVersion, errors, parseResult);
             return true;
         }
 
         result = new CliInput(RootCliOptions.Null, commandPath, showHelp, showVersion, [.. errors.Union(optionReadResult.Errors)], parseResult);
         return false;
+    }
+
+    /// <summary>
+    ///     P1 CLI-surface removal: --transport is proxy|http only. When the raw args name a
+    ///     removed value, append one stderr line (still exit 9 for bare launches via the launch
+    ///     Errors check, 15 for verb paths via ConfigCommands). Raw-args scan, so the hint does
+    ///     not depend on how System.CommandLine bound the value — and keep-enum (ADR-0104) means
+    ///     the members stay as parse-rejected values, so this scan is the mechanism, not a bridge
+    ///     to a deletion.
+    /// </summary>
+    private static void AppendTransportRemovalHint(string[] args, List<string> errors)
+    {
+        if (TransportValue(args) is not { } value)
+        {
+            return;
+        }
+
+        if (string.Equals(value, "stdio", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("Hint: --transport stdio was removed; run bare 'ai-raccoon' for the proxy or 'ai-raccoon serve' for HTTP.");
+        }
+    }
+
+    /// <summary>
+    ///     Rejects removed values through the parsed enum (keep-enum, ADR-0104: Stdio/Https still
+    ///     parse, so there is no coercion error to inherit): an explicit removed value adds one
+    ///     line naming the allowed set. The raw spelling is echoed so --transport STDIO reads back
+    ///     what was typed.
+    /// </summary>
+    private static void AppendTransportRemovalRejection(string[] args, List<string> errors, RootCliOptions options)
+    {
+        if (!options.IsTransportExplicit || options.Transport is not (McpTransport.Stdio or McpTransport.Https))
+        {
+            return;
+        }
+
+        var raw = TransportValue(args) ?? options.Transport.ToString().ToLowerInvariant();
+        errors.Add($"Cannot parse argument '{raw}' as --transport: expected proxy|http.");
+    }
+
+    /// <summary>Raw --transport value, last occurrence wins (handles --transport v, --transport=v
+    /// and --transport:v, case-preserved for the rejection echo).</summary>
+    private static string? TransportValue(string[] args)
+    {
+        string? value = null;
+        for (var i = 0; i < args.Length; i++)
+        {
+            var token = args[i];
+            if (token.StartsWith("--transport=", StringComparison.Ordinal))
+            {
+                value = token["--transport=".Length..];
+            }
+            else if (token.StartsWith("--transport:", StringComparison.Ordinal))
+            {
+                value = token["--transport:".Length..];
+            }
+            else if (string.Equals(token, "--transport", StringComparison.Ordinal) && i + 1 < args.Length)
+            {
+                var next = args[i + 1];
+                if (!next.StartsWith("-", StringComparison.Ordinal))
+                {
+                    value = next;
+                }
+            }
+        }
+
+        return value;
     }
 
     /// <summary>System.CommandLine 2.0.10 reports some parse errors (e.g. a missing required
@@ -63,7 +140,7 @@ internal static class CliArgs
             var token = args[i];
             if (token.StartsWith("--", StringComparison.Ordinal))
             {
-                if (!token.Contains('='))
+                if (!token.Contains('=') && !token.Contains(':'))
                 {
                     i++; // the option's value
                 }

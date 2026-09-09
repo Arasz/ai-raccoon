@@ -1,3 +1,4 @@
+using System.Reflection;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Watchdog;
 using AiRaccoon.Infrastructure.Degradation;
@@ -24,9 +25,9 @@ using IdleWatchdog = AiRaccoon.Hosting.Watchdog.IdleWatchdog;
 namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
-///     Host-shape contract: stdio-only launches run with no web server; HTTP/S launches bind
-///     the configured port (never the ASP.NET default 5000); a combined stdio+http set keeps
-///     the web host with stdio attached.
+///     Sole-host contract (P2/ADR-0020: the web host is the only shape — no stdio plain host,
+///     no combined set): the host binds the configured port (never the ASP.NET default 5000),
+///     always registers the long-lived background loops, and gates the watchdog on the timeout alone.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -52,16 +53,40 @@ public class McpServerSetupHostTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    ///     Inversion of the deleted StdioOnlyHost_HasNoWebServer contract (P2/ADR-0020): no host
+    ///     shape without a web server exists anymore, so holding the ASP.NET default port blocks
+    ///     nothing — the host still builds a web server and starts on its own port.
+    /// </summary>
     [RetryFact]
-    public async Task StdioOnlyHost_HasNoWebServer_AndStartsWithTheDefaultPortHeld()
+    public async Task SoleHost_IsAlwaysAWebHost_EvenWithTheDefaultPortHeld()
     {
         using var blocker = LoopbackPort.TryOccupy(5000);
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http));
 
-        host.Services.GetService(typeof(IServer)).ShouldBeNull();
+        host.ShouldBeOfType<WebApplication>();
+        host.Services.GetService(typeof(IServer)).ShouldNotBeNull();
         await host.StartAsync(TestContext.Current.CancellationToken);
         await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    ///     Meta-guard for the deleted matrix: P2 removed the stdio plain host (CreateAppHost) and
+    ///     the transports-parameterized overloads. If either comes back, the matrix it reopens
+    ///     needs its own contract — fail here, not silently.
+    /// </summary>
+    [RetryFact]
+    public void McpServerSetup_DeclaresNoPlainAppHost_AndNoTransportsOverload()
+    {
+        var methods = typeof(McpServerSetup).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+
+        methods.ShouldNotContain(m => m.Name.Contains("AppHost", StringComparison.Ordinal),
+            "the stdio plain host is deleted (P2/ADR-0020); resurrecting it reopens the host matrix");
+        methods.Where(m => m.Name.Contains("CreateServerHost", StringComparison.Ordinal))
+            .SelectMany(m => m.GetParameters())
+            .ShouldNotContain(p => p.ParameterType == typeof(IReadOnlyCollection<McpTransport>),
+                "the transports-parameterized overloads are deleted (P2); the sole host takes no transport set");
     }
 
     [RetryFact]
@@ -105,28 +130,11 @@ public class McpServerSetupHostTests : IAsyncLifetime
         }
     }
 
-    [RetryFact]
-    public async Task BothTransports_CreateWebHostWithStdio()
-    {
-        // Free port: 7721 may be held by a live server or a concurrent suite.
-        using var lease = LoopbackPort.Reserve();
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
-
-        host.Services.GetService(typeof(IServer)).ShouldNotBeNull();
-        lease.ReleaseForBind();
-        await host.StartAsync(TestContext.Current.CancellationToken);
-        await host.StopAsync(TestContext.Current.CancellationToken);
-    }
-
-    [RetryFact]
-    public void StdioOnlyHost_DoesNotRegisterTheExtractionHostedService()
-    {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
-
-        host.Services.GetServices<IHostedService>()
-            .ShouldNotContain(service => service is ExtractionHostedService);
-    }
-
+    /// <summary>
+    ///     The long-lived inversion (P2/ADR-0020): the sole host is always long-lived, so the
+    ///     extraction loop is always registered — the deleted StdioOnlyHost_DoesNotRegister test
+    ///     asserted the opposite for a host shape that no longer exists.
+    /// </summary>
     [RetryFact]
     public void HttpHost_RegistersTheExtractionHostedService()
     {
@@ -137,28 +145,10 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldContain(service => service is ExtractionHostedService);
     }
 
-    [RetryFact]
-    public void BothTransportsHost_RegistersTheExtractionHostedService()
-    {
-        // HTTP/S presence means the process can live long enough for the extraction
-        // loop to matter; a pure-stdio process is per-connection and recycled.
-        using var lease = LoopbackPort.Reserve();
-        var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
-
-        host.Services.GetServices<IHostedService>()
-            .ShouldContain(service => service is ExtractionHostedService);
-    }
-
-    [RetryFact]
-    public void StdioOnlyHost_DoesNotRegisterTheSweepHostedService()
-    {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
-
-        host.Services.GetServices<IHostedService>()
-            .ShouldNotContain(service => service is SweepHostedService);
-    }
-
+    /// <summary>
+    ///     Same inversion for the sweep loop: always registered on the sole host; the deleted
+    ///     StdioOnlyHost_DoesNotRegister twin is its red-first predecessor.
+    /// </summary>
     [RetryFact]
     public void HttpHost_RegistersTheSweepHostedService()
     {
@@ -170,43 +160,10 @@ public class McpServerSetupHostTests : IAsyncLifetime
     }
 
     [RetryFact]
-    public void BothTransportsHost_RegistersTheSweepHostedService()
-    {
-        using var lease = LoopbackPort.Reserve();
-        var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
-
-        host.Services.GetServices<IHostedService>()
-            .ShouldContain(service => service is SweepHostedService);
-    }
-
-    [RetryFact]
-    public void StdioOnlyHost_RegistersTheBankMaintenanceHostedService()
-    {
-        // Bank maintenance is registered in ALL modes: a stdio process is session-bound,
-        // so its startup + shutdown boundary checkpoints are the only ones it gets.
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
-
-        host.Services.GetServices<IHostedService>()
-            .ShouldContain(service => service is BankMaintenanceHostedService);
-    }
-
-    [RetryFact]
     public void HttpHost_RegistersTheBankMaintenanceHostedService()
     {
         using var lease = LoopbackPort.Reserve();
         var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
-
-        host.Services.GetServices<IHostedService>()
-            .ShouldContain(service => service is BankMaintenanceHostedService);
-    }
-
-    [RetryFact]
-    public void BothTransportsHost_RegistersTheBankMaintenanceHostedService()
-    {
-        using var lease = LoopbackPort.Reserve();
-        var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is BankMaintenanceHostedService);
@@ -245,12 +202,14 @@ public class McpServerSetupHostTests : IAsyncLifetime
 
     /// <summary>
     ///     Pins the registered MCP tool count, including the watch trio (previously dropped by
-    ///     a missing .WithTools&lt;WatchTools&gt;() that host tests didn't catch).
+    ///     a missing .WithTools&lt;WatchTools&gt;() that host tests didn't catch). Renamed off the
+    ///     deleted stdio host (P2 red-first rename, never a blind swap): the surface is the sole
+    ///     host's now.
     /// </summary>
     [RetryFact]
-    public void StdioHost_RegistersWatchTools_OnTheMcpSurface()
+    public void HttpHost_RegistersWatchTools_OnTheMcpSurface()
     {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http));
 
         var options = host.Services.GetRequiredService<IOptions<McpServerOptions>>().Value;
         var toolNames = (options.ToolCollection ?? throw new InvalidOperationException("ToolCollection not configured"))
@@ -260,26 +219,10 @@ public class McpServerSetupHostTests : IAsyncLifetime
         toolNames.OrderBy(n => n, StringComparer.Ordinal).ShouldBe(RegisteredTools.Names());
     }
 
-    [RetryFact]
-    public void StdioOnlyHost_DoesNotRegisterTheIdleWatchdog()
-    {
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
-
-        host.Services.GetServices<IHostedService>()
-            .ShouldNotContain(service => service is IdleWatchdog);
-    }
-
-    [RetryFact]
-    public void StdioOnlyHost_WithIdleTimeout_StillDoesNotRegisterTheIdleWatchdog()
-    {
-        // Watchdog gating is host shape first, timeout second: a stdio-only host never
-        // gets it even when a timeout is configured (it is recycled in minutes anyway).
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio, idleTimeout: TimeSpan.FromHours(4)));
-
-        host.Services.GetServices<IHostedService>()
-            .ShouldNotContain(service => service is IdleWatchdog);
-    }
-
+    /// <summary>
+    ///     Watchdog gating is timeout-only on the sole host: the old stdio-shape exemption died
+    ///     with the plain host (P2/ADR-0020), so a timeout always arms it.
+    /// </summary>
     [RetryFact]
     public void HttpHost_WithIdleTimeout_RegistersWatchdogAndSignaler_AsOneInstance()
     {
@@ -312,7 +255,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         var port = lease.Port;
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 8, 6, 12, 0, 0, TimeSpan.Zero));
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Http, port, TimeSpan.FromSeconds(2)), [McpTransport.Http], time);
+            Config(McpTransport.Http, port, TimeSpan.FromSeconds(2)), time);
         var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 
         lease.ReleaseForBind();
@@ -360,6 +303,19 @@ public class McpServerSetupHostTests : IAsyncLifetime
         {
             await host.StopAsync(CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    ///     Defense in depth behind the parse rejection (ADR-0104 D1): a removed transport has no
+    ///     host path, so a config carrying one must fail here rather than bind an HTTP host for
+    ///     it. Throws before any builder, port or bank exists, so the port stays free.
+    /// </summary>
+    [RetryTheory]
+    [InlineData(McpTransport.Stdio)]
+    [InlineData(McpTransport.Https)]
+    public void CreateWebHost_RemovedTransport_ThrowsArgumentOutOfRange(McpTransport transport)
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() => McpServerSetup.CreateWebHost(Config(transport)));
     }
 
     private ServerConfig Config(McpTransport transport, int port = 0, TimeSpan idleTimeout = default) =>

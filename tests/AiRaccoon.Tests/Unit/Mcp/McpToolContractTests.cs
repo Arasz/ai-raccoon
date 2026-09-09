@@ -122,8 +122,10 @@ public sealed class McpToolContractTests : IAsyncLifetime
 
     private List<McpServerTool> Tools()
     {
+        // Re-derived against the Http host (P2/ADR-0020): the ServerConfig transport is data-only
+        // now — every value builds the same sole web host — so Http names the surviving shape.
         var host = McpServerSetup.CreateServerHost(
-            new ServerConfig(0, McpTransport.Stdio, TestData.CreateInfrastructureOptions(_dataRoot)));
+            new ServerConfig(0, McpTransport.Http, TestData.CreateInfrastructureOptions(_dataRoot)));
         var options = host.Services.GetRequiredService<IOptions<McpServerOptions>>().Value;
         return
         [

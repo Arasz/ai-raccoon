@@ -44,40 +44,39 @@ dotnet tool install -g ai-raccoon
 
 ---
 
-## Step 2: Pick a transport mode
+## Step 2: Pick a launch shape
 
-AiRaccoon supports three transport modes depending on how your agent runs:
+AiRaccoon has two launch shapes. The default bare run is a proxy that
+starts the HTTP backend on demand. `serve` runs that backend by hand
+(long-lived daemon, explicit port). Pick the proxy unless you need the
+backend to outlive your client or to serve several clients at once:
 
 ```mermaid
 graph TD
-    Start([Launch Mode]) --> Choice{Which setup do you need?}
+    Start([Launch Shape]) --> Choice{Which setup do you need?}
     
-    Choice -->|Zero-config / Default| Proxy["Proxy Mode (Default)\n`ai-raccoon`"]
-    Choice -->|In-Process / Standalone| Stdio["Stdio Mode\n`ai-raccoon --transport stdio`"]
-    Choice -->|Remote / Long-lived Daemon| HTTP["HTTP Serve Mode\n`ai-raccoon --transport http`"]
+    Choice -->|Zero-config / Default| Proxy["Proxy (Default)\n`ai-raccoon`"]
+    Choice -->|Long-lived Daemon / Shared Backend| HTTP["Serve Mode\n`ai-raccoon serve`"]
     
     Proxy --> P_Desc["Auto-spawns HTTP background server on demand\nRecommended for general agent work"]
-    Stdio --> S_Desc["Runs server inside the process over stdin/stdout\nNo background daemon or network ports"]
-    HTTP --> H_Desc["Exposes HTTP endpoint at /mcp\nSupports multi-client attachment & telemetry"]
+    HTTP --> H_Desc["Exposes HTTP endpoint at /mcp\nSupports multi-client attachment and telemetry"]
 ```
 
-1. **Proxy mode (Default / Recommended):**
+1. **Proxy (Default / Recommended):**
    ```bash
    ai-raccoon
    ```
-   Probes port `7721`, starts a background `ai-raccoon serve` process if nothing is listening, and relays JSON-RPC messages. Details in [ADR-0020](../adr/0020-always-on-http-stdio-proxy.md).
+   Probes port `7721`, starts a background `ai-raccoon serve` process if nothing is listening, and relays JSON-RPC messages. Details in [ADR-0020](../adr/0020-always-on-http-stdio-proxy.md). The proxy speaks MCP over stdio on its own stdin and stdout, so the client config stays a bare command with no args.
 
-2. **Stdio mode (Standalone):**
+2. **Serve (Long-lived daemon):**
    ```bash
-   ai-raccoon --transport stdio
+   ai-raccoon serve --port 7721
    ```
-   Runs a self-contained server over stdio. No background daemons and no network ports.
-
-3. **HTTP mode (Server / Remote):**
-   ```bash
-   ai-raccoon --transport http --port 7721
-   ```
-   Starts a streamable HTTP endpoint on `http://127.0.0.1:7721/mcp`.
+   Serves a streamable HTTP endpoint on `http://127.0.0.1:7721/mcp`, guarded by
+a loopback token. Background it with `ai-raccoon serve > serve.log 2>&1 &`.
+The old stdio standalone server was removed outright
+(see [ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)). Its value fails
+at parse now, so do not pass it.
 
 ---
 

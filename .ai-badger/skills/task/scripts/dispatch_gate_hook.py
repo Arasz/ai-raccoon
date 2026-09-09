@@ -12,6 +12,15 @@ lanes are exempt, derived from `disallowedTools` frontmatter rather than a perso
 
 Why parallelism-only, why the machine-wide session count was cut, and why gating needs
 positive proof that a lane writes: `docs/changelog/0.138.0-a-contract-with-no-gate-behind-it.md`.
+
+Lane vocabulary (ADR-0027, dual-key): personas carry `level:` (routing intent,
+low|medium|high) beside the Claude-legible `model:` bare lane. `level:` is gate-only
+vocabulary — `adjust_agents.CLAUDE_KEYS` does not carry it, so it is stripped at
+`.claude/agents/` delivery and a gate-declared level is never a runtime-routed one on
+Claude. The future `declares_level()` disjunct beside `declares_model()` is recorded,
+not wired: this change is DENY_REASON + docstring text only, zero logic change.
+Fail-open on unreadable files is preserved (S6); loud only for parseable ones.
+Resolution precedence is owned by PKG-2 and quoted in DENY_REASON, never restated here (M2).
 """
 from __future__ import annotations
 
@@ -47,7 +56,10 @@ WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 DENY_REASON = (
     "Dispatch declares no model and subagent type '{subagent_type}' has no model lane. "
     "Pass model explicitly ('haiku' for mechanical work, 'sonnet' for spec-driven work, "
-    "'opus' for derivation) — see .ai-badger/delegation.md."
+    "'opus' for derivation) — see .ai-badger/delegation.md. "
+    "Levels low, medium, high name the routing intent beside each lane there: "
+    "\"An explicit model wins verbatim; else the persona's level resolves to its group's "
+    "preferred pin; else the session model is inherited.\""
 )
 
 ISOLATION_DENY_REASON = (

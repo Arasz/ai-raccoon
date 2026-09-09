@@ -5,7 +5,6 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup;
 using AiRaccoon.Tests.TestHelpers;
-using DotNext.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
@@ -28,7 +27,7 @@ public sealed class DependenciesEncryptionSmokeTests
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            services.RegisterMemoryServices(new InfrastructureOptions { DataRoot = tempRoot, Scope = InstallScope.User }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
+            services.RegisterMemoryServices(new InfrastructureOptions { DataRoot = tempRoot, Scope = InstallScope.User });
 
             using var provider = services.BuildServiceProvider();
 
@@ -54,7 +53,7 @@ public sealed class DependenciesEncryptionSmokeTests
                 (EnvEncryptionKeyProvider.EnvVarName, "smoke-pass"));
             var services = new ServiceCollection();
             services.AddLogging();
-            services.RegisterMemoryServices(new InfrastructureOptions { DataRoot = tempRoot, Scope = InstallScope.User }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
+            services.RegisterMemoryServices(new InfrastructureOptions { DataRoot = tempRoot, Scope = InstallScope.User });
 
             using var provider = services.BuildServiceProvider();
 

@@ -19,13 +19,13 @@ Protocol (revised per architect plan review deleg_98028a5e):
   3. --version -> 2>&1, substring "$V"
   4. --help -> 2>&1, verb tree renders
   5. model embedding set local (documented setup verb; bundled engine, no download)
-  6. MCP stdio: initialize (<10s) -> serverInfo; notifications/initialized
+  6. MCP round trip over the proxy child: initialize (<10s) -> serverInfo; notifications/initialized
   7. tools/call memory_write {projectId, content} unique string -> no error
   8. tools/call memory_search {projectId, query} -> written entry returns by hash (real vec0 path)
   9. tools/call memory_stats -> entries>=1 AND pending==0
  10. stderr assertions: no "Bundled embedding model unavailable", no "Downloading bundled model asset"
- 11. dual-instance: 2nd server, fresh DATAROOT, concurrent initialize (5000-bind regression)
- 12. graceful shutdown: close stdin -> exit 0
+ 11. dual-instance: 2nd proxy child, fresh DATAROOT + leased port, concurrent initialize (5000-bind regression)
+ 12. graceful shutdown: close stdin -> proxy child exits 0 (its serve backend idles out on its own watchdog)
  13. zero-config probe: fresh DATAROOT, NO model embedding set local, write+search -> record behavior
      (informational: FTS5-only by design — "model reset" prints 'no engine (FTS5-only search)')
  14. cleanup
@@ -149,9 +149,30 @@ r = run([os.path.join(TOOLPATH, "ai-raccoon"), "--data-root", DATAROOT, "model",
 check("model embedding set local exits 0", r.returncode == 0, r.stderr[-300:])
 check("model embedding set local prints confirmation", "local" in (r.stdout + r.stderr).lower(), (r.stdout + r.stderr).strip())
 
+def _lease_port():
+    """One free loopback port per proxy child (temp-port proxy recipe, ADR-0104).
+
+    Best-effort: another process can win the port between this close and the
+    backend's bind — the same race the proxy's own auto-start already lives with."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 class MCP:
-    def __init__(self, tool, dataroot):
-        self.proc = subprocess.Popen([tool, "--data-root", dataroot, "--transport", "stdio"],
+    """One proxy child speaking MCP over stdio, with its own temp bank and leased port.
+
+    Bare spawn is the proxy since the stdio full-server removal (ADR-0104): stdin
+    stays the JSON-RPC channel and closing it still exits 0, but the serve backend
+    the child starts outlives it and idles out on its own watchdog — step 14's
+    cleanup removes the temp dirs, not the backends. Child-stderr assertions pin
+    the proxy stream only: backend lines never reach it (the launcher captures the
+    backend's stderr for the failure path alone), so a backend-side string passes
+    vacuously here — check serve logs for those.
+    """
+    def __init__(self, tool, dataroot, port):
+        self.proc = subprocess.Popen([tool, "--data-root", dataroot, "--port", str(port)],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, text=True, bufsize=1)
         self.pending = {}
@@ -192,8 +213,8 @@ class MCP:
             self.reader.join(timeout=timeout)
         return "".join(self.stderr_lines)
 
-print("== steps 6-9: MCP stdio round trip (fresh bank) ==")
-mcp = MCP(os.path.join(TOOLPATH, "ai-raccoon"), DATAROOT)
+print("== steps 6-9: MCP round trip (proxy child, fresh bank) ==")
+mcp = MCP(os.path.join(TOOLPATH, "ai-raccoon"), DATAROOT, _lease_port())
 t0 = time.time()
 init_id = mcp.send("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "manual-test", "version": "1.0"}})
 init = mcp.read_response(init_id, timeout=15)
@@ -237,7 +258,7 @@ check("early: no 'Downloading bundled model asset'", "Downloading bundled model 
 check("early: no 'Failed to download'", "Failed to download bundled model asset" not in stderr_early)
 
 print("== step 11: dual-instance overlap (2nd server, fresh DATAROOT, 1st still alive) ==")
-mcp2 = MCP(os.path.join(TOOLPATH, "ai-raccoon"), DATAROOT2)
+mcp2 = MCP(os.path.join(TOOLPATH, "ai-raccoon"), DATAROOT2, _lease_port())
 i2 = mcp2.send("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "manual-test-2", "version": "1.0"}})
 init2 = mcp2.read_response(i2, timeout=15)
 check("2nd instance initialize no error", "error" not in init2, json.dumps(init2.get("error")) if "error" in init2 else "")
@@ -255,7 +276,7 @@ check("final: no 'Downloading bundled model asset'", "Downloading bundled model 
 check("final: no 'Failed to download'", "Failed to download bundled model asset" not in stderr_final)
 
 print("== step 13: zero-config probe (informational) ==")
-mcp0 = MCP(os.path.join(TOOLPATH, "ai-raccoon"), DATAROOT0)
+mcp0 = MCP(os.path.join(TOOLPATH, "ai-raccoon"), DATAROOT0, _lease_port())
 i0 = mcp0.send("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "probe", "version": "1.0"}})
 mcp0.read_response(i0, timeout=15)
 w0 = mcp0.send("tools/call", {"name": "memory_write", "arguments": {"projectId": PROJECT, "content": "zero-config probe content unique-xyz-9911"}})

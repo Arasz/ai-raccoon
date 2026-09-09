@@ -1,0 +1,940 @@
+{
+  "queries": [
+    {
+      "queryId": "chg-a",
+      "queryText": "How does the memory sweep decide which entries to delete?",
+      "projectId": "ai-raccoon",
+      "arms": {
+        "off": {
+          "results": [
+            {
+              "hash": "chg-a-off-1",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [off 1]",
+              "sourceFile": "src/chg-a-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "chg-a-off-2",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [off 2]",
+              "sourceFile": "src/chg-a-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "chg-a-off-3",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [off 3]",
+              "sourceFile": "src/chg-a-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "chg-a-off-4",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [off 4]",
+              "sourceFile": "src/chg-a-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "chg-a-off-5",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [off 5]",
+              "sourceFile": "src/chg-a-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "chg-a-off-6",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [off 6]",
+              "sourceFile": "src/chg-a-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "chg-a-off-7",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [off 7]",
+              "sourceFile": "src/chg-a-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "chg-a-off-8",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [off 8]",
+              "sourceFile": "src/chg-a-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        },
+        "threshold": {
+          "results": [
+            {
+              "hash": "chg-a-thr-1",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [threshold 1]",
+              "sourceFile": "src/chg-a-thr-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "chg-a-thr-2",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [threshold 2]",
+              "sourceFile": "src/chg-a-thr-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "chg-a-thr-3",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [threshold 3]",
+              "sourceFile": "src/chg-a-thr-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "chg-a-thr-4",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [threshold 4]",
+              "sourceFile": "src/chg-a-thr-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "chg-a-thr-5",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [threshold 5]",
+              "sourceFile": "src/chg-a-thr-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "chg-a-thr-6",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [threshold 6]",
+              "sourceFile": "src/chg-a-thr-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "chg-a-thr-7",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [threshold 7]",
+              "sourceFile": "src/chg-a-thr-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "chg-a-thr-8",
+              "snippet": "memory_sweep deletes an entry only when its rating decays below the sweep threshold AND its per-entry TTL has elapsed. [threshold 8]",
+              "sourceFile": "src/chg-a-thr-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        }
+      },
+      "pair": {
+        "top8SetOverlap": 0.875,
+        "rbo": 0.49,
+        "drop": [],
+        "backfill": []
+      }
+    },
+    {
+      "queryId": "chg-b",
+      "queryText": "What does the shared promotion tier require before an entry is shared?",
+      "projectId": "ai-raccoon",
+      "arms": {
+        "off": {
+          "results": [
+            {
+              "hash": "chg-b-off-1",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [off 1]",
+              "sourceFile": "src/chg-b-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "chg-b-off-2",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [off 2]",
+              "sourceFile": "src/chg-b-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "chg-b-off-3",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [off 3]",
+              "sourceFile": "src/chg-b-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "chg-b-off-4",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [off 4]",
+              "sourceFile": "src/chg-b-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "chg-b-off-5",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [off 5]",
+              "sourceFile": "src/chg-b-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "chg-b-off-6",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [off 6]",
+              "sourceFile": "src/chg-b-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "chg-b-off-7",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [off 7]",
+              "sourceFile": "src/chg-b-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "chg-b-off-8",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [off 8]",
+              "sourceFile": "src/chg-b-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        },
+        "threshold": {
+          "results": [
+            {
+              "hash": "chg-b-thr-1",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [threshold 1]",
+              "sourceFile": "src/chg-b-thr-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "chg-b-thr-2",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [threshold 2]",
+              "sourceFile": "src/chg-b-thr-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "chg-b-thr-3",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [threshold 3]",
+              "sourceFile": "src/chg-b-thr-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "chg-b-thr-4",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [threshold 4]",
+              "sourceFile": "src/chg-b-thr-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "chg-b-thr-5",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [threshold 5]",
+              "sourceFile": "src/chg-b-thr-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "chg-b-thr-6",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [threshold 6]",
+              "sourceFile": "src/chg-b-thr-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "chg-b-thr-7",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [threshold 7]",
+              "sourceFile": "src/chg-b-thr-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "chg-b-thr-8",
+              "snippet": "Nothing is shared without an explicit promotion: share_extract proposes candidates and share promotes the keepers into the curated tier. [threshold 8]",
+              "sourceFile": "src/chg-b-thr-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        }
+      },
+      "pair": {
+        "top8SetOverlap": 0.75,
+        "rbo": 0.49,
+        "drop": [],
+        "backfill": []
+      }
+    },
+    {
+      "queryId": "chg-c",
+      "queryText": "Where does AiRaccoon store its embedding vectors?",
+      "projectId": "ai-raccoon",
+      "arms": {
+        "off": {
+          "results": [
+            {
+              "hash": "chg-c-off-1",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [off 1]",
+              "sourceFile": "src/chg-c-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "chg-c-off-2",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [off 2]",
+              "sourceFile": "src/chg-c-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "chg-c-off-3",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [off 3]",
+              "sourceFile": "src/chg-c-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "chg-c-off-4",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [off 4]",
+              "sourceFile": "src/chg-c-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "chg-c-off-5",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [off 5]",
+              "sourceFile": "src/chg-c-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "chg-c-off-6",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [off 6]",
+              "sourceFile": "src/chg-c-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "chg-c-off-7",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [off 7]",
+              "sourceFile": "src/chg-c-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "chg-c-off-8",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [off 8]",
+              "sourceFile": "src/chg-c-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        },
+        "threshold": {
+          "results": [
+            {
+              "hash": "chg-c-thr-1",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [threshold 1]",
+              "sourceFile": "src/chg-c-thr-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "chg-c-thr-2",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [threshold 2]",
+              "sourceFile": "src/chg-c-thr-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "chg-c-thr-3",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [threshold 3]",
+              "sourceFile": "src/chg-c-thr-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "chg-c-thr-4",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [threshold 4]",
+              "sourceFile": "src/chg-c-thr-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "chg-c-thr-5",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [threshold 5]",
+              "sourceFile": "src/chg-c-thr-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "chg-c-thr-6",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [threshold 6]",
+              "sourceFile": "src/chg-c-thr-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "chg-c-thr-7",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [threshold 7]",
+              "sourceFile": "src/chg-c-thr-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "chg-c-thr-8",
+              "snippet": "Embeddings live inside the sqlite-memory bank file via the vec0 virtual-table extension, chunked alongside their entries. [threshold 8]",
+              "sourceFile": "src/chg-c-thr-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        }
+      },
+      "pair": {
+        "top8SetOverlap": 0.625,
+        "rbo": 0.49,
+        "drop": [],
+        "backfill": []
+      }
+    },
+    {
+      "queryId": "chg-d",
+      "queryText": "How do workspace sandboxes isolate in-progress notes?",
+      "projectId": "ai-raccoon",
+      "arms": {
+        "off": {
+          "results": [
+            {
+              "hash": "chg-d-off-1",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [off 1]",
+              "sourceFile": "src/chg-d-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "chg-d-off-2",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [off 2]",
+              "sourceFile": "src/chg-d-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "chg-d-off-3",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [off 3]",
+              "sourceFile": "src/chg-d-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "chg-d-off-4",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [off 4]",
+              "sourceFile": "src/chg-d-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "chg-d-off-5",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [off 5]",
+              "sourceFile": "src/chg-d-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "chg-d-off-6",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [off 6]",
+              "sourceFile": "src/chg-d-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "chg-d-off-7",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [off 7]",
+              "sourceFile": "src/chg-d-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "chg-d-off-8",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [off 8]",
+              "sourceFile": "src/chg-d-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        },
+        "threshold": {
+          "results": [
+            {
+              "hash": "chg-d-thr-1",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [threshold 1]",
+              "sourceFile": "src/chg-d-thr-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "chg-d-thr-2",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [threshold 2]",
+              "sourceFile": "src/chg-d-thr-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "chg-d-thr-3",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [threshold 3]",
+              "sourceFile": "src/chg-d-thr-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "chg-d-thr-4",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [threshold 4]",
+              "sourceFile": "src/chg-d-thr-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "chg-d-thr-5",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [threshold 5]",
+              "sourceFile": "src/chg-d-thr-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "chg-d-thr-6",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [threshold 6]",
+              "sourceFile": "src/chg-d-thr-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "chg-d-thr-7",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [threshold 7]",
+              "sourceFile": "src/chg-d-thr-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "chg-d-thr-8",
+              "snippet": "A workspace context is isolated by design: writes naming the workspace id land in its outbox until consolidation promotes kept entries. [threshold 8]",
+              "sourceFile": "src/chg-d-thr-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        }
+      },
+      "pair": {
+        "top8SetOverlap": 0.875,
+        "rbo": 0.49,
+        "drop": [],
+        "backfill": []
+      }
+    },
+    {
+      "queryId": "chg-e",
+      "queryText": "Which command promotes a workspace when it is finished?",
+      "projectId": "ai-raccoon",
+      "arms": {
+        "off": {
+          "results": [
+            {
+              "hash": "chg-e-off-1",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [off 1]",
+              "sourceFile": "src/chg-e-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "chg-e-off-2",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [off 2]",
+              "sourceFile": "src/chg-e-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "chg-e-off-3",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [off 3]",
+              "sourceFile": "src/chg-e-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "chg-e-off-4",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [off 4]",
+              "sourceFile": "src/chg-e-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "chg-e-off-5",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [off 5]",
+              "sourceFile": "src/chg-e-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "chg-e-off-6",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [off 6]",
+              "sourceFile": "src/chg-e-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "chg-e-off-7",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [off 7]",
+              "sourceFile": "src/chg-e-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "chg-e-off-8",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [off 8]",
+              "sourceFile": "src/chg-e-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        },
+        "threshold": {
+          "results": [
+            {
+              "hash": "chg-e-thr-1",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [threshold 1]",
+              "sourceFile": "src/chg-e-thr-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "chg-e-thr-2",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [threshold 2]",
+              "sourceFile": "src/chg-e-thr-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "chg-e-thr-3",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [threshold 3]",
+              "sourceFile": "src/chg-e-thr-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "chg-e-thr-4",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [threshold 4]",
+              "sourceFile": "src/chg-e-thr-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "chg-e-thr-5",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [threshold 5]",
+              "sourceFile": "src/chg-e-thr-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "chg-e-thr-6",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [threshold 6]",
+              "sourceFile": "src/chg-e-thr-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "chg-e-thr-7",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [threshold 7]",
+              "sourceFile": "src/chg-e-thr-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "chg-e-thr-8",
+              "snippet": "workspace_consolidate finishes a workspace: it promotes the kept hashes into committed project memory, then removes the workspace context. [threshold 8]",
+              "sourceFile": "src/chg-e-thr-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        }
+      },
+      "pair": {
+        "top8SetOverlap": 0.5,
+        "rbo": 0.49,
+        "drop": [],
+        "backfill": []
+      }
+    },
+    {
+      "queryId": "ctl-a",
+      "queryText": "What backend does the agent memory server use?",
+      "projectId": "ai-raccoon",
+      "arms": {
+        "off": {
+          "results": [
+            {
+              "hash": "ctl-a-off-1",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 1]",
+              "sourceFile": "src/ctl-a-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "ctl-a-off-2",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 2]",
+              "sourceFile": "src/ctl-a-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "ctl-a-off-3",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 3]",
+              "sourceFile": "src/ctl-a-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "ctl-a-off-4",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 4]",
+              "sourceFile": "src/ctl-a-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "ctl-a-off-5",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 5]",
+              "sourceFile": "src/ctl-a-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "ctl-a-off-6",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 6]",
+              "sourceFile": "src/ctl-a-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "ctl-a-off-7",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 7]",
+              "sourceFile": "src/ctl-a-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "ctl-a-off-8",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 8]",
+              "sourceFile": "src/ctl-a-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        },
+        "threshold": {
+          "results": [
+            {
+              "hash": "ctl-a-off-1",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 1]",
+              "sourceFile": "src/ctl-a-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "ctl-a-off-2",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 2]",
+              "sourceFile": "src/ctl-a-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "ctl-a-off-3",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 3]",
+              "sourceFile": "src/ctl-a-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "ctl-a-off-4",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 4]",
+              "sourceFile": "src/ctl-a-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "ctl-a-off-5",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 5]",
+              "sourceFile": "src/ctl-a-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "ctl-a-off-6",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 6]",
+              "sourceFile": "src/ctl-a-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "ctl-a-off-7",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 7]",
+              "sourceFile": "src/ctl-a-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "ctl-a-off-8",
+              "snippet": "The agent memory server is backed by sqlite-memory: a per-machine SQLite bank file. [off 8]",
+              "sourceFile": "src/ctl-a-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        }
+      },
+      "pair": {
+        "top8SetOverlap": 1.0,
+        "rbo": 0.5126,
+        "drop": [],
+        "backfill": []
+      }
+    },
+    {
+      "queryId": "ctl-b",
+      "queryText": "Which SQLite table holds memory entries?",
+      "projectId": "ai-raccoon",
+      "arms": {
+        "off": {
+          "results": [
+            {
+              "hash": "ctl-b-off-1",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 1]",
+              "sourceFile": "src/ctl-b-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "ctl-b-off-2",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 2]",
+              "sourceFile": "src/ctl-b-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "ctl-b-off-3",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 3]",
+              "sourceFile": "src/ctl-b-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "ctl-b-off-4",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 4]",
+              "sourceFile": "src/ctl-b-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "ctl-b-off-5",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 5]",
+              "sourceFile": "src/ctl-b-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "ctl-b-off-6",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 6]",
+              "sourceFile": "src/ctl-b-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "ctl-b-off-7",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 7]",
+              "sourceFile": "src/ctl-b-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "ctl-b-off-8",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 8]",
+              "sourceFile": "src/ctl-b-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        },
+        "threshold": {
+          "results": [
+            {
+              "hash": "ctl-b-off-1",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 1]",
+              "sourceFile": "src/ctl-b-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "ctl-b-off-2",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 2]",
+              "sourceFile": "src/ctl-b-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "ctl-b-off-3",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 3]",
+              "sourceFile": "src/ctl-b-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "ctl-b-off-4",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 4]",
+              "sourceFile": "src/ctl-b-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "ctl-b-off-5",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 5]",
+              "sourceFile": "src/ctl-b-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "ctl-b-off-6",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 6]",
+              "sourceFile": "src/ctl-b-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "ctl-b-off-7",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 7]",
+              "sourceFile": "src/ctl-b-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "ctl-b-off-8",
+              "snippet": "Memory entries live in the entries table, keyed by content hash and scoped by project_id. [off 8]",
+              "sourceFile": "src/ctl-b-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        }
+      },
+      "pair": {
+        "top8SetOverlap": 1.0,
+        "rbo": 0.5126,
+        "drop": [],
+        "backfill": []
+      }
+    },
+    {
+      "queryId": "ctl-c",
+      "queryText": "What does memory_watch_add do?",
+      "projectId": "ai-raccoon",
+      "arms": {
+        "off": {
+          "results": [
+            {
+              "hash": "ctl-c-off-1",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 1]",
+              "sourceFile": "src/ctl-c-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "ctl-c-off-2",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 2]",
+              "sourceFile": "src/ctl-c-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "ctl-c-off-3",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 3]",
+              "sourceFile": "src/ctl-c-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "ctl-c-off-4",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 4]",
+              "sourceFile": "src/ctl-c-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "ctl-c-off-5",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 5]",
+              "sourceFile": "src/ctl-c-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "ctl-c-off-6",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 6]",
+              "sourceFile": "src/ctl-c-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "ctl-c-off-7",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 7]",
+              "sourceFile": "src/ctl-c-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "ctl-c-off-8",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 8]",
+              "sourceFile": "src/ctl-c-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        },
+        "threshold": {
+          "results": [
+            {
+              "hash": "ctl-c-off-1",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 1]",
+              "sourceFile": "src/ctl-c-off-1.cs",
+              "chunkIndex": 0
+            },
+            {
+              "hash": "ctl-c-off-2",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 2]",
+              "sourceFile": "src/ctl-c-off-2.cs",
+              "chunkIndex": 1
+            },
+            {
+              "hash": "ctl-c-off-3",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 3]",
+              "sourceFile": "src/ctl-c-off-3.cs",
+              "chunkIndex": 2
+            },
+            {
+              "hash": "ctl-c-off-4",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 4]",
+              "sourceFile": "src/ctl-c-off-4.cs",
+              "chunkIndex": 3
+            },
+            {
+              "hash": "ctl-c-off-5",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 5]",
+              "sourceFile": "src/ctl-c-off-5.cs",
+              "chunkIndex": 4
+            },
+            {
+              "hash": "ctl-c-off-6",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 6]",
+              "sourceFile": "src/ctl-c-off-6.cs",
+              "chunkIndex": 5
+            },
+            {
+              "hash": "ctl-c-off-7",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 7]",
+              "sourceFile": "src/ctl-c-off-7.cs",
+              "chunkIndex": 6
+            },
+            {
+              "hash": "ctl-c-off-8",
+              "snippet": "memory_watch_add registers a file or directory so it is mirrored into the project's memory on every change. [off 8]",
+              "sourceFile": "src/ctl-c-off-8.cs",
+              "chunkIndex": 7
+            }
+          ]
+        }
+      },
+      "pair": {
+        "top8SetOverlap": 1.0,
+        "rbo": 0.5126,
+        "drop": [],
+        "backfill": []
+      }
+    }
+  ]
+}

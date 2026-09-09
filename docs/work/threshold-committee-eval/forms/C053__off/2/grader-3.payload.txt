@@ -1,0 +1,62 @@
+You are grader #3 on a 3-grader retrieval-quality committee.
+
+Query (projectId=deepseek-harness):
+How is ```mermaid plugin_dsh_base_tool_result_pruner["tool-result-pruner<br/>@deepseek-ai/dsh-compaction-to handled?
+
+Chunks retrieved for arm "off" (rank order):
+1. hash=10a5467dd286e18dc8745a6a53c5b109acf1964e8d84fb474215d8d35da99d54
+   file: /Users/arasz/RiderProjects/deepseek-harness/packages/compaction/compaction-tool-result-pruner/README.zh.md
+   # @deepseek-ai/dsh-compaction-tool-result-pruner
+
+[English](README.md) | 中文
+
+可安全回放…
+2. hash=fa83f28b10694317bbeeec76bda2d8b879d983c90da82d0dfc292c6f56e9067d
+   file: /Users/arasz/RiderProjects/deepseek-harness/packages/compaction/compaction-tool-result-pruner/README.md
+   # @deepseek-ai/dsh-compaction-tool-result-pruner
+
+English | [中文](README.zh.md…
+3. hash=001307d09219d7a2b94f643935cc9b812f8eeddba553ecbc92e58006e29f9682
+   file: /Users/arasz/RiderProjects/deepseek-harness/apps/cli/composition.md
+   …br/>@deepseek-ai/dsh-compaction-tool-result-pruner"]
+  cfg --> plugin_dsh_base…
+4. hash=0b58324c30984c338302ba86d77a9a0c62c77cc7f95dbe90320b00875f826f29
+   file: /Users/arasz/RiderProjects/deepseek-harness/docs/config-catalog.md
+   …compaction-tool-result-pruner"></a>
+
+## `@deepseek-ai/dsh-compaction-tool-result-pruner…
+5. hash=32e94fafbe701ca038345ec3fee666440f7097f603b32acd9c30ffd6b258aada
+   file: /Users/arasz/RiderProjects/deepseek-harness/docs/config-catalog.zh.md
+   …compaction-tool-result-pruner"></a>
+
+## `@deepseek-ai/dsh-compaction-tool-result-pruner…
+6. hash=7b3346c2cc4dfff9ad09053fd4885fad47125b817160dda0cc1e05942bf27a1a
+   file: /Users/arasz/RiderProjects/deepseek-harness/packages/compaction/compaction-tool-result-pruner/package.json
+   {
+  "name": "@deepseek-ai/dsh-compaction-tool-result-pruner",
+  "description": "Replay-safe model…
+7. hash=0f3900c7429b24487a3a7ca8602b652b077e5495178f9e3c5e46b13d946836d2
+   file: /Users/arasz/RiderProjects/deepseek-harness/examples/acp-agent/composition.md
+   ```mermaid
+  plugin_acp_acp_agent --> entrypoint_acp["@deepseek-ai/dsh-acp<br…
+8. hash=473b26ed0926a54cad426a8af4780442fe4c32adad0fc75e0e3db8126bf3da43
+   file: /Users/arasz/RiderProjects/ai-badger/docs/adr/0013-what-the-mcp-tool-index-is-for.md
+   …to enriching all 98, with untouched tools
+   flat.
+
+## Decision
+
+**The MCP tool…
+
+Grade EACH chunk: "A" (A = 1: the chunk answers the query) or "0" (0: it does not) — PoC rubric.
+
+Output ONLY the JSON form below — no free-form verdict, no markdown, no commentary:
+{"slotId": "<slotId>", "queryId": "<queryId>", "arm": "<arm>", "chunks": [{"hash": "<hash>", "grade": "A"|"0", "reason": "<one sentence>"}, ...], "overall": "<one sentence>"}
+
+Use slotId="C053__off", queryId="C053", arm="off", and exactly the hashes listed above, each exactly once.
+
+Nudge: argue against your own grades. Reconsider every chunk grade; you may change your mind.
+Your previous form was:
+{"slotId": "C053__off", "queryId": "C053", "arm": "off", "chunks": [{"hash": "10a5467dd286e18dc8745a6a53c5b109acf1964e8d84fb474215d8d35da99d54", "grade": "0", "reason": "General package description in Chinese does not explain how the mermaid graph node is handled."}, {"hash": "fa83f28b10694317bbeeec76bda2d8b879d983c90da82d0dfc292c6f56e9067d", "grade": "0", "reason": "English README describes the package but not how the mermaid plugin node is registered or composed."}, {"hash": "001307d09219d7a2b94f643935cc9b812f8eeddba553ecbc92e58006e29f9682", "grade": "A", "reason": "Contains the exact mermaid definition showing plugin_dsh_base_tool_result_pruner and its connection (cfg --> plugin_dsh_base...), directly answering how it is composed."}, {"hash": "0b58324c30984c338302ba86d77a9a0c62c77cc7f95dbe90320b00875f826f29", "grade": "A", "reason": "Config catalog documents the plugin's configuration surface, explaining how it is handled at the config level."}, {"hash": "32e94fafbe701ca038345ec3fee666440f7097f603b32acd9c30ffd6b258aada", "grade": "A", "reason": "Chinese config catalog entry provides the same configuration handling details as the English version."}, {"hash": "7b3346c2cc4dfff9ad09053fd4885fad47125b817160dda0cc1e05942bf27a1a", "grade": "0", "reason": "Package.json shows metadata only, not how the mermaid plugin node is handled in composition."}, {"hash": "0f3900c7429b24487a3a7ca8602b652b077e5495178f9e3c5e46b13d946836d2", "grade": "0", "reason": "Shows a different plugin (plugin_acp_acp_agent) in mermaid, not the queried tool-result-pruner plugin."}, {"hash": "473b26ed0926a54cad426a8af4780442fe4c32adad0fc75e0e3db8126bf3da43", "grade": "0", "reason": "ADR from a different project (ai-badger) about MCP tool index is completely irrelevant to the query."}], "overall": "Three chunks directly address how the plugin is handled: one shows its mermaid graph composition, two document its configuration surface."}
+
+Return a fresh complete form in the same output-only format.

@@ -4,7 +4,6 @@ using System.Reflection;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
-using DotNext.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
@@ -41,8 +40,7 @@ public sealed class OtlpNamesRegistryTests : IDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.RegisterMemoryServices(
-            new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User },
-            IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
+            new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
 
         using var provider = services.BuildServiceProvider();
 

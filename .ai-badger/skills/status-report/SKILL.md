@@ -55,7 +55,7 @@ minutes for the task to end; answering late is answering wrong.
    truth: **Current task** (plus any other open tasks), **Progress checklist** (plan
    packages and checkbox counts), **What's next** (quote `state.json`'s `next` field
    verbatim), **Sub-agents & delegation** (recorded subagent entries, live lane worktrees,
-   live sessions).
+   untracked worktrees, live sessions with STALE marking).
 
 3. Label inference as inference. The script prints the loop's step order
    (prepare > analyze > plan > … > merge) as a reference line; locating "we are at step X"
@@ -69,25 +69,32 @@ minutes for the task to end; answering late is answering wrong.
    happening.
 
 5. Nothing in progress: say so, show the last finished task and the `next` field, and offer
-   to start the next task — nothing more.
+   to start the next task — nothing more. Exception: untracked worktrees listed means real
+   work exists with no tracker row — lead with that and offer `start`/`reattach` for it
+   instead of the next queue item.
 
 ## Where each section draws from
 
 | Section | Source |
 |---|---|
-| Current task | latest IN_PROGRESS row in the `tasks` table of `.ai-badger/task-tracking/tracking.db` |
+| Current task | latest open row (state STARTED or IN_PROGRESS) in the `tasks` table of `.ai-badger/task-tracking/tracking.db` — STARTED is registered work awaiting its first Stop-hook promotion (or a harness with no Stop hook), still open |
 | Progress checklist | `task-tracking/plans/*.md` — package headings + `- [x]` counts |
 | What's next | `state.json` `next` field, verbatim |
-| Sub-agents | `token_usage` subagent records + `worktrees/` lanes + the `sessions` table |
+| Sub-agents | `token_usage` subagent records + `worktrees/` lanes for open tasks + worktrees matching no tracker row (untracked — work without tracking) + the `sessions` table (dead pids marked STALE) |
 
 ## Gotchas
 
 - An empty recorded-subagent list does NOT mean no delegation is running — records land only
   on completion (`task_tracker.py subagent`), so mid-flight delegations are invisible there.
   Live evidence is lane worktrees, the `sessions` table, and your own session context.
-- Stale IN_PROGRESS entries from dead sessions show up as current (latest-started wins).
+- Stale open entries from dead sessions show up as current (latest-started wins).
   Report them honestly — do not silently pick "the one that looks active" and do not start
-  finishing or parking them unprompted.
+  finishing or parking them unprompted. Sessions whose pid is dead are marked STALE by the
+  script (the table prunes dead pids only on write); treat a STALE mark as tracker hygiene
+  to offer, not as a live lane.
+- A worktree matching no tracker row in any state is reported as an untracked worktree —
+  work without tracking (the task was never `start`ed, or `start` failed and the agent
+  proceeded anyway). Offer `start`/`reattach`; do not silently adopt it as the current task.
 - When no plan filename carries the task id, the report falls back to the newest plan and
   says so — verify it is actually this task's plan before quoting its checklist as progress.
 - The checklist counts only `- [ ]`/`- [x]` checkbox lines. Plans written without checkboxes

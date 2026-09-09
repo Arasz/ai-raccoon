@@ -12,7 +12,7 @@ internal static class PreHostLogging
 {
     internal static Handle CreateLogger(string category, InfrastructureOptions options)
     {
-        var factory = LoggerFactory.Create(b => HostLogging.Configure(b, [], options));
+        var factory = LoggerFactory.Create(b => HostLogging.Configure(b, options));
         return new Handle(factory, factory.CreateLogger(category));
     }
 

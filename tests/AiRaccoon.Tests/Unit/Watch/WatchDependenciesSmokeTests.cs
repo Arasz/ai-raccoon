@@ -1,7 +1,6 @@
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Setup;
-using DotNext.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
@@ -27,7 +26,7 @@ public sealed class WatchDependenciesSmokeTests : IDisposable
         {
             DataRoot = _dataRoot,
             Scope = InstallScope.User
-        }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
+        });
 
         using var provider = services.BuildServiceProvider();
 
@@ -46,7 +45,7 @@ public sealed class WatchDependenciesSmokeTests : IDisposable
         {
             DataRoot = _dataRoot,
             Scope = InstallScope.User
-        }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Http));
+        });
 
         using var provider = services.BuildServiceProvider();
 

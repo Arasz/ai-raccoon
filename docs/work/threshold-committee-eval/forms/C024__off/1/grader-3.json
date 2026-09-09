@@ -1,0 +1,48 @@
+{
+  "slotId": "C024__off",
+  "queryId": "C024",
+  "arm": "off",
+  "chunks": [
+    {
+      "hash": "7919c74edd680689a72d99cc9cb5fa6e3d03e264edd2731493423aac62e9a08a",
+      "grade": "A",
+      "reason": "Directly shows the 'Managed by ai-badger' comment in HERMES.md with source-of-truth pointing to .ai-badger/HERMES.md, answering how the pattern is handled."
+    },
+    {
+      "hash": "7c0c3e8e537890d376e3002476f647dda7dbd3e1785c7cf5952f2f92de795224",
+      "grade": "0",
+      "reason": "Discusses Hermes Agent configuration and the .ai-badger directory role but does not explain how the 'Managed by ai-badger' comment pattern works."
+    },
+    {
+      "hash": "ce42316307329c71cf6073a2b881e6659fa6cb70a2cbb160b83752ad7850dfe0",
+      "grade": "0",
+      "reason": "Describes a Hermes plugin gate implementation plan phase, unrelated to how the 'Managed by ai-badger' comment is handled."
+    },
+    {
+      "hash": "1c8e2de0e6452669b154671fab78880b738267d251da13b7c3336a27b20625e6",
+      "grade": "A",
+      "reason": "Shows the same 'Managed by ai-badger' pattern in CLAUDE.md with source-of-truth directive, demonstrating how the scaffolding handles these files."
+    },
+    {
+      "hash": "bdb232ef5f20ad29a04fe8eb3f77593216da67355b4cbc11fcdaf21dffd66170",
+      "grade": "0",
+      "reason": "References a Hermes ai-raccoon provider protocol document but does not address how the 'Managed by ai-badger' comment is handled."
+    },
+    {
+      "hash": "cc7888a972d38dc81cb530ecafe543e0868e2581d3e39a03ce3dee26d12cff28",
+      "grade": "0",
+      "reason": "Discusses hyphenated directory naming conventions, not the 'Managed by ai-badger' comment handling pattern."
+    },
+    {
+      "hash": "94e5c699e8e4a0037b79c44b8c1c16af21ed6066e5aeaa7ec8eb1b6bae966cdb",
+      "grade": "0",
+      "reason": "Covers Hermes skill discovery via namespaced symlinks, not the 'Managed by ai-badger' source-of-truth mechanism."
+    },
+    {
+      "hash": "fb87aea5792d20f831c34920ff65189bc74951fc492464d4190022b8dff0fbc9",
+      "grade": "0",
+      "reason": "Describes a memory-first gate ADR with search gating details, unrelated to the 'Managed by ai-badger' pattern."
+    }
+  ],
+  "overall": "Two chunks (1 and 4) directly demonstrate the 'Managed by ai-badger' pattern showing source-of-truth comments in scaffolded files; the remaining six are tangentially related to ai-badger or Hermes but do not explain how the comment mechanism works."
+}

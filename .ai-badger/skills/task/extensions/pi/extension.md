@@ -16,6 +16,15 @@ pi --mode json -p --no-session --model <model> --tools <toolset> "<task>"
 
 The reference subagent implementation is at `examples/extensions/subagent/` in the pi repo.
 
+### Model tier forwarding
+
+The `level` field is optional (`low`, `medium`, or `high`), resolved to that model tier's preferred registry entry.
+An explicit `model` always wins over `level`.
+With neither `level` nor `model`, the dispatch inherits the session (or parent) default model.
+The registry lives at `.ai-badger/model-groups.json`; it holds the IDs and prices, so this extension names neither.
+
+Forward `--level <low|medium|high>` or an explicit `--model <id>` through to the subagent spawn; pi-badger-integration is normative for the exact argv.
+
 ## Session management
 
 - Resume work: `pi -p --session <session_id>` — `--resume, -r` takes no argument (it opens an
@@ -57,3 +66,19 @@ that the existing Python hooks expect, and maps responses back to pi's format.
 pi's `input` event exposes `streamingBehavior` (`"steer"` | `"followUp"` | `undefined`),
 which may fix ai-badger's documented mid-turn marker defect. `undefined` when idle,
 `steer` for mid-stream interrupts, `followUp` for messages queued until the agent finishes.
+
+## Status-report enforcement (pi)
+
+- `PI_SESSION_ID` must be set in every process that runs `task_tracker.py` — it is the
+  tracker's exact identity and outranks pid/cwd guesses. An "already attached" refusal naming
+  a session you do not recognise means a stale row won in the past: re-run with explicit
+  `--session-id "$PI_SESSION_ID"`, never work untracked.
+- Run `start` from the main checkout (the worktree is created for you); the checkpoint reader
+  locates the session file by cwd, so checkpoints taken inside the worktree degrade to zero —
+  expected, not a bug to chase.
+- After every delegation settles, record it before the next dispatch:
+  `task_tracker.py subagent <taskId> --delegation <runId>` (the R4 subagent-log contract).
+  Unrecorded lanes are invisible to status.
+- The plan-file contract (Phase 2: `plans/<date>-<taskId>.md`, taskId in filename, `**P<N>**`
+  headings, checkboxes) and `<taskId>-lane-*` worktree naming apply unchanged — status keys
+  off them.

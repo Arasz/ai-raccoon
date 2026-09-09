@@ -1,0 +1,48 @@
+{
+  "slotId": "C011__off",
+  "queryId": "C011",
+  "arm": "off",
+  "chunks": [
+    {
+      "hash": "407ab320871af93171c4cf1cc74344476fa89db76922724126720c76aac5d5fa",
+      "grade": "A",
+      "reason": "Contains the actual 'Managed by ai-badger' comment in HERMES.md showing the source-of-truth directive pattern."
+    },
+    {
+      "hash": "aa6b11b8cc74c4690c4b3db1c1246ef49d5540d00b842709d05b91c70178205d",
+      "grade": "A",
+      "reason": "Contains the actual 'Managed by ai-badger' comment in CLAUDE.md showing the source-of-truth directive pattern."
+    },
+    {
+      "hash": "fb87aea5792d20f831c34920ff65189bc74951fc492464d4190022b8dff0fbc9",
+      "grade": "0",
+      "reason": "This ADR covers memory-first gate gating logic, not how the 'Managed by ai-badger' annotation works."
+    },
+    {
+      "hash": "e6732f9447884e24acb9e92a8e2d48d3a09643e14f2d5a63bcbd1f6edec6f114",
+      "grade": "0",
+      "reason": "This is a daily done-log mentioning ai-badger as a tool reference, not about the managed-by annotation mechanism."
+    },
+    {
+      "hash": "75e76a011c8087dd4383bbf7552dc471c4b4b492f09bcd39ad7a32cfe65b980e",
+      "grade": "0",
+      "reason": "This reports memory watch and promotion queue status, unrelated to how 'Managed by ai-badger' is handled."
+    },
+    {
+      "hash": "858c7c7f032d76c0f782169dfc4426045538d61c67bc9724f2fcfa96fbf99725",
+      "grade": "0",
+      "reason": "This ADR is about SignalDisposition states in the job-search-ai-assistant project, unrelated to the query."
+    },
+    {
+      "hash": "6e5389d93ec45025155b6d5c0703b07eac914899f166548164aa55254b91a4ba",
+      "grade": "0",
+      "reason": "This covers workspace isolation design and mentions ai-badger's worktree style, not the managed-by annotation."
+    },
+    {
+      "hash": "37222c0cc2d1a299dedd307c9a7f5b837f063714dd933f83b8ef045679061064",
+      "grade": "0",
+      "reason": "This is the ai-badger docs README index page; it describes the documentation tree but not how the managed-by annotation works."
+    }
+  ],
+  "overall": "Only chunks 1 and 2 (HERMES.md and CLAUDE.md) directly answer the query by showing the 'Managed by ai-badger' comment with its source-of-truth directive; the remaining six chunks are tangentially related to ai-badger but do not address the annotation mechanism."
+}

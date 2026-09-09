@@ -18,7 +18,5 @@ public sealed record CliInput(
 {
     public bool IsCommandInput => CommandPath.Length > 0;
 
-    public bool IsProxyInput => ServerConfig.Transport == McpTransport.Proxy;
-
     public ServerConfig ServerConfig { get; } = Options.ToServerConfig();
 }

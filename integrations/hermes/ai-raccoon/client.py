@@ -6,7 +6,11 @@ Two transports behind one duck-typed surface:
   (MCP over stdio). Since ADR-0020 that child is a proxy that relays to an
   ``ai-raccoon serve`` backend, starting one if none is listening. The data
   root comes ONLY from the ``--data-root`` flag (pass it via ``binary_args``)
-  — no data-root environment variable is read by the CLI.
+  — no data-root environment variable is read by the CLI. Isolation (tests,
+  scratch banks) is a temp ``--data-root`` plus a leased ``--port`` in
+  ``binary_args`` (the temp-port proxy recipe, ADR-0104): never the shared
+  default port, and never a transport flag — the removed stdio in-process recipe
+  has no flag-shaped successor.
 - ``http``: connects to a running server's Streamable HTTP endpoint
   (default ``http://127.0.0.1:7721/mcp``). ``ai-raccoon serve`` gates ``/mcp``
   behind a loopback token (``McpTokenGate``); this transport reads
@@ -200,8 +204,9 @@ class HttpClient(_MCPClient):
 
     ``token_file`` (default ``~/.ai-raccoon/mcp-token``) is read at connect time and, when
     ``url`` targets loopback, sent as ``X-AiRaccoon-Token`` — the header ``ai-raccoon serve``
-    (unlike the ungated ``--transport http``) requires. A missing, unreadable, empty or
-    whitespace-only file just means no header: the ungated case must keep working (D2).
+    requires. A missing, unreadable, empty or whitespace-only file just means no header is
+    sent, and serve is fail-closed: without the token the endpoint refuses instead of serving
+    ungated (the ungated ``--transport http`` posture retired with ADR-0104).
     """
 
     def __init__(self, url: str = DEFAULT_HTTP_URL, token_file: str = DEFAULT_TOKEN_FILE) -> None:
@@ -279,6 +284,11 @@ def create_client(config: dict) -> _MCPClient:
     destination, so it still writes ``Warning``-and-above — and any
     backend-unavailable line — to stderr. Set ``quiet: false`` in the plugin
     config for full backend logs.
+
+    Keep a busy default port out of the picture with the temp-port proxy
+    recipe: ``binary_args: ["--data-root", "/tmp/bank", "--port", "<lease>"]``
+    where ``<lease>`` is a free port leased at setup time. Proven against a
+    busy 7721 (ADR-0104).
     """
     transport = config.get("transport", "stdio")
     if transport == "http":

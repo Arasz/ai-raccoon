@@ -1,0 +1,48 @@
+{
+  "slotId": "C024__off",
+  "queryId": "C097",
+  "arm": "off",
+  "chunks": [
+    {
+      "hash": "01403e0d71a083be480a730926646fdb349c4ec32157af9f3e45d25618c528ca",
+      "grade": "A",
+      "reason": "Contains the exact queried loc from line 27 column 30 to line 29 column 1."
+    },
+    {
+      "hash": "5811c3dae1f33ef85040596a3d12742da1370fe794ebeff2ba385055b7049e05",
+      "grade": "0",
+      "reason": "Shows a line 146 span that does not contain the queried line 27 fragment."
+    },
+    {
+      "hash": "4c0d171f23eeb11fdc4ab8295ee34c95809c87c7e261267e52364bef680507f9",
+      "grade": "0",
+      "reason": "Shows line 27 columns 47-53, not the queried columns 20 and 30."
+    },
+    {
+      "hash": "4d94f44a980e6abd41894301201c3455f1faa03cb5ea3edc96492c1f1963c365",
+      "grade": "0",
+      "reason": "Shows a line 38 span with no match to the queried line 27 location."
+    },
+    {
+      "hash": "b5df94888abafbe967014c37389519958c3ea710759238d099cc5f8c1faa93f6",
+      "grade": "0",
+      "reason": "Shows a line 72 span with no match to the queried line 27 location."
+    },
+    {
+      "hash": "8a2f22cdae5b555f74398a5d097775813c0a481bf3d1be50b8d86c9544e23b9d",
+      "grade": "0",
+      "reason": "Shows line 27 columns 9-22, which is adjacent to but not the queried location."
+    },
+    {
+      "hash": "44856130a182143217817e46cca35214f3e2f9dee825b91ec8caef410829de97",
+      "grade": "0",
+      "reason": "Shows line 27 columns 0-18, which precedes but does not contain the queried fragment."
+    },
+    {
+      "hash": "5be0e7d01eeb637a408745b6ac9aa0e1e1ccbec46fa3b28670e9858f20e65608",
+      "grade": "0",
+      "reason": "Shows a line 13 span with no match to the queried line 27 location."
+    }
+  ],
+  "overall": "Only rank 1 contains the queried fragment while the other same-file chunks show different spans."
+}

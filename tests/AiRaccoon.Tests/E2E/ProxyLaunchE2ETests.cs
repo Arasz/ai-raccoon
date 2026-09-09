@@ -133,7 +133,8 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
             run.ExitCode.ShouldBe(ExitCode.ProxyBackendUnavailable);
             run.Stderr.ShouldContain($"http://127.0.0.1:{port}/mcp");
             run.Stderr.ShouldContain($"serve exit {ExitCode.FailedToOpenEncryptedBank}");
-            run.Stderr.ShouldContain("ai-raccoon --transport stdio");
+            run.Stderr.ShouldContain("no in-process fallback exists");
+            run.Stderr.ShouldContain("ai-raccoon serve --port");
         }
         finally
         {

@@ -4,6 +4,7 @@ description: >
   Work-routing lead for multi-package sessions. Dispatches to specialist
   personas; does only integration, arbitration, and gate-running itself.
 model: opus
+level: high
 ---
 
 # Delegator

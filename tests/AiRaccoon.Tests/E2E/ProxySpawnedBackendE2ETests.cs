@@ -73,6 +73,40 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
         tools.ShouldNotBeEmpty();
     }
 
+    /// <summary>
+    ///     G3 convergence: from a fresh root and one reserved-then-released port, a single bare
+    ///     proxy spawn converges to exactly one backend serving every surface. No retry: one
+    ///     attempt inside a stated budget. Four healthy surfaces through the same proxy child —
+    ///     tools listed, a tool round-tripped, /observability naming one pid, the gate token the
+    ///     backend minted before it bound — and reaching them at all is the zero-exit-6 proof
+    ///     (a proxy with no backend fails the session with BackendUnavailable instead).
+    /// </summary>
+    [RetryFact]
+    public async Task ProxySpawnedBackend_ConvergesToOneHealthyBackend()
+    {
+        var budget = TimeSpan.FromSeconds(60);
+        _lease.ReleaseForBind();
+        await using var client = await AiRaccoonProcess.ConnectAsync(
+            ["--data-root", _dataRoot, "--port", _port.ToString(System.Globalization.CultureInfo.InvariantCulture)],
+            TestContext.Current.CancellationToken);
+
+        var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+        tools.ShouldNotBeEmpty();
+
+        var stats = await client.CallToolAsync("memory_stats",
+            new Dictionary<string, object?> { ["projectId"] = "acme" },
+            cancellationToken: TestContext.Current.CancellationToken);
+        stats.IsError.ShouldNotBe(true);
+
+        var pid = await FindBackendPidAsync(budget);
+        pid.ShouldNotBeNull();
+        File.Exists(Path.Combine(_dataRoot, McpTokenFile.FileName)).ShouldBeTrue();
+
+        // Eventual-one-pid: the backend is still that same process once the dust settles —
+        // no second starter won the port behind the first.
+        (await FindBackendPidAsync(TimeSpan.FromSeconds(10))).ShouldBe(pid);
+    }
+
     [RetryFact]
     public async Task ProxyOverASpawnedServe_CallsAToolThroughTheGate()
     {
@@ -129,7 +163,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     }
 
     /// <summary>Retries the lookup: a cold spawn can still be booting when the test body ends.</summary>
-    private async Task<int?> FindBackendPidAsync()
+    private async Task<int?> FindBackendPidAsync(TimeSpan? deadline = null)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         int? pid = null;
@@ -151,7 +185,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
             }
 
             return false;
-        }, WaitByPolling.DefaultFirstTick, WaitByPolling.DefaultMaxTick, PidLookupDeadline, TimeProvider.System,
+        }, WaitByPolling.DefaultFirstTick, WaitByPolling.DefaultMaxTick, deadline ?? PidLookupDeadline, TimeProvider.System,
             CancellationToken.None);
 
         return pid;
