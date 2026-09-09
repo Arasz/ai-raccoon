@@ -16,7 +16,7 @@ namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
 ///     Pins the owner's quiet-mode ruling (2026-08-09): every level reaches a file, nothing
-///     reaches stdout/stderr, on every transport; an unwritable log path degrades to silence
+///     reaches stdout/stderr, on the sole surviving host; an unwritable log path degrades to silence
 ///     rather than crashing; non-quiet console behaviour is unchanged. Console.Out/Error are
 ///     process-global, so this class disables parallelization with itself
 ///     (QuietLoggingCollection) — it cannot rule out interference from unrelated tests that
@@ -55,45 +55,32 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    ///     Renamed off the deleted stdio host (P2 red-first rename): quiet routing is a property
+    ///     of the sole host now, not of a transport shape.
+    /// </summary>
     [RetryFact]
-    public void Quiet_Stdio_NothingReachesStdoutOrStderr_ButInformationReachesTheFile()
+    public void Quiet_Http_NothingReachesStdoutOrStderr_ButInformationReachesTheFile()
     {
         var options = QuietOptions(InstallScope.User);
-        var config = new ServerConfig(DefaultOptions.Port, McpTransport.Stdio, options);
+        var config = new ServerConfig(DefaultOptions.Port, McpTransport.Http, options);
 
         var (stdout, stderr) = ConsoleCapture.Run(() =>
         {
             using var host = McpServerSetup.CreateServerHost(config);
             var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("quiet-test");
-            logger.LogInformation("quiet-stdio-info-marker");
-            logger.LogWarning("quiet-stdio-warn-marker");
+            logger.LogInformation("quiet-http-info-marker");
+            logger.LogWarning("quiet-http-warn-marker");
         });
 
         stderr.ShouldBeEmpty();
         stdout.ShouldBeEmpty();
-        File.ReadAllText(LogFilePath(options)).ShouldContain("quiet-stdio-info-marker");
+        File.ReadAllText(LogFilePath(options)).ShouldContain("quiet-http-info-marker");
     }
 
-    /// <summary>D6: combined mode (stdio + http together) shares CreateWebHost with plain HTTP,
-    /// so the contract must hold there too — this is the site the second gate's ruling added.</summary>
-    [RetryFact]
-    public void Quiet_Combined_NothingReachesStdoutOrStderr_ButInformationReachesTheFile()
-    {
-        var options = QuietOptions(InstallScope.Project);
-        var config = new ServerConfig(0, McpTransport.Http, options);
-
-        var (stdout, stderr) = ConsoleCapture.Run(() =>
-        {
-            using var host = McpServerSetup.CreateServerHost(config, TimeProvider.System);
-            var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("quiet-test");
-            logger.LogInformation("quiet-combined-info-marker");
-            logger.LogWarning("quiet-combined-warn-marker");
-        });
-
-        stderr.ShouldBeEmpty();
-        stdout.ShouldBeEmpty();
-        File.ReadAllText(LogFilePath(options)).ShouldContain("quiet-combined-info-marker");
-    }
+    // Deleted with the combined host shape (P2): D6's combined mode shared CreateWebHost with
+    // plain HTTP, and now everything is plain HTTP — QuietHttp_... below (console silence plus
+    // the category floors in the file) is the surviving joint assertion.
 
     /// <summary>Same principle as WP4's endpoint guard: an observability misconfiguration must
     /// never take the server down. A directory occupying the log file's path makes it unwritable.</summary>
@@ -122,7 +109,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     [RetryFact]
     public void NonQuietHost_KeepsInformation_OnConsole()
     {
-        var config = new ServerConfig(DefaultOptions.Port, McpTransport.Stdio, LoudOptions(InstallScope.User));
+        var config = new ServerConfig(DefaultOptions.Port, McpTransport.Http, LoudOptions(InstallScope.User));
 
         var entries = Capture(logger => logger.LogInformation("loud-info-marker"), config);
 
@@ -185,7 +172,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     }
 
     /// <summary>QA-4: the proxy path builds its own container; quiet mode must reach it too. A
-    /// quiet stdio bridge that relays every request must not print HttpClient info lines to the
+    /// quiet proxy bridge that relays every request must not print HttpClient info lines to the
     /// operator's terminal.</summary>
     [RetryFact]
     public async Task QuietProxy_HttpClientRelayLogs_StayOutOfStderr()
