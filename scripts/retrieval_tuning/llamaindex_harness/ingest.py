@@ -1,9 +1,10 @@
 """Bank-copy -> Chroma + FTS5 ingestion (P1; import-safe, argparse + main(argv)).
 
 Dataset rule (M1, verified against SearchContexts.cs + MemorySql.cs):
-- project buckets (ai-raccoon, hermes-default): scope IN ('project','custom') —
-  scope=project searches the project context plus its custom labels (plus the
-  workspace context, which the corpus never targets).
+- resolved project buckets (explicit --buckets or the corpus header's
+  projects): scope IN ('project','custom') — scope=project searches the
+  project context plus its custom labels (plus the workspace context, which
+  the corpus never targets).
 - shared: ALL projects' scope='shared' rows — the shared context is global
   (SelectEntryByHashForRead: project_id = @projectId OR scope = 'shared').
 
