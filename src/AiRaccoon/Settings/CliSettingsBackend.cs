@@ -7,7 +7,7 @@ namespace AiRaccoon.Settings;
 
 /// <summary>
 ///     Acquires the settings server for a CLI process (ADR-0075 §5.1): reuses
-///     <c>BackendLauncher.AcquireAsync</c> exactly as the stdio proxy does
+///     <c>BackendLauncher.AcquireAsync</c> exactly as the proxy does
 ///     (<see cref="BackendLaunchArguments" />), then builds a <see cref="ServerSettingsStore" />
 ///     against the acquired endpoint. Every failure mode — an undialable port, no answer within the
 ///     acquire budget, a data root with no minted token — is reported as
