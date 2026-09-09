@@ -7,7 +7,6 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,14 +19,11 @@ namespace AiRaccoon.Tests.E2E;
 /// <summary>
 ///     Boots the real HTTP MCP server in-process and exposes an MCP client bound to it, each
 ///     instance under its own temp data root. P2/ADR-0020: bare launches proxy out-of-process, so
-///     the entry point no longer builds an in-process host for WebApplicationFactory to
-///     intercept — the sole host is built directly (the same McpServerSetup.CreateWebHost
-///     production boots) on an ephemeral loopback port, and the client dials its bound URL over
-///     real HTTP. The WebApplicationFactory base is retained only for call-site type
-///     compatibility; its server pipeline (TestServer) is unused. Access mode defaults to full
-///     before the first bank open.
+///     the sole host is built directly (the same McpServerSetup.CreateWebHost production boots)
+///     on an ephemeral loopback port, and the client dials its bound URL over real HTTP — no
+///     WebApplicationFactory, no TestServer. Access mode defaults to full before the first bank open.
 /// </summary>
-public sealed class McpServerFactory : WebApplicationFactory<Program>
+public sealed class McpServerFactory : IDisposable, IAsyncDisposable
 {
     private readonly InstallScope _scope;
     private WebApplication? _app;
@@ -41,11 +37,8 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
     /// <summary>The temp data root the server instance writes into.</summary>
     public string DataRoot { get; } = CreateTempRoot();
 
-    /// <summary>
-    ///     The live server's services (ForceFlush probes, log providers). Overrides the base
-    ///     TestServer-backed property, which has no server behind it since P2.
-    /// </summary>
-    public override IServiceProvider Services => _app?.Services
+    /// <summary>The live server's services (ForceFlush probes, log providers).</summary>
+    public IServiceProvider Services => _app?.Services
         ?? throw new InvalidOperationException("CreateClientAsync builds the server; call it first.");
 
     public async Task<McpClient> CreateClientAsync()
@@ -93,7 +86,7 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
             IngestScopeKeys.Serialize([Path.GetTempPath(), DataRoot]));
     }
 
-    protected override void Dispose(bool disposing)
+    public void Dispose()
     {
         if (_disposed)
         {
@@ -101,19 +94,13 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
         }
 
         _disposed = true;
-        if (disposing)
-        {
-            _app?.StopAsync().GetAwaiter().GetResult();
-            _app?.DisposeAsync().GetAwaiter().GetResult();
-        }
-
-        base.Dispose(disposing);
+        _app?.StopAsync().GetAwaiter().GetResult();
+        _app?.DisposeAsync().GetAwaiter().GetResult();
+        _app = null;
         TestData.DeleteTempRoot(DataRoot);
     }
 
-    /// <summary>Async twin of <see cref="Dispose(bool)" />: the base DisposeAsync is not virtual
-    ///     and knows nothing of the directly-managed server, so this hides it.</summary>
-    public new async ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_app is not null)
         {
@@ -122,7 +109,6 @@ public sealed class McpServerFactory : WebApplicationFactory<Program>
             _app = null;
         }
 
-        await base.DisposeAsync();
         if (!_disposed)
         {
             _disposed = true;
