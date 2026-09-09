@@ -5,19 +5,12 @@ using AiRaccoon.Core.Watch;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Setup.Cli.Render;
-using AiRaccoon.Setup.Extensions;
 using AiRaccoon.Setup.Logging;
-using AiRaccoon.Setup.Models;
-using Microsoft.Data.Sqlite;
-using SQLitePCL;
-using AiRaccoon.Observability;
 
 namespace AiRaccoon;
 
@@ -81,85 +74,10 @@ public sealed partial class AppRunner
             return ExitCode.FailedToParseCliArgs;
         }
 
-        if (cliInput.IsProxyInput)
-        {
-            return await RunProxy(cliInput);
-        }
-
-        return await DirectRunAsync(cliInput);
+        // Bare launches proxy to the HTTP backend (ADR-0020, D2b): there is no in-process
+        // server path anymore — the stdio plain host and the bare-http full server are deleted.
+        return await RunProxy(cliInput);
     }
-
-    private async Task<int> DirectRunAsync(CliInput cliInput)
-    {
-        var app = McpServerSetup.CreateServerHost(cliInput.ServerConfig);
-        var embeddingAvailability = app.Services.GetRequiredService<IEmbeddingAvailability>();
-        var factory = app.Services.GetRequiredService<ISqliteConnectionFactory>();
-        var resolver = app.Services.GetRequiredService<IEncryptionKeyResolver>();
-        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<AppRunner>();
-
-        LogSqliteEngine(logger);
-
-        var (resolvedEncryptionKey, encryptionKey) = await TryResolveEncryptionKeyAsync(logger, resolver, Token);
-        if (!resolvedEncryptionKey)
-        {
-            return ExitCode.FailedToResolveEncryptionKey;
-        }
-
-        if (!await TryProbeBankDecryption(logger, factory, encryptionKey, Token))
-        {
-            return ExitCode.FailedToOpenEncryptedBank;
-        }
-
-        await new BankEngineReporter(factory,
-                app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<BankEngineReporter>())
-            .ReportAsync(Token);
-
-        await embeddingAvailability.EnsureEmbeddingAvailabilityAsync(Token);
-
-        return await app.RunAsync(cliInput.ServerConfig, Token);
-
-        static void LogSqliteEngine(ILogger logger)
-        {
-            try
-            {
-                using var conn = new SqliteConnection("Data Source=:memory:");
-                conn.Open();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "SELECT sqlite3mc_version()";
-                var engineVersion = (string)cmd.ExecuteScalar()!;
-                Log.SqliteEngineVersion(logger, raw.sqlite3_libversion().utf8_to_string(), engineVersion);
-            }
-            catch (SqliteException)
-            {
-            }
-        }
-
-        static async Task<bool> TryProbeBankDecryption(ILogger logger, ISqliteConnectionFactory sqliteConnectionFactory, ResolvedKey resolvedKey, CancellationToken cancellationToken)
-        {
-            var probeUsingEncryptionKey = await sqliteConnectionFactory.ProbeUsingEncryptionKey(resolvedKey.Passphrase, cancellationToken);
-            if (probeUsingEncryptionKey.IsCorrectKey)
-            {
-                return true;
-            }
-
-            Log.FailedToOpenEncryptedBank(logger, resolvedKey.SourceName, probeUsingEncryptionKey.Exception);
-            return false;
-        }
-
-        static async Task<(bool Success, ResolvedKey Key)> TryResolveEncryptionKeyAsync(ILogger logger,
-            IEncryptionKeyResolver encryptionKeyResolver, CancellationToken cancellationToken)
-        {
-            var probeResolvingEncryptionKey = await encryptionKeyResolver.ProbeResolvingEncryptionKeyAsync(cancellationToken);
-            if (probeResolvingEncryptionKey.IsSuccess)
-            {
-                return (true, probeResolvingEncryptionKey.Key);
-            }
-
-            Log.FailedToResolveEncryptionKey(logger, probeResolvingEncryptionKey.Exception);
-            return (false, ResolvedKey.None);
-        }
-    }
-
 
     private CliInput? GetCliInput(string[] args)
     {
@@ -278,17 +196,5 @@ public sealed partial class AppRunner
         {
             builder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
         }
-    }
-
-    private static partial class Log
-    {
-        [LoggerMessage(EventId = 10, Level = LogLevel.Error, Message = "Failed to resolve encryption key")]
-        public static partial void FailedToResolveEncryptionKey(ILogger logger, Exception? exception);
-
-        [LoggerMessage(EventId = 11, Level = LogLevel.Error, Message = "Failed to open encrypted bank with {EncryptionSource} encryption source key")]
-        public static partial void FailedToOpenEncryptedBank(ILogger logger, string encryptionSource, Exception? exception);
-
-        [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "ai-raccoon: SQLite engine {LibVersion} ({EngineVersion})")]
-        public static partial void SqliteEngineVersion(ILogger logger, string libVersion, string engineVersion);
     }
 }
