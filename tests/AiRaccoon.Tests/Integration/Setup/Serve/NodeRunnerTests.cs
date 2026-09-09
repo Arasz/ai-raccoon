@@ -308,7 +308,9 @@ public sealed class NodeRunnerTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "--transport", "stdio", "serve", "--port", port.ToString()]);
+        // proxy is the only surviving non-http value that reaches serve (stdio/https are
+        // rejected at parse, P1); serve always uses http, so it warns and serves anyway.
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "--transport", "proxy", "serve", "--port", port.ToString()]);
 
         var url = await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
@@ -316,6 +318,7 @@ public sealed class NodeRunnerTests : IDisposable
 
         exit.ShouldBe(ExitCode.Success);
         run.Stderr.ShouldContain("serve always uses http");
+        run.Stderr.ShouldContain("proxy");
     }
 
     [RetryFact]
