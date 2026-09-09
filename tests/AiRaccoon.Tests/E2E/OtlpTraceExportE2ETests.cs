@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AiRaccoon.Observability;
 using Microsoft.Extensions.DependencyInjection;
+using OpenTelemetry;
 using OpenTelemetry.Trace;
 using Shouldly;
 using Xunit;
@@ -84,25 +85,22 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
 
     // ADR-0021: registering the ASP.NET Core request source (OtlpNames.AspNetCoreScope) fixes the
     // orphan — the tool span's parent must now be a recorded, exported span, not the dangling id
-    // the old unrecorded Activity left behind. AddInMemoryExporter chains onto the same
-    // TracerProviderBuilder AddOtlpExport already configured for the real host (OtlpExportTests'
-    // bare-ServiceCollection tests use the same trick).
+    // the old unrecorded Activity left behind. P2/ADR-0020 removed entry-point hosting, so the
+    // chaining seam (AddInMemoryExporter onto the app's own builder) is gone with it: an
+    // ActivityListener observes the same spans off the same sources instead.
     [RetryFact]
     public async Task ToolCallSpan_NestsUnderAResolvableRequestSpan()
     {
-        var exportedItems = new List<Activity>();
-        await using var factory = new McpServerFactory(configureAdditionalServices: services =>
-            services.AddOpenTelemetry().WithTracing(t => t.AddInMemoryExporter(exportedItems)));
+        using var listener = SpanCapture.ListenTo(OtlpNames.MemoryToolsScope, OtlpNames.AspNetCoreScope);
+        await using var factory = new McpServerFactory();
         var client = await factory.CreateClientAsync();
         try
         {
             await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
                 null, null, TestContext.Current.CancellationToken);
 
-            factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
-
-            var toolSpan = exportedItems.Single(a => a.OperationName == "tools/call memory_stats");
-            var requestSpan = exportedItems.SingleOrDefault(a =>
+            var toolSpan = listener.Ended.Single(a => a.OperationName == "tools/call memory_stats");
+            var requestSpan = listener.Ended.SingleOrDefault(a =>
                 a.Source.Name == OtlpNames.AspNetCoreScope && a.SpanId == toolSpan.ParentSpanId);
 
             requestSpan.ShouldNotBeNull();
@@ -117,22 +115,19 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     // ADR-0021 flags this as unverified: whether SuppressActivityOpenTelemetryData is read lazily
     // per request or cached at type init. This proves the ordering (switch set before
     // WebApplication.CreateBuilder) is early enough either way — the tags actually reach an
-    // exported span.
+    // observed span. Same P2 seam removal as above: ActivityListener instead of InMemoryExporter.
     [RetryFact]
     public async Task RequestSpan_CarriesHttpSemanticConventionTags()
     {
-        var exportedItems = new List<Activity>();
-        await using var factory = new McpServerFactory(configureAdditionalServices: services =>
-            services.AddOpenTelemetry().WithTracing(t => t.AddInMemoryExporter(exportedItems)));
+        using var listener = SpanCapture.ListenTo(OtlpNames.MemoryToolsScope, OtlpNames.AspNetCoreScope);
+        await using var factory = new McpServerFactory();
         var client = await factory.CreateClientAsync();
         try
         {
             await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
                 null, null, TestContext.Current.CancellationToken);
 
-            factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
-
-            var requestSpan = exportedItems.First(a => a.Source.Name == OtlpNames.AspNetCoreScope);
+            var requestSpan = listener.Ended.First(a => a.Source.Name == OtlpNames.AspNetCoreScope);
 
             requestSpan.GetTagItem("http.request.method").ShouldBe("POST");
         }
@@ -142,16 +137,13 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         }
     }
 
-    // ADR-0021 "The sampler stays until another lane's test says otherwise": with the hardcoded
-    // AlwaysOnSampler in place, this must go red — spans export regardless of OTEL_TRACES_SAMPLER.
-    // Removing the override restores it as live configuration; this proves the env var actually
-    // reaches the SDK. The assertion is a probe on a source registered only on this factory's
-    // provider: Activity.IsAllDataRequested is process-global (the union of every live listener's
-    // sample result), so a parallel collection's default-sampled provider marks the shared
-    // request/tool/HttpClient spans recorded and they show up here too — asserting on those would
-    // test the other lane's sampler, not ours. The probe source has no other listener, so its
-    // root span is created (AlwaysOff keeps PropagationData so the trace id survives) but never
-    // recorded or exported.
+    // ADR-0021 "The sampler stays until another lane's test says otherwise": OTEL_TRACES_SAMPLER
+    // is live configuration (the hardcoded AlwaysOn override the original comment names is gone
+    // from OtlpExport.cs — "OTEL_TRACES_SAMPLER is live configuration again"). Same P2 seam
+    // removal: the probe runs against a test-owned provider built from the same SDK env plumbing
+    // instead of the app's builder. The probe source is registered only there, so asserting on it
+    // cannot observe a parallel collection's default-sampled provider (IsAllDataRequested is the
+    // union of every live listener's sample result) — same isolation argument as before.
     [RetryFact]
     public async Task OtelTracesSamplerAlwaysOff_ProducesNoSpans()
     {
@@ -159,10 +151,11 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         try
         {
             var exportedItems = new List<Activity>();
-            await using var factory = new McpServerFactory(configureAdditionalServices: services =>
-                services.AddOpenTelemetry().WithTracing(t => t
-                    .AddInMemoryExporter(exportedItems)
-                    .AddSource(SamplerProbeSource)));
+            using var testProvider = Sdk.CreateTracerProviderBuilder()
+                .AddSource(SamplerProbeSource)
+                .AddInMemoryExporter(exportedItems)
+                .Build();
+            await using var factory = new McpServerFactory();
             var client = await factory.CreateClientAsync();
             try
             {
@@ -171,9 +164,11 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
 
                 using var probe = new ActivitySource(SamplerProbeSource).StartActivity("sampler-probe");
                 probe.ShouldNotBeNull();
+                // Secondary observable: the sampling decision itself, not just the exporter's silence.
+                probe.IsAllDataRequested.ShouldBeFalse();
                 probe.Dispose();
 
-                factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
+                testProvider.ForceFlush();
 
                 exportedItems.ShouldNotContain(a => a.Source.Name == SamplerProbeSource);
             }
@@ -188,6 +183,37 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
             // original and puts it back at teardown. Restoring it here used to lose it.
             Environment.SetEnvironmentVariable(SamplerVar, null);
         }
+    }
+
+    /// <summary>
+    ///     Process-wide span tap for the two sources a tool call exercises, narrowed to exactly
+    ///     those scopes so parallel suites never observe this test's sampling decisions.
+    /// </summary>
+    private sealed class SpanCapture : IDisposable
+    {
+        private readonly ActivityListener _listener;
+
+        private SpanCapture(ActivityListener listener) => _listener = listener;
+
+        public List<Activity> Ended { get; } = [];
+
+        public static SpanCapture ListenTo(params string[] sources)
+        {
+            var capture = new SpanCapture(new ActivityListener());
+            capture._listener.ShouldListenTo = source => sources.Contains(source.Name, StringComparer.Ordinal);
+            capture._listener.Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData;
+            capture._listener.ActivityStopped = activity =>
+            {
+                lock (capture.Ended)
+                {
+                    capture.Ended.Add(activity);
+                }
+            };
+            ActivitySource.AddActivityListener(capture._listener);
+            return capture;
+        }
+
+        public void Dispose() => _listener.Dispose();
     }
 
     /// <summary>Minimal loopback OTLP/HTTP collector stand-in: records every request path it receives.</summary>
