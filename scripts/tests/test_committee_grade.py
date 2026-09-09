@@ -477,9 +477,9 @@ def test_sampling(tmp_path):
         },
         {
             "index": 3,
-            "provider": "xiaomi",
-            "model": "mio-v2.5-pro",
-            "label": "xiaomi/mio-v2.5-pro",
+            "provider": "openrouter",
+            "model": "xiaomi/mimo-v2.5-pro",
+            "label": "openrouter/xiaomi/mimo-v2.5-pro",
         },
     ]
     assert header["composition"] == {

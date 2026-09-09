@@ -6,12 +6,12 @@
     {
       "hash": "smoke-hash-1",
       "grade": "A",
-      "reason": "It directly names SQLite via sqlite-memory as the memory bank backend."
+      "reason": "It directly states SQLite via sqlite-memory backs agent memory."
     },
     {
       "hash": "smoke-hash-2",
       "grade": "0",
-      "reason": "It describes Hermes gateway routing and does not mention the storage engine."
+      "reason": "It describes Hermes gateway routing, not the memory storage engine."
     }
   ],
   "overall": "Only the first chunk answers the storage-engine question."

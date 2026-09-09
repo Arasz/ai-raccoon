@@ -1,0 +1,48 @@
+{
+  "slotId": "C053__threshold",
+  "queryId": "C053",
+  "arm": "threshold",
+  "chunks": [
+    {
+      "hash": "10a5467dd286e18dc8745a6a53c5b109acf1964e8d84fb474215d8d35da99d54",
+      "grade": "0",
+      "reason": "Chinese README explains pruner replay semantics, not the mermaid composition wiring."
+    },
+    {
+      "hash": "fa83f28b10694317bbeeec76bda2d8b879d983c90da82d0dfc292c6f56e9067d",
+      "grade": "0",
+      "reason": "English README explains pruner replay semantics, not the mermaid composition wiring."
+    },
+    {
+      "hash": "001307d09219d7a2b94f643935cc9b812f8eeddba553ecbc92e58006e29f9682",
+      "grade": "A",
+      "reason": "Contains the exact mermaid node for tool-result-pruner and its cfg edge in CLI composition."
+    },
+    {
+      "hash": "0b58324c30984c338302ba86d77a9a0c62c77cc7f95dbe90320b00875f826f29",
+      "grade": "0",
+      "reason": "Config catalog header names the package but shows no mermaid wiring edge."
+    },
+    {
+      "hash": "7b3346c2cc4dfff9ad09053fd4885fad47125b817160dda0cc1e05942bf27a1a",
+      "grade": "0",
+      "reason": "Package.json gives only name and description metadata with no wiring detail."
+    },
+    {
+      "hash": "0f3900c7429b24487a3a7ca8602b652b077e5495178f9e3c5e46b13d946836d2",
+      "grade": "0",
+      "reason": "Different ACP-agent composition graph with no tool-result-pruner node."
+    },
+    {
+      "hash": "473b26ed0926a54cad426a8af4780442fe4c32adad0fc75e0e3db8126bf3da43",
+      "grade": "0",
+      "reason": "Unrelated ai-badger ADR about MCP tool indexing, not the queried plugin."
+    },
+    {
+      "hash": "ac897c414168c56899e601be63d2488935ac8f1100d70cee3ca509a5f8b8ddd3",
+      "grade": "0",
+      "reason": "Shows the adjacent compaction-basic node, not the queried tool-result-pruner wiring."
+    }
+  ],
+  "overall": "Only the CLI composition chunk directly shows the queried mermaid wiring; others are same-package context or off-target graphs."
+}

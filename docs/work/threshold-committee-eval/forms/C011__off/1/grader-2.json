@@ -1,0 +1,48 @@
+{
+  "slotId": "C011__off",
+  "queryId": "C011",
+  "arm": "off",
+  "chunks": [
+    {
+      "hash": "407ab320871af93171c4cf1cc74344476fa89db76922724126720c76aac5d5fa",
+      "grade": "A",
+      "reason": "Shows the Managed by ai-badger banner with source-of-truth pointer."
+    },
+    {
+      "hash": "aa6b11b8cc74c4690c4b3db1c1246ef49d5540d00b842709d05b91c70178205d",
+      "grade": "A",
+      "reason": "Shows the Managed by ai-badger banner with source-of-truth pointer."
+    },
+    {
+      "hash": "fb87aea5792d20f831c34920ff65189bc74951fc492464d4190022b8dff0fbc9",
+      "grade": "0",
+      "reason": "Discusses memory-first gating, not Managed by ai-badger handling."
+    },
+    {
+      "hash": "e6732f9447884e24acb9e92a8e2d48d3a09643e14f2d5a63bcbd1f6edec6f114",
+      "grade": "0",
+      "reason": "Mentions ai-badger precedent but not the Managed by marker."
+    },
+    {
+      "hash": "75e76a011c8087dd4383bbf7552dc471c4b4b492f09bcd39ad7a32cfe65b980e",
+      "grade": "0",
+      "reason": "Reports docs sync health, not Managed by handling."
+    },
+    {
+      "hash": "858c7c7f032d76c0f782169dfc4426045538d61c67bc9724f2fcfa96fbf99725",
+      "grade": "0",
+      "reason": "Discusses SignalDisposition states, unrelated to the query."
+    },
+    {
+      "hash": "6e5389d93ec45025155b6d5c0703b07eac914899f166548164aa55254b91a4ba",
+      "grade": "0",
+      "reason": "Mentions worktree isolation, not Managed by marker handling."
+    },
+    {
+      "hash": "37222c0cc2d1a299dedd307c9a7f5b837f063714dd933f83b8ef045679061064",
+      "grade": "0",
+      "reason": "Is a generic docs index with no Managed by handling."
+    }
+  ],
+  "overall": "Only the first two chunks directly show Managed by ai-badger handling, the rest are off-topic."
+}

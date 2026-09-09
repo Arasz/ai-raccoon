@@ -34,6 +34,7 @@ import json
 import random
 import re
 import shlex
+import os
 import subprocess
 from pathlib import Path
 
@@ -45,11 +46,12 @@ DEFAULT_RUNNER = "pi -p"
 DEFAULT_TOP_K = 5
 
 # The grader trio, equal by contract to P4 sample.json's header.graders
-# (owner decision: #1 session default, #2 muse-spark, #3 mio-v2.5-pro).
+# (owner decision: #1 session default, #2 muse-spark, #3 mimo-v2.5-pro; #3 re-picked
+# as openrouter/xiaomi/mimo-v2.5-pro after H1 auth failure on the native xiaomi provider).
 TRIO = (
     {"name": "grader-1", "provider": None, "model": None},
     {"name": "grader-2", "provider": "openrouter", "model": "meta/muse-spark-1.3-contributor"},
-    {"name": "grader-3", "provider": "xiaomi", "model": "mio-v2.5-pro"},
+    {"name": "grader-3", "provider": "openrouter", "model": "xiaomi/mimo-v2.5-pro"},
 )
 
 # The fixed payload surface — must never hint the arms (AC5.1). Everything a
@@ -129,7 +131,13 @@ def build_grader_argv(runner_cmd: str, payload: str, provider: str | None, model
 
 def subprocess_runner(argv: list[str]) -> str:
     """Real runner: one headless grader subprocess; non-zero exit → unparseable output."""
-    proc = subprocess.run(argv, capture_output=True, text=True, check=False)
+    proc = subprocess.run(
+        argv,
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "PI_BADGER_MEM_RAG": "0"},
+    )
     return proc.stdout if proc.returncode == 0 else ""
 
 

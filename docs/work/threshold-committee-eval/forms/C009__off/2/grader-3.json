@@ -1,0 +1,48 @@
+{
+  "slotId": "C009__off",
+  "queryId": "C009",
+  "arm": "off",
+  "chunks": [
+    {
+      "hash": "407ab320871af93171c4cf1cc74344476fa89db76922724126720c76aac5d5fa",
+      "grade": "A",
+      "reason": "Contains the literal 'Managed by ai-badger' marker with its source-of-truth path, directly showing where it is documented."
+    },
+    {
+      "hash": "aa6b11b8cc74c4690c4b3db1c1246ef49d5540d00b842709d05b91c70178205d",
+      "grade": "A",
+      "reason": "Contains the literal 'Managed by ai-badger' marker with its source-of-truth path in CLAUDE.md, directly answering the query."
+    },
+    {
+      "hash": "89269fc947f0769575ed33642f6274cf2d31d7aa4de5c9368948fb4312fa3ab8",
+      "grade": "A",
+      "reason": "Contains the literal 'Managed by ai-badger' marker in the changelog README, showing another documented instance."
+    },
+    {
+      "hash": "fa97c8d6cccca49bffcabd4976f30cdb13f8e4d8c9065b876aea4ec8e8527de6",
+      "grade": "0",
+      "reason": "A changelog entry about disjoint files that mentions ai-badger but does not contain or explain the 'Managed by ai-badger' marker."
+    },
+    {
+      "hash": "e6732f9447884e24acb9e92a8e2d48d3a09643e14f2d5a63bcbd1f6edec6f114",
+      "grade": "0",
+      "reason": "A done-log from a different project; references ai-badger usage but not where the marker is documented."
+    },
+    {
+      "hash": "37222c0cc2d1a299dedd307c9a7f5b837f063714dd933f83b8ef045679061064",
+      "grade": "0",
+      "reason": "A general docs index page; points to documentation categories but does not mention or explain the 'Managed by ai-badger' marker."
+    },
+    {
+      "hash": "7ebc94ff88e059975acbcbac4ec5247d408122dfc5d9b1cbbd70c66df9626bf0",
+      "grade": "0",
+      "reason": "Azure invariant about managed identity; 'managed' here refers to Azure identity, not the ai-badger marker."
+    },
+    {
+      "hash": "93c92401e22959d3d78409fe2657d762fd6af232b12479827a8f94096d23d258",
+      "grade": "0",
+      "reason": "Getting-started page explaining what ai-badger is; does not contain or explain where the 'Managed by ai-badger' marker is documented."
+    }
+  ],
+  "overall": "Three chunks (HERMES.md, CLAUDE.md, changelog README) each carry the literal 'Managed by ai-badger' comment with a source-of-truth path, directly answering where it is documented; the remaining five mention ai-badger or 'managed' in unrelated contexts."
+}

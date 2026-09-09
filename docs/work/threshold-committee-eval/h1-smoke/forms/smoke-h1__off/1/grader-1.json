@@ -6,13 +6,13 @@
     {
       "hash": "smoke-hash-1",
       "grade": "A",
-      "reason": "Chunk states SQLite via sqlite-memory backs the bank."
+      "reason": "It directly states SQLite via sqlite-memory backs agent memory."
     },
     {
       "hash": "smoke-hash-2",
       "grade": "0",
-      "reason": "Chunk describes Hermes gateway routing, not storage engine."
+      "reason": "It describes Hermes gateway routing, not the memory storage engine."
     }
   ],
-  "overall": "Only the first chunk answers the storage engine query."
+  "overall": "Only the first chunk answers the storage-engine question."
 }
