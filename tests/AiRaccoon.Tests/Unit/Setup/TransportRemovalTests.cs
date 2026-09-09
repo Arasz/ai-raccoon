@@ -99,6 +99,114 @@ public sealed class TransportRemovalTests : IDisposable
         exitCode.ShouldBe(ExitCode.FailedToParseCliArgs);
     }
 
+    [Theory]
+    // ADR-0104 D1: every spelling that names stdio dies at parse with the hint plus a
+    // rejection naming the surviving pair — including the System.CommandLine colon form
+    // (--transport:stdio) and an all-caps value.
+    [InlineData("--transport", "stdio")]
+    [InlineData("--transport=stdio")]
+    [InlineData("--transport:stdio")]
+    [InlineData("--transport", "STDIO")]
+    public void Parse_RemovedStdioSpellings_AreRejectedWithHintAndRejection(params string[] transportFlag)
+    {
+        CliArgs.TryParse([.. transportFlag, "--data-root", _dataRoot], out var parsed);
+
+        parsed!.Errors.ShouldContain(e => e.Contains("--transport stdio was removed", StringComparison.Ordinal));
+        parsed.Errors.ShouldContain(e => e.Contains("proxy|http", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Parse_RemovedTransport_LastOccurrenceWins()
+    {
+        CliArgs.TryParse(["--transport", "proxy", "--transport", "stdio", "--data-root", _dataRoot], out var last);
+
+        last!.Errors.ShouldContain(e => e.Contains("--transport stdio was removed", StringComparison.Ordinal));
+
+        CliArgs.TryParse(["--transport", "stdio", "--transport", "proxy", "--data-root", _dataRoot], out var first);
+
+        first!.Errors.ShouldNotBeEmpty();
+        first.Errors.ShouldNotContain(e => e.Contains("--transport stdio was removed", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("--transport", "stdio")]
+    [InlineData("--transport=stdio")]
+    [InlineData("--transport:stdio")]
+    public void Parse_ServeWithRemovedStdio_FailsParse(params string[] transportFlag)
+    {
+        CliArgs.TryParse([.. transportFlag, "--data-root", _dataRoot, "serve"], out var parsed);
+
+        parsed!.Errors.ShouldNotBeEmpty();
+        parsed.Errors.ShouldContain(e => e.Contains("--transport stdio was removed", StringComparison.Ordinal));
+        parsed.CommandPath.ShouldBe(["serve"]);
+    }
+
+    [Fact]
+    public void Parse_ServeWithRemovedStdio_PostVerb_FailsParse()
+    {
+        CliArgs.TryParse(["serve", "--transport", "stdio", "--data-root", _dataRoot], out var parsed);
+
+        parsed!.Errors.ShouldNotBeEmpty();
+        parsed.Errors.ShouldContain(e => e.Contains("--transport stdio was removed", StringComparison.Ordinal));
+        parsed.CommandPath.ShouldBe(["serve"]);
+    }
+
+    [Theory]
+    [InlineData("--transport", "stdio")]
+    [InlineData("--transport=stdio")]
+    [InlineData("--transport:stdio")]
+    public async Task Serve_RemovedStdioSpellings_ReturnFifteen(params string[] transportFlag)
+    {
+        var runner = new AppRunner();
+
+        var exit = await runner.Run([.. transportFlag, "--data-root", _dataRoot, "serve"]);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+    }
+
+    [Fact]
+    public async Task Serve_RemovedStdio_PostVerb_ReturnsFifteen()
+    {
+        var runner = new AppRunner();
+
+        var exit = await runner.Run(["serve", "--transport", "stdio", "--data-root", _dataRoot]);
+
+        exit.ShouldBe(ExitCode.InvalidArgument);
+    }
+
+    [Fact]
+    public async Task Bare_PortZero_ReturnsSixWithoutDialling()
+    {
+        var runner = new AppRunner();
+
+        var exit = await runner.Run(["--data-root", _dataRoot, "--port", "0"]);
+
+        exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
+    }
+
+    [Theory]
+    [InlineData("--transport", "proxy")]
+    [InlineData("--transport=proxy")]
+    public void Parse_ServeWithProxy_PreVerb_ParsesCleanly(params string[] transportFlag)
+    {
+        var ok = CliArgs.TryParse([.. transportFlag, "--data-root", _dataRoot, "serve"], out var parsed);
+
+        ok.ShouldBeTrue();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["serve"]);
+    }
+
+    [Fact]
+    public void Parse_ServeWithProxy_PostVerb_IsRejected()
+    {
+        // serve takes no --transport at all (ADR-0104): a root option after the verb is
+        // unrecognized, so the post-verb shape fails parse — pinned here, not clean.
+        var ok = CliArgs.TryParse(["serve", "--transport", "proxy", "--data-root", _dataRoot], out var parsed);
+
+        parsed!.Errors.ShouldNotBeEmpty();
+        parsed.CommandPath.ShouldBe(["serve"]);
+    }
+
     private static string RenderErrors(CliInput parsed)
     {
         var writer = new StringWriter();

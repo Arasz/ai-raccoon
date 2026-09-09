@@ -43,7 +43,7 @@ internal static class CliArgs
         {
             if (!showHelp && !showVersion)
             {
-                AppendTransportRemovalRejection(args, errors);
+                AppendTransportRemovalRejection(args, errors, optionReadResult.Options);
             }
 
             result = new CliInput(optionReadResult.Options, commandPath, showHelp, showVersion, errors, parseResult);
@@ -57,8 +57,10 @@ internal static class CliArgs
     /// <summary>
     ///     P1 CLI-surface removal: --transport is proxy|http only. When the raw args name a
     ///     removed value, append one stderr line (still exit 9 for bare launches via the launch
-    ///     Errors check, 15 for verb paths via ConfigCommands). Raw-args scan, not enum-value
-    ///     check, so it survives the backend enum deletion (P2) without referencing removed members.
+    ///     Errors check, 15 for verb paths via ConfigCommands). Raw-args scan, so the hint does
+    ///     not depend on how System.CommandLine bound the value — and keep-enum (ADR-0104) means
+    ///     the members stay as parse-rejected values, so this scan is the mechanism, not a bridge
+    ///     to a deletion.
     /// </summary>
     private static void AppendTransportRemovalHint(string[] args, List<string> errors)
     {
@@ -74,48 +76,49 @@ internal static class CliArgs
     }
 
     /// <summary>
-    ///     Rejects removed values that still parse today (backend enum retains them for P2 compat):
-    ///     with keep-enum there is no coercion error yet, so add one naming the allowed set.
-    ///     Raw-args only, so it survives the enum deletion (then it is a no-op for stdio, which
-    ///     already failed coercion, and still rejects https until P2 deletes it too).
+    ///     Rejects removed values through the parsed enum (keep-enum, ADR-0104: Stdio/Https still
+    ///     parse, so there is no coercion error to inherit): an explicit removed value adds one
+    ///     line naming the allowed set. The raw spelling is echoed so --transport STDIO reads back
+    ///     what was typed.
     /// </summary>
-    private static void AppendTransportRemovalRejection(string[] args, List<string> errors)
+    private static void AppendTransportRemovalRejection(string[] args, List<string> errors, RootCliOptions options)
     {
-        if (TransportValue(args) is not { } value)
+        if (!options.IsTransportExplicit || options.Transport is not (McpTransport.Stdio or McpTransport.Https))
         {
             return;
         }
 
-        if (string.Equals(value, "https", StringComparison.OrdinalIgnoreCase))
-        {
-            errors.Add("Cannot parse argument 'https' as --transport: expected proxy|http.");
-        }
+        var raw = TransportValue(args) ?? options.Transport.ToString().ToLowerInvariant();
+        errors.Add($"Cannot parse argument '{raw}' as --transport: expected proxy|http.");
     }
 
-    /// <summary>Raw --transport value (handles --transport v and --transport=v, case-preserved).</summary>
+    /// <summary>Raw --transport value, last occurrence wins (handles --transport v, --transport=v
+    /// and --transport:v, case-preserved for the rejection echo).</summary>
     private static string? TransportValue(string[] args)
     {
+        string? value = null;
         for (var i = 0; i < args.Length; i++)
         {
             var token = args[i];
             if (token.StartsWith("--transport=", StringComparison.Ordinal))
             {
-                return token["--transport=".Length..];
+                value = token["--transport=".Length..];
             }
-
-            if (string.Equals(token, "--transport", StringComparison.Ordinal) && i + 1 < args.Length)
+            else if (token.StartsWith("--transport:", StringComparison.Ordinal))
+            {
+                value = token["--transport:".Length..];
+            }
+            else if (string.Equals(token, "--transport", StringComparison.Ordinal) && i + 1 < args.Length)
             {
                 var next = args[i + 1];
                 if (!next.StartsWith("-", StringComparison.Ordinal))
                 {
-                    return next;
+                    value = next;
                 }
-
-                return null;
             }
         }
 
-        return null;
+        return value;
     }
 
     /// <summary>System.CommandLine 2.0.10 reports some parse errors (e.g. a missing required
@@ -137,7 +140,7 @@ internal static class CliArgs
             var token = args[i];
             if (token.StartsWith("--", StringComparison.Ordinal))
             {
-                if (!token.Contains('='))
+                if (!token.Contains('=') && !token.Contains(':'))
                 {
                     i++; // the option's value
                 }
