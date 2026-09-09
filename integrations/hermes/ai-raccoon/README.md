@@ -56,7 +56,7 @@ plugins:
     url: http://127.0.0.1:7721/mcp   # http mode
     token_file: ~/.ai-raccoon/mcp-token   # http mode; read at connect, never copied into config.yaml
     binary: ai-raccoon    # stdio mode (resolved on PATH)
-    binary_args: []       # extra spawn args, e.g. ["--data-root", "/tmp/bank"]
+    binary_args: []       # extra spawn args, e.g. ["--data-root", "/tmp/bank", "--port", "54321"] for an isolated temp bank
     quiet: true           # spawn the server with --quiet (all logs to a file, none on stdout/stderr)
     status_words: true    # one-word stderr cue per call ("searching", "remembering", …)
     project_id: ""        # empty -> derived "hermes-<profile>" (e.g. hermes-default)
@@ -67,15 +67,16 @@ plugins:
 
 - **stdio (default):** the provider spawns the installed `ai-raccoon` binary as a child
   process and speaks MCP over stdio. Since ADR-0020 that child is a *proxy*, not a
-  server: it probes `http://127.0.0.1:7721/mcp`, starts `ai-raccoon serve` when nothing
+  server: it probes the configured port, starts `ai-raccoon serve` when nothing
   answers, and relays every message to it. So this mode does use a port, and the bank is
-  held by a separate long-lived backend process that outlives the provider. Pass
-  `--transport stdio` in `binary_args` for the old in-process behaviour. For isolation
-  (tests, scratch banks), pass spawn args via `binary_args` — the production CLI resolves
-  the data root ONLY from the `--data-root` flag, so
-  `binary_args: ["--data-root", "/tmp/bank"]` is the way to point a spawned server at a
-  temp bank; the proxy forwards `--data-root` and `--install-scope` to the backend it
-  starts.
+  held by a separate long-lived backend process that outlives the provider. For isolation
+  (tests, scratch banks), give the child a temp bank on a leased port via `binary_args`:
+  the production CLI resolves the data root ONLY from the `--data-root` flag, so
+  `binary_args: ["--data-root", "/tmp/bank", "--port", "54321"]` (with `54321` a
+  free port leased at setup time) keeps the spawn off the default `7721` even when
+  another server already owns it. That temp-port proxy recipe is proven against a busy
+  7721 (see ADR-0104 in the ai-raccoon repo). The proxy forwards `--data-root`,
+  `--install-scope` and `--quiet` to the backend it starts.
 - **http:** the provider connects to a running server's Streamable HTTP endpoint —
   useful when one long-running server should serve several clients. Reads
   `token_file` (default `~/.ai-raccoon/mcp-token`) at connect and sends its
