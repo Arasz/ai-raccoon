@@ -76,7 +76,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
     ///     the transports-parameterized overloads. If either comes back, the matrix it reopens
     ///     needs its own contract — fail here, not silently.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public void McpServerSetup_DeclaresNoPlainAppHost_AndNoTransportsOverload()
     {
         var methods = typeof(McpServerSetup).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);

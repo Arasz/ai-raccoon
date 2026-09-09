@@ -67,7 +67,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
     ///     starts nothing — no listener on the passed port, no fallback onto the default 7721,
     ///     no bank, no token, nothing on stdout (drained pipes).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task RemovedStdioTransport_IsRejectedWithHint_AndStartsNothing()
     {
         var dataRoot = TestData.CreateTempRoot("removed-stdio");

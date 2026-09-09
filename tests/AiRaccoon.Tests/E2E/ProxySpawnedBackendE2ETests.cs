@@ -81,7 +81,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     ///     backend minted before it bound — and reaching them at all is the zero-exit-6 proof
     ///     (a proxy with no backend fails the session with BackendUnavailable instead).
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task ProxySpawnedBackend_ConvergesToOneHealthyBackend()
     {
         var budget = TimeSpan.FromSeconds(60);

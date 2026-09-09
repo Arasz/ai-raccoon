@@ -17,9 +17,27 @@ namespace AiRaccoon.Tests.Integration.Setup.Serve;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class ServerProbeTests : IDisposable
+public sealed class ServerProbeTests : IDisposable, IAsyncLifetime
 {
     private readonly List<TcpListener> _listeners = [];
+
+    private IAsyncDisposable? _envGate;
+
+    /// <summary>
+    ///     Holds the env gate as a reader: the JustRecognizes test below opens a bank through the
+    ///     real host, so an encryption test's window would make it open a plain bank with a key
+    ///     (docs/adr/0066).
+    /// </summary>
+    public async ValueTask InitializeAsync() =>
+        _envGate = await TestData.HoldEnvGateAsync(TestContext.Current.CancellationToken);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_envGate is not null)
+        {
+            await _envGate.DisposeAsync();
+        }
+    }
 
     public void Dispose()
     {
