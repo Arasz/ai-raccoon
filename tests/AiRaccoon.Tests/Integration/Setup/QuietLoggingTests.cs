@@ -84,7 +84,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
 
         var (stdout, stderr) = ConsoleCapture.Run(() =>
         {
-            using var host = McpServerSetup.CreateServerHost(config, [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
+            using var host = McpServerSetup.CreateServerHost(config, TimeProvider.System);
             var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("quiet-test");
             logger.LogInformation("quiet-combined-info-marker");
             logger.LogWarning("quiet-combined-warn-marker");

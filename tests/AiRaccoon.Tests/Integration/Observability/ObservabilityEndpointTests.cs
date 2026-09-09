@@ -149,7 +149,7 @@ public sealed class ObservabilityEndpointTests : IDisposable
         var port = lease.Port;
         var time = new FakeTimeProvider(FixedNow);
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Http, port, TimeSpan.FromSeconds(2)), [McpTransport.Http], time);
+            Config(McpTransport.Http, port, TimeSpan.FromSeconds(2)), time);
         var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 
         lease.ReleaseForBind();

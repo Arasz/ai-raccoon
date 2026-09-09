@@ -41,6 +41,7 @@ internal partial class NodeRunner(
             Restarting = options.Restart,
             TokenFile = new McpTokenFile(cliInput.ServerConfig.Options.DataRoot)
         };
+        WarnOnNonHttpTransport(cliInput.ServerConfig, cliInput.Options.IsTransportExplicit, streams);
 
         var preBind = await RestartServer(descriptor, streams, ctx);
         if (preBind.ExitNow is { } exitNow)
@@ -151,6 +152,22 @@ internal partial class NodeRunner(
         Log.ServeListening(logger, boundUrl);
 
         await streams.RenderUrlForInput(boundUrl, boundPort, descriptor.Source.McpEntry, descriptor.Source.Format);
+    }
+
+    /// <summary>
+    ///     serve always uses http: an explicit --transport names the proxy entry point, not this
+    ///     host, so it is ignored with a warning rather than silently (observability, not control).
+    /// </summary>
+    private void WarnOnNonHttpTransport(ServerConfig serverConfig, bool transportExplicit, StandardStreams streams)
+    {
+        var selected = serverConfig.Transport;
+        if (!transportExplicit || selected == McpTransport.Http)
+        {
+            return;
+        }
+
+        Log.IgnoringTransport(logger, selected);
+        streams.WriteErrorLine($"ai-raccoon: serve ignoring --transport {selected}; serve always uses http");
     }
 
     /// <summary>
@@ -277,6 +294,9 @@ internal partial class NodeRunner(
     {
         [LoggerMessage(EventId = 601, Level = LogLevel.Debug, Message = "ai-raccoon: serve listening on {Url}")]
         public static partial void ServeListening(ILogger logger, string url);
+
+        [LoggerMessage(EventId = 602, Level = LogLevel.Warning, Message = "ai-raccoon: serve ignoring --transport {Transport}; serve always uses http")]
+        public static partial void IgnoringTransport(ILogger logger, McpTransport transport);
 
         [LoggerMessage(EventId = 603, Level = LogLevel.Error, Message = "ai-raccoon: port {Port} is in use — pass --port 0 for a random port, or free the port")]
         public static partial void PortInUse(ILogger logger, int port);

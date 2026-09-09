@@ -23,7 +23,7 @@ public class WritePerformanceBenchmarkTests(ITestOutputHelper output)
         {
             var options = TestData.CreateInfrastructureOptions(dataRoot);
             var services = new ServiceCollection();
-            services.RegisterMemoryServices(options, [McpTransport.Stdio]);
+            services.RegisterMemoryServices(options);
 
             // Build service provider
             using var provider = services.BuildServiceProvider();

@@ -2,7 +2,6 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
-using DotNext.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
@@ -44,7 +43,7 @@ public sealed class ChunkIndexRepairDoesNotAutoStartTests : IDisposable
         {
             DataRoot = _dataRoot,
             Scope = InstallScope.User
-        }, IReadOnlyList<McpTransport>.Singleton(McpTransport.Stdio));
+        });
 
         using var provider = services.BuildServiceProvider();
 

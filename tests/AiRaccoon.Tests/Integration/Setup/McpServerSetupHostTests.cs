@@ -110,7 +110,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
     {
         // Free port: 7721 may be held by a live server or a concurrent suite.
         using var lease = LoopbackPort.Reserve();
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio, lease.Port), TimeProvider.System);
 
         host.Services.GetService(typeof(IServer)).ShouldNotBeNull();
         lease.ReleaseForBind();
@@ -144,7 +144,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         // loop to matter; a pure-stdio process is per-connection and recycled.
         using var lease = LoopbackPort.Reserve();
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
+            Config(McpTransport.Stdio, lease.Port), TimeProvider.System);
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is ExtractionHostedService);
@@ -174,7 +174,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
     {
         using var lease = LoopbackPort.Reserve();
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
+            Config(McpTransport.Stdio, lease.Port), TimeProvider.System);
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is SweepHostedService);
@@ -206,7 +206,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
     {
         using var lease = LoopbackPort.Reserve();
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Stdio, lease.Port), [McpTransport.Stdio, McpTransport.Http], TimeProvider.System);
+            Config(McpTransport.Stdio, lease.Port), TimeProvider.System);
 
         host.Services.GetServices<IHostedService>()
             .ShouldContain(service => service is BankMaintenanceHostedService);
@@ -312,7 +312,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
         var port = lease.Port;
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 8, 6, 12, 0, 0, TimeSpan.Zero));
         var host = McpServerSetup.CreateServerHost(
-            Config(McpTransport.Http, port, TimeSpan.FromSeconds(2)), [McpTransport.Http], time);
+            Config(McpTransport.Http, port, TimeSpan.FromSeconds(2)), time);
         var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 
         lease.ReleaseForBind();
