@@ -24,6 +24,9 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     private const string ProtocolVar = "OTEL_EXPORTER_OTLP_PROTOCOL";
     private const string SamplerVar = "OTEL_TRACES_SAMPLER";
     private const string SamplerProbeSource = "AiRaccoon.Tests.SamplerProbe";
+
+    /// <summary>How long a late span gets to reach the listener before the test calls it missing.</summary>
+    private static readonly TimeSpan SpanSettleTimeout = TimeSpan.FromSeconds(30);
     private CapturingCollector _collector = null!;
     private EnvScope _env = null!;
 
@@ -99,12 +102,23 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
             await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
                 null, null, TestContext.Current.CancellationToken);
 
-            var toolSpan = listener.Ended.Single(a => a.OperationName == "tools/call memory_stats");
-            var requestSpan = listener.Ended.SingleOrDefault(a =>
-                a.Source.Name == OtlpNames.AspNetCoreScope && a.SpanId == toolSpan.ParentSpanId);
+            // The listener appends under a lock on another thread: snapshot under the same lock
+            // and poll — a bare Single races the stop callback and flakes under load.
+            Activity? toolSpan = null;
+            Activity? requestSpan = null;
+            var settled = await WaitByPolling.WaitForAsync(async () =>
+            {
+                var ended = listener.Snapshot();
+                toolSpan = ended.SingleOrDefault(a => a.OperationName == "tools/call memory_stats");
+                requestSpan = toolSpan is null
+                    ? null
+                    : ended.SingleOrDefault(a => a.Source.Name == OtlpNames.AspNetCoreScope && a.SpanId == toolSpan.ParentSpanId);
+                return toolSpan is not null && requestSpan is not null;
+            }, WaitByPolling.DefaultFirstTick, WaitByPolling.DefaultMaxTick, SpanSettleTimeout, TimeProvider.System,
+                TestContext.Current.CancellationToken);
 
-            requestSpan.ShouldNotBeNull();
-            requestSpan.TraceId.ShouldBe(toolSpan.TraceId);
+            settled.ShouldBeTrue("the tool span and its request parent reach the listener");
+            requestSpan!.TraceId.ShouldBe(toolSpan!.TraceId);
         }
         finally
         {
@@ -127,9 +141,16 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
             await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
                 null, null, TestContext.Current.CancellationToken);
 
-            var requestSpan = listener.Ended.First(a => a.Source.Name == OtlpNames.AspNetCoreScope);
+            Activity? settledRequestSpan = null;
+            var requestSettled = await WaitByPolling.WaitForAsync(async () =>
+            {
+                settledRequestSpan = listener.Snapshot().FirstOrDefault(a => a.Source.Name == OtlpNames.AspNetCoreScope);
+                return settledRequestSpan is not null;
+            }, WaitByPolling.DefaultFirstTick, WaitByPolling.DefaultMaxTick, SpanSettleTimeout, TimeProvider.System,
+                TestContext.Current.CancellationToken);
 
-            requestSpan.GetTagItem("http.request.method").ShouldBe("POST");
+            requestSettled.ShouldBeTrue("the request span reaches the listener");
+            settledRequestSpan!.GetTagItem("http.request.method").ShouldBe("POST");
         }
         finally
         {
@@ -196,6 +217,15 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         private SpanCapture(ActivityListener listener) => _listener = listener;
 
         public List<Activity> Ended { get; } = [];
+
+        /// <summary>Locked copy of the stopped spans: the stop callback appends on another thread.</summary>
+        public List<Activity> Snapshot()
+        {
+            lock (Ended)
+            {
+                return [.. Ended];
+            }
+        }
 
         public static SpanCapture ListenTo(params string[] sources)
         {
