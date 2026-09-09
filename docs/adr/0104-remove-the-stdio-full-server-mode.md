@@ -131,9 +131,12 @@ line of its own.
 - **Neutral:** `Stdio`/`Https` enum members remain as parse-rejected values
   (the silent-deletion finding above). Help text is hand-derived from the
   surviving pair, so a future transport must update it deliberately.
-- **Neutral:** the D3 same-root probe and the D10 manual checklist are P6
-  work. Until P6 runs, same-data-root concurrent serves are allowed without a
-  live characterization, and this removal does not claim one.
+- **Neutral:** the D3 same-root probe ran in P6 (Evidence below), so
+  same-data-root concurrent serves on distinct ports are allowed with a live
+  characterization for small-write workloads: no attach, one converged token,
+  cross-server reads, zero contention markers. The binary still performs no
+  data-root ownership check (attach stays port-keyed by design), and heavier
+  contention was not probed. The D10 manual checklist is still P6 work.
 
 ## Alternatives rejected
 
@@ -187,6 +190,44 @@ with 7721 held by a foreign backend on another data root, a bare child with a
 temp `--data-root` and a leased `--port` completed initialize, a `memory_write`
 plus `memory_search` hash round-trip, served from the leased port (not 7721),
 and exited 0 on stdin close. The busy-port clause stands; no gap to strike.
+
+D3 same-root live probe (2026-09-09, worktree build `1.42.0+ae17bf8c`, fresh
+temp data-root, `AIRACCOON_DB_PASSPHRASE` unset, no test runner active so the
+ADR-0066 env gate had no writers to race):
+
+- `serve --port 50221` bound and printed `http://127.0.0.1:50221/mcp`. Then
+  `serve --port 50222` on the SAME root bound and printed its own URL. Neither
+  side attached (`grep -i attach` over both stdouts and stderrs found nothing),
+  because attach is port-keyed: `ReportAttachedAsync` fires only when the
+  requested port is already held by an ai-raccoon server, and each port here
+  was free.
+- One token file. The second serve converged on the first one's `mcp-token`
+  (sha256 identical, mtime unchanged, mode 0600 kept). No re-mint, no debris.
+- Both ports answered MCP. Unauthenticated `GET /mcp` returned 401 with the
+  -32001 token-file body on each port; authenticated `initialize` returned 200
+  with `serverInfo {"name":"AiRaccoon","version":"1.42.0.0"}` on each
+  (stateless: no `Mcp-Session-Id` issued).
+- One bank, both directions. `memory_write` through A came back `stored:true`
+  (hash `d2a349f4…`), and `memory_get` for that hash through B returned the
+  exact value. Then 4 concurrent writes split 2+2 across A and B all came back
+  `stored:true`, and all 4 read back through A, including the two B wrote.
+- Zero contention markers. `grep -i` for `busy`, `locked`, `lock contention`,
+  `SqliteException` and `database is locked` over both stderrs found nothing,
+  and no error, crit or exception lines appeared. Only the first server ran the
+  startup maintenance jobs; both checkpointed WAL on shutdown.
+- SIGTERM shut both down gracefully (`Application is shutting down...` plus a
+  final `Bank WAL checkpoint complete` on each). Both ports refused connections
+  afterwards and no processes remained. Per-process exit codes were not
+  captured (each probe shell is a fresh process group, so `wait` could not reap
+  the backgrounded serves); the shutdown lines are the evidence. The temp root
+  was deleted after the run.
+
+The allowance this probe supports is narrow. Small sequential and 4-way
+concurrent writes over one WAL bank stayed healthy with two servers. Nobody
+probed sustained write throughput, large-ingest races, or two writers under
+`VACUUM` or migration pressure. No defect surfaced, so there is nothing to
+report beyond the characterization; if heavier contention ever bites, it lands
+as a bug report with a repro, not as a scope expansion of this removal.
 
 Post-change grep: `grep -rin -- "--transport stdio" docs/ integrations/
 scripts/ README.md` hits only history (`docs/adr/0020*`, `docs/plans/`,
