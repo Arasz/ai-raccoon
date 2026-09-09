@@ -120,3 +120,17 @@ def test_report_carries_recompute_path_line():
     # must say how a rerun recomputes from results.json without new retrieval.
     text = report.render(_results(), _context())
     assert "recompute" in text.lower()
+
+
+def test_report_no_restriction_line_when_stale_accounts_the_gap():
+    # Full-100 shape: 99 scored + C034 null-filtered (stale, unscored) = 100
+    # accounted — the SUBSET disclaimer must NOT fire. C026 is scored (into d)
+    # AND stale-flagged, so only unscored stale ids close the gap.
+    out = _results()
+    out["rows"] = [dict(r, id=f"E{i:03d}") for i, r in enumerate(out["rows"] * 50)][:99]
+    out["rows"][0]["id"] = "C026"
+    out["summary"]["n"] = 99
+    out["staleAnchors"] = ["C026", "C034"]
+    text = report.render(out, _context())
+    assert "SUBSET eval" not in text
+    assert "C026" in text and "C034" in text

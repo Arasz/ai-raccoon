@@ -41,13 +41,14 @@ def render(results: dict, context: dict) -> str:
         f"Model: {context.get('model', '?')} ({context.get('model_bytes', '?')} "
         f"HF cache). Store: {context.get('store_bytes', '?')}.",
     ]
-    if n < corpus_size:
+    stale = results.get("staleAnchors") or context.get("stale_anchors") or []
+    if n + len([s for s in stale if s not in {r["id"] for r in rows}]) < corpus_size:
         lines.append(f"Restriction: this is a documented SUBSET eval — {n} of "
                      f"{corpus_size} queries (integration gate / time-boxed run).")
-    stale = results.get("staleAnchors") or context.get("stale_anchors") or []
     if stale:
-        lines.append(f"Stale anchors ({len(stale)}, re-chunked upstream — unhittable "
-                     f"by either leg, counted in d): {', '.join(stale)}.")
+        lines.append(f"Stale anchors ({len(stale)} — unhittable by either leg: "
+                     f"absent anchors still score into d, null-anchored rows are "
+                     f"filtered pre-eval and unscored): {', '.join(stale)}.")
     lines += [
         "",
         "## Scope and routing",
