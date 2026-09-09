@@ -36,7 +36,6 @@ internal partial class NodeRunner(
         {
             Source = options,
             Port = options.Port,
-            Transport = McpTransport.Http,
             IdleTimeout = IdleTimeoutParser.TryParse(options.IdleTimeout, out var idleTimeout) ? idleTimeout : DefaultOptions.IdleTimeout,
             Restarting = options.Restart,
             TokenFile = new McpTokenFile(cliInput.ServerConfig.Options.DataRoot)
@@ -276,14 +275,13 @@ internal partial class NodeRunner(
         public string Url => $"http://127.0.0.1:{Port}/mcp";
         public required NodeCliOptions Source { get; init; }
         public required int Port { get; init; }
-        public required McpTransport Transport { get; init; }
         public required TimeSpan IdleTimeout { get; set; }
         public required bool Restarting { get; init; }
         public required McpTokenFile TokenFile { get; init; }
         public string Token { get; init; } = "";
 
         public ServerConfig ToServerConfig() =>
-            new(Port, Transport, LaunchConfig.Options, IdleTimeout)
+            new(Port, McpTransport.Http, LaunchConfig.Options, IdleTimeout)
             {
                 McpToken = Token
             };

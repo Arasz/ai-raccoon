@@ -42,7 +42,9 @@ public sealed partial class AppRunner
 
     internal CancellationToken Token => _cts.Token;
 
-    /// <summary>Test seam: counts how many times a one-shot path wired shutdown-signal cancellation.</summary>
+    /// <summary>Test seam: counts how many times a one-shot path wired shutdown-signal cancellation —
+    /// the observable that tells a routed launch (proxy or CLI command: 1) from one that returned
+    /// early (parse failure, help/version: 0).</summary>
     internal int ShutdownCancellationRegistrations { get; private set; }
 
     public async Task<int> Run(string[] args)

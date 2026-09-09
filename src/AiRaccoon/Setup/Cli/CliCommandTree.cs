@@ -15,7 +15,9 @@ internal static class CliCommandTree
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
-    /// <summary>CLI surface is proxy|http only (stdio/https removed, P1); derived from McpTransport so a new transport cannot leave the help name stale.</summary>
+    /// <summary>CLI surface is proxy|http only (stdio/https removed, P1); a hand-maintained
+    /// allowlist of the surviving pair (ADR-0104) — a new McpTransport member stays out of help
+    /// until it is added here deliberately. nameof keeps the spelling tied to the enum.</summary>
     private static readonly string TransportHelpName =
         string.Join('|', new[] { nameof(McpTransport.Proxy), nameof(McpTransport.Http) }.Select(name => name.ToLowerInvariant()));
 

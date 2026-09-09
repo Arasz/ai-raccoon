@@ -6,13 +6,11 @@ namespace AiRaccoon.Setup.Logging;
 ///     Single logging configuration point for the web host (owner ruling 2026-08-09, D6):
 ///     quiet decides the destination — a file, never stdout/stderr — before anything decides
 ///     level. The web host is the sole surviving host shape, so the ASP.NET/MCP-server
-///     chatter floor always applies; transports is retained only because PreHostLogging
-///     calls this overload, and it no longer affects the outcome.
+///     chatter floor always applies.
 /// </summary>
 internal static class HostLogging
 {
-    internal static void Configure(ILoggingBuilder loggingBuilder, IReadOnlyCollection<McpTransport> transports,
-        InfrastructureOptions options)
+    internal static void Configure(ILoggingBuilder loggingBuilder, InfrastructureOptions options)
     {
         // Sole surviving host is the web host: the floors always apply.
         loggingBuilder.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);

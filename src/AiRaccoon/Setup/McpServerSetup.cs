@@ -63,7 +63,7 @@ internal static partial class McpServerSetup
         builder.Services.RegisterMemoryServices(serverConfig.Options);
         builder.Services.AddOtlpExport(serverConfig.Options);
         builder.Services.AddSingleton(timeProvider);
-        HostLogging.Configure(builder.Logging, [serverConfig.Transport], serverConfig.Options);
+        HostLogging.Configure(builder.Logging, serverConfig.Options);
 
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, serverConfig.Port));
         builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = ShutdownEndpoint.DrainWindow);
