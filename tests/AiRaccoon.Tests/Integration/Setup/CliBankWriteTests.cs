@@ -1,5 +1,6 @@
 using System.Globalization;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -68,6 +69,13 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     ];
 
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-cli-writes");
+
+    /// <summary>
+    ///     Alias map for the project-ids apply case (written by <see cref="SeedProjectIdsLoserRowAsync" />):
+    ///     post-#603/ADR-0099 a map-less derive reports every id unattributed (0 folds) and --apply
+    ///     commits nothing, so the gate would pass vacuously. The map makes loser→winner actionable.
+    /// </summary>
+    private string _projectIdsMapPath = string.Empty;
     private ISqliteConnectionFactory _factory = null!;
     private LoopbackPort _portLease = null!;
     private int _port;
@@ -255,6 +263,10 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
         await SeedForAsync(label, TestContext.Current.CancellationToken);
+        if (label == "repair project-ids --apply")
+        {
+            argv = [.. argv, "--map", _projectIdsMapPath];
+        }
         var before = await BankContent.SnapshotAsync(_factory, TestContext.Current.CancellationToken);
 
         var run = await RaccoonProcess.RunAsync(
@@ -300,11 +312,13 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         "repair reingest --apply" => new HashSet<string> { "entries" },
         // Every id-keyed surface the fold rewrites (ProjectIdsRepair step order): an in-window
         // relay drain may legitimately touch any of them plus its maintenance_jobs stamp.
+        // project_id_aliases: a --map apply persists the one-shot map to the durable table.
         // Ledger — dropped-surface-omitted : --filter ApplyCommand_OnlyCommitsAnOutboxRequest : recipe lists every surface the fold writes.
         "repair project-ids --apply" => new HashSet<string>
         {
             "entries", "code_entries", "promotion_queue", "promotion_discards", "search_quality",
-            "watches", "watch_files", "watch_digest_claims", "settings", "projects", "sync_tombstones"
+            "watches", "watch_files", "watch_digest_claims", "settings", "projects", "sync_tombstones",
+            "project_id_aliases"
         },
         _ => throw new ArgumentOutOfRangeException(nameof(label), label, "no target-table recipe for this --apply leaf")
     };
@@ -385,10 +399,14 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         }
     }
 
-    /// <summary>A labeled loser-id row plus its queue leg — the jsaa-cluster shape the project-ids diagnose reports on.</summary>
+    /// <summary>A labeled loser-id row plus its queue leg — the jsaa-cluster shape the project-ids diagnose reports on. Post-#603 the derive only folds map-attributed ids, so the seed also writes the alias map (loser→winner); without it the plan is settled-empty and --apply commits no request.</summary>
     // Ledger — empty-bank-short-circuits-outbox-write : --filter ApplyCommand_OnlyCommitsAnOutboxRequest : loser + winner rows (an empty bank would let --apply short-circuit before the outbox write).
     private async Task SeedProjectIdsLoserRowAsync(CancellationToken cancellationToken)
     {
+        _projectIdsMapPath = Path.Combine(_dataRoot, "project-ids-apply-map.json");
+        await File.WriteAllTextAsync(_projectIdsMapPath,
+            new ProjectIdAliasMap([new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa")], ["jsaa"], []).ToJson(),
+            cancellationToken);
         await using var connection = await _factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(
             """
