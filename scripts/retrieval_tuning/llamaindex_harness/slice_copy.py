@@ -131,17 +131,18 @@ def main(argv: list[str] | None = None) -> int:
                         help="explicit comma-separated buckets; wins over the corpus header")
     args = parser.parse_args(argv)
     forced = _forced_hashes(args.corpus)
-    if args.buckets:
-        buckets = tuple(b.strip() for b in args.buckets.split(",") if b.strip())
+    header, _ = scopes.load_corpus(args.corpus)
+    if args.buckets or (header is not None and isinstance(header.get("projects"), dict)):
+        # One resolver for every derived path (explicit wins, else the corpus
+        # header; typos fail loud against the source). Bare-list subset corpora
+        # fall to the legacy default pinned by the slice gates.
+        try:
+            buckets, _ = scopes.resolve_buckets(args.source, args.corpus, args.buckets)
+        except ValueError as exc:
+            print(f"FAIL: {exc}")
+            return 2
     else:
-        header, _ = scopes.load_corpus(args.corpus)
-        if header is not None and isinstance(header.get("projects"), dict):
-            buckets = tuple(sorted(header["projects"]))
-        else:
-            # Legacy default: bare-list subset corpora carry no header, and the
-            # slice gates pin the 2-bucket default there — header-shaped corpora
-            # never reach this branch.
-            buckets = DEFAULT_BUCKETS
+        buckets = DEFAULT_BUCKETS
     try:
         counts = slice_copy(args.source, args.target, forced,
                             buckets, args.cap_per_bucket)
