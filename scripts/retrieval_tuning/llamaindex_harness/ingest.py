@@ -33,6 +33,7 @@ from llama_index.core.schema import Document
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 from . import fts as fts_plan
+from . import scopes
 
 # Frozen Doc contract: every metadata key a Document carries through the harness.
 METADATA_KEYS = (
@@ -60,9 +61,43 @@ PARAMS = {
     "model": MODEL_NAME,
 }
 
-_PROJECT_BUCKETS = ("ai-raccoon", "hermes-default")
+# Frozen model-weights revision: the HF snapshot the F1 golden was built
+# against. A cache advance changes every vector leg, so ingest refuses until
+# the pin is reviewed and moved (see check_pinned_revision). Recorded with
+# its byte size into params.json for audit.
+PINNED_MODEL_REVISION = "cb950dc80d677c6fdc00f56c8ddd20ca2642c59e"
 
-_VALID_SCOPES = ("project", "shared", "all")
+
+def model_weights_info(model_name: str = MODEL_NAME, hub_dir=None) -> tuple[str, int]:
+    """(revision, bytes) of the cached HF snapshot for a model repo.
+
+    hub_dir is the HF hub root (injected in tests; defaults to the real
+    cache, honoring HF_HOME). Raises when the cache cannot resolve — an
+    unresolvable weight set must fail loud, never embed silently."""
+    import os as _os  # noqa: PLC0415 — keep module import light
+    root = Path(hub_dir) if hub_dir is not None else (
+        Path(_os.environ.get("HF_HOME", str(Path.home() / ".cache" / "huggingface"))) / "hub")
+    base = root / ("models--" + model_name.replace("/", "--"))
+    try:
+        revision = (base / "refs" / "main").read_text().strip()
+        snap = base / "snapshots" / revision
+        size = sum(p.stat().st_size for p in snap.rglob("*") if p.is_file())
+    except OSError as exc:
+        raise ValueError(f"model weights for {model_name!r} unresolvable under "
+                         f"{root} (reuse the pinned cache or fetch first): {exc}") from exc
+    if not revision or size <= 0:
+        raise ValueError(f"model weights for {model_name!r} resolve empty "
+                         f"(revision={revision!r}, bytes={size})")
+    return revision, size
+
+
+def check_pinned_revision(revision: str) -> None:
+    """Freeze gate: the weights under test must be the pinned revision."""
+    if revision != PINNED_MODEL_REVISION:
+        raise ValueError(
+            f"model weights revision {revision!r} != pinned {PINNED_MODEL_REVISION!r}: "
+            "vectors would drift from the frozen golden — review and move the pin, "
+            "never embed past it")
 
 
 def default_store_dir() -> Path:
@@ -77,17 +112,24 @@ def open_copy_readonly(copy_path: str) -> sqlite3.Connection:
     return conn
 
 
-def load_rows(copy_path: str) -> tuple[list[dict], int]:
-    """All harness rows from a bank copy: project buckets + global shared tier."""
+def load_rows(copy_path: str, buckets: tuple[str, ...] | list[str]) -> tuple[list[dict], int]:
+    """All harness rows from a bank copy: resolved buckets + global shared tier.
+
+    buckets comes from scopes.resolve_buckets (explicit --buckets or corpus
+    header) — never a frozen constant, so a corpus query outside the old
+    2-bucket rule ingests instead of silently scoring empty."""
+    bucket_list = tuple(buckets)
+    if not bucket_list:
+        raise ValueError("load_rows: empty buckets (resolve via scopes.resolve_buckets)")
     conn = open_copy_readonly(copy_path)
     try:
-        placeholders = ",".join("?" for _ in _PROJECT_BUCKETS)
+        placeholders = ",".join("?" for _ in bucket_list)
         rows = conn.execute(
             "SELECT hash, path, value, scope, project_id, source_file, section,"
             " heading_path, chunk_index, total_chunks FROM entries"
             f" WHERE (project_id IN ({placeholders}) AND scope IN ('project','custom'))"
             " OR scope = 'shared' ORDER BY id",
-            _PROJECT_BUCKETS,
+            bucket_list,
         ).fetchall()
         copy_entries = conn.execute("SELECT count(*) FROM entries").fetchone()[0]
     finally:
@@ -223,7 +265,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
 
 
 def _scope_predicate(project_id: str, scope: str) -> tuple[str, tuple]:
-    if scope not in _VALID_SCOPES:
+    scope = scopes.normalize_scope(scope)  # corpus custom -> bank project
+    if scope not in scopes.VALID_SCOPES:
         raise ValueError(f"unknown scope {scope!r}")
     if scope == "project":
         return "project_id = ? AND scope IN ('project','custom')", (project_id,)
@@ -251,7 +294,11 @@ def query_fts(handle: StoreHandle, expression: str, project_id: str, scope: str,
 
 def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
                 embed_fn, copy_entries: int, batch_size: int = 32,
-                progress_every: int = 0) -> StoreHandle:
+                progress_every: int = 0, *, buckets: tuple[str, ...] | list[str],
+                excluded: list[dict] | None = None,
+                corpus_name: str | None = None,
+                corpus_snapshot: str | None = None,
+                model_info: dict | None = None) -> StoreHandle:
     """Idempotent build: upsert current ids, delete stale ids, rewrite params.json."""
     store_dir.mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=str(store_dir / "chroma"))
@@ -293,6 +340,13 @@ def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
 
     params = dict(PARAMS)
     params["buckets"] = sorted({f"{r['project_id']}/{r['scope']}" for r in rows})
+    params["resolvedBuckets"] = sorted(buckets)  # the input rule (audit)
+    params["excludedProjects"] = list(excluded or [])  # seed-equal manifest
+    params["corpus"] = corpus_name
+    params["corpusSnapshotSha256"] = corpus_snapshot
+    model_info = model_info or {"revision": "test-seam", "bytes": 0}
+    params["modelRevision"] = model_info["revision"]
+    params["modelBytes"] = model_info["bytes"]
     params["counts"] = {
         "rows": len(docs),
         "content": content.count(),
@@ -319,8 +373,10 @@ def open_store(store_dir: Path) -> StoreHandle:
     )
 
 
-def verify_store(copy_path: str, store: StoreHandle) -> list[str]:
+def verify_store(copy_path: str, store: StoreHandle,
+                 buckets: tuple[str, ...] | list[str]) -> list[str]:
     """SHA-256 chunk-faithful verify: every Chroma id in the copy, byte-identical value."""
+    bucket_list = tuple(buckets)
     conn = open_copy_readonly(copy_path)
     try:
         expected = {h: v for h, v in conn.execute("SELECT hash, value FROM entries")}
@@ -339,12 +395,12 @@ def verify_store(copy_path: str, store: StoreHandle) -> list[str]:
     # Id-set parity against the ingest rule (project buckets + global shared).
     conn = open_copy_readonly(copy_path)
     try:
-        placeholders = ",".join("?" for _ in _PROJECT_BUCKETS)
+        placeholders = ",".join("?" for _ in bucket_list)
         wanted = {r[0] for r in conn.execute(
             "SELECT hash FROM entries"
             f" WHERE (project_id IN ({placeholders}) AND scope IN ('project','custom'))"
             " OR scope = 'shared'",
-            _PROJECT_BUCKETS,
+            bucket_list,
         )}
     finally:
         conn.close()
@@ -374,17 +430,18 @@ def _bank_fts_order(conn: sqlite3.Connection, probe: str, predicate: str,
     ).fetchall()]
 
 
-def fts_parity_probe(copy_path: str, store: StoreHandle, probe: str) -> list[str]:
+def fts_parity_probe(copy_path: str, store: StoreHandle, probe: str,
+                     buckets: tuple[str, ...] | list[str]) -> list[str]:
     """S3 parity: same 1-token probe, same bm25 weights, same ORDER as bank FTS SQL.
 
-    Per-bucket: the ingest rule spans every project bucket plus the global
+    Per-bucket: the ingest rule spans every resolved bucket plus the global
     shared tier, so each leg is compared under its own predicate — a single
     ai-raccoon-wide comparison silently drops other buckets' rows (a probe
     hitting hermes-default reported skew at 0 with byte-identical stores).
     """
     legs = [("project", bucket, f"e.project_id = ? AND e.scope IN ('project','custom')",
              (bucket,))
-            for bucket in _PROJECT_BUCKETS]
+            for bucket in buckets]
     legs.append(("shared", "global", "e.scope = 'shared'", ()))
     conn = open_copy_readonly(copy_path)
     try:
@@ -411,6 +468,11 @@ def main(argv: list[str] | None = None, embed=None) -> int:
     parser.add_argument("--embed-batch-size", type=int, default=32)
     parser.add_argument("--offline", action="store_true",
                         help="reuse cached HF weights; fail instead of downloading")
+    parser.add_argument("--buckets", default=None,
+                        help="explicit comma-separated project buckets; wins over --corpus")
+    parser.add_argument("--corpus", default=None,
+                        help="header-shaped corpus JSON: derives buckets + exclusion manifest"
+                        " + snapshot SHA (required unless --buckets is given)")
     parser.add_argument("--verify-only", action="store_true")
     args = parser.parse_args(argv)
     store_dir = Path(args.store_dir)
@@ -421,7 +483,12 @@ def main(argv: list[str] | None = None, embed=None) -> int:
         except Exception as exc:  # noqa: BLE001 — any open failure is a failed gate
             print(f"FAIL: cannot open store: {exc}")
             return 1
-        problems = verify_store(args.copy, handle)
+        try:
+            buckets, _ = scopes.resolve_buckets(args.copy, args.corpus, args.buckets)
+        except ValueError as exc:
+            print(f"FAIL: {exc}")
+            return 2
+        problems = verify_store(args.copy, handle, buckets)
         handle.close()
         if problems:
             print(f"FAIL: {len(problems)} verify problems (first 5):")
@@ -431,17 +498,38 @@ def main(argv: list[str] | None = None, embed=None) -> int:
         print("VERIFIED: store is chunk-faithful to the copy")
         return 0
 
-    rows, copy_entries = load_rows(args.copy)
+    try:
+        buckets, excluded = scopes.resolve_buckets(args.copy, args.corpus, args.buckets)
+    except ValueError as exc:
+        print(f"FAIL: {exc}")
+        return 2
+    corpus_name, corpus_snapshot = None, None
+    if args.corpus is not None:
+        header, _ = scopes.load_corpus(args.corpus)
+        corpus_name = Path(args.corpus).name
+        corpus_snapshot = (header or {}).get("snapshotSha256")
+    rows, copy_entries = load_rows(args.copy, buckets)
     docs = to_documents(rows)
     if embed is not None:
         embed_fn = embed  # test seam: (texts) -> vectors
+        model_info = {"revision": "test-seam", "bytes": 0}
     else:
+        try:
+            revision, nbytes = model_weights_info(args.model)
+            check_pinned_revision(revision)
+        except ValueError as exc:
+            print(f"FAIL: {exc}")
+            return 1
+        model_info = {"revision": revision, "bytes": nbytes}
         model = create_embedding_model(args.model, args.offline)
         embed_fn = model.get_text_embedding_batch
+    print(f"buckets: {','.join(buckets)} (excluded={len(excluded)})", flush=True)
     handle = build_store(store_dir, docs, rows, embed_fn, copy_entries, args.embed_batch_size,
-                         progress_every=10)
-    problems = verify_store(args.copy, handle)
-    fts_diff = fts_parity_probe(args.copy, handle, probe="memory")
+                         progress_every=10, buckets=buckets, excluded=excluded,
+                         corpus_name=corpus_name, corpus_snapshot=corpus_snapshot,
+                         model_info=model_info)
+    problems = verify_store(args.copy, handle, buckets)
+    fts_diff = fts_parity_probe(args.copy, handle, probe="memory", buckets=buckets)
     handle.close()
     print(f"ingested: rows={len(docs)} copyEntries={copy_entries} store={store_dir}")
     if problems or fts_diff:

@@ -65,6 +65,49 @@ def mcc_agreement(harness_hits: list[int],
     return (a * d - b * c) / denominator, None
 
 
+def partition_null_anchors(entries: list[dict]) -> tuple[list[dict], list]:
+    """Split scorable entries from null-anchor rows (C034 shape).
+
+    Content-targeted corpus rows carry expectedHash: null by generator
+    contract; run_eval refuses them (missing expectedHash), so main() filters
+    them here and records their ids as stale — accounted, never scored."""
+    scorable = [e for e in entries
+                if isinstance(e.get("expectedHash"), str) and e["expectedHash"]]
+    null_ids = [e.get("id") for e in entries if e not in scorable]
+    return scorable, null_ids
+
+
+def aggregate_gaps(rows: list[dict]) -> dict:
+    """Provisional leg-gap counts over paired rows (P1; P2 refines into the
+    classified taxonomy reusing these numbers, never redefining them).
+
+    Computed ONLY on the c-cell (bank-hit/harness-miss) from the existing
+    fts_hit/vector_hit columns — never misattributing agreement as deficit.
+    Conservation: the five c_* buckets sum to c_cell. Rows without leg
+    columns land in c_unknown (a data gap, not a retrieval gap)."""
+    paired = [r for r in rows if not r["harness"].get("error")
+              and not r["airaccoon"].get("error")]
+    c_rows = [r for r in paired if r["airaccoon"]["hit"] == 1
+              and r["harness"]["hit"] == 0]
+    gaps = {"n_paired": len(paired), "c_cell": len(c_rows),
+            "c_fts_only": 0, "c_vec_only": 0, "c_both_legs": 0,
+            "c_neither_leg": 0, "c_unknown": 0}
+    for r in c_rows:
+        fts_hit = r["harness"].get("fts_hit")
+        vec_hit = r["harness"].get("vector_hit")
+        if fts_hit == 1 and vec_hit == 0:
+            gaps["c_fts_only"] += 1  # legs split: embedding-gap evidence
+        elif fts_hit == 0 and vec_hit == 1:
+            gaps["c_vec_only"] += 1  # a leg had it, fusion lost it
+        elif fts_hit == 1 and vec_hit == 1:
+            gaps["c_both_legs"] += 1  # both legs hit, fusion lost it
+        elif fts_hit == 0 and vec_hit == 0:
+            gaps["c_neither_leg"] += 1  # unrecoverable by fusion
+        else:
+            gaps["c_unknown"] += 1
+    return gaps
+
+
 def _score_side(expected_hash: str, outcome: dict) -> dict:
     hashes = list(outcome.get("hashes") or [])
     hit, precision, recall, f1 = f1_singleton(expected_hash, hashes)
@@ -119,7 +162,8 @@ def run_eval(entries: list[dict], harness_fn, airaccoon_fn) -> dict:
                         "airaccoon": summarize("airaccoon"),
                         "contingency": {"a": a, "b": b, "c": c,
                                         "d": len(paired) - a - b - c},
-                        "mcc": mcc, "mcc_reason": mcc_reason}}
+                        "mcc": mcc, "mcc_reason": mcc_reason,
+                        "gaps": aggregate_gaps(rows)}}
 
 
 def _self_paths() -> tuple[Path, Path]:
@@ -174,6 +218,7 @@ def build_airaccoon_fn(server, session_id: str) -> object:
     MCPClient._extract_results.
     """
     from retrieval_tuning.mcp import MCPClient  # noqa: PLC0415 — needs scripts/src
+    from llamaindex_harness import scopes  # noqa: PLC0415 — stdlib-only, CI-safe
 
     client = server.client
 
@@ -182,7 +227,9 @@ def build_airaccoon_fn(server, session_id: str) -> object:
             parsed = client._call_tool("memory_search", {
                 "projectId": entry.get("targetProjectId") or "ai-raccoon",
                 "query": entry["query"],
-                "scope": entry.get("targetScope") or "project",
+                # Corpus custom -> bank project (SearchContexts.cs: project
+                # covers custom labels; the bank refuses scope=custom).
+                "scope": scopes.normalize_scope(entry.get("targetScope") or "project"),
                 "limit": EVAL_LIMIT,
                 "minRelativeScore": 0.6,  # the harness floor: both legs serve
                 "kind": "memory",      # the same post-floor, post-limit shape
@@ -256,9 +303,13 @@ def main(argv: list[str] | None = None) -> int:
     from retrieval_tuning.server import start_server  # noqa: PLC0415 — needs scripts/src
 
     entries = json.loads(Path(args.corpus).read_text())
+    if isinstance(entries, dict):  # header-shaped corpus: header + queries
+        entries = entries["queries"]
     if args.limit_queries is not None:
         entries = entries[:args.limit_queries]
-    stale_anchors = check_anchors_resolve(entries, Path(args.store_dir))
+    scorable, null_anchors = partition_null_anchors(entries)
+    stale_anchors = check_anchors_resolve(scorable, Path(args.store_dir))
+    stale_anchors = sorted(set(stale_anchors) | set(null_anchors))
     if len(stale_anchors) == len(entries):
         raise ValueError("no corpus anchor resolves against this store — wrong store/copy?")
     if stale_anchors:
@@ -270,7 +321,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with start_server(args.scratch_data_root, binary=args.binary) as server:
             print(f"scratch server on port {server.port} (never 7721)", flush=True)
-            out = run_eval(entries, harness_fn,
+            out = run_eval(scorable, harness_fn,
                            build_airaccoon_fn(server, session_id))
     finally:
         harness_fn.close()  # type: ignore[attr-defined]
@@ -282,9 +333,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     out["sessionId"] = session_id
     out["staleAnchors"] = stale_anchors
+    store_params = json.loads((Path(args.store_dir) / "params.json").read_text())
+    out["corpusSnapshotSha256"] = store_params.get("corpusSnapshotSha256")
+    out["excludedProjects"] = store_params.get("excludedProjects", [])
+    out["resolvedBuckets"] = store_params.get("resolvedBuckets", [])
     Path(args.out).write_text(json.dumps(out, indent=2))
     s = out["summary"]
-    print(f"eval: n={s['n']} paired={s['n_paired']} "
+    print(f"eval: n={s['n']} paired={s['n_paired']} stale={len(stale_anchors)} "
           f"harness hit-rate={s['harness']['hit_rate']:.3f} f1={s['harness']['mean_f1']:.3f} | "
           f"ai-raccoon hit-rate={s['airaccoon']['hit_rate']:.3f} f1={s['airaccoon']['mean_f1']:.3f} | "
           f"mcc={s['mcc']} cont={s['contingency']}")

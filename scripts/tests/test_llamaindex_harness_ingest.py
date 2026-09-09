@@ -71,8 +71,10 @@ def _fixture_copy(path: Path):
 
 
 def _run_ingest(copy: Path, store: Path):
-    # Buckets are the frozen M1 rule (project buckets + global shared), not CLI knobs.
-    rc = ingest.main(["--copy", str(copy), "--store-dir", str(store)], embed=_toy_embed)
+    # Explicit buckets (the fixture's two projects); production resolves them
+    # from the corpus header via scopes.resolve_buckets.
+    rc = ingest.main(["--copy", str(copy), "--store-dir", str(store),
+                      "--buckets", "ai-raccoon,hermes-default"], embed=_toy_embed)
     assert rc == 0
     return ingest.open_store(store)
 
@@ -95,7 +97,8 @@ def test_verify_only_passes_on_faithful_store(tmp_path):
     _fixture_copy(copy)
     store = tmp_path / "store"
     _run_ingest(copy, store).close()
-    assert ingest.main(["--copy", str(copy), "--store-dir", str(store), "--verify-only"]) == 0
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store), "--buckets",
+                        "ai-raccoon,hermes-default", "--verify-only"]) == 0
 
 
 def test_verify_only_fails_on_tampered_value(tmp_path):
@@ -107,7 +110,8 @@ def test_verify_only_fails_on_tampered_value(tmp_path):
     conn.execute("UPDATE entries SET value='tampered' WHERE hash='h1'")
     conn.commit()
     conn.close()
-    assert ingest.main(["--copy", str(copy), "--store-dir", str(store), "--verify-only"]) == 1
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store), "--buckets",
+                        "ai-raccoon,hermes-default", "--verify-only"]) == 1
 
 
 def test_fts_parity_probe_matches_bank_bm25_order(tmp_path):
@@ -117,7 +121,8 @@ def test_fts_parity_probe_matches_bank_bm25_order(tmp_path):
     store = tmp_path / "store"
     handle = _run_ingest(copy, store)
     try:
-        assert ingest.fts_parity_probe(copy, handle, probe="alpha") == []
+        assert ingest.fts_parity_probe(copy, handle, probe="alpha",
+                                       buckets=("ai-raccoon", "hermes-default")) == []
     finally:
         handle.close()
 
@@ -131,7 +136,8 @@ def test_fts_parity_probe_covers_nondefault_project_bucket(tmp_path):
     store = tmp_path / "store"
     handle = _run_ingest(copy, store)
     try:
-        assert ingest.fts_parity_probe(copy, handle, probe="hermes") == []
+        assert ingest.fts_parity_probe(copy, handle, probe="hermes",
+                                       buckets=("ai-raccoon", "hermes-default")) == []
     finally:
         handle.close()
 
@@ -237,7 +243,8 @@ def test_real_volume_upsert_exceeding_chroma_batch_cap(tmp_path):
     conn.close()
     store = tmp_path / "store"
     assert ingest.main(["--copy", str(tmp_path / "copy.db"),
-                        "--store-dir", str(store)], embed=_toy_embed) == 0
+                        "--store-dir", str(store), "--buckets", "ai-raccoon"],
+                       embed=_toy_embed) == 0
     handle = ingest.open_store(store)
     try:
         assert handle.content.count() == 6000

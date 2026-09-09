@@ -17,6 +17,11 @@ def _short(h: str) -> str:
     return h[:12] if isinstance(h, str) else "-"
 
 
+def _bucket_projects(buckets: list) -> list[str]:
+    """Project ids from observed params.json bucket strings ('proj/scope')."""
+    return sorted({b.split("/")[0] for b in buckets if isinstance(b, str) and "/" in b})
+
+
 def render(results: dict, context: dict) -> str:
     """results.json dict + context dict -> the full markdown report."""
     s = results["summary"]
@@ -49,9 +54,9 @@ def render(results: dict, context: dict) -> str:
         "",
         "M1: each query ran at its own corpus targetProjectId/targetScope on "
         "BOTH systems (no 75-row file-targeted restriction). The harness store "
-        "ingests every targeted bucket (project buckets ai-raccoon + "
-        "hermes-default incl. custom scopes, plus the global shared tier); "
-        "buckets in this store: " + ", ".join(context.get("buckets", ["?"])) + ".",
+        "ingests every targeted bucket (project buckets incl. custom scopes, "
+        "plus the global shared tier); project buckets in this store: "
+        + (", ".join(_bucket_projects(context.get("buckets", []))) or "?") + ".",
         "Both systems ran at a uniform limit 8 (overrides the corpus "
         "searchLimit=5; candidate window max(limit*3,100)=100 either way).",
         "",
@@ -108,6 +113,11 @@ def render(results: dict, context: dict) -> str:
         f"ai-raccoon-only c={cont['c']}, neither d={cont['d']} "
         f"(cells sum to {cont['a'] + cont['b'] + cont['c'] + cont['d']}).",
         f"Agreement MCC: {mcc_line}.",
+        "Recompute path: results.json preserves per-query served hashes plus "
+        "the harness fts_hit/vector_hit legs, so post-hoc relevance metrics "
+        "recompute from the hash-preserving golden without new retrieval "
+        "(rerun report.py on results.json). Singleton-F1 here is a parity "
+        "verdict, not a relevance verdict.",
         "",
         "## Parity-gap discussion",
         "",
@@ -124,7 +134,44 @@ def render(results: dict, context: dict) -> str:
         "- No harness knob was tuned to close either gap (plan: measure and "
         "report, never tune silently).",
         "",
+        "### Provisional gap counts (P1; P2 refines into the classified taxonomy "
+        "reusing these numbers)",
+        "",
+        _gap_table(s.get("gaps")),
+        "",
+        _exclusion_lines(results, context),
+        "",
     ]
+    return "\n".join(lines)
+
+
+def _gap_table(gaps: dict | None) -> str:
+    """Provisional c-cell counts table (harness-relative, bank-hit/harness-miss only)."""
+    if not gaps:
+        return ("Gap counts not recorded in this results.json "
+                "(pre-P1 golden — rerun evaluate.py to populate summary.gaps).")
+    rows = ["| bucket | n | reading |",
+            "|---|---|---|",
+            f"| c_cell (bank-hit/harness-miss of {gaps.get('n_paired', '?')} paired) "
+            f"| {gaps.get('c_cell', '?')} | harness deficit under test |",
+            f"| c_fts_only | {gaps.get('c_fts_only', '?')} | legs split: embedding-gap evidence |",
+            f"| c_vec_only | {gaps.get('c_vec_only', '?')} | a leg had it, fusion lost it |",
+            f"| c_both_legs | {gaps.get('c_both_legs', '?')} | both legs hit, fusion lost it |",
+            f"| c_neither_leg | {gaps.get('c_neither_leg', '?')} | unrecoverable by fusion |",
+            f"| c_unknown | {gaps.get('c_unknown', '?')} | leg columns absent (data gap) |"]
+    return "\n".join(rows)
+
+
+def _exclusion_lines(results: dict, context: dict) -> str:
+    """Exclusion-manifest disclosure: seed-equal with the corpus header."""
+    excluded = results.get("excludedProjects") or context.get("excluded_projects") or []
+    if not excluded:
+        return "Excluded projects: none — every corpus-targeted bucket was ingested."
+    lines = [f"Excluded projects ({len(excluded)}, seed-equal with the corpus "
+             "header excludedProjects — documented there, never ad hoc):"]
+    for e in excluded:
+        lines.append(f"- {e.get('projectId')} → {e.get('canonicalId')} "
+                     f"({e.get('embeddedRows', '?')} embedded rows): {e.get('reason', '')}")
     return "\n".join(lines)
 
 

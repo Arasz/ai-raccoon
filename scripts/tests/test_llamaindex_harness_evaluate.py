@@ -214,7 +214,7 @@ def test_partition_null_anchors():
     entries = [_entry(1), _entry(2, expectedHash=None, id="C034"),
                _entry(3, expectedHash="")]
     scorable, null_ids = evaluate.partition_null_anchors(entries)
-    assert [e["id"] for e in scorable] == ["E001", "E003"]
+    assert [e["id"] for e in scorable] == ["E001"]
     assert null_ids == ["C034", "E003"]
 
 

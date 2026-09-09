@@ -22,6 +22,7 @@ from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 
 from . import fts as fts_plan
 from . import fusion
+from . import scopes
 from .fusion import DocScoreFormula, RankedHit
 from .ingest import StoreHandle, query_fts
 
@@ -55,6 +56,10 @@ def dedupe_by_content(
 
 
 def _chroma_where(project_id: str, scope: str) -> dict:
+    # Corpus custom -> bank project (SearchContexts.cs: scope=project covers
+    # custom labels); without the map, custom fell through to the all-scope
+    # $or and over-searched the vector leg.
+    scope = scopes.normalize_scope(scope)
     if scope == "project":
         return {"$and": [{"project_id": {"$eq": project_id}},
                          {"scope": {"$in": ["project", "custom"]}}]}

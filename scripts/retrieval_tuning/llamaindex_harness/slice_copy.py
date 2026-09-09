@@ -21,12 +21,17 @@ import sys
 import tempfile
 from pathlib import Path
 
+from . import scopes
+
 DEFAULT_BUCKETS = ("ai-raccoon", "hermes-default")
 DEFAULT_CAP = 1500
 
 
 def _forced_hashes(corpus_path: str) -> list[str]:
-    entries = json.loads(Path(corpus_path).read_text())
+    # Bare-list subset corpora and header-shaped corpora ({header, queries})
+    # both force their anchors in; null anchors (content-targeted rows) carry
+    # no hash and are skipped (the eval filters them pre-run_eval).
+    _, entries = scopes.load_corpus(corpus_path)
     return [e["expectedHash"] for e in entries
             if isinstance(e.get("expectedHash"), str) and e["expectedHash"]]
 
@@ -122,12 +127,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--target", required=True, help="slice output path")
     parser.add_argument("--corpus", required=True, help="subset JSON (expectedHash force-in)")
     parser.add_argument("--cap-per-bucket", type=int, default=DEFAULT_CAP)
-    parser.add_argument("--buckets", default=",".join(DEFAULT_BUCKETS))
+    parser.add_argument("--buckets", default=None,
+                        help="explicit comma-separated buckets; wins over the corpus header")
     args = parser.parse_args(argv)
     forced = _forced_hashes(args.corpus)
+    if args.buckets:
+        buckets = tuple(b.strip() for b in args.buckets.split(",") if b.strip())
+    else:
+        header, _ = scopes.load_corpus(args.corpus)
+        if header is not None and isinstance(header.get("projects"), dict):
+            buckets = tuple(sorted(header["projects"]))
+        else:
+            # Legacy default: bare-list subset corpora carry no header, and the
+            # slice gates pin the 2-bucket default there — header-shaped corpora
+            # never reach this branch.
+            buckets = DEFAULT_BUCKETS
     try:
         counts = slice_copy(args.source, args.target, forced,
-                            tuple(args.buckets.split(",")), args.cap_per_bucket)
+                            buckets, args.cap_per_bucket)
     except Exception as exc:  # noqa: BLE001 — any slice failure is a failed gate
         print(f"FAIL: slice failed: {exc}")
         return 1

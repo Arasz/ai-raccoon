@@ -71,7 +71,8 @@ def store(tmp_path):
     copy = tmp_path / "copy.db"
     _fixture_copy(copy)
     store_dir = tmp_path / "store"
-    assert ingest.main(["--copy", str(copy), "--store-dir", str(store_dir)],
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store_dir),
+                       "--buckets", "ai-raccoon"],
                        embed=_toy_embed) == 0
     handle = ingest.open_store(store_dir)
     yield handle
