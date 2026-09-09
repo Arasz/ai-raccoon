@@ -22,8 +22,9 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Observability;
 
 /// <summary>
-///     OTel SDK wiring (ADR-0009): opt-in on OTEL_EXPORTER_OTLP_ENDPOINT, web-host only —
-///     never stdio (short-lived, per-connection processes) and never the one-shot CLI verbs.
+///     OTel SDK wiring (ADR-0009): opt-in on OTEL_EXPORTER_OTLP_ENDPOINT. The sole surviving
+///     host is the web host (P2/ADR-0020), so opt-in always wires there — and never on the
+///     one-shot CLI verbs.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -274,48 +275,27 @@ public sealed class OtlpExportTests : IDisposable
         new ActivitySource(OtlpNames.HttpScope).HasListeners().ShouldBeTrue();
     }
 
+    /// <summary>
+    ///     Inversion of the deleted stdio exemption (P2/ADR-0009 scope): the sole host is the
+    ///     web host, so an endpoint opts it in — no recycled-per-connection process exists to exempt.
+    /// </summary>
     [RetryFact]
-    public async Task StdioHost_NeverWiresTheExporter_EvenWithAnEndpointSet()
-    {
-        // Stdio hosts recycle too fast to pay the exporter's batch delay / shutdown grace —
-        // CreateWebHost only (ADR-0009, "Which host paths get the exporter").
-        await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
-
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
-
-        host.Services.GetService(typeof(TracerProvider)).ShouldBeNull();
-        host.Services.GetService(typeof(MeterProvider)).ShouldBeNull();
-    }
-
-    // Proves what StdioHost_NeverWiresTheExporter_EvenWithAnEndpointSet doesn't: a stdio tool
-    // call's own metric has no listener at all, not just that a provider type is absent
-    // (ADR-0009). Asserts a before/after delta rather than an absolute false, the same way
-    // CliCommandRunner_NeverWiresTheExporter below does — Enabled/HasListeners() reflect
-    // process-wide state, and another test's undisposed provider can leave a listener attached
-    // for the rest of the run. GetService(typeof(MeterProvider)) force-builds any provider that
-    // exists before the "after" reading — a listener only attaches once built, not merely
-    // registered — so this stays a real trap for a future stdio-wiring change.
-    [RetryFact]
-    public async Task StdioHost_ToolCallMetric_HasNoListener_SoInvocationsAreNeverExported()
+    public async Task SoleHost_WiresTheExporter_WhenEndpointSet()
     {
         await using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         Environment.SetEnvironmentVariable(EndpointVar, "http://127.0.0.1:4317");
-        using var probeMetrics = new ToolCallMetrics();
-        var enabledBefore = probeMetrics.Meter.CreateCounter<long>("probe_stdio_before_call").Enabled;
-        var hasListenersBefore = probeMetrics.ActivitySource.HasListeners();
 
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
-        host.Services.GetService(typeof(MeterProvider));
-        var metrics = host.Services.GetRequiredService<ToolCallMetrics>();
-        using (var toolActivity = new ToolExecutionActivity(metrics, "probe_tool", "probe-project"))
-        {
-            toolActivity.RecordInvocation();
-        }
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
 
-        metrics.Meter.CreateCounter<long>("probe_stdio_after_call").Enabled.ShouldBe(enabledBefore);
-        metrics.ActivitySource.HasListeners().ShouldBe(hasListenersBefore);
+        host.Services.GetService(typeof(TracerProvider)).ShouldNotBeNull();
+        host.Services.GetService(typeof(MeterProvider)).ShouldNotBeNull();
     }
+
+    // Deleted with the stdio host (P2): StdioHost_ToolCallMetric_HasNoListener pinned that a
+    // stdio tool call's metric has no listener at all. The sole host always wires the exporter
+    // when opted in — StartedHttpHost_AttachesATraceListener below is the surviving trap for
+    // the same wiring, asserting the positive instead of a delta.
 
     [RetryFact]
     public async Task CliCommandRunner_NeverWiresTheExporter()

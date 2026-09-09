@@ -85,18 +85,19 @@ public sealed class ToolTelemetryCoverageTests
     }
 
     /// <summary>
-    ///     Both tool-serving hosts compose the filter through the same seam, so the in-process stdio
-    ///     host must also resolve what the filter looks up — otherwise it would quietly emit nothing.
+    ///     The tool-serving host composes the filter through the same seam the proxy never
+    ///     touches, so the sole host must resolve what the filter looks up — otherwise it would
+    ///     quietly emit nothing. Renamed off the deleted stdio host (P2 red-first rename).
     ///     The proxy is not a tool-serving host: it returns before CreateServerHost (Program.cs, ADR-0020).
     /// </summary>
     [RetryFact]
-    public void StdioHost_RegistersToolsAndTheMetricsTheFilterResolves()
+    public void SoleHost_RegistersToolsAndTheMetricsTheFilterResolves()
     {
-        var dataRoot = TestData.CreateTempRoot("tool-telemetry-stdio");
+        var dataRoot = TestData.CreateTempRoot("tool-telemetry-sole-host");
         try
         {
             var host = McpServerSetup.CreateServerHost(
-                new ServerConfig(0, McpTransport.Stdio, TestData.CreateInfrastructureOptions(dataRoot)));
+                new ServerConfig(0, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
 
             host.Services.GetServices<McpServerTool>().ShouldNotBeEmpty();
             host.Services.GetService<ToolCallMetrics>().ShouldNotBeNull();

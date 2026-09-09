@@ -132,14 +132,30 @@ public sealed class ObservabilityEndpointTests : IDisposable
         }
     }
 
+    /// <summary>
+    ///     Inversion of the deleted stdio proof (P2/ADR-0020): the sole host is always a web
+    ///     host, so /observability is always mapped — there is no host shape without it.
+    /// </summary>
     [RetryFact]
-    public void Get_IsNotMapped_InStdioMode()
+    public async Task Get_IsMapped_OnTheSoleHost()
     {
-        // Stdio-only runs on a plain app host with no web server at all (ADR-0008): there
-        // is no port to map /observability onto, so the absence of IServer proves it.
-        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Stdio));
+        await using var env = await AcquireCleanEnvAsync();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, port));
 
-        host.Services.GetService(typeof(IServer)).ShouldBeNull();
+        lease.ReleaseForBind();
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            var json = await GetObservabilityAsync(port);
+
+            json.RootElement.GetProperty("name").GetString().ShouldBe("ai-raccoon");
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
     }
 
     [RetryFact]
