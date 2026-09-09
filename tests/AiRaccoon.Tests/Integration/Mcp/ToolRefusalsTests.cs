@@ -570,6 +570,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                     new StringContent(call, Encoding.UTF8, "application/json"),
                     TestContext.Current.CancellationToken);
                 response.EnsureSuccessStatusCode();
+                response.Content.Headers.ContentType?.MediaType.ShouldBe("text/event-stream");
                 var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
                 body.ShouldContain("\"isError\":true");
