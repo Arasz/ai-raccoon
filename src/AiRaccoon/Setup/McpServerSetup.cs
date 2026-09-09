@@ -8,6 +8,7 @@ using AiRaccoon.Prompts;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tools;
+using CommunityToolkit.Diagnostics;
 using ModelContextProtocol.Server;
 using ShutdownEndpoint = AiRaccoon.Hosting.Node.ShutdownEndpoint;
 
@@ -39,6 +40,12 @@ internal static partial class McpServerSetup
 
     private static WebApplication CreateWebHost(ServerConfig serverConfig, TimeProvider timeProvider)
     {
+        if (serverConfig.Transport is McpTransport.Stdio or McpTransport.Https)
+        {
+            ThrowHelper.ThrowArgumentOutOfRangeException<ServerConfig>(nameof(serverConfig),
+                $"{serverConfig.Transport} has no host path: the sole host is HTTP (ADR-0104) — bare launches proxy instead.");
+        }
+
         if (OtlpExportState.Resolve().Enabled)
         {
             AppContext.SetSwitch(AspNetCoreHostingOpenTelemetryDataSwitch, false);

@@ -305,6 +305,19 @@ public class McpServerSetupHostTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    ///     Defense in depth behind the parse rejection (ADR-0104 D1): a removed transport has no
+    ///     host path, so a config carrying one must fail here rather than bind an HTTP host for
+    ///     it. Throws before any builder, port or bank exists, so the port stays free.
+    /// </summary>
+    [RetryTheory]
+    [InlineData(McpTransport.Stdio)]
+    [InlineData(McpTransport.Https)]
+    public void CreateWebHost_RemovedTransport_ThrowsArgumentOutOfRange(McpTransport transport)
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() => McpServerSetup.CreateWebHost(Config(transport)));
+    }
+
     private ServerConfig Config(McpTransport transport, int port = 0, TimeSpan idleTimeout = default) =>
         new(port, transport, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, idleTimeout);
 }
