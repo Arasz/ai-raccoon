@@ -136,8 +136,14 @@ internal static class ToolTelemetry
             ? projection(arguments)
             : new ToolProject(Text(arguments, ProjectIdArgument) ?? string.Empty, null);
 
-    /// <summary>A refusal is what <see cref="ToolRefusals" /> already calls one — no second list of what counts.</summary>
-    private static bool Refused(Exception exception) => ToolRefusals.PrefixFor(exception) is not null || exception is McpException;
+    /// <summary>
+    ///     A refusal is what <see cref="ToolRefusals" /> already calls one — no second list of what
+    ///     counts — plus a live-connection cancellation, which <c>ToolRefusals</c> answers the same
+    ///     way: caller-triggered and cheap to emit in bulk, so the counter stays bounded (WP9).
+    ///     <see cref="ToolRefusals.PrefixFor" /> itself stays exact-type.
+    /// </summary>
+    private static bool Refused(Exception exception) =>
+        ToolRefusals.PrefixFor(exception) is not null || exception is McpException || exception is OperationCanceledException;
 
     private static string? Text(IDictionary<string, JsonElement>? arguments, string name) =>
         arguments?.TryGetValue(name, out var value) == true && value.ValueKind == JsonValueKind.String

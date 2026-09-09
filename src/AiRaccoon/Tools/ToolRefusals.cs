@@ -18,7 +18,9 @@ namespace AiRaccoon.Tools;
 /// <summary>
 ///     Turns an expected refusal into a normal error <see cref="CallToolResult" /> instead of an
 ///     escaping exception: the SDK's <c>McpServerImpl</c> logs Error on every exception a tool call
-///     throws, <see cref="McpException" /> included. Registered once as a CallToolFilter in McpServerSetup.ConfigureMcpTransport.
+///     throws, <see cref="McpException" /> included. A cancelled call whose request connection is
+///     still live is answered the same way (<c>cancelled</c>) rather than escaping to the SDK's
+///     warn-level "request handler failed". Registered once as a CallToolFilter in McpServerSetup.ConfigureMcpTransport.
 /// </summary>
 internal static partial class ToolRefusals
 {
@@ -77,6 +79,15 @@ internal static partial class ToolRefusals
     /// </summary>
     internal static readonly IReadOnlyCollection<string> DirectThrowPrefixes = ["invalid-params"];
 
+    /// <summary>
+    ///     The wire prefix for a call cancelled while its request connection was still live.
+    ///     Kept out of <see cref="RefusalPrefixes" /> on purpose: <see cref="PrefixFor" /> matches
+    ///     the exact type, so a table entry could not cover the <see cref="OperationCanceledException" />
+    ///     hierarchy (notably <see cref="TaskCanceledException" />) — the filter catches the base
+    ///     type explicitly instead. The doc-drift test concats this with the two tables above.
+    /// </summary>
+    internal const string CancelledPrefix = "cancelled";
+
     /// <summary>Expected refusals remain visible at Warning without being logged as errors.</summary>
     private static readonly HashSet<string> WarningPrefixes =
         ["sync-network", "sync-corrupt-file", "sync-tampered-remote", "unknown-hash", "embedding-install-replaced", "code-engine-unloadable"];
@@ -93,9 +104,10 @@ internal static partial class ToolRefusals
     internal static LogLevel LevelFor(string prefix) => WarningPrefixes.Contains(prefix) ? LogLevel.Warning : LogLevel.Information;
 
     /// <summary>
-    ///     The CallToolFilter: a protocol exception or cancellation always rethrows; a mapped refusal
-    ///     or a bare <see cref="McpException" /> (already client-facing text) becomes an error result
-    ///     instead; anything else rethrows and stays fail-level.
+    ///     The CallToolFilter: a protocol exception always rethrows, as does a cancellation whose
+    ///     own request token is already dead (answering a gone client is pointless); a cancellation
+    ///     with a live connection, a mapped refusal, or a bare <see cref="McpException" /> (already
+    ///     client-facing text) becomes an error result instead; anything else rethrows and stays fail-level.
     /// </summary>
     internal static McpRequestHandler<CallToolRequestParams, CallToolResult> Filter(
         McpRequestHandler<CallToolRequestParams, CallToolResult> next) =>
@@ -109,9 +121,13 @@ internal static partial class ToolRefusals
             {
                 throw;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (OperationCanceledException)
+            {
+                return Cancelled(request);
             }
             catch (Exception ex) when (PrefixFor(ex) is { } prefix)
             {
@@ -162,6 +178,28 @@ internal static partial class ToolRefusals
         };
     }
 
+    /// <summary>
+    ///     Answers a cancellation with a live request connection: static text with the tool name —
+    ///     the exception's own message is runtime-generic ("A task was canceled.") and adds nothing.
+    ///     Same envelope as a refusal (single Information line, no exception attached), logged under
+    ///     its own line so the 913 owner stays <c>ToolRefusals.cs</c> alone.
+    /// </summary>
+    private static CallToolResult Cancelled(RequestContext<CallToolRequestParams> request)
+    {
+        var toolName = request.Params?.Name ?? string.Empty;
+        const string reason = "request was cancelled";
+        var logger = request.Services?.GetService<ILoggerFactory>()?.CreateLogger("AiRaccoon.Tools.ToolRefusals");
+        if (logger is not null)
+        {
+            Log.ToolCancelled(logger, toolName, reason);
+        }
+        return new CallToolResult
+        {
+            IsError = true,
+            Content = [new TextContentBlock { Text = $"{CancelledPrefix}: tool '{toolName}' {reason}" }]
+        };
+    }
+
     private static CallToolResult Refused(RequestContext<CallToolRequestParams> request, string message,
         string reason, LogLevel level)
     {
@@ -191,5 +229,8 @@ internal static partial class ToolRefusals
 
         [LoggerMessage(EventId = 912, Level = LogLevel.Error, Message = "\"{ToolName}\" failed with an unmapped {ExceptionType}")]
         public static partial void ToolFailed(ILogger logger, string toolName, string exceptionType, Exception exception);
+
+        [LoggerMessage(EventId = 913, Level = LogLevel.Information, Message = "\"{ToolName}\" cancelled: {Reason}")]
+        public static partial void ToolCancelled(ILogger logger, string toolName, string reason);
     }
 }
