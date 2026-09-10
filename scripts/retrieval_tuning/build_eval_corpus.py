@@ -32,7 +32,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from retrieval_tuning import repo_data  # noqa: E402
+from retrieval_tuning import corpus_anchors, repo_data  # noqa: E402
 
 # P3 AC2: generator constants live in data/corpora/eval-set-100.json.
 _GENERATOR = repo_data.CORPORA["eval-set-100"]
@@ -408,18 +408,9 @@ def _resolve_adr_target(conn: sqlite3.Connection, filename: str, family: str) ->
 def _resolve_non_file_target(
     conn: sqlite3.Connection, project_id: str, scope: str, chunk_index: int | None, marker: str
 ) -> sqlite3.Row:
-    q = "SELECT hash, source_file, section, project_id, scope, value, chunk_index FROM entries WHERE value LIKE ?"
-    args: list = [f"%{marker}%"]
-    if project_id:
-        q += " AND project_id=?"
-        args.append(project_id)
-    if scope:
-        q += " AND scope=?"
-        args.append(scope)
-    if chunk_index is not None:
-        q += " AND chunk_index=?"
-        args.append(chunk_index)
-    rows = conn.execute(q, args).fetchall()
+    rows = corpus_anchors.marker_matches(
+        conn, marker, project_id=project_id, scope=scope,
+        chunk_index=chunk_index, literal=False, columns=corpus_anchors.ANCHOR_COLUMNS)
     if len(rows) != 1:
         raise RuntimeError(
             f"non-file marker {marker[:60]!r} resolved to {len(rows)} rows "
@@ -429,9 +420,7 @@ def _resolve_non_file_target(
 
 
 def _check_hash_unique(conn: sqlite3.Connection, hash_value: str, label: str) -> None:
-    n = conn.execute("SELECT count(*) FROM entries WHERE hash=?", (hash_value,)).fetchone()[0]
-    if n != 1:
-        raise RuntimeError(f"{label}: hash {hash_value[:16]}... is not unique in the copy ({n} rows)")
+    corpus_anchors.assert_hash_unique(conn, hash_value, label)
 
 
 def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -> list[dict]:
@@ -450,8 +439,7 @@ def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -
         "allowlist overlaps the reserved test-set files"
     )
 
-    conn = sqlite3.connect(f"file:{copy_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
+    conn = corpus_anchors.open_copy(copy_path)
     queries: list[dict] = []
 
     try:

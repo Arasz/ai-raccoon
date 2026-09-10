@@ -54,7 +54,6 @@ Run:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import random
@@ -64,7 +63,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from retrieval_tuning import repo_data  # noqa: E402
+from retrieval_tuning import corpus_anchors, repo_data  # noqa: E402
 
 # P3 AC2: generator constants live in data/corpora/project-corpus-100.json.
 _GENERATOR = repo_data.CORPORA["project-corpus-100"]
@@ -86,14 +85,6 @@ _TOPIC_MIN_CUT = 8
 _MARKER_MIN_CHARS = 8
 _MARKER_WINDOW_LENS = (120, 240)
 _ANSWER_SPAN_CHARS = 160
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _normalize(text: str) -> str:
@@ -257,12 +248,8 @@ def _derive_unique_marker(
             if len(span) < _MARKER_MIN_CHARS or span in tried:
                 continue
             tried.add(span)
-            n = conn.execute(
-                "SELECT count(*) FROM entries "
-                "WHERE project_id=? AND scope=? AND instr(value, ?) > 0",
-                (project_id, scope, span),
-            ).fetchone()[0]
-            if n == 1:
+            if len(corpus_anchors.marker_matches(
+                    conn, span, project_id=project_id, scope=scope)) == 1:
                 return span
     return None
 
@@ -292,14 +279,6 @@ def _content_candidates(conn: sqlite3.Connection, project_id: str) -> list[dict]
             "value": row["value"],
         })
     return out
-
-
-def _assert_hash_unique(conn: sqlite3.Connection, hash_value: str) -> None:
-    n = conn.execute(
-        "SELECT count(*) FROM entries WHERE hash=?", (hash_value,)).fetchone()[0]
-    if n != 1:
-        raise RuntimeError(
-            f"anchor hash {hash_value[:16]}... is not unique in the copy ({n} rows)")
 
 
 # ------------------------------------------------------------------ allocation (pinned)
@@ -426,7 +405,7 @@ def _build_project_queries(
     for ordinal, target in enumerate(targets):
         frame_base = ordinal % 3
         if target["kind"] == "file":
-            _assert_hash_unique(conn, target["anchor_hash"])
+            corpus_anchors.assert_hash_unique(conn, target["anchor_hash"])
             value = conn.execute(
                 "SELECT value FROM entries WHERE hash=?", (target["anchor_hash"],)
             ).fetchone()[0]
@@ -478,10 +457,9 @@ def generate(copy_path: Path, output_path: Path) -> dict:
     output_path = Path(output_path)
     if not copy_path.exists():
         raise RuntimeError(f"memory-db copy not found: {copy_path}")
-    snapshot_sha = _sha256_file(copy_path)
+    snapshot_sha = corpus_anchors.sha256_file(copy_path)
 
-    conn = sqlite3.connect(f"file:{copy_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
+    conn = corpus_anchors.open_copy(copy_path)
     try:
         fold_map = _load_alias_fold_map(conn)
         projects = _enumerate_projects(conn)
