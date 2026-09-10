@@ -96,21 +96,28 @@ Stored vectors for the **same hash/text** compared bank-vs-harness
 Running the **bank's own vec0 KNN with the harness's query embedding** likewise
 does not reproduce the harness's Chroma similarities (bank top content sims
 0.55–0.63 vs harness 0.74–0.91) — the two systems embed the same text
-differently. Mechanism, read from the shipped artifacts and installed code:
+differently.
 
-- Bank: `~/.ai-raccoon/models/Salesforce__SFR-Embedding-Code-400M_R/ai-raccoon.manifest.json`
-  pins `"pooling": {"mode": "cls"}`, `"normalization": "none"`, `"queryInstruction": null`.
-- Harness: the HF snapshot
-  (`~/.cache/huggingface/hub/models--Salesforce--SFR-Embedding-Code-400M_R/snapshots/<rev>/`)
-  ships **no `modules.json`** / sentence-transformers pooling config, so
-  `HuggingFaceEmbedding` → `SentenceTransformer` takes
-  `_load_default_modules` — whose own docstring (sentence-transformers 5.6.1)
-  reads: *"Creates a simple Transformer + **Mean Pooling** model …, except for
-  CausalLM-based models which use Last Token pooling instead. This is used as a
-  fallback when no pre-trained SentenceTransformer model is found."*
-
-CLS vs mean pooling over the same weights is the divergence; it is a
-leg-input difference, not a fusion-path difference.
+**CORRECTION (C14, 2026-09-10): the pooling explanation below is RETRACTED.**
+The harness is NOT mean-pooling. Triangle test (measured; probes in `/tmp/p1-red/`):
+the live model object reports `pooling_mode='cls'` and its output equals the
+model-card recipe (`last_hidden_state[:, 0]`, fp32, repaired position_ids) at
+**cos 1.00000**; llama-index's `get_pooling_mode` defaults to `'cls'` when the
+repo has no pooling config (`utils.py:79-98`) and `base.py:150` feeds it to
+`SentenceTransformer`; the store equals the current HFE path at 1.00000; the
+bank's own ONNX reproduces the bank's stored vectors at 0.9826 (0.945–0.9999);
+**bank-ONNX vs harness-HF on the same text = 0.5934** (padding irrelevant:
+1.00000). So the divergence is a model-conversion/runtime seam (ONNX export vs
+HF safetensors), not pooling — a `pooling='cls'` "fix" would be a no-op (the
+installed llama-index even refuses the parameter: "pooling is deprecated").
+Leads: the bank manifest pins `source.revision: 'main'` (unpinned) vs the
+harness snapshot `cb950dc8…` (the weights file is not covered by the matching
+config/tokenizer provenance); and/or the ONNX export's positional handling
+differs from the repaired HF path. The residual 1.7% on the bank match is
+likely the bank's C# tokenizer (separate, smaller seam). The superseded reading,
+kept only as a pointer: it claimed a `_load_default_modules` mean-pooling
+fallback (sentence-transformers docstring) — true for a bare SentenceTransformer,
+false for this path because llama-index supplies the pooling config itself.
 
 ## 5. Verdict (C10)
 
@@ -120,12 +127,14 @@ leg-input difference, not a fusion-path difference.
 - **Judgment: per-spec.** The harness's dedupe/RRF/affinity/floor are faithful
   to the frozen contract (all knobs untouched); the same harness pipeline,
   given the bank's vector ranks (19–25), serves the anchor. The divergence
-  upstream of fusion is the known bank-ONNX-vs-harness-HF embedding seam, now
-  measured (CLS vs mean pooling, stored-vector cos 0.50–0.63). No code fix is
-  taken: changing pooling would require re-embedding the 56,321-row store and
-  would change every vector-leg number — a P2/P3-scale decision, not a C10
-  knob fix. No regression test is added for the same reason (nothing to
-  regress; the trace is the evidence).
+  upstream of fusion is the bank-ONNX-vs-harness-HF model-conversion seam
+  (corrected in §4: bank-ONNX self-consistency 0.9826, ONNX-vs-HF 0.5934; the
+  earlier CLS-vs-mean pooling explanation is retracted — the harness already
+  pools CLS). No code fix is taken: the seam is a runtime difference between
+  the two deployed systems, and the alleged pooling fix would have been a no-op
+  (llama-index refuses the parameter; vectors unchanged at cos 1.00000). No
+  regression test is added for the same reason (nothing to regress; the trace
+  is the evidence).
 - **P2 AC2 marking**: C019/C065/C081 are **fusion-drop** (the FTS leg held the
   anchor at rank 1 in the candidate window; the final output dropped it),
   **never "embedding-gap evidence"**. Note for P2: "fusion-drop" here does not

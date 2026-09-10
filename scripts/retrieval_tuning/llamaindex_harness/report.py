@@ -208,10 +208,15 @@ def render(results: dict, context: dict) -> str:
         *_stratification_lines(rows),
         "## Parity-gap discussion",
         "",
-        "- Embedding seam (C13, owner decision pending): the bank's ONNX manifest pins "
-        "CLS pooling while the HF snapshot ships no sentence-transformers config, so the "
-        "harness falls back to that library's mean-pooling default — same weights, "
-        "different vectors (measured stored-vector cos 0.50–0.63 for identical text). "
+        "- Embedding seam (C13/C14, corrected mechanism): both systems use the same "
+        "SFR-Embedding-Code-400M_R weights with CLS pooling — the harness was verified "
+        "CLS (llama-index defaults `get_pooling_mode` to 'cls'; the live Pooling module "
+        "reports pooling_mode='cls'; harness output equals the model-card recipe at "
+        "cos 1.00000), so this is NOT a pooling difference (that explanation is "
+        "retracted). The bank runs its own ONNX export while the harness runs the HF "
+        "safetensors path: bank-ONNX self-consistency 0.9826, ONNX-vs-HF same-text "
+        "cos 0.5934, store == current HFE path 1.00000; harness vector_hit=1 on only "
+        "8/99 rows (78/99 are fts=1/vec=0; 14/15 c-cell rows are fts=1/vec=0). "
         "The taxonomy below labels rows against MEASURED leg positions and never claims "
         "the harness embedding equals the bank's: a row whose FTS window held the anchor "
         "is `fusion` even when the vector leg missed (C10), and only rows where BOTH "
@@ -349,7 +354,7 @@ def _classified_gap_table(rows: list[dict]) -> list[str]:
         "fusion": "a leg's candidate window held the anchor; the fused pipeline "
                   "did not serve it (dedupe/RRF/floor/Take(8))",
         "embedding": "no leg window held it on clean prose — representation side "
-                     "(the harness mean-pooling vs bank CLS seam qualifies this, C13)",
+                     "(the bank-ONNX vs harness-HF runtime seam qualifies this, C13/C14)",
         "unrecoverable": "no leg window held it on a debris/tool-call artifact — "
                          "no representation recovers it",
         "unknown": "leg diagnostics absent (data gap)",

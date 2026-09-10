@@ -157,7 +157,7 @@ Disclosure: relevance-flavoured readings ("bank finds what harness misses", any 
 
 ## Parity-gap discussion
 
-- Embedding seam (C13, owner decision pending): the bank's ONNX manifest pins CLS pooling while the HF snapshot ships no sentence-transformers config, so the harness falls back to that library's mean-pooling default — same weights, different vectors (measured stored-vector cos 0.50–0.63 for identical text). The taxonomy below labels rows against MEASURED leg positions and never claims the harness embedding equals the bank's: a row whose FTS window held the anchor is `fusion` even when the vector leg missed (C10), and only rows where BOTH windows missed are `embedding`/`unrecoverable` (composition-aware, C9).
+- Embedding seam (C13/C14, corrected mechanism): both systems use the same SFR-Embedding-Code-400M_R weights with CLS pooling — the harness was verified CLS (llama-index defaults `get_pooling_mode` to 'cls'; the live Pooling module reports pooling_mode='cls'; harness output equals the model-card recipe at cos 1.00000), so this is NOT a pooling difference (that explanation is retracted). The bank runs its own ONNX export while the harness runs the HF safetensors path: bank-ONNX self-consistency 0.9826, ONNX-vs-HF same-text cos 0.5934, store == current HFE path 1.00000; harness vector_hit=1 on only 8/99 rows (78/99 are fts=1/vec=0; 14/15 c-cell rows are fts=1/vec=0). The taxonomy below labels rows against MEASURED leg positions and never claims the harness embedding equals the bank's: a row whose FTS window held the anchor is `fusion` even when the vector leg missed (C10), and only rows where BOTH windows missed are `embedding`/`unrecoverable` (composition-aware, C9).
 - Structure gap: 15898 of 56321 rows carry heading_path structure texts (structureAlpha=0.5 fuse; missing structure scores 0). Section-targeted misses on unheaded rows are structure-gap, not fusion-gap.
 - No harness knob was tuned to close either gap (plan: measure and report, never tune silently).
 
@@ -169,7 +169,7 @@ Labels are computed per row from the existing `fts_hit`/`vector_hit` columns, wh
 |---|---|---|
 | none | 84 | no harness deficit under test (harness hit, or the bank missed too — agreement is never a deficit) |
 | fusion | 15 | a leg's candidate window held the anchor; the fused pipeline did not serve it (dedupe/RRF/floor/Take(8)) |
-| embedding | 0 | no leg window held it on clean prose — representation side (the harness mean-pooling vs bank CLS seam qualifies this, C13) |
+| embedding | 0 | no leg window held it on clean prose — representation side (the bank-ONNX vs harness-HF runtime seam qualifies this, C13/C14) |
 | unrecoverable | 0 | no leg window held it on a debris/tool-call artifact — no representation recovers it |
 | unknown | 0 | leg diagnostics absent (data gap) |
 | c_cell (bank-hit/harness-miss of 99 paired) | 15 | deficit labels sum; unknown share 0.0% (cap 5%) |
