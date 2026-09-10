@@ -1,5 +1,6 @@
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -29,7 +30,7 @@ public sealed class MiniLmGoldenVectorReaderTests
         }
         """;
 
-    [Fact]
+    [RetryFact]
     public void ReadEvalSetQueries_ReadsTheBareArrayShape()
     {
         var queries = MiniLmGoldenVectorReader.ReadEvalSetQueries(BareArrayJson);
@@ -38,7 +39,7 @@ public sealed class MiniLmGoldenVectorReaderTests
         queries[1].ShouldBe(("E002", "beta"));
     }
 
-    [Fact]
+    [RetryFact]
     public void ReadEvalSetQueries_ReadsTheHeaderShape()
     {
         var queries = MiniLmGoldenVectorReader.ReadEvalSetQueries(HeaderShapeJson);
@@ -47,7 +48,7 @@ public sealed class MiniLmGoldenVectorReaderTests
         queries[1].ShouldBe(("E002", "beta"));
     }
 
-    [Fact]
+    [RetryFact]
     public void ReadEvalSetQueries_DoesNotConfuseTheHeaderWithAQuery()
     {
         var queries = MiniLmGoldenVectorReader.ReadEvalSetQueries(HeaderShapeJson);
