@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-09-10T15:25:00+02:00",
+  "lastUpdated": "2026-09-10T15:40:00+02:00",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
@@ -77,7 +77,7 @@
       "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
     }
   ],
-  "next": "Harness follow-ups (definition: docs/work/2026-09-10-harness-followups-definition.md): C + E unblock clean CI (eval-set-100 provenance; env-gate the corpus-copy tests; declare optuna/matplotlib), then B (corpus quality), then A1 (harness-on-ONNX fusion-isolation control), D (per-row leg ranks), F (bank-side upstream notes). C13 default A3 unless the owner rules otherwise.",
+  "next": "Harness follow-ups (definition: docs/work/2026-09-10-harness-followups-definition.md; owner decision 2026-09-10: package G (13h full-volume E2E) DROPPED). Order: C + E (eval-set-100 provenance; env-gate corpus-copy tests; declare optuna/matplotlib) -> B (corpus quality) -> A1 (harness-on-ONNX fusion-isolation control) -> D (per-row leg ranks) -> F (bank-side upstream notes). C13 default A3 unless the owner rules otherwise. Execute as per-package tasks in this order.",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",

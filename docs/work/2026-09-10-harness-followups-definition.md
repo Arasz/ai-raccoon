@@ -86,14 +86,15 @@ reasons); the CI lane mirrors it. Small.
 **AC.** Filed with the bank repo (issues or PR) or explicitly accepted with a record. Small,
 external.
 
-## Package G — Full-volume fresh-bank E2E (optional)
+## Package G — Full-volume fresh-bank E2E — **DROPPED (owner decision, 2026-09-10)**
 
-The literal P4 AC3 at real volume: fresh copy → refresh (needs C for a green path) → full
-ingest (~13 h) → evaluate → report. **AC.** One overnight run artifact. **Default: skipped**
-— the fixture-scoped E2E plus the P1 full ingest cover the wiring and the real-volume ingest
-respectively. Do it only if the fixture proof is judged insufficient.
+The literal P4 AC3 at real volume (fresh copy → refresh → full ingest ~13 h → evaluate →
+report) is **dropped by the owner**: no 13-hour test runs. The fixture-scoped E2E plus the
+P1 full ingest at real volume (already proven, exit 0) cover the wiring and the volume path
+respectively. Recorded here so the decision is not silently revisited.
 
 ## Sequencing suggestion
 
 `C + E` (unblock clean CI) → `B` (the instrument) → `A1` (the confounder) → `D` → `F`
-(external, parallel).
+(external, parallel). `G` is dropped. Execute as per-package tasks in this order; each
+package's AC is the task's pass condition.
