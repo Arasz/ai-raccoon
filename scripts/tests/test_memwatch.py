@@ -4,6 +4,7 @@ included — a pure kill-decision test cannot see them), full stdout passthrough
 
 import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -51,3 +52,22 @@ def test_memwatch_live_kills_the_process_tree_on_breach(capsys):
         except ProcessLookupError:
             return
     raise AssertionError(f"grandchild {pid} survived the tree kill")
+
+
+def test_memwatch_runs_as_module_documents_cap_and_sampling():
+    # P2 AC4: one-command gate — `python -m memwatch --help` must work (no
+    # package-relative imports), state the default cap, and document the
+    # sampling limitation (a backstop, never presented as a cgroup).
+    retrieval_tuning = Path(__file__).resolve().parents[1] / "retrieval_tuning"
+    proc = subprocess.run([sys.executable, "-m", "memwatch", "--help"],
+                          capture_output=True, text=True, timeout=120,
+                          cwd=retrieval_tuning)
+    assert proc.returncode == 0, proc.stderr[-500:]
+    assert "--cap-mb" in proc.stdout
+    assert "sampling" in proc.stdout.lower()
+    assert "12 GB" in proc.stdout
+
+
+def test_memwatch_default_cap_is_12gb():
+    from memwatch import DEFAULT_CAP_MB
+    assert DEFAULT_CAP_MB == 12 * 1024

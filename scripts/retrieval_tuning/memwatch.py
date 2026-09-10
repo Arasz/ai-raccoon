@@ -96,7 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--cap-mb", type=int, default=None,
-                        help=f"RSS cap in MB (default {DEFAULT_CAP_MB} = 12 GB)")
+                        help=f"RSS cap in MB (default {DEFAULT_CAP_MB} = "
+                             f"{DEFAULT_CAP_MB // 1024} GB)")
     parser.add_argument("--interval", type=float, default=2.0,
                         help="sampling period seconds; a spike shorter than this can be missed")
     parser.add_argument("--log", default=None,
