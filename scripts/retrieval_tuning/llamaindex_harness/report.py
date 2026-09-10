@@ -204,6 +204,7 @@ def render(results: dict, context: dict) -> str:
         "(rerun report.py on results.json). Singleton-F1 here is a parity "
         "verdict, not a relevance verdict.",
         "",
+        *_repeat_lines(results),
         *_stratification_lines(rows),
         "## Parity-gap discussion",
         "",
@@ -229,6 +230,51 @@ def render(results: dict, context: dict) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def _repeat_lines(results: dict) -> list[str]:
+    """P2 AC1: repeat-run spread table + unstable ids + what the repeats guard.
+
+    Absent for single-run artifacts (no repeats block), so golden reports from
+    a one-shot run stay unchanged."""
+    repeats = results.get("repeats")
+    if not repeats:
+        return []
+    metrics = repeats.get("metrics") or {}
+
+    def _spread(name: str) -> str:
+        m = metrics.get(name) or {}
+        if m.get("mean") is None:
+            return "—"
+        return f"{m['mean']:.4f} [{m['min']:.4f}–{m['max']:.4f}]"
+
+    unstable = repeats.get("unstable") or {}
+    revision = repeats.get("modelRevision") or results.get("modelRevision") or "?"
+    nbytes = repeats.get("modelBytes") or results.get("modelBytes") or "?"
+    return [
+        f"### Repeat-run spread ({repeats.get('n', '?')} independent runs, fresh bank "
+        "scratch per repeat; min/max are across runs)",
+        "",
+        "| metric | mean [min–max] |",
+        "|---|---|",
+        f"| harness hit-rate | {_spread('harness_hit_rate')} |",
+        f"| ai-raccoon hit-rate | {_spread('airaccoon_hit_rate')} |",
+        f"| harness mean F1 | {_spread('harness_mean_f1')} |",
+        f"| ai-raccoon mean F1 | {_spread('airaccoon_mean_f1')} |",
+        f"| agreement MCC | {_spread('mcc')} |",
+        "",
+        f"Unstable served-set query ids across repeats: harness="
+        f"{', '.join(unstable.get('harness') or []) or 'none'}, ai-raccoon="
+        f"{', '.join(unstable.get('airaccoon') or []) or 'none'}. A non-empty list "
+        "is jitter a golden must not tolerate — the run exits nonzero and never "
+        "tolerance-blesses a moved anchor.",
+        f"Variance guarded: weight drift (weights revision "
+        f"{str(revision)[:12]}... / {nbytes} bytes pinned), server nondeterminism "
+        "(fresh scratch copy + fresh server per repeat), and bank drift (row-stability "
+        "snapshot per repeat, C11). Process-level harness determinism remains the P1 "
+        "C7 double-run gate; repeats here share one read-only harness store.",
+        "",
+    ]
 
 
 def _stratification_lines(rows: list[dict]) -> list[str]:

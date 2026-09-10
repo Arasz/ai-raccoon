@@ -305,6 +305,52 @@ def test_report_rejects_unknown_share_above_cap():
         report.render(out, _context())
 
 
+def _results_with_repeats():
+    out = _results_c_cell_taxonomy()
+    out["repeats"] = {
+        "n": 3,
+        "modelRevision": "cb950dc80d677c6fdc00f56c8ddd20ca2642c59e",
+        "modelBytes": 869254400,
+        "metrics": {
+            "harness_hit_rate": {"mean": 0.6667, "min": 0.6667, "max": 0.6667},
+            "airaccoon_hit_rate": {"mean": 0.6667, "min": 0.6667, "max": 0.6667},
+            "harness_mean_f1": {"mean": 0.3333, "min": 0.3333, "max": 0.3333},
+            "airaccoon_mean_f1": {"mean": 0.3333, "min": 0.3333, "max": 0.3333},
+            "mcc": {"mean": 0.25, "min": 0.2, "max": 0.3, "nullCount": 0},
+        },
+        "unstable": {"harness": [], "airaccoon": []},
+    }
+    return out
+
+
+def test_report_renders_repeat_spread_mean_min_max():
+    # P2 AC1: the report renders mean [min-max] per metric and the unstable-id
+    # list, so a reader sees the campaign spread, not a single number.
+    text = report.render(_results_with_repeats(), _context())
+    assert "Repeat-run spread" in text
+    assert "0.6667 [0.6667\u20130.6667]" in text
+    assert "0.2500 [0.2000\u20130.3000]" in text
+    assert "Unstable served-set query ids" in text
+    assert "harness=none" in text
+
+
+def test_report_states_what_repeats_guard():
+    # The gate must say which variance repeats guard: weight drift, server
+    # nondeterminism, bank drift — never an unexplained spread.
+    text = report.render(_results_with_repeats(), _context())
+    assert "Variance guarded" in text
+    assert "weight" in text.lower()
+    assert "server nondeterminism" in text
+    assert "bank drift" in text
+
+
+def test_report_renders_unstable_ids_when_present():
+    out = _results_with_repeats()
+    out["repeats"]["unstable"] = {"harness": ["C045"], "airaccoon": ["C066"]}
+    text = report.render(out, _context())
+    assert "C045" in text and "C066" in text
+
+
 def test_frozen_golden_c_cell_is_fusion_with_shared_oracle_rows():
     # P2 AC2 oracle against the frozen golden (not a synthetic fixture): every
     # c-cell row classifies `fusion` (a leg window held it; the rows are the

@@ -30,9 +30,13 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
+import shutil
 import sqlite3
+import subprocess
 import sys
+import threading
 import uuid
 from pathlib import Path
 
@@ -224,6 +228,156 @@ def gap_taxonomy(rows: list[dict]) -> dict:
     c_cell = sum(n for label, n in cells.items() if label != "none")
     return {"n_paired": len(paired), "c_cell": c_cell, "cells": cells,
             "unknownShare": (cells["unknown"] / len(paired)) if paired else 0.0}
+
+
+def _served_sets(run: dict, side: str) -> dict[str, tuple]:
+    """Per-query served hash SETS (order-insensitive) for one leg."""
+    return {row["id"]: tuple(sorted(set(row[side].get("hashes") or [])))
+            for row in run.get("rows", [])}
+
+
+def summarize_repeats(runs: list[dict]) -> dict:
+    """P2 AC1: aggregate N independent run_eval results.
+
+    Per-metric mean/min/max over runs; MCC is null-through (None runs are
+    skipped and counted, never coerced to 0). Served SETS are diffed per query
+    per leg across runs — a query whose set differs (or that is missing from a
+    run) is unstable jitter, reported by id. Order-only differences are stable.
+    Repeats with a FRESH bank scratch guard weight drift, server
+    nondeterminism and bank drift; the article pins weights revision/bytes."""
+    if not runs:
+        raise ValueError("summarize_repeats: no runs")
+    metrics: dict = {}
+    for name, side, key in (("harness_hit_rate", "harness", "hit_rate"),
+                            ("airaccoon_hit_rate", "airaccoon", "hit_rate"),
+                            ("harness_mean_f1", "harness", "mean_f1"),
+                            ("airaccoon_mean_f1", "airaccoon", "mean_f1")):
+        values = [float(run["summary"][side][key]) for run in runs]
+        metrics[name] = {"mean": sum(values) / len(values),
+                         "min": min(values), "max": max(values)}
+    mcc_values = [run["summary"].get("mcc") for run in runs]
+    present = [float(v) for v in mcc_values if v is not None]
+    metrics["mcc"] = {
+        "mean": sum(present) / len(present) if present else None,
+        "min": min(present) if present else None,
+        "max": max(present) if present else None,
+        "nullCount": len(mcc_values) - len(present)}
+
+    unstable: dict[str, list[str]] = {}
+    for side in ("harness", "airaccoon"):
+        per_run = [_served_sets(run, side) for run in runs]
+        ids = sorted({row["id"] for run in runs for row in run.get("rows", [])})
+        unstable[side] = [
+            qid for qid in ids
+            if any(run_sets.get(qid) != per_run[0].get(qid) for run_sets in per_run[1:])]
+    return {"n": len(runs), "metrics": metrics, "unstable": unstable}
+
+
+def fresh_scratch_copy(base_db: Path, data_root: Path) -> Path:
+    """Byte-copy the quiesced base into data_root/memory.db (one per repeat).
+
+    Stale WAL/SHM sidecars are removed so a prior repeat's writes can never
+    bleed into the next run; the base itself is opened read-only by the copy."""
+    base_db, data_root = Path(base_db), Path(data_root)
+    if not base_db.exists():
+        raise FileNotFoundError(f"scratch base not found: {base_db}")
+    data_root.mkdir(parents=True, exist_ok=True)
+    dest = data_root / "memory.db"
+    for stale in (dest, dest.with_name(dest.name + "-wal"),
+                  dest.with_name(dest.name + "-shm")):
+        stale.unlink(missing_ok=True)
+    shutil.copyfile(base_db, dest)
+    return dest
+
+
+def _sibling_import(name: str):
+    """Import a plain script beside the package (make_quiesced_scratch, memwatch)."""
+    import importlib  # noqa: PLC0415 — stdlib
+    sibling_dir = Path(__file__).resolve().parents[1]
+    if str(sibling_dir) not in sys.path:
+        sys.path.insert(0, str(sibling_dir))
+    return importlib.import_module(name)
+
+
+def scratch_row_stability(db_path: Path) -> dict:
+    """C11 run recipe: entries count + max(created_at/updated_at), read-only.
+
+    The SQL lives in make_quiesced_scratch.row_stability (one definition, the
+    helper the quiesced base was built with); this opens the scratch copy RO."""
+    row_stability = _sibling_import("make_quiesced_scratch").row_stability
+    conn = sqlite3.connect(f"file:{Path(db_path).resolve()}?mode=ro", uri=True)
+    try:
+        return row_stability(conn)
+    finally:
+        conn.close()
+
+
+def _default_tree_rss_mb() -> int:
+    return _sibling_import("memwatch").tree_rss_mb(os.getpid())
+
+
+class RssSampler:
+    """Keep the process tree's peak RSS while a repeat runs (P2 AC1 evidence).
+
+    Periodic sampling is a backstop, not a cgroup: a spike shorter than the
+    interval can be missed (the same limitation memwatch documents).
+    tree_rss_mb is reused from memwatch so the ps sampling has one owner."""
+
+    def __init__(self, rss_fn=None, interval: float = 2.0) -> None:
+        self._rss_fn = rss_fn or _default_tree_rss_mb
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self.peak = 0
+
+    def _sample_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self.peak = max(self.peak, int(self._rss_fn()))
+            except (OSError, ValueError, subprocess.SubprocessError):
+                pass
+            self._stop.wait(self._interval)
+
+    def __enter__(self) -> "RssSampler":
+        self._thread = threading.Thread(target=self._sample_loop, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=10)
+        return False
+
+
+def compose_results(out: dict, stale_anchors: list, model_provenance: dict,
+                    store_params: dict, session_id: str,
+                    repeats: dict | None = None) -> dict:
+    """Assemble the written results.json (C3/P1 provenance + P2 blocks).
+
+    staleAnchors is ALWAYS present, empty list included; the repeat block is
+    added only in base mode so the single-run artifact shape is unchanged."""
+    composed = dict(out)
+    composed["sessionId"] = session_id
+    composed["staleAnchors"] = list(stale_anchors)
+    composed.update(model_provenance)
+    composed["copyPath"] = store_params.get("copyPath")
+    composed["copySnapshotSha256"] = store_params.get("copySnapshotSha256")
+    composed["corpusSnapshotSha256"] = store_params.get("corpusSnapshotSha256")
+    composed["excludedProjects"] = store_params.get("excludedProjects", [])
+    composed["resolvedBuckets"] = store_params.get("resolvedBuckets", [])
+    if repeats is not None:
+        composed["repeats"] = repeats
+    return composed
+
+
+def run_once(entries: list[dict], harness_fn, scratch_data_root, binary: str,
+             session_id: str) -> dict:
+    """One paired eval against one scratch data root (fresh scratch server)."""
+    from retrieval_tuning.server import start_server  # noqa: PLC0415 — needs scripts/src
+    with start_server(scratch_data_root, binary=binary) as server:
+        print(f"scratch server on port {server.port} (never 7721)", flush=True)
+        return run_eval(entries, harness_fn, build_airaccoon_fn(server, session_id))
 
 
 def _score_side(expected_hash: str, outcome: dict) -> dict:
@@ -423,12 +577,34 @@ def check_anchors_resolve(entries: list[dict], store_dir: Path) -> list:
         handle.close()
 
 
+def _checked_scratch_check(db_path: Path, store_params: dict, label: str = ""):
+    """scratch_copy_check with warn/fail printing; None means the run must stop."""
+    prov, failures, warnings = scratch_copy_check(
+        db_path, store_params.get("copySnapshotSha256"),
+        (store_params.get("counts") or {}).get("copyEntries"))
+    prefix = f"{label}: " if label else ""
+    for warning in warnings:
+        print(f"WARNING: {prefix}{warning}", flush=True)
+    if failures:
+        for failure in failures:
+            print(f"FAIL: {prefix}{failure}")
+        return None
+    return prov
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus", required=True)
     parser.add_argument("--store-dir", required=True)
-    parser.add_argument("--scratch-data-root", required=True,
-                        help="data-root seeded from a bank copy; a scratch server serves it (M2)")
+    parser.add_argument("--scratch-data-root", default=None,
+                        help="data-root seeded from a bank copy; a scratch server serves it "
+                             "(M2, single run)")
+    parser.add_argument("--scratch-base", default=None,
+                        help="quiesced base bank DB; every repeat starts from a FRESH copy")
+    parser.add_argument("--scratch-root", default=None,
+                        help="parent directory for per-repeat scratch data roots")
+    parser.add_argument("--repeats", type=int, default=1,
+                        help="N independent runs, each from a fresh copy of --scratch-base")
     parser.add_argument("--binary", default="ai-raccoon")
     parser.add_argument("--out", required=True, help="results.json target")
     parser.add_argument("--limit-queries", type=int, default=None)
@@ -436,9 +612,22 @@ def main(argv: list[str] | None = None) -> int:
                         help="reuse cached HF weights; fail instead of downloading")
     args = parser.parse_args(argv)
 
+    if args.repeats < 1:
+        parser.error("--repeats must be >= 1")
+    base_mode = args.scratch_base is not None or args.scratch_root is not None
+    if base_mode and args.scratch_data_root:
+        parser.error("--scratch-data-root cannot be combined with "
+                     "--scratch-base/--scratch-root")
+    if base_mode and not (args.scratch_base and args.scratch_root):
+        parser.error("--scratch-base and --scratch-root are required together")
+    if args.repeats > 1 and not base_mode:
+        parser.error("--repeats > 1 requires --scratch-base and --scratch-root")
+    if not base_mode and not args.scratch_data_root:
+        parser.error("one scratch mode is required: --scratch-data-root, or "
+                     "--scratch-base + --scratch-root")
+
     _, repo = _self_paths()
     sys.path.insert(0, str(repo / "scripts" / "src"))
-    from retrieval_tuning.server import start_server  # noqa: PLC0415 — needs scripts/src
 
     entries = json.loads(Path(args.corpus).read_text())
     if isinstance(entries, dict):  # header-shaped corpus: header + queries
@@ -458,21 +647,22 @@ def main(argv: list[str] | None = None) -> int:
     except (ValueError, ImportError) as exc:
         print(f"FAIL: model provenance: {exc}")
         return 1
-    scratch_prov, scratch_failures, scratch_warnings = scratch_copy_check(
-        Path(args.scratch_data_root) / "memory.db",
-        store_params.get("copySnapshotSha256"),
-        (store_params.get("counts") or {}).get("copyEntries"))
-    for warning in scratch_warnings:
-        print(f"WARNING: {warning}", flush=True)
-    if scratch_failures:
-        for failure in scratch_failures:
-            print(f"FAIL: {failure}")
-        return 1
-    print(f"model: revision={model_provenance['modelRevision'][:12]}... "
-          f"bytes={model_provenance['modelBytes']} | scratch copy "
-          f"sha={scratch_prov['scratchSnapshotSha256'][:12]}... "
-          f"rows={scratch_prov['scratchRows']} | copy path "
-          f"{store_params.get('copyPath')}", flush=True)
+
+    if not base_mode:
+        scratch_prov = _checked_scratch_check(
+            Path(args.scratch_data_root) / "memory.db", store_params)
+        if scratch_prov is None:
+            return 1
+        print(f"model: revision={model_provenance['modelRevision'][:12]}... "
+              f"bytes={model_provenance['modelBytes']} | scratch copy "
+              f"sha={scratch_prov['scratchSnapshotSha256'][:12]}... "
+              f"rows={scratch_prov['scratchRows']} | copy path "
+              f"{store_params.get('copyPath')}", flush=True)
+    else:
+        print(f"model: revision={model_provenance['modelRevision'][:12]}... "
+              f"bytes={model_provenance['modelBytes']} | scratch base "
+              f"{args.scratch_base} ({args.repeats} fresh copies) | copy path "
+              f"{store_params.get('copyPath')}", flush=True)
 
     scorable, null_anchors = partition_null_anchors(entries)
     stale_anchors = check_anchors_resolve(scorable, Path(args.store_dir))
@@ -488,33 +678,78 @@ def main(argv: list[str] | None = None) -> int:
     session_id = f"llamaindex-harness-{uuid.uuid4().hex[:12]}"
 
     harness_fn = build_harness_fn(Path(args.store_dir), offline=args.offline)
+    repeats_block = None
+    out = None
     try:
-        with start_server(args.scratch_data_root, binary=args.binary) as server:
-            print(f"scratch server on port {server.port} (never 7721)", flush=True)
-            out = run_eval(scorable, harness_fn,
-                           build_airaccoon_fn(server, session_id))
+        if not base_mode:
+            out = run_once(scorable, harness_fn, args.scratch_data_root,
+                           args.binary, session_id)
+            failures = eval_gate_failures(out)
+            if failures:
+                for failure in failures:
+                    print(f"FAIL: {failure}")
+                return 1
+            Path(args.out).write_text(json.dumps(compose_results(
+                out, stale_anchors, model_provenance, store_params, session_id),
+                indent=2))
+        else:
+            base = Path(args.scratch_base)
+            runs: list[dict] = []
+            run_meta: list[dict] = []
+            for i in range(1, args.repeats + 1):
+                data_root = Path(args.scratch_root) / f"repeat-{i}"
+                scratch_db = fresh_scratch_copy(base, data_root)
+                scratch_prov = _checked_scratch_check(scratch_db, store_params,
+                                                      label=f"repeat {i}")
+                if scratch_prov is None:
+                    return 1
+                before = scratch_row_stability(scratch_db)
+                with RssSampler() as sampler:
+                    out_i = run_once(scorable, harness_fn, data_root,
+                                     args.binary, session_id)
+                after = scratch_row_stability(scratch_db)
+                failures = eval_gate_failures(out_i)
+                if failures:
+                    for failure in failures:
+                        print(f"FAIL: repeat {i}: {failure}")
+                    return 1
+                if before != after:
+                    print(f"FAIL: repeat {i} row stability changed: {before} -> {after} "
+                          "(the bank leg wrote rows through the eval)")
+                    return 1
+                runs.append(out_i)
+                run_meta.append({
+                    "repeat": i, "scratchDataRoot": str(data_root),
+                    "scratchSnapshotSha256": scratch_prov["scratchSnapshotSha256"],
+                    "scratchRows": scratch_prov["scratchRows"],
+                    "rowStability": before, "peakRssMb": sampler.peak})
+                repeats_block = summarize_repeats(runs)
+                repeats_block.update({
+                    "modelRevision": model_provenance["modelRevision"],
+                    "modelBytes": model_provenance["modelBytes"],
+                    "scratchBase": str(base), "scratchRoot": str(args.scratch_root),
+                    "runs": list(run_meta)})
+                # Checkpoint after every repeat: a long campaign keeps its runs.
+                Path(args.out).write_text(json.dumps(compose_results(
+                    runs[0], stale_anchors, model_provenance, store_params,
+                    session_id, repeats=repeats_block), indent=2))
+            out = runs[0]
     finally:
         harness_fn.close()  # type: ignore[attr-defined]
 
-    failures = eval_gate_failures(out)
-    if failures:
-        for failure in failures:
-            print(f"FAIL: {failure}")
-        return 1
-    out["sessionId"] = session_id
-    out["staleAnchors"] = stale_anchors
-    out.update(model_provenance)  # C3: frozen weights identity in the golden
-    out["copyPath"] = store_params.get("copyPath")
-    out["copySnapshotSha256"] = store_params.get("copySnapshotSha256")
-    out["corpusSnapshotSha256"] = store_params.get("corpusSnapshotSha256")
-    out["excludedProjects"] = store_params.get("excludedProjects", [])
-    out["resolvedBuckets"] = store_params.get("resolvedBuckets", [])
-    Path(args.out).write_text(json.dumps(out, indent=2))
     s = out["summary"]
-    print(f"eval: n={s['n']} paired={s['n_paired']} stale={len(stale_anchors)} "
+    repeat_note = f" repeats={repeats_block['n']}" if repeats_block else ""
+    print(f"eval: n={s['n']} paired={s['n_paired']} stale={len(stale_anchors)}"
+          f"{repeat_note} "
           f"harness hit-rate={s['harness']['hit_rate']:.3f} f1={s['harness']['mean_f1']:.3f} | "
           f"ai-raccoon hit-rate={s['airaccoon']['hit_rate']:.3f} f1={s['airaccoon']['mean_f1']:.3f} | "
           f"mcc={s['mcc']} cont={s['contingency']}")
+    if repeats_block is not None:
+        unstable = repeats_block["unstable"]
+        if unstable["harness"] or unstable["airaccoon"]:
+            print(f"FAIL: unstable served sets across repeats: "
+                  f"harness={unstable['harness']} airaccoon={unstable['airaccoon']}")
+            return 1
     return 0
 
 

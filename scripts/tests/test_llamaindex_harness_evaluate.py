@@ -4,7 +4,9 @@ transport-failure pairwise exclusion, corpus-contract fail-loud, N x 2 shape."""
 import json
 import math
 import os
+import sqlite3
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -312,11 +314,15 @@ def test_anchor_verdict_refuse_warn_clean():
 
 
 def _run_main_with_fakes(monkeypatch, tmp_path, *, entries, stale,
-                         harness_hashes=None, bank_hashes=None, extra_argv=()):
+                         harness_hashes=None, bank_hashes=None, extra_argv=(),
+                         harness_fn=None, scratch_base=None, scratch_root=None,
+                         start_server=None):
     """Patch main()'s heavy seams (provenance, scratch, server, retriever).
 
     Returns (argv, out_path); the caller calls evaluate.main(argv). Only the
-    write path and the anchor verdict are real — everything expensive is fake."""
+    write path and the anchor verdict are real — everything expensive is fake.
+    ``scratch_base`` selects base mode (--scratch-base/--scratch-root +
+    --repeats in extra_argv) instead of the single-run --scratch-data-root."""
     store = tmp_path / "store"
     store.mkdir()
     (store / "params.json").write_text(json.dumps({
@@ -355,17 +361,24 @@ def _run_main_with_fakes(monkeypatch, tmp_path, *, entries, stale,
         def __exit__(self, *exc):
             return False
 
-    monkeypatch.setattr(server_mod, "start_server", lambda *a, **k: _FakeServer())
+    if start_server is None:
+        start_server = lambda *a, **k: _FakeServer()  # noqa: E731
+    monkeypatch.setattr(server_mod, "start_server", start_server)
     monkeypatch.setattr(
         evaluate, "build_airaccoon_fn",
         lambda server, session_id: (lambda e: {
             "hashes": list(bank_hashes or []), "error": None}))
-    harness_fn = lambda e: {"hashes": list(harness_hashes or []), "error": None}
-    harness_fn.close = lambda: None
+    if harness_fn is None:
+        harness_fn = lambda e: {"hashes": list(harness_hashes or []), "error": None}
+        harness_fn.close = lambda: None
     monkeypatch.setattr(evaluate, "build_harness_fn",
                         lambda store_dir, offline=False: harness_fn)
-    argv = ["--corpus", str(corpus), "--store-dir", str(store),
-            "--scratch-data-root", str(scratch), "--out", str(out), *extra_argv]
+    argv = ["--corpus", str(corpus), "--store-dir", str(store), "--out", str(out)]
+    if scratch_base is not None:
+        argv += ["--scratch-base", str(scratch_base), "--scratch-root", str(scratch_root)]
+    else:
+        argv += ["--scratch-data-root", str(scratch)]
+    argv += list(extra_argv)
     return argv, out
 
 
@@ -529,3 +542,210 @@ def test_leg_diagnostics_use_candidate_window_not_top8(monkeypatch, tmp_path):
         fn.close()
     assert out["fts_hit"] == 1
     assert out["vector_hit"] == 0
+
+
+# --- P2 AC1: repeat-run spread + served-set stability (pure) ---
+
+def _repeat_out(harness_hit_rate, harness_f1, bank_hit_rate, bank_f1, mcc,
+                served, bank_served=None):
+    rows = []
+    for qid, hashes in served.items():
+        bank_hashes = (bank_served or served).get(qid, hashes)
+        rows.append({"id": qid,
+                     "harness": {"hashes": list(hashes)},
+                     "airaccoon": {"hashes": list(bank_hashes)}})
+    return {"summary": {"harness": {"hit_rate": harness_hit_rate,
+                                     "mean_f1": harness_f1},
+                        "airaccoon": {"hit_rate": bank_hit_rate,
+                                      "mean_f1": bank_f1},
+                        "mcc": mcc},
+            "rows": rows}
+
+
+def test_summarize_repeats_min_max():
+    runs = [
+        _repeat_out(0.60, 0.150, 0.80, 0.180, 0.50, {"A": ["h1"]}),
+        _repeat_out(0.68, 0.162, 0.81, 0.187, None, {"A": ["h1"]}),
+        _repeat_out(0.64, 0.155, 0.79, 0.181, 0.55, {"A": ["h1"]}),
+    ]
+    out = evaluate.summarize_repeats(runs)
+    assert out["n"] == 3
+    hit = out["metrics"]["harness_hit_rate"]
+    assert hit["mean"] == pytest.approx((0.60 + 0.68 + 0.64) / 3)
+    assert (hit["min"], hit["max"]) == (0.60, 0.68)
+    assert out["metrics"]["airaccoon_mean_f1"]["max"] == 0.187
+    # MCC null-through: the null run is counted, never coerced to zero
+    assert out["metrics"]["mcc"]["nullCount"] == 1
+    assert out["metrics"]["mcc"]["mean"] == pytest.approx((0.50 + 0.55) / 2)
+    assert out["metrics"]["mcc"]["min"] == 0.50
+    assert out["metrics"]["mcc"]["max"] == 0.55
+    assert out["unstable"] == {"harness": [], "airaccoon": []}
+
+
+def test_summarize_repeats_single_repeat_is_degenerate_but_valid():
+    run = _repeat_out(0.60, 0.150, 0.80, 0.180, None, {"A": ["h1"]})
+    out = evaluate.summarize_repeats([run])
+    assert out["n"] == 1
+    assert out["metrics"]["harness_hit_rate"] == {"mean": 0.60, "min": 0.60, "max": 0.60}
+    assert out["metrics"]["mcc"] == {"mean": None, "min": None, "max": None,
+                                     "nullCount": 1}
+    assert out["unstable"] == {"harness": [], "airaccoon": []}
+
+
+def test_summarize_repeats_reports_unstable_served_sets():
+    # A served SET that differs across repeats is jitter the golden must not
+    # tolerate; order-only differences are stable; a row absent from a run is
+    # unstable on that leg (C is only in run 2).
+    runs = [
+        _repeat_out(0.6, 0.1, 0.6, 0.1, 0.5, {"A": ["h1"], "B": ["h2"]}),
+        _repeat_out(0.6, 0.1, 0.6, 0.1, 0.5,
+                    {"A": ["h1"], "B": ["h2", "hX"], "C": ["h3"]},
+                    bank_served={"A": ["h1"], "B": ["h2"]}),
+        _repeat_out(0.6, 0.1, 0.6, 0.1, 0.5, {"B": ["h2"], "A": ["h1"]}),
+    ]
+    out = evaluate.summarize_repeats(runs)
+    # harness: B's set grew in run 2, C is missing from runs 1/3; A stable
+    # despite run 3 listing B before A (set comparison, order-insensitive).
+    assert out["unstable"]["harness"] == ["B", "C"]
+    # bank: B held {h2} everywhere; C still missing from runs 1/3.
+    assert out["unstable"]["airaccoon"] == ["C"]
+
+
+def test_fresh_scratch_copy_is_fresh_per_repeat(tmp_path):
+    # Fresh copy per repeat: each run starts from the quiesced base bytes even
+    # after a prior repeat mutated its own scratch, and the base is never
+    # written through (fresh-copy semantics the repeats bar rests on).
+    base = tmp_path / "base.db"
+    base.write_bytes(b"BASE")
+    dest = evaluate.fresh_scratch_copy(base, tmp_path / "root")
+    assert dest == tmp_path / "root" / "memory.db"
+    assert dest.read_bytes() == b"BASE"
+    dest.write_bytes(b"MUTATED")
+    again = evaluate.fresh_scratch_copy(base, tmp_path / "root")
+    assert again.read_bytes() == b"BASE"
+    assert base.read_bytes() == b"BASE"
+
+
+def test_rss_sampler_keeps_tree_peak():
+    # Per-repeat peak RSS: the sampler keeps the max, and a stop ends the thread.
+    values = iter([100, 300, 200] * 200)
+    sampler = evaluate.RssSampler(rss_fn=lambda: next(values), interval=0.01)
+    with sampler:
+        time.sleep(0.08)
+    assert sampler.peak == 300
+
+
+# --- P2 AC1 main wiring: --repeats from a fresh copy of the quiesced base ---
+
+def _base_db(tmp_path, rows=1):
+    base = tmp_path / "base.db"
+    conn = sqlite3.connect(base)
+    conn.execute("CREATE TABLE entries (id INTEGER PRIMARY KEY, created_at TEXT, "
+                 "updated_at TEXT)")
+    for _ in range(rows):
+        conn.execute("INSERT INTO entries (created_at, updated_at) "
+                     "VALUES ('2026-01-01', '2026-01-01')")
+    conn.commit()
+    conn.close()
+    return base
+
+
+class _FakeRepeatServer:
+    port = 50002
+    client = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_main_repeats_mode_requires_base_and_root():
+    # Mode contract: N>1 repeats need --scratch-base + --scratch-root; the
+    # single-run --scratch-data-root cannot silently double as a repeat base.
+    common = ["--corpus", "c.json", "--store-dir", "s", "--out", "o.json"]
+    with pytest.raises(SystemExit):
+        evaluate.main(common + ["--repeats", "3"])
+    with pytest.raises(SystemExit):
+        evaluate.main(common + ["--repeats", "2", "--scratch-base", "b.db"])
+    with pytest.raises(SystemExit):
+        evaluate.main(common + ["--repeats", "2", "--scratch-data-root", "scratch",
+                                "--scratch-base", "b.db", "--scratch-root", "r"])
+
+
+def test_main_repeats_fresh_copy_per_repeat_and_block(monkeypatch, tmp_path, capsys):
+    base = _base_db(tmp_path)
+    roots, seen_rows = [], []
+
+    def fake_start(data_root, binary="ai-raccoon"):
+        roots.append(Path(data_root))
+        conn = sqlite3.connect(Path(data_root) / "memory.db")
+        seen_rows.append(conn.execute("SELECT count(*) FROM entries").fetchone()[0])
+        conn.close()
+        return _FakeRepeatServer()
+
+    argv, out = _run_main_with_fakes(
+        monkeypatch, tmp_path, entries=[_entry(1)], stale=[],
+        harness_hashes=["hash001"], bank_hashes=["hash001"],
+        scratch_base=base, scratch_root=tmp_path / "repeats",
+        start_server=fake_start, extra_argv=["--repeats", "3"])
+    assert evaluate.main(argv) == 0
+    assert len(roots) == 3 and len(set(roots)) == 3  # one fresh data root per repeat
+    assert seen_rows == [1, 1, 1]  # every repeat started from the base bytes
+    data = json.loads(out.read_text())
+    rep = data["repeats"]
+    assert rep["n"] == 3
+    assert rep["modelRevision"] == "rev-cb950dc8" and rep["modelBytes"] == 5
+    assert rep["unstable"] == {"harness": [], "airaccoon": []}
+    assert rep["metrics"]["harness_hit_rate"] == {"mean": 1.0, "min": 1.0, "max": 1.0}
+    assert rep["metrics"]["airaccoon_hit_rate"]["mean"] == 1.0
+    assert len(rep["runs"]) == 3
+    for meta in rep["runs"]:
+        assert meta["peakRssMb"] >= 0
+        assert meta["rowStability"]["entries"] == 1
+    assert data["rows"] and data["staleAnchors"] == []
+
+
+def test_main_repeats_row_stability_violation_fails_loud(monkeypatch, tmp_path, capsys):
+    # C11 in the repeat loop: a bank leg that writes rows through the scratch is
+    # a mutating search universe — fail loud, never compare against it.
+    base = _base_db(tmp_path)
+
+    def mutating_start(data_root, binary="ai-raccoon"):
+        conn = sqlite3.connect(Path(data_root) / "memory.db")
+        conn.execute("INSERT INTO entries (created_at, updated_at) "
+                     "VALUES ('2026-02-02', '2026-02-02')")
+        conn.commit()
+        conn.close()
+        return _FakeRepeatServer()
+
+    argv, out = _run_main_with_fakes(
+        monkeypatch, tmp_path, entries=[_entry(1)], stale=[],
+        harness_hashes=["hash001"], bank_hashes=["hash001"],
+        scratch_base=base, scratch_root=tmp_path / "repeats",
+        start_server=mutating_start, extra_argv=["--repeats", "2"])
+    assert evaluate.main(argv) == 1
+    assert "stability" in capsys.readouterr().out.lower()
+
+
+def test_main_repeats_unstable_served_sets_fail_loud(monkeypatch, tmp_path, capsys):
+    # Jitter across fresh-copy repeats is exactly what the repeat diff exists to
+    # catch: report the ids, checkpoint the artifact, and exit nonzero.
+    base = _base_db(tmp_path)
+    calls = {"n": 0}
+
+    def drift_fn(entry):
+        calls["n"] += 1
+        hashes = ["hash001"] if calls["n"] == 1 else ["hash001", "extra"]
+        return {"hashes": hashes, "error": None}
+
+    drift_fn.close = lambda: None
+    argv, out = _run_main_with_fakes(
+        monkeypatch, tmp_path, entries=[_entry(1)], stale=[],
+        harness_fn=drift_fn, scratch_base=base, scratch_root=tmp_path / "repeats",
+        start_server=lambda *a, **k: _FakeRepeatServer(),
+        extra_argv=["--repeats", "2"])
+    assert evaluate.main(argv) == 1
+    assert "unstable" in capsys.readouterr().out.lower()
+    assert json.loads(out.read_text())["repeats"]["unstable"]["harness"] == ["E001"]
