@@ -642,7 +642,8 @@
     },
     "queryCount": 100,
     "seed": 42,
-    "snapshotSha256": "e0434a7214ac4caf1dbbef56147f582515bd0f5ebda665ad8cb06687296a55f6"
+    "snapshotSha256": "e0434a7214ac4caf1dbbef56147f582515bd0f5ebda665ad8cb06687296a55f6",
+    "topicDerivation": "markup-aware-v1"
   },
   "queries": [
     {
@@ -655,7 +656,7 @@
       "holdout": false,
       "id": "C001",
       "projectId": "ai-badger",
-      "query": "What do our notes say about This matters because the repo had already shipped the whole memory subsystem?",
+      "query": "What do our notes say about This matters because the repo had already shipped the whole memory subsystem: 0.78.0 (#302) added?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "project"
@@ -670,7 +671,7 @@
       "holdout": false,
       "id": "C002",
       "projectId": "ai-badger",
-      "query": "How is Closed 2026-08-30 handled?",
+      "query": "How is Closed 2026-08-30: hermes-isolation-gap and incident-guard both FINISHED handled?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "custom"
@@ -685,7 +686,7 @@
       "holdout": false,
       "id": "C003",
       "projectId": "ai-badger",
-      "query": "Where is - pytest alone, isolated and clean documented?",
+      "query": "Where is pytest alone, isolated and clean: 608.44s, and separately 814.99s and 1337.90s and 1202.29s under documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "project"
@@ -700,7 +701,7 @@
       "holdout": false,
       "id": "C004",
       "projectId": "ai-badger",
-      "query": "What do our notes say about pi model-lane resolution hazard (found 2026-09-02, delegation d-324?",
+      "query": "What do our notes say about ai-badger does NOT pin the provider; pi's resolveCliModel owns alias→provider and its FUZZY path is?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "custom"
@@ -730,7 +731,7 @@
       "holdout": false,
       "id": "C006",
       "projectId": "ai-badger",
-      "query": "Where is Task seed queued (owner e documented?",
+      "query": "Where is Requirements: send skill (target = session id / project id / broadcast-to-all-except-sender; sender documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "custom"
@@ -745,7 +746,7 @@
       "holdout": false,
       "id": "C007",
       "projectId": "ai-badger",
-      "query": "What do our notes say about Owner confirmed ALL FOUR D2 design rulings \"as recommended\" (2026-09-01, f?",
+      "query": "What do our notes say about Owner confirmed ALL FOUR D2 design rulings \"as recommended\" (2026-09-01, f: marker): (1) dedicated?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "custom"
@@ -775,7 +776,7 @@
       "holdout": false,
       "id": "C009",
       "projectId": "ai-badger",
-      "query": "Where is Managed by ai-badger documented?",
+      "query": "Where is Source of truth: .ai-badger/CLAUDE.md documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "project"
@@ -805,7 +806,7 @@
       "holdout": false,
       "id": "C011",
       "projectId": "ai-badger",
-      "query": "How is Managed by ai-badger handled?",
+      "query": "How is Source of truth: .ai-badger/HERMES.md handled?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "project"
@@ -820,7 +821,7 @@
       "holdout": false,
       "id": "C012",
       "projectId": "ai-badger",
-      "query": "Where is 7. Open a PR; CI runs the same gates. 8. **Merge. The tag is automatic** — since 0.69.2 a workflow t documented?",
+      "query": "Where is Open a PR; CI runs the same gates documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "project"
@@ -835,7 +836,7 @@
       "holdout": false,
       "id": "C013",
       "projectId": "ai-badger",
-      "query": "What do our notes say about `main`, and the whole history weekly (`.github/workflows/secret-scan.yml?",
+      "query": "What do our notes say about main, and the whole history weekly (.github/workflows/secret-scan.yml?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "project"
@@ -865,7 +866,7 @@
       "holdout": false,
       "id": "C015",
       "projectId": "ai-badger",
-      "query": "Where is **Costs.** Three skills to maintain instead of two documented?",
+      "query": "Where is Three skills to maintain instead of two documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-badger",
       "targetScope": "project"
@@ -880,7 +881,7 @@
       "holdout": false,
       "id": "C016",
       "projectId": "ai-raccoon",
-      "query": "What do our notes say about ai-badger project ops (learned 2026-09-03 in ai-raccoon?",
+      "query": "What do our notes say about Also: fast-lane CI exit 139 SIGSEGV after 2303/2303 green with 0 failures is the known transient?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -895,7 +896,7 @@
       "holdout": false,
       "id": "C017",
       "projectId": "ai-raccoon",
-      "query": "How is ], \"intent handled?",
+      "query": "How is intent Close the browser and end the browsing session. origin manual handled?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -925,7 +926,7 @@
       "holdout": false,
       "id": "C019",
       "projectId": "ai-raccoon",
-      "query": "What do our notes say about DISPATCH` — with no shared contract test holding them together?",
+      "query": "What do our notes say about DISPATCH — with no shared contract test holding them together?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "shared"
@@ -940,7 +941,7 @@
       "holdout": false,
       "id": "C020",
       "projectId": "ai-raccoon",
-      "query": "How is --- description handled?",
+      "query": "How is Source of truth: .ai-badger/AGENTS.override.md handled?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -955,7 +956,7 @@
       "holdout": false,
       "id": "C021",
       "projectId": "ai-raccoon",
-      "query": "Where is ``` BenchmarkDotNet v0.15.8, macOS Tahoe 26.6.2 (25G83) [Darwin 25.6.0] Apple M4, 1 CPU, 10 logical documented?",
+      "query": "Where is BenchmarkDotNet v0.15.8 macOS Tahoe 25G83 Darwin Apple M4 CPU logical and documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -970,7 +971,7 @@
       "holdout": false,
       "id": "C022",
       "projectId": "ai-raccoon",
-      "query": "What do our notes say about Managed by ai-badger?",
+      "query": "What do our notes say about Source of truth: .ai-badger/CLAUDE.md?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -981,11 +982,11 @@
       "contentMarker": null,
       "expectedHash": "7919c74edd680689a72d99cc9cb5fa6e3d03e264edd2731493423aac62e9a08a",
       "expectedSource": "/Users/arasz/RiderProjects/ai-raccoon/HERMES.md",
-      "frame": 1,
+      "frame": 2,
       "holdout": false,
       "id": "C023",
       "projectId": "ai-raccoon",
-      "query": "How is Managed by ai-badger (HERMES.md) handled?",
+      "query": "Where is Source of truth: .ai-badger/HERMES.md documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1000,7 +1001,7 @@
       "holdout": false,
       "id": "C024",
       "projectId": "ai-raccoon",
-      "query": "Where is AiRaccoon documented?",
+      "query": "Where is Built on .NET 10 with local-first SQLite, hybrid FTS5+vec0 search, workspace sandboxes, a shared documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1015,7 +1016,7 @@
       "holdout": false,
       "id": "C025",
       "projectId": "ai-raccoon",
-      "query": "What do our notes say about Security policy ## Reporting a vulnerability **Do not open a public issue for a security problem?",
+      "query": "What do our notes say about Security policy Reporting a vulnerability Do not open a public issue for a security problem?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1030,7 +1031,7 @@
       "holdout": false,
       "id": "C026",
       "projectId": "ai-raccoon",
-      "query": "How is | lmstudio:text-embedding-qwen3-embedding-0.6b | 1024 | 0.326 | 0.378 | 0.854 | 0.606 | | handled?",
+      "query": "How is lmstudio:text-embedding-qwen3-embedding-0.6b lmstudio:text-embedding-embeddinggemma-300m What each handled?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1045,7 +1046,7 @@
       "holdout": false,
       "id": "C027",
       "projectId": "ai-raccoon",
-      "query": "Where is 0001 - FluentValidation for domain request validation Date documented?",
+      "query": "Where is 0001 - FluentValidation for domain request validation Date: 2026-08-03 Status: Accepted Context documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1060,7 +1061,7 @@
       "holdout": false,
       "id": "C028",
       "projectId": "ai-raccoon",
-      "query": "What do our notes say about > row deliberately did not?",
+      "query": "What do our notes say about row deliberately did not?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1075,7 +1076,7 @@
       "holdout": false,
       "id": "C029",
       "projectId": "ai-raccoon",
-      "query": "How is (e.g. `decision`). `memory_write` gains optional `sourceFile` and `section` parameters so the ingest handled?",
+      "query": "How is Legacy banks gain both columns on open (schema migration in MemorySchema.MigrateAsync handled?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1090,7 +1091,7 @@
       "holdout": false,
       "id": "C030",
       "projectId": "ai-raccoon",
-      "query": "Where is - Ingest provenance (`## Source:` lines) and code-fence content are not headings and are ignored documented?",
+      "query": "Where is Ingest provenance (## Source: lines) and code-fence content are not headings and are ignored, so documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1120,7 +1121,7 @@
       "holdout": false,
       "id": "C032",
       "projectId": "ai-raccoon",
-      "query": "How is - **Recall@5-based fusion gate handled?",
+      "query": "How is Recall@5-based fusion gate: rejected as the hard gate — it flags the hybrid's top-5 diversity handled?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1135,7 +1136,7 @@
       "holdout": false,
       "id": "C033",
       "projectId": "ai-raccoon",
-      "query": "Where is content from different paths dedupes to one row by construction documented?",
+      "query": "Where is content from different paths dedupes to one row by construction; whitespace-normalized value twins documented?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1150,7 +1151,7 @@
       "holdout": false,
       "id": "C034",
       "projectId": "ai-raccoon",
-      "query": "What do our notes say about probe. That capability is not needed today (see Future evolution above). ### Shell out to `lsof` / ?",
+      "query": "What do our notes say about That capability is not needed today (see Future evolution above?",
       "searchLimit": 8,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
@@ -1165,7 +1166,7 @@
       "holdout": false,
       "id": "C035",
       "projectId": "ai-sheepdog",
-      "query": "What do our notes say about ai-sheepdog bootstrap (2026-08-29?",
+      "query": "What do our notes say about ai-sheepdog bootstrap (2026-08-29): .NET 10 CLI agent-harness skeleton shipped to public repo?",
       "searchLimit": 8,
       "targetProjectId": "ai-sheepdog",
       "targetScope": "project"
@@ -1180,7 +1181,7 @@
       "holdout": false,
       "id": "C036",
       "projectId": "arasz-home-page",
-      "query": "What do our notes say about - [Session 2026-07-26 Final?",
+      "query": "What do our notes say about Session 2026-07-26 Final: All Systems Healthy — 477 tests ✓ (362 FE + 115 BE), build successful?",
       "searchLimit": 8,
       "targetProjectId": "arasz-home-page",
       "targetScope": "project"
@@ -1195,7 +1196,7 @@
       "holdout": false,
       "id": "C037",
       "projectId": "arasz-home-page",
-      "query": "How is --- name handled?",
+      "query": "How is The site is feature-complete, fully tested, and ready for long-term maintenance mode handled?",
       "searchLimit": 8,
       "targetProjectId": "arasz-home-page",
       "targetScope": "project"
@@ -1210,7 +1211,7 @@
       "holdout": false,
       "id": "C038",
       "projectId": "arasz-home-page",
-      "query": "Where is - Linting documented?",
+      "query": "Where is Linting: All files pass Security: 0 vulnerabilities Infrastructure: Stable ✅ Managed identity + documented?",
       "searchLimit": 8,
       "targetProjectId": "arasz-home-page",
       "targetScope": "project"
@@ -1225,7 +1226,7 @@
       "holdout": false,
       "id": "C039",
       "projectId": "arasz-home-page",
-      "query": "What do our notes say about --- name?",
+      "query": "What do our notes say about name ai-badger-0-3-rescan description ai-badger framework updated from to with complete re-scaffold?",
       "searchLimit": 8,
       "targetProjectId": "arasz-home-page",
       "targetScope": "project"
@@ -1236,11 +1237,11 @@
       "contentMarker": null,
       "expectedHash": "d420480a49c2151f74faf76829ea09d2e4d6db7e001f9ffee32cbd3667a4760f",
       "expectedSource": "/Users/arasz/.claude/projects/-Users-arasz-RiderProjects-arasz-home-page/memory/ai-badger-tracker-plugin-path-bug.md",
-      "frame": 2,
+      "frame": 1,
       "holdout": false,
       "id": "C040",
       "projectId": "arasz-home-page",
-      "query": "Where is --- name documented?",
+      "query": "How is Two consequences: all tracking data (executed-tasks.json, token-usage.json) is written into the handled?",
       "searchLimit": 8,
       "targetProjectId": "arasz-home-page",
       "targetScope": "project"
@@ -1255,7 +1256,7 @@
       "holdout": false,
       "id": "C041",
       "projectId": "arasz-home-page",
-      "query": "Where is --- name (ai-raccoon-project-memory-setup.md) documented?",
+      "query": "Where is Ingest scope allowlist (CLI-only channel; the server refuses to read any path outside it documented?",
       "searchLimit": 8,
       "targetProjectId": "arasz-home-page",
       "targetScope": "project"
@@ -1270,7 +1271,7 @@
       "holdout": false,
       "id": "C042",
       "projectId": "arasz-home-page",
-      "query": "What do our notes say about --- name (arasz-home-page-ci-gotchas.md)?",
+      "query": "What do our notes say about They gate jobs via a job-level if:, evaluated before the environment resolves, so an?",
       "searchLimit": 8,
       "targetProjectId": "arasz-home-page",
       "targetScope": "project"
@@ -1285,7 +1286,7 @@
       "holdout": false,
       "id": "C043",
       "projectId": "deepseek-harness",
-      "query": "What do our notes say about - ESM everywhere (`\"type?",
+      "query": "What do our notes say about ESM everywhere (\"type\": \"module?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1300,7 +1301,7 @@
       "holdout": false,
       "id": "C044",
       "projectId": "deepseek-harness",
-      "query": "How is Running benchmarks Follow [Get started with the Python SDK](docs/user/guide/python-sdk.md) to handled?",
+      "query": "How is Running benchmarks Follow Get started with the Python SDK to install the SDK and run the handled?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1315,7 +1316,7 @@
       "holdout": false,
       "id": "C045",
       "projectId": "deepseek-harness",
-      "query": "Where is ``` workflow/ workflow capability + worker-thread provider + tool Consumer todo/ todo_write tool documented?",
+      "query": "Where is workflow workflow capability worker-thread provider tool Consumer todo todo write tool documented?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1330,7 +1331,7 @@
       "holdout": false,
       "id": "C046",
       "projectId": "deepseek-harness",
-      "query": "What do our notes say about - Write blog posts and how-to guides about DeepSeek Harness?",
+      "query": "What do our notes say about Write blog posts and how-to guides about DeepSeek Harness?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1345,7 +1346,7 @@
       "holdout": false,
       "id": "C047",
       "projectId": "deepseek-harness",
-      "query": "How is - 为生态系统作出贡献： - 创建令你感兴趣的插件，并分享给其他人： - 为你的 GitHub 项目添加 `dsh-plugin` 话题，让其他人更容易找到你的插件。 - 撰写有关 DeepSeek handled?",
+      "query": "How is 为生态系统作出贡献： 创建令你感兴趣的插件，并分享给其他人： 为你的 GitHub 项目添加 dsh-plugin 话题，让其他人更容易找到你的插件。 撰写有关 DeepSeek Harness handled?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1360,7 +1361,7 @@
       "holdout": false,
       "id": "C048",
       "projectId": "deepseek-harness",
-      "query": "Where is DeepSeek Harness English | [中文](README.zh.md) DeepSeek Harness (`dsh`) is an open-source agent documented?",
+      "query": "Where is It uses an architecture where everything is a plugin, and is powered by Cordis, whose design is documented?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1375,7 +1376,7 @@
       "holdout": false,
       "id": "C049",
       "projectId": "deepseek-harness",
-      "query": "What do our notes say about - 为你的插件仓库添加 [`dsh-plugin`](https://github.com/topics/dsh-plugin) 话题，便于被发现。 - 欢迎加入 DeepSeek Harness 企?",
+      "query": "What do our notes say about 为你的插件仓库添加 dsh-plugin 话题，便于被发现。 欢迎加入 DeepSeek Harness 企微群：扫码添加企微小助手并填写入群问卷，完成后小助手会邀请你入群。 企微小助手 入群问卷?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1390,7 +1391,7 @@
       "holdout": false,
       "id": "C050",
       "projectId": "deepseek-harness",
-      "query": "How is | [`@anthropic-ai/claude-agent-sdk-darwin-x64`](https://www.npmjs.com/package/@anthropic-ai/claude-a handled?",
+      "query": "How is anthropic-ai/claude-agent-sdk-darwin-x64 anthropic-ai/claude-agent-sdk-linux-arm64 handled?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1405,7 +1406,7 @@
       "holdout": false,
       "id": "C051",
       "projectId": "deepseek-harness",
-      "query": "Where is `@deepseek-ai/dsh` English | [中文](README.zh.md) The `dsh` command is the product launcher for documented?",
+      "query": "Where is src/args.ts owns the command grammar, and src/bin.ts loads only the selected runner documented?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1420,7 +1421,7 @@
       "holdout": false,
       "id": "C052",
       "projectId": "deepseek-harness",
-      "query": "What do our notes say about | `dsh --profile headless \"job\"` | 运行一个全新的持久化会话，打印最终答案并退出。 | | `dsh web` | `--profile web` 的别名。 | |?",
+      "query": "What do our notes say about dsh --profile headless \"job\" --profile web 的别名。 dsh plugin --profile 运行命令时所在的目录将作为默认 workspace?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1435,7 +1436,7 @@
       "holdout": false,
       "id": "C053",
       "projectId": "deepseek-harness",
-      "query": "How is ```mermaid plugin_dsh_base_tool_result_pruner[\"tool-result-pruner<br/>@deepseek-ai/dsh-compaction-to handled?",
+      "query": "How is plugindshbasetoolresult pruner tool-result-prunerdeepseek-ai dsh-compaction-tool-result-pruner cfg handled?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1450,7 +1451,7 @@
       "holdout": false,
       "id": "C054",
       "projectId": "deepseek-harness",
-      "query": "Where is - guessed access to `window`, `document`, `process`, `Buffer`, `fetch`, or native timers documented?",
+      "query": "Where is guessed access to window, document, process, Buffer, fetch, or native timers documented?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1480,7 +1481,7 @@
       "holdout": false,
       "id": "C056",
       "projectId": "deepseek-harness",
-      "query": "How is \"@deepseek-ai/dsh-settings handled?",
+      "query": "How is deepseek-ai dsh-settings workspace deepseek-ai dsh-subagent workspace deepseek-ai dsh-system-prompt handled?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1495,7 +1496,7 @@
       "holdout": false,
       "id": "C057",
       "projectId": "deepseek-harness",
-      "query": "Where is Install external plugin bundles through `dsh plugin --profile <name> add <package-or-git-spec> documented?",
+      "query": "Where is Install external plugin bundles through dsh plugin --profile add  documented?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1510,7 +1511,7 @@
       "holdout": false,
       "id": "C058",
       "projectId": "deepseek-harness",
-      "query": "What do our notes say about _USE_ENV_PROXY=1`。安装形式会直接启动构建后的 `apps/cli/lib/bin.js`，不会重新构建仓库。?",
+      "query": "What do our notes say about USEENV PROXY apps cli lib?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1525,7 +1526,7 @@
       "holdout": false,
       "id": "C059",
       "projectId": "deepseek-harness",
-      "query": "How is { \"references handled?",
+      "query": "How is references path vendor cordis path vendor loader path vendor include path handled?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1540,7 +1541,7 @@
       "holdout": false,
       "id": "C060",
       "projectId": "deepseek-harness",
-      "query": "Where is { \"name documented?",
+      "query": "Where is name deepseek-ai dsh-web-frontend description Web application entry vite build over the documented?",
       "searchLimit": 8,
       "targetProjectId": "deepseek-harness",
       "targetScope": "project"
@@ -1585,7 +1586,7 @@
       "holdout": false,
       "id": "C063",
       "projectId": "hermes-default",
-      "query": "What do our notes say about jsaa task jsaa-offer-apply-button-state-polling (PR #998?",
+      "query": "What do our notes say about Application.id === offer.id (Application.Create) is the invariant that makes the offer-side probe?",
       "searchLimit": 8,
       "targetProjectId": "hermes-default",
       "targetScope": "project"
@@ -1615,7 +1616,7 @@
       "holdout": false,
       "id": "C065",
       "projectId": "hermes-default",
-      "query": "Where is CI convention (publish.yml documented?",
+      "query": "Where is CI convention (publish.yml): the ubuntu-slim runner has NO preinstalled dotnet on PATH (unlike documented?",
       "searchLimit": 8,
       "targetProjectId": "hermes-default",
       "targetScope": "shared"
@@ -1630,7 +1631,7 @@
       "holdout": false,
       "id": "C066",
       "projectId": "hermes-default",
-      "query": "What do our notes say about Self-scaffold of the ai-badger repo (scaffold.py --config .ai-badger/config.json --target?",
+      "query": "What do our notes say about Self-scaffold of the ai-badger repo (scaffold.py --config .ai-badger/config.json --target ?",
       "searchLimit": 8,
       "targetProjectId": "hermes-default",
       "targetScope": "project"
@@ -1645,7 +1646,7 @@
       "holdout": false,
       "id": "C067",
       "projectId": "hermes-default",
-      "query": "How is Bun 1.4 + happy-dom test traps (jsaa, PR #999 handled?",
+      "query": "How is Bun 1.4 + happy-dom test traps (jsaa, PR #999): a full-file bun test run can CRASH bun itself (3GB handled?",
       "searchLimit": 8,
       "targetProjectId": "hermes-default",
       "targetScope": "custom"
@@ -1660,7 +1661,7 @@
       "holdout": false,
       "id": "C068",
       "projectId": "hermes-default",
-      "query": "Where is Bun worktree install trap documented?",
+      "query": "Where is Bun worktree install trap: a re-created git worktree for this repo needs bun install run INSIDE documented?",
       "searchLimit": 8,
       "targetProjectId": "hermes-default",
       "targetScope": "project"
@@ -1675,7 +1676,7 @@
       "holdout": false,
       "id": "C069",
       "projectId": "hermes-default",
-      "query": "What do our notes say about ai-sheepdog project-scope review campaign (2026-08-29, complete?",
+      "query": "What do our notes say about ai-sheepdog project-scope review campaign (2026-08-29, complete): record at?",
       "searchLimit": 8,
       "targetProjectId": "hermes-default",
       "targetScope": "custom"
@@ -1690,7 +1691,7 @@
       "holdout": false,
       "id": "C070",
       "projectId": "hermes-default",
-      "query": "How is jsaa signals UX (2026-08-19, task stuck-signal, PR #908 handled?",
+      "query": "How is jsaa signals UX (2026-08-19, task stuck-signal, PR #908): ApplicationViewed/PostingClosed cards handled?",
       "searchLimit": 8,
       "targetProjectId": "hermes-default",
       "targetScope": "project"
@@ -1720,7 +1721,7 @@
       "holdout": false,
       "id": "C072",
       "projectId": "interview-tasks",
-      "query": "What do our notes say about { \"sdk\": { \"version\": \"9.0.0\", \"rollForward\": \"latestMinor\", \"allowPrerelease\": false } }?",
+      "query": "What do our notes say about sdk version rollForward latestMinor allowPrerelease?",
       "searchLimit": 8,
       "targetProjectId": "interview-tasks",
       "targetScope": "project"
@@ -1735,7 +1736,7 @@
       "holdout": false,
       "id": "C073",
       "projectId": "jsaa",
-      "query": "What do our notes say about jsaa prod incident 2026-09-01?",
+      "query": "What do our notes say about jsaa prod incident 2026-09-01: \"no cv template improvements\" after judge-pipeline deploy?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "custom"
@@ -1750,7 +1751,7 @@
       "holdout": false,
       "id": "C074",
       "projectId": "jsaa",
-      "query": "How is jsaa task jsaa-feedback-contract-telemetry-tier-fix (PR #1035) shipped 2026-09-01 handled?",
+      "query": "How is jsaa task jsaa-feedback-contract-telemetry-tier-fix (PR #1035) shipped 2026-09-01: (1) frontend handled?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "custom"
@@ -1765,7 +1766,7 @@
       "holdout": false,
       "id": "C075",
       "projectId": "jsaa",
-      "query": "Where is Two traps, both lived 2026-08-31 in job-search-ai-assistant documented?",
+      "query": "Where is Two traps, both lived 2026-08-31 in job-search-ai-assistant: (1) React 19 + TypeScript documented?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1780,7 +1781,7 @@
       "holdout": false,
       "id": "C076",
       "projectId": "jsaa",
-      "query": "What do our notes say about Task jsaa-english-only-llm-generation-translation (PR #1109, merged 7ed48da5?",
+      "query": "What do our notes say about Task jsaa-english-only-llm-generation-translation (PR #1109, merged 7ed48da5): FR-4.7 English-only?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1810,7 +1811,7 @@
       "holdout": false,
       "id": "C078",
       "projectId": "jsaa",
-      "query": "Where is Memory Index ## jsaa — production & pipeline - [Full project review, all waves documented?",
+      "query": "Where is Memory Index jsaa production pipeline Full project review all waves 2026-08-07 documented?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1825,7 +1826,7 @@
       "holdout": false,
       "id": "C079",
       "projectId": "jsaa",
-      "query": "What do our notes say about `hooks/awm_context.py?",
+      "query": "What do our notes say about Origin: it is now ai-badger's features/claude/skills/auto-wm?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1840,7 +1841,7 @@
       "holdout": false,
       "id": "C080",
       "projectId": "jsaa",
-      "query": "How is - Agents **do not push.** This is the part that is easy to miss handled?",
+      "query": "How is Agents do not push handled?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1870,7 +1871,7 @@
       "holdout": false,
       "id": "C082",
       "projectId": "jsaa",
-      "query": "What do our notes say about **How to apply:** Write braces from the start?",
+      "query": "What do our notes say about How to apply: Write braces from the start; new validators = FluentValidation nested Validator?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1885,7 +1886,7 @@
       "holdout": false,
       "id": "C083",
       "projectId": "jsaa",
-      "query": "How is **Why:** Nondeterministic list order leaks into API responses, UI rendering, and tests handled?",
+      "query": "How is Why: Nondeterministic list order leaks into API responses, UI rendering, and tests; the CvTemplate handled?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1900,7 +1901,7 @@
       "holdout": false,
       "id": "C084",
       "projectId": "jsaa",
-      "query": "Where is changed** — not a changelog of edits, but a record of *why the earlier version was wrong documented?",
+      "query": "Where is changed — not a changelog of edits, but a record of why the earlier version was wrong documented?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1915,7 +1916,7 @@
       "holdout": false,
       "id": "C085",
       "projectId": "jsaa",
-      "query": "What do our notes say about --- name (feedback-draft-pr-until-gate-green.md)?",
+      "query": "What do our notes say about Why: on 2026-07-29 PR #401 (documentation-refactor) was merged while a push was still running the?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1945,7 +1946,7 @@
       "holdout": false,
       "id": "C087",
       "projectId": "jsaa",
-      "query": "Where is **How to apply:** At session start, check ToolSearch for `mcp__plugin_github…` tools (exact prefix documented?",
+      "query": "Where is If registered, prefer them for PR/issue/review operations documented?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1960,7 +1961,7 @@
       "holdout": false,
       "id": "C088",
       "projectId": "jsaa",
-      "query": "What do our notes say about --- name (feedback-intent-lives-in-documents.md)?",
+      "query": "What do our notes say about A planning agent agreed and scoped its deletion?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1975,7 +1976,7 @@
       "holdout": false,
       "id": "C089",
       "projectId": "jsaa",
-      "query": "How is with its gate output pasted handled?",
+      "query": "How is with its gate output pasted; a 16-hour package is split into milestones, each dispatched separately handled?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -1990,7 +1991,7 @@
       "holdout": false,
       "id": "C090",
       "projectId": "jsaa",
-      "query": "Where is cost hours documented?",
+      "query": "Where is The discriminator, in order of cost: What fraction passes documented?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -2005,7 +2006,7 @@
       "holdout": false,
       "id": "C091",
       "projectId": "jsaa",
-      "query": "What do our notes say about --- name (feedback-merge-prs-yourself.md)?",
+      "query": "What do our notes say about name: merge-prs-yourself description: Rafał expects the agent to merge its own PRs once the gate is?",
       "searchLimit": 8,
       "targetProjectId": "jsaa",
       "targetScope": "project"
@@ -2020,7 +2021,7 @@
       "holdout": false,
       "id": "C092",
       "projectId": "pi-badger-integration",
-      "query": "What do our notes say about message-bus extension (pi-badger-integration?",
+      "query": "What do our notes say about message-bus extension (pi-badger-integration): three delegated subagents (architect d-518/d-519?",
       "searchLimit": 8,
       "targetProjectId": "pi-badger-integration",
       "targetScope": "custom"
@@ -2035,7 +2036,7 @@
       "holdout": false,
       "id": "C093",
       "projectId": "pi-badger-integration",
-      "query": "How is ai-badger test-suite lessons (task pbi-queue-admission-monitors-results-cache, 2026-09-02 handled?",
+      "query": "How is ai-badger test-suite lessons (task pbi-queue-admission-monitors-results-cache, 2026-09-02): (1) A handled?",
       "searchLimit": 8,
       "targetProjectId": "pi-badger-integration",
       "targetScope": "custom"
@@ -2050,7 +2051,7 @@
       "holdout": false,
       "id": "C094",
       "projectId": "pi-badger-integration",
-      "query": "Where is pi skill-collision caveat (2026-08-30 documented?",
+      "query": "Where is pi-badger-integration's settings entry was removed on 2026-08-30; a scaffold that runs WITHOUT documented?",
       "searchLimit": 8,
       "targetProjectId": "pi-badger-integration",
       "targetScope": "project"
@@ -2065,7 +2066,7 @@
       "holdout": false,
       "id": "C095",
       "projectId": "vue-kanban",
-      "query": "What do our notes say about → `.ai-badger/invariants/no-hardcoded-secrets.md` - **Run what you changed?",
+      "query": "What do our notes say about → .ai-badger/invariants/no-hardcoded-secrets.md Run what you changed; the pipeline runs the rest ?",
       "searchLimit": 8,
       "targetProjectId": "vue-kanban",
       "targetScope": "project"
@@ -2080,7 +2081,7 @@
       "holdout": false,
       "id": "C096",
       "projectId": "vue-kanban",
-      "query": "How is | Unit | Vitest 4 + @vue/test-utils (jsdom), v8 coverage | | E2E | Playwright (chromium) + axe-core handled?",
+      "query": "How is Vitest 4 + vue/test-utils (jsdom), v8 coverage Playwright (chromium) + axe-core WCAG 2.1 AA scans handled?",
       "searchLimit": 8,
       "targetProjectId": "vue-kanban",
       "targetScope": "project"
@@ -2095,7 +2096,7 @@
       "holdout": false,
       "id": "C097",
       "projectId": "vue-kanban",
-      "query": "Where is \":{\"line\":27,\"column\":20}},\"loc\":{\"start\":{\"line\":27,\"column\":30},\"end\":{\"line\":29,\"column\":1}},\"lin documented?",
+      "query": "Where is line column loc start line column end line column line name documented?",
       "searchLimit": 8,
       "targetProjectId": "vue-kanban",
       "targetScope": "project"
@@ -2125,7 +2126,7 @@
       "holdout": false,
       "id": "C099",
       "projectId": "vue-kanban",
-      "query": "How is { \"extends handled?",
+      "query": "How is extends tsconfig node24 tsconfig.json include compilerOptions module preserve moduleResolution handled?",
       "searchLimit": 8,
       "targetProjectId": "vue-kanban",
       "targetScope": "project"
@@ -2140,7 +2141,7 @@
       "holdout": false,
       "id": "C100",
       "projectId": "vue-kanban",
-      "query": "Where is } }, \"total-blocking-time documented?",
+      "query": "Where is total-blocking-time id total-blocking-time title Total Blocking Time description Sum of all documented?",
       "searchLimit": 8,
       "targetProjectId": "vue-kanban",
       "targetScope": "project"
