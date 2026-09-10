@@ -400,6 +400,8 @@ def test_params_records_buckets_excluded_snapshot_and_model(tmp_path):
          "embeddedRows": 1, "reason": "alias fold"}]
     assert params["corpusSnapshotSha256"] == "ab" * 32
     assert params["modelRevision"] == "test-seam" and params["modelBytes"] == 0
+    assert params["copyPath"] == str(copy.resolve())
+    assert params["copySnapshotSha256"] == hashlib.sha256(copy.read_bytes()).hexdigest()
     assert params["bucketCounts"] == {
         "ai-raccoon/project": 2, "ai-raccoon/custom": 1,
         "ai-raccoon/shared": 1, "hermes-default/project": 1}

@@ -242,3 +242,57 @@ def test_aggregate_gaps_counts_sum_to_c_cell():
             + gaps["c_neither_leg"] + gaps["c_unknown"]) == gaps["c_cell"]
     assert (gaps["c_fts_only"], gaps["c_vec_only"], gaps["c_both_legs"],
             gaps["c_neither_leg"], gaps["c_unknown"]) == (1, 1, 1, 1, 1)
+
+
+# --- C3 provenance gates (F4/F5) ---
+
+
+def test_model_revision_check_fails_loud_on_mismatch_and_empty():
+    # The eval must embed with the store's recorded revision, never whatever
+    # the cache happens to hold; a missing/empty record or zero bytes is loud.
+    assert evaluate.model_revision_check("cb950dc8", "cb950dc8", 869254400) == {
+        "modelRevision": "cb950dc8", "modelBytes": 869254400}
+    with pytest.raises(ValueError, match="embedded revision"):
+        evaluate.model_revision_check("cb950dc8", "different", 869254400)
+    with pytest.raises(ValueError, match="no modelRevision"):
+        evaluate.model_revision_check(None, "cb950dc8", 869254400)
+    with pytest.raises(ValueError, match="resolve empty"):
+        evaluate.model_revision_check("cb950dc8", "cb950dc8", 0)
+
+
+def test_scratch_copy_check_row_drift_fails_sha_only_warns(tmp_path):
+    # The bank leg reads scratch-data-root/memory.db; row drift against the
+    # store's copy would compare two universes -> fail. The scratch copy is
+    # mutated by access bumps across repeat runs -> SHA-only change warns.
+    import hashlib as _hashlib
+    import sqlite3 as _sqlite3
+
+    db = tmp_path / "memory.db"
+    conn = _sqlite3.connect(db)
+    conn.execute("CREATE TABLE entries (id INTEGER PRIMARY KEY, value TEXT)")
+    conn.executemany("INSERT INTO entries (value) VALUES (?)", [("a",), ("b",)])
+    conn.commit()
+    conn.close()
+    sha = _hashlib.sha256(db.read_bytes()).hexdigest()
+
+    provenance, failures, warnings = evaluate.scratch_copy_check(db, sha, 2)
+    assert failures == [] and warnings == []
+    assert provenance["scratchRows"] == 2
+    assert provenance["scratchSnapshotSha256"] == sha
+
+    conn = _sqlite3.connect(db)
+    conn.execute("UPDATE entries SET value='a-bumped' WHERE id=1")
+    conn.commit()
+    conn.close()
+    provenance, failures, warnings = evaluate.scratch_copy_check(db, sha, 2)
+    assert failures == [] and warnings and "sha" in warnings[0]
+
+    conn = _sqlite3.connect(db)
+    conn.execute("INSERT INTO entries (value) VALUES ('c')")
+    conn.commit()
+    conn.close()
+    _, failures, _ = evaluate.scratch_copy_check(db, sha, 2)
+    assert failures and "rows" in failures[0]
+
+    _, failures, _ = evaluate.scratch_copy_check(tmp_path / "absent.db", sha, 2)
+    assert failures

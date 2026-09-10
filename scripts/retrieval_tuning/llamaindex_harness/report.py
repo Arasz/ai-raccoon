@@ -77,6 +77,14 @@ def render(results: dict, context: dict) -> str:
         f"Model: {context.get('model', '?')} ({context.get('model_bytes', '?')} "
         f"HF cache). Store: {context.get('store_bytes', '?')}.",
     ]
+    revision = results.get("modelRevision") or context.get("model_revision")
+    copy_sha = results.get("copySnapshotSha256") or context.get("copy_snapshot_sha256")
+    if revision or copy_sha:
+        lines.append(
+            f"Provenance: weights revision {str(revision or '?')[:12]}... "
+            f"({results.get('modelBytes') or context.get('model_bytes_raw') or '?'} bytes); "
+            f"bank copy {results.get('copyPath') or context.get('copy_path') or '?'} "
+            f"(sha256 {str(copy_sha or '?')[:12]}...).")
     stale = results.get("staleAnchors") or context.get("stale_anchors") or []
     if n + len([s for s in stale if s not in {r["id"] for r in rows}]) < corpus_size:
         lines.append(f"Restriction: this is a documented SUBSET eval — {n} of "

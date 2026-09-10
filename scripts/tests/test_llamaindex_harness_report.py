@@ -139,6 +139,20 @@ def test_report_exclusion_discloses_committed_vs_shared_counts():
     assert "job-search-ai-assistant" in text and "jsaa" in text
 
 
+def test_report_renders_copy_and_model_provenance():
+    # C3: the golden must state which weights and which copy it was measured
+    # against, so a later drift is visible, not silent.
+    out = _results()
+    out["modelRevision"] = "cb950dc80d677c6fdc00f56c8ddd20ca2642c59e"
+    out["modelBytes"] = 869254400
+    out["copyPath"] = "/tmp/p1-live-copy.db"
+    out["copySnapshotSha256"] = "e0434a7214ac4caf1dbbef56147f582515bd0f5ebda665ad8cb06687296a55f6"
+    text = report.render(out, _context())
+    assert "cb950dc8" in text
+    assert "e0434a72" in text
+    assert "869254400" in text
+
+
 def test_report_renders_gap_counts_table():
     text = report.render(_results_with_gaps(), _context())
     assert "c_fts_only" in text and "c_cell" in text

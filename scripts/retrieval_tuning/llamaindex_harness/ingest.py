@@ -100,6 +100,14 @@ def check_pinned_revision(revision: str) -> None:
             "never embed past it")
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def default_store_dir() -> Path:
     """Repo tmp/llamaindex-harness — gitignored via tmp/ (S9: never the harness dir)."""
     return Path(__file__).resolve().parents[3] / "tmp" / "llamaindex-harness"
@@ -326,7 +334,9 @@ def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
                 corpus_name: str | None = None,
                 corpus_snapshot: str | None = None,
                 model_info: dict | None = None,
-                dupes_dropped: int = 0) -> StoreHandle:
+                dupes_dropped: int = 0,
+                copy_path: str | None = None,
+                copy_sha: str | None = None) -> StoreHandle:
     """Idempotent build: upsert current ids, delete stale ids, rewrite params.json."""
     store_dir.mkdir(parents=True, exist_ok=True)
     client = chromadb.PersistentClient(path=str(store_dir / "chroma"))
@@ -377,6 +387,8 @@ def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
     params["excludedProjects"] = list(excluded or [])  # seed-equal manifest
     params["corpus"] = corpus_name
     params["corpusSnapshotSha256"] = corpus_snapshot
+    params["copyPath"] = copy_path
+    params["copySnapshotSha256"] = copy_sha
     model_info = model_info or {"revision": "test-seam", "bytes": 0}
     params["modelRevision"] = model_info["revision"]
     params["modelBytes"] = model_info["bytes"]
@@ -542,6 +554,12 @@ def main(argv: list[str] | None = None, embed=None) -> int:
         header, _ = scopes.load_corpus(args.corpus)
         corpus_name = Path(args.corpus).name
         corpus_snapshot = (header or {}).get("snapshotSha256")
+    copy_path = str(Path(args.copy).resolve())
+    copy_sha = _sha256_file(args.copy)
+    if corpus_snapshot and copy_sha != corpus_snapshot:
+        print(f"WARNING: copy sha {copy_sha[:12]}... != corpus snapshot "
+              f"{corpus_snapshot[:12]}... (corpus drift; both legs share this copy)",
+              flush=True)
     rows, copy_entries, dupes_dropped = load_rows(args.copy, buckets)
     if dupes_dropped:
         print(f"deduped: {len(dupes_dropped)} multi-homed hashes (first-by-id wins): "
@@ -564,7 +582,8 @@ def main(argv: list[str] | None = None, embed=None) -> int:
     handle = build_store(store_dir, docs, rows, embed_fn, copy_entries, args.embed_batch_size,
                          progress_every=10, buckets=buckets, excluded=excluded,
                          corpus_name=corpus_name, corpus_snapshot=corpus_snapshot,
-                         model_info=model_info, dupes_dropped=len(dupes_dropped))
+                         model_info=model_info, dupes_dropped=len(dupes_dropped),
+                         copy_path=copy_path, copy_sha=copy_sha)
     problems = verify_store(args.copy, handle, buckets)
     fts_diff = fts_parity_probe(args.copy, handle, probe="memory", buckets=buckets)
     handle.close()

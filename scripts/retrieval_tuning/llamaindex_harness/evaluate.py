@@ -27,13 +27,70 @@ Metric forks from scripts/src/retrieval_tuning/scoring.py (M6, justified):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import sqlite3
 import sys
 import uuid
 from pathlib import Path
 
 EVAL_LIMIT = 8
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def model_revision_check(recorded: str | None, revision: str, nbytes: int) -> dict:
+    """Eval-side freeze gate (C3/F4): the query encoder must be the store's weights.
+
+    A cache advance between ingest and eval would silently change every query
+    vector and the golden, so a missing record, a mismatched revision, or an
+    empty cache is loud, never skipped."""
+    if not recorded:
+        raise ValueError("store params carry no modelRevision — cannot verify the frozen weights")
+    if revision != recorded:
+        raise ValueError(
+            f"model weights revision {revision!r} != store's embedded revision {recorded!r}: "
+            "query vectors would drift from the store — reuse the pinned cache")
+    if nbytes <= 0:
+        raise ValueError(f"model weights resolve empty (bytes={nbytes})")
+    return {"modelRevision": revision, "modelBytes": nbytes}
+
+
+def scratch_copy_check(db_path: Path, recorded_sha: str | None,
+                       recorded_entries: int | None) -> tuple[dict, list[str], list[str]]:
+    """(provenance, failures, warnings) for the bank-leg scratch copy, pre-run (C3).
+
+    The harness leg reads the store (built from --copy) while the bank leg
+    reads scratch-data-root/memory.db; row divergence compares two universes
+    and is a failure. A SHA-only change is an access-bump mutation from a
+    prior run — warned, with the row-count guard still in force."""
+    db_path = Path(db_path)
+    if not db_path.exists():
+        return {}, [f"scratch data root has no {db_path.name} for the bank leg"], []
+    sha = _sha256_file(db_path)
+    try:
+        conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True)
+        try:
+            rows = conn.execute("SELECT count(*) FROM entries").fetchone()[0]
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        return {}, [f"cannot read scratch copy entries: {exc}"], []
+    failures, warnings = [], []
+    if recorded_entries is not None and rows != recorded_entries:
+        failures.append(f"scratch copy rows {rows} != store copy rows {recorded_entries}")
+    if recorded_sha and sha != recorded_sha:
+        warnings.append(f"scratch copy sha {sha[:12]}... != store copy sha {recorded_sha[:12]}... "
+                        "(row count matches: access-bump mutation from a prior run)")
+    return ({"scratchPath": str(db_path), "scratchSnapshotSha256": sha, "scratchRows": rows},
+            failures, warnings)
 
 
 def hit_singleton(expected_hash: str, served_hashes: list[str]) -> int:
@@ -307,6 +364,35 @@ def main(argv: list[str] | None = None) -> int:
         entries = entries["queries"]
     if args.limit_queries is not None:
         entries = entries[:args.limit_queries]
+    store_params = json.loads((Path(args.store_dir) / "params.json").read_text())
+
+    # C3 provenance gates BEFORE any retrieval: frozen weights, same copy universe.
+    try:
+        from . import ingest as ingest_mod  # noqa: PLC0415 — lazy: keeps module import-safe
+        revision, nbytes = ingest_mod.model_weights_info(
+            store_params.get("model") or ingest_mod.MODEL_NAME)
+        model_provenance = model_revision_check(store_params.get("modelRevision"),
+                                                revision, nbytes)
+        ingest_mod.check_pinned_revision(revision)
+    except (ValueError, ImportError) as exc:
+        print(f"FAIL: model provenance: {exc}")
+        return 1
+    scratch_prov, scratch_failures, scratch_warnings = scratch_copy_check(
+        Path(args.scratch_data_root) / "memory.db",
+        store_params.get("copySnapshotSha256"),
+        (store_params.get("counts") or {}).get("copyEntries"))
+    for warning in scratch_warnings:
+        print(f"WARNING: {warning}", flush=True)
+    if scratch_failures:
+        for failure in scratch_failures:
+            print(f"FAIL: {failure}")
+        return 1
+    print(f"model: revision={model_provenance['modelRevision'][:12]}... "
+          f"bytes={model_provenance['modelBytes']} | scratch copy "
+          f"sha={scratch_prov['scratchSnapshotSha256'][:12]}... "
+          f"rows={scratch_prov['scratchRows']} | copy path "
+          f"{store_params.get('copyPath')}", flush=True)
+
     scorable, null_anchors = partition_null_anchors(entries)
     stale_anchors = check_anchors_resolve(scorable, Path(args.store_dir))
     stale_anchors = sorted(set(stale_anchors) | set(null_anchors))
@@ -333,7 +419,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     out["sessionId"] = session_id
     out["staleAnchors"] = stale_anchors
-    store_params = json.loads((Path(args.store_dir) / "params.json").read_text())
+    out.update(model_provenance)  # C3: frozen weights identity in the golden
+    out["copyPath"] = store_params.get("copyPath")
+    out["copySnapshotSha256"] = store_params.get("copySnapshotSha256")
     out["corpusSnapshotSha256"] = store_params.get("corpusSnapshotSha256")
     out["excludedProjects"] = store_params.get("excludedProjects", [])
     out["resolvedBuckets"] = store_params.get("resolvedBuckets", [])
