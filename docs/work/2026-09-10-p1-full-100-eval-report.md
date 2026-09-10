@@ -5,13 +5,14 @@ Bank copy entries: 56457. Ingested rows: 56321 (content=56321, structure=15898, 
 Model: Salesforce/SFR-Embedding-Code-400M_R (829M HF cache). Store: 910M.
 Provenance: weights revision cb950dc80d67... (869254400 bytes); bank copy /private/tmp/p1-live-copy.db (sha256 e0434a7214ac...).
 Stale anchors (1 — unhittable by either leg: absent anchors still score into d, null-anchored rows are filtered pre-eval and unscored): C035.
+Stale-anchor invariant (asserted): staleAnchors ∩ scored = ∅.
 
 ## Scope and routing
 
 M1: each query ran at its own corpus targetProjectId/targetScope on BOTH systems (no 75-row file-targeted restriction). The harness store ingests every targeted bucket (project buckets incl. custom scopes, plus the global shared tier).
 Resolved project buckets (11): ai-badger, ai-raccoon, ai-sheepdog, arasz-home-page, deepseek-harness, dotnet-ignore, hermes-default, interview-tasks, jsaa, pi-badger-integration, vue-kanban.
 Additional shared-tier spellings present in the store (raw project_id folds; those rows are global and are served by shared/all queries): aib/shared (1), job-search-ai-assistant/shared (8).
-Both systems ran at a uniform limit 8 (overrides the corpus searchLimit=5; candidate window max(limit*3,100)=100 either way).
+Both systems ran at a uniform limit 8 (the corpus records searchLimit=8 for all 100 queries; candidate window max(limit*3,100)=100 either way).
 
 ## Method
 
@@ -132,9 +133,18 @@ Agreement table: both-hit a=65, harness-only b=2, ai-raccoon-only c=15, neither 
 Agreement MCC: 0.5955.
 Recompute path: results.json preserves per-query served hashes plus the harness fts_hit/vector_hit legs, so post-hoc relevance metrics recompute from the hash-preserving golden without new retrieval (rerun report.py on results.json). Singleton-F1 here is a parity verdict, not a relevance verdict.
 
+### Query-composition stratification (recomputed from the scored corpus rows)
+
+| stratum | n | harness hit-rate | ai-raccoon hit-rate | harness mean F1 | ai-raccoon mean F1 |
+|---|---|---|---|---|---|
+| debris (query text carries markup/JSON debris) | 23 | 0.609 | 0.696 | 0.169 | 0.188 |
+| clean (natural-language query) | 76 | 0.697 | 0.842 | 0.155 | 0.187 |
+
+Disclosure: relevance-flavoured readings ("bank finds what harness misses", any embedding-gap narrative) are **composition-sensitive** — the debris stratum is a tool-call-artifact subset whose stratified rates differ from the clean stratum, so aggregate gaps partly reflect corpus composition. The parity/pipeline reading (identical fusion pipeline on both legs, exact-hash hits) stands. The split is recomputed here from the scored rows' query text by signature (regex adapted from docs/work/mmr_transfer_checks.py), never a hardcoded id list.
+
 ## Parity-gap discussion
 
-- Embedding gap (bank local ONNX SFR-Embedding-Code-400M_R vs harness public HF weights, same architecture): the per-query fts/vec column separates it — queries where FTS hits but the vector leg misses are embedding-gap evidence; where both legs miss, the fusion cannot recover regardless of weights.
+- Embedding gap (bank local ONNX SFR-Embedding-Code-400M_R vs harness public HF weights, same architecture): the same model name does not imply the same vectors — the bank's manifest pins CLS pooling while the HF snapshot ships no sentence-transformers config, so the harness falls back to that library's mean-pooling default; measured stored-vector agreement for the same text is partial (C10 evidence doc). The per-query fts/vec column locates the divergence, but the label is per row: P2 AC2 resolves fusion-drop vs embedding-gap, and C10 proved the shared-scope rows are fusion-drop. Where both legs miss, the fusion cannot recover regardless of weights.
 - Structure gap: 15898 of 56321 rows carry heading_path structure texts (structureAlpha=0.5 fuse; missing structure scores 0). Section-targeted misses on unheaded rows are structure-gap, not fusion-gap.
 - No harness knob was tuned to close either gap (plan: measure and report, never tune silently).
 
@@ -143,11 +153,13 @@ Recompute path: results.json preserves per-query served hashes plus the harness 
 | bucket | n | reading |
 |---|---|---|
 | c_cell (bank-hit/harness-miss of 99 paired) | 15 | harness deficit under test |
-| c_fts_only | 14 | legs split: embedding-gap evidence |
+| c_fts_only | 14 | legs split: FTS held it, vector leg missed — P2 AC2 resolves fusion-drop vs embedding-gap per row (C10: not per se embedding-gap) |
 | c_vec_only | 0 | a leg had it, fusion lost it |
 | c_both_legs | 1 | both legs hit, fusion lost it |
 | c_neither_leg | 0 | unrecoverable by fusion |
 | c_unknown | 0 | leg columns absent (data gap) |
+
+C10 trace note: shared-scope rows (C019, C065, C081) were traced stage-by-stage — the anchor survived per-leg content-dedupe, RRF, affinity and the relative floor, and was dropped by Take(8) after dual-leg candidates outranked it (the harness/bank vector scores diverge at the embedding seam, measured). These rows are fusion-drop; never mapped to "embedding-gap evidence".
 
 Excluded projects (2, seed-equal with the corpus header excludedProjects — documented there, never ad hoc):
 - aib → ai-badger (committed=0, shared=1, embedded=1): raw entries.project_id 'aib' folds to canonical 'ai-badger' under the search gate; it has no committed project/custom rows, and its 1 scope='shared' row is global, remains ingested and is served by shared/all queries

@@ -1,9 +1,13 @@
 # Lane report: P1 bucket extension + full-100 eval + close-out
 
 Task: air-full-hundred-query-parity-eval, package P1.
-Branch: `task/air-full-hundred-query-parity-eval-lane-impl-p1`. Base: `a0bab95c`.
+Branch: `task/air-full-hundred-query-parity-eval-lane-impl-p1` (C1–C7);
+close-out round 2 (C9–C11) on `task/air-full-hundred-query-parity-eval-lane-close2`
+from merged P1 close-out `44546818`. Base: `a0bab95c`.
 Status: P1 close-out items C1–C7 done; golden frozen under the measured
 quiesced-scratch precondition (see "Close-out deviations"); C8 report attached.
+Round 2: C9 + C10 + C11 done 2026-09-10 — C10 verdict is per-spec (drop at
+Take(8); embedding-seam leg inputs), so the golden is unchanged (no re-freeze).
 
 ## What changed (commits)
 
@@ -22,6 +26,12 @@ quiesced-scratch precondition (see "Close-out deviations"); C8 report attached.
 - `c88ce57b` **C5** fix: memwatch closes its status log after the final result line
 - `2aee89d4` **C6** feat: ingest `--refresh-params` metadata-only fast path
 - (this commit) **C7** docs: golden `results.json` + run-2 + eval report + refreshed lane report
+
+Close-out round 2 (branch `…-lane-close2`, base `44546818`):
+
+- `1f9fdd1e` **C10** docs: shared-scope fusion trace — drop is Take(8), per-spec
+- `63720868` **C9+C10** docs/report: composition strata, stale invariant, fusion-drop marking
+- `568157da` **C11** feat: tested quiesced-scratch builder + row-stability snapshot
 
 ## Finding verification (reproduced before fixing; corrections marked)
 
@@ -311,12 +321,17 @@ run 1 = run 2 (0.798/0.185, c=14, peaks 8551/7904 MB), run 3
 | eval D (run-2) | 6561 MB | 12288 | exit(0) |
 | eval A/B (quiet, same copy) | 6644 / 5686 MB | 12288 | exit(0) |
 | eval run 1/2/3 (no-quiesce) | 8551 / 7904 / 9033 MB | 12288 | exit(0) |
+| C10 trace (harness replica) | 2493 MB | 12288 | exit(0) |
+| C10 bank probe (real server) | 3482 MB | 12288 | exit(0) |
+| C10 exact-recall / profile | 2212 / 2212 MB | 12288 | exit(0) |
 
 ## Artefact locations
 
 - Golden: `docs/work/results-f1.json` (run C), `docs/work/results-f1-run2.json` (run D).
-- Eval report: `docs/work/2026-09-10-p1-full-100-eval-report.md`.
+- Eval report: `docs/work/2026-09-10-p1-full-100-eval-report.md` (regenerated round 2).
 - Determinism analysis: `docs/work/2026-09-10-p1-determinism-finding.md`.
+- **C10 evidence: `docs/work/2026-09-10-p1-c10-shared-fusion-trace.md`; repro
+  `docs/work/c10_shared_leg_trace.py`; census strata `docs/work/mmr_transfer_checks.py`.**
 - Review: `docs/work/2026-09-10-p1-review-d756.md`; plan: `docs/work/2026-09-09-air-full-hundred-query-parity-eval.md`.
 - RED/collector/run logs: `/tmp/p1-closeout/` (RED-c1-tie.txt,
   RED-c2-manifest.txt, RED-c2-report.txt, RED-c2-bucketcounts.txt,
@@ -359,3 +374,134 @@ run 1 = run 2 (0.798/0.185, c=14, peaks 8551/7904 MB), run 3
 - **N3 (tolerance):** plan P3 AC4 / P4 AC2's "exact on hashes" is satisfiable
   only with the quiesced rig. If P3 keeps one tolerance term, state the
   precondition in the same breath.
+
+## Close-out round 2 (C9–C11, 2026-09-10, branch `…-lane-close2`)
+
+Round-2 base: merged P1 close-out `44546818`. The golden stays run C/D
+(`results-f1.json` / `results-f1-run2.json`): C10 found no fusion defect and no
+knob, corpus, store or settings changed, so there is no re-freeze.
+
+### C10 — shared-scope fusion-loss trace (per-spec; stage = Take(8))
+
+Repro committed as `docs/work/c10_shared_leg_trace.py` (defaults resolve to this
+checkout); full evidence in `docs/work/2026-09-10-p1-c10-shared-fusion-trace.md`.
+
+```
+$ cd scripts/retrieval_tuning && python3 memwatch.py --cap-mb 12288 \
+    --log /tmp/p1-closeout2/rss/c10-trace-mem.log -- \
+    python3 ../../docs/work/c10_shared_leg_trace.py --harness-dir . \
+    --corpus corpora/project-corpus-100.json --store-dir /tmp/p1-full-store --offline
+memwatch: peak=2493MB cap=12288MB result=exit(0)
+  C019: fts rank 1; vector absent; dedupe kept; pre-RRF 28; post-affinity 28 (0.6932) ≥ 0.6
+        VERDICT: outside top-8 after floor (rank 28)
+  C065: fts rank 1; vector absent; dedupe kept; pre-RRF 32; post-affinity 32 (0.6630) ≥ 0.6
+        VERDICT: outside top-8 after floor (rank 32)
+  C081: fts rank 1; vector rank 95; dedupe kept; pre-RRF 10; post-affinity 10 (0.8714) ≥ 0.6
+        VERDICT: outside top-8 after floor (rank 10)
+```
+
+Stage verdict: **Take(8)** — no per-leg dedupe / RRF / floor / affinity loss.
+The bank's `evidenceByHash` sidecar (scratch probe, peak 3482 MB) shows the same
+anchors served at bank ranks 1/2/1 with vector ranks **25/19/23** (harness:
+absent/absent/95): the leg inputs, not the fusion, differ. Stored vectors for
+the same text measure cos(bank, harness) 0.504–0.628; mechanism = bank manifest
+`pooling.mode=cls` vs sentence-transformers' `_load_default_modules`
+mean-pooling fallback (the HF snapshot ships no `modules.json`). Rows are marked
+**fusion-drop** (never "embedding-gap evidence") in the eval report for P2 AC2.
+
+### C9 — query-composition disclosure
+
+RED pasted before the implementation:
+
+```
+$ python3 -m pytest scripts/tests/test_llamaindex_harness_report.py -q \
+    -k "stratification or stratified or stale_anchors_are_never"
+FAILED ...::test_stratification_is_signature_based_not_id_based
+FAILED ...::test_report_renders_stratified_rates_and_composition_disclosure
+FAILED ...::test_report_asserts_stale_anchors_are_never_scored
+3 failed, 13 deselected
+```
+
+GREEN: `16 passed`. The regenerated report recomputes the split from the scored
+rows' query text (signature adapted from `docs/work/mmr_transfer_checks.py`,
+never an id list):
+
+```
+| debris (markup/JSON signature) | 23 | 0.609 | 0.696 | 0.169 | 0.188 |
+| clean                          | 76 | 0.697 | 0.842 | 0.155 | 0.187 |
+```
+
+with the composition-sensitivity disclosure. NOTE: the plan's C9 prose records
+clean-bank `0.8289`; the recomputation on the frozen golden gives **0.8421**
+(plan number came from the sibling's earlier reading) — the artifact holds the
+recomputed value. `staleAnchors ∩ scored == ∅` is now asserted in `render`
+(ValueError on violation); the obsolete C026-scored sensitivity test was
+replaced by an unscored-stale shape that still pins the SUBSET-accounting rule.
+
+### C11 — quiesced scratch builder + run recipe
+
+RED:
+
+```
+$ python3 -m pytest scripts/tests/test_make_quiesced_scratch.py -q
+ModuleNotFoundError: No module named 'make_quiesced_scratch'
+```
+
+GREEN: `5 passed`. Helper `scripts/retrieval_tuning/make_quiesced_scratch.py`;
+smoke-tested on the pinned copy (2.1 s, no model):
+
+```
+$ python3 make_quiesced_scratch.py --source /tmp/p1-live-copy.db --out /tmp/p1-closeout2/base-rebuilt.db
+rows: 56457 (copy parity verified)
+settings disabled: 12 (watch/sweep/extract kill switches)
+base sha256: eeb431a3efd8933811714d1fb3fa7e97bb26ae9e95f4573bcaa71d8588a5e41d
+```
+
+The helper landed now so P2 consumes it (as this report recommended); the
+row-stability assertion it exposes is part of the run recipe below.
+
+### Round-2 suite note
+
+Full `scripts/tests` on this box: **551 passed, 8 skipped, 5 failed** — all five
+pre-existing and unrelated to round 2. Stashing the round-2 tracked edits
+reproduces the three that do not depend on installed extras
+(`test_dependencies_declared` matplotlib gap; `test_retrieval_tuning_eval_corpus`
+E040 + committed `eval-set-100.json` drift) failing identically; the other two
+(`test_retrieval_tuning_report` study-summary) need `optuna`, which is not
+installed here (the module itself fails collection without it).
+
+## RUNBOOK — reproducing the frozen golden
+
+1. **Store** (already frozen at `/tmp/p1-full-store`; full rebuild = re-ingest):
+   `python3 -m llamaindex_harness.ingest --copy /tmp/p1-live-copy.db
+   --store-dir /tmp/p1-full-store --corpus corpora/project-corpus-100.json --offline`
+2. **Quiesced base from the pinned copy** (C11 helper; refuses row drift):
+   `python3 make_quiesced_scratch.py --source /tmp/p1-live-copy.db
+   --out /tmp/p1-eval-scratch-quiet-base.db`
+3. **Per-repeat scratch**: byte-copy the base to `<scratch>/memory.db`, record
+   the row-stability snapshot before and after with
+   `python3 make_quiesced_scratch.py --stability <scratch>/memory.db`
+   (entries + max created/updated must be equal across the run; a
+   bookkeeping-only WAL from access bumps is expected).
+4. **Eval** (one heavy process at a time, ~3 min, never port 7721):
+   `python3 memwatch.py --cap-mb 12288 --log <log> -- python3 -m
+   llamaindex_harness.evaluate --corpus corpora/project-corpus-100.json
+   --store-dir /tmp/p1-full-store --scratch-data-root <scratch>
+   --out <results.json> --offline`
+5. **Report**: `python3 -m llamaindex_harness.report --results <results.json>
+   --out <report.md> --context /tmp/p1-closeout/report-context.json`
+6. **Determinism gate**: two fresh-process runs on two fresh copies of ONE base
+   must be byte-identical modulo `sessionId` on both legs (C12); mean-F1
+   ±1e-9. If an anchor moves, stop — never tolerance-bless it.
+
+## Proposed plan amendments (task-tracking plan not owned here)
+
+- **C9**: replace the recorded clean-bank `0.8289` with the recomputed `0.8421`
+  (`report.py` is the generator; the artifact is the source of truth).
+- **C10**: check the box as per-spec (no re-freeze); the pooling seam
+  (CLS vs mean) is a *new* P2/P3 candidate item — aligning it would require a
+  full re-embed, so it is a decision, not a close-out fix.
+- **C11**: helper is built (`make_quiesced_scratch.py`) and P2 should consume
+  it; the plan's "P2 ownership" line can become "P2 consumes".
+- **C2**: the external-validation #5b uniform-8 wording fix landed with this
+  round's report regeneration (the report no longer claims `searchLimit=5`).
