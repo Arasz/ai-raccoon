@@ -149,11 +149,11 @@ def main(argv: list[str] | None = None) -> int:
         if not breached:
             proc.wait()
         reader.join(timeout=10)
+        result = "KILLED" if breached else f"exit({proc.returncode})"
+        note(f"memwatch: peak={peak}MB cap={cap_mb}MB result={result}")
     finally:
         if log is not None:
             log.close()
-    result = "KILLED" if breached else f"exit({proc.returncode})"
-    note(f"memwatch: peak={peak}MB cap={cap_mb}MB result={result}")
     return 99 if breached else proc.returncode
 
 

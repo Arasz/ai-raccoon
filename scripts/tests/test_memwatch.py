@@ -21,14 +21,18 @@ HOG = (
 )
 
 
-def test_memwatch_streams_child_stdout_in_full(capsys):
-    code = memwatch_main(["--cap-mb", "4096", "--interval", "0.05", "--",
-                          sys.executable, "-c",
+def test_memwatch_streams_child_stdout_in_full(capsys, tmp_path):
+    log = tmp_path / "mem.log"
+    code = memwatch_main(["--cap-mb", "4096", "--interval", "0.05", "--log", str(log),
+                          "--", sys.executable, "-c",
                           "print('HEAD' + 'x' * 20000); print('TAIL-MARKER')"])
     out = capsys.readouterr().out
     assert code == 0
     assert "HEAD" in out and "TAIL-MARKER" in out
     assert out.count("x") >= 20000, "child stdout was clipped"
+    # the status log must close cleanly and carry the final result line
+    log_text = log.read_text()
+    assert "result=exit(0)" in log_text
 
 
 def test_memwatch_live_kills_the_process_tree_on_breach(capsys):
