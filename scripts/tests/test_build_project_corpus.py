@@ -213,17 +213,26 @@ def _make_db(path: Path, *, dup_value_content: bool = False, dup_anchor_hash: bo
     for n in range(2):
         add("folddiv", f"folddiv content observation {n:02d}: marker phrase folddiv-{n}.",
             source_file=None)
+    # folddiv's shared row IS servable (global tier): the exclusion manifest
+    # must distinguish it from the committed rows that can never be served.
+    add("folddiv", "folddiv shared observation: global tier row under the raw spelling.",
+        source_file=None, scope="shared")
+    # sharedonly: a raw spelling whose only rows are shared -> committed=0.
+    add("sharedonly", "sharedonly shared observation: global tier under a raw spelling.",
+        source_file=None, scope="shared")
     # ghost: enumerated but zero embedded rows -> no candidates, no queries
     for n in range(5):
         add("ghost", f"ghost pending row {n}: never embedded.", source_file=None, state="pending")
 
     conn.executemany(
         "INSERT INTO project_id_aliases (alias, winner, kind, applied_at) VALUES (?,?,?,1)",
-        [("folddiv", "alpha", "alias"), ("ghost-alias", "beta", "alias"), ("qa-noise", None, "drop")],
+        [("folddiv", "alpha", "alias"), ("ghost-alias", "beta", "alias"),
+         ("sharedonly", "beta", "alias"), ("qa-noise", None, "drop")],
     )
     map_json = json.dumps({
         "Aliases": [{"Alias": "folddiv", "Canonical": "alpha"},
-                    {"Alias": "ghost-alias", "Canonical": "beta"}],
+                    {"Alias": "ghost-alias", "Canonical": "beta"},
+                    {"Alias": "sharedonly", "Canonical": "beta"}],
         "Canonicals": ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta",
                        "theta", "tiny", "ghost"],
         "Dropped": ["qa-noise"],
@@ -423,6 +432,35 @@ def test_anchors_resolve(tmp_path: Path) -> None:
     if reason is not None:
         pytest.skip(f"committed-artifact anchors not checkable: {reason}")
     _assert_anchors_resolve(_load_corpus(ARTIFACT_PATH), COPY_PATH, "committed artifact")
+
+
+# ------------------------------------------------------------------ exclusion manifest (F2)
+
+
+def test_excluded_manifest_splits_committed_and_shared_rows(tmp_path: Path) -> None:
+    # The old manifest counted all scopes as one number and claimed the whole
+    # project "could never be served" — false for its scope='shared' rows
+    # (global tier, ingested, served by shared/all). The manifest must split
+    # the counts and say which half is servable.
+    mod = _load_generator()
+    db = _corpus_db(tmp_path)
+    out = tmp_path / "corpus.json"
+    corpus = mod.generate(copy_path=db, output_path=out)
+    excluded = {e["projectId"]: e for e in corpus["header"]["excludedProjects"]}
+
+    folddiv = excluded["folddiv"]
+    assert folddiv["committedRows"] == 3
+    assert folddiv["sharedRows"] == 1
+    assert folddiv["embeddedRows"] == 4
+    assert "3 committed project/custom rows can never be served" in folddiv["reason"]
+    assert "1 scope='shared' row" in folddiv["reason"]
+    assert "served by shared/all" in folddiv["reason"]
+
+    sharedonly = excluded["sharedonly"]
+    assert sharedonly["committedRows"] == 0
+    assert sharedonly["sharedRows"] == 1
+    assert "no committed project/custom rows" in sharedonly["reason"]
+    assert "served by shared/all" in sharedonly["reason"]
 
 
 # ------------------------------------------------------------------ AC2.4 coverage + holdout

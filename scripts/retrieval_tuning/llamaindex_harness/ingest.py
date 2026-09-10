@@ -367,7 +367,12 @@ def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
     fts.commit()
 
     params = dict(PARAMS)
-    params["buckets"] = sorted({f"{r['project_id']}/{r['scope']}" for r in rows})
+    bucket_counts: dict[str, int] = {}
+    for r in rows:
+        spelling = f"{r['project_id']}/{r['scope']}"
+        bucket_counts[spelling] = bucket_counts.get(spelling, 0) + 1
+    params["buckets"] = sorted(bucket_counts)
+    params["bucketCounts"] = bucket_counts  # observed spellings -> store row counts
     params["resolvedBuckets"] = sorted(buckets)  # the input rule (audit)
     params["excludedProjects"] = list(excluded or [])  # seed-equal manifest
     params["corpus"] = corpus_name

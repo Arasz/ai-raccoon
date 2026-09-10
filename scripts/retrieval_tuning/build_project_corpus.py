@@ -176,6 +176,46 @@ def _embedded_row_counts(conn: sqlite3.Connection) -> dict[str, int]:
     }
 
 
+def _embedded_scope_counts(conn: sqlite3.Connection, project_id: str) -> tuple[int, int]:
+    """(committed, shared) embedded rows for one project.
+
+    Committed = scope IN ('project','custom') — the rows the search gate's
+    project predicate can reach; a raw-spelled project_id can never match it.
+    Shared = scope='shared' — global, served by shared/all queries regardless
+    of the project_id spelling, so those rows are NOT lost to the fold.
+    NULL-scope rows count as neither (the ingest rule never sees them)."""
+    committed = shared = 0
+    for scope, n in conn.execute(
+        "SELECT scope, count(*) FROM entries "
+        "WHERE project_id=? AND embed_state='embedded' AND workspace_id IS NULL "
+        "GROUP BY scope",
+        (project_id,),
+    ):
+        if scope in ("project", "custom"):
+            committed += n
+        elif scope == "shared":
+            shared += n
+    return committed, shared
+
+
+def _exclusion_reason(project_id: str, canonical_id: str, committed: int, shared: int) -> str:
+    """Per-project reason naming which half of the exclusion is actually unservable."""
+    base = (f"raw entries.project_id {project_id!r} folds to canonical "
+            f"{canonical_id!r} under the search gate")
+    if shared == 0:
+        shared_part = "it has no scope='shared' rows"
+    elif shared == 1:
+        shared_part = ("its 1 scope='shared' row is global, remains ingested "
+                       "and is served by shared/all queries")
+    else:
+        shared_part = (f"its {shared} scope='shared' rows are global, remain ingested "
+                       "and are served by shared/all queries")
+    if committed:
+        return (f"{base}, so its {committed} committed project/custom rows can never be "
+                f"served; {shared_part}")
+    return f"{base}; it has no committed project/custom rows, and {shared_part}"
+
+
 def _file_candidates(conn: sqlite3.Connection, project_id: str) -> list[dict]:
     """Distinct source_file with >=1 embedded chunk; the anchor is the file's
     first embedded chunk (lowest chunk_index, hash tie-break)."""
@@ -451,13 +491,14 @@ def generate(copy_path: Path, output_path: Path) -> dict:
         for pid in projects:
             canonical = fold_map.get(pid, pid)
             if canonical != pid:
+                committed, shared = _embedded_scope_counts(conn, pid)
                 excluded.append({
                     "projectId": pid,
                     "canonicalId": canonical,
                     "embeddedRows": embedded.get(pid, 0),
-                    "reason": (
-                        f"raw entries.project_id {pid!r} folds to canonical {canonical!r} under "
-                        "the search gate, so a raw-spelled anchor could never be served"),
+                    "committedRows": committed,
+                    "sharedRows": shared,
+                    "reason": _exclusion_reason(pid, canonical, committed, shared),
                 })
             elif embedded.get(pid, 0) >= 1:
                 weights[pid] = math.sqrt(embedded[pid])

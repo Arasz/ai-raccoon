@@ -22,6 +22,42 @@ def _bucket_projects(buckets: list) -> list[str]:
     return sorted({b.split("/")[0] for b in buckets if isinstance(b, str) and "/" in b})
 
 
+def _spelling(bucket: str, counts: dict) -> str:
+    """'proj/scope (n)' when a count is known, the bare spelling otherwise."""
+    n = counts.get(bucket) if isinstance(counts, dict) else None
+    return f"{bucket} ({n})" if n is not None else bucket
+
+
+def _scope_lines(results: dict, context: dict) -> list[str]:
+    """Scope/routing prose: resolved project buckets vs extra shared-tier spellings.
+
+    F3: observed bucket spellings include raw project_id folds (aib/shared),
+    whose rows are global and ARE served by shared/all — listing them among
+    resolved project buckets conflates the two."""
+    resolved = [p for p in (results.get("resolvedBuckets") or []) if isinstance(p, str)]
+    bucket_counts = context.get("bucket_counts") or {}
+    if not bucket_counts:
+        bucket_counts = {b: None for b in context.get("buckets", []) if isinstance(b, str)}
+    extras = [b for b in bucket_counts
+              if b.split("/")[-1] == "shared" and b.split("/")[0] not in set(resolved)]
+    lines = ["M1: each query ran at its own corpus targetProjectId/targetScope on "
+             "BOTH systems (no 75-row file-targeted restriction). The harness store "
+             "ingests every targeted bucket (project buckets incl. custom scopes, "
+             "plus the global shared tier)."]
+    if resolved:
+        lines.append(f"Resolved project buckets ({len(resolved)}): "
+                     + ", ".join(resolved) + ".")
+    else:
+        lines.append("Project buckets in this store: "
+                     + (", ".join(_bucket_projects(context.get("buckets", []))) or "?") + ".")
+    if extras:
+        lines.append("Additional shared-tier spellings present in the store (raw "
+                     "project_id folds; those rows are global and are served by "
+                     "shared/all queries): "
+                     + ", ".join(_spelling(b, bucket_counts) for b in extras) + ".")
+    return lines
+
+
 def render(results: dict, context: dict) -> str:
     """results.json dict + context dict -> the full markdown report."""
     s = results["summary"]
@@ -53,11 +89,7 @@ def render(results: dict, context: dict) -> str:
         "",
         "## Scope and routing",
         "",
-        "M1: each query ran at its own corpus targetProjectId/targetScope on "
-        "BOTH systems (no 75-row file-targeted restriction). The harness store "
-        "ingests every targeted bucket (project buckets incl. custom scopes, "
-        "plus the global shared tier); project buckets in this store: "
-        + (", ".join(_bucket_projects(context.get("buckets", []))) or "?") + ".",
+        *_scope_lines(results, context),
         "Both systems ran at a uniform limit 8 (overrides the corpus "
         "searchLimit=5; candidate window max(limit*3,100)=100 either way).",
         "",
@@ -172,7 +204,9 @@ def _exclusion_lines(results: dict, context: dict) -> str:
              "header excludedProjects — documented there, never ad hoc):"]
     for e in excluded:
         lines.append(f"- {e.get('projectId')} → {e.get('canonicalId')} "
-                     f"({e.get('embeddedRows', '?')} embedded rows): {e.get('reason', '')}")
+                     f"(committed={e.get('committedRows', '?')}, "
+                     f"shared={e.get('sharedRows', '?')}, "
+                     f"embedded={e.get('embeddedRows', '?')}): {e.get('reason', '')}")
     return "\n".join(lines)
 
 

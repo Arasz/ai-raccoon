@@ -95,12 +95,48 @@ def _results_with_gaps():
 
 def test_report_bucket_prose_is_data_driven():
     # Today report.py hardcodes the 2-bucket rule in prose; the buckets must
-    # come from the context or a third bucket silently vanishes from the story.
+    # come from the results/context or a third bucket silently vanishes.
+    out = _results()
+    out["resolvedBuckets"] = ["jsaa", "ai-raccoon"]
     ctx = _context()
     ctx["buckets"] = ["jsaa/project", "ai-raccoon/project", "ai-raccoon/shared"]
-    text = report.render(_results(), ctx)
+    text = report.render(out, ctx)
     assert "jsaa" in text
     assert "hermes-default" not in text
+
+
+def test_report_separates_resolved_buckets_from_shared_spellings():
+    # F3: resolvedBuckets are the ingest rule's inputs; observed aib/shared and
+    # job-search-ai-assistant/shared are extra spellings whose rows are global
+    # and servable. They must not read as "project buckets".
+    out = _results()
+    out["resolvedBuckets"] = ["ai-raccoon", "jsaa"]
+    ctx = _context()
+    ctx["bucket_counts"] = {
+        "ai-raccoon/project": 100,
+        "aib/shared": 1,
+        "job-search-ai-assistant/shared": 8,
+    }
+    text = report.render(out, ctx)
+    assert "Resolved project buckets (2)" in text
+    assert "ai-raccoon" in text and "jsaa" in text
+    assert "Additional shared-tier spellings" in text
+    assert "aib/shared (1)" in text
+    assert "job-search-ai-assistant/shared (8)" in text
+
+
+def test_report_exclusion_discloses_committed_vs_shared_counts():
+    # F2: the manifest split must be rendered — committed rows are unservable,
+    # the shared rows are ingested and served by shared/all.
+    out = _results_with_gaps()
+    out["excludedProjects"] = [
+        {"projectId": "job-search-ai-assistant", "canonicalId": "jsaa",
+         "embeddedRows": 114, "committedRows": 106, "sharedRows": 8,
+         "reason": "committed project/custom rows can never be served; "
+                   "scope='shared' rows are served by shared/all"}]
+    text = report.render(out, _context())
+    assert "committed=106" in text and "shared=8" in text
+    assert "job-search-ai-assistant" in text and "jsaa" in text
 
 
 def test_report_renders_gap_counts_table():
