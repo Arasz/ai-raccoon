@@ -37,15 +37,19 @@ import re
 import shlex
 import os
 import subprocess
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from retrieval_tuning import repo_data  # noqa: E402
+
 log = logging.getLogger(__name__)
 
 DEFAULT_RUNNER = "pi -p"
-SEED = 42
+SEED = repo_data.GRADERS["SEED"]
 ARMS = ("off", "threshold")
 SAMPLE_SIZE = 16
 CHANGED_PICK = 10
@@ -77,10 +81,9 @@ class Grader:
 
 
 # Owner decision (research record): #1 session default, #2 muse-spark, #3 mio.
-GRADER_TRIO = (
-    Grader(1, None, None),
-    Grader(2, "openrouter", "meta/muse-spark-1.3-contributor"),
-    Grader(3, "openrouter", "xiaomi/mimo-v2.5-pro"),
+GRADER_TRIO = tuple(
+    Grader(grader["index"], grader["provider"], grader["model"])
+    for grader in repo_data.GRADERS["GRADER_TRIO"]
 )
 
 

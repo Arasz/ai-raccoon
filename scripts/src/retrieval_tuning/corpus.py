@@ -1,20 +1,21 @@
 """Load/validate corpus JSON per plan §5.3, with anchors resolved against the memory-db copy.
 
 Validation is read-only against the copy (sqlite3 ?mode=ro); the live bank is
-never opened here — only the copy path a caller passes in.
+never opened here — only the copy path a caller passes in. The corpus-level
+scope set and the loader itself live in `retrieval_tuning.scopes` (one home,
+P3 AC1): this module keeps the entry validator and the anchor resolution.
 """
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
-from pathlib import Path
 from typing import Optional
 
+from . import scopes
+from .scopes import CORPUS_SCOPES as VALID_SCOPES
 from .scoring import anchor_of, source_file_matches
 
-VALID_SCOPES = {"project", "shared", "all"}
 TEST_GRADES = {"good", "could-be-improved", "just-wrong"}
 _HEX_RE = re.compile(r"^[0-9a-fA-F]{6,}$")
 _WS_RE = re.compile(r"\s+")
@@ -26,13 +27,11 @@ def _slug(text: str) -> str:
 
 
 def load_corpus(path) -> list[dict]:
-    """Read a corpus file: a JSON list of entries, or {'queries': [...]}."""
-    raw = json.loads(Path(path).read_text())
-    if isinstance(raw, list):
-        return raw
-    if isinstance(raw, dict) and isinstance(raw.get("queries"), list):
-        return raw["queries"]
-    raise ValueError(f"{path}: corpus JSON must be a list of entries or {{'queries': [...]}}")
+    """Read a corpus file: a JSON list of entries, or {'queries': [...]}.
+
+    One loader for every corpus shape (scopes.load_corpus); this returns the
+    entries half that the validator/consumers here expect."""
+    return scopes.load_corpus(path)[1]
 
 
 def validate_entries(

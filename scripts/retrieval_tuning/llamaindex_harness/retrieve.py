@@ -22,11 +22,16 @@ from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 
 from . import fts as fts_plan
 from . import fusion
+from . import scopes
+from retrieval_tuning import repo_data
+
+_FROZEN = repo_data.KNOBS["PARAMS"]
+EVAL_LIMIT = repo_data.KNOBS["EVAL_LIMIT"]
 from .fusion import DocScoreFormula, RankedHit
 from .ingest import StoreHandle, query_fts
 
 
-def candidate_window(limit: int, mode: str = "max3x100") -> int:
+def candidate_window(limit: int, mode: str = _FROZEN["candidateWindow"]) -> int:
     """Port of SqliteMemoryStore.CandidateWindowFor (default Max3X100)."""
     if mode == "max5x50":
         return max(limit * 5, 50)
@@ -54,17 +59,6 @@ def dedupe_by_content(
     return picked
 
 
-def _chroma_where(project_id: str, scope: str) -> dict:
-    if scope == "project":
-        return {"$and": [{"project_id": {"$eq": project_id}},
-                         {"scope": {"$in": ["project", "custom"]}}]}
-    if scope == "shared":
-        return {"scope": {"$eq": "shared"}}
-    return {"$or": [{"$and": [{"project_id": {"$eq": project_id}},
-                              {"scope": {"$in": ["project", "custom"]}}]},
-                    {"scope": {"$eq": "shared"}}]}
-
-
 def _finite_hits(ids: list[str], distances: list[float]) -> dict[str, float]:
     """Chroma distances -> cosine similarities; non-finite entries are dropped.
 
@@ -77,11 +71,45 @@ def _finite_hits(ids: list[str], distances: list[float]) -> dict[str, float]:
     return out
 
 
+def _query_tie_complete(collection, qvec, window: int, where: dict) -> dict:
+    """Chroma ANN query with the window cut expanded past exact-distance ties.
+
+    Chroma truncates an exact-distance tie group at the requested k and the
+    surviving subset is process-dependent (measured: a 17-item tie group at
+    d=2^-24 spanning the k=100 cut). Grow the request while the (window+1)-th
+    distance equals the window-th one, bounded by the collection count, so the
+    caller can sort by (distance, hash) and cut deterministically."""
+    count = collection.count()
+    if count == 0:
+        return {"ids": [[]], "distances": [[]]}
+    k = min(count, window + 1)
+    while True:
+        hits = collection.query(query_embeddings=[qvec], n_results=k,
+                                where=where, include=["distances"])
+        dists = hits["distances"][0]
+        if (len(dists) < k  # every matching row is in hand
+                or len(dists) <= window  # the cut is the collection's end
+                or k >= count  # no rows left to grow into
+                or dists[window] != dists[window - 1]):  # no tie at the cut
+            return hits
+        k = min(count, max(k * 2, window + 1))
+
+
+def _top_window_similarity(collection, qvec, window: int, where: dict) -> dict[str, float]:
+    """Tie-complete top-window keyed by hash, sorted (distance, hash) before the cut."""
+    hits = _query_tie_complete(collection, qvec, window, where)
+    rows = [(h, d) for h, d in zip(hits["ids"][0], hits["distances"][0])
+            if isinstance(d, (int, float)) and not isinstance(d, bool) and math.isfinite(d)]
+    rows.sort(key=lambda item: (item[1], item[0]))
+    return _finite_hits([h for h, _ in rows[:window]], [d for _, d in rows[:window]])
+
+
 class FusionRetriever(BaseRetriever):
-    """BaseRetriever over a harness store; retrieve(query, limit=8) serves NodeWithScore."""
+    """BaseRetriever over a harness store; retrieve(query, limit=EVAL_LIMIT) serves NodeWithScore."""
 
     def __init__(self, handle: StoreHandle, query_embed, project_id: str = "ai-raccoon",
-                 scope: str = "project", default_limit: int = 8) -> None:
+                 scope: str = scopes.DEFAULT_QUERY_SCOPE,
+                 default_limit: int = EVAL_LIMIT) -> None:
         super().__init__()
         self._handle = handle
         self._query_embed = query_embed
@@ -89,16 +117,17 @@ class FusionRetriever(BaseRetriever):
         self._scope = scope
         self._default_limit = default_limit
         params = handle.params
-        self._rrf_k = int(params.get("rrfK", 60))
-        self._fts_weight = float(params.get("ftsWeight", 1))
-        self._vector_weight = float(params.get("vectorWeight", 1))
-        self._min_rel = float(params.get("minRelativeScore", 0.6))
-        self._lambda = float(params.get("sourceLambda", 0.1))
-        self._threshold = float(params.get("consolidationThreshold", 0.1))
+        self._rrf_k = int(params.get("rrfK", _FROZEN["rrfK"]))
+        self._fts_weight = float(params.get("ftsWeight", _FROZEN["ftsWeight"]))
+        self._vector_weight = float(params.get("vectorWeight", _FROZEN["vectorWeight"]))
+        self._min_rel = float(params.get("minRelativeScore", _FROZEN["minRelativeScore"]))
+        self._lambda = float(params.get("sourceLambda", _FROZEN["sourceLambda"]))
+        self._threshold = float(params.get("consolidationThreshold",
+                                          _FROZEN["consolidationThreshold"]))
         self._formula = (DocScoreFormula.SUM if params.get("docScoreFormula") == "sum"
                          else DocScoreFormula.MAX)
-        self._window_mode = str(params.get("candidateWindow", "max3x100"))
-        self._alpha = float(params.get("structureAlpha", 0.5))
+        self._window_mode = str(params.get("candidateWindow", _FROZEN["candidateWindow"]))
+        self._alpha = float(params.get("structureAlpha", _FROZEN["structureAlpha"]))
 
     # -- legs (public for the skipped-leg wiring tests) --
 
@@ -121,19 +150,9 @@ class FusionRetriever(BaseRetriever):
             return []
         window = candidate_window(limit, self._window_mode)
         qvec = self._query_embed(query)
-        where = _chroma_where(self._project_id, self._scope)
-        content_hits = self._handle.content.query(
-            query_embeddings=[qvec], n_results=min(window, self._handle.content.count() or 1),
-            where=where, include=["distances"])
-        structure_hits = self._handle.structure.query(
-            query_embeddings=[qvec],
-            n_results=min(window, self._handle.structure.count() or 1) if
-            self._handle.structure.count() else 1,
-            where=where, include=["distances"])
-        content = _finite_hits(content_hits["ids"][0], content_hits["distances"][0]) \
-            if content_hits["ids"] else {}
-        struct = _finite_hits(structure_hits["ids"][0], structure_hits["distances"][0]) \
-            if structure_hits["ids"] and self._handle.structure.count() else {}
+        where = scopes.chroma_where(self._project_id, self._scope)
+        content = _top_window_similarity(self._handle.content, qvec, window, where)
+        struct = _top_window_similarity(self._handle.structure, qvec, window, where)
         return fusion.structure_rank(content, struct, self._alpha, window)
 
     # -- pipeline --

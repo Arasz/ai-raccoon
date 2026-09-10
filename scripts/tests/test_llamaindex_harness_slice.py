@@ -210,3 +210,18 @@ def test_slice_removes_vec_orphans(tmp_path):
         assert conn.execute("SELECT count(*) FROM vec_entries").fetchone()[0] == 2
     finally:
         conn.close()
+
+
+def test_slice_explicit_blank_buckets_fails_loud(tmp_path, capsys):
+    # F11: an explicit empty --buckets is falsy, so the legacy 2-bucket default
+    # (bare-list corpora) or the header derivation (header corpora) silently
+    # swallowed it. An explicit blank must exit 2, never fall back.
+    src = tmp_path / "src.db"
+    _fixture_copy(src)
+    corpus = tmp_path / "corpus.json"
+    _corpus(corpus, ["keep1"])
+    dst = tmp_path / "slice.db"
+    assert slice_copy.main(["--source", str(src), "--target", str(dst),
+                            "--corpus", str(corpus), "--buckets", ""]) == 2
+    assert "blank" in capsys.readouterr().out.lower()
+    assert not dst.exists()

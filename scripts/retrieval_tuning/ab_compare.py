@@ -36,23 +36,24 @@ import re
 import shlex
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from retrieval_tuning import repo_data  # noqa: E402
 
 ARM_THRESHOLD = "threshold"
 ARM_OFF = "off"
 CHUNKS_PER_LIST = 8
-DEFAULT_SEED = 20260909
+DEFAULT_SEED = repo_data.GRADERS["DEFAULT_SEED"]
 DEFAULT_RUNNER = "pi -p"
 DEFAULT_TOP_K = 5
 
 # The grader trio, equal by contract to P4 sample.json's header.graders
 # (owner decision: #1 session default, #2 muse-spark, #3 mimo-v2.5-pro; #3 re-picked
 # as openrouter/xiaomi/mimo-v2.5-pro after H1 auth failure on the native xiaomi provider).
-TRIO = (
-    {"name": "grader-1", "provider": None, "model": None},
-    {"name": "grader-2", "provider": "openrouter", "model": "meta/muse-spark-1.3-contributor"},
-    {"name": "grader-3", "provider": "openrouter", "model": "xiaomi/mimo-v2.5-pro"},
-)
+# P3 AC2: the trio lives in data/graders.json.
+TRIO = tuple(dict(grader) for grader in repo_data.GRADERS["TRIO"])
 
 # The fixed payload surface — must never hint the arms (AC5.1). Everything a
 # payload shares across queries and graders lives in these constants.

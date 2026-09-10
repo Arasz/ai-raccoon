@@ -71,7 +71,8 @@ def store(tmp_path):
     copy = tmp_path / "copy.db"
     _fixture_copy(copy)
     store_dir = tmp_path / "store"
-    assert ingest.main(["--copy", str(copy), "--store-dir", str(store_dir)],
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store_dir),
+                       "--buckets", "ai-raccoon"],
                        embed=_toy_embed) == 0
     handle = ingest.open_store(store_dir)
     yield handle
@@ -164,3 +165,153 @@ def test_nonfinite_distances_are_dropped_from_vector_hits():
     got = retrieve._finite_hits(["a", "b", "c", "d"],
                                 [0.2, float("nan"), float("inf"), 0.5])
     assert got == {"a": pytest.approx(0.8), "d": pytest.approx(0.5)}
+
+
+# --- C1 vector-leg determinism: tie-complete window expansion (TDD RED) ---
+
+
+class _TieCollection:
+    """Fake Chroma collection whose exact-distance tie group at the k cut is
+    returned in `tie_order` — the measured cross-process instability (same
+    distances, process-dependent surviving subset) made reproducible."""
+
+    def __init__(self, head, ties, tail, tie_order):
+        self._head = list(head)  # (id, distance) below the tie value
+        self._ties = dict(ties)  # id -> tie distance
+        self._tail = list(tail)  # (id, distance) above the tie value
+        self._order = list(tie_order)
+
+    def count(self):
+        return len(self._head) + len(self._ties) + len(self._tail)
+
+    def query(self, query_embeddings, n_results, where, include):
+        order = (self._head
+                 + [(t, self._ties[t]) for t in self._order]
+                 + self._tail)
+        take = order[:n_results]
+        return {"ids": [[i for i, _ in take]],
+                "distances": [[d for _, d in take]]}
+
+
+def _fake_handle(content, structure):
+    class _Handle:
+        params: dict = {}
+    handle = _Handle()
+    handle.content = content
+    handle.structure = structure
+    return handle
+
+
+def _tie_retriever(content, structure):
+    return retrieve.FusionRetriever(_fake_handle(content, structure),
+                                    query_embed=lambda t: [0.0])
+
+
+def _c066_shape(prefix, tie_order):
+    """The measured C066 shape: a 17-item exact-distance tie group spans the
+    k=100 cut (95 head items below the tie, 5 tail items above)."""
+    head = [(f"{prefix}h{i:03d}", 0.1 + i * 1e-6) for i in range(95)]
+    ties = {f"{prefix}t{i:02d}": 0.2 for i in range(17)}
+    tail = [(f"{prefix}z{i}", 0.3) for i in range(5)]
+    return _TieCollection(head, ties, tail, tie_order), head, ties
+
+
+def test_vector_leg_content_tie_is_k_complete_across_process_variants():
+    # Pre-fix the single n_results=window query truncates the tie group at the
+    # k=100 cut; the surviving subset (and so the served head) follows the
+    # fake's process-dependent tie order. Post-fix both variants serve the
+    # (distance, hash)-deterministic head.
+    empty = _TieCollection([], {}, [], [])
+    order_a = sorted(f"xt{i:02d}" for i in range(17))
+    order_b = list(reversed(order_a))
+    col_a, head, ties = _c066_shape("x", order_a)
+    col_b, _, _ = _c066_shape("x", order_b)
+    vec_a = _tie_retriever(col_a, empty).vector_leg("query", 8)
+    vec_b = _tie_retriever(col_b, empty).vector_leg("query", 8)
+    assert vec_a == vec_b, "content-leg tie truncation is k/process dependent"
+    expected = [h for h, _ in head] + sorted(ties)[:5]
+    assert [h for h, _ in vec_a] == expected
+
+
+def test_vector_leg_structure_tie_is_k_complete_across_process_variants():
+    empty = _TieCollection([], {}, [], [])
+    order_a = sorted(f"xt{i:02d}" for i in range(17))
+    order_b = list(reversed(order_a))
+    col_a, head, ties = _c066_shape("x", order_a)
+    col_b, _, _ = _c066_shape("x", order_b)
+    vec_a = _tie_retriever(empty, col_a).vector_leg("query", 8)
+    vec_b = _tie_retriever(empty, col_b).vector_leg("query", 8)
+    assert vec_a == vec_b, "structure-leg tie truncation is k/process dependent"
+    expected = [h for h, _ in head] + sorted(ties)[:5]
+    assert [h for h, _ in vec_a] == expected
+
+
+# --- P1 custom-scope vector-leg gates (TDD RED) ---
+
+def test_custom_scope_chroma_where_matches_project():
+    # Vector leg: custom must compile to the project predicate (SearchContexts:
+    # scope=project covers custom labels), never the all-scope $or fallthrough.
+    # P3: the emit lives in retrieval_tuning.scopes (one home); the harness
+    # module only re-exports it.
+    from llamaindex_harness import scopes as scopes_mod
+    assert scopes_mod.chroma_where("ai-badger", "custom") == \
+        scopes_mod.chroma_where("ai-badger", "project")
+    assert scopes_mod.chroma_where("ai-badger", "custom") != \
+        scopes_mod.chroma_where("ai-badger", "all")
+
+
+def test_custom_scope_retrieve_matches_project_scope(tmp_path):
+    # End to end on a store with custom rows: custom serves exactly project.
+    import sqlite3 as _sqlite3
+    from llamaindex_harness import ingest as ingest_mod
+    from llamaindex_harness import retrieve as retrieve_mod
+    copy = tmp_path / "copy.db"
+    conn = _sqlite3.connect(copy)
+    conn.executescript(
+        """
+        CREATE TABLE entries (
+            id INTEGER PRIMARY KEY, hash TEXT, path TEXT, value TEXT,
+            scope TEXT, project_id TEXT, source_file TEXT, section TEXT,
+            heading_path TEXT, chunk_index INTEGER, total_chunks INTEGER);
+        CREATE VIRTUAL TABLE entries_fts USING fts5(value, source_file, section);
+        CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+            INSERT INTO entries_fts(rowid, value, source_file, section)
+            VALUES (new.id, new.value, new.source_file, new.section);
+        END;
+        """
+    )
+    conn.executemany(
+        "INSERT INTO entries (hash, path, value, scope, project_id, source_file,"
+        " section, heading_path, chunk_index, total_chunks) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [("c1", "c.md", "custom wardrobe tailoring ledger entry", "custom", "ai-badger",
+          "docs:c.md", "context", "Custom", 0, 1),
+         ("p1", "p.md", "project wardrobe standard pattern draft", "project", "ai-badger",
+          "docs:p.md", "context", "Project", 0, 1),
+         ("s9", "s.md", "shared wardrobe notion", "shared", "ai-badger",
+          None, None, "", -1, 0)],
+    )
+    conn.commit()
+    conn.close()
+    store_dir = tmp_path / "store"
+    assert ingest_mod.main(["--copy", str(copy), "--store-dir", str(store_dir),
+                            "--buckets", "ai-badger"], embed=_toy_embed) == 0
+    handle = ingest_mod.open_store(store_dir)
+    try:
+        vec_custom = retrieve_mod.FusionRetriever(
+            handle, query_embed=lambda t: _toy_embed([t])[0],
+            project_id="ai-badger", scope="custom").vector_leg("wardrobe", 8)
+        vec_project = retrieve_mod.FusionRetriever(
+            handle, query_embed=lambda t: _toy_embed([t])[0],
+            project_id="ai-badger", scope="project").vector_leg("wardrobe", 8)
+        assert vec_custom == vec_project and vec_custom
+        served_custom = retrieve_mod.FusionRetriever(
+            handle, query_embed=lambda t: _toy_embed([t])[0],
+            project_id="ai-badger", scope="custom").retrieve("wardrobe")
+        served_project = retrieve_mod.FusionRetriever(
+            handle, query_embed=lambda t: _toy_embed([t])[0],
+            project_id="ai-badger", scope="project").retrieve("wardrobe")
+        assert {n.node.node_id for n in served_custom} == \
+            {n.node.node_id for n in served_project} >= {"c1", "p1"}
+        assert "s9" not in {n.node.node_id for n in served_custom}  # not widened
+    finally:
+        handle.close()

@@ -54,18 +54,23 @@ Run:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import random
 import re
 import sqlite3
+import sys
 from pathlib import Path
 
-SEED = 42  # determinism contract (AC2.1): same inputs -> byte-identical JSON
-TOTAL_QUERIES = 100
-QUERY_CAP = 20
-SEARCH_LIMIT = 8  # P3 computes top-8 set overlap; the corpus must ask for 8
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from retrieval_tuning import corpus_anchors, repo_data  # noqa: E402
+
+# P3 AC2: generator constants live in data/corpora/project-corpus-100.json.
+_GENERATOR = repo_data.CORPORA["project-corpus-100"]
+SEED = _GENERATOR["SEED"]  # determinism contract (AC2.1): byte-identical JSON
+TOTAL_QUERIES = _GENERATOR["TOTAL_QUERIES"]
+QUERY_CAP = _GENERATOR["QUERY_CAP"]
+SEARCH_LIMIT = _GENERATOR["SEARCH_LIMIT"]  # top-8 set overlap: the corpus asks for it
 
 DEFAULT_COPY = Path("/tmp/continue-testing-algorithm/datasets/memory-copy.db")
 DEFAULT_OUTPUT = (
@@ -73,25 +78,13 @@ DEFAULT_OUTPUT = (
     / "scripts" / "retrieval_tuning" / "corpora" / "project-corpus-100.json"
 )
 
-# 3 paraphrase frames per target, rotated by target ordinal (plan §P2-2c).
-FRAMES = (
-    "What do our notes say about {topic}?",
-    "How is {topic} handled?",
-    "Where is {topic} documented?",
-)
+# Paraphrase frames per target, rotated by target ordinal (plan §P2-2c).
+FRAMES = tuple(_GENERATOR["FRAMES"])
 _TOPIC_MAX_CHARS = 100
 _TOPIC_MIN_CUT = 8
 _MARKER_MIN_CHARS = 8
 _MARKER_WINDOW_LENS = (120, 240)
 _ANSWER_SPAN_CHARS = 160
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _normalize(text: str) -> str:
@@ -176,6 +169,46 @@ def _embedded_row_counts(conn: sqlite3.Connection) -> dict[str, int]:
     }
 
 
+def _embedded_scope_counts(conn: sqlite3.Connection, project_id: str) -> tuple[int, int]:
+    """(committed, shared) embedded rows for one project.
+
+    Committed = scope IN ('project','custom') — the rows the search gate's
+    project predicate can reach; a raw-spelled project_id can never match it.
+    Shared = scope='shared' — global, served by shared/all queries regardless
+    of the project_id spelling, so those rows are NOT lost to the fold.
+    NULL-scope rows count as neither (the ingest rule never sees them)."""
+    committed = shared = 0
+    for scope, n in conn.execute(
+        "SELECT scope, count(*) FROM entries "
+        "WHERE project_id=? AND embed_state='embedded' AND workspace_id IS NULL "
+        "GROUP BY scope",
+        (project_id,),
+    ):
+        if scope in ("project", "custom"):
+            committed += n
+        elif scope == "shared":
+            shared += n
+    return committed, shared
+
+
+def _exclusion_reason(project_id: str, canonical_id: str, committed: int, shared: int) -> str:
+    """Per-project reason naming which half of the exclusion is actually unservable."""
+    base = (f"raw entries.project_id {project_id!r} folds to canonical "
+            f"{canonical_id!r} under the search gate")
+    if shared == 0:
+        shared_part = "it has no scope='shared' rows"
+    elif shared == 1:
+        shared_part = ("its 1 scope='shared' row is global, remains ingested "
+                       "and is served by shared/all queries")
+    else:
+        shared_part = (f"its {shared} scope='shared' rows are global, remain ingested "
+                       "and are served by shared/all queries")
+    if committed:
+        return (f"{base}, so its {committed} committed project/custom rows can never be "
+                f"served; {shared_part}")
+    return f"{base}; it has no committed project/custom rows, and {shared_part}"
+
+
 def _file_candidates(conn: sqlite3.Connection, project_id: str) -> list[dict]:
     """Distinct source_file with >=1 embedded chunk; the anchor is the file's
     first embedded chunk (lowest chunk_index, hash tie-break)."""
@@ -215,12 +248,8 @@ def _derive_unique_marker(
             if len(span) < _MARKER_MIN_CHARS or span in tried:
                 continue
             tried.add(span)
-            n = conn.execute(
-                "SELECT count(*) FROM entries "
-                "WHERE project_id=? AND scope=? AND instr(value, ?) > 0",
-                (project_id, scope, span),
-            ).fetchone()[0]
-            if n == 1:
+            if len(corpus_anchors.marker_matches(
+                    conn, span, project_id=project_id, scope=scope)) == 1:
                 return span
     return None
 
@@ -250,14 +279,6 @@ def _content_candidates(conn: sqlite3.Connection, project_id: str) -> list[dict]
             "value": row["value"],
         })
     return out
-
-
-def _assert_hash_unique(conn: sqlite3.Connection, hash_value: str) -> None:
-    n = conn.execute(
-        "SELECT count(*) FROM entries WHERE hash=?", (hash_value,)).fetchone()[0]
-    if n != 1:
-        raise RuntimeError(
-            f"anchor hash {hash_value[:16]}... is not unique in the copy ({n} rows)")
 
 
 # ------------------------------------------------------------------ allocation (pinned)
@@ -316,14 +337,14 @@ def _render_query(
     failure. Returns (query text, frame actually used)."""
     topic = _derive_topic(value)
     attempts: list[tuple[str, int]] = []
-    for offset in range(3):
-        frame_idx = (frame_base + offset) % 3
+    for offset in range(len(FRAMES)):
+        frame_idx = (frame_base + offset) % len(FRAMES)
         attempts.append((FRAMES[frame_idx].replace("{topic}", topic), frame_idx))
     for discriminator in disambiguators:
         if not discriminator:
             continue
-        for offset in range(3):
-            frame_idx = (frame_base + offset) % 3
+        for offset in range(len(FRAMES)):
+            frame_idx = (frame_base + offset) % len(FRAMES)
             attempts.append((
                 FRAMES[frame_idx].replace("{topic}", f"{topic} ({discriminator})"),
                 frame_idx,
@@ -384,7 +405,7 @@ def _build_project_queries(
     for ordinal, target in enumerate(targets):
         frame_base = ordinal % 3
         if target["kind"] == "file":
-            _assert_hash_unique(conn, target["anchor_hash"])
+            corpus_anchors.assert_hash_unique(conn, target["anchor_hash"])
             value = conn.execute(
                 "SELECT value FROM entries WHERE hash=?", (target["anchor_hash"],)
             ).fetchone()[0]
@@ -436,10 +457,9 @@ def generate(copy_path: Path, output_path: Path) -> dict:
     output_path = Path(output_path)
     if not copy_path.exists():
         raise RuntimeError(f"memory-db copy not found: {copy_path}")
-    snapshot_sha = _sha256_file(copy_path)
+    snapshot_sha = corpus_anchors.sha256_file(copy_path)
 
-    conn = sqlite3.connect(f"file:{copy_path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
+    conn = corpus_anchors.open_copy(copy_path)
     try:
         fold_map = _load_alias_fold_map(conn)
         projects = _enumerate_projects(conn)
@@ -451,13 +471,14 @@ def generate(copy_path: Path, output_path: Path) -> dict:
         for pid in projects:
             canonical = fold_map.get(pid, pid)
             if canonical != pid:
+                committed, shared = _embedded_scope_counts(conn, pid)
                 excluded.append({
                     "projectId": pid,
                     "canonicalId": canonical,
                     "embeddedRows": embedded.get(pid, 0),
-                    "reason": (
-                        f"raw entries.project_id {pid!r} folds to canonical {canonical!r} under "
-                        "the search gate, so a raw-spelled anchor could never be served"),
+                    "committedRows": committed,
+                    "sharedRows": shared,
+                    "reason": _exclusion_reason(pid, canonical, committed, shared),
                 })
             elif embedded.get(pid, 0) >= 1:
                 weights[pid] = math.sqrt(embedded[pid])

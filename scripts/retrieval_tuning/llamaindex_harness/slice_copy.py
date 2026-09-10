@@ -21,12 +21,19 @@ import sys
 import tempfile
 from pathlib import Path
 
-DEFAULT_BUCKETS = ("ai-raccoon", "hermes-default")
-DEFAULT_CAP = 1500
+from . import scopes
+from retrieval_tuning import repo_data
+
+# P3 AC2: slice defaults live in data/buckets.json.
+DEFAULT_BUCKETS = tuple(repo_data.BUCKETS["DEFAULT_BUCKETS"])
+DEFAULT_CAP = repo_data.BUCKETS["DEFAULT_CAP"]
 
 
 def _forced_hashes(corpus_path: str) -> list[str]:
-    entries = json.loads(Path(corpus_path).read_text())
+    # Bare-list subset corpora and header-shaped corpora ({header, queries})
+    # both force their anchors in; null anchors (content-targeted rows) carry
+    # no hash and are skipped (the eval filters them pre-run_eval).
+    _, entries = scopes.load_corpus(corpus_path)
     return [e["expectedHash"] for e in entries
             if isinstance(e.get("expectedHash"), str) and e["expectedHash"]]
 
@@ -79,12 +86,7 @@ def slice_copy(source: str, target: str, forced: list[str],
             # NULL-safe keep: NOT(keep) is NULL (not TRUE) for NULL-scope rows
             # and DELETE spares NULL — so NULL scopes die explicitly unless
             # force-listed. Mirrors ingest.load_rows (which can never see them).
-            keep = ["scope = 'shared'"]
-            params: list = []
-            for bucket in buckets:
-                keep.append("id IN (SELECT id FROM entries WHERE project_id = ?"
-                            " AND scope IN ('project','custom') ORDER BY id LIMIT ?)")
-                params.extend([bucket, cap_per_bucket])
+            keep, params = scopes.slice_keep_clauses(buckets, cap_per_bucket)
             if forced:
                 conn.execute(
                     "DELETE FROM entries WHERE"
@@ -122,12 +124,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--target", required=True, help="slice output path")
     parser.add_argument("--corpus", required=True, help="subset JSON (expectedHash force-in)")
     parser.add_argument("--cap-per-bucket", type=int, default=DEFAULT_CAP)
-    parser.add_argument("--buckets", default=",".join(DEFAULT_BUCKETS))
+    parser.add_argument("--buckets", default=None,
+                        help="explicit comma-separated buckets; wins over the corpus header")
     args = parser.parse_args(argv)
+    if args.buckets is not None and not args.buckets.strip():
+        print("FAIL: --buckets is blank (pass a comma-separated list or omit the flag)")
+        return 2
     forced = _forced_hashes(args.corpus)
+    header, _ = scopes.load_corpus(args.corpus)
+    if args.buckets or (header is not None and isinstance(header.get("projects"), dict)):
+        # One resolver for every derived path (explicit wins, else the corpus
+        # header; typos fail loud against the source). Bare-list subset corpora
+        # fall to the legacy default pinned by the slice gates.
+        try:
+            buckets, _ = scopes.resolve_buckets(args.source, args.corpus, args.buckets)
+        except ValueError as exc:
+            print(f"FAIL: {exc}")
+            return 2
+    else:
+        buckets = DEFAULT_BUCKETS
     try:
         counts = slice_copy(args.source, args.target, forced,
-                            tuple(args.buckets.split(",")), args.cap_per_bucket)
+                            buckets, args.cap_per_bucket)
     except Exception as exc:  # noqa: BLE001 — any slice failure is a failed gate
         print(f"FAIL: slice failed: {exc}")
         return 1

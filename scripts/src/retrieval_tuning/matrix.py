@@ -31,22 +31,15 @@ import json
 import os
 import sys
 
+from . import repo_data
+
 # ---------------------------------------------------------------------------
 # Ladder definitions (plan §3.1 — default marked bold in the plan; the default
-# value is a ladder point for every knob).
+# value is a ladder point for every knob). P3 AC2: the defaults are the same
+# data/knobs.json values settings.py writes — one source, not two.
 # ---------------------------------------------------------------------------
 
-DEFAULTS: dict = {
-    "rrfK": 60,
-    "ftsWeight": 1,
-    "vectorWeight": 1,
-    "sourceLambda": 0.1,
-    "consolidationThreshold": 0.1,
-    "docScoreFormula": "max",
-    "candidateWindow": "max3x100",
-    "structureAlpha": 0.5,
-    "fusion": False,
-}
+DEFAULTS: dict = dict(repo_data.KNOBS["KNOB_DEFAULTS"])
 
 LADDERS: dict = {
     "rrfK": [1, 5, 15, 60, 120, 200],
