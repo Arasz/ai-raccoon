@@ -8,6 +8,7 @@ provenance gap instead of hiding it.
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -268,19 +269,51 @@ class TestRegistry:
         assert [s.anchor_style for s in specs] == ["hash-only", "eval"]
         assert all(s.expected_count == 100 for s in specs)
 
+    def test_committed_corpora_carry_snapshot_pins(self):
+        """Every committed corpus pins its source copy (C1/C3) — the refresh
+        contract's snapshot check is dead for any corpus without a header."""
+        for name in ("project-corpus-100.json", "eval-set-100.json"):
+            payload = json.loads((COMMITTED_CORPORA / name).read_text())
+            assert isinstance(payload, dict), f"{name}: root must be {{header, queries}}"
+            header = payload.get("header")
+            assert isinstance(header, dict), f"{name}: header missing"
+            assert header.get("generator"), f"{name}: header.generator missing"
+            assert header.get("seed") is not None, f"{name}: header.seed missing"
+            assert header.get("queryCount") == 100, f"{name}: header.queryCount"
+            assert len(payload.get("queries", [])) == 100, f"{name}: queries length"
+            sha = header.get("snapshotSha256")
+            assert isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{64}", sha), (
+                f"{name}: snapshotSha256 must be 64 lowercase hex, got {sha!r}"
+            )
+
+    def test_committed_pins_refuse_a_different_copy(self, tmp_path):
+        """The pins are active, not decorative (C3): a copy whose sha differs
+        from the committed header is refused with exit 2 before any generator
+        runs. The real committed corpora are the input; the copy file itself is
+        a placeholder because the snapshot check short-circuits generation."""
+        dummy = tmp_path / "not-the-pinned-copy.db"
+        dummy.write_bytes(b"not a bank copy")
+        report = refresh_corpora.refresh(dummy, COMMITTED_CORPORA, tmp_path / "out",
+                                         copy_sha="0" * 64)
+        assert report["exitCode"] == 2
+        assert {r["name"] for r in report["corpora"]} == {
+            "project-corpus-100.json", "eval-set-100.json"}
+        for record in report["corpora"]:
+            assert record["status"] == "snapshot-mismatch", record
+            assert record["problems"], record
+        assert not (tmp_path / "out" / "project-corpus-100.json").exists()
+        assert not (tmp_path / "out" / "eval-set-100.json").exists()
+
     @pytest.mark.skipif(not PINNED_COPY.exists(),
                         reason=f"pinned copy absent: {PINNED_COPY}")
-    def test_pinned_copy_reproduces_the_project_corpus(self, tmp_path):
+    def test_pinned_copy_reproduces_every_committed_corpus(self, tmp_path):
         report = refresh_corpora.refresh(PINNED_COPY, COMMITTED_CORPORA,
                                          tmp_path / "regenerated")
         by_name = {r["name"]: r for r in report["corpora"]}
-        project = by_name["project-corpus-100.json"]
-        assert project["matchesCommitted"] is True, project["problems"]
-        assert project["status"] == "clean"
-        assert project["queryCount"] == 100
-        # The eval-set artifact predates the pinned copy and carries no snapshot
-        # pin; the refresh says so instead of pretending it reproduced.
-        eval_set = by_name["eval-set-100.json"]
-        assert eval_set["matchesCommitted"] is False
-        assert eval_set["problems"], "a divergent artifact must name its reason"
-        assert report["exitCode"] == 3
+        assert set(by_name) == {"project-corpus-100.json", "eval-set-100.json"}
+        for name, record in by_name.items():
+            assert record["matchesCommitted"] is True, (name, record["problems"])
+            assert record["status"] == "clean", (name, record["status"])
+            assert record["queryCount"] == 100, name
+        assert report["status"] == "clean"
+        assert report["exitCode"] == 0

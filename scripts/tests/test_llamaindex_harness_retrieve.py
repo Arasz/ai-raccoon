@@ -126,6 +126,8 @@ def test_served_shape_floor_and_order_over_corpus_queries(store):
     corpus = json.loads(
         (Path(__file__).resolve().parents[1] / "retrieval_tuning" / "corpora"
          / "eval-set-100.json").read_text())
+    if isinstance(corpus, dict):  # provenance-header shape: {header, queries}
+        corpus = corpus["queries"]
     r = _retriever(store)
     for entry in corpus[:20]:
         served = r.retrieve(entry["query"])
