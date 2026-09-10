@@ -27,6 +27,12 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
+
+sys.path.insert(0, str(REPO / "scripts" / "retrieval_tuning"))
+
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+
+from llamaindex_harness.evaluate import debris_query  # noqa: E402
 P3_BASE = "12a72dfb"
 PINNED_COPY = Path(os.environ.get("AI_RACCOON_EVAL_COPY", "/tmp/p1-live-copy.db"))
 PARITY = os.environ.get("P3_CLI_PARITY") == "1"
@@ -234,6 +240,19 @@ class TestSliceParity:
 
 
 class TestRefreshParity:
+    # Markup/JSON debris ids of the legacy project-corpus output, measured
+    # with the report's predicate (evaluate.debris_query). The anti-vacuity
+    # pin: the legacy run must yield exactly these, or the repair check below
+    # proves nothing (a wrong copy fails loudly here, not silently below).
+    LEGACY_DEBRIS_IDS = [
+        "C017", "C021", "C026", "C028", "C036", "C044", "C045", "C048",
+        "C049", "C050", "C051", "C052", "C053", "C056", "C057", "C059",
+        "C060", "C072", "C078", "C096", "C097", "C099", "C100",
+    ]
+    COMMITTED_PROJECT_CORPUS = (
+        REPO / "scripts" / "retrieval_tuning" / "corpora" / "project-corpus-100.json"
+    )
+
     @pytest.mark.skipif(not PINNED_COPY.exists(), reason=f"pinned copy absent: {PINNED_COPY}")
     def test_generators_reproduce_the_legacy_payload(self, tmp_path):
         legacy = _extract_tree(tmp_path)
@@ -274,5 +293,41 @@ class TestRefreshParity:
                 assert new_payload["queries"] == legacy_payload, \
                     "eval corpus query payload differs from the legacy output"
             else:
-                assert _sha256(legacy_out) == _sha256(new_out), \
-                    f"{generator}: legacy and new bytes differ"
+                # B (air-corpus-quality-clean-instrument): the project corpus
+                # is repaired, never byte-identical. (a) the new output
+                # reproduces the committed artifact; (b) legacy vs new agree
+                # on every field except query/frame, and on the header except
+                # topicDerivation; (c) every legacy-debris query changed text
+                # and carries no debris after the repair.
+                assert _sha256(new_out) == _sha256(self.COMMITTED_PROJECT_CORPUS), (
+                    "(a) new project-corpus output differs from the committed artifact")
+                legacy_doc = json.loads(legacy_out.read_text())
+                new_doc = json.loads(new_out.read_text())
+                legacy_debris = [
+                    q["id"] for q in legacy_doc["queries"] if debris_query(q["query"])
+                ]
+                assert legacy_debris == self.LEGACY_DEBRIS_IDS, (
+                    "legacy project-corpus output does not carry the 23 pinned "
+                    f"debris ids (got {len(legacy_debris)}: {legacy_debris})")
+                assert set(legacy_doc["header"]) | {"topicDerivation"} == set(
+                    new_doc["header"]), (
+                    "project-corpus header drift beyond topicDerivation")
+                for key in legacy_doc["header"]:
+                    assert legacy_doc["header"][key] == new_doc["header"][key], (
+                        f"project-corpus header[{key!r}] differs legacy vs new")
+                assert new_doc["header"]["topicDerivation"] == "markup-aware-v1"
+                old_queries = {q["id"]: q for q in legacy_doc["queries"]}
+                new_queries = {q["id"]: q for q in new_doc["queries"]}
+                assert set(old_queries) == set(new_queries), (
+                    "project-corpus query ids moved legacy vs new")
+                for qid in old_queries:
+                    for key in old_queries[qid]:
+                        if key in ("query", "frame"):
+                            continue
+                        assert old_queries[qid][key] == new_queries[qid][key], (
+                            f"{qid}: field {key!r} differs legacy vs new")
+                for qid in legacy_debris:
+                    assert old_queries[qid]["query"] != new_queries[qid]["query"], (
+                        f"{qid}: legacy debris query text not repaired")
+                    assert not debris_query(new_queries[qid]["query"]), (
+                        f"{qid}: repaired query text still carries debris")
