@@ -423,8 +423,8 @@ def _check_hash_unique(conn: sqlite3.Connection, hash_value: str, label: str) ->
     corpus_anchors.assert_hash_unique(conn, hash_value, label)
 
 
-def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -> list[dict]:
-    """Resolve all anchors from the copy and write the 100-query corpus JSON."""
+def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -> dict:
+    """Resolve all anchors from the copy and write the {header, queries} corpus JSON."""
     copy_path = Path(copy_path)
     output_path = Path(output_path)
     assert copy_path.exists(), f"memory-db copy not found: {copy_path}"
@@ -495,10 +495,19 @@ def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -
     assert len({q["query"] for q in queries}) == 100, "duplicate query text"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    corpus = {
+        "header": {
+            "generator": "build_eval_corpus.py",
+            "seed": SEED,
+            "queryCount": len(queries),
+            "snapshotSha256": corpus_anchors.sha256_file(copy_path),
+        },
+        "queries": queries,
+    }
     with output_path.open("w", encoding="utf-8") as fh:
-        json.dump(queries, fh, indent=2, sort_keys=True, ensure_ascii=False)
+        json.dump(corpus, fh, indent=2, sort_keys=True, ensure_ascii=False)
         fh.write("\n")
-    return queries
+    return corpus
 
 
 def main() -> None:
@@ -507,8 +516,8 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="output JSON path")
     parser.add_argument("--docs-dir", type=Path, default=None, help="docs/adr directory")
     args = parser.parse_args()
-    queries = generate(args.copy, args.output, args.docs_dir)
-    print(f"wrote {len(queries)} queries to {args.output}")
+    corpus = generate(args.copy, args.output, args.docs_dir)
+    print(f"wrote {corpus['header']['queryCount']} queries to {args.output}")
 
 
 if __name__ == "__main__":
