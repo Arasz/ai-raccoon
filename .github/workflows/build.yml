@@ -270,7 +270,9 @@ jobs:
         # which the evaluate seam test exercises through build_airaccoon_fn.
         run: python3 -m pip install pytest httpx
       - name: Stdlib-runnable harness tests
-        run: python3 -m pytest scripts/tests/test_llamaindex_harness_fts.py scripts/tests/test_llamaindex_harness_fusion.py scripts/tests/test_llamaindex_harness_evaluate.py scripts/tests/test_llamaindex_harness_report.py scripts/tests/test_llamaindex_harness_slice.py scripts/tests/test_retrieval_tuning_scopes.py scripts/tests/test_no_hardcoded_knobs.py scripts/tests/test_refresh_corpora.py scripts/tests/test_collect_ac_evidence.py scripts/tests/test_diff_golden.py scripts/tests/test_dependencies_declared.py scripts/tests/test_retrieval_tuning_eval_corpus.py -q
+        # test_corpus_text + test_build_project_corpus are stdlib-only and carry
+        # the corpus debris gate (T8: committed artifact debris-free, copy-free).
+        run: python3 -m pytest scripts/tests/test_llamaindex_harness_fts.py scripts/tests/test_llamaindex_harness_fusion.py scripts/tests/test_llamaindex_harness_evaluate.py scripts/tests/test_llamaindex_harness_report.py scripts/tests/test_llamaindex_harness_slice.py scripts/tests/test_retrieval_tuning_scopes.py scripts/tests/test_no_hardcoded_knobs.py scripts/tests/test_refresh_corpora.py scripts/tests/test_collect_ac_evidence.py scripts/tests/test_diff_golden.py scripts/tests/test_dependencies_declared.py scripts/tests/test_retrieval_tuning_eval_corpus.py scripts/tests/test_corpus_text.py scripts/tests/test_build_project_corpus.py -q
 
   build-nightly-gates:
     # Q2 (delta review fix plan, owner flag O1): nothing ran Speed=Nightly against a PR head.
