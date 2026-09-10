@@ -275,9 +275,13 @@ What changed vs the P1 report:
   that the `c_*` names do not survive as a second taxonomy).
 - New `### Repeat-run spread` block: `mean [min–max]` per metric, `unstable=none`, and the
   variance statement.
-- The embedding bullet is now an explicit C13 seam disclosure: the harness's mean-pooled
-  vectors are not the bank's CLS vectors; labels are against measured leg positions; only
-  both-windows-miss rows are `embedding`/`unrecoverable`.
+- The embedding bullet is now an explicit C13 seam disclosure, CORRECTED by C14 (this
+  lane's report predates the correction): both systems use CLS (llama-index
+  `get_pooling_mode` defaults to 'cls'; harness output equals the model-card
+  `last_hidden_state[:,0]` recipe at cos 1.00000), and the measured seam is ONNX-vs-HF
+  model conversion (bank ONNX reproduces its stored vectors at 0.9826; ONNX-vs-HF is
+  0.5934 on the same text; padding is a no-op). Labels are against measured leg
+  positions; only both-windows-miss rows are `embedding`/`unrecoverable`.
 - C9 composition stratification (debris 23 / clean 76, recomputed) and the C10 trace note
   are unchanged.
 
