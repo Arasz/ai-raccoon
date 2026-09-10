@@ -23,11 +23,15 @@ from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from . import fts as fts_plan
 from . import fusion
 from . import scopes
+from retrieval_tuning import repo_data
+
+_FROZEN = repo_data.KNOBS["PARAMS"]
+EVAL_LIMIT = repo_data.KNOBS["EVAL_LIMIT"]
 from .fusion import DocScoreFormula, RankedHit
 from .ingest import StoreHandle, query_fts
 
 
-def candidate_window(limit: int, mode: str = "max3x100") -> int:
+def candidate_window(limit: int, mode: str = _FROZEN["candidateWindow"]) -> int:
     """Port of SqliteMemoryStore.CandidateWindowFor (default Max3X100)."""
     if mode == "max5x50":
         return max(limit * 5, 50)
@@ -101,10 +105,11 @@ def _top_window_similarity(collection, qvec, window: int, where: dict) -> dict[s
 
 
 class FusionRetriever(BaseRetriever):
-    """BaseRetriever over a harness store; retrieve(query, limit=8) serves NodeWithScore."""
+    """BaseRetriever over a harness store; retrieve(query, limit=EVAL_LIMIT) serves NodeWithScore."""
 
     def __init__(self, handle: StoreHandle, query_embed, project_id: str = "ai-raccoon",
-                 scope: str = "project", default_limit: int = 8) -> None:
+                 scope: str = scopes.DEFAULT_QUERY_SCOPE,
+                 default_limit: int = EVAL_LIMIT) -> None:
         super().__init__()
         self._handle = handle
         self._query_embed = query_embed
@@ -112,16 +117,17 @@ class FusionRetriever(BaseRetriever):
         self._scope = scope
         self._default_limit = default_limit
         params = handle.params
-        self._rrf_k = int(params.get("rrfK", 60))
-        self._fts_weight = float(params.get("ftsWeight", 1))
-        self._vector_weight = float(params.get("vectorWeight", 1))
-        self._min_rel = float(params.get("minRelativeScore", 0.6))
-        self._lambda = float(params.get("sourceLambda", 0.1))
-        self._threshold = float(params.get("consolidationThreshold", 0.1))
+        self._rrf_k = int(params.get("rrfK", _FROZEN["rrfK"]))
+        self._fts_weight = float(params.get("ftsWeight", _FROZEN["ftsWeight"]))
+        self._vector_weight = float(params.get("vectorWeight", _FROZEN["vectorWeight"]))
+        self._min_rel = float(params.get("minRelativeScore", _FROZEN["minRelativeScore"]))
+        self._lambda = float(params.get("sourceLambda", _FROZEN["sourceLambda"]))
+        self._threshold = float(params.get("consolidationThreshold",
+                                          _FROZEN["consolidationThreshold"]))
         self._formula = (DocScoreFormula.SUM if params.get("docScoreFormula") == "sum"
                          else DocScoreFormula.MAX)
-        self._window_mode = str(params.get("candidateWindow", "max3x100"))
-        self._alpha = float(params.get("structureAlpha", 0.5))
+        self._window_mode = str(params.get("candidateWindow", _FROZEN["candidateWindow"]))
+        self._alpha = float(params.get("structureAlpha", _FROZEN["structureAlpha"]))
 
     # -- legs (public for the skipped-leg wiring tests) --
 

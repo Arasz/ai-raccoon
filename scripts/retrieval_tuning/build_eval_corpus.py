@@ -28,9 +28,15 @@ import argparse
 import json
 import re
 import sqlite3
+import sys
 from pathlib import Path
 
-SEED = 42  # determinism contract: same inputs -> byte-identical JSON
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from retrieval_tuning import repo_data  # noqa: E402
+
+# P3 AC2: generator constants live in data/corpora/eval-set-100.json.
+_GENERATOR = repo_data.CORPORA["eval-set-100"]
+SEED = _GENERATOR["SEED"]  # determinism contract: same inputs -> byte-identical JSON
 
 DEFAULT_COPY = Path("/tmp/continue-testing-algorithm/datasets/memory-copy.db")
 DEFAULT_OUTPUT = (
@@ -39,42 +45,11 @@ DEFAULT_OUTPUT = (
 )
 
 # ADR files RESERVED for the 10-query test set (plan §5.2) — never targeted here.
-RESERVED_TEST_FILES = {
-    "0006-rrf-parameter-optimization.md",
-    "0056-a-retrieval-gate-measured-off-its-tuning-set.md",
-    "0070-maintenance-is-a-list-of-jobs-with-a-ledger.md",
-    "0078-the-no-fusion-regression-rule-is-an-order-and-ships-default-off.md",
-}
+RESERVED_TEST_FILES = frozenset(_GENERATOR["RESERVED_TEST_FILES"])
 
 # The explicit 25-file allowlist (plan §5.4): spread across the numbering range,
 # favouring table-bearing and multi-chunk ADRs; disjoint from RESERVED_TEST_FILES.
-ADR_ALLOWLIST = [
-    "0004-dual-vector-structure-signal.md",
-    "0008-live-pid-discovery-for-monitoring.md",
-    "0011-schema-versioning.md",
-    "0013-extension-host-hook-surface.md",
-    "0014-settings-never-sync.md",
-    "0017-tensorprimitives-in-core.md",
-    "0020-always-on-http-stdio-proxy.md",
-    "0022-authenticated-loopback-restart.md",
-    "0025-the-sweep-reaper.md",
-    "0035-memory-get-and-query-relevant-snippets.md",
-    "0036-engine-aware-chunk-token-budget.md",
-    "0039-noise-learning-substrate-and-shadow-mode.md",
-    "0044-section-fts-weight.md",
-    "0046-project-membership-has-one-definition.md",
-    "0048-a-chunk-is-a-well-formed-markdown-fragment.md",
-    "0053-rating-is-computed-where-it-is-stored.md",
-    "0060-an-unrecognised-verb-must-not-launch-anything.md",
-    "0064-memory-write-chunks-like-everything-else.md",
-    "0067-naming-shared-asks-for-promotion.md",
-    "0068-ctx-is-a-vec0-metadata-column-not-a-partition-key.md",
-    "0071-a-query-is-trimmed-deliberately-and-said-so.md",
-    "0072-a-term-budget-for-long-queries-is-not-adjudicable.md",
-    "0075-only-the-server-writes-to-the-bank.md",
-    "0080-the-phases-close-against-search-total-not-the-tool-total.md",
-    "0083-search-parameters-unified-source.md",
-]
+ADR_ALLOWLIST = list(_GENERATOR["ADR_ALLOWLIST"])
 
 # Per-file query specs: (family, category, difficulty, query text).
 # The target chunk is resolved from the copy as the FIRST chunk (by chunk_index)
@@ -495,7 +470,7 @@ def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -
                     "answerSpan": _answer_span(row["value"]),
                     "targetProjectId": row["project_id"],
                     "targetScope": row["scope"],
-                    "searchLimit": 5,
+                    "searchLimit": _GENERATOR["SEARCH_LIMIT"],
                     "relevanceGrade": 5,
                     "negativeTest": False,
                     "difficulty": difficulty,
@@ -519,7 +494,7 @@ def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -
                 "answerSpan": _answer_span(row["value"]),
                 "targetProjectId": row["project_id"],
                 "targetScope": row["scope"],
-                "searchLimit": 5,
+                "searchLimit": _GENERATOR["SEARCH_LIMIT"],
                 "relevanceGrade": 5,
                 "negativeTest": False,
                 "difficulty": difficulty,

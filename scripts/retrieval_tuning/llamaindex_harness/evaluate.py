@@ -39,7 +39,10 @@ import threading
 import uuid
 from pathlib import Path
 
-EVAL_LIMIT = 8
+from . import scopes
+from retrieval_tuning import repo_data
+
+EVAL_LIMIT = repo_data.KNOBS["EVAL_LIMIT"]
 
 
 def _sha256_file(path: Path) -> str:
@@ -444,7 +447,7 @@ def build_harness_fn(store_dir: Path, offline: bool = False):
 
     def fn(entry: dict) -> dict:
         project = entry.get("targetProjectId") or "ai-raccoon"
-        scope = entry.get("targetScope") or "project"
+        scope = entry.get("targetScope") or scopes.DEFAULT_QUERY_SCOPE
         key = (project, scope)
         if key not in cache:
             cache[key] = retrieve.FusionRetriever(
@@ -480,7 +483,6 @@ def build_airaccoon_fn(server, session_id: str) -> object:
     MCPClient._extract_results.
     """
     from retrieval_tuning.mcp import MCPClient  # noqa: PLC0415 — needs scripts/src
-    from llamaindex_harness import scopes  # noqa: PLC0415 — stdlib-only, CI-safe
 
     client = server.client
 
@@ -491,13 +493,15 @@ def build_airaccoon_fn(server, session_id: str) -> object:
                 "query": entry["query"],
                 # Corpus custom -> bank project (SearchContexts.cs: project
                 # covers custom labels; the bank refuses scope=custom).
-                "scope": scopes.normalize_scope(entry.get("targetScope") or "project"),
+                "scope": scopes.normalize_scope(
+                    entry.get("targetScope") or scopes.DEFAULT_QUERY_SCOPE),
                 "limit": EVAL_LIMIT,
-                "minRelativeScore": 0.6,  # the harness floor: both legs serve
-                "kind": "memory",      # the same post-floor, post-limit shape
+                "minRelativeScore": repo_data.KNOBS["PARAMS"]["minRelativeScore"],
+                "kind": repo_data.KNOBS["PARAMS"]["kind"],      # the same post-floor, post-limit shape
                 "sessionId": session_id,
             })
-            results = MCPClient._extract_results(parsed, kind="memory")
+            results = MCPClient._extract_results(
+                parsed, kind=repo_data.KNOBS["PARAMS"]["kind"])
             hashes = []
             for row in results:
                 h = row.get("hash") if isinstance(row, dict) else None

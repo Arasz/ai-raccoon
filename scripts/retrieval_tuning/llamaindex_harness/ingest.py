@@ -35,6 +35,7 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 from . import fts as fts_plan
 from . import scopes
+from retrieval_tuning import repo_data
 
 # Frozen Doc contract: every metadata key a Document carries through the harness.
 METADATA_KEYS = (
@@ -42,31 +43,28 @@ METADATA_KEYS = (
     "project_id", "scope",
 )
 
-MODEL_NAME = "Salesforce/SFR-Embedding-Code-400M_R"
+# P3 AC2: every behavior constant below is read from data/knobs.json — the
+# literals live there and nowhere in logic (test_no_hardcoded_knobs.py).
+MODEL_NAME = repo_data.KNOBS["MODEL_NAME"]
 
 # Frozen replication contract (verified from bank settings + SearchDefaults.cs).
-PARAMS = {
-    "rrfK": 60,
-    "ftsWeight": 1,
-    "vectorWeight": 1,
-    "limit": 8,
-    "minRelativeScore": 0.6,
-    "sourceLambda": 0.1,
-    "consolidationThreshold": 0.1,
-    "docScoreFormula": "max",
-    "candidateWindow": "max3x100",
-    "structureAlpha": 0.5,
-    "fusionNoRegression": False,
-    "scope": "project",
-    "kind": "memory",
-    "model": MODEL_NAME,
-}
+PARAMS = dict(repo_data.KNOBS["PARAMS"])
 
 # Frozen model-weights revision: the HF snapshot the F1 golden was built
 # against. A cache advance changes every vector leg, so ingest refuses until
 # the pin is reviewed and moved (see check_pinned_revision). Recorded with
 # its byte size into params.json for audit.
-PINNED_MODEL_REVISION = "cb950dc80d677c6fdc00f56c8ddd20ca2642c59e"
+PINNED_MODEL_REVISION = repo_data.KNOBS["PINNED_MODEL_REVISION"]
+
+# MemorySql's bm25 column weights; the SQL is built from this tuple so the
+# bank-vs-harness parity probe can never drift from the FTS leg.
+BM25_WEIGHTS = tuple(repo_data.KNOBS["BM25_WEIGHTS"])
+EMBED_BATCH_SIZE = repo_data.KNOBS["EMBED_BATCH_SIZE"]
+
+# Chroma upsert batching: one call trips the server max-batch cap (5461 at
+# chromadb 1.5.9; production content holds 11,816 rows). 4000 leaves headroom
+# for payload variance; a future lower cap still fails loud (InternalError).
+_UPSERT_BATCH_SIZE = repo_data.KNOBS["UPSERT_BATCH_SIZE"]
 
 
 def model_weights_info(model_name: str = MODEL_NAME, hub_dir=None) -> tuple[str, int]:
@@ -237,7 +235,7 @@ def create_embedding_model(model_name: str = MODEL_NAME, offline: bool = False):
     return model
 
 
-def embed_texts(embed_fn, texts: list[str], batch_size: int = 32,
+def embed_texts(embed_fn, texts: list[str], batch_size: int = EMBED_BATCH_SIZE,
                 progress_every: int = 0) -> list[list[float]]:
     """Batched embedding with a finiteness gate (a NaN vector poisons every cosine).
 
@@ -274,10 +272,10 @@ class StoreHandle:
         self.fts.close()
 
 
-# Chroma upsert batching: one call trips the server max-batch cap (5461 at
-# chromadb 1.5.9; production content holds 11,816 rows). 4000 leaves headroom
-# for payload variance; a future lower cap still fails loud (InternalError).
-_UPSERT_BATCH_SIZE = 4000
+def _bm25_terms(table: str) -> str:
+    """`bm25(<table>, w0, w1, w2)` — one spelling for harness and bank legs."""
+    weights = ", ".join(str(w) for w in BM25_WEIGHTS)
+    return f"bm25({table}, {weights})"
 
 
 def _upsert_in_batches(collection, ids, embeddings, documents, metadatas) -> None:
@@ -400,7 +398,7 @@ def query_fts(handle: StoreHandle, expression: str, project_id: str, scope: str,
     deterministic when bm25 scores tie."""
     predicate, args = scopes.scope_predicate(project_id, scope)
     rows = handle.fts.execute(
-        "SELECT hash, bm25(docs_fts, 1.0, 8.0, 4.0) AS rank FROM docs_fts"
+        f"SELECT hash, {_bm25_terms('docs_fts')} AS rank FROM docs_fts"
         f" WHERE docs_fts MATCH ? AND {predicate}"
         " ORDER BY rank, hash LIMIT ?",
         (expression, *args, limit),
@@ -409,7 +407,7 @@ def query_fts(handle: StoreHandle, expression: str, project_id: str, scope: str,
 
 
 def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
-                embed_fn, copy_entries: int, batch_size: int = 32,
+                embed_fn, copy_entries: int, batch_size: int = EMBED_BATCH_SIZE,
                 progress_every: int = 0, *, buckets: tuple[str, ...] | list[str],
                 excluded: list[dict] | None = None,
                 corpus_name: str | None = None,
@@ -523,7 +521,7 @@ def _bank_fts_order(conn: sqlite3.Connection, probe: str, predicate: str,
         "SELECT e.hash FROM entries_fts"
         " JOIN entries e ON e.id = entries_fts.rowid"
         f" WHERE entries_fts MATCH ? AND {predicate}"
-        " ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0), e.hash",
+        f" ORDER BY {_bm25_terms('entries_fts')}, e.hash",
         (probe, *args),
     ).fetchall()]
 
@@ -562,7 +560,7 @@ def main(argv: list[str] | None = None, embed=None) -> int:
     parser.add_argument("--copy", required=True, help="read-only bank copy path")
     parser.add_argument("--store-dir", default=str(default_store_dir()))
     parser.add_argument("--model", default=MODEL_NAME)
-    parser.add_argument("--embed-batch-size", type=int, default=32)
+    parser.add_argument("--embed-batch-size", type=int, default=EMBED_BATCH_SIZE)
     parser.add_argument("--offline", action="store_true",
                         help="reuse cached HF weights; fail instead of downloading")
     parser.add_argument("--buckets", default=None,

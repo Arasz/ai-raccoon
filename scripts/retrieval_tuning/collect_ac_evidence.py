@@ -22,11 +22,16 @@ import sqlite3
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from retrieval_tuning import repo_data  # noqa: E402
+
+# P3 AC2: the frozen contract comes from data/knobs.json; this module only
+# names which of its keys the evidence check compares.
 FROZEN_KNOBS = {
-    "rrfK": 60, "ftsWeight": 1, "vectorWeight": 1, "limit": 8,
-    "minRelativeScore": 0.6, "sourceLambda": 0.1,
-    "consolidationThreshold": 0.1, "docScoreFormula": "max",
-    "candidateWindow": "max3x100", "structureAlpha": 0.5,
+    key: repo_data.KNOBS["PARAMS"][key]
+    for key in ("rrfK", "ftsWeight", "vectorWeight", "limit", "minRelativeScore",
+                "sourceLambda", "consolidationThreshold", "docScoreFormula",
+                "candidateWindow", "structureAlpha")
 }
 
 

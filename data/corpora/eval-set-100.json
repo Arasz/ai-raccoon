@@ -1,0 +1,37 @@
+{
+  "SEED": 42,
+  "SEARCH_LIMIT": 5,
+  "RESERVED_TEST_FILES": [
+    "0006-rrf-parameter-optimization.md",
+    "0056-a-retrieval-gate-measured-off-its-tuning-set.md",
+    "0070-maintenance-is-a-list-of-jobs-with-a-ledger.md",
+    "0078-the-no-fusion-regression-rule-is-an-order-and-ships-default-off.md"
+  ],
+  "ADR_ALLOWLIST": [
+    "0004-dual-vector-structure-signal.md",
+    "0008-live-pid-discovery-for-monitoring.md",
+    "0011-schema-versioning.md",
+    "0013-extension-host-hook-surface.md",
+    "0014-settings-never-sync.md",
+    "0017-tensorprimitives-in-core.md",
+    "0020-always-on-http-stdio-proxy.md",
+    "0022-authenticated-loopback-restart.md",
+    "0025-the-sweep-reaper.md",
+    "0035-memory-get-and-query-relevant-snippets.md",
+    "0036-engine-aware-chunk-token-budget.md",
+    "0039-noise-learning-substrate-and-shadow-mode.md",
+    "0044-section-fts-weight.md",
+    "0046-project-membership-has-one-definition.md",
+    "0048-a-chunk-is-a-well-formed-markdown-fragment.md",
+    "0053-rating-is-computed-where-it-is-stored.md",
+    "0060-an-unrecognised-verb-must-not-launch-anything.md",
+    "0064-memory-write-chunks-like-everything-else.md",
+    "0067-naming-shared-asks-for-promotion.md",
+    "0068-ctx-is-a-vec0-metadata-column-not-a-partition-key.md",
+    "0071-a-query-is-trimmed-deliberately-and-said-so.md",
+    "0072-a-term-budget-for-long-queries-is-not-adjudicable.md",
+    "0075-only-the-server-writes-to-the-bank.md",
+    "0080-the-phases-close-against-search-total-not-the-tool-total.md",
+    "0083-search-parameters-unified-source.md"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "SEED": 42,
+  "TOTAL_QUERIES": 100,
+  "QUERY_CAP": 20,
+  "SEARCH_LIMIT": 8,
+  "FRAMES": [
+    "What do our notes say about {topic}?",
+    "How is {topic} handled?",
+    "Where is {topic} documented?"
+  ]
+}

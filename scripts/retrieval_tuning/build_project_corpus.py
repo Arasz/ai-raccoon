@@ -60,12 +60,18 @@ import math
 import random
 import re
 import sqlite3
+import sys
 from pathlib import Path
 
-SEED = 42  # determinism contract (AC2.1): same inputs -> byte-identical JSON
-TOTAL_QUERIES = 100
-QUERY_CAP = 20
-SEARCH_LIMIT = 8  # P3 computes top-8 set overlap; the corpus must ask for 8
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from retrieval_tuning import repo_data  # noqa: E402
+
+# P3 AC2: generator constants live in data/corpora/project-corpus-100.json.
+_GENERATOR = repo_data.CORPORA["project-corpus-100"]
+SEED = _GENERATOR["SEED"]  # determinism contract (AC2.1): byte-identical JSON
+TOTAL_QUERIES = _GENERATOR["TOTAL_QUERIES"]
+QUERY_CAP = _GENERATOR["QUERY_CAP"]
+SEARCH_LIMIT = _GENERATOR["SEARCH_LIMIT"]  # top-8 set overlap: the corpus asks for it
 
 DEFAULT_COPY = Path("/tmp/continue-testing-algorithm/datasets/memory-copy.db")
 DEFAULT_OUTPUT = (
@@ -73,12 +79,8 @@ DEFAULT_OUTPUT = (
     / "scripts" / "retrieval_tuning" / "corpora" / "project-corpus-100.json"
 )
 
-# 3 paraphrase frames per target, rotated by target ordinal (plan §P2-2c).
-FRAMES = (
-    "What do our notes say about {topic}?",
-    "How is {topic} handled?",
-    "Where is {topic} documented?",
-)
+# Paraphrase frames per target, rotated by target ordinal (plan §P2-2c).
+FRAMES = tuple(_GENERATOR["FRAMES"])
 _TOPIC_MAX_CHARS = 100
 _TOPIC_MIN_CUT = 8
 _MARKER_MIN_CHARS = 8
@@ -356,14 +358,14 @@ def _render_query(
     failure. Returns (query text, frame actually used)."""
     topic = _derive_topic(value)
     attempts: list[tuple[str, int]] = []
-    for offset in range(3):
-        frame_idx = (frame_base + offset) % 3
+    for offset in range(len(FRAMES)):
+        frame_idx = (frame_base + offset) % len(FRAMES)
         attempts.append((FRAMES[frame_idx].replace("{topic}", topic), frame_idx))
     for discriminator in disambiguators:
         if not discriminator:
             continue
-        for offset in range(3):
-            frame_idx = (frame_base + offset) % 3
+        for offset in range(len(FRAMES)):
+            frame_idx = (frame_base + offset) % len(FRAMES)
             attempts.append((
                 FRAMES[frame_idx].replace("{topic}", f"{topic} ({discriminator})"),
                 frame_idx,

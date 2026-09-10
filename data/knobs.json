@@ -1,0 +1,47 @@
+{
+  "MODEL_NAME": "Salesforce/SFR-Embedding-Code-400M_R",
+  "PINNED_MODEL_REVISION": "cb950dc80d677c6fdc00f56c8ddd20ca2642c59e",
+  "EVAL_LIMIT": 8,
+  "THRESHOLD_SEARCH_LIMIT": 8,
+  "BM25_WEIGHTS": [1.0, 8.0, 4.0],
+  "UPSERT_BATCH_SIZE": 4000,
+  "EMBED_BATCH_SIZE": 32,
+  "PARAMS": {
+    "rrfK": 60,
+    "ftsWeight": 1,
+    "vectorWeight": 1,
+    "limit": 8,
+    "minRelativeScore": 0.6,
+    "sourceLambda": 0.1,
+    "consolidationThreshold": 0.1,
+    "docScoreFormula": "max",
+    "candidateWindow": "max3x100",
+    "structureAlpha": 0.5,
+    "fusionNoRegression": false,
+    "scope": "project",
+    "kind": "memory",
+    "model": "Salesforce/SFR-Embedding-Code-400M_R"
+  },
+  "KNOB_DEFAULTS": {
+    "rrfK": 60,
+    "ftsWeight": 1,
+    "vectorWeight": 1,
+    "sourceLambda": 0.1,
+    "consolidationThreshold": 0.1,
+    "docScoreFormula": "max",
+    "candidateWindow": "max3x100",
+    "structureAlpha": 0.5,
+    "fusion": false
+  },
+  "KNOB_VERBS": {
+    "rrfK": "rrfk",
+    "ftsWeight": "fts-weight",
+    "vectorWeight": "vector-weight",
+    "sourceLambda": "source-lambda",
+    "consolidationThreshold": "consolidation",
+    "docScoreFormula": "doc-formula",
+    "candidateWindow": "window",
+    "structureAlpha": "alpha",
+    "fusion": "fusion"
+  }
+}

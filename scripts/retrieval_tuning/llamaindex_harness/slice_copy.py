@@ -22,9 +22,11 @@ import tempfile
 from pathlib import Path
 
 from . import scopes
+from retrieval_tuning import repo_data
 
-DEFAULT_BUCKETS = ("ai-raccoon", "hermes-default")
-DEFAULT_CAP = 1500
+# P3 AC2: slice defaults live in data/buckets.json.
+DEFAULT_BUCKETS = tuple(repo_data.BUCKETS["DEFAULT_BUCKETS"])
+DEFAULT_CAP = repo_data.BUCKETS["DEFAULT_CAP"]
 
 
 def _forced_hashes(corpus_path: str) -> list[str]:
