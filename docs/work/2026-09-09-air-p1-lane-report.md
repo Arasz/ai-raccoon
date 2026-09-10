@@ -404,9 +404,10 @@ Stage verdict: **Take(8)** — no per-leg dedupe / RRF / floor / affinity loss.
 The bank's `evidenceByHash` sidecar (scratch probe, peak 3482 MB) shows the same
 anchors served at bank ranks 1/2/1 with vector ranks **25/19/23** (harness:
 absent/absent/95): the leg inputs, not the fusion, differ. Stored vectors for
-the same text measure cos(bank, harness) 0.504–0.628; mechanism = bank manifest
-`pooling.mode=cls` vs sentence-transformers' `_load_default_modules`
-mean-pooling fallback (the HF snapshot ships no `modules.json`). Rows are marked
+the same text measure cos(bank, harness) 0.504–0.628 — the measured ONNX-vs-HF
+model-conversion seam (bank ONNX self-consistency 0.9826; ONNX-vs-HF 0.5934 on
+the same text; the harness already pools CLS at cos 1.00000 vs the model-card
+recipe — the earlier pooling explanation is retracted, C14). Rows are marked
 **fusion-drop** (never "embedding-gap evidence") in the eval report for P2 AC2.
 
 ### C9 — query-composition disclosure
@@ -498,9 +499,10 @@ installed here (the module itself fails collection without it).
 
 - **C9**: replace the recorded clean-bank `0.8289` with the recomputed `0.8421`
   (`report.py` is the generator; the artifact is the source of truth).
-- **C10**: check the box as per-spec (no re-freeze); the pooling seam
-  (CLS vs mean) is a *new* P2/P3 candidate item — aligning it would require a
-  full re-embed, so it is a decision, not a close-out fix.
+- **C10**: check the box as per-spec (no re-freeze); the measured embedding
+  seam is ONNX-vs-HF model conversion (not pooling — retracted, C14). Aligning
+  it would require a full re-embed or the bank's own ONNX in the harness, so it
+  is a decision, not a close-out fix.
 - **C11**: helper is built (`make_quiesced_scratch.py`) and P2 should consume
   it; the plan's "P2 ownership" line can become "P2 consumes".
 - **C2**: the external-validation #5b uniform-8 wording fix landed with this

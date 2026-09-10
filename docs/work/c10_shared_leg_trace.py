@@ -20,8 +20,10 @@ the expected hash is rank 1 in the fts leg, absent from the dual-vector leg
 RRF, unchanged by affinity, above the 0.6 relative floor (0.6932/0.6630/0.8714)
 and dropped by the final Take(8). The drop is the limit, not dedupe/RRF/floor/
 affinity; the vector-input scores behind the outranking candidates are the
-divergent stage (bank ONNX CLS pooling vs the harness's mean-pooling default —
-see docs/work/2026-09-10-p1-c10-shared-fusion-trace.md).
+divergent stage (the measured ONNX-vs-HF model-conversion seam: bank ONNX
+self-consistency 0.9826, ONNX-vs-HF 0.5934 on the same text; the harness
+already pools CLS at cos 1.00000 vs the model-card recipe — the earlier pooling
+explanation is retracted, C14; see docs/work/2026-09-10-p1-c10-shared-fusion-trace.md).
 """
 from __future__ import annotations
 
