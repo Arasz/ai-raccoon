@@ -235,7 +235,7 @@ class TestSliceParity:
 
 class TestRefreshParity:
     @pytest.mark.skipif(not PINNED_COPY.exists(), reason=f"pinned copy absent: {PINNED_COPY}")
-    def test_generators_reproduce_the_legacy_bytes(self, tmp_path):
+    def test_generators_reproduce_the_legacy_payload(self, tmp_path):
         legacy = _extract_tree(tmp_path)
         legacy_scripts = legacy / "scripts" / "retrieval_tuning"
         for generator in ("build_project_corpus", "build_eval_corpus"):
@@ -266,6 +266,11 @@ class TestRefreshParity:
                 pin = header.get("snapshotSha256")
                 assert isinstance(pin, str) and len(pin) == 64, \
                     "eval corpus header must carry a 64-hex snapshotSha256 pin"
+                # Desk review F2 (mutation-confirmed): 64-hex alone accepts a pin that
+                # hashes anything, e.g. the generator's own source. The pin must be the
+                # sha256 of the pinned copy this run generated from.
+                assert pin == _sha256(PINNED_COPY), \
+                    "eval corpus pin must equal the pinned copy's sha256"
                 assert new_payload["queries"] == legacy_payload, \
                     "eval corpus query payload differs from the legacy output"
             else:
