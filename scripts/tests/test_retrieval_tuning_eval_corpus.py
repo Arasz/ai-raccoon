@@ -12,6 +12,7 @@ Checks, on the GENERATED artifact `scripts/retrieval_tuning/corpora/eval-set-100
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import importlib.util
 import json
 import os
@@ -60,12 +61,61 @@ DIFFICULTIES = {"easy", "medium", "hard", "very-hard"}
 SCOPES = {"project", "shared", "all"}
 
 
-def _load_corpus() -> list[dict]:
+def _load_payload() -> dict | list:
     assert CORPUS_PATH.exists(), f"corpus file missing: {CORPUS_PATH}"
     with CORPUS_PATH.open(encoding="utf-8") as fh:
-        data = json.load(fh)
-    assert isinstance(data, list), "corpus root must be a JSON array"
-    return data
+        return json.load(fh)
+
+
+def _load_corpus() -> list[dict]:
+    """The 100 query entries, from either the bare-array or {header, queries} shape."""
+    payload = _load_payload()
+    if isinstance(payload, dict):  # provenance-header shape
+        payload = payload.get("queries")
+    assert isinstance(payload, list), "corpus root must be a JSON array or {header, queries}"
+    return payload
+
+
+def _load_header() -> dict | None:
+    """The committed artifact's provenance header, None for the bare-array shape."""
+    payload = _load_payload()
+    return payload.get("header") if isinstance(payload, dict) else None
+
+
+def _copy_sha256() -> str:
+    digest = hashlib.sha256()
+    with COPY_PATH.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _snapshot_mismatch_reason() -> str | None:
+    """None when COPY_PATH is exactly the snapshot the committed artifact pins.
+
+    Mirrors test_build_project_corpus._snapshot_mismatch_reason: the
+    copy-dependent half of this file skips with a precise reason rather than
+    failing on a clean checkout (E1).
+    """
+    if not COPY_PATH.exists():
+        return f"memory-db copy missing: {COPY_PATH}"
+    if not CORPUS_PATH.exists():
+        return f"committed artifact missing: {CORPUS_PATH}"
+    pin = (_load_header() or {}).get("snapshotSha256")
+    if not pin:
+        return f"committed artifact carries no snapshotSha256 pin: {CORPUS_PATH}"
+    actual = _copy_sha256()
+    if pin != actual:
+        return (
+            f"copy at {COPY_PATH} is not the snapshot the committed artifact pins "
+            f"({pin[:12]}... != {actual[:12]}...)"
+        )
+    return None
+
+
+_COPY_MISMATCH = _snapshot_mismatch_reason()
+_COPY_SKIP = pytest.mark.skipif(_COPY_MISMATCH is not None,
+                                reason=_COPY_MISMATCH or "copy not pinned")
 
 
 def _load_generator():
@@ -101,6 +151,26 @@ def _slugify(section: str) -> str:
 def test_corpus_exists_and_is_exactly_100() -> None:
     data = _load_corpus()
     assert len(data) == 100, f"expected exactly 100 entries, got {len(data)}"
+
+
+def test_committed_corpus_carries_a_snapshot_pin() -> None:
+    """The provenance header the refresh contract reads (C1/C3).
+
+    Copy-independent by design (reviewer F3): it asserts the shape and a
+    64-hex snapshotSha256, never equality with a local bank copy — that is the
+    pinned-copy test's job, and asserting it here would fail (not skip) on the
+    CI runner, which has no copy.
+    """
+    header = _load_header()
+    assert header is not None, "committed eval-set-100.json must carry a header"
+    assert header.get("generator") == "build_eval_corpus.py"
+    assert header.get("seed") == 42
+    assert header.get("queryCount") == 100
+    assert header.get("queryCount") == len(_load_corpus())
+    sha = header.get("snapshotSha256")
+    assert isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{64}", sha), (
+        f"snapshotSha256 must be 64 lowercase hex, got {sha!r}"
+    )
 
 
 def test_split_is_75_adr_plus_25_non_file() -> None:
@@ -189,6 +259,7 @@ def test_no_shared_query_text_with_test_set_when_present() -> None:
 # ---------------------------------------------------------------- anchor resolution (G2)
 
 
+@_COPY_SKIP
 def test_all_anchors_resolve_in_copy() -> None:
     data = _load_corpus()
     with _copy_conn() as conn:
@@ -228,6 +299,7 @@ def test_all_anchors_resolve_in_copy() -> None:
             )
 
 
+@_COPY_SKIP
 def test_expected_source_suffix_matches_at_least_one_source_file() -> None:
     data = _load_corpus()
     with _copy_conn() as conn:
@@ -247,6 +319,7 @@ def test_expected_source_suffix_matches_at_least_one_source_file() -> None:
 # ---------------------------------------------------------------- determinism (G2)
 
 
+@_COPY_SKIP
 def test_generator_is_deterministic_and_matches_committed_corpus(tmp_path: Path) -> None:
     mod = _load_generator()
     out1 = tmp_path / "run1.json"
