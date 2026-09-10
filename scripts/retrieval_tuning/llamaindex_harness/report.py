@@ -9,8 +9,50 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
+
+# C9 query-composition signature. Adapted from docs/work/mmr_transfer_checks.py
+# (the sibling session's census+strata script): markup/JSON debris and
+# unbroken long tokens flag queries whose text is a tool-call artifact rather
+# than a natural-language question. Never a hardcoded id list — ids shift with
+# corpus regeneration, the signature does not.
+DEBRIS_SIGNATURE = re.compile(r'[{}\[\]|<>\\]|://|```|"line"|@[a-z0-9-]+/|\S{60,}')
+
+
+def debris_query(text: str) -> bool:
+    """True when a query text carries the markup/JSON-debris signature."""
+    return bool(DEBRIS_SIGNATURE.search(text or "")) or len(text or "") > 160
+
+
+def stratify_rows(rows: list[dict]) -> dict[str, list[dict]]:
+    """Split scored rows into debris/clean strata by query text (C9)."""
+    strata: dict[str, list[dict]] = {"debris": [], "clean": []}
+    for row in rows:
+        strata["debris" if debris_query(row.get("query", "")) else "clean"].append(row)
+    return strata
+
+
+def stratum_stats(rows: list[dict]) -> dict:
+    """Hit-rate/mean-F1 per stratum; rates are None for an empty stratum."""
+    n = len(rows)
+    if not n:
+        return {"n": 0, "harness_hit_rate": None, "bank_hit_rate": None,
+                "harness_mean_f1": None, "bank_mean_f1": None}
+    return {
+        "n": n,
+        "harness_hit_rate": sum(r["harness"]["hit"] for r in rows) / n,
+        "bank_hit_rate": sum(r["airaccoon"]["hit"] for r in rows) / n,
+        "harness_mean_f1": sum(r["harness"]["f1"] for r in rows) / n,
+        "bank_mean_f1": sum(r["airaccoon"]["f1"] for r in rows) / n,
+    }
+
+
+def stale_scored_intersection(results: dict) -> list[str]:
+    """staleAnchors that were nevertheless scored — must be empty (C9 invariant)."""
+    scored = {r["id"] for r in results.get("rows", [])}
+    return sorted(s for s in (results.get("staleAnchors") or []) if s in scored)
 
 
 def _short(h: str) -> str:
@@ -93,13 +135,20 @@ def render(results: dict, context: dict) -> str:
         lines.append(f"Stale anchors ({len(stale)} — unhittable by either leg: "
                      f"absent anchors still score into d, null-anchored rows are "
                      f"filtered pre-eval and unscored): {', '.join(stale)}.")
+    stale_scored = stale_scored_intersection(results)
+    if stale_scored:
+        raise ValueError(
+            f"stale-anchor invariant broken: staleAnchors ∩ scored = {stale_scored}; "
+            "a filtered-stale id must never appear in rows")
+    lines.append("Stale-anchor invariant (asserted): staleAnchors ∩ scored = ∅.")
     lines += [
         "",
         "## Scope and routing",
         "",
         *_scope_lines(results, context),
-        "Both systems ran at a uniform limit 8 (overrides the corpus "
-        "searchLimit=5; candidate window max(limit*3,100)=100 either way).",
+        "Both systems ran at a uniform limit 8 (the corpus records "
+        "searchLimit=8 for all 100 queries; candidate window "
+        "max(limit*3,100)=100 either way).",
         "",
         "## Method",
         "",
@@ -160,13 +209,19 @@ def render(results: dict, context: dict) -> str:
         "(rerun report.py on results.json). Singleton-F1 here is a parity "
         "verdict, not a relevance verdict.",
         "",
+        *_stratification_lines(rows),
         "## Parity-gap discussion",
         "",
         "- Embedding gap (bank local ONNX SFR-Embedding-Code-400M_R vs "
-        "harness public HF weights, same architecture): the per-query fts/vec "
-        "column separates it — queries where FTS hits but the vector leg "
-        "misses are embedding-gap evidence; where both legs miss, the fusion "
-        "cannot recover regardless of weights.",
+        "harness public HF weights, same architecture): the same model name does "
+        "not imply the same vectors — the bank's manifest pins CLS pooling while "
+        "the HF snapshot ships no sentence-transformers config, so the harness "
+        "falls back to that library's mean-pooling default; measured stored-vector "
+        "agreement for the same text is partial (C10 evidence doc). The per-query "
+        "fts/vec column locates the divergence, but the label is per row: P2 AC2 "
+        "resolves fusion-drop vs embedding-gap, and C10 proved the shared-scope "
+        "rows are fusion-drop. Where both legs miss, the fusion cannot recover "
+        "regardless of weights.",
         f"- Structure gap: {context.get('headed', '?')} of "
         f"{context.get('store_rows', '?')} rows carry heading_path structure "
         "texts (structureAlpha=0.5 fuse; missing structure scores 0). "
@@ -180,10 +235,64 @@ def render(results: dict, context: dict) -> str:
         "",
         _gap_table(s.get("gaps")),
         "",
+        *_shared_scope_lines(rows),
         _exclusion_lines(results, context),
         "",
     ]
     return "\n".join(lines)
+
+
+def _stratification_lines(rows: list[dict]) -> list[str]:
+    """C9: recomputed query-composition stratification + composition disclosure."""
+    strata = stratify_rows(rows)
+    stats = {name: stratum_stats(members) for name, members in strata.items()}
+
+    def _fmt(value: float | None) -> str:
+        return "—" if value is None else f"{value:.3f}"
+
+    lines = [
+        "### Query-composition stratification (recomputed from the scored corpus rows)",
+        "",
+        "| stratum | n | harness hit-rate | ai-raccoon hit-rate | harness mean F1 |"
+        " ai-raccoon mean F1 |",
+        "|---|---|---|---|---|---|",
+    ]
+    for name, reading in (("debris", "query text carries markup/JSON debris"),
+                          ("clean", "natural-language query")):
+        s = stats[name]
+        lines.append(
+            f"| {name} ({reading}) | {s['n']} | {_fmt(s['harness_hit_rate'])} | "
+            f"{_fmt(s['bank_hit_rate'])} | {_fmt(s['harness_mean_f1'])} | "
+            f"{_fmt(s['bank_mean_f1'])} |")
+    lines += [
+        "",
+        "Disclosure: relevance-flavoured readings (\"bank finds what harness "
+        "misses\", any embedding-gap narrative) are **composition-sensitive** — "
+        "the debris stratum is a tool-call-artifact subset whose stratified rates "
+        "differ from the clean stratum, so aggregate gaps partly reflect corpus "
+        "composition. The parity/pipeline reading (identical fusion pipeline on "
+        "both legs, exact-hash hits) stands. The split is recomputed here from the "
+        "scored rows' query text by signature (regex adapted from "
+        "docs/work/mmr_transfer_checks.py), never a hardcoded id list.",
+        "",
+    ]
+    return lines
+
+
+def _shared_scope_lines(rows: list[dict]) -> list[str]:
+    """C10: shared-scope rows traced to the Take(8) limit, never embedding-gap labels."""
+    shared = [r["id"] for r in rows if r.get("targetScope") == "shared"]
+    if not shared:
+        return []
+    return [
+        f"C10 trace note: shared-scope rows ({', '.join(shared)}) were traced "
+        "stage-by-stage — the anchor survived per-leg content-dedupe, RRF, affinity "
+        "and the relative floor, and was dropped by Take(8) after dual-leg candidates "
+        "outranked it (the harness/bank vector scores diverge at the embedding seam, "
+        "measured). These rows are fusion-drop; never mapped to \"embedding-gap "
+        "evidence\".",
+        "",
+    ]
 
 
 def _gap_table(gaps: dict | None) -> str:
@@ -195,7 +304,9 @@ def _gap_table(gaps: dict | None) -> str:
             "|---|---|---|",
             f"| c_cell (bank-hit/harness-miss of {gaps.get('n_paired', '?')} paired) "
             f"| {gaps.get('c_cell', '?')} | harness deficit under test |",
-            f"| c_fts_only | {gaps.get('c_fts_only', '?')} | legs split: embedding-gap evidence |",
+            f"| c_fts_only | {gaps.get('c_fts_only', '?')} | legs split: FTS held it,"
+            " vector leg missed — P2 AC2 resolves fusion-drop vs embedding-gap per row"
+            " (C10: not per se embedding-gap) |",
             f"| c_vec_only | {gaps.get('c_vec_only', '?')} | a leg had it, fusion lost it |",
             f"| c_both_legs | {gaps.get('c_both_legs', '?')} | both legs hit, fusion lost it |",
             f"| c_neither_leg | {gaps.get('c_neither_leg', '?')} | unrecoverable by fusion |",

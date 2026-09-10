@@ -173,14 +173,72 @@ def test_report_carries_recompute_path_line():
 
 
 def test_report_no_restriction_line_when_stale_accounts_the_gap():
-    # Full-100 shape: 99 scored + C034 null-filtered (stale, unscored) = 100
-    # accounted — the SUBSET disclaimer must NOT fire. C026 is scored (into d)
-    # AND stale-flagged, so only unscored stale ids close the gap.
+    # Full-100 shape: 99 scored + 1 stale null-filtered (unscored) = 100
+    # accounted — the SUBSET disclaimer must NOT fire, and the C9 invariant
+    # (staleAnchors ∩ scored = ∅) holds because the stale ids are unscored.
     out = _results()
     out["rows"] = [dict(r, id=f"E{i:03d}") for i, r in enumerate(out["rows"] * 50)][:99]
-    out["rows"][0]["id"] = "C026"
     out["summary"]["n"] = 99
-    out["staleAnchors"] = ["C026", "C034"]
+    out["staleAnchors"] = ["C034", "E099"]
     text = report.render(out, _context())
     assert "SUBSET eval" not in text
-    assert "C026" in text and "C034" in text
+    assert "C034" in text and "E099" in text
+
+
+# --- C9 query-composition disclosure: signature-based strata + stale invariant ---
+
+def test_stratification_is_signature_based_not_id_based():
+    # C9: the debris/clean split is recomputed from the query text, never a
+    # hardcoded id list (ids shift with corpus regeneration).
+    rows = [
+        {"id": "X1", "query": "see https://example.com/a for details",
+         "harness": {"hit": 1, "f1": 0.5}, "airaccoon": {"hit": 0, "f1": 0.0}},
+        {"id": "X2", "query": "plain prose query about dispatch contracts",
+         "harness": {"hit": 0, "f1": 0.0}, "airaccoon": {"hit": 1, "f1": 0.5}},
+    ]
+    strata = report.stratify_rows(rows)
+    assert [r["id"] for r in strata["debris"]] == ["X1"]
+    assert [r["id"] for r in strata["clean"]] == ["X2"]
+    stats = report.stratum_stats(strata["debris"])
+    assert stats["n"] == 1
+    assert stats["harness_hit_rate"] == 1.0
+    assert stats["bank_hit_rate"] == 0.0
+    stats = report.stratum_stats(strata["clean"])
+    assert stats["n"] == 1
+    assert stats["harness_hit_rate"] == 0.0
+    assert stats["bank_hit_rate"] == 1.0
+
+
+def test_report_renders_stratified_rates_and_composition_disclosure():
+    # C9: the report must carry the recomputed stratified hit-rates and say
+    # the relevance-flavoured readings are composition-sensitive while the
+    # parity reading stands.
+    out = _results()
+    out["rows"][0]["query"] = 'JSON debris {"line": "x"} copied from a tool call'
+    text = report.render(out, _context())
+    assert "Query-composition stratification" in text
+    assert "debris" in text and "clean" in text
+    assert "composition-sensitive" in text
+    assert "1.000" in text or "0.500" in text  # rendered rates, not just headers
+
+
+def test_report_asserts_stale_anchors_are_never_scored():
+    # C9: staleAnchors ∩ scored == ∅ is asserted, not merely asserted-in-prose.
+    out = _results()
+    out["staleAnchors"] = ["E001"]  # E001 is a scored row: the invariant is broken
+    with pytest.raises(ValueError, match="stale"):
+        report.render(out, _context())
+    out["staleAnchors"] = ["E009"]
+    text = report.render(out, _context())
+    assert "staleAnchors" in text and "scored" in text
+
+
+def test_report_marks_shared_scope_rows_as_fusion_drop():
+    # C10: the shared-scope rows are fusion-drop (a leg held the anchor in the
+    # window; the Take(8) limit dropped it once the leg scores diverged) and
+    # must never be labelled "embedding-gap evidence".
+    out = _results()  # E002 is targetScope=shared
+    text = report.render(out, _context())
+    c10 = next(line for line in text.splitlines() if line.startswith("C10 trace note"))
+    assert "E002" in c10 and "fusion-drop" in c10
+    assert "embedding-gap evidence" not in text.replace(c10, "")  # P1 label gone elsewhere
