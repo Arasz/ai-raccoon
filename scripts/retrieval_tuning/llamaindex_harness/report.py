@@ -9,21 +9,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
-# C9 query-composition signature. Adapted from docs/work/mmr_transfer_checks.py
-# (the sibling session's census+strata script): markup/JSON debris and
-# unbroken long tokens flag queries whose text is a tool-call artifact rather
-# than a natural-language question. Never a hardcoded id list — ids shift with
-# corpus regeneration, the signature does not.
-DEBRIS_SIGNATURE = re.compile(r'[{}\[\]|<>\\]|://|```|"line"|@[a-z0-9-]+/|\S{60,}')
+from . import evaluate
+from .evaluate import debris_query
 
-
-def debris_query(text: str) -> bool:
-    """True when a query text carries the markup/JSON-debris signature."""
-    return bool(DEBRIS_SIGNATURE.search(text or "")) or len(text or "") > 160
+# C9 query-composition signature now lives beside the AC2 taxonomy (one
+# definition, shared with evaluate.gap_label); re-exported for callers.
 
 
 def stratify_rows(rows: list[dict]) -> dict[str, list[dict]]:
@@ -171,10 +164,11 @@ def render(results: dict, context: dict) -> str:
         "",
         "## Per-query results",
         "",
-        "| id | target | exp | harness hit/F1 | ai-raccoon hit/F1 | agree |"
+        "| id | target | exp | harness hit/F1 | ai-raccoon hit/F1 | agree | gap |"
         " fts/vec | error |",
-        "|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
+    gap_labels = evaluate.gap_columns(rows)
     for r in rows:
         h, a = r["harness"], r["airaccoon"]
         if h.get("error") or a.get("error"):
@@ -186,7 +180,8 @@ def render(results: dict, context: dict) -> str:
         lines.append(
             f"| {r['id']} | {r.get('targetProjectId')}/{r.get('targetScope')} | "
             f"{_short(r['expectedHash'])} | {h['hit']} {h['f1']:.3f} | "
-            f"{a['hit']} {a['f1']:.3f} | {agree} | {legs} | {err} |")
+            f"{a['hit']} {a['f1']:.3f} | {agree} | {gap_labels.get(r['id'], 'unknown')} | "
+            f"{legs} | {err} |")
     hs, az = s["harness"], s["airaccoon"]
     cont = s["contingency"]
     mcc_line = f"{s['mcc']:.4f}" if s["mcc"] is not None else f"null ({s['mcc_reason']})"
@@ -212,16 +207,14 @@ def render(results: dict, context: dict) -> str:
         *_stratification_lines(rows),
         "## Parity-gap discussion",
         "",
-        "- Embedding gap (bank local ONNX SFR-Embedding-Code-400M_R vs "
-        "harness public HF weights, same architecture): the same model name does "
-        "not imply the same vectors — the bank's manifest pins CLS pooling while "
-        "the HF snapshot ships no sentence-transformers config, so the harness "
-        "falls back to that library's mean-pooling default; measured stored-vector "
-        "agreement for the same text is partial (C10 evidence doc). The per-query "
-        "fts/vec column locates the divergence, but the label is per row: P2 AC2 "
-        "resolves fusion-drop vs embedding-gap, and C10 proved the shared-scope "
-        "rows are fusion-drop. Where both legs miss, the fusion cannot recover "
-        "regardless of weights.",
+        "- Embedding seam (C13, owner decision pending): the bank's ONNX manifest pins "
+        "CLS pooling while the HF snapshot ships no sentence-transformers config, so the "
+        "harness falls back to that library's mean-pooling default — same weights, "
+        "different vectors (measured stored-vector cos 0.50–0.63 for identical text). "
+        "The taxonomy below labels rows against MEASURED leg positions and never claims "
+        "the harness embedding equals the bank's: a row whose FTS window held the anchor "
+        "is `fusion` even when the vector leg missed (C10), and only rows where BOTH "
+        "windows missed are `embedding`/`unrecoverable` (composition-aware, C9).",
         f"- Structure gap: {context.get('headed', '?')} of "
         f"{context.get('store_rows', '?')} rows carry heading_path structure "
         "texts (structureAlpha=0.5 fuse; missing structure scores 0). "
@@ -230,11 +223,7 @@ def render(results: dict, context: dict) -> str:
         "- No harness knob was tuned to close either gap (plan: measure and "
         "report, never tune silently).",
         "",
-        "### Provisional gap counts (P1; P2 refines into the classified taxonomy "
-        "reusing these numbers)",
-        "",
-        _gap_table(s.get("gaps")),
-        "",
+        *_classified_gap_table(rows),
         *_shared_scope_lines(rows),
         _exclusion_lines(results, context),
         "",
@@ -295,23 +284,51 @@ def _shared_scope_lines(rows: list[dict]) -> list[str]:
     ]
 
 
-def _gap_table(gaps: dict | None) -> str:
-    """Provisional c-cell counts table (harness-relative, bank-hit/harness-miss only)."""
-    if not gaps:
-        return ("Gap counts not recorded in this results.json "
-                "(pre-P1 golden — rerun evaluate.py to populate summary.gaps).")
-    rows = ["| bucket | n | reading |",
-            "|---|---|---|",
-            f"| c_cell (bank-hit/harness-miss of {gaps.get('n_paired', '?')} paired) "
-            f"| {gaps.get('c_cell', '?')} | harness deficit under test |",
-            f"| c_fts_only | {gaps.get('c_fts_only', '?')} | legs split: FTS held it,"
-            " vector leg missed — P2 AC2 resolves fusion-drop vs embedding-gap per row"
-            " (C10: not per se embedding-gap) |",
-            f"| c_vec_only | {gaps.get('c_vec_only', '?')} | a leg had it, fusion lost it |",
-            f"| c_both_legs | {gaps.get('c_both_legs', '?')} | both legs hit, fusion lost it |",
-            f"| c_neither_leg | {gaps.get('c_neither_leg', '?')} | unrecoverable by fusion |",
-            f"| c_unknown | {gaps.get('c_unknown', '?')} | leg columns absent (data gap) |"]
-    return "\n".join(rows)
+def _classified_gap_table(rows: list[dict]) -> list[str]:
+    """P2 AC2: the single classified taxonomy replacing the P1 provisional table.
+
+    Labels come from evaluate.gap_label over the window-level fts_hit/vector_hit
+    columns; conservation (cells sum to paired) is structural and the unknown
+    share is asserted against its 5% cap before publication."""
+    tax = evaluate.gap_taxonomy(rows)
+    if tax["unknownShare"] > 0.05:
+        raise ValueError(
+            f"gap taxonomy unknown share {tax['unknownShare']:.1%} > 5% cap "
+            f"({tax['cells']['unknown']} of {tax['n_paired']} paired): the "
+            "classifier or the leg columns failed, not the retrieval")
+    cells = tax["cells"]
+    readings = {
+        "none": "no harness deficit under test (harness hit, or the bank missed "
+                "too — agreement is never a deficit)",
+        "fusion": "a leg's candidate window held the anchor; the fused pipeline "
+                  "did not serve it (dedupe/RRF/floor/Take(8))",
+        "embedding": "no leg window held it on clean prose — representation side "
+                     "(the harness mean-pooling vs bank CLS seam qualifies this, C13)",
+        "unrecoverable": "no leg window held it on a debris/tool-call artifact — "
+                         "no representation recovers it",
+        "unknown": "leg diagnostics absent (data gap)",
+    }
+    lines = [
+        "### Classified gap taxonomy (the single table; P1 provisional counts "
+        "consumed, never redefined)",
+        "",
+        "Labels are computed per row from the existing `fts_hit`/`vector_hit` "
+        "columns, which are CANDIDATE-WINDOW hits (max(limit*3,100)=100), never "
+        "each leg's top-8: a window-rank 9–100 hit counts as held and therefore "
+        "labels `fusion`, not `embedding`. Harness-relative and restricted to the "
+        "c-cell (bank-hit/harness-miss); agreement is never misattributed as "
+        "deficit.",
+        "",
+        "| label | n | reading |",
+        "|---|---|---|",
+    ]
+    for label in evaluate.GAP_LABELS:
+        lines.append(f"| {label} | {cells[label]} | {readings[label]} |")
+    lines.append(
+        f"| c_cell (bank-hit/harness-miss of {tax['n_paired']} paired) | "
+        f"{tax['c_cell']} | deficit labels sum; unknown share "
+        f"{tax['unknownShare']:.1%} (cap 5%) |")
+    return lines + [""]
 
 
 def _exclusion_lines(results: dict, context: dict) -> str:

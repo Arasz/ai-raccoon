@@ -30,6 +30,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import sqlite3
 import sys
 import uuid
@@ -135,13 +136,13 @@ def partition_null_anchors(entries: list[dict]) -> tuple[list[dict], list]:
 
 
 def aggregate_gaps(rows: list[dict]) -> dict:
-    """Provisional leg-gap counts over paired rows (P1; P2 refines into the
-    classified taxonomy reusing these numbers, never redefining them).
+    """P1 provisional leg-gap counts + the P2 classified taxonomy over the same rows.
 
     Computed ONLY on the c-cell (bank-hit/harness-miss) from the existing
     fts_hit/vector_hit columns — never misattributing agreement as deficit.
-    Conservation: the five c_* buckets sum to c_cell. Rows without leg
-    columns land in c_unknown (a data gap, not a retrieval gap)."""
+    Conservation: the five c_* buckets sum to c_cell; the taxonomy cells sum to
+    paired. Rows without leg columns land in c_unknown (a data gap, not a
+    retrieval gap)."""
     paired = [r for r in rows if not r["harness"].get("error")
               and not r["airaccoon"].get("error")]
     c_rows = [r for r in paired if r["airaccoon"]["hit"] == 1
@@ -162,7 +163,67 @@ def aggregate_gaps(rows: list[dict]) -> dict:
             gaps["c_neither_leg"] += 1  # unrecoverable by fusion
         else:
             gaps["c_unknown"] += 1
+    gaps["taxonomy"] = gap_taxonomy(rows)
     return gaps
+
+
+# C9 debris signature (shared with report.py so the taxonomy and the
+# stratification split on ONE definition, never two).
+DEBRIS_SIGNATURE = re.compile(r'[{}\[\]|<>\\]|://|```|"line"|@[a-z0-9-]+/|\S{60,}')
+
+GAP_LABELS = ("none", "fusion", "embedding", "unrecoverable", "unknown")
+
+
+def debris_query(text: str) -> bool:
+    """True when a query text carries the markup/JSON-debris signature (C9)."""
+    return bool(DEBRIS_SIGNATURE.search(text or "")) or len(text or "") > 160
+
+
+def gap_label(row: dict) -> str:
+    """P2 AC2 per-row label over the EXISTING window-level leg columns.
+
+    'none'          — not a harness deficit under test (harness hit, or the
+                      bank missed too: agreement is never a deficit)
+    'fusion'        — a leg's candidate window held the anchor but the fused
+                      pipeline did not serve it (dedupe/RRF/floor/Take(8))
+    'embedding'     — no leg window held it, on a clean natural-language query
+    'unrecoverable' — no leg window held it, on a debris/tool-call artifact
+    'unknown'       — leg diagnostics absent (an unpaired error row too)
+
+    The leg columns are window hits: build_harness_fn reads the FULL leg lists
+    at candidate_window(8)=100, so window-rank 9-100 hits count as held."""
+    harness, bank = row.get("harness", {}), row.get("airaccoon", {})
+    if harness.get("error") or bank.get("error"):
+        return "unknown"
+    if not (bank.get("hit") == 1 and harness.get("hit") == 0):
+        return "none"
+    fts_hit, vec_hit = harness.get("fts_hit"), harness.get("vector_hit")
+    if fts_hit is None or vec_hit is None:
+        return "unknown"
+    if fts_hit == 1 or vec_hit == 1:
+        return "fusion"
+    return "unrecoverable" if debris_query(row.get("query", "")) else "embedding"
+
+
+def gap_columns(rows: list[dict]) -> dict[str, str]:
+    """Per-row taxonomy labels keyed by query id (per-row evidence, every row)."""
+    return {r["id"]: gap_label(r) for r in rows}
+
+
+def gap_taxonomy(rows: list[dict]) -> dict:
+    """AC2 counts over PAIRED rows; the five cells sum to n_paired.
+
+    'none' is the c-cell complement, so conservation holds by construction.
+    unknownShare is the classifier-health bar (<= 5% else the classifier or
+    the data failed, not retrieval)."""
+    paired = [r for r in rows
+              if not r["harness"].get("error") and not r["airaccoon"].get("error")]
+    cells = {label: 0 for label in GAP_LABELS}
+    for row in paired:
+        cells[gap_label(row)] += 1
+    c_cell = sum(n for label, n in cells.items() if label != "none")
+    return {"n_paired": len(paired), "c_cell": c_cell, "cells": cells,
+            "unknownShare": (cells["unknown"] / len(paired)) if paired else 0.0}
 
 
 def _score_side(expected_hash: str, outcome: dict) -> dict:
@@ -320,6 +381,14 @@ def eval_gate_failures(out: dict) -> list[str]:
             f"ai-raccoon errors on {len(prod_errors)} queries: {prod_errors[:5]}")
     if out.get("summary", {}).get("n_paired", 0) == 0:
         failures.append("zero paired rows: no query scored on both systems")
+    taxonomy = (out.get("summary", {}).get("gaps") or {}).get("taxonomy")
+    if taxonomy is None:
+        taxonomy = gap_taxonomy(out.get("rows", []))
+    if taxonomy["unknownShare"] > 0.05:
+        failures.append(
+            f"gap taxonomy unknown share {taxonomy['unknownShare']:.1%} > 5% cap "
+            f"({taxonomy['cells']['unknown']} of {taxonomy['n_paired']} paired): "
+            "the classifier or the leg columns failed, not the retrieval")
     return failures
 
 

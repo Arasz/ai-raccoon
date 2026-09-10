@@ -400,3 +400,132 @@ def test_refuse_verdict_writes_no_results_file(monkeypatch, tmp_path, capsys):
     assert evaluate.main(argv) == 1
     assert not out.exists()
     assert "FAIL" in capsys.readouterr().out
+
+
+# --- P2 AC2: gap taxonomy over the candidate window (existing columns only) ---
+
+def _gap_row(qid, *, harness_hit, fts, vec, bank_hit=1, query="plain prose query",
+             **over):
+    harness = {"hit": harness_hit}
+    if fts is not None:
+        harness["fts_hit"] = fts
+    if vec is not None:
+        harness["vector_hit"] = vec
+    row = {"id": qid, "query": query, "targetScope": "project",
+           "harness": harness, "airaccoon": {"hit": bank_hit}}
+    row.update(over)
+    return row
+
+
+def test_gap_columns_classification_table():
+    # Labels are computed over fts_hit/vector_hit AS WINDOW HITS (the eval
+    # computes them from the full candidate-window leg lists, max(limit*3,100)):
+    # a leg window hit that the fused pipeline did not serve is FUSION, never
+    # an embedding-miss label. "embedding"/"unrecoverable" need BOTH windows to
+    # miss; the clean-vs-debris composition (C9) separates them.
+    rows = [
+        _gap_row("A", harness_hit=0, fts=1, vec=0),          # leg held it in-window
+        _gap_row("B", harness_hit=0, fts=0, vec=1),
+        _gap_row("C", harness_hit=0, fts=1, vec=1),
+        _gap_row("D", harness_hit=0, fts=0, vec=0),          # no leg, clean prose
+        _gap_row("E", harness_hit=0, fts=0, vec=0,
+                 query='JSON debris {"line": "x"} copied from a tool call'),
+        _gap_row("F", harness_hit=0, fts=None, vec=None),    # leg columns absent
+        _gap_row("G", harness_hit=1, fts=1, vec=1),          # agreement, not a gap
+        _gap_row("H", harness_hit=0, fts=1, vec=1, bank_hit=0),  # bank missed too
+    ]
+    assert evaluate.gap_columns(rows) == {
+        "A": "fusion", "B": "fusion", "C": "fusion", "D": "embedding",
+        "E": "unrecoverable", "F": "unknown", "G": "none", "H": "none"}
+
+
+def test_gap_columns_shared_scope_rows_are_fusion_drop():
+    # C10 oracle (refreshed-pair ids C019/C065/C081): each shared-scope row had
+    # the anchor in the FTS window (rank 1) with vector 0/0/1 and was traced to
+    # a Take(8) drop — they must classify as fusion, never "embedding gap".
+    rows = [
+        _gap_row("C019", harness_hit=0, fts=1, vec=0, targetScope="shared"),
+        _gap_row("C065", harness_hit=0, fts=1, vec=0, targetScope="shared"),
+        _gap_row("C081", harness_hit=0, fts=1, vec=1, targetScope="shared"),
+    ]
+    labels = evaluate.gap_columns(rows)
+    assert labels == {"C019": "fusion", "C065": "fusion", "C081": "fusion"}
+
+
+def test_gap_taxonomy_conservation_and_unknown_cap():
+    # Conservation: the five cells partition the PAIRED rows (none = the c-cell
+    # complement); c_cell is the four deficit labels; unknown share is capped.
+    rows = [
+        _gap_row("A", harness_hit=0, fts=1, vec=0),                 # fusion
+        _gap_row("B", harness_hit=0, fts=0, vec=0),                 # embedding
+        _gap_row("C", harness_hit=1, fts=1, vec=1),                 # none
+        _gap_row("D", harness_hit=0, fts=None, vec=None),           # unknown
+        _gap_row("E", harness_hit=0, fts=0, vec=1, bank_hit=0),     # bank miss -> none
+        {"id": "F", "query": "q", "harness": {"hit": 0, "error": "boom"},
+         "airaccoon": {"hit": 1}},                                  # unpaired, excluded
+    ]
+    tax = evaluate.gap_taxonomy(rows)
+    assert tax["n_paired"] == 5
+    assert tax["c_cell"] == 3
+    assert tax["cells"] == {"none": 2, "fusion": 1, "embedding": 1,
+                             "unrecoverable": 0, "unknown": 1}
+    assert sum(tax["cells"].values()) == tax["n_paired"]
+    assert tax["unknownShare"] == pytest.approx(1 / 5)
+
+
+def test_unknown_share_over_cap_fails_the_eval_gate():
+    # Bar: unknown share <= 5%, else the classifier (or the data) failed, not
+    # the retrieval. Pure function reports the share; the gate fails loud.
+    rows = [_gap_row("A", harness_hit=0, fts=None, vec=None)]
+    out = {"rows": rows, "summary": {"n_paired": 1, "gaps": evaluate.aggregate_gaps(rows)}}
+    failures = evaluate.eval_gate_failures(out)
+    assert any("unknown" in f.lower() for f in failures)
+    rows_ok = [_gap_row("A", harness_hit=1, fts=1, vec=1)]
+    out_ok = {"rows": rows_ok,
+              "summary": {"n_paired": 1, "gaps": evaluate.aggregate_gaps(rows_ok)}}
+    assert evaluate.eval_gate_failures(out_ok) == []
+
+
+def test_leg_diagnostics_use_candidate_window_not_top8(monkeypatch, tmp_path):
+    # AC2 honesty precondition: build_harness_fn computes fts_hit/vector_hit
+    # over the FULL leg lists (candidate window 100), never a top-8 slice — an
+    # anchor at window index 49 must count as a window hit. If this ever
+    # regresses, the taxonomy would label fusion rows as embedding-misses.
+    from llamaindex_harness import ingest as ingest_mod  # noqa: PLC0415
+    from llamaindex_harness import retrieve as retrieve_mod  # noqa: PLC0415
+
+    class _FakeHandle:
+        def close(self):
+            pass
+
+    class _FakeModel:
+        def get_query_embedding(self, text):
+            return [0.0]
+
+    class _FakeRetriever:
+        def __init__(self, handle, query_embed, project_id, scope, default_limit):
+            pass
+
+        def fts_leg(self, query, limit):
+            # anchor at 1-based rank 50: beyond ANY top-8 shape
+            rows = [(f"other{i}", 1.0) for i in range(49)]
+            return rows + [("anchor", 1.0)], object()
+
+        def vector_leg(self, query, limit):
+            return [("other", 1.0)]
+
+        def retrieve(self, query, limit=None):
+            return []
+
+    monkeypatch.setattr(retrieve_mod, "FusionRetriever", _FakeRetriever)
+    monkeypatch.setattr(ingest_mod, "open_store", lambda path: _FakeHandle())
+    monkeypatch.setattr(ingest_mod, "create_embedding_model",
+                        lambda offline=False: _FakeModel())
+    fn = evaluate.build_harness_fn(tmp_path)
+    try:
+        out = fn({"query": "q", "expectedHash": "anchor",
+                  "targetProjectId": "p", "targetScope": "project"})
+    finally:
+        fn.close()
+    assert out["fts_hit"] == 1
+    assert out["vector_hit"] == 0

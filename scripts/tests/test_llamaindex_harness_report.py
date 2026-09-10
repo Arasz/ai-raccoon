@@ -153,10 +153,58 @@ def test_report_renders_copy_and_model_provenance():
     assert "869254400" in text
 
 
+def _results_c_cell_taxonomy():
+    """E001 both-hit (none), E002 bank-only + fts window hit (fusion),
+    E003 bank-only + no leg window (embedding)."""
+    entries = [
+        {"id": "E001", "query": "plain q1", "expectedHash": "h1",
+         "targetProjectId": "ai-raccoon", "targetScope": "project"},
+        {"id": "E002", "query": "plain q2", "expectedHash": "h2",
+         "targetProjectId": "ai-raccoon", "targetScope": "shared"},
+        {"id": "E003", "query": "plain q3", "expectedHash": "h3",
+         "targetProjectId": "ai-raccoon", "targetScope": "project"},
+    ]
+    harness = {
+        "E001": {"hashes": ["h1"], "fts_hit": 1, "vector_hit": 1, "error": None},
+        "E002": {"hashes": [], "fts_hit": 1, "vector_hit": 0, "error": None},
+        "E003": {"hashes": [], "fts_hit": 0, "vector_hit": 0, "error": None},
+    }
+    bank = {
+        "E001": {"hashes": ["h1"], "error": None},
+        "E002": {"hashes": ["h2"], "error": None},
+        "E003": {"hashes": ["h3"], "error": None},
+    }
+    return evaluate.run_eval(entries, lambda e: dict(harness[e["id"]]),
+                             lambda e: dict(bank[e["id"]]))
+
+
 def test_report_renders_gap_counts_table():
-    text = report.render(_results_with_gaps(), _context())
-    assert "c_fts_only" in text and "c_cell" in text
-    assert "1" in text  # the counted values are rendered, not just headers
+    # P2 AC2: the single classified taxonomy REPLACES the P1 provisional counts
+    # table — the provisional c_* names must not survive as a second taxonomy.
+    text = report.render(_results_c_cell_taxonomy(), _context())
+    assert "Classified gap taxonomy" in text
+    assert "| fusion |" in text
+    assert "embedding" in text and "unrecoverable" in text and "unknown" in text
+    assert "c_fts_only" not in text
+    assert "of 3 paired" in text
+    # per-row evidence: every c-cell row carries its classification
+    row_fusion = next(l for l in text.splitlines() if l.startswith("| E002 |"))
+    row_embedding = next(l for l in text.splitlines() if l.startswith("| E003 |"))
+    assert "fusion" in row_fusion
+    assert "embedding" in row_embedding
+
+
+def test_report_gap_taxonomy_conservation_and_oracle_labels():
+    # C10 oracle: the shared-scope row (fts window hit) classifies fusion, and
+    # the cells conserve: none+fusion+embedding+unrecoverable+unknown = paired.
+    out = _results_c_cell_taxonomy()
+    tax = evaluate.gap_taxonomy(out["rows"])
+    assert sum(tax["cells"].values()) == tax["n_paired"] == 3
+    assert tax["c_cell"] == 2
+    text = report.render(out, _context())
+    shared_line = next(l for l in text.splitlines() if l.startswith("| E002 |"))
+    assert "shared" in shared_line and "fusion" in shared_line
+    assert "0.0%" in text  # unknown share rendered in the taxonomy table
 
 
 def test_report_discloses_exclusions():
@@ -242,3 +290,43 @@ def test_report_marks_shared_scope_rows_as_fusion_drop():
     c10 = next(line for line in text.splitlines() if line.startswith("C10 trace note"))
     assert "E002" in c10 and "fusion-drop" in c10
     assert "embedding-gap evidence" not in text.replace(c10, "")  # P1 label gone elsewhere
+
+
+# --- P2 AC2 report gates: cap + frozen-golden oracle ---
+
+def test_report_rejects_unknown_share_above_cap():
+    # Bar: unknown share <= 5%. With no leg diagnostics on c-cell rows the
+    # classifier cannot speak, so publishing must fail loud, not guess.
+    out = _results_c_cell_taxonomy()
+    for row in out["rows"]:
+        row["harness"].pop("fts_hit", None)
+        row["harness"].pop("vector_hit", None)
+    with pytest.raises(ValueError, match="unknown share"):
+        report.render(out, _context())
+
+
+def test_frozen_golden_c_cell_is_fusion_with_shared_oracle_rows():
+    # P2 AC2 oracle against the frozen golden (not a synthetic fixture): every
+    # c-cell row classifies `fusion` (a leg window held it; the rows are the
+    # Known fusion/limit drops), no row is labelled "embedding gap", and the
+    # targetScope=shared rows — the C10 oracle — are all fusion. Ids are
+    # selected by targetScope, never hardcoded (they shift on regeneration).
+    golden = (Path(__file__).resolve().parents[2] / "docs" / "work"
+              / "results-f1.json")
+    if not golden.exists():
+        pytest.skip("frozen golden not present in this checkout")
+    results = json.loads(golden.read_text())
+    labels = evaluate.gap_columns(results["rows"])
+    tax = evaluate.gap_taxonomy(results["rows"])
+    gaps = results["summary"]["gaps"]
+    assert tax["c_cell"] == gaps["c_cell"]
+    assert tax["cells"]["fusion"] == gaps["c_cell"]
+    assert tax["cells"]["embedding"] == 0
+    assert tax["cells"]["unrecoverable"] == 0
+    assert tax["cells"]["unknown"] == 0
+    assert sum(tax["cells"].values()) == tax["n_paired"]
+    shared = [r["id"] for r in results["rows"]
+              if r.get("targetScope") == "shared"]
+    assert shared, "frozen pair must carry shared-scope rows (C10 oracle)"
+    for qid in shared:
+        assert labels[qid] == "fusion"
