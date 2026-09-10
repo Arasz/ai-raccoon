@@ -339,10 +339,22 @@ def _run_main_with_fakes(monkeypatch, tmp_path, *, entries, stale,
     (scratch / "memory.db").write_bytes(b"")
     out = tmp_path / "results.json"
 
-    from llamaindex_harness import ingest as ingest_mod  # noqa: PLC0415
-    monkeypatch.setattr(ingest_mod, "model_weights_info",
-                        lambda model: ("rev-cb950dc8", 5))
-    monkeypatch.setattr(ingest_mod, "check_pinned_revision", lambda revision: None)
+    # P3: main() reaches ingest only for the two provenance functions. Inject a
+    # fake submodule instead of importing the real one (chromadb/torch are not
+    # installed in the stdlib-only scripts-harness CI lane; the heavy import is
+    # not the seam this test exercises).
+    import types  # noqa: PLC0415
+
+    import llamaindex_harness  # noqa: PLC0415
+
+    fake_ingest = types.ModuleType("llamaindex_harness.ingest")
+    fake_ingest.model_weights_info = lambda model: ("rev-cb950dc8", 5)
+    fake_ingest.check_pinned_revision = lambda revision: None
+    # `from . import ingest` returns the PARENT PACKAGE ATTRIBUTE when one is
+    # already bound (an earlier test imported the real module), so replace both
+    # the sys.modules entry and the attribute.
+    monkeypatch.setitem(sys.modules, "llamaindex_harness.ingest", fake_ingest)
+    monkeypatch.setattr(llamaindex_harness, "ingest", fake_ingest, raising=False)
     monkeypatch.setattr(
         evaluate, "scratch_copy_check",
         lambda *a, **k: ({"scratchSnapshotSha256": "e" * 64, "scratchRows": 1},
@@ -504,6 +516,9 @@ def test_leg_diagnostics_use_candidate_window_not_top8(monkeypatch, tmp_path):
     # over the FULL leg lists (candidate window 100), never a top-8 slice — an
     # anchor at window index 49 must count as a window hit. If this ever
     # regresses, the taxonomy would label fusion rows as embedding-misses.
+    # Inherently heavy (real Chroma + llama-index plumbing); the stdlib-only
+    # CI lane skips it and the dependency-full local gate runs it.
+    pytest.importorskip("llama_index")
     from llamaindex_harness import ingest as ingest_mod  # noqa: PLC0415
     from llamaindex_harness import retrieve as retrieve_mod  # noqa: PLC0415
 
