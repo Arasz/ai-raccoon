@@ -323,6 +323,9 @@ LEGACY_DEBRIS_IDS = [
 def test_committed_corpus_is_debris_free() -> None:
     corpus = _committed_corpus()
     queries = corpus["queries"]
+    by_id = {q["id"]: q for q in queries}
+    missing = [qid for qid in LEGACY_DEBRIS_IDS if qid not in by_id]
+    assert not missing, f"legacy debris ids missing from the corpus: {missing}"
     debris = [q["id"] for q in queries if debris_query(q["query"])]
     assert debris == [], (
         f"regenerated corpus still carries debris in {len(debris)}/{len(queries)}: {debris}")
