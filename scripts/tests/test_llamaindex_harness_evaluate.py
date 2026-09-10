@@ -465,7 +465,7 @@ def test_gap_columns_shared_scope_rows_are_fusion_drop():
     assert labels == {"C019": "fusion", "C065": "fusion", "C081": "fusion"}
 
 
-def test_gap_taxonomy_conservation_and_unknown_cap():
+def test_gap_counts_sum_to_paired():
     # Conservation: the five cells partition the PAIRED rows (none = the c-cell
     # complement); c_cell is the four deficit labels; unknown share is capped.
     rows = [
