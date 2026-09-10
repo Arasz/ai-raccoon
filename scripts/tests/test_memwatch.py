@@ -1,0 +1,49 @@
+"""C5/P2-AC4 memwatch gates: live kill of a process TREE (grandchildren
+included — a pure kill-decision test cannot see them), full stdout passthrough
+(the probe version printed only out[-6000:]), and the breach exit code 99."""
+
+import os
+import re
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "retrieval_tuning"))
+
+from memwatch import main as memwatch_main  # noqa: E402
+
+HOG = (
+    "import subprocess, sys, time\n"
+    "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+    "print(f'GRANDCHILD {p.pid}', flush=True)\n"
+    "buf = bytearray(250 * 1024 * 1024)\n"
+    "time.sleep(120)\n"
+)
+
+
+def test_memwatch_streams_child_stdout_in_full(capsys):
+    code = memwatch_main(["--cap-mb", "4096", "--interval", "0.05", "--",
+                          sys.executable, "-c",
+                          "print('HEAD' + 'x' * 20000); print('TAIL-MARKER')"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "HEAD" in out and "TAIL-MARKER" in out
+    assert out.count("x") >= 20000, "child stdout was clipped"
+
+
+def test_memwatch_live_kills_the_process_tree_on_breach(capsys):
+    code = memwatch_main(["--cap-mb", "50", "--interval", "0.1", "--",
+                          sys.executable, "-c", HOG])
+    out = capsys.readouterr().out
+    assert code == 99, f"breach must exit 99, got {code}: {out[-500:]}"
+    match = re.search(r"GRANDCHILD (\d+)", out)
+    assert match, f"hog did not report its grandchild pid: {out[-500:]}"
+    pid = int(match.group(1))
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+            time.sleep(0.1)
+        except ProcessLookupError:
+            return
+    raise AssertionError(f"grandchild {pid} survived the tree kill")

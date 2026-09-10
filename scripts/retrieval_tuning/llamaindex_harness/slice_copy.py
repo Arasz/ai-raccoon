@@ -130,6 +130,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--buckets", default=None,
                         help="explicit comma-separated buckets; wins over the corpus header")
     args = parser.parse_args(argv)
+    if args.buckets is not None and not args.buckets.strip():
+        print("FAIL: --buckets is blank (pass a comma-separated list or omit the flag)")
+        return 2
     forced = _forced_hashes(args.corpus)
     header, _ = scopes.load_corpus(args.corpus)
     if args.buckets or (header is not None and isinstance(header.get("projects"), dict)):
