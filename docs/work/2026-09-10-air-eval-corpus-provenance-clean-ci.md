@@ -203,7 +203,7 @@ P2 (E):
 
 **P1 `eval-set-100.json` provenance — regenerate from the pinned copy with a snapshot header (Package C)**
 
-- [ ] C1 — `build_eval_corpus.generate()` writes and returns the header-shaped corpus
+- [x] C1 — `build_eval_corpus.generate()` writes and returns the header-shaped corpus
   (`{header:{generator:build_eval_corpus.py, seed:42, queryCount:100, snapshotSha256:<copy sha>},
   queries:[…]}`); the committed `eval-set-100.json` is regenerated from `/tmp/p1-live-copy.db`
   and the 6 anchors E040/E041/E042/E045/E063/E065 now resolve in the copy.
@@ -214,12 +214,12 @@ P2 (E):
   `AI_RACCOON_EVAL_COPY=/tmp/p1-live-copy.db python3 -m pytest
   scripts/tests/test_retrieval_tuning_eval_corpus.py -q` → 0 failed, 0 skipped;
   header/query checks pinned by new test #1 (`test_committed_corpus_carries_a_snapshot_pin`).
-- [ ] C2 — `refresh-retrieval-corpora.py` exits **0 for every committed corpus** from the
+- [x] C2 — `refresh-retrieval-corpora.py` exits **0 for every committed corpus** from the
   pinned copy; both records `committed-match=True`. **Gate:**
   `python3 scripts/refresh-retrieval-corpora.py --copy /tmp/p1-live-copy.db --out-dir "$(mktemp -d)"`
   → exit 0, both `OK … committed-match=True`; `AI_RACCOON_EVAL_COPY=/tmp/p1-live-copy.db
   python3 -m pytest scripts/tests/test_refresh_corpora.py -q` → all pass (updated test #5).
-- [ ] C3 — the eval pin is **active**, not decorative: a different copy sha is refused with
+- [x] C3 — the eval pin is **active**, not decorative: a different copy sha is refused with
   exit 2 (snapshot-mismatch), never silently regenerated. The new pin tests are
   COPY-INDEPENDENT (reviewer F3): they assert presence + 64-hex `snapshotSha256` +
   `generator`/`seed`/`queryCount` shape on the committed artifact — copy-sha equality belongs
@@ -228,14 +228,14 @@ P2 (E):
   (`test_committed_corpora_carry_snapshot_pins`) plus the existing mismatch test; optional CLI
   probe `python3 -c "from retrieval_tuning import refresh_corpora as r; …copy_sha='0'*64…"`
   printing `exitCode == 2`.
-- [ ] C4 — the corpus tests pass **without the local-copy workaround**: with no
+- [x] C4 — the corpus tests pass **without the local-copy workaround**: with no
   `AI_RACCOON_EVAL_COPY`, the copy-dependent tests skip with a precise reason (E1), and the
   pure corpus gates run against the committed artifact. **Gate:**
   `python3 -m pytest scripts/tests/test_retrieval_tuning_eval_corpus.py -q` (env unset) →
   0 failed, 3 skipped with reasons; `test_llamaindex_harness_retrieve.py` corpus slice test
   green (header-aware read). **Gate:** `python3 -m pytest
   scripts/tests/test_llamaindex_harness_retrieve.py -q` (heavy local gate) → 0 failed.
-- [ ] C5 — no silent re-baseline and no frozen-contract change: generation moves query
+- [x] C5 — no silent re-baseline and no frozen-contract change: generation moves query
   text/ids **not at all** and hashes/spans on exactly the 6 named ids; the PR description
   carries the old→new table. **Gate:** BASE-vs-NEW diff (reviewer F2 — the
   committed-vs-regenerated probe is vacuous post-C by construction):
@@ -245,7 +245,7 @@ P2 (E):
   final head); `git diff --exit-code <base> -- docs/work/results-f1.json docs/work/results-f1-run2.json
   docs/work/results-f1-repeats.json docs/work/results-f1-merged-repeats.json` prints nothing;
   `python3 -m pytest scripts/tests/test_diff_golden.py -q` → pass.
-- [ ] C6 — the second raw consumer survives the header: `MiniLmGoldenVectorTests.cs`'s capture
+- [x] C6 — the second raw consumer survives the header: `MiniLmGoldenVectorTests.cs`'s capture
   path reads the corpus shape-aware (array OR `{header,queries}`), mirroring
   `evaluate.py:626-628`; the read is extracted into a helper unit-tested on both shapes.
   **Gate:** `dotnet build` clean + the new helper test RED on the object-shaped input before
@@ -254,28 +254,28 @@ P2 (E):
 
 **P2 test hygiene — clean-checkout zero failures (Package E)**
 
-- [ ] E1 — copy-dependent tests skip, never fail, when the copy is absent or not the pinned
+- [x] E1 — copy-dependent tests skip, never fail, when the copy is absent or not the pinned
   snapshot; `_load_corpus` accepts the header shape (mirrors
   `test_build_project_corpus.py:106-121`/`:433`). **Gate:**
   `python3 -m pytest scripts/tests/test_retrieval_tuning_eval_corpus.py -q` (no env) →
   0 failed, 3 skipped; with `AI_RACCOON_EVAL_COPY=/tmp/p1-live-copy.db` → 0 failed, 0 skipped;
   point the env at a wrong-sha copy → skip with the `snapshotSha256` mismatch reason.
-- [ ] E2 — `matplotlib` is declared where the static gate demands it (a genuine import of
+- [x] E2 — `matplotlib` is declared where the static gate demands it (a genuine import of
   committed code at `generate-embedding-benchmark-report.py:17-20`; gating cannot hide an AST
   import). **Gate:** `python3 -m pytest scripts/tests/test_dependencies_declared.py -q` →
   2 passed (RED today: 1 failed listing matplotlib).
-- [ ] E3 — optuna-dependent tests skip cleanly when optuna is absent; optuna stays a declared
+- [x] E3 — optuna-dependent tests skip cleanly when optuna is absent; optuna stays a declared
   main dependency (`pyproject.toml:13`, used at `tune.py:36`). **Gate:**
   `python3 -m pytest scripts/tests/test_retrieval_tuning_report.py scripts/tests/test_retrieval_tuning_tune.py -q`
   → 0 failed, 2 tests + 1 module skipped with reasons (RED today: 2 failed + 1 collection
   error); with optuna installed → 26 + 13 tests run.
-- [ ] E4 — full `scripts/tests` on a clean checkout reports **no failures (skips only, with
+- [x] E4 — full `scripts/tests` on a clean checkout reports **no failures (skips only, with
   reasons)**; includes the `test_committee_grade::test_sampling` fixture guard (pre-existing
   main failure caused by the `af1c2482` artifact deletion; a 3-line test-only extraction —
   beyond E1/E2 but required by this AC, flagged in the report). **Gate:**
   `python3 -m pytest scripts/tests -q` on the branch head → 0 failed; every skip line names a
   reason (`no copy`, `optuna not installed`, `fixture missing`, …).
-- [ ] E5 — the CI lane mirrors the fix: `test_dependencies_declared.py` and
+- [x] E5 — the CI lane mirrors the fix: `test_dependencies_declared.py` and
   `test_retrieval_tuning_eval_corpus.py` join the scripts-harness file list. **Gate:** local
   run of the exact lane command (`python3 -m pytest scripts/tests/test_llamaindex_harness_fts.py
   … scripts/tests/test_dependencies_declared.py scripts/tests/test_retrieval_tuning_eval_corpus.py -q`)
@@ -283,23 +283,23 @@ P2 (E):
 
 **P3 Integration (always last)**
 
-- [ ] I1 — full suite on the final branch head: `python3 -m pytest scripts/tests -q` →
+- [x] I1 — full suite on the final branch head: `python3 -m pytest scripts/tests -q` →
   **0 failed**, skips only; the branch-state-dependent
   `test_threshold_eval_integration.py::test_merge_hygiene_pr_branch_has_empty_src_diff` passes
   because the branch changes `scripts/`, `data/`, `pyproject.toml`, `.github/` (top-level
   `src/` untouched). **Gate:** that command, output pasted.
-- [ ] I2 — refresh + corpus contract green together on the merged head:
+- [x] I2 — refresh + corpus contract green together on the merged head:
   `python3 scripts/refresh-retrieval-corpora.py --copy /tmp/p1-live-copy.db --out-dir "$(mktemp -d)"`
   → exit 0 **and** `AI_RACCOON_EVAL_COPY=/tmp/p1-live-copy.db python3 -m pytest
   scripts/tests/test_refresh_corpora.py scripts/tests/test_retrieval_tuning_eval_corpus.py -q`
   → 0 failed. **Gate:** both commands.
-- [ ] I3 — frozen contract and harness behavior unchanged: goldens byte-identical to base,
+- [x] I3 — frozen contract and harness behavior unchanged: goldens byte-identical to base,
   `test_diff_golden.py` + `test_collect_ac_evidence.py` green, no file under top-level `src/`
   or `scripts/src/retrieval_tuning/` changed beyond the generator's output shape (the one
   header-aware read fix is test-side). **Gate:**
   `git diff --name-only "$(git merge-base HEAD origin/main)"..HEAD` reviewed; goldens diff
   empty; the two test files green.
-- [ ] I4 — traceability: one PR from this branch, commits per package, PR description carries
+- [x] I4 — traceability: one PR from this branch, commits per package, PR description carries
   the 6-entry old→new hash table, the RED outputs for tests #1–#9, and the refresh exit-0
   output. **Gate:** PR link + description read-back. Note the side effect that editing
   `build.yml` flips the dotnet lanes to `code=true` for this PR (full build/test will run
