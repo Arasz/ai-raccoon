@@ -1,6 +1,7 @@
 """P3 eval gates: singleton-F1 math, agreement-MCC incl. null-with-reason,
 transport-failure pairwise exclusion, corpus-contract fail-loud, N x 2 shape."""
 
+import json
 import math
 import os
 import sys
@@ -296,3 +297,106 @@ def test_scratch_copy_check_row_drift_fails_sha_only_warns(tmp_path):
 
     _, failures, _ = evaluate.scratch_copy_check(tmp_path / "absent.db", sha, 2)
     assert failures
+
+
+# --- P2 AC3: pure anchor verdict + stale list always on the write path ---
+
+def test_anchor_verdict_refuse_warn_clean():
+    # P2 AC3: the anchor gate is a pure verdict. refuse = no anchor resolves
+    # (wrong store/copy); warn = some stale (re-chunked upstream); clean = none.
+    assert evaluate.anchor_verdict(3, []) == "clean"
+    assert evaluate.anchor_verdict(3, ["C001"]) == "warn"
+    assert evaluate.anchor_verdict(3, ["C001", "C002", "C003"]) == "refuse"
+    assert evaluate.anchor_verdict(1, ["C001"]) == "refuse"
+    assert evaluate.anchor_verdict(0, []) == "clean"
+
+
+def _run_main_with_fakes(monkeypatch, tmp_path, *, entries, stale,
+                         harness_hashes=None, bank_hashes=None, extra_argv=()):
+    """Patch main()'s heavy seams (provenance, scratch, server, retriever).
+
+    Returns (argv, out_path); the caller calls evaluate.main(argv). Only the
+    write path and the anchor verdict are real — everything expensive is fake."""
+    store = tmp_path / "store"
+    store.mkdir()
+    (store / "params.json").write_text(json.dumps({
+        "model": "Salesforce/SFR-Embedding-Code-400M_R",
+        "modelRevision": "rev-cb950dc8",
+        "counts": {"copyEntries": 1},
+        "copyPath": "/tmp/p1-live-copy.db",
+        "copySnapshotSha256": "e" * 64,
+    }))
+    corpus = tmp_path / "corpus.json"
+    corpus.write_text(json.dumps(entries))
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / "memory.db").write_bytes(b"")
+    out = tmp_path / "results.json"
+
+    from llamaindex_harness import ingest as ingest_mod  # noqa: PLC0415
+    monkeypatch.setattr(ingest_mod, "model_weights_info",
+                        lambda model: ("rev-cb950dc8", 5))
+    monkeypatch.setattr(ingest_mod, "check_pinned_revision", lambda revision: None)
+    monkeypatch.setattr(
+        evaluate, "scratch_copy_check",
+        lambda *a, **k: ({"scratchSnapshotSha256": "e" * 64, "scratchRows": 1},
+                         [], []))
+    monkeypatch.setattr(evaluate, "check_anchors_resolve", lambda *a, **k: list(stale))
+
+    import retrieval_tuning.server as server_mod  # noqa: PLC0415
+
+    class _FakeServer:
+        port = 50001
+        client = None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(server_mod, "start_server", lambda *a, **k: _FakeServer())
+    monkeypatch.setattr(
+        evaluate, "build_airaccoon_fn",
+        lambda server, session_id: (lambda e: {
+            "hashes": list(bank_hashes or []), "error": None}))
+    harness_fn = lambda e: {"hashes": list(harness_hashes or []), "error": None}
+    harness_fn.close = lambda: None
+    monkeypatch.setattr(evaluate, "build_harness_fn",
+                        lambda store_dir, offline=False: harness_fn)
+    argv = ["--corpus", str(corpus), "--store-dir", str(store),
+            "--scratch-data-root", str(scratch), "--out", str(out), *extra_argv]
+    return argv, out
+
+
+def test_stale_anchors_always_recorded_even_when_empty(monkeypatch, tmp_path, capsys):
+    # P2 AC3: the write path always carries staleAnchors (empty list included);
+    # the one-line summary repeats the count.
+    argv, out = _run_main_with_fakes(
+        monkeypatch, tmp_path, entries=[_entry(1)], stale=[],
+        harness_hashes=["hash001"], bank_hashes=["hash001"])
+    assert evaluate.main(argv) == 0
+    assert "stale=0" in capsys.readouterr().out
+    assert json.loads(out.read_text())["staleAnchors"] == []
+
+
+def test_stale_anchors_recorded_when_stale(monkeypatch, tmp_path, capsys):
+    argv, out = _run_main_with_fakes(
+        monkeypatch, tmp_path, entries=[_entry(1), _entry(2)], stale=["C035"],
+        harness_hashes=["hash001"], bank_hashes=["hash001"])
+    assert evaluate.main(argv) == 0
+    out_text = capsys.readouterr().out
+    assert "stale=1" in out_text and "C035" in out_text
+    assert json.loads(out.read_text())["staleAnchors"] == ["C035"]
+
+
+def test_refuse_verdict_writes_no_results_file(monkeypatch, tmp_path, capsys):
+    # Pinned choice (P2 AC3): failure paths never write the artifact — a
+    # results.json only ever exists for a run that passed its gates, so every
+    # written artifact carries staleAnchors by construction.
+    argv, out = _run_main_with_fakes(
+        monkeypatch, tmp_path, entries=[_entry(1)], stale=["E001"],
+        harness_hashes=[], bank_hashes=[])
+    assert evaluate.main(argv) == 1
+    assert not out.exists()
+    assert "FAIL" in capsys.readouterr().out

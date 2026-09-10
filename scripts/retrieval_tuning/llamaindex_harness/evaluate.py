@@ -323,6 +323,18 @@ def eval_gate_failures(out: dict) -> list[str]:
     return failures
 
 
+def anchor_verdict(n_entries: int, stale_ids: list) -> str:
+    """P2 AC3: 'refuse' when no anchor resolves, 'warn' when some, else 'clean'.
+
+    Pure so the gate choice is testable: a store where every corpus anchor is
+    stale is the wrong store/copy (refuse, never a silent all-miss run); a
+    partial stale set is upstream re-chunking (warn-and-record)."""
+    n_stale = len(stale_ids)
+    if n_entries > 0 and n_stale >= n_entries:
+        return "refuse"
+    return "warn" if n_stale else "clean"
+
+
 def missing_anchors(entries: list[dict], stored_ids: set) -> list:
     """Corpus-staleness gate (pure): entry ids whose expectedHash is not stored."""
     return [e.get("id") for e in entries if e.get("expectedHash") not in stored_ids]
@@ -396,9 +408,12 @@ def main(argv: list[str] | None = None) -> int:
     scorable, null_anchors = partition_null_anchors(entries)
     stale_anchors = check_anchors_resolve(scorable, Path(args.store_dir))
     stale_anchors = sorted(set(stale_anchors) | set(null_anchors))
-    if len(stale_anchors) == len(entries):
-        raise ValueError("no corpus anchor resolves against this store — wrong store/copy?")
-    if stale_anchors:
+    verdict = anchor_verdict(len(entries), stale_anchors)
+    if verdict == "refuse":
+        print(f"FAIL: no corpus anchor resolves against this store — wrong store/copy? "
+              f"({len(stale_anchors)} stale of {len(entries)})")
+        return 1
+    if verdict == "warn":
         print(f"WARNING: {len(stale_anchors)} stale anchors (re-chunked upstream, "
               f"unhittable by either leg): {stale_anchors}", flush=True)
     session_id = f"llamaindex-harness-{uuid.uuid4().hex[:12]}"
