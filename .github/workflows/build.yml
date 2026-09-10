@@ -249,7 +249,9 @@ jobs:
     # PRs (like the llamaindex harness). This job runs unconditionally (~1 min).
     # Scope is the stdlib-runnable subset — fts, fusion, evaluate, report, slice
     # (vec0 tests importorskip sqlite_vec), plus the P3/F1/F3 gates: scope builder,
-    # no-hardcode scan, refresh-corpora contract, frozen-contract collector, golden diff.
+    # no-hardcode scan, refresh-corpora contract, frozen-contract collector, golden diff,
+    # the dependency-declaration scan, and the eval-corpus provenance gates (their
+    # copy-dependent tests skip on a runner with no pinned bank copy).
     # Heavy files (ingest, retrieve, cli, p3_cli_parity) need chromadb/torch/
     # llama-index and stay a documented local gate:
     #   python3 -m pytest scripts/tests/test_llamaindex_harness_ingest.py \
@@ -268,7 +270,7 @@ jobs:
         # which the evaluate seam test exercises through build_airaccoon_fn.
         run: python3 -m pip install pytest httpx
       - name: Stdlib-runnable harness tests
-        run: python3 -m pytest scripts/tests/test_llamaindex_harness_fts.py scripts/tests/test_llamaindex_harness_fusion.py scripts/tests/test_llamaindex_harness_evaluate.py scripts/tests/test_llamaindex_harness_report.py scripts/tests/test_llamaindex_harness_slice.py scripts/tests/test_retrieval_tuning_scopes.py scripts/tests/test_no_hardcoded_knobs.py scripts/tests/test_refresh_corpora.py scripts/tests/test_collect_ac_evidence.py scripts/tests/test_diff_golden.py -q
+        run: python3 -m pytest scripts/tests/test_llamaindex_harness_fts.py scripts/tests/test_llamaindex_harness_fusion.py scripts/tests/test_llamaindex_harness_evaluate.py scripts/tests/test_llamaindex_harness_report.py scripts/tests/test_llamaindex_harness_slice.py scripts/tests/test_retrieval_tuning_scopes.py scripts/tests/test_no_hardcoded_knobs.py scripts/tests/test_refresh_corpora.py scripts/tests/test_collect_ac_evidence.py scripts/tests/test_diff_golden.py scripts/tests/test_dependencies_declared.py scripts/tests/test_retrieval_tuning_eval_corpus.py -q
 
   build-nightly-gates:
     # Q2 (delta review fix plan, owner flag O1): nothing ran Speed=Nightly against a PR head.

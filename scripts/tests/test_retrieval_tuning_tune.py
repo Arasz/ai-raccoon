@@ -10,11 +10,12 @@ The live study (server + optuna + settings writes) is exercised by the
 mini-study proof; these tests stay pure.
 """
 
-import optuna
 import pytest
-from optuna.samplers import TPESampler
 
-from retrieval_tuning import scoring, settings as settings_mod, tune
+optuna = pytest.importorskip("optuna")
+from optuna.samplers import TPESampler  # noqa: E402
+
+from retrieval_tuning import scoring, settings as settings_mod, tune  # noqa: E402
 
 # Plan §6.3 search space (bounds as the plan table states them).
 BOUNDS = {

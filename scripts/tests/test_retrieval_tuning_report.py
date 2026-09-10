@@ -307,7 +307,7 @@ class TestParseTunedJson:
 
 class TestStudySummary:
     def test_summary_reads_a_real_optuna_study(self, tmp_path):
-        import optuna
+        optuna = pytest.importorskip("optuna")
         from optuna.samplers import TPESampler
 
         storage = f"sqlite:///{tmp_path / 'study.db'}"
@@ -330,6 +330,7 @@ class TestStudySummary:
         assert info["sampler"] == "TPESampler"
 
     def test_unreadable_storage_yields_none(self, tmp_path):
+        pytest.importorskip("optuna")
         assert report.study_summary(f"sqlite:///{tmp_path / 'missing.db'}") is None
 
 
