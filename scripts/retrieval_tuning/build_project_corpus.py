@@ -63,7 +63,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from retrieval_tuning import corpus_anchors, repo_data  # noqa: E402
+from retrieval_tuning import corpus_anchors, corpus_text, repo_data  # noqa: E402
 
 # P3 AC2: generator constants live in data/corpora/project-corpus-100.json.
 _GENERATOR = repo_data.CORPORA["project-corpus-100"]
@@ -80,8 +80,6 @@ DEFAULT_OUTPUT = (
 
 # Paraphrase frames per target, rotated by target ordinal (plan §P2-2c).
 FRAMES = tuple(_GENERATOR["FRAMES"])
-_TOPIC_MAX_CHARS = 100
-_TOPIC_MIN_CUT = 8
 _MARKER_MIN_CHARS = 8
 _MARKER_WINDOW_LENS = (120, 240)
 _ANSWER_SPAN_CHARS = 160
@@ -91,21 +89,9 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower()).strip()
 
 
-def _derive_topic(value: str) -> str:
-    """First topical span of the chunk text: leading markdown heading marker
-    stripped, first sentence (or ':' clause) kept, hard-capped at 100 chars on
-    a word boundary. Never empty."""
-    text = re.sub(r"\s+", " ", value).strip()
-    text = re.sub(r"^#{1,6}\s+", "", text)
-    m = re.search(r"[.;:!?](\s|$)", text)
-    cut = m.start() if m and m.start() >= _TOPIC_MIN_CUT else min(len(text), _TOPIC_MAX_CHARS)
-    topic = text[:cut]
-    if len(topic) > _TOPIC_MAX_CHARS:
-        topic = topic[:_TOPIC_MAX_CHARS].rsplit(" ", 1)[0]
-    topic = topic.strip().rstrip(".,;:!?'\"`*)]—–-")
-    topic = re.sub(r"^<!--+\s*", "", topic)
-    topic = re.sub(r"\s*-+->$", "", topic)
-    return topic or text[:_TOPIC_MAX_CHARS].strip() or "this note"
+def _derive_topic(value: str, fallback: str | None = None) -> str:
+    """Topical span of the chunk text, via the markup-aware repair module."""
+    return corpus_text.repair_topic(value, fallback=fallback)
 
 
 def _answer_span(value: str) -> str:
@@ -335,7 +321,7 @@ def _render_query(
     next paraphrase frame, then re-render with each deterministic discriminator
     (source-file name, full path / content-hash prefix); exhausted -> loud
     failure. Returns (query text, frame actually used)."""
-    topic = _derive_topic(value)
+    topic = _derive_topic(value, fallback=disambiguators[0] if disambiguators else None)
     attempts: list[tuple[str, int]] = []
     for offset in range(len(FRAMES)):
         frame_idx = (frame_base + offset) % len(FRAMES)
@@ -518,6 +504,7 @@ def generate(copy_path: Path, output_path: Path) -> dict:
     corpus = {
         "header": {
             "generator": "build_project_corpus.py",
+            "topicDerivation": corpus_text.TOPIC_DERIVATION,
             "seed": SEED,
             "queryCount": len(queries),
             "snapshotSha256": snapshot_sha,

@@ -32,11 +32,19 @@ import json
 import os
 import re
 import sqlite3
+import sys
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_RETRIEVAL_TUNING = REPO_ROOT / "scripts" / "retrieval_tuning"
+
+sys.path.insert(0, str(REPO_RETRIEVAL_TUNING))
+
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+
+from llamaindex_harness.evaluate import debris_query  # noqa: E402
 GENERATOR_PATH = REPO_ROOT / "scripts" / "retrieval_tuning" / "build_project_corpus.py"
 ARTIFACT_PATH = REPO_ROOT / "scripts" / "retrieval_tuning" / "corpora" / "project-corpus-100.json"
 COPY_PATH = Path(
@@ -52,6 +60,7 @@ QUERY_CAP = 20
 
 HEADER_KEYS = {
     "generator",
+    "topicDerivation",
     "seed",
     "queryCount",
     "snapshotSha256",
@@ -293,6 +302,36 @@ def _holdout_leaks(corpus: dict, conn: sqlite3.Connection) -> list[str]:
             if rows[0]["hash"] in holdout_hashes.get(pid, set()):
                 leaks.append(f"{q['id']}: anchors held-out content row {rows[0]['hash'][:12]}...")
     return leaks
+
+
+def _committed_corpus() -> dict:
+    assert ARTIFACT_PATH.exists(), f"committed artifact missing: {ARTIFACT_PATH}"
+    return _load_corpus(ARTIFACT_PATH)
+
+
+# ------------------------------------------------------------------ B debris-free (T8/T9, copy-free so CI enforces them)
+
+# Debris ids of the pre-repair artifact, measured with the report's predicate
+# (evaluate.debris_query); the repair must change every one of them.
+LEGACY_DEBRIS_IDS = [
+    "C017", "C021", "C026", "C028", "C036", "C044", "C045", "C048",
+    "C049", "C050", "C051", "C052", "C053", "C056", "C057", "C059",
+    "C060", "C072", "C078", "C096", "C097", "C099", "C100",
+]
+
+
+def test_committed_corpus_is_debris_free() -> None:
+    corpus = _committed_corpus()
+    queries = corpus["queries"]
+    debris = [q["id"] for q in queries if debris_query(q["query"])]
+    assert debris == [], (
+        f"regenerated corpus still carries debris in {len(debris)}/{len(queries)}: {debris}")
+
+
+def test_committed_artifact_records_the_topic_derivation() -> None:
+    corpus = _committed_corpus()
+    assert corpus["header"].get("topicDerivation") == "markup-aware-v1", (
+        "committed artifact must record the topic derivation that produced it")
 
 
 # ------------------------------------------------------------------ AC2.1 determinism
