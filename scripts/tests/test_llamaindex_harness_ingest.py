@@ -407,6 +407,76 @@ def test_params_records_buckets_excluded_snapshot_and_model(tmp_path):
         "ai-raccoon/shared": 1, "hermes-default/project": 1}
 
 
+def test_refresh_params_accepts_identical_rows_without_reembedding(tmp_path):
+    # C6: header/metadata-only changes (manifest, snapshot, copy SHA) must not
+    # cost a re-embed. The fast path validates the row universe and rewrites
+    # FTS + params; the embed seam raising proves no vector work happened.
+    copy = tmp_path / "copy.db"
+    _fixture_copy(copy)
+    corpus = tmp_path / "corpus.json"
+    _header_corpus(corpus)
+    store = tmp_path / "store"
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store),
+                        "--corpus", str(corpus)], embed=_toy_embed) == 0
+    before = json.loads((store / "params.json").read_text())
+
+    def _must_not_embed(texts):
+        raise AssertionError("refresh-params attempted to embed")
+
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store),
+                        "--corpus", str(corpus), "--refresh-params"],
+                       embed=_must_not_embed) == 0
+    after = json.loads((store / "params.json").read_text())
+    assert after["counts"] == before["counts"]
+    assert after["modelRevision"] == before["modelRevision"] == "test-seam"
+    assert after["copySnapshotSha256"] == hashlib.sha256(copy.read_bytes()).hexdigest()
+    assert after["bucketCounts"] == before["bucketCounts"]
+    assert after["resolvedBuckets"] == before["resolvedBuckets"]
+
+
+def test_refresh_params_refuses_when_a_row_value_changed(tmp_path, capsys):
+    copy = tmp_path / "copy.db"
+    _fixture_copy(copy)
+    corpus = tmp_path / "corpus.json"
+    _header_corpus(corpus)
+    store = tmp_path / "store"
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store),
+                        "--corpus", str(corpus)], embed=_toy_embed) == 0
+    before = json.loads((store / "params.json").read_text())
+    conn = sqlite3.connect(copy)
+    conn.execute("UPDATE entries SET value = value || ' MUTATED' WHERE hash = 'h1'")
+    conn.commit()
+    conn.close()
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store),
+                        "--corpus", str(corpus), "--refresh-params"],
+                       embed=_toy_embed) == 1
+    assert "refresh refused" in capsys.readouterr().out
+    after = json.loads((store / "params.json").read_text())
+    assert after["dupesDropped"] == before["dupesDropped"]
+
+
+def test_refresh_params_refuses_when_a_row_is_added(tmp_path, capsys):
+    copy = tmp_path / "copy.db"
+    _fixture_copy(copy)
+    corpus = tmp_path / "corpus.json"
+    _header_corpus(corpus)
+    store = tmp_path / "store"
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store),
+                        "--corpus", str(corpus)], embed=_toy_embed) == 0
+    conn = sqlite3.connect(copy)
+    conn.execute(
+        "INSERT INTO entries (hash, path, value, scope, project_id, source_file,"
+        " section, heading_path, chunk_index, total_chunks)"
+        " VALUES ('h9', 'new.md', 'a brand new row', 'project', 'ai-raccoon',"
+        " 'docs:new.md', NULL, '', -1, 0)")
+    conn.commit()
+    conn.close()
+    assert ingest.main(["--copy", str(copy), "--store-dir", str(store),
+                        "--corpus", str(corpus), "--refresh-params"],
+                       embed=_toy_embed) == 1
+    assert "row id set changed" in capsys.readouterr().out
+
+
 def test_model_weights_info_reads_cache_layout(tmp_path):
     hub = tmp_path / "hub" / "models--org--model"
     snap = hub / "snapshots" / ("cd" * 20)

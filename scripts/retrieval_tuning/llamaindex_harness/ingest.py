@@ -299,6 +299,100 @@ CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
 """
 
 
+def _write_fts(fts: sqlite3.Connection, docs: list[Document]) -> None:
+    """Rewrite the FTS mirror from the canonical documents (idempotent)."""
+    fts.executescript(_FTS_SCHEMA)
+    fts.execute("DELETE FROM docs_fts")
+    fts.executemany(
+        "INSERT INTO docs_fts (value, source_file, section, hash, path, project_id,"
+        " scope, chunk_index, total_chunks) VALUES (?,?,?,?,?,?,?,?,?)",
+        [(d.text, d.metadata["source_file"], d.metadata["section"], d.id_,
+          d.metadata["path"], d.metadata["project_id"], d.metadata["scope"],
+          d.metadata["chunk_index"], d.metadata["total_chunks"]) for d in docs],
+    )
+    fts.commit()
+
+
+def _store_params(rows: list[dict], docs: list[Document], *, content_count: int,
+                  structure_count: int, fts_count: int, headed_count: int,
+                  copy_entries: int, buckets, excluded, corpus_name, corpus_snapshot,
+                  model_info: dict, dupes_dropped: int, copy_path, copy_sha) -> dict:
+    """The params.json payload: frozen knobs + the audit/provenance block."""
+    params = dict(PARAMS)
+    bucket_counts: dict[str, int] = {}
+    for r in rows:
+        spelling = f"{r['project_id']}/{r['scope']}"
+        bucket_counts[spelling] = bucket_counts.get(spelling, 0) + 1
+    params["buckets"] = sorted(bucket_counts)
+    params["bucketCounts"] = bucket_counts  # observed spellings -> store row counts
+    params["resolvedBuckets"] = sorted(buckets)  # the input rule (audit)
+    params["excludedProjects"] = list(excluded or [])  # seed-equal manifest
+    params["corpus"] = corpus_name
+    params["corpusSnapshotSha256"] = corpus_snapshot
+    params["copyPath"] = copy_path
+    params["copySnapshotSha256"] = copy_sha
+    params["modelRevision"] = model_info["revision"]
+    params["modelBytes"] = model_info["bytes"]
+    params["dupesDropped"] = dupes_dropped
+    params["counts"] = {
+        "rows": len(docs),
+        "content": content_count,
+        "structure": structure_count,
+        "fts": fts_count,
+        "headed": headed_count,
+        "copyEntries": copy_entries,
+    }
+    params["ingestedAt"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    return params
+
+
+def refresh_params(store: StoreHandle, rows: list[dict], docs: list[Document], *,
+                   buckets, excluded, corpus_name, corpus_snapshot, copy_path: str,
+                   copy_sha: str, copy_entries: int, model_info: dict,
+                   dupes_dropped: int) -> None:
+    """Metadata-only refresh: rewrite FTS + params, refusing any row drift (C6).
+
+    Header/metadata edits (manifest, corpus snapshot, copy SHA) must not cost
+    a re-embed. Validate that the fresh row universe (id set, text hashes,
+    structure id set, model revision) matches the store, then rewrite the FTS
+    mirror and params.json — never embed or upsert. Any mismatch refuses loud
+    (a full ingest is required), so a fast path can never lie about the store."""
+    got = store.content.get(include=["documents"])
+    stored_ids = set(got["ids"])
+    fresh_ids = {d.id_ for d in docs}
+    if fresh_ids != stored_ids:
+        missing = sorted(fresh_ids - stored_ids)[:3]
+        extra = sorted(stored_ids - fresh_ids)[:3]
+        raise ValueError(
+            f"refresh refused: row id set changed (fresh={len(fresh_ids)}, "
+            f"store={len(stored_ids)}; missing={missing}, extra={extra}) — a full "
+            "ingest is required")
+    fresh_text = {d.id_: hashlib.sha256((d.text or "").encode()).hexdigest()
+                  for d in docs}
+    for doc_id, text in zip(got["ids"], got["documents"]):
+        if fresh_text[doc_id] != hashlib.sha256((text or "").encode()).hexdigest():
+            raise ValueError(
+                f"refresh refused: text changed for {doc_id[:12]} — a full ingest is required")
+    headed = [d for d, r in zip(docs, rows) if heading_of(coerce_row(r))]
+    if {d.id_ for d in headed} != set(store.structure.get(include=[])["ids"]):
+        raise ValueError("refresh refused: structure id set changed — a full ingest is required")
+    if (model_info["revision"] != store.params.get("modelRevision")
+            or model_info["bytes"] != store.params.get("modelBytes")):
+        raise ValueError(
+            f"refresh refused: model revision {model_info['revision']!r} != store's "
+            f"{store.params.get('modelRevision')!r} — a full re-embed is required")
+    _write_fts(store.fts, docs)
+    params = _store_params(rows, docs, content_count=store.content.count(),
+                           structure_count=store.structure.count(),
+                           fts_count=store.fts_count(), headed_count=len(headed),
+                           copy_entries=copy_entries, buckets=buckets, excluded=excluded,
+                           corpus_name=corpus_name, corpus_snapshot=corpus_snapshot,
+                           model_info=model_info, dupes_dropped=dupes_dropped,
+                           copy_path=copy_path, copy_sha=copy_sha)
+    (store.store_dir / "params.json").write_text(json.dumps(params, indent=2, sort_keys=True))
+    store.params = params
+
+
 def _scope_predicate(project_id: str, scope: str) -> tuple[str, tuple]:
     scope = scopes.normalize_scope(scope)  # corpus custom -> bank project
     if scope not in scopes.VALID_SCOPES:
@@ -365,43 +459,16 @@ def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
 
     fts_path = store_dir / "fts.db"
     fts = sqlite3.connect(fts_path)
-    fts.executescript(_FTS_SCHEMA)
-    fts.execute("DELETE FROM docs_fts")
-    fts.executemany(
-        "INSERT INTO docs_fts (value, source_file, section, hash, path, project_id,"
-        " scope, chunk_index, total_chunks) VALUES (?,?,?,?,?,?,?,?,?)",
-        [(d.text, d.metadata["source_file"], d.metadata["section"], d.id_,
-          d.metadata["path"], d.metadata["project_id"], d.metadata["scope"],
-          d.metadata["chunk_index"], d.metadata["total_chunks"]) for d in docs],
-    )
-    fts.commit()
+    _write_fts(fts, docs)
 
-    params = dict(PARAMS)
-    bucket_counts: dict[str, int] = {}
-    for r in rows:
-        spelling = f"{r['project_id']}/{r['scope']}"
-        bucket_counts[spelling] = bucket_counts.get(spelling, 0) + 1
-    params["buckets"] = sorted(bucket_counts)
-    params["bucketCounts"] = bucket_counts  # observed spellings -> store row counts
-    params["resolvedBuckets"] = sorted(buckets)  # the input rule (audit)
-    params["excludedProjects"] = list(excluded or [])  # seed-equal manifest
-    params["corpus"] = corpus_name
-    params["corpusSnapshotSha256"] = corpus_snapshot
-    params["copyPath"] = copy_path
-    params["copySnapshotSha256"] = copy_sha
     model_info = model_info or {"revision": "test-seam", "bytes": 0}
-    params["modelRevision"] = model_info["revision"]
-    params["modelBytes"] = model_info["bytes"]
-    params["dupesDropped"] = dupes_dropped
-    params["counts"] = {
-        "rows": len(docs),
-        "content": content.count(),
-        "structure": structure.count(),
-        "fts": fts.execute("SELECT count(*) FROM docs_fts").fetchone()[0],
-        "headed": len(headed),
-        "copyEntries": copy_entries,
-    }
-    params["ingestedAt"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    params = _store_params(
+        rows, docs, content_count=content.count(), structure_count=structure.count(),
+        fts_count=fts.execute("SELECT count(*) FROM docs_fts").fetchone()[0],
+        headed_count=len(headed), copy_entries=copy_entries, buckets=buckets,
+        excluded=excluded, corpus_name=corpus_name, corpus_snapshot=corpus_snapshot,
+        model_info=model_info, dupes_dropped=dupes_dropped, copy_path=copy_path,
+        copy_sha=copy_sha)
     (store_dir / "params.json").write_text(json.dumps(params, indent=2, sort_keys=True))
     return StoreHandle(store_dir, client, content, structure, fts, params)
 
@@ -519,7 +586,12 @@ def main(argv: list[str] | None = None, embed=None) -> int:
     parser.add_argument("--corpus", default=None,
                         help="header-shaped corpus JSON: derives buckets + exclusion manifest"
                         " + snapshot SHA (required unless --buckets is given)")
-    parser.add_argument("--verify-only", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--verify-only", action="store_true")
+    mode.add_argument("--refresh-params", action="store_true",
+                      help="metadata-only refresh (dedupe + FTS rewrite + params + verify); "
+                      "refuses when the row id set, text hashes, structure ids or model "
+                      "revision differ from the store — never embeds")
     args = parser.parse_args(argv)
     store_dir = Path(args.store_dir)
 
@@ -542,6 +614,65 @@ def main(argv: list[str] | None = None, embed=None) -> int:
                 print(f"  {p}")
             return 1
         print("VERIFIED: store is chunk-faithful to the copy")
+        return 0
+
+    if args.refresh_params:
+        try:
+            handle = open_store(store_dir)
+        except Exception as exc:  # noqa: BLE001 — any open failure is a failed gate
+            print(f"FAIL: cannot open store: {exc}")
+            return 1
+        try:
+            buckets, excluded = scopes.resolve_buckets(args.copy, args.corpus, args.buckets)
+        except ValueError as exc:
+            print(f"FAIL: {exc}")
+            handle.close()
+            return 2
+        corpus_name, corpus_snapshot = None, None
+        if args.corpus is not None:
+            header, _ = scopes.load_corpus(args.corpus)
+            corpus_name = Path(args.corpus).name
+            corpus_snapshot = (header or {}).get("snapshotSha256")
+        copy_path = str(Path(args.copy).resolve())
+        copy_sha = _sha256_file(args.copy)
+        if corpus_snapshot and copy_sha != corpus_snapshot:
+            print(f"WARNING: copy sha {copy_sha[:12]}... != corpus snapshot "
+                  f"{corpus_snapshot[:12]}... (corpus drift; both legs share this copy)",
+                  flush=True)
+        rows, copy_entries, dupes_dropped = load_rows(args.copy, buckets)
+        docs = to_documents(rows)
+        if embed is not None:  # test seam: mirrors the build path's model_info
+            model_info = {"revision": "test-seam", "bytes": 0}
+        else:
+            try:
+                revision, nbytes = model_weights_info(args.model)
+                check_pinned_revision(revision)
+            except ValueError as exc:
+                print(f"FAIL: {exc}")
+                handle.close()
+                return 1
+            model_info = {"revision": revision, "bytes": nbytes}
+        try:
+            refresh_params(handle, rows, docs, buckets=buckets, excluded=excluded,
+                           corpus_name=corpus_name, corpus_snapshot=corpus_snapshot,
+                           copy_path=copy_path, copy_sha=copy_sha,
+                           copy_entries=copy_entries, model_info=model_info,
+                           dupes_dropped=len(dupes_dropped))
+        except ValueError as exc:
+            print(f"FAIL: {exc}")
+            handle.close()
+            return 1
+        problems = verify_store(args.copy, handle, buckets)
+        fts_diff = fts_parity_probe(args.copy, handle, probe="memory", buckets=buckets)
+        handle.close()
+        if problems or fts_diff:
+            print(f"FAIL: verify={len(problems)} fts_parity={len(fts_diff)}")
+            for p in (problems + fts_diff)[:5]:
+                print(f"  {p}")
+            return 1
+        print(f"refreshed: rows={len(docs)} copyEntries={copy_entries} "
+              f"dupesDropped={len(dupes_dropped)} (no re-embed)")
+        print("VERIFIED: refreshed store is chunk-faithful to the copy; FTS parity probe clean")
         return 0
 
     try:
