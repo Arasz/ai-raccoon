@@ -165,10 +165,7 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
     private static IReadOnlyList<(string Id, string Query)> ReadEvalSetQueries()
     {
         var corpusPath = Path.Combine(FindRepoRoot(), "scripts/retrieval_tuning/corpora/eval-set-100.json");
-        using var doc = JsonDocument.Parse(File.ReadAllText(corpusPath));
-        return doc.RootElement.EnumerateArray()
-            .Select(item => (item.GetProperty("id").GetString()!, item.GetProperty("query").GetString()!))
-            .ToList();
+        return MiniLmGoldenVectorReader.ReadEvalSetQueries(File.ReadAllText(corpusPath));
     }
 
     private static string FindRepoRoot()
