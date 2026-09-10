@@ -22,17 +22,41 @@ import sqlite3
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from retrieval_tuning import repo_data  # noqa: E402
+# F1: the frozen replication contract as LITERALS. The evidence check must not
+# read its expectations from `data/knobs.json` — that is the artifact it audits
+# (a JSON edit would move both sides together and the gate could never fail).
+# `scripts/tests/test_collect_ac_evidence.py` pins this dict to its own literal.
+FROZEN_PARAMS = {
+    "rrfK": 60,
+    "ftsWeight": 1,
+    "vectorWeight": 1,
+    "limit": 8,
+    "minRelativeScore": 0.6,
+    "sourceLambda": 0.1,
+    "consolidationThreshold": 0.1,
+    "docScoreFormula": "max",
+    "candidateWindow": "max3x100",
+    "structureAlpha": 0.5,
+    "fusionNoRegression": False,
+    "scope": "project",
+    "kind": "memory",
+    "model": "Salesforce/SFR-Embedding-Code-400M_R",
+}
 
-# P3 AC2: the frozen contract comes from data/knobs.json; this module only
-# names which of its keys the evidence check compares.
+# The subset the eval evidence check compares against the store params.
 FROZEN_KNOBS = {
-    key: repo_data.KNOBS["PARAMS"][key]
+    key: FROZEN_PARAMS[key]
     for key in ("rrfK", "ftsWeight", "vectorWeight", "limit", "minRelativeScore",
                 "sourceLambda", "consolidationThreshold", "docScoreFormula",
                 "candidateWindow", "structureAlpha")
 }
+
+
+def frozen_knob_failures(params: dict) -> list[str]:
+    """The frozen-contract gate: every compared value must equal its literal."""
+    return [f"{key}: {params.get(key)!r} != frozen {value!r}"
+            for key, value in FROZEN_KNOBS.items()
+            if params.get(key) != value]
 
 
 def model_pin_failures(params: dict, results: dict, pinned_revision: str) -> list[str]:
@@ -131,8 +155,9 @@ def main(argv: list[str] | None = None, pinned_revision: str | None = None) -> i
           f"corpus={str(params.get('corpusSnapshotSha256'))[:12]}... "
           f"copy={str(params.get('copySnapshotSha256'))[:12]}...")
     check("frozen knobs untouched",
-          all(params.get(k) == v for k, v in FROZEN_KNOBS.items()),
-          "rrfK/weights/limit/floor/lambda/threshold/Max/Max3X100/alpha per contract")
+          not frozen_knob_failures(params),
+          "; ".join(frozen_knob_failures(params))
+          or "rrfK/weights/limit/floor/lambda/threshold/Max/Max3X100/alpha per contract")
     gaps = s.get("gaps", {})
     check("gap counts conserved",
           gaps.get("c_cell") == (gaps.get("c_fts_only", 0) + gaps.get("c_vec_only", 0)

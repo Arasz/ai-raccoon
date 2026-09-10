@@ -24,13 +24,20 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 DATA = REPO / "data"
 
+# F1: the AC evidence collector is the auditor of `data/knobs.json`, so it holds
+# the frozen contract as an independent literal BY DESIGN — deriving its
+# expectations from the JSON it audits is exactly the circularity F1 removed.
+# Its coupling is pinned by test_collect_ac_evidence.py (collector literal ==
+# repo literal == data/knobs.json PARAMS), not by this scan.
+_SCAN_EXEMPT = {REPO / "scripts" / "retrieval_tuning" / "collect_ac_evidence.py"}
+
 
 def _logic_files() -> list[Path]:
     roots = [REPO / "scripts" / "retrieval_tuning",
              REPO / "scripts" / "src" / "retrieval_tuning"]
     files = [p for root in roots for p in root.rglob("*.py")]
     files.append(REPO / "scripts" / "refresh-retrieval-corpora.py")
-    return sorted(p for p in files if p.exists())
+    return sorted(p for p in files if p.exists() and p not in _SCAN_EXEMPT)
 
 
 def _data_files() -> list[Path]:
@@ -126,17 +133,44 @@ def test_matcher_flags_a_synthetic_hardcode():
     assert hardcode_hits("FRAMES", ["a", "b"], "FRAMES = tuple(gen[\"FRAMES\"])\n") == []
 
 
-def test_no_json_constant_is_hardcoded_in_a_logic_file():
-    logic = {path: _code_only(path.read_text()) for path in _logic_files()}
+def test_scan_flags_a_re_hardcoded_constant_in_a_synthetic_module():
+    """F7 fail-capability for the SCAN, not just the matcher: a synthetic
+    logic module that re-hardcodes a JSON value must produce a problem."""
+    payloads = [("knobs.json", {"EVAL_LIMIT": 8, "PARAMS": {"rrfK": 60}})]
+    hardcoded = {Path("synthetic/module.py"):
+                 "EVAL_LIMIT = 8\nPARAMS = {\n    \"rrfK\": 60,\n}\n"}
+    problems = hardcoded_problems(hardcoded, payloads)
+    assert any("EVAL_LIMIT" in p for p in problems)
+    assert any("rrfK" in p for p in problems)
+    # ... and the derived forms the refactor left behind are clean.
+    derived = {Path("synthetic/module.py"):
+               "EVAL_LIMIT = repo_data.KNOBS[\"EVAL_LIMIT\"]\n"
+               "PARAMS = dict(repo_data.KNOBS[\"PARAMS\"])\n"}
+    assert hardcoded_problems(derived, payloads) == []
+
+
+def hardcoded_problems(logic: dict[Path, str],
+                       payloads: list[tuple[str, object]]) -> list[str]:
+    """The scan: one problem string per (data value, hardcoding line) pair.
+
+    Extracted from the gate below so an in-tree test can prove the scan itself
+    goes red on a re-hardcoded constant (F7); the live gate feeds it the real
+    logic files and the real `data/**` payloads."""
     problems: list[str] = []
-    for data_file in _data_files():
-        payload = json.loads(data_file.read_text())
+    for name, payload in payloads:
         for key, value in _leaves(payload, None):
             for path, text in logic.items():
                 for hit in hardcode_hits(key, value, text):
                     problems.append(
-                        f"{path.relative_to(REPO)}:{key} hardcodes {data_file.name}'s "
-                        f"value ({hit})")
+                        f"{path}:{key} hardcodes {name}'s value ({hit})")
+    return problems
+
+
+def test_no_json_constant_is_hardcoded_in_a_logic_file():
+    logic = {path: _code_only(path.read_text()) for path in _logic_files()}
+    payloads = [(data_file.name, json.loads(data_file.read_text()))
+                for data_file in _data_files()]
+    problems = hardcoded_problems(logic, payloads)
     assert problems == [], "behavior constants must come from data/**/*.json:\n" + \
         "\n".join(problems)
 
