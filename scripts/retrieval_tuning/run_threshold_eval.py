@@ -53,12 +53,16 @@ import os
 import select
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Self
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from retrieval_tuning import repo_data  # noqa: E402
 
 ARMS: dict[str, dict[str, str]] = {
     "off": {"MMR_DISABLE": "1"},
@@ -67,7 +71,7 @@ ARMS: dict[str, dict[str, str]] = {
 MARKER = "[mmr-poc]"
 RBO_P = 0.9
 SNIPPET_MAX = 600
-SEARCH_LIMIT = 8
+SEARCH_LIMIT = repo_data.KNOBS["THRESHOLD_SEARCH_LIMIT"]
 SESSION_ID = "threshold-eval"
 RESPONSE_TIMEOUT_S = 180.0  # per response; the first search loads the embedding model
 PROTOCOL_VERSION = "2024-11-05"

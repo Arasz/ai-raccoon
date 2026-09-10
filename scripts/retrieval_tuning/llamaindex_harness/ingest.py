@@ -35,6 +35,7 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 from . import fts as fts_plan
 from . import scopes
+from retrieval_tuning import repo_data
 
 # Frozen Doc contract: every metadata key a Document carries through the harness.
 METADATA_KEYS = (
@@ -42,31 +43,28 @@ METADATA_KEYS = (
     "project_id", "scope",
 )
 
-MODEL_NAME = "Salesforce/SFR-Embedding-Code-400M_R"
+# P3 AC2: every behavior constant below is read from data/knobs.json — the
+# literals live there and nowhere in logic (test_no_hardcoded_knobs.py).
+MODEL_NAME = repo_data.KNOBS["MODEL_NAME"]
 
 # Frozen replication contract (verified from bank settings + SearchDefaults.cs).
-PARAMS = {
-    "rrfK": 60,
-    "ftsWeight": 1,
-    "vectorWeight": 1,
-    "limit": 8,
-    "minRelativeScore": 0.6,
-    "sourceLambda": 0.1,
-    "consolidationThreshold": 0.1,
-    "docScoreFormula": "max",
-    "candidateWindow": "max3x100",
-    "structureAlpha": 0.5,
-    "fusionNoRegression": False,
-    "scope": "project",
-    "kind": "memory",
-    "model": MODEL_NAME,
-}
+PARAMS = dict(repo_data.KNOBS["PARAMS"])
 
 # Frozen model-weights revision: the HF snapshot the F1 golden was built
 # against. A cache advance changes every vector leg, so ingest refuses until
 # the pin is reviewed and moved (see check_pinned_revision). Recorded with
 # its byte size into params.json for audit.
-PINNED_MODEL_REVISION = "cb950dc80d677c6fdc00f56c8ddd20ca2642c59e"
+PINNED_MODEL_REVISION = repo_data.KNOBS["PINNED_MODEL_REVISION"]
+
+# MemorySql's bm25 column weights; the SQL is built from this tuple so the
+# bank-vs-harness parity probe can never drift from the FTS leg.
+BM25_WEIGHTS = tuple(repo_data.KNOBS["BM25_WEIGHTS"])
+EMBED_BATCH_SIZE = repo_data.KNOBS["EMBED_BATCH_SIZE"]
+
+# Chroma upsert batching: one call trips the server max-batch cap (5461 at
+# chromadb 1.5.9; production content holds 11,816 rows). 4000 leaves headroom
+# for payload variance; a future lower cap still fails loud (InternalError).
+_UPSERT_BATCH_SIZE = repo_data.KNOBS["UPSERT_BATCH_SIZE"]
 
 
 def model_weights_info(model_name: str = MODEL_NAME, hub_dir=None) -> tuple[str, int]:
@@ -130,15 +128,14 @@ def load_rows(copy_path: str, buckets: tuple[str, ...] | list[str]
     bucket_list = tuple(buckets)
     if not bucket_list:
         raise ValueError("load_rows: empty buckets (resolve via scopes.resolve_buckets)")
+    where, where_args = scopes.ingest_predicate(bucket_list)
     conn = open_copy_readonly(copy_path)
     try:
-        placeholders = ",".join("?" for _ in bucket_list)
         rows = conn.execute(
             "SELECT hash, path, value, scope, project_id, source_file, section,"
             " heading_path, chunk_index, total_chunks FROM entries"
-            f" WHERE (project_id IN ({placeholders}) AND scope IN ('project','custom'))"
-            " OR scope = 'shared' ORDER BY id",
-            bucket_list,
+            f" WHERE {where} ORDER BY id",
+            where_args,
         ).fetchall()
         copy_entries = conn.execute("SELECT count(*) FROM entries").fetchone()[0]
     finally:
@@ -238,7 +235,7 @@ def create_embedding_model(model_name: str = MODEL_NAME, offline: bool = False):
     return model
 
 
-def embed_texts(embed_fn, texts: list[str], batch_size: int = 32,
+def embed_texts(embed_fn, texts: list[str], batch_size: int = EMBED_BATCH_SIZE,
                 progress_every: int = 0) -> list[list[float]]:
     """Batched embedding with a finiteness gate (a NaN vector poisons every cosine).
 
@@ -275,10 +272,10 @@ class StoreHandle:
         self.fts.close()
 
 
-# Chroma upsert batching: one call trips the server max-batch cap (5461 at
-# chromadb 1.5.9; production content holds 11,816 rows). 4000 leaves headroom
-# for payload variance; a future lower cap still fails loud (InternalError).
-_UPSERT_BATCH_SIZE = 4000
+def _bm25_terms(table: str) -> str:
+    """`bm25(<table>, w0, w1, w2)` — one spelling for harness and bank legs."""
+    weights = ", ".join(str(w) for w in BM25_WEIGHTS)
+    return f"bm25({table}, {weights})"
 
 
 def _upsert_in_batches(collection, ids, embeddings, documents, metadatas) -> None:
@@ -393,27 +390,15 @@ def refresh_params(store: StoreHandle, rows: list[dict], docs: list[Document], *
     store.params = params
 
 
-def _scope_predicate(project_id: str, scope: str) -> tuple[str, tuple]:
-    scope = scopes.normalize_scope(scope)  # corpus custom -> bank project
-    if scope not in scopes.VALID_SCOPES:
-        raise ValueError(f"unknown scope {scope!r}")
-    if scope == "project":
-        return "project_id = ? AND scope IN ('project','custom')", (project_id,)
-    if scope == "shared":
-        return "scope = 'shared'", ()
-    return ("((project_id = ? AND scope IN ('project','custom')) OR scope = 'shared')",
-            (project_id,))
-
-
 def query_fts(handle: StoreHandle, expression: str, project_id: str, scope: str,
               limit: int) -> list[tuple[str, float]]:
     """FTS leg query: bm25(1.0,8.0,4.0) ascending — the bank's MemorySql weights.
 
     Hash tiebreak mirrors the parity probe: a total order keeps RRF ranks
     deterministic when bm25 scores tie."""
-    predicate, args = _scope_predicate(project_id, scope)
+    predicate, args = scopes.scope_predicate(project_id, scope)
     rows = handle.fts.execute(
-        "SELECT hash, bm25(docs_fts, 1.0, 8.0, 4.0) AS rank FROM docs_fts"
+        f"SELECT hash, {_bm25_terms('docs_fts')} AS rank FROM docs_fts"
         f" WHERE docs_fts MATCH ? AND {predicate}"
         " ORDER BY rank, hash LIMIT ?",
         (expression, *args, limit),
@@ -422,7 +407,7 @@ def query_fts(handle: StoreHandle, expression: str, project_id: str, scope: str,
 
 
 def build_store(store_dir: Path, docs: list[Document], rows: list[dict],
-                embed_fn, copy_entries: int, batch_size: int = 32,
+                embed_fn, copy_entries: int, batch_size: int = EMBED_BATCH_SIZE,
                 progress_every: int = 0, *, buckets: tuple[str, ...] | list[str],
                 excluded: list[dict] | None = None,
                 corpus_name: str | None = None,
@@ -506,14 +491,12 @@ def verify_store(copy_path: str, store: StoreHandle,
             problems.append(f"value mismatch: {doc_id[:12]}")
     missing = []
     # Id-set parity against the ingest rule (project buckets + global shared).
+    where, where_args = scopes.ingest_predicate(bucket_list)
     conn = open_copy_readonly(copy_path)
     try:
-        placeholders = ",".join("?" for _ in bucket_list)
         wanted = {r[0] for r in conn.execute(
-            "SELECT hash FROM entries"
-            f" WHERE (project_id IN ({placeholders}) AND scope IN ('project','custom'))"
-            " OR scope = 'shared'",
-            bucket_list,
+            f"SELECT hash FROM entries WHERE {where}",
+            where_args,
         )}
     finally:
         conn.close()
@@ -538,7 +521,7 @@ def _bank_fts_order(conn: sqlite3.Connection, probe: str, predicate: str,
         "SELECT e.hash FROM entries_fts"
         " JOIN entries e ON e.id = entries_fts.rowid"
         f" WHERE entries_fts MATCH ? AND {predicate}"
-        " ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0), e.hash",
+        f" ORDER BY {_bm25_terms('entries_fts')}, e.hash",
         (probe, *args),
     ).fetchall()]
 
@@ -552,10 +535,9 @@ def fts_parity_probe(copy_path: str, store: StoreHandle, probe: str,
     ai-raccoon-wide comparison silently drops other buckets' rows (a probe
     hitting hermes-default reported skew at 0 with byte-identical stores).
     """
-    legs = [("project", bucket, f"e.project_id = ? AND e.scope IN ('project','custom')",
-             (bucket,))
+    legs = [("project", bucket, *scopes.scope_predicate(bucket, "project", prefix="e."))
             for bucket in buckets]
-    legs.append(("shared", "global", "e.scope = 'shared'", ()))
+    legs.append(("shared", "global", *scopes.scope_predicate("", "shared", prefix="e.")))
     conn = open_copy_readonly(copy_path)
     try:
         problems = []
@@ -578,7 +560,7 @@ def main(argv: list[str] | None = None, embed=None) -> int:
     parser.add_argument("--copy", required=True, help="read-only bank copy path")
     parser.add_argument("--store-dir", default=str(default_store_dir()))
     parser.add_argument("--model", default=MODEL_NAME)
-    parser.add_argument("--embed-batch-size", type=int, default=32)
+    parser.add_argument("--embed-batch-size", type=int, default=EMBED_BATCH_SIZE)
     parser.add_argument("--offline", action="store_true",
                         help="reuse cached HF weights; fail instead of downloading")
     parser.add_argument("--buckets", default=None,

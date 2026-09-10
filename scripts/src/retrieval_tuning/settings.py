@@ -18,31 +18,13 @@ import subprocess
 from typing import Optional
 
 from .server import SafetyViolation, assert_port_not_7721, assert_safe_data_root
+from . import repo_data
 
 # The nine knobs and their canonical defaults (plan §1 table / §8 settings.py).
-KNOB_DEFAULTS: dict = {
-    "rrfK": 60,
-    "ftsWeight": 1,
-    "vectorWeight": 1,
-    "sourceLambda": 0.1,
-    "consolidationThreshold": 0.1,
-    "docScoreFormula": "max",
-    "candidateWindow": "max3x100",
-    "structureAlpha": 0.5,
-    "fusion": False,
-}
+# P3 AC2: the values and their CLI verbs come from data/knobs.json.
+KNOB_DEFAULTS: dict = dict(repo_data.KNOBS["KNOB_DEFAULTS"])
 
-_KNOB_VERBS = {
-    "rrfK": "rrfk",
-    "ftsWeight": "fts-weight",
-    "vectorWeight": "vector-weight",
-    "sourceLambda": "source-lambda",
-    "consolidationThreshold": "consolidation",
-    "docScoreFormula": "doc-formula",
-    "candidateWindow": "window",
-    "structureAlpha": "alpha",
-    "fusion": "fusion",
-}
+_KNOB_VERBS: dict = dict(repo_data.KNOBS["KNOB_VERBS"])
 
 
 class SettingsError(RuntimeError):
