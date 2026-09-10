@@ -251,11 +251,13 @@ def test_vector_leg_structure_tie_is_k_complete_across_process_variants():
 def test_custom_scope_chroma_where_matches_project():
     # Vector leg: custom must compile to the project predicate (SearchContexts:
     # scope=project covers custom labels), never the all-scope $or fallthrough.
-    from llamaindex_harness import retrieve as retrieve_mod
-    assert retrieve_mod._chroma_where("ai-badger", "custom") == \
-        retrieve_mod._chroma_where("ai-badger", "project")
-    assert retrieve_mod._chroma_where("ai-badger", "custom") != \
-        retrieve_mod._chroma_where("ai-badger", "all")
+    # P3: the emit lives in retrieval_tuning.scopes (one home); the harness
+    # module only re-exports it.
+    from llamaindex_harness import scopes as scopes_mod
+    assert scopes_mod.chroma_where("ai-badger", "custom") == \
+        scopes_mod.chroma_where("ai-badger", "project")
+    assert scopes_mod.chroma_where("ai-badger", "custom") != \
+        scopes_mod.chroma_where("ai-badger", "all")
 
 
 def test_custom_scope_retrieve_matches_project_scope(tmp_path):

@@ -55,21 +55,6 @@ def dedupe_by_content(
     return picked
 
 
-def _chroma_where(project_id: str, scope: str) -> dict:
-    # Corpus custom -> bank project (SearchContexts.cs: scope=project covers
-    # custom labels); without the map, custom fell through to the all-scope
-    # $or and over-searched the vector leg.
-    scope = scopes.normalize_scope(scope)
-    if scope == "project":
-        return {"$and": [{"project_id": {"$eq": project_id}},
-                         {"scope": {"$in": ["project", "custom"]}}]}
-    if scope == "shared":
-        return {"scope": {"$eq": "shared"}}
-    return {"$or": [{"$and": [{"project_id": {"$eq": project_id}},
-                              {"scope": {"$in": ["project", "custom"]}}]},
-                    {"scope": {"$eq": "shared"}}]}
-
-
 def _finite_hits(ids: list[str], distances: list[float]) -> dict[str, float]:
     """Chroma distances -> cosine similarities; non-finite entries are dropped.
 
@@ -159,7 +144,7 @@ class FusionRetriever(BaseRetriever):
             return []
         window = candidate_window(limit, self._window_mode)
         qvec = self._query_embed(query)
-        where = _chroma_where(self._project_id, self._scope)
+        where = scopes.chroma_where(self._project_id, self._scope)
         content = _top_window_similarity(self._handle.content, qvec, window, where)
         struct = _top_window_similarity(self._handle.structure, qvec, window, where)
         return fusion.structure_rank(content, struct, self._alpha, window)

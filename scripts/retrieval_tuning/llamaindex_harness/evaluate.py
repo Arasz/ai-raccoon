@@ -32,7 +32,6 @@ import json
 import math
 import os
 import re
-import shutil
 import sqlite3
 import subprocess
 import sys
@@ -274,20 +273,11 @@ def summarize_repeats(runs: list[dict]) -> dict:
 
 
 def fresh_scratch_copy(base_db: Path, data_root: Path) -> Path:
-    """Byte-copy the quiesced base into data_root/memory.db (one per repeat).
+    """The copy half of the scratch composition (P3: one home in
+    retrieval_tuning.scratch; re-exported here for the repeat-loop gates)."""
+    from retrieval_tuning.scratch import fresh_scratch_copy as _impl  # noqa: PLC0415
 
-    Stale WAL/SHM sidecars are removed so a prior repeat's writes can never
-    bleed into the next run; the base itself is opened read-only by the copy."""
-    base_db, data_root = Path(base_db), Path(data_root)
-    if not base_db.exists():
-        raise FileNotFoundError(f"scratch base not found: {base_db}")
-    data_root.mkdir(parents=True, exist_ok=True)
-    dest = data_root / "memory.db"
-    for stale in (dest, dest.with_name(dest.name + "-wal"),
-                  dest.with_name(dest.name + "-shm")):
-        stale.unlink(missing_ok=True)
-    shutil.copyfile(base_db, dest)
-    return dest
+    return _impl(base_db, data_root)
 
 
 def _sibling_import(name: str):
@@ -693,21 +683,36 @@ def main(argv: list[str] | None = None) -> int:
                 out, stale_anchors, model_provenance, store_params, session_id),
                 indent=2))
         else:
+            from retrieval_tuning.scratch import ScratchRefused, scratch_server  # noqa: PLC0415
+
             base = Path(args.scratch_base)
             runs: list[dict] = []
             run_meta: list[dict] = []
             for i in range(1, args.repeats + 1):
                 data_root = Path(args.scratch_root) / f"repeat-{i}"
-                scratch_db = fresh_scratch_copy(base, data_root)
-                scratch_prov = _checked_scratch_check(scratch_db, store_params,
-                                                      label=f"repeat {i}")
-                if scratch_prov is None:
+                state: dict = {}
+
+                def prepare_scratch(db, _label=f"repeat {i}", _state=state):
+                    # Copy done, no server yet: the refusal/mutation checks run
+                    # here so a refused scratch never serves (P3 composition).
+                    _state["prov"] = _checked_scratch_check(db, store_params,
+                                                            label=_label)
+                    if _state["prov"] is None:
+                        raise ScratchRefused(f"{_label}: scratch copy check failed")
+                    _state["before"] = scratch_row_stability(db)
+
+                try:
+                    with scratch_server(base, data_root, binary=args.binary,
+                                        before_start=prepare_scratch) as server:
+                        print(f"scratch server on port {server.port} (never 7721)",
+                              flush=True)
+                        with RssSampler() as sampler:
+                            out_i = run_eval(scorable, harness_fn,
+                                             build_airaccoon_fn(server, session_id))
+                except ScratchRefused:
                     return 1
-                before = scratch_row_stability(scratch_db)
-                with RssSampler() as sampler:
-                    out_i = run_once(scorable, harness_fn, data_root,
-                                     args.binary, session_id)
-                after = scratch_row_stability(scratch_db)
+                after = scratch_row_stability(data_root / "memory.db")
+                scratch_prov, before = state["prov"], state["before"]
                 failures = eval_gate_failures(out_i)
                 if failures:
                     for failure in failures:

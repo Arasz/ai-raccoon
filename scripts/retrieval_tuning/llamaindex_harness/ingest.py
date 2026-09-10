@@ -130,15 +130,14 @@ def load_rows(copy_path: str, buckets: tuple[str, ...] | list[str]
     bucket_list = tuple(buckets)
     if not bucket_list:
         raise ValueError("load_rows: empty buckets (resolve via scopes.resolve_buckets)")
+    where, where_args = scopes.ingest_predicate(bucket_list)
     conn = open_copy_readonly(copy_path)
     try:
-        placeholders = ",".join("?" for _ in bucket_list)
         rows = conn.execute(
             "SELECT hash, path, value, scope, project_id, source_file, section,"
             " heading_path, chunk_index, total_chunks FROM entries"
-            f" WHERE (project_id IN ({placeholders}) AND scope IN ('project','custom'))"
-            " OR scope = 'shared' ORDER BY id",
-            bucket_list,
+            f" WHERE {where} ORDER BY id",
+            where_args,
         ).fetchall()
         copy_entries = conn.execute("SELECT count(*) FROM entries").fetchone()[0]
     finally:
@@ -393,25 +392,13 @@ def refresh_params(store: StoreHandle, rows: list[dict], docs: list[Document], *
     store.params = params
 
 
-def _scope_predicate(project_id: str, scope: str) -> tuple[str, tuple]:
-    scope = scopes.normalize_scope(scope)  # corpus custom -> bank project
-    if scope not in scopes.VALID_SCOPES:
-        raise ValueError(f"unknown scope {scope!r}")
-    if scope == "project":
-        return "project_id = ? AND scope IN ('project','custom')", (project_id,)
-    if scope == "shared":
-        return "scope = 'shared'", ()
-    return ("((project_id = ? AND scope IN ('project','custom')) OR scope = 'shared')",
-            (project_id,))
-
-
 def query_fts(handle: StoreHandle, expression: str, project_id: str, scope: str,
               limit: int) -> list[tuple[str, float]]:
     """FTS leg query: bm25(1.0,8.0,4.0) ascending — the bank's MemorySql weights.
 
     Hash tiebreak mirrors the parity probe: a total order keeps RRF ranks
     deterministic when bm25 scores tie."""
-    predicate, args = _scope_predicate(project_id, scope)
+    predicate, args = scopes.scope_predicate(project_id, scope)
     rows = handle.fts.execute(
         "SELECT hash, bm25(docs_fts, 1.0, 8.0, 4.0) AS rank FROM docs_fts"
         f" WHERE docs_fts MATCH ? AND {predicate}"
@@ -506,14 +493,12 @@ def verify_store(copy_path: str, store: StoreHandle,
             problems.append(f"value mismatch: {doc_id[:12]}")
     missing = []
     # Id-set parity against the ingest rule (project buckets + global shared).
+    where, where_args = scopes.ingest_predicate(bucket_list)
     conn = open_copy_readonly(copy_path)
     try:
-        placeholders = ",".join("?" for _ in bucket_list)
         wanted = {r[0] for r in conn.execute(
-            "SELECT hash FROM entries"
-            f" WHERE (project_id IN ({placeholders}) AND scope IN ('project','custom'))"
-            " OR scope = 'shared'",
-            bucket_list,
+            f"SELECT hash FROM entries WHERE {where}",
+            where_args,
         )}
     finally:
         conn.close()
@@ -552,10 +537,9 @@ def fts_parity_probe(copy_path: str, store: StoreHandle, probe: str,
     ai-raccoon-wide comparison silently drops other buckets' rows (a probe
     hitting hermes-default reported skew at 0 with byte-identical stores).
     """
-    legs = [("project", bucket, f"e.project_id = ? AND e.scope IN ('project','custom')",
-             (bucket,))
+    legs = [("project", bucket, *scopes.scope_predicate(bucket, "project", prefix="e."))
             for bucket in buckets]
-    legs.append(("shared", "global", "e.scope = 'shared'", ()))
+    legs.append(("shared", "global", *scopes.scope_predicate("", "shared", prefix="e.")))
     conn = open_copy_readonly(copy_path)
     try:
         problems = []
