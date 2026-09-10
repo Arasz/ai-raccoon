@@ -82,6 +82,39 @@ def _finite_hits(ids: list[str], distances: list[float]) -> dict[str, float]:
     return out
 
 
+def _query_tie_complete(collection, qvec, window: int, where: dict) -> dict:
+    """Chroma ANN query with the window cut expanded past exact-distance ties.
+
+    Chroma truncates an exact-distance tie group at the requested k and the
+    surviving subset is process-dependent (measured: a 17-item tie group at
+    d=2^-24 spanning the k=100 cut). Grow the request while the (window+1)-th
+    distance equals the window-th one, bounded by the collection count, so the
+    caller can sort by (distance, hash) and cut deterministically."""
+    count = collection.count()
+    if count == 0:
+        return {"ids": [[]], "distances": [[]]}
+    k = min(count, window + 1)
+    while True:
+        hits = collection.query(query_embeddings=[qvec], n_results=k,
+                                where=where, include=["distances"])
+        dists = hits["distances"][0]
+        if (len(dists) < k  # every matching row is in hand
+                or len(dists) <= window  # the cut is the collection's end
+                or k >= count  # no rows left to grow into
+                or dists[window] != dists[window - 1]):  # no tie at the cut
+            return hits
+        k = min(count, max(k * 2, window + 1))
+
+
+def _top_window_similarity(collection, qvec, window: int, where: dict) -> dict[str, float]:
+    """Tie-complete top-window keyed by hash, sorted (distance, hash) before the cut."""
+    hits = _query_tie_complete(collection, qvec, window, where)
+    rows = [(h, d) for h, d in zip(hits["ids"][0], hits["distances"][0])
+            if isinstance(d, (int, float)) and not isinstance(d, bool) and math.isfinite(d)]
+    rows.sort(key=lambda item: (item[1], item[0]))
+    return _finite_hits([h for h, _ in rows[:window]], [d for _, d in rows[:window]])
+
+
 class FusionRetriever(BaseRetriever):
     """BaseRetriever over a harness store; retrieve(query, limit=8) serves NodeWithScore."""
 
@@ -127,18 +160,8 @@ class FusionRetriever(BaseRetriever):
         window = candidate_window(limit, self._window_mode)
         qvec = self._query_embed(query)
         where = _chroma_where(self._project_id, self._scope)
-        content_hits = self._handle.content.query(
-            query_embeddings=[qvec], n_results=min(window, self._handle.content.count() or 1),
-            where=where, include=["distances"])
-        structure_hits = self._handle.structure.query(
-            query_embeddings=[qvec],
-            n_results=min(window, self._handle.structure.count() or 1) if
-            self._handle.structure.count() else 1,
-            where=where, include=["distances"])
-        content = _finite_hits(content_hits["ids"][0], content_hits["distances"][0]) \
-            if content_hits["ids"] else {}
-        struct = _finite_hits(structure_hits["ids"][0], structure_hits["distances"][0]) \
-            if structure_hits["ids"] and self._handle.structure.count() else {}
+        content = _top_window_similarity(self._handle.content, qvec, window, where)
+        struct = _top_window_similarity(self._handle.structure, qvec, window, where)
         return fusion.structure_rank(content, struct, self._alpha, window)
 
     # -- pipeline --
