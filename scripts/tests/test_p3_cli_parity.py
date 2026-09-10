@@ -253,5 +253,21 @@ class TestRefreshParity:
                  "--copy", str(PINNED_COPY), "--output", str(new_out), *extra],
                 capture_output=True, text=True, timeout=900)
             assert new.returncode == 0, new.stderr[-2000:]
-            assert _sha256(legacy_out) == _sha256(new_out), \
-                f"{generator}: legacy and new bytes differ"
+            if generator == "build_eval_corpus":
+                # C (air-eval-corpus-provenance-clean-ci): the eval corpus is now
+                # header-shaped. The legacy contract is the QUERY PAYLOAD, so compare
+                # that (bytes can no longer be identical by construction) and pin the
+                # new shape: header present with a 64-hex snapshot hash.
+                legacy_payload = json.loads(legacy_out.read_text())
+                new_payload = json.loads(new_out.read_text())
+                assert isinstance(new_payload, dict) and "queries" in new_payload, \
+                    "eval corpus must be header-shaped after C"
+                header = new_payload.get("header") or {}
+                pin = header.get("snapshotSha256")
+                assert isinstance(pin, str) and len(pin) == 64, \
+                    "eval corpus header must carry a 64-hex snapshotSha256 pin"
+                assert new_payload["queries"] == legacy_payload, \
+                    "eval corpus query payload differs from the legacy output"
+            else:
+                assert _sha256(legacy_out) == _sha256(new_out), \
+                    f"{generator}: legacy and new bytes differ"
