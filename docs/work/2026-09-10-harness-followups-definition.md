@@ -45,7 +45,7 @@ change; a regenerated corpus whose debris share is materially reduced (target â‰
 explicit floor); a re-run artifact; no silent re-baseline of the frozen golden (a new
 golden version is explicitly named if the corpus changes).
 
-**Status (2026-09-10, lane `task/air-corpus-quality-clean-instrument-lane-impl`, PR TBD).**
+**Status (2026-09-10, lane `task/air-corpus-quality-clean-instrument-lane-impl`, PR #635).**
 Done, awaiting review/merge. Generator change: new stdlib-only
 `scripts/src/retrieval_tuning/corpus_text.py` (`repair_topic`,
 `TOPIC_DERIVATION = "markup-aware-v1"`); `build_project_corpus._derive_topic`
