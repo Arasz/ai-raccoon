@@ -4,6 +4,7 @@ using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Observability;
 using AiRaccoon.Tests.Unit.Observability;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
@@ -345,7 +346,87 @@ public sealed class ExtractionHostedServiceTests
         await Should.NotThrowAsync(() => service.RunOnceAsync(cts.Token));
 
         queue.PromoteCalls.Count.ShouldBe(2, "beta must still be processed");
-        logger.Collector.GetSnapshot().ShouldContain(r => r.Id.Id == 503 && r.Level == LogLevel.Warning);
+        var failures = logger.Collector.GetSnapshot().Where(r => r.Id.Id == 503).ToList();
+        failures.ShouldNotBeEmpty();
+        failures.ShouldAllBe(r => r.Level == LogLevel.Warning);
+        failures.ShouldAllBe(r => r.Exception != null,
+            "a genuine failure keeps its stack trace; only busy/locked is de-stacked");
+    }
+
+    /// <summary>
+    ///     WP12's convoy makes SQLITE_BUSY/LOCKED a transient deferral: one warning with no stack
+    ///     trace, still counted as a pass failure because the project's work did not happen.
+    /// </summary>
+    [Fact]
+    public async Task RunOnce_ProjectBusy_LogsOneConciseLine_WithoutAStackTrace()
+    {
+        using var probe = new BackgroundTelemetryProbe(ExtractionHostedService.OperationName);
+        var logger = new FakeLogger<ExtractionHostedService>();
+        var (store, _, service, queue) = NewStack(logger, probe.Telemetry);
+        store.Projects.Clear();
+        store.Projects.Add("acme"); // a single project keeps the assertions unambiguous
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.Settings[ExtractionConfigKeys.ModeGlobal] = "promote";
+        store.Candidates["acme"] = [Row("h1", null, "organic fact about beta")];
+        queue.PromoteError = new SqliteException("database is locked", 5);
+
+        await service.RunOnceAsync(TestContext.Current.CancellationToken);
+
+        var deferred = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 499);
+        deferred.Level.ShouldBe(LogLevel.Warning);
+        deferred.Message.ShouldContain("acme");
+        deferred.Exception.ShouldBeNull("a transient lock is a deferral, not a stack trace");
+        logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 503);
+        probe.Passes.ShouldHaveSingleItem().Tags["result"].ShouldNotBe("success");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PassBusy_LogsOneConciseLine_WithoutAStackTrace()
+    {
+        var logger = new FakeLogger<ExtractionHostedService>();
+        var (store, time, service, _) = NewStack(logger);
+        store.Settings[ExtractionConfigKeys.EnabledGlobal] = "true";
+        store.ProjectListError = new SqliteException("database is locked", 5);
+
+        using var cts = new CancellationTokenSource();
+        var run = service.StartAsync(cts.Token);
+
+        await AdvanceUntilAsync(time, TimeSpan.FromMinutes(30),
+            () => logger.Collector.GetSnapshot().Any(r => r.Id.Id == 498),
+            TestContext.Current.CancellationToken);
+
+        run.IsFaulted.ShouldBeFalse();
+        var deferred = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 498);
+        deferred.Level.ShouldBe(LogLevel.Warning);
+        deferred.Exception.ShouldBeNull("a transient lock is a deferral, not a stack trace");
+        logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 505);
+
+        await cts.CancelAsync();
+        await run;
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_IntervalReadBusy_LogsOneConciseLine_WithoutAStackTrace()
+    {
+        var logger = new FakeLogger<ExtractionHostedService>();
+        var (store, time, service, _) = NewStack(logger);
+        store.IntervalReadError = new SqliteException("database is locked", 5);
+
+        using var cts = new CancellationTokenSource();
+        var run = service.StartAsync(cts.Token);
+
+        await AdvanceUntilAsync(time, TimeSpan.FromMinutes(30),
+            () => logger.Collector.GetSnapshot().Any(r => r.Id.Id == 497),
+            TestContext.Current.CancellationToken);
+
+        run.IsFaulted.ShouldBeFalse();
+        var deferred = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 497);
+        deferred.Level.ShouldBe(LogLevel.Warning);
+        deferred.Exception.ShouldBeNull("a transient lock is a deferral, not a stack trace");
+        logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 506);
+
+        await cts.CancelAsync();
+        await run;
     }
 
     /// <summary>Per-element candidate logging is gone (per-element log noise rule, 2026-08-11):
