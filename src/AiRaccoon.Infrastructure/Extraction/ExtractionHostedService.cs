@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -36,6 +37,11 @@ public sealed partial class ExtractionHostedService(
             {
                 break;
             }
+            catch (Exception ex) when (IsBankBusy(ex))
+            {
+                // Transient contention: one line, no stack trace, and the loop retries on the next tick.
+                Log.RunDeferred(logger);
+            }
             catch (Exception ex)
             {
                 Log.RunFailed(logger, ex);
@@ -56,6 +62,11 @@ public sealed partial class ExtractionHostedService(
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (Exception ex) when (IsBankBusy(ex))
+        {
+            Log.IntervalReadDeferred(logger);
+            return TimeSpan.FromMinutes(ExtractionConfigKeys.DefaultIntervalMinutes);
         }
         catch (Exception ex)
         {
@@ -182,6 +193,12 @@ public sealed partial class ExtractionHostedService(
             {
                 throw; // shutdown: no per-project failure noise, no doomed round-trips (S5)
             }
+            catch (Exception ex) when (IsBankBusy(ex))
+            {
+                // The project is deferred to the next pass (WP12 convoy), not failed with a stack trace.
+                Log.ProjectDeferred(logger, projectId);
+                failures++;
+            }
             catch (Exception ex)
             {
                 Log.ProjectFailed(logger, projectId, ex);
@@ -204,8 +221,38 @@ public sealed partial class ExtractionHostedService(
         return TimeSpan.FromMinutes(minutes);
     }
 
+    /// <summary>
+    ///     SQLITE_BUSY (5) / SQLITE_LOCKED (6) anywhere in the chain: another writer holds the bank
+    ///     (WP12's write-lock convoy). Transient contention, so the deferred path logs one line while
+    ///     the exception-carrying events stay reserved for genuine failures.
+    /// </summary>
+    private static bool IsBankBusy(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is SqliteException { SqliteErrorCode: 5 or 6 })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static partial class Log
     {
+        [LoggerMessage(EventId = 497, Level = LogLevel.Warning,
+            Message = "Extraction interval read deferred: the bank is busy (another writer holds the lock); using the default interval")]
+        public static partial void IntervalReadDeferred(ILogger logger);
+
+        [LoggerMessage(EventId = 498, Level = LogLevel.Warning,
+            Message = "Extraction pass deferred: the bank is busy (another writer holds the lock)")]
+        public static partial void RunDeferred(ILogger logger);
+
+        [LoggerMessage(EventId = 499, Level = LogLevel.Warning,
+            Message = "Extraction deferred for {ProjectId}: the bank is busy (another writer holds the lock)")]
+        public static partial void ProjectDeferred(ILogger logger, string projectId);
+
         [LoggerMessage(EventId = 500, Level = LogLevel.Debug, Message = "Shared extraction disabled; skipping")]
         public static partial void Skipped(ILogger logger);
 
