@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **180** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **181** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -26,6 +26,10 @@ Remeasured 2026-09-09, air-handle-tool-cancellation-errors-gracefully: **176** �
 (Remeasured 2026-09-14, fix/bank-busy-tool-ux: **180** — `SqliteMemoryStore` 897,
 the search access-rating bump skipped when the bank is busy; the `bank-busy` tool
 refusal itself adds no `[LoggerMessage]` (it reuses `ToolRefusals` 911).)
+
+(Remeasured 2026-09-14, fix/search-quality-busy-log: **181** —
+`SqliteSearchQualityService` 964, the best-effort search_quality row skipped on a
+busy bank; 965 keeps genuine failures with their exception.)
 
 Worth recording why this doc exists at all: colliding ids compile, log, and pass every
 assertion that isn't specifically checking for the collision — a duplicate is invisible
@@ -94,7 +98,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 960 | `src/AiRaccoon.Infrastructure/Metrics/MetricsRecorder.cs` (docs/plans/2026-08-15-performance-metrics-implementation.md, WP3) |
 | 961 | `src/AiRaccoon.Infrastructure/Metrics/SqliteMetricsStore.cs` (WP3: the save-time query-identity allowlist) |
 | 970-974 | `src/AiRaccoon.Infrastructure/Metrics/MetricsFlusher.cs` (WP3; moved from 962-964 and extended to 973-974 — the bounded shutdown-time final flush, review-fixes blocker 2 — freeing room the old block did not have: it sat wedged between SqliteMetricsStore's 961 and SqliteSearchQualityService's 965) |
-| 965 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteSearchQualityService.cs` (WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: `RecordSearchSafeAsync`'s best-effort failure) |
+| 964-965 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteSearchQualityService.cs` (WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: `RecordSearchSafeAsync`'s best-effort failure. 964 added 2026-09-14, fix/search-quality-busy-log: the write lost the lock to another writer (SQLITE_BUSY/LOCKED anywhere in the chain) now logs one friendly Warning with no exception — the same raw-exception noise class the tool path's 912 had; grew the block downward into the room `MetricsFlusher` vacated with its 962-964 move. 965 stays for the genuine failures and keeps the exception attached) |
 | 1000-1001 | `src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs` (GH #357: `doctor`'s key-resolution and bank-open failure logs) |
 | 1002-1013 | `src/AiRaccoon.Infrastructure/Embedding/EmbedDrainReporter.cs` (relocated 2026-08-26 from `EmbedDrainService.cs` — the whole nested Log class moved so the migration relay reports through the same declarations instead of a second copy; moving only the pass ids would have left EmbedDrainService owning 1004/1006 inside the reporter's 1002-1013 span, which `EventIdBlocks_DoNotInterleaveBetweenOwners` forbids, same wedge as 416/418/424. 1002-1007 unchanged in behavior, only the owning type moved. 1008-1013 new, LANE P4: the migration relay had no log line at all — 1008 the drain starting with rows owed, 1009 a stale lease reclaimed from a dead holder (the shape `PromotionQueueService`'s 709 already logs for promotion claims), 1010 the lease held by another relay pass (was a silent `return false`), 1011 the migration already finished by another pass (also silent), 1012 no embedding provider configured — observability only, one Warning per process per migration; the drain still throws and the bank stays ToolGate-locked until the model-reset guard lands (its own follow-up), 1013 a time-strided progress heartbeat — one line per lease TTL, O(elapsed time) not O(rows)) |
 
