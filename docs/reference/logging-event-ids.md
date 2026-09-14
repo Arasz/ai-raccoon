@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **179** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **180** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -22,6 +22,10 @@ Remeasured 2026-09-09, air-handle-tool-cancellation-errors-gracefully: **176** �
 
 (Remeasured 2026-09-11, fix/extraction-busy-no-stack-trace: **179** —
 `ExtractionHostedService` 497-499, the transient BUSY/LOCKED deferrals.)
+
+(Remeasured 2026-09-14, fix/bank-busy-tool-ux: **180** — `SqliteMemoryStore` 897,
+the search access-rating bump skipped when the bank is busy; the `bank-busy` tool
+refusal itself adds no `[LoggerMessage]` (it reuses `ToolRefusals` 911).)
 
 Worth recording why this doc exists at all: colliding ids compile, log, and pass every
 assertion that isn't specifically checking for the collision — a duplicate is invisible
@@ -82,7 +86,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 714 | `src/AiRaccoon.Infrastructure/Maintenance/ProjectIdAliasCacheHostedService.cs` (added 2026-09-05: the startup warm was cancelled by shutdown — Information, one line per occurrence, enforcement warms on the next reload) |
 | 712 | `src/AiRaccoon.Infrastructure/Sqlite/ProjectIdAliases.cs` (added 2026-09-05, Package E of docs/work/air-run-once-repair-fully-converges-plan.md: the cache reload skips direct-SQL `alias` rows with a NULL winner and says so — a null winner would fold an id to null downstream) |
 | 800-807 | `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` |
-| 898-900 | `src/AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs` and `SqliteMemoryStore.Replace.cs` (path corrected 2026-08-22, same commit that added 899: the doc named `Sqlite/SqliteMemoryStore.cs`, but the file has lived at `Sqlite/Memory/SqliteMemoryStore.cs` since the class was split into partials — 899 is WP11 Finding (b)'s `ReplaceCoreAsync` transaction-span log, in `Replace.cs`, sharing the `Log` class nested in the outer `SqliteMemoryStore` partial (WP12 split its single "held the write lock" message into separate wait/held numbers once the chunker moved outside the lock); 898 added WP12 review round 3: the watch-digest chunk claim's best-effort release failing in the catch path (a rare BUSY/LOCKED on that DELETE), placed just below 899 rather than after 900 to leave `SqliteMemoryStore.cs`'s own 900 undisturbed; placed immediately below 900 rather than after 903, since `SqliteConnectionFactory` already owns 901-903) |
+| 897-900 | `src/AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs` and `SqliteMemoryStore.Replace.cs` (path corrected 2026-08-22, same commit that added 899: the doc named `Sqlite/SqliteMemoryStore.cs`, but the file has lived at `Sqlite/Memory/SqliteMemoryStore.cs` since the class was split into partials — 899 is WP11 Finding (b)'s `ReplaceCoreAsync` transaction-span log, in `Replace.cs`, sharing the `Log` class nested in the outer `SqliteMemoryStore` partial (WP12 split its single "held the write lock" message into separate wait/held numbers once the chunker moved outside the lock); 898 added WP12 review round 3: the watch-digest chunk claim's best-effort release failing in the catch path (a rare BUSY/LOCKED on that DELETE), placed just below 899 rather than after 900 to leave `SqliteMemoryStore.cs`'s own 900 undisturbed; 897 added 2026-09-14, fix/bank-busy-tool-ux: the search's access-rating bump skipped on a busy bank — one friendly Warning with no exception, and the search still returns its results; grew the block downward rather than into `SqliteConnectionFactory`'s 901-903, the same convention as 898) |
 | 901, 902, 903 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteConnectionFactory.cs` (added 2026-08-21: the overlap-prune report (formerly the v11 ladder step, now an unconditional open-time step)'s overlap-prune report — one line per pruned watch + a count, docs/work/2026-08-21-code-search-implementation-plan.md §4; the migration itself is silent and only returns the pruned list, since `SqliteConnectionFactory.InitializeAsync` is the one caller in the chain that owns a logger) |
 | 910-913 | `src/AiRaccoon/Tools/ToolRefusals.cs` (913 added air-handle-tool-cancellation-errors-gracefully: the live-connection cancellation line) |
 | 920-921 | `src/AiRaccoon/Tools/MemoryTools.cs` (docs/adr/0040: read-path query guard shadow-mode verdict; 921 added — WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: best-effort phase-measurement recording failure) |

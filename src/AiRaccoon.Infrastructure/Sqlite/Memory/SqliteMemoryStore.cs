@@ -948,21 +948,33 @@ public sealed partial class SqliteMemoryStore(
     private async Task BumpAccessAsync(SqliteConnection connection, DeferredSearchResult deferredSearch, string projectId, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        foreach (var hash in deferredSearch.Results.Select(r => r.Hash).Distinct(StringComparer.Ordinal))
+        var hashes = deferredSearch.Results.Select(r => r.Hash).Distinct(StringComparer.Ordinal).ToList();
+        try
         {
-            await connection.ExecuteAsync(
-                    Def(MemorySql.BumpAccess,
-                        new
-                        {
-                            hash,
-                            now,
-                            projectId,
-                            baseScore = RatingPolicy.DefaultBaseScore,
-                            halfLifeDays = RatingPolicy.DefaultHalfLifeDays,
-                            accessMultiplier = RatingPolicy.DefaultAccessMultiplier
-                        },
-                        cancellationToken))
-                .ConfigureAwait(false);
+            foreach (var hash in hashes)
+            {
+                await connection.ExecuteAsync(
+                        Def(MemorySql.BumpAccess,
+                            new
+                            {
+                                hash,
+                                now,
+                                projectId,
+                                baseScore = RatingPolicy.DefaultBaseScore,
+                                halfLifeDays = RatingPolicy.DefaultHalfLifeDays,
+                                accessMultiplier = RatingPolicy.DefaultAccessMultiplier
+                            },
+                            cancellationToken))
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
+        {
+            // The results are already final; the bump is rating bookkeeping, and the relative
+            // counter tolerates one lost tick (docs/adr/0053). Abort the whole bump on the first
+            // BUSY/LOCKED rather than retrying each hash into the same 5 s wait per row: one
+            // friendly Warning, then the search still returns what it computed.
+            Log.BumpAccessDeferred(logger, hashes.Count);
         }
     }
 
@@ -1023,6 +1035,10 @@ public sealed partial class SqliteMemoryStore(
 
     private static partial class Log
     {
+        [LoggerMessage(EventId = 897, Level = LogLevel.Warning,
+            Message = "Access-rating bump skipped for {Count} result(s): the bank is busy (another writer holds the lock)")]
+        public static partial void BumpAccessDeferred(ILogger logger, int count);
+
         [LoggerMessage(EventId = 900, Level = LogLevel.Warning,
             Message = "Keyword search failed; degrading to the vector modality for this query")]
         public static partial void KeywordModalityFailed(ILogger logger, Exception exception);

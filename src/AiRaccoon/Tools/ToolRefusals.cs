@@ -9,6 +9,7 @@ using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using FluentValidation;
+using Microsoft.Data.Sqlite;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -88,9 +89,19 @@ internal static partial class ToolRefusals
     /// </summary>
     internal const string CancelledPrefix = "cancelled";
 
+    /// <summary>
+    ///     The wire prefix for a transient SQLITE_BUSY (5) / SQLITE_LOCKED (6) — another writer holds
+    ///     the bank's write lock past the busy timeout (WP12's write-lock convoy). Special-cased in
+    ///     <see cref="Filter" /> rather than tabled in <see cref="RefusalPrefixes" /> because the
+    ///     condition depends on <c>SqliteErrorCode</c>, not the exception type: the same
+    ///     <c>SqliteException</c> also carries real faults (26, "file is not a database") that must
+    ///     stay unmapped. The doc-drift test concats this with the two tables above.
+    /// </summary>
+    internal const string BankBusyPrefix = "bank-busy";
+
     /// <summary>Expected refusals remain visible at Warning without being logged as errors.</summary>
     private static readonly HashSet<string> WarningPrefixes =
-        ["sync-network", "sync-corrupt-file", "sync-tampered-remote", "unknown-hash", "embedding-install-replaced", "code-engine-unloadable"];
+        ["sync-network", "sync-corrupt-file", "sync-tampered-remote", "unknown-hash", "embedding-install-replaced", "code-engine-unloadable", "bank-busy"];
 
     /// <summary>
     ///     The wire prefix for a known refusal, or null when the exception is a genuine failure.
@@ -132,6 +143,15 @@ internal static partial class ToolRefusals
             catch (Exception ex) when (PrefixFor(ex) is { } prefix)
             {
                 return Refused(request, $"{prefix}: {ex.Message}", prefix, LevelFor(prefix));
+            }
+            catch (Exception ex) when (IsBankBusy(ex))
+            {
+                // Transient lock contention, not a crash: one friendly line with no exception
+                // attached (the same shape ExtractionHostedService logs for this condition),
+                // and a caller-visible retry instruction instead of EventId 912's raw type name.
+                const string reason = "the bank is busy (another writer holds the lock); retry the call";
+                return Refused(request, $"{BankBusyPrefix}: {reason}", $"{BankBusyPrefix}: {reason}",
+                    LevelFor(BankBusyPrefix));
             }
             catch (McpException ex)
             {
@@ -217,6 +237,25 @@ internal static partial class ToolRefusals
         }
 
         return new CallToolResult { IsError = true, Content = [new TextContentBlock { Text = message }] };
+    }
+
+    /// <summary>
+    ///     SQLITE_BUSY (5) / SQLITE_LOCKED (6) anywhere in the chain: another writer holds the bank
+    ///     (the same classification <c>ExtractionHostedService.IsBankBusy</c> applies to an extraction
+    ///     pass). Transient contention, so it is refused at Warning while genuine SQLite faults
+    ///     (26, "file is not a database") keep the unmapped Error path.
+    /// </summary>
+    internal static bool IsBankBusy(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is SqliteException { SqliteErrorCode: 5 or 6 })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     internal static partial class Log
