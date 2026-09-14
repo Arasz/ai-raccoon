@@ -966,7 +966,7 @@ internal static class MemorySchema
             await connection.ExecuteAsync(new CommandDefinition("VACUUM;", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
         }
-        catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6) // SQLITE_BUSY / SQLITE_LOCKED
+        catch (SqliteException ex) when (ex.IsBankBusy())
         {
             // Another connection holds the bank. The pages stay on the free list and the next
             // maintenance vacuum collects them; nothing is lost but the disk saving is deferred.

@@ -968,7 +968,7 @@ public sealed partial class SqliteMemoryStore(
                     .ConfigureAwait(false);
             }
         }
-        catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
+        catch (SqliteException ex) when (ex.IsBankBusy())
         {
             // The results are already final; the bump is rating bookkeeping, and the relative
             // counter tolerates one lost tick (docs/adr/0053). Abort the whole bump on the first

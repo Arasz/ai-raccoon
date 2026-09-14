@@ -1,6 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
-using Microsoft.Data.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -37,7 +37,7 @@ public sealed partial class ExtractionHostedService(
             {
                 break;
             }
-            catch (Exception ex) when (IsBankBusy(ex))
+            catch (Exception ex) when (ex.IsBankBusy())
             {
                 // Transient contention: one line, no stack trace, and the loop retries on the next tick.
                 Log.RunDeferred(logger);
@@ -63,7 +63,7 @@ public sealed partial class ExtractionHostedService(
         {
             throw;
         }
-        catch (Exception ex) when (IsBankBusy(ex))
+        catch (Exception ex) when (ex.IsBankBusy())
         {
             Log.IntervalReadDeferred(logger);
             return TimeSpan.FromMinutes(ExtractionConfigKeys.DefaultIntervalMinutes);
@@ -193,7 +193,7 @@ public sealed partial class ExtractionHostedService(
             {
                 throw; // shutdown: no per-project failure noise, no doomed round-trips (S5)
             }
-            catch (Exception ex) when (IsBankBusy(ex))
+            catch (Exception ex) when (ex.IsBankBusy())
             {
                 // The project is deferred to the next pass (WP12 convoy), not failed with a stack trace.
                 Log.ProjectDeferred(logger, projectId);
@@ -219,24 +219,6 @@ public sealed partial class ExtractionHostedService(
             await store.GetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, cancellationToken)
                 .ConfigureAwait(false));
         return TimeSpan.FromMinutes(minutes);
-    }
-
-    /// <summary>
-    ///     SQLITE_BUSY (5) / SQLITE_LOCKED (6) anywhere in the chain: another writer holds the bank
-    ///     (WP12's write-lock convoy). Transient contention, so the deferred path logs one line while
-    ///     the exception-carrying events stay reserved for genuine failures.
-    /// </summary>
-    private static bool IsBankBusy(Exception exception)
-    {
-        for (var current = exception; current is not null; current = current.InnerException)
-        {
-            if (current is SqliteException { SqliteErrorCode: 5 or 6 })
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static partial class Log

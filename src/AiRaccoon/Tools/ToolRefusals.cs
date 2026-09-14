@@ -8,8 +8,8 @@ using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Sqlite;
 using FluentValidation;
-using Microsoft.Data.Sqlite;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -144,7 +144,7 @@ internal static partial class ToolRefusals
             {
                 return Refused(request, $"{prefix}: {ex.Message}", prefix, LevelFor(prefix));
             }
-            catch (Exception ex) when (IsBankBusy(ex))
+            catch (Exception ex) when (ex.IsBankBusy())
             {
                 // Transient lock contention, not a crash: one friendly line with no exception
                 // attached (the same shape ExtractionHostedService logs for this condition),
@@ -237,25 +237,6 @@ internal static partial class ToolRefusals
         }
 
         return new CallToolResult { IsError = true, Content = [new TextContentBlock { Text = message }] };
-    }
-
-    /// <summary>
-    ///     SQLITE_BUSY (5) / SQLITE_LOCKED (6) anywhere in the chain: another writer holds the bank
-    ///     (the same classification <c>ExtractionHostedService.IsBankBusy</c> applies to an extraction
-    ///     pass). Transient contention, so it is refused at Warning while genuine SQLite faults
-    ///     (26, "file is not a database") keep the unmapped Error path.
-    /// </summary>
-    internal static bool IsBankBusy(Exception exception)
-    {
-        for (var current = exception; current is not null; current = current.InnerException)
-        {
-            if (current is SqliteException { SqliteErrorCode: 5 or 6 })
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     internal static partial class Log
