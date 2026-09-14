@@ -2,6 +2,7 @@ using System.Text.Json;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.SearchQuality;
 using Dapper;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
@@ -33,10 +34,34 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
             await RecordSearchAsync(correlationId, query, scope, projectId, kind, sessionId, resultCount, topSourceFiles, ct, evidence)
                 .ConfigureAwait(false);
         }
+        catch (Exception ex) when (IsBankBusy(ex))
+        {
+            // Transient contention (WP12's write-lock convoy): the row is lost by design, and a
+            // raw SqliteException with a stack for it is the noise class the tool path's 912
+            // already dropped. One friendly Warning, no exception; genuine faults keep 965 below.
+            Log.RecordSearchDeferredOnBusy(logger, correlationId);
+        }
         catch (Exception ex)
         {
             Log.RecordSearchSafeFailed(logger, ex, correlationId);
         }
+    }
+
+    /// <summary>
+    ///     SQLITE_BUSY (5) / SQLITE_LOCKED (6) anywhere in the chain — the same classification the
+    ///     tool filter and the extraction pass apply to the same convoy.
+    /// </summary>
+    private static bool IsBankBusy(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is SqliteException { SqliteErrorCode: 5 or 6 })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public async Task RecordSearchAsync(
@@ -283,6 +308,10 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
 
     private static partial class Log
     {
+        [LoggerMessage(EventId = 964, Level = LogLevel.Warning,
+            Message = "Search-quality row skipped for correlation {CorrelationId}: the bank is busy (another writer holds the lock)")]
+        public static partial void RecordSearchDeferredOnBusy(ILogger logger, string correlationId);
+
         [LoggerMessage(EventId = 965, Level = LogLevel.Warning,
             Message = "Failed to record search quality for correlation {CorrelationId}")]
         public static partial void RecordSearchSafeFailed(ILogger logger, Exception exception, string correlationId);
