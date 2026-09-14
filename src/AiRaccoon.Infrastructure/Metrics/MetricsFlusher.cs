@@ -3,6 +3,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Maintenance;
+using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -142,7 +143,7 @@ public sealed partial class MetricsFlusher(
             {
                 throw;
             }
-            catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6 && attempt < MaxSaveAttempts)
+            catch (SqliteException ex) when (ex.IsBankBusy() && attempt < MaxSaveAttempts)
             {
                 // SQLITE_BUSY / SQLITE_LOCKED: the same write-lock convoy WP12 shortens elsewhere.
                 // Retried silently — only the final failure (below) is worth a log line.
