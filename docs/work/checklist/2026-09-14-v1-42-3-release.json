@@ -1,0 +1,157 @@
+{
+ "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+ "derived": {
+  "mcp-prompt-count": "2",
+  "mcp-tool-count": "29",
+  "note": "Produced at run time by python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . Output verbatim: version=1.42.3 mcp-tool-count=29 mcp-prompt-count=2.",
+  "version": "1.42.3"
+ },
+ "findings-against-prior-runs": [
+  {
+   "evidence": "This run: HTTP 200 and grep '\"isError\"' of the raw SSE bytes -> '\"isError\":true' for the verbatim RealHermesProcessNotification refuse probe. Commit 85944da2 message: 'Raw-HTTP (curl) ground truth on current code: refusals carry \"isError\":true in the SSE bytes, successes omit the key — the 1.42.0 checklist's missing-isError reading was an extraction artifact (envelope code unchanged since #163)'; its src/ delta is empty (test + VERSION only).",
+   "prior-claim": "On the published 1.42.0 build over HTTP, a refused query returns HTTP 200 with the refusal as plain-text result content and NO isError flag — the run recorded this as a transport difference (its prior run, the stdio-driven D10 checklist, had seen isError:true).",
+   "prior-run": "docs/work/checklist/2026-09-09-1.42.0-full.json",
+   "so-what": "The transport-difference explanation in the 1.42.0 finding was wrong and must not be re-inherited: future runs should compare isError against the pinned raw-HTTP test (ToolRefusalsTests.Refusal_OverRawHttp_CarriesIsErrorTrue_InTheSseBytes), not re-derive the envelope from scratch.",
+   "what-is-actually-true": "On 1.42.3 over raw HTTP the refused query carries \"isError\":true in the SSE bytes. The 1.41.2 run was right; the 1.42.0 reading was an extraction artifact — commit 85944da2 (1.42.1) had already diagnosed it and pinned the envelope with a regression test, and no envelope code changed."
+  }
+ ],
+ "items": [
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "MSBUILDDISABLENODEREUSE=1 dotnet build AiRaccoon.slnx -c Release ; dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=osx-arm64 -p:SuppressDeployToLocalSource=true -o /tmp/air-1423-localpack ; curl nuget flatcontainer index ; dotnet tool uninstall -g ai-raccoon ; dotnet tool install -g ai-raccoon --version 1.42.3 --source https://api.nuget.org/v3/index.json ; ai-raccoon --version ; read version+repository commit from the installed store's ai-raccoon.nuspec ; git diff 1129d517..HEAD -- src/",
+   "evidence": "Build succeeded 0 Warning(s) 0 Error(s). Pack: 'Successfully created package '/tmp/air-1423-localpack/ai-raccoon.osx-arm64.1.42.3.nupkg'' and 'ai-raccoon.1.42.3.nupkg'. Feed: latest: 1.42.3, has-1.42.3: True. Uninstall/install: 'Tool ai-raccoon (version 1.42.3) was successfully uninstalled' / 'successfully installed'. ai-raccoon --version -> 1.42.3+1129d51789a240176e0ace4154210a6e7df92b68. nuspec: <version>1.42.3</version> commit=\"1129d51789a240176e0ace4154210a6e7df92b68\". git diff 1129d517..HEAD -- src/: 0 lines.",
+   "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+   "item": "build-and-install-global-package",
+   "observed-result": "The published 1.42.3 installed from the feed; the --version suffix and the nuspec both pin the release commit and the tree adds zero src/ changes on top, so the running binary == the tree's product code.",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "curl :7721/mcp (before) ; nohup ai-raccoon --data-root /tmp/air-1423-full serve --port 0 ; read the bound port back from serve.log ; nohup ai-raccoon --data-root /tmp/air-1423-full serve --port 64936 --restart ; curl :7721/mcp (after)",
+   "evidence": "7721-before: 401. serve.log: 'Now listening on: http://127.0.0.1:64936' (ephemeral port read back, not assumed). Restart: 'asking the server on port 64936 to stop (pid 91100, 1.42.3+1129d51789a240176e0ace4154210a6e7df92b68)' then 'the server on port 64936 (pid 91100) stopped and the port is free' then 'Now listening on: http://127.0.0.1:64936' (rebound, new pid 91213). 7721-after: 401. Operational note: --restart ran under nohup, so ending the driving shell could not take the rebound server down — the 1.42.0 run lost its server exactly that way.",
+   "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+   "item": "server-lifecycle",
+   "observed-result": "Ephemeral port bound and read back; --restart stopped exactly the scratch pid and rebound the same scratch port; the default port answered 401 throughout and was never bound.",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "tools/call memory_write {clean astrolabe sentence, sourceFile probe/dome.md, section 'Dusk Operations'} ; memory_write {near-miss '[Hermes background-process log] heartbeat ok, nothing to act on'} ; memory_write {'[IMPORTANT: Background process 12345 finished with exit 0 after 12s]'} ; memory_write {'received signal 15'}",
+   "evidence": "clean -> stored:true hash 3107e895d04225a4b0ef55d764e75a58ce70194c26cd7acb27e908c7d5a24798. near-miss -> stored:true hash 226629f4b4273eaa2add27622a3e3f95414e8eb3dccded73253477b5b9fbe77d (correctly NOT rejected). '[IMPORTANT: Background process 12345 ...]' -> stored:false hash:'' reason \"rejected by noise policy 'HermesBackgroundProcessLog'\". 'received signal 15' -> stored:false hash:'' same reason. The clean control plus two near-misses make the rejection able to fail.",
+   "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+   "item": "memory-write-stores-and-reports-truthfully",
+   "observed-result": "The store returns a hash; rejections report stored=false with the policy reason and no fabricated hash (ADR-0032).",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "settings model show ; model embedding set local (CLI routed via --port 64936) ; tools/call memory_stats (pending drain check) ; tools/call memory_search {query 'an antique navigation instrument reflecting evening light in a stargazing room' — zero literal overlap with the stored astrolabe/lamplight/observatory text, kind memory, scope project}",
+   "evidence": "model show -> 'provider: (none — FTS5-only search)'. set local -> 'embedding engine set to local (bundled ONNX model); re-embedding in the background'. memory_stats -> {\"entries\":2,\"pending\":0,\"contexts\":[\"project:01a0a078-...\"]}. Search -> hash 3107e895 rank 1 with snippet of the stored text; evidenceByHash legs [{fts,rank:1},{vector,rank:1}], cosine 0.23587211966514587, fusionStrength 1, participatingLegs [fts,vector]; the second (near-miss) entry carried vector rank 2, cosine 0.0611. The query shares no token with the stored sentence, so the vector leg is what carries the hit.",
+   "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+   "item": "memory-search-hybrid-retrieval",
+   "observed-result": "Hybrid retrieval proven on a zero-overlap query: the written entry is rank 1 with both legs agreeing and a real cosine once the bundled engine is configured; a keyword-only system could not resolve it.",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "tools/call memory_get {hash 3107e895...} ; tools/call memory_get {hash 000...0}",
+   "evidence": "known -> full value 'The observatory keeper polishes a brass astrolabe by lamplight under the great dome.' with the correct hash/context/path. unknown -> isError:true \"unknown-hash: No entry with hash '0000000000000000000000000000000000000000000000000000000000000000' in project '01a0a078-1e57-7396-906a-68d011d71b93'.\"",
+   "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+   "item": "memory-get-returns-content-by-hash",
+   "observed-result": "Get-by-hash returns content; an unknown hash refuses with unknown-hash and isError, never empty (ADR-0035).",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "tools/call memory_search {query 'probe/dome.md#Dusk Operations', kind memory, scope project}",
+   "evidence": "hash 3107e895 rank 1, snippet '…observatory keeper polishes a brass astrolabe by lamplight under the great dome.', sourceFile 'probe/dome.md', chunkIndex 0, totalChunks 1.",
+   "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+   "item": "source-path-anchor-resolves-its-chunk",
+   "observed-result": "The file#section anchor resolves its exact chunk at rank 1 inside the production result window.",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "read src/AiRaccoon/Setup/AppRegistrations.cs INoiseFilterPolicy registrations ; read HermesProcessNoisePolicy.cs ; the clean/near-miss/rejected writes from the write item ; ai-raccoon --data-root /tmp/air-1423-full --port 64936 noise entries ; sqlite3 (PRAGMA query_only=1) SELECT detected_by_policy, substr(request_content,1,80) FROM noise_entries",
+   "evidence": "Tree registers exactly one write-path policy: HermesProcessNoisePolicy (AppRegistrations.cs:320); its shapes are the prefixes '[IMPORTANT: Background process' and '[ASYNC DELEGATION BATCH', plus an exact 'received signal <digits>' body — no deleted-feature step. noise entries -> 'total: 2' / 'HermesBackgroundProcessLog: 2'. noise_entries rows: 'HermesBackgroundProcessLog|[IMPORTANT: Background process 12345 finished with exit 0 after 12s]' and 'HermesBackgroundProcessLog|received signal 15' (both rejected bodies verbatim with policy attribution).",
+   "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+   "item": "write-path-noise-filtering",
+   "observed-result": "The single registered policy was verified against a clean control and a near-miss that stayed stored; both rejections are reported and retrievable verbatim with per-policy counts (ADR-0039).",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "settings queryguard list ; settings queryguard structural --help ; tools/call memory_search {verbatim RealHermesProcessNotification fixture from QueryGuardPolicyTests.cs} ; tools/call memory_search {verbatim RealStackTracePaste fixture} ; raw curl dump of the refuse probe",
+   "evidence": "list -> 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'. structural --help -> 'Off by default — it only ever adds an annotation, never a refusal'. refuse probe -> isError:true, text 'invalid-params: This looks like tool output rather than a question. … Refused query: [IMPORTANT: Background process proc_97aa3ea5eb50 …' (no search executed, no results, no correlationId). Raw HTTP: HTTP 200 and the SSE bytes contain '\"isError\":true' (see findings-against-prior-runs). warn probe -> search proceeds WITH warning 'This query contains what looks like log or stack-trace output. …' and results returned.",
+   "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+   "item": "read-path-query-guard",
+   "observed-result": "Refuse and annotate tiers behave per ADR-0040 against verbatim fixtures; the structural detector is off by default and the help states it is annotate-only (ADR-0041).",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "settings ingest scope add '*' /tmp/air-1423-full/probe ; settings watch enable '*' true ; tools/call memory_watch_add {path /tmp/air-1423-full/probe} ; tools/call memory_watch_status",
+   "evidence": "'added /tmp/air-1423-full/probe to ingest scope for *' ; 'watch enabled for *' ; watch_add -> {\"projectId\":\"01a0a078-...\",\"path\":\"/tmp/air-1423-full/probe\",\"pruned\":[]} ; watch_status -> watches:[{path:'/tmp/air-1423-full/probe', state:'Scanning'}] (non-empty assertion).",
+   "expected-result": "memory_watch_status lists live registrations and their sync state",
+   "item": "file-watch-status",
+   "observed-result": "Live registration listed with its sync state — not an empty-list shape.",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "tools/call memory_share_extract {projectIds [01a0a078-...], mode propose, limit 5} ; tools/call memory_promotion_list {projectId 01a0a078-...}",
+   "evidence": "propose -> candidates incl. {hash 3107e895, score 1.07, rating 0.6499888755108174, accessCount 3, reasons ['organic-note','very-short-penalty'], sourceFile 'probe/dome.md', valuePreview 'The observatory keeper polishes …'}. promotion_list -> the same rows with full value + createdAt/updatedAt.",
+   "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+   "item": "promotion-queue-state",
+   "observed-result": "Propose-tier candidates asserted by content (score/reasons/identity/accessCount), not by list shape; queue state is accurate.",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Ran the lock from a separate process against the scratch bank only; the production 5 s busy timeout was exercised unmodified. Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "python3: open /tmp/air-1423-full/memory.db, BEGIN IMMEDIATE, hold 25 s (scratch bank, never the live one) ; tools/call memory_search {zero-overlap query} ; tools/call memory_write {clean lighthouse sentence} ; grep the scratch server log for 897/911/912/965",
+   "evidence": "busy-search (10.1 s) -> results returned (hash 3107e895 rank 1): the locked bank did not fail the search. busy-write (5.1 s) -> isError:true, text 'bank-busy: the bank is busy (another writer holds the lock); retry the call'. Server log: 911 warn '\"memory_write\" refused: bank-busy: the bank is busy (another writer holds the lock); retry the call'; 897 warn 'Access-rating bump skipped for 2 result(s): the bank is busy (another writer holds the lock)'; ZERO 912 lines in either scratch log. Sibling observation: 965 (SqliteSearchQualityService, the best-effort search_quality write) logged the same SQLITE_BUSY at Warning WITH the exception and stack — the same raw-exception noise class the release set out to remove, on a different site; recorded as a follow-up candidate, out of this item's scope.",
+   "expected-result": "with another writer holding the bank's write lock: memory_search still returns its computed results and logs EventId 897 (one friendly Warning, no exception), and a write tool is refused as `bank-busy` at Warning with no EventId 912 — the 1.42.3 change (commit 1129d517, PR #637)",
+   "item": "busy-bank-refusal-and-best-effort-bump",
+   "observed-result": "The release's headline change works live: a locked bank no longer fails a computed search (bump skipped, EventId 897, no stack) and a write is refused as a retryable bank-busy Warning with no 912.",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "POST /mcp tools/list + prompts/list with X-AiRaccoon-Token (scratch token file) ; 9 distinct tools returned live results this run",
+   "evidence": "tools/list -> 29 tools == derived.mcp-tool-count (code_get … project_id_token_get, full list in run notes). prompts/list -> 2 ['workspace-consolidation-guide','memory-usage-guide'] == derived.mcp-prompt-count. Reachability: 9 distinct tools returned live results (project_id_token_get, memory_write, memory_stats, memory_search, memory_get, memory_watch_add, memory_watch_status, memory_share_extract, memory_promotion_list) plus CLI paths (settings model/queryguard/ingest/watch, model embedding set local, noise entries).",
+   "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+   "item": "full-mcp-surface",
+   "observed-result": "29 tools + 2 prompts listed, counts equal to the derived facts; reachability proven by live calls, not by listing alone.",
+   "status": "pass"
+  },
+  {
+   "acceptance-reason": "Observed result matches the expected result exactly; evidence is the live command output quoted above.",
+   "accepted": true,
+   "command": "extract emitted ids from /tmp/air-1423-serve.log + /tmp/air-1423-restart.log ; resolve each against the allocation table in docs/reference/logging-event-ids.md",
+   "evidence": "Product ids emitted: 428 (426-428 EmbeddingService), 510 (510-524 BankMaintenanceHostedService), 525 (525-528 MaintenanceJobRunner), 610 (610-612 IdleWatchdog), 650/651 (650-656 ServerRestart), 660 (ShutdownEndpoint), 672/673/674 (670-675 SettingsEndpoint), 897 (897-900 SqliteMemoryStore — allocated by this release and observed live), 910/911 (910-913 ToolRefusals), 965 (SqliteSearchQualityService), 1003 (1002-1013 EmbedDrainReporter). All resolve; 897 is the new id this release added. Framework-only ids 0/14 are Microsoft.Hosting.Lifetime, not product [LoggerMessage] events.",
+   "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+   "item": "observability-event-ids",
+   "observed-result": "Every emitted product event id resolves against the reference, including the newly allocated 897.",
+   "status": "pass"
+  }
+ ],
+ "run": {
+  "branch": "main",
+  "commit": "1129d517 (VERSION 1.42.3; the published package's nuspec pins repository commit 1129d517 and git diff 1129d517..HEAD -- src/ is empty, so the running binary is this tree's product code)",
+  "data-root": "/tmp/air-1423-full (scratch server :64936 — first pid 91095, --restart stopped 91100 and rebound pid 91213; never ~/.ai-raccoon; port 7721 answered 401 before/during/after and was never bound). Project 01a0a078-1e57-7396-906a-68d011d71b93. MCP driven over raw HTTP with X-AiRaccoon-Token read from the scratch root's mcp-token. All scratch servers killed and the scratch root deleted after the run.",
+  "date": "2026-09-14",
+  "note": "Full release checklist for 1.42.3 (bank-busy tool refusal + best-effort search access bump, PR #637): the published build was installed from nuget.org (uninstall + install -g --version 1.42.3), not a branch binary. Global tool now at 1.42.3+1129d517. New this run: item busy-bank-refusal-and-best-effort-bump, a live write-lock probe for the release's headline change."
+ }
+}
