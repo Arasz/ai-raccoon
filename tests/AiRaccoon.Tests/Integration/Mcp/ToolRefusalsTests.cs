@@ -593,6 +593,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
     [InlineData("sync-tampered-remote", LogLevel.Warning)]
     [InlineData("unknown-hash", LogLevel.Warning)]
     [InlineData("embedding-install-replaced", LogLevel.Warning)]
+    [InlineData("bank-busy", LogLevel.Warning)]
     [InlineData("path-outside-scope", LogLevel.Information)]
     [InlineData("access-denied", LogLevel.Information)]
     [InlineData("invalid-params", LogLevel.Information)]
@@ -617,7 +618,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
 
         var codePrefixes = ToolRefusals.RefusalPrefixes.Values
             .Concat(ToolRefusals.DirectThrowPrefixes)
-            .Concat([ToolRefusals.CancelledPrefix])
+            .Concat([ToolRefusals.CancelledPrefix, ToolRefusals.BankBusyPrefix])
             .ToHashSet(StringComparer.Ordinal);
 
         var documentedButNotInCode = documentedPrefixes.Except(codePrefixes).ToList();
