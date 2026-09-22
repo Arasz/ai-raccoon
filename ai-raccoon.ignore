@@ -12,9 +12,8 @@ tests/AiRaccoon.Tests/Unit/Retrieval/assets/
 # Bundled model binaries.
 src/AiRaccoon/Models/
 
-# Generated code and CI bookkeeping.
+# Generated code.
 *.g.cs
-known-flakes.json
 
 # Eval corpora and golden-file fixtures: machine-generated JSON the retriever must
 # never quote back as project knowledge (leaked 788 rows before 2026-09-03:

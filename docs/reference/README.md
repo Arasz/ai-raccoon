@@ -14,5 +14,8 @@ packaging metadata. Filenames are bare nouns.
 - [`logging-event-ids.md`](logging-event-ids.md) — the measured, zero-duplicate
   `[LoggerMessage]` `EventId` allocation across the solution, and how the table is
   reproduced.
+- [`releases-and-publishing.md`](releases-and-publishing.md) — how a GitHub release
+  tag relates to (and doesn't guarantee) a nuget.org package, and how to check what's
+  actually installable.
 - [`whats-new-history.md`](whats-new-history.md) — archived release highlights from
   versions older than 1.29.0, moved here from the README.

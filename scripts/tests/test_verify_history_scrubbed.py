@@ -1,7 +1,7 @@
 """Tests for verify-history-scrubbed.py's exit-code logic — the #414 S6b post-rewrite gate.
 
 Follows the scripts/tests convention for a hyphenated top-level entrypoint (see
-test_nightly_triage.py): load it by file path with importlib, then exercise it against a
+test_diff_golden.py): load it by file path with importlib, then exercise it against a
 local fixture repo built in a temp dir. No network access — the real remote is only cloned
 when the script runs for real (see the runbook)."""
 
