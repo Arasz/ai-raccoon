@@ -232,10 +232,11 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
         var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, marker);
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(),
             new NeverMigratingStore(), guard, migrationGate: marker);
+        var settings = new InMemorySettings();
         return new MemoryTools(_store, gate,
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
-            new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
-            NoOpMeasurementRecorder.Instance, NullLogger<MemoryTools>.Instance);
+            new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue()),
+            NoOpMeasurementRecorder.Instance, settings, NullLogger<MemoryTools>.Instance);
     }
 
     private PromotionTools PromotionToolsFor(FakePromotionQueue queue)

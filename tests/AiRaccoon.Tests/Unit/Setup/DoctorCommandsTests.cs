@@ -778,6 +778,49 @@ public sealed class DoctorCommandsTests : IDisposable
         Lines(outp).ShouldContain("status: HEALTHY");
     }
 
+    /// <summary>
+    ///     F7 (ruling K7): a file that exists but is not a SQLite database must exit the distinct
+    ///     corrupt-bank code, not InvalidArgument (15) with the raw SQLite error text — the deferred
+    ///     open failure surfaces from SchemaDoctor's first statement, outside OpenBankReadOnlyAsync.
+    /// </summary>
+    [RetryFact]
+    public async Task Doctor_NotASqliteDatabase_ExitsBankCorrupted_WithACleanMessage()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_factory.BankPath)!);
+        await File.WriteAllTextAsync(_factory.BankPath, "this is not a sqlite database at all, just text",
+            TestContext.Current.CancellationToken);
+
+        var (exit, outp, err) = await Run(CreateDoctor(), ["doctor"]);
+
+        exit.ShouldBe(ExitCode.BankCorrupted);
+        outp.ShouldBeEmpty();
+        err.Trim().ShouldBe(
+            $"ai-raccoon: doctor: the bank at {_factory.BankPath} exists but is not a SQLite database (SQLite error 26); restore it from a backup or check --data-root");
+        err.ShouldNotContain("Parameter");
+    }
+
+    /// <summary>
+    ///     F7: milliseconds in the seconds column is a real open outbox row (the server still refuses
+    ///     every tool call), but FromUnixTimeSeconds threw on the value and the raw .NET parameter
+    ///     text escaped to the catch-all. The open state stays reported; the timestamp degrades.
+    /// </summary>
+    [RetryFact]
+    public async Task Doctor_OpenMigrationWithAnOutOfRangeTimestamp_PrintsNoRawParameterText()
+    {
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await SeedMigrationAsync(finishedAt: null, connection, startedAt: 1758538800000);
+        }
+
+        var (exit, outp, err) = await Run(CreateDoctor(), ["doctor"]);
+
+        exit.ShouldBe(ExitCode.ModelMigrationOpen);
+        (outp + err).ShouldNotContain("Parameter 'seconds'");
+        (outp + err).ShouldNotContain("Valid values are between");
+        Lines(outp).ShouldContain(
+            "model migration: open since <unrepresentable unix time 1758538800000> (all MCP tool calls are refused until it finishes)");
+    }
+
     [RetryFact]
     public async Task Doctor_NeverModifiesTheBank_WithBothCorporaAndAnOpenMigration()
     {

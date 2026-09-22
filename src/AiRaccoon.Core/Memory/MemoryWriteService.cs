@@ -1,6 +1,6 @@
 namespace AiRaccoon.Core.Memory;
 
-/// <summary>The reasons a row reaches the promotion queue. One place, so the wire strings agree.</summary>
+/// <summary>The promotion reason tags and the refusal text a `shared` write reports — one place, so the wire strings agree.</summary>
 public static class PromotionReasons
 {
     /// <summary>
@@ -8,6 +8,22 @@ public static class PromotionReasons
     ///     request, not a scorer's inference (docs/adr/0067).
     /// </summary>
     public const string AgentRequestedShare = "agent-requested-share";
+
+    /// <summary>
+    ///     The write asked for promotion, but the queue refused it: the hash was discarded earlier
+    ///     (docs/adr/0026) or its value is already shared. The response says so instead of claiming a
+    ///     queued review.
+    /// </summary>
+    public const string AgentRequestedRefused =
+        "not-queued: agent-requested-share refused (discarded earlier or already shared)";
+
+    /// <summary>
+    ///     The write asked for promotion, and the pass's own capacity eviction removed the row
+    ///     before it could be reviewed (docs/adr/0007). The queue did not refuse the request — it
+    ///     could not hold it — so the response must not claim a discard or shared-twin refusal.
+    /// </summary>
+    public const string AgentRequestedEvicted =
+        "not-queued: agent-requested-share evicted (queue at capacity)";
 }
 
 /// <summary>
@@ -26,11 +42,13 @@ public interface IMemoryWriteService
 public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue) : IMemoryWriteService
 {
     /// <summary>
-    ///     Above the scorer's range, so an explicit request outranks every inference. Eviction is
+    ///     Derived from <see cref="PromotionScorer.MaxScore" /> — the scorer's declared output
+    ///     ceiling — plus a full point, so an explicit request outranks every inference even if that
+    ///     ceiling is retuned later (docs/adr/0067, owner ruling P1.2-b, 2026-09-22). Eviction is
     ///     deliberately left untouched: a request that cannot fit shows up in the queue's own metrics
     ///     rather than being silently dropped, and that is reversible if it proves wrong.
     /// </summary>
-    public const double AgentRequestedScore = 1.0;
+    public const double AgentRequestedScore = PromotionScorer.MaxScore + 1.0;
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request,
         CancellationToken cancellationToken = default)
@@ -54,14 +72,28 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
             return entry;
         }
 
-        await queue.ProposeAsync(request.ProjectId,
+        var outcome = await queue.ProposeAsync(request.ProjectId,
                 [
+                    // K2 (F22): stamped with the current scorer version, not the 0 default — ClearStale
+                    // deletes every row on a retired version before the next pass ranks, which would
+                    // destroy the explicit request a below-floor note can never re-earn.
                     new QueueCandidate(entry.Hash, entry.Path, entry.Value, request.SourceFile,
-                        AgentRequestedScore, [PromotionReasons.AgentRequestedShare])
+                        AgentRequestedScore, [PromotionReasons.AgentRequestedShare], PromotionScorer.Version)
                 ],
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return entry with { Reason = $"queued-for-promotion: {PromotionReasons.AgentRequestedShare}" };
+        // F25: the upsert is refused for a remembered discard or an already-shared value twin, so
+        // the queue — not the call — decides which reason is true here. Refused and NotQueued are
+        // split because NotQueued is the state (absent from the queue) and a capacity eviction also
+        // produces it; only Refused names a rejection of the request itself.
+        return entry with
+        {
+            Reason = outcome.Refused.Contains(entry.Hash, StringComparer.Ordinal)
+                ? PromotionReasons.AgentRequestedRefused
+                : outcome.NotQueued.Contains(entry.Hash, StringComparer.Ordinal)
+                    ? PromotionReasons.AgentRequestedEvicted
+                    : $"queued-for-promotion: {PromotionReasons.AgentRequestedShare}"
+        };
     }
 }

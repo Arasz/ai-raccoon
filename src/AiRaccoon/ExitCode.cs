@@ -83,5 +83,14 @@ public static class ExitCode
     /// Same species as <see cref="ModelMigrationOpen" /> (24), but a settings-verb refusal.</summary>
     public const int ModelResetRefused = 25;
 
+    /// <summary>`doctor` (F7, ruling K7): the bank file exists but is not a SQLite database — corrupt,
+    /// or not readable with the resolved encryption key. Distinct from <see cref="NoBank" /> (no file
+    /// at all) and <see cref="FailedToOpenEncryptedBank" /> (a real database whose open failed).</summary>
+    public const int BankCorrupted = 26;
+
+    /// <summary>The command was cancelled before it finished (Ctrl-C / SIGTERM — 130 is 128 +
+    /// SIGINT(2), the shell's conventional interrupt code); the command changed nothing.</summary>
+    public const int Interrupted = 130;
+
     public const int Success = 0;
 }
