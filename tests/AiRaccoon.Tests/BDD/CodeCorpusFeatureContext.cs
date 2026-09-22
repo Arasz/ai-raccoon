@@ -72,7 +72,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         MemoryTools = new MemoryTools(Store, gate,
             new SearchDispatcher(Store, CodeSearch, SearchQuality),
             new QueryGuardService(Settings), new MemoryWriteService(Store, new FakePromotionQueue()),
-            new NoOpMeasurementRecorder(), Settings, NullLogger<MemoryTools>.Instance);
+            new NoOpMeasurementRecorder(), Settings, NullLogger<MemoryTools>.Instance, FakeEmbeddingService);
         CodeTools = new CodeTools(CodeSearch, gate);
 
         ComposeWatchStack();

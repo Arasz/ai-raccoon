@@ -29,8 +29,8 @@ public sealed partial class MemoryTools(
     IMeasurementRecorder measurements,
     ISettingsStore settings,
     ILogger<MemoryTools> logger,
-    TimeProvider? timeProvider = null,
-    IEmbeddingService? embeddings = null)
+    IEmbeddingService embeddings,
+    TimeProvider? timeProvider = null)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -306,20 +306,14 @@ public sealed partial class MemoryTools(
     }
 
     /// <summary>
-    ///     pi-badger-integration F1: QueryLengthGuard's reported budget must track the ACTIVE memory
-    ///     engine, not the bundled model's fixed 254 -- resolved via IEmbeddingService.ResolveChunkBudgetFor
-    ///     (D6/D9), the same number EntryEmbedder.EmbedQueryAsync will actually trim to. An unconfigured
-    ///     provider resolves as "local" (the bundled model the remedy activates), so the guard's number
-    ///     still matches what a fresh bank would do once fixed. embeddings is optional (DI-resolved in
-    ///     production, like timeProvider); a caller that supplies none keeps the bundled 254 unchanged.
+    ///     QueryLengthGuard's reported budget must track the ACTIVE memory engine, not the bundled
+    ///     model's fixed 254 -- resolved via IEmbeddingService.ResolveChunkBudgetFor (D6/D9), the same
+    ///     number EntryEmbedder.EmbedQueryAsync will actually trim to. An unconfigured provider
+    ///     resolves as "local" (the bundled model the remedy activates), so the guard's number still
+    ///     matches what a fresh bank would do once fixed.
     /// </summary>
     private async Task<int> MemoryQueryBudgetTokensAsync(CancellationToken cancellationToken)
     {
-        if (embeddings is null)
-        {
-            return QueryLengthGuard.BundledBudgetTokens;
-        }
-
         var provider = await settings.GetSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken);
         var model = await settings.GetSettingAsync(EmbeddingSettingsKeys.Model, cancellationToken);
         var resolvedProvider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
