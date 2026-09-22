@@ -408,7 +408,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var deleted = await _store.DeleteAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
-        deleted.ShouldBeTrue();
+        deleted.ShouldBe(1);
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
         (await _store.SearchAsync(
                 new SearchQuery("acme", "deleted", MinRelativeScore: 0),
@@ -424,13 +424,15 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         var deleted = await _store.DeleteAsync("other", entry.Hash, TestContext.Current.CancellationToken);
 
-        deleted.ShouldBeFalse();
+        deleted.ShouldBe(0);
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
     }
 
     /// <summary>
     ///     N7 (owner ruling, F26): one multi-chunk write creates N rows under one path, and
-    ///     memory_delete on the returned hash must remove the whole write — not 1 of N.
+    ///     memory_delete on the returned hash must remove the whole write — not 1 of N — and
+    ///     report the true row count. Positive control: an unrelated write sharing nothing with
+    ///     the deleted one must survive.
     /// </summary>
     [RetryFact]
     public async Task Delete_OfAMultiChunkWrite_RemovesEveryRowOfThatWrite()
@@ -439,15 +441,21 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             Enumerable.Range(1, 5).Select(i => $"paragraph {i} of the one long note"));
         var entry = await _store.WriteAsync(new MemoryWriteRequest("acme", content),
             TestContext.Current.CancellationToken);
+        var unrelated = await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "an unrelated fact sharing nothing with the long note"),
+            TestContext.Current.CancellationToken);
 
         var rowsBefore = await CountRowsForPathAsync(entry.Path);
         rowsBefore.ShouldBeGreaterThan(1, "the fixture must produce a multi-chunk write");
         (await ReadRowAsync(entry.Hash)).ShouldNotBeNull("the returned hash is the write's first chunk");
 
-        await _store.DeleteAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+        var deleted = await _store.DeleteAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
+        deleted.ShouldBe((int)rowsBefore, "the response must report the true row count, not 1");
         (await CountRowsForPathAsync(entry.Path)).ShouldBe(0,
             "memory_delete must remove the whole write, not one of its N rows");
+        (await ReadRowAsync(unrelated.Hash)).ShouldNotBeNull(
+            "an unrelated write sharing nothing with the deleted one must survive");
     }
 
     [RetryFact]

@@ -357,9 +357,9 @@ public class WorkspaceServiceTests
                 content, 1), true));
         }
 
-        public override Task<bool> DeleteAsync(string projectId, string hash,
+        public override Task<int> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+            Task.FromResult(1);
 
         public override Task<int> DeleteContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default)

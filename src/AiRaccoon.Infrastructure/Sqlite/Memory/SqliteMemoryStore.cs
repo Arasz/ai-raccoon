@@ -271,7 +271,7 @@ public sealed partial class SqliteMemoryStore(
         return [.. rows];
     }
 
-    public async Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+    public async Task<int> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
@@ -296,7 +296,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(scope);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await DeleteCoreAsync(connection, projectId, hash, scope, cancellationToken).ConfigureAwait(false);
+        return await DeleteCoreAsync(connection, projectId, hash, scope, cancellationToken).ConfigureAwait(false) > 0;
     }
 
     public async Task<int> DeleteContextAsync(string projectId, string context,
@@ -741,7 +741,7 @@ public sealed partial class SqliteMemoryStore(
     ///     next sync. Same BEGIN IMMEDIATE/COMMIT/ROLLBACK shape as <see cref="DeleteSourcePathAsync" />
     ///     and <see cref="SqliteMemoryStore.ReplaceCoreAsync" />; both callers are top-level, so there is no nested-transaction hazard.
     /// </summary>
-    private async Task<bool> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash,
+    private async Task<int> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash,
         string? scope, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
@@ -749,26 +749,34 @@ public sealed partial class SqliteMemoryStore(
             .ConfigureAwait(false);
         try
         {
-            var rowScope = await connection.QueryFirstOrDefaultAsync<string?>(
-                    Def(MemorySql.SelectScopeByHashAndProject, new { hash, projectId, scope }, cancellationToken))
-                .ConfigureAwait(false);
+            // The whole-write delete (N7/F26) reaches every row sharing the write's path;
+            // resolved once so the delete and its tombstone derivation both match on it.
+            // DeleteInScopeAsync (scope set) stays hash+scope exact and never needs a path.
+            var path = scope is null
+                ? await connection.QueryFirstOrDefaultAsync<string?>(
+                        Def(MemorySql.SelectPathByHashAndProject, new { hash, projectId }, cancellationToken))
+                    .ConfigureAwait(false)
+                : null;
 
             var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
                     Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken))
                 .ConfigureAwait(false);
 
-            var deleted = await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope }, cancellationToken))
+            // Tombstones every row about to be removed (N7/F26) — not just the reported hash —
+            // before the delete runs, from the identical predicate, in the same transaction.
+            await connection.ExecuteAsync(
+                    Def(MemorySql.TombstoneFromPredicate,
+                        new
+                        {
+                            hash, projectId, scope, path,
+                            deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
+                        },
+                        cancellationToken))
                 .ConfigureAwait(false);
 
-            if (deleted > 0 && rowScope is not null)
-            {
-                await connection.ExecuteAsync(
-                        Def(MemorySql.UpsertTombstone,
-                            new { projectId, hash, scope = rowScope, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                            cancellationToken))
-                    .ConfigureAwait(false);
-            }
+            var deleted = await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope, path }, cancellationToken))
+                .ConfigureAwait(false);
 
             if (deleted > 0 && recomputeContext?.SourceFile is not null)
             {
@@ -781,7 +789,7 @@ public sealed partial class SqliteMemoryStore(
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
-            return deleted > 0;
+            return deleted;
         }
         catch
         {

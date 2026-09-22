@@ -162,7 +162,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
 
         var deleted = await _store.DeleteAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
-        deleted.ShouldBeTrue();
+        deleted.ShouldBe(1);
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(0);
     }
 

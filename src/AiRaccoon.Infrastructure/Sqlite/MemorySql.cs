@@ -161,27 +161,38 @@ internal static class MemorySql
                                                         ORDER BY v.distance, e.path
                                                         """;
 
-    // @scope null is memory_delete (N7/F26): the whole write behind the hash goes, every chunk
-    // sharing its path — plus the hash itself wherever it lives. @scope set is the sweep's own
-    // delete (H2): chunk-exact, so a project-scoped pass cannot touch a sibling row sharing the
-    // hash in another scope/workspace.
-    public const string DeleteByHashAndProject =
-        "DELETE FROM entries WHERE project_id = @projectId AND " +
-        "((@scope IS NULL AND (hash = @hash OR (@path IS NOT NULL AND path = @path))) " +
+    // @scope null is memory_delete (N7/F26): every row sharing the write's path goes, not just
+    // the reported hash — a manual memory_write's N chunks share one content-addressed path. The
+    // "(source_file IS NULL OR source_file <> path)" guard keeps this off an ingested/mirrored
+    // file's rows, where FileIngestor always sets source_file = path for its own group: those stay
+    // reachable only by their exact hash (DeleteBySourcePath/the watcher own the whole-file delete,
+    // never memory_delete — see SqliteMemoryStoreChunkColumnMaintenanceTests). @scope set is the
+    // sweep's own delete (H2): chunk-exact, so a project-scoped pass cannot touch a sibling row
+    // sharing the hash in another scope/workspace.
+    private const string DeleteMatchPredicate =
+        "project_id = @projectId AND " +
+        "((@scope IS NULL AND (hash = @hash OR " +
+        "(@path IS NOT NULL AND path = @path AND (source_file IS NULL OR source_file <> path)))) " +
         "OR (@scope IS NOT NULL AND scope = @scope AND hash = @hash))";
+
+    public const string DeleteByHashAndProject = "DELETE FROM entries WHERE " + DeleteMatchPredicate;
 
     // The write's path is what makes the whole-write delete whole (N7/F26); resolved before the
     // delete so the predicate stays a plain parameter comparison.
     public const string SelectPathByHashAndProject =
         "SELECT path FROM entries WHERE hash = @hash AND project_id = @projectId LIMIT 1";
 
-    // Sync propagates deletes through tombstones (FR-NM-8): the row's committed scope is
-    // recorded before the delete so sync can suppress resurrection and ship the tombstone.
-    public const string SelectScopeByHashAndProject =
-        "SELECT scope FROM entries WHERE hash = @hash AND project_id = @projectId AND (@scope IS NULL OR scope IS @scope)";
+    // Tombstones every row DeleteByHashAndProject is about to remove (N7/F26) — one per distinct
+    // (hash, scope), not just the caller's reported hash, so a multi-chunk write's untombstoned
+    // siblings cannot resurrect on the next sync pull. Reads the identical predicate from `entries`
+    // before the delete runs, in the same transaction — afterward the rows are gone to read.
+    public const string TombstoneFromPredicate =
+        "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) " +
+        "SELECT DISTINCT project_id, hash, scope, @deletedAt FROM entries WHERE " + DeleteMatchPredicate + " " +
+        "ON CONFLICT(project_id, hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
 
-    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read alongside
-    // SelectScopeByHashAndProject, before the delete, so the row's group can be recomputed afterward.
+    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read before the
+    // delete so the row's group can be recomputed afterward.
     public const string SelectDeleteRecomputeContext = """
                                                        SELECT scope AS Scope, context_label AS ContextLabel,
                                                               workspace_id AS WorkspaceId, source_file AS SourceFile,
@@ -190,10 +201,6 @@ internal static class MemorySql
                                                        WHERE hash = @hash AND project_id = @projectId
                                                          AND (@scope IS NULL OR scope IS @scope)
                                                        """;
-
-    public const string UpsertTombstone =
-        "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@projectId, @hash, @scope, @deletedAt) " +
-        "ON CONFLICT(project_id, hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
 
     // Mirror delete/rename: removes committed chunks of the source path and its subtree (directory
     // delete cascades; workspace scratch is transient and stays), plus per-path watch fingerprints

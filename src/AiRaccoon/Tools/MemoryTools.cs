@@ -372,10 +372,10 @@ public sealed partial class MemoryTools(
 
     [McpServerTool(Name = TnMemoryDelete)]
     [Description(
-        "Deletes a specific memory entry by its content hash. Idempotent: an unknown hash is not an error — it reports deleted=0.")]
+        "Deletes the whole memory behind a content hash: a multi-chunk memory_write's chunks share one write, so any of its chunk hashes deletes all of them, not just one. Idempotent: an unknown hash is not an error — it reports the true row count, 0 for an unknown hash.")]
     public async Task<ApiEnvelope<DeletedResult>> Delete(
         [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
-        [Description("The content hash to delete.")]
+        [Description("The content hash to delete — any chunk of a multi-chunk write reaches the whole write.")]
         string hash,
         CancellationToken cancellationToken = default)
     {
@@ -383,7 +383,7 @@ public sealed partial class MemoryTools(
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var deleted = await store.DeleteAsync(canonical, hash, cancellationToken);
-        var result = new DeletedResult(deleted ? 1 : 0);
+        var result = new DeletedResult(deleted);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }

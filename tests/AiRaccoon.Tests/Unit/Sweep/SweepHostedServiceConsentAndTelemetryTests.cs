@@ -234,16 +234,17 @@ internal sealed class FakeSweepStore : FakeMemoryStore
         CancellationToken cancellationToken = default) =>
         Task.FromResult(MetadataByHash.GetValueOrDefault(hash));
 
-    public override Task<bool> DeleteAsync(string projectId, string hash,
+    public override Task<int> DeleteAsync(string projectId, string hash,
         CancellationToken cancellationToken = default)
     {
         Deleted.Add((projectId, hash));
+        var removed = 0;
         foreach (var list in Entries.Values)
         {
-            list.RemoveAll(e => e.Hash == hash);
+            removed += list.RemoveAll(e => e.Hash == hash);
         }
 
-        return Task.FromResult(true);
+        return Task.FromResult(removed);
     }
 
     public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>

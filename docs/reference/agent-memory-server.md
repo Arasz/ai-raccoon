@@ -50,7 +50,7 @@ config channel (see [Command-line options](#command-line-options)).
 | `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
 | `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
 | `memory_share_extract`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...], absorbed, skippedDuplicates, failures: [...]}`         |
-| `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: 0\|1}`                                                                                  |
+| `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: n}`                                                                                     |
 | `memory_delete_context`        | `projectId`, `context`                                                                                                                                      | `{deleted: n}`                                                                                     |
 | `memory_ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
 | `memory_ingest_directory`      | `projectId`, `path`, `context?`                                                                                                                             | `{scanned: n}`                                                                                     |
@@ -1060,7 +1060,12 @@ the passphrase the bank is plaintext (backward compatible).
 ## Deletion and sync semantics
 
 - Deletes are permanent — there is no trash or recovery.
-- `memory_delete` targets one hash wherever it lives, including a `shared` row;
+- `memory_delete` targets the whole write behind one hash, wherever it lives, including a
+  `shared` row: a multi-chunk `memory_write` produces N rows under one content-addressed path,
+  and any of their hashes deletes all of them, not just the chunk it names. The response's
+  `deleted` count is the true number of rows removed (N7). An ingested/watched file keeps its
+  own narrower reach — deleting one of its chunks by hash removes only that chunk (its siblings
+  share the real file path with `source_file`, which excludes them from the whole-write match);
   `memory_delete_context` deletes every entry under a context label. Nothing forbids
   targeting `shared` — use it deliberately.
 - Deleting a synced context (`shared`, `project:<id>`, custom) removes rows locally;

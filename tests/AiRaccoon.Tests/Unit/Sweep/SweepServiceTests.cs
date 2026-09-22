@@ -120,11 +120,11 @@ public class SweepServiceTests
 
         public HashSet<string> SharedHashes { get; } = new(StringComparer.Ordinal);
 
-        public override Task<bool> DeleteAsync(string projectId, string hash,
+        public override Task<int> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
         {
             Deleted.Add(hash);
-            return Task.FromResult(true);
+            return Task.FromResult(1);
         }
 
         public override Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
@@ -176,11 +176,11 @@ public class SweepServiceTests
     {
         public List<string> Deleted { get; } = [];
 
-        public override Task<bool> DeleteAsync(string projectId, string hash,
+        public override Task<int> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
         {
             Deleted.Add(hash);
-            return Task.FromResult(true);
+            return Task.FromResult(1);
         }
 
         public override Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
