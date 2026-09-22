@@ -177,7 +177,7 @@ internal static class MemorySql
     // suppresses under the P2.2 age guard; INSERT OR IGNORE would keep the older value.
     public static string TombstoneFromPredicate(string predicate) =>
         "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) " +
-        "SELECT DISTINCT project_id, hash, COALESCE(scope, 'workspace'), @deletedAt FROM entries " +
+        "SELECT DISTINCT project_id, hash, scope, @deletedAt FROM entries " +
         $"WHERE {predicate} AND scope IN ('project', 'custom', 'shared') " +
         "ON CONFLICT(project_id, hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
 
