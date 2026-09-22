@@ -637,7 +637,9 @@ public class MemoryToolsTests
         _store.LastQuery.ShouldNotBeNull();
         result.Data!.Warning.ShouldBeNull();
         logger.Collector.LatestRecord.Message.ShouldContain("Refuse");
-        logger.Collector.LatestRecord.Message.ShouldContain("Background process");
+        // The verdict is recorded; the query text is not — the fingerprint (policy, length, hash) names it instead.
+        logger.Collector.LatestRecord.Message.ShouldContain("MachineOutputQuery");
+        logger.Collector.LatestRecord.Message.ShouldNotContain("Background process");
     }
 
     [Fact]

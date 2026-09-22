@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using AiRaccoon.Core.Metrics;
+using AiRaccoon.Tools;
 
 namespace AiRaccoon.Observability;
 
@@ -100,10 +101,25 @@ public sealed class ToolExecutionActivity : IDisposable
         }
 
         _recorded = true;
-        _activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+        var description = (exception as RefusedQueryException)?.RedactedMessage ?? exception.Message;
+        _activity?.SetStatus(ActivityStatusCode.Error, description);
         _activity?.SetTag(ErrorTypeActivityTag, exception.GetType().Name);
         _activity?.SetTag(ResultActivityTag, ResultError);
-        _activity?.AddException(exception);
+        if (exception is RefusedQueryException)
+        {
+            // A refused query's text stays with its sender: same exception-event shape
+            // (type/message/stacktrace), carrying the redacted diagnostic instead of the message.
+            _activity?.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+            {
+                ["exception.type"] = exception.GetType().FullName,
+                ["exception.message"] = description,
+                ["exception.stacktrace"] = exception.StackTrace ?? string.Empty
+            }));
+        }
+        else
+        {
+            _activity?.AddException(exception);
+        }
         var boundedProjectId = metricProjectId ?? _metricProjectId;
         _metrics.RecordInvocation(_toolName, boundedProjectId, _stopwatch.Elapsed, true, exception.GetType().Name);
         RecordMeasurement(metricProjectId ?? _bankProjectId);

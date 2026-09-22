@@ -157,9 +157,11 @@ internal static partial class ToolRefusals
             {
                 // Every prefix thrown directly as a bare McpException is a
                 // user-input mistake, never an infrastructure fault. The message is already
-                // client-visible over MCP, so logging it adds no new exposure; 5d511748's
-                // anti-flood property (no Exception object) is kept.
-                return Refused(request, ex.Message, ex.Message, LogLevel.Information);
+                // client-visible over MCP, so logging it adds no new exposure — except a refused
+                // query's text, which stays with its sender and logs as the fingerprint instead.
+                // 5d511748's anti-flood property (no Exception object) is kept.
+                var reason = ex is RefusedQueryException refused ? refused.RedactedMessage : ex.Message;
+                return Refused(request, ex.Message, reason, LogLevel.Information);
             }
             catch (Exception ex)
             {

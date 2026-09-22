@@ -205,12 +205,16 @@ public sealed partial class MemoryTools(
         if (guard.Shadowed is { } suppressed)
         {
             Log.QueryGuardShadowVerdict(logger, suppressed.Tier.ToString(), canonical,
-                suppressed.PolicyName ?? string.Empty, QuerySnippet(query));
+                suppressed.PolicyName ?? string.Empty, QueryFingerprint(query));
         }
 
         if (guard.Verdict.Tier == QueryGuardTier.Refuse)
         {
-            throw new McpException($"invalid-params: {guard.Verdict.Guidance} Refused query: {QuerySnippet(query)}");
+            // The caller gets its own query text back in the error result; the server's own
+            // channels (log line, OTLP span) carry only the fingerprint below.
+            throw new RefusedQueryException(
+                $"invalid-params: {guard.Verdict.Guidance} Refused query: {QuerySnippet(query)}",
+                $"invalid-params: {guard.Verdict.Guidance} Refused query fingerprint ({guard.Verdict.PolicyName}): {QueryFingerprint(query)}");
         }
 
         var correlationId = Guid.CreateVersion7().ToString("N");
@@ -641,19 +645,23 @@ public sealed partial class MemoryTools(
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRunRegex();
 
-    /// <summary>Single-line, whitespace-collapsed echo of the query for refusal diagnostics, capped at 200 chars.</summary>
+    /// <summary>Single-line, whitespace-collapsed echo of the query for the caller's own refusal result, capped at 200 chars.</summary>
     private static string QuerySnippet(string query)
     {
         var collapsed = WhitespaceRunRegex().Replace(query, " ").Trim();
         return collapsed.Length <= 200 ? collapsed : collapsed[..200] + "…";
     }
 
+    /// <summary>The refused query's raw length and content hash — the whole identity server-side channels keep, never its text.</summary>
+    private static string QueryFingerprint(string query) =>
+        $"{query.Length} chars, sha256 {ContentHash.OfValue(query)}";
+
     private static partial class Log
     {
         /// <summary>Kept here, not in Core: the guard decides, the host reports (docs/adr/0065).</summary>
         [LoggerMessage(EventId = 920, Level = LogLevel.Information,
-            Message = "Query guard (shadow) would have returned {Tier} for project {ProjectId} via {PolicyName}; query: {Query}")]
-        public static partial void QueryGuardShadowVerdict(ILogger logger, string tier, string projectId, string policyName, string query);
+            Message = "Query guard (shadow) would have returned {Tier} for project {ProjectId} via {PolicyName}; query fingerprint: {QueryFingerprint}")]
+        public static partial void QueryGuardShadowVerdict(ILogger logger, string tier, string projectId, string policyName, string queryFingerprint);
 
         [LoggerMessage(EventId = 921, Level = LogLevel.Warning,
             Message = "Failed to record search phase measurements for correlation {CorrelationId}")]
