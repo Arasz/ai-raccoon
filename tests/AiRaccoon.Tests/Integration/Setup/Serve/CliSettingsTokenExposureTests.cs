@@ -13,12 +13,16 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
-///     F70/K1's settings-verb leg: every server-routed CLI verb (`settings …`, `model …`,
-///     `watch registered`, `noise entries`, `repair`, …) acquires its backend through
-///     <see cref="CliSettingsBackend" />, so it must private-spawn exactly like the proxy. Before
-///     this gate that path called the legacy attach-or-start acquire and sent the data root's
-///     token to whatever held the configured port — measured with `noise entries` in the join
-///     review.
+///     Owner ruling 2026-09-22 ("no own backend - attach - the same rules as usual - CLI - only
+///     proxy - if no server is running - we start it") reverted every server-routed CLI verb
+///     (`settings …`, `model …`, `watch registered`, `noise entries`, `repair`, …) off the F70/K1
+///     private spawn this path briefly carried, back to the legacy attach-or-start acquire on
+///     <c>--port</c> — the same shape every settings command used before F70. That means whatever
+///     already answers the configured port is trusted with the data root's token, exactly like every
+///     other attach-shaped decision in this codebase (`serve --attach`, the proxy's own
+///     <c>--attach</c>): this is a documented, ruled acceptance of F70's exposure on this one path,
+///     not the private-spawn gate F70/K1 built for the proxy and (until this ruling) mirrored here.
+///     See ADR-0105.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -29,50 +33,47 @@ public sealed class CliSettingsTokenExposureTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
-    ///     The gate: a squatter holding the configured port must receive nothing at all — not the
-    ///     probe, and above all not the token on the store's first request. The store read is the
-    ///     shape the join review measured (`GET /noise/summary` with the real token).
+    ///     Documents the accepted exposure (owner ruling 2026-09-22): a listener that merely holds
+    ///     the configured port and answers /mcp with a JSON-RPC-shaped body — what <c>ServerProbe</c>
+    ///     accepts as "an ai-raccoon server" — receives the settings request and the data root's
+    ///     token, because the shared acquire trusts whatever answers the port by design. This is not
+    ///     a defect: it is the same trust decision `serve --attach` and the proxy's `--attach` make,
+    ///     now the CLI settings transport's only shape, with no opt-in flag to gate it behind.
     /// </summary>
     [RetryFact]
-    public async Task AcquireAsync_WithoutAttach_WithASquatterHoldingTheConfiguredPort_DoesNotSendItTheToken()
+    public async Task AcquireAsync_AgainstAListenerHoldingTheConfiguredPort_SendsItTheToken_AsRuledAcceptable()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
-        // A real token on disk, exactly as the join-review harness minted one: the legacy path reads
-        // it after the probe and sends it to the squatter, which is the measurement this gate makes.
+        // A real token on disk, exactly as a live data root would hold one: the shared acquire reads
+        // it after the probe and sends it to whatever answered, which is the measurement this test
+        // records as the accepted (not refused) behaviour.
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         using var squatter = new Squatter();
         var config = new ServerConfig(squatter.Port, McpTransport.Http,
             new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
-        var recording = new RecordingLauncher(RealLauncher());
 
-        var store = await CliSettingsBackend.AcquireAsync(recording, ServeExecutable, config,
-            TestContext.Current.CancellationToken);
+        var store = await CliSettingsBackend.AcquireAsync(RealLauncher(), ServeExecutable, config,
+            NullLogger.Instance, TestContext.Current.CancellationToken);
         // A settings verb always reads something; the token rides the default header on that request.
         await store.GetSettingAsync("sweep.threshold", TestContext.Current.CancellationToken);
 
         store.ShouldBeOfType<ServerSettingsStore>();
-        // The measurement first: the squatter's request log is what proves the token arrived.
-        squatter.Requests.ShouldBeEmpty(
-            $"the settings path contacted a squatter holding port {squatter.Port}; token headers seen: " +
-            $"{string.Join(", ", squatter.TokenHeaderValues)}; request:\n{string.Join("\n---\n", squatter.Requests)}");
-        // The positive half: the private spawn really happened. Without it the empty-request
-        // assertion above could pass for a spawn that failed before sending anything.
-        recording.PrivateUrl.ShouldNotBeNullOrWhiteSpace(
-            "the settings path must start its own private backend instead of attaching to the configured port");
-        new Uri(recording.PrivateUrl!).Port.ShouldNotBe(squatter.Port);
-
-        await RaccoonBackendCleanup.ShutdownIfRunningAsync(_dataRoot, new Uri(recording.PrivateUrl!).Port,
-            CancellationToken.None);
+        squatter.Requests.ShouldNotBeEmpty(
+            "the shared acquire must reach whatever answers the configured port — that is the ruled " +
+            "trade-off of the attach-or-start shape, not a regression");
+        squatter.TokenHeaderValues.ShouldNotBeEmpty(
+            "the data root's token must ride the request to the configured port, as it does for every " +
+            "other attach-shaped acquire in this codebase");
     }
 
     /// <summary>
-    ///     The positive control for the gate: with the explicit opt-in, a settings verb still
-    ///     reaches a real ai-raccoon server on the configured port and reads through its token —
-    ///     so "never attach at all" cannot satisfy the threshold test above.
+    ///     The positive control: the same acquire, with no flag at all, still reaches a real
+    ///     ai-raccoon server on the configured port and reads through its token — the accepted-
+    ///     exposure test above cannot be satisfied by an acquire that simply never reaches anything.
     /// </summary>
     [RetryFact]
-    public async Task AcquireAsync_WithAttachAgainstARealServer_ReadsThroughTheToken()
+    public async Task AcquireAsync_AgainstARealServer_ReadsThroughTheToken_WithNoAttachFlagNeeded()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -83,12 +84,9 @@ public sealed class CliSettingsTokenExposureTests : IDisposable
         await server.WaitForUrlAsync(TestContext.Current.CancellationToken);
 
         var config = new ServerConfig(port, McpTransport.Http,
-            new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User })
-        {
-            Attach = true
-        };
+            new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
         var store = await CliSettingsBackend.AcquireAsync(RealLauncher(), ServeExecutable, config,
-            TestContext.Current.CancellationToken);
+            NullLogger.Instance, TestContext.Current.CancellationToken);
 
         // A write-then-read round trip only answers if the server accepted the token.
         await store.SetSettingAsync("sweep.threshold", "0.7", TestContext.Current.CancellationToken);
@@ -102,23 +100,4 @@ public sealed class CliSettingsTokenExposureTests : IDisposable
 
     private static string ServeExecutable =>
         Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "AiRaccoon.exe" : "AiRaccoon");
-
-    /// <summary>Delegates to the real launcher and keeps the private URL, which the store itself
-    /// never exposes and the test needs to shut the spawned backend down afterwards.</summary>
-    private sealed class RecordingLauncher(BackendLauncher inner) : IBackendLauncher
-    {
-        public string? PrivateUrl { get; private set; }
-
-        public async Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments,
-            CancellationToken ctx)
-        {
-            var result = await inner.StartPrivateAsync(fileName, arguments, ctx);
-            PrivateUrl = result.Url;
-            return result;
-        }
-
-        public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments,
-            CancellationToken ctx) =>
-            inner.AcquireAsync(port, fileName, arguments, ctx);
-    }
 }
