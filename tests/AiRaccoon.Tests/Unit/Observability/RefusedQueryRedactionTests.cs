@@ -148,7 +148,8 @@ public sealed class RefusedQueryRedactionTests
             new MemoryWriteService(store, new FakePromotionQueue()),
             new NoOpMeasurementRecorder(),
             store,
-            logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MemoryTools>.Instance);
+            logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MemoryTools>.Instance,
+            new CountingEmbeddingService());
     }
 
     private static RequestContext<CallToolRequestParams> Request(string toolName, IServiceProvider services)

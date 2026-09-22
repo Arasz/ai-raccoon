@@ -83,7 +83,7 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
         return new MemoryTools(_store, gate,
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue()),
-            NoOpMeasurementRecorder.Instance, settings, NullLogger<MemoryTools>.Instance);
+            NoOpMeasurementRecorder.Instance, settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
     }
 
     private async Task SeedMigratedWinnerAsync()

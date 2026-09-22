@@ -29,6 +29,7 @@ public sealed partial class MemoryTools(
     IMeasurementRecorder measurements,
     ISettingsStore settings,
     ILogger<MemoryTools> logger,
+    IEmbeddingService embeddings,
     TimeProvider? timeProvider = null)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
@@ -133,12 +134,14 @@ public sealed partial class MemoryTools(
     public async Task<ApiEnvelope<SearchResultList>> Search(
         [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description(
-            "The search query. Semantic matching only sees roughly the first 254 tokens (~1,000 " +
-            "characters of English prose, approximate) — for a long paste (a log, stack trace, test " +
-            "output), search its identifying line (exception type, error code, failing test name) " +
-            "instead of the whole dump. Keyword matching still covers the query in full. When kind " +
-            "is code or both, the code leg's own engine window is wider (510 tokens for " +
-            "code-daemon-embed-v1) — a query trimmed for code may still fit the memory leg in full.")]
+            "The search query. Semantic matching only sees roughly the first N tokens — the active " +
+            "memory embedding engine's own window (254 tokens for the bundled model; a manifest " +
+            "model's is wider, and a result warning names the real number when a query is long " +
+            "enough to hit it) — for a long paste (a log, stack trace, test output), search its " +
+            "identifying line (exception type, error code, failing test name) instead of the whole " +
+            "dump. Keyword matching still covers the query in full. When kind is code or both, the " +
+            "code leg has its own, separately-sized engine window and its own trim warning — a query " +
+            "trimmed for one leg may still fit the other in full.")]
         string query,
         [Description(
             "The calling agent's session id. Required attribution, stored verbatim on the search_quality row; " +
@@ -241,12 +244,8 @@ public sealed partial class MemoryTools(
             RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, canonical);
         }
 
-        // QueryLengthGuard is always on -- a fact about the embedding window, not a togglable
-        // policy like the guard above -- so it is evaluated unconditionally, never through
-        // IQueryGuardService (a disabled guard must not silence it). It applies identically
-        // whichever kind was requested, since both corpora search the same query text.
-        var warning = SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query),
-            await MemoryEngineWarningAsync(parsedKind, cancellationToken), dispatch.CodeWarning);
+        var warning = await ComposeWarningAsync(guard.Verdict, query, parsedKind, dispatch.CodeWarning,
+            cancellationToken);
         var result = BuildSearchResultList(dispatch, warning, searchQuery);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
 
@@ -286,6 +285,20 @@ public sealed partial class MemoryTools(
     }
 
     /// <summary>
+    ///     memory_search's one warning string. QueryLengthGuard is always on -- a fact about the
+    ///     embedding window, not a togglable policy -- so it is evaluated here unconditionally, never
+    ///     through IQueryGuardService (a disabled guard must not silence it), against the active
+    ///     memory engine's budget whichever kind was requested.
+    /// </summary>
+    private async Task<string?> ComposeWarningAsync(QueryGuardVerdict guardVerdict, string query,
+        SearchKind kind, string? codeWarning, CancellationToken cancellationToken)
+    {
+        var lengthBudget = await MemoryQueryBudgetTokensAsync(cancellationToken);
+        return SearchWarnings.Compose(guardVerdict, QueryLengthGuard.Evaluate(query, lengthBudget),
+            await MemoryEngineWarningAsync(kind, cancellationToken), codeWarning);
+    }
+
+    /// <summary>
     ///     The memory leg's engine note: `embedding.provider` unset means FTS5-only memory search
     ///     (F6), the same state doctor reports. Null for kind=code, whose leg never runs — reading
     ///     the setting then would be work with no consumer.
@@ -299,6 +312,21 @@ public sealed partial class MemoryTools(
 
         var provider = await settings.GetSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken);
         return SearchWarnings.MemoryEngineWarning(provider);
+    }
+
+    /// <summary>
+    ///     QueryLengthGuard's reported budget must track the ACTIVE memory engine, not the bundled
+    ///     model's fixed 254 -- resolved via IEmbeddingService.ResolveChunkBudgetFor (D6/D9), the same
+    ///     number EntryEmbedder.EmbedQueryAsync will actually trim to. An unconfigured provider
+    ///     resolves as "local" (the bundled model the remedy activates), so the guard's number still
+    ///     matches what a fresh bank would do once fixed.
+    /// </summary>
+    private async Task<int> MemoryQueryBudgetTokensAsync(CancellationToken cancellationToken)
+    {
+        var provider = await settings.GetSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken);
+        var model = await settings.GetSettingAsync(EmbeddingSettingsKeys.Model, cancellationToken);
+        var resolvedProvider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
+        return embeddings.ResolveChunkBudgetFor(new EmbeddingSettings(resolvedProvider, model, null, null));
     }
 
     /// <summary>

@@ -81,7 +81,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
         new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
-            NoOpMeasurementRecorder.Instance, new InMemorySettings(), NullLogger<MemoryTools>.Instance);
+            NoOpMeasurementRecorder.Instance, new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
     /// <summary>The P3-activated choke: identical stack except the marker reads migrated, so the alias fold runs.</summary>
     private MemoryTools BuildMigratedTools() =>
@@ -89,7 +89,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
                 migrationGate: new StubMigrationGate(Migrated: true)),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
-            NoOpMeasurementRecorder.Instance, new InMemorySettings(), NullLogger<MemoryTools>.Instance);
+            NoOpMeasurementRecorder.Instance, new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
     [RetryFact]
     public async Task MemoryWrite_UnderARespelledForm_WritesTheCanonicalLowercaseDForm_ToEntries()

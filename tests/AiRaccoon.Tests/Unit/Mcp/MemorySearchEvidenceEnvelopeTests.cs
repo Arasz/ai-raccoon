@@ -41,7 +41,7 @@ public sealed class MemorySearchEvidenceEnvelopeTests
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, new NoOpSearchQualityService()),
             new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
-            _settings, NullLogger<MemoryTools>.Instance);
+            _settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
     }
 
     /// <summary>
