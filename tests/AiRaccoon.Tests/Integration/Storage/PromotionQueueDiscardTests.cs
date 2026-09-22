@@ -161,6 +161,8 @@ public sealed class PromotionQueueDiscardTests : IDisposable
             TestContext.Current.CancellationToken);
 
         outcome.Evicted.Count.ShouldBe(1);
+        outcome.NotQueued.ShouldBe([outcome.Evicted[0].Hash],
+            "a candidate evicted by this same pass is not in the queue when it ends");
         (await DiscardCountAsync("acme", TestContext.Current.CancellationToken)).ShouldBe(0,
             "capacity eviction must not be recorded as a rejection");
     }

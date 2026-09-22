@@ -53,8 +53,16 @@ public sealed record PromotionWaitStats(
 /// <summary>The row an eviction removed (for logging and the response).</summary>
 public sealed record EvictedRow(string ProjectId, string Hash, double Score, string Reason);
 
-/// <summary>Outcome of persisting candidates into the propose tier.</summary>
-public sealed record ProposeOutcome(int Upserted, IReadOnlyList<EvictedRow> Evicted);
+/// <summary>Outcome of persisting candidates into the propose tier, with what did not land.</summary>
+public sealed record ProposeOutcome(int Upserted, IReadOnlyList<EvictedRow> Evicted)
+{
+    /// <summary>
+    ///     Candidate hashes absent from the queue once the pass finished: refused (a remembered
+    ///     discard or an already-shared value twin) or evicted by the same pass. Upserted counts new
+    ///     rows only, so a refused candidate is indistinguishable from a refreshed one without this.
+    /// </summary>
+    public IReadOnlyList<string> NotQueued { get; init; } = [];
+}
 
 /// <summary>One candidate that could not be promoted: claimed from the queue but never shared.</summary>
 public sealed record PromoteFailure(string ProjectId, string Hash, string Reason);

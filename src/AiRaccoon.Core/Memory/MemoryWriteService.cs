@@ -1,6 +1,6 @@
 namespace AiRaccoon.Core.Memory;
 
-/// <summary>The reasons a row reaches the promotion queue. One place, so the wire strings agree.</summary>
+/// <summary>The promotion reason tags and the refusal text a `shared` write reports — one place, so the wire strings agree.</summary>
 public static class PromotionReasons
 {
     /// <summary>
@@ -8,6 +8,14 @@ public static class PromotionReasons
     ///     request, not a scorer's inference (docs/adr/0067).
     /// </summary>
     public const string AgentRequestedShare = "agent-requested-share";
+
+    /// <summary>
+    ///     The write asked for promotion, but the queue refused it: the hash was discarded earlier
+    ///     (docs/adr/0026) or its value is already shared. The response says so instead of claiming a
+    ///     queued review.
+    /// </summary>
+    public const string AgentRequestedRefused =
+        "not-queued: agent-requested-share refused (discarded earlier or already shared)";
 }
 
 /// <summary>
@@ -54,14 +62,24 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
             return entry;
         }
 
-        await queue.ProposeAsync(request.ProjectId,
+        var outcome = await queue.ProposeAsync(request.ProjectId,
                 [
+                    // K2 (F22): stamped with the current scorer version, not the 0 default — ClearStale
+                    // deletes every row on a retired version before the next pass ranks, which would
+                    // destroy the explicit request a below-floor note can never re-earn.
                     new QueueCandidate(entry.Hash, entry.Path, entry.Value, request.SourceFile,
-                        AgentRequestedScore, [PromotionReasons.AgentRequestedShare])
+                        AgentRequestedScore, [PromotionReasons.AgentRequestedShare], PromotionScorer.Version)
                 ],
                 cancellationToken)
             .ConfigureAwait(false);
 
-        return entry with { Reason = $"queued-for-promotion: {PromotionReasons.AgentRequestedShare}" };
+        // F25: the upsert is refused for a remembered discard or an already-shared value twin, so
+        // the queue — not the call — decides which reason is true here.
+        return entry with
+        {
+            Reason = outcome.NotQueued.Contains(entry.Hash, StringComparer.Ordinal)
+                ? PromotionReasons.AgentRequestedRefused
+                : $"queued-for-promotion: {PromotionReasons.AgentRequestedShare}"
+        };
     }
 }

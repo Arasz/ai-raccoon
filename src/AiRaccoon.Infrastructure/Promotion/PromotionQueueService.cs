@@ -62,9 +62,20 @@ public sealed partial class PromotionQueueService(
             stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        // The final queue is the only honest answer to "did this candidate land?" — UpsertAsync's
+        // count cannot tell a refused row from a refreshed one, and this pass's own eviction can
+        // remove a row it just inserted.
+        var queued = (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
+            .Select(r => r.Hash)
+            .ToHashSet(StringComparer.Ordinal);
+        var notQueued = candidates.Select(c => c.Hash)
+            .Where(h => !queued.Contains(h))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
         metrics.RecordSnapshot(stats, cap);
         Log.Proposed(logger, projectId, upserted, evicted.Count);
-        return new ProposeOutcome(upserted, evicted);
+        return new ProposeOutcome(upserted, evicted) { NotQueued = notQueued };
     }
 
     public async Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit, double? minScore = null,
