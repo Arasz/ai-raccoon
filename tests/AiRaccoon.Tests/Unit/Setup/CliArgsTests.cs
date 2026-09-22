@@ -784,6 +784,22 @@ public class CliArgsTests
         parsed!.Errors.ShouldHaveSingleItem().ShouldContain("--bogus");
     }
 
+    /// <summary>
+    ///     A root flag before a verb must not be read as consuming the verb name. `ContainsVerb`
+    ///     used to skip the token after every value-less `--flag`, so with a parse error inside the
+    ///     verb the launch-root fallback won and the operator got "Unrecognized command or argument
+    ///     'settings'" and exit 9 instead of the verb's own 15 and its help.
+    /// </summary>
+    [Fact]
+    public void Parse_RootAttachBeforeABrokenVerb_KeepsTheVerbPath()
+    {
+        CliArgs.TryParse(["--attach", "settings", "sweep", "bogus"], out var parsed);
+
+        parsed!.CommandPath.ShouldBe(["settings", "sweep"]);
+        parsed.Errors.ShouldNotContain(error => error.Contains("Unrecognized command or argument 'settings'", StringComparison.Ordinal));
+        parsed.Errors.ShouldContain(error => error.Contains("'bogus'", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Parse_MissingValue_ReturnsError()
     {
