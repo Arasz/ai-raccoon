@@ -1093,6 +1093,12 @@ the passphrase the bank is plaintext (backward compatible).
 - Deleting a synced context (`shared`, `project:<id>`, custom) removes rows locally;
   the deletion is pushed as a tombstone on the next `memory_sync`, so the removal
   propagates to the cloud copy.
+- Tombstones are label-aware: each deletion carries its context label, so a
+  label-scoped delete (`memory_delete_context` on one label, or `memory_delete` of
+  a row that lived under a label) removes only that label's rows on other replicas —
+  a peer's same-hash row under a different label survives and keeps syncing.
+  Label-less tombstones (a whole `shared` or `project:<id>` context delete, or a
+  tombstone written before labels were tracked) keep their reach over every label.
 - Workspace contexts are never synced, so `memory_workspace_discard` and consolidation's
   discard have no cloud counterpart.
 

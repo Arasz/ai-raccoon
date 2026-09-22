@@ -45,7 +45,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         [Winner],
         [Dropped]);
 
-    private static string BankDdl(bool withAliasTable) => $$"""
+    private static string BankDdl(bool withAliasTable, bool withContextLabelColumn = true) => $$"""
         CREATE TABLE IF NOT EXISTS entries (
             id INTEGER PRIMARY KEY,
             hash TEXT,
@@ -80,7 +80,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NULL, created_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS sync_tombstones (project_id TEXT NOT NULL, hash TEXT NOT NULL, scope TEXT NOT NULL,
-            deleted_at INTEGER NOT NULL, PRIMARY KEY (project_id, hash, scope));
+            {{(withContextLabelColumn ? "context_label TEXT NULL, " : "")}}deleted_at INTEGER NOT NULL, PRIMARY KEY (project_id, hash, scope));
         CREATE TABLE IF NOT EXISTS memory_source (
             id INTEGER PRIMARY KEY,
             source_type TEXT NOT NULL,
@@ -90,12 +90,13 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         {{(withAliasTable ? ProjectIdAliases.TableDdl + ";" : "")}}
         """;
 
-    private async Task CreateBankAsync(string path, bool withAliasTable, CancellationToken ct)
+    private async Task CreateBankAsync(string path, bool withAliasTable, CancellationToken ct,
+        bool withContextLabelColumn = true)
     {
         await using var conn = new SqliteConnection($"Data Source={path}");
         await conn.OpenAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = BankDdl(withAliasTable);
+        cmd.CommandText = BankDdl(withAliasTable, withContextLabelColumn);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -405,6 +406,78 @@ public sealed class SyncServiceAliasMapTests : IDisposable
 
         (await TextAsync(BankPath, "SELECT project_id FROM entries WHERE hash = 'custom-hash'", ct))
             .ShouldBe(Winner);
+    }
+
+    /// <summary>
+    ///     v15 compat: a remote pushed by a pre-label binary has <c>sync_tombstones</c> without
+    ///     <c>context_label</c>. Its tombstones were written under label-blind semantics and must
+    ///     keep reaching every label after the pull — the missing column reads as NULL ("matches
+    ///     any label"), so the pull merges instead of throwing "no such column". Red without the
+    ///     column probe; the arriving entry is the positive control that the merge is not a no-op.
+    /// </summary>
+    [RetryFact]
+    public async Task MemorySync_PullFromAPreLabelRemote_TombstonesStillReachEveryLabel()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await CreateBankAsync(BankPath, withAliasTable: true, ct);
+        await CreateBankAsync(RemotePath, withAliasTable: true, ct, withContextLabelColumn: false);
+        await ExecAsync(BankPath,
+            "INSERT INTO entries (hash, path, value, scope, project_id, context_label, created_at, updated_at) " +
+            "VALUES ('h1', 'p1.md', 'v1', 'custom', 'acme', 'notes', 1, 1), " +
+            "('h1', 'p1.md', 'v1', 'custom', 'acme', 'other', 1, 1)", ct);
+        await ExecAsync(RemotePath,
+            "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES ('acme', 'h1', 'custom', 100)", ct);
+        await ExecAsync(RemotePath,
+            "INSERT INTO entries (hash, path, value, scope, project_id, context_label, created_at, updated_at) " +
+            "VALUES ('h5', 'p5.md', 'v5', 'custom', 'acme', 'notes', 1, 1)", ct);
+
+        var cloud = new FakeCloudStore();
+        cloud.Set("test-object", await File.ReadAllBytesAsync(RemotePath, ct));
+        await NewService(cloud).MemorySyncAsync("acme", "test-object", ct);
+
+        (await ScalarAsync(BankPath, "SELECT COUNT(*) FROM entries WHERE hash = 'h1'", ct)).ShouldBe(0,
+            "the pre-label tombstone keeps its label-blind reach — it deletes both labels");
+        (await ScalarAsync(BankPath, "SELECT COUNT(*) FROM entries WHERE hash = 'h5'", ct)).ShouldBe(1,
+            "positive control: the same pull still merges entries, so the deletion above is the tombstone's, not a no-op merge");
+    }
+
+    /// <summary>
+    ///     A NULL-label tombstone ("matches any label" — the legacy and label-less shape) keeps its
+    ///     whole-context reach on both merge legs: it deletes same-hash rows of ANY label on apply,
+    ///     and suppresses a labeled remote row from arriving. Red under strict label equality —
+    ///     the arriving entry is the positive control that suppression is not blanket.
+    /// </summary>
+    [RetryFact]
+    public async Task MemorySync_LabellessTombstones_KeepReachingEveryLabel()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await CreateBankAsync(BankPath, withAliasTable: true, ct);
+        await CreateBankAsync(RemotePath, withAliasTable: true, ct);
+        await ExecAsync(BankPath,
+            "INSERT INTO entries (hash, path, value, scope, project_id, context_label, created_at, updated_at) " +
+            "VALUES ('h2', 'p2.md', 'v2', 'custom', 'acme', 'notes', 1, 1), " +
+            "('h2', 'p2.md', 'v2', 'custom', 'acme', 'other', 1, 1)", ct);
+        await ExecAsync(BankPath,
+            "INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at) " +
+            "VALUES ('acme', 'h4', 'custom', NULL, 100)", ct);
+        await ExecAsync(RemotePath,
+            "INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at) " +
+            "VALUES ('acme', 'h2', 'custom', NULL, 100)", ct);
+        await ExecAsync(RemotePath,
+            "INSERT INTO entries (hash, path, value, scope, project_id, context_label, created_at, updated_at) " +
+            "VALUES ('h4', 'p4.md', 'v4', 'custom', 'acme', 'notes', 1, 1), " +
+            "('h5', 'p5.md', 'v5', 'custom', 'acme', 'notes', 1, 1)", ct);
+
+        var cloud = new FakeCloudStore();
+        cloud.Set("test-object", await File.ReadAllBytesAsync(RemotePath, ct));
+        await NewService(cloud).MemorySyncAsync("acme", "test-object", ct);
+
+        (await ScalarAsync(BankPath, "SELECT COUNT(*) FROM entries WHERE hash = 'h2'", ct)).ShouldBe(0,
+            "apply side: a NULL-label tombstone deletes same-hash rows under every label");
+        (await ScalarAsync(BankPath, "SELECT COUNT(*) FROM entries WHERE hash = 'h4'", ct)).ShouldBe(0,
+            "merge side: a NULL-label local tombstone suppresses a labeled remote row from arriving");
+        (await ScalarAsync(BankPath, "SELECT COUNT(*) FROM entries WHERE hash = 'h5'", ct)).ShouldBe(1,
+            "positive control: an untombstoned entry still arrives — suppression is not blanket");
     }
 
     [RetryFact]

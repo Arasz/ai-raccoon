@@ -91,6 +91,20 @@ public partial class SyncService(
     }
 
     /// <summary>
+    ///     A remote pushed by a pre-label binary has <c>sync_tombstones</c> without
+    ///     <c>context_label</c>; probed like <see cref="AliasTableExistsAsync" /> so its label-blind
+    ///     tombstones merge as the "any label" NULL instead of throwing "no such column".
+    /// </summary>
+    private static async Task<bool> ColumnExistsAsync(SqliteConnection conn, string schema, string table,
+        string column, CancellationToken cancellationToken)
+    {
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}', '{schema}') WHERE name = @column";
+        cmd.Parameters.AddWithValue("@column", column);
+        return (long)(await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))! > 0;
+    }
+
+    /// <summary>
     ///     The E2 conflict probe: a locally mapped alias the remote maps to a different winner
     ///     (or a different kind) aborts the merge before entries move — first-writer-wins keeps the
     ///     local row, and the throw names both winners for the human who must pick the canonical one.
@@ -452,6 +466,7 @@ public partial class SyncService(
                                                      WHERE t.hash = r.hash
                                                        AND t.scope = COALESCE(r.scope, 'workspace')
                                                        AND t.project_id = {foldedRemoteProject}
+                                                       AND (t.context_label IS NULL OR t.context_label IS r.context_label)
                                                  )
                                                """;
                     received += await mergeEntries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -498,28 +513,49 @@ public partial class SyncService(
                 // cross the sync boundary in either direction — push already strips them, and
                 // pull must not read remote.settings at all.
 
+                // v15 compat: a remote pushed by a pre-label binary has sync_tombstones without
+                // context_label — probed once, reused by both legs below, so a pull never throws
+                // "no such column" against an older peer's snapshot.
+                var remoteHasContextLabel = await ColumnExistsAsync(conn, "remote", "sync_tombstones",
+                    "context_label", cancellationToken).ConfigureAwait(false);
+                var remoteContextLabelColumn = remoteHasContextLabel ? "context_label" : "NULL";
+
                 // Merge sync_tombstones: union, folding loser ids so an unrepaired replica's
-                // loser tombstone meets the repair's rewritten winner-keyed one (OR IGNORE dedups).
+                // loser tombstone meets the repair's rewritten winner-keyed one (OR IGNORE dedups
+                // against uq_sync_tombstones_identity, MemorySchema.cs).
                 await using (var mergeTombstones = conn.CreateCommand())
                 {
                     var foldedTombstoneProject = FoldRemoteProjectId("project_id", ResolveAliasMap());
                     mergeTombstones.CommandText = $"""
-                                                  INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at)
-                                                  SELECT {foldedTombstoneProject}, hash, scope, deleted_at FROM remote.sync_tombstones
+                                                  INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at)
+                                                  SELECT {foldedTombstoneProject}, hash, scope, {remoteContextLabelColumn}, deleted_at FROM remote.sync_tombstones
                                                   """;
                     await mergeTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
                 // Apply tombstones: delete rows locally that remote deleted — the remote side folds
                 // too, so a loser tombstone from an unrepaired replica still deletes the locally
-                // folded winner row.
+                // folded winner row. K3 (D27): only rows at or older than the tombstone are deleted,
+                // so a fact re-created after its delete (created_at > deleted_at) survives. Partial
+                // for multi-replica convergence: a replica already holding the tombstone still
+                // suppresses the re-created row through the merge's NOT EXISTS leg above, which has
+                // no age comparison. Label-aware (v15): NULL means "matches any label", so a legacy
+                // tombstone (or one pulled from a pre-label remote, remoteContextLabelColumn above)
+                // still deletes regardless of the row's own label — only a genuinely label-scoped
+                // tombstone is confined to its own label.
                 await using (var applyTombstones = conn.CreateCommand())
                 {
-                    var foldedApplyProject = FoldRemoteProjectId("project_id", ResolveAliasMap());
+                    var foldedApplyProject = FoldRemoteProjectId("t.project_id", ResolveAliasMap());
                     applyTombstones.CommandText = $"""
                                                   DELETE FROM entries
-                                                  WHERE (hash, COALESCE(scope, 'workspace'), project_id)
-                                                      IN (SELECT hash, scope, {foldedApplyProject} FROM remote.sync_tombstones)
+                                                  WHERE EXISTS (
+                                                      SELECT 1 FROM remote.sync_tombstones t
+                                                      WHERE t.hash = entries.hash
+                                                        AND t.scope = COALESCE(entries.scope, 'workspace')
+                                                        AND {foldedApplyProject} = entries.project_id
+                                                        AND entries.created_at <= t.deleted_at
+                                                        AND ({(remoteHasContextLabel ? "t.context_label IS NULL OR t.context_label IS entries.context_label" : "1 = 1")})
+                                                  )
                                                   """;
                     await applyTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }

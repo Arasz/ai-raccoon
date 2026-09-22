@@ -1205,7 +1205,8 @@ public sealed class MemorySchemaVersionTests
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
-        // Verify the table has the correct shape.
+        // Verify the label-aware identity the ladder now ends at: v11 rebuilt the composite-PK
+        // shape and v15 then rebuilt that into (project_id, hash, scope, COALESCE(context_label,'')).
         var columns = await connection.QueryAsync<ColumnRow>(
             new CommandDefinition(
                 "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
@@ -1213,7 +1214,10 @@ public sealed class MemorySchemaVersionTests
         var projectIdCol = columns.First(c => c.Name == "project_id");
         projectIdCol.Type.ShouldBe("TEXT");
         projectIdCol.NotNull.ShouldBe(1L);
-        projectIdCol.Pk.ShouldBe(1L);
+        columns.ShouldContain(c => c.Name == "context_label" && c.NotNull == 0L,
+            "v15 rebuilds the v11 table into the label-aware shape");
+        (await IndexExistsAsync(connection, "uq_sync_tombstones_identity")).ShouldBeTrue(
+            "the COALESCE-based unique index is the tombstone identity now — there is no PK");
 
         // Verify data was preserved.
         var rows = (await connection.QueryAsync<(string ProjectId, string Hash, string Scope, long DeletedAt)>(
@@ -1228,7 +1232,12 @@ public sealed class MemorySchemaVersionTests
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
-    /// <summary>A bank already at the correct shape must not be touched by the v11 step.</summary>
+    /// <summary>
+    ///     A bank whose table already carries the v11-era composite shape must not be rebuilt by
+    ///     the v11 step. Witnessed by the ''-project_id row: only the skip path preserves it (a
+    ///     rebuild's copy filter drops unscoped rows). v15 still rebuilds the table afterward —
+    ///     the label-aware identity cannot be reached by ALTERing the old PRIMARY KEY away.
+    /// </summary>
     [RetryFact]
     public async Task EnsureAsync_OnAV10Bank_WithCorrectSyncTombstones_SkipsTheMigration()
     {
@@ -1236,16 +1245,21 @@ public sealed class MemorySchemaVersionTests
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
             """
+            DROP TABLE sync_tombstones;
+            CREATE TABLE sync_tombstones (
+                project_id TEXT NOT NULL,
+                hash TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                deleted_at INTEGER NOT NULL,
+                PRIMARY KEY (project_id, hash, scope)
+            );
             INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
                 VALUES ('acme', 'h1', 'project', 100);
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES ('', 'h-unscoped', 'project', 100);
             PRAGMA user_version = 10;
             """,
             cancellationToken: TestContext.Current.CancellationToken));
-
-        // Schema witness: the table's sqlite_master rowid is stable across a no-op but a
-        // drop/recreate allocates a new one — the count assertion alone cannot tell those apart
-        // (a rebuild that reinserts the single row keeps count at 1).
-        var witnessBefore = await TableRowidAsync(connection, "sync_tombstones");
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
@@ -1253,16 +1267,16 @@ public sealed class MemorySchemaVersionTests
             new CommandDefinition(
                 "SELECT count(*) FROM sync_tombstones",
                 cancellationToken: TestContext.Current.CancellationToken));
-        count.ShouldBe(1L, "the existing row must survive unchanged");
-        (await TableRowidAsync(connection, "sync_tombstones")).ShouldBe(witnessBefore,
-            "the table must not have been dropped and recreated — a rebuild would allocate a fresh sqlite_master rowid");
+        count.ShouldBe(2L,
+            "the v11 step must skip the correct shape — a rebuild's copy filter drops the ''-project_id row");
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
     /// <summary>
-    ///     The full-shape gate: a table whose project_id column happens to be NOT NULL + PK but
-    ///     whose hash/scope are not part of the composite key must still be recreated, not skipped
-    ///     and stamped v11 with SchemaDoctor still reporting a mismatch.
+    ///     The full-shape gate, witnessed inverted to the skip case: a table whose project_id is
+    ///     NOT NULL + PK but whose hash/scope are not composite-key members must still be rebuilt,
+    ///     so the rebuild's copy filter DROPS its ''-project_id row — its absence is the proof the
+    ///     v11 step rebuilt instead of skipping.
     /// </summary>
     [RetryFact]
     public async Task EnsureAsync_OnAV10Bank_WithAPartiallyCorrectShape_StillRecreates()
@@ -1281,18 +1295,22 @@ public sealed class MemorySchemaVersionTests
             );
             INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
                 VALUES ('acme', 'h1', 'project', 100);
+            INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at)
+                VALUES ('', 'h-unscoped', 'project', 100);
             PRAGMA user_version = 10;
             """,
             cancellationToken: TestContext.Current.CancellationToken));
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
-        var columns = await connection.QueryAsync<ColumnRow>(
-            new CommandDefinition(
-                "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
-                cancellationToken: TestContext.Current.CancellationToken));
-        columns.First(c => c.Name == "hash").Pk.ShouldBe(2L, "hash must be a composite-PK member after the migration");
-        columns.First(c => c.Name == "scope").Pk.ShouldBe(3L, "scope must be a composite-PK member after the migration");
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sync_tombstones WHERE hash = 'h-unscoped'",
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(0L, "the ''-project_id row is dropped only by a rebuild — the full-shape gate rejected the partial shape");
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sync_tombstones WHERE hash = 'h1'",
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(1L, "the well-keyed row survives the rebuild");
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
     }
 
@@ -1361,22 +1379,19 @@ public sealed class MemorySchemaVersionTests
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
         // The bank must have advanced past v11's gate: a fresh EnsureAsync must not re-enter
-        // the ladder for this table, and the table must carry the correct composite shape.
+        // the ladder for this table, and the table must carry the label-aware shape.
         var columns = await connection.QueryAsync<ColumnRow>(
             new CommandDefinition(
                 "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
                 cancellationToken: TestContext.Current.CancellationToken));
-        columns.ShouldContain(c => c.Name == "project_id" && c.Pk == 1L && c.NotNull == 1L);
+        columns.ShouldContain(c => c.Name == "project_id" && c.NotNull == 1L,
+            "the rebuild adds project_id NOT NULL — the label-aware shape carries no PK");
+        columns.ShouldContain(c => c.Name == "context_label" && c.NotNull == 0L);
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
 
         // A second open must be a clean no-op (the regression the CI run caught).
         await Should.NotThrowAsync(() => MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken));
     }
-
-    private static async Task<long> TableRowidAsync(SqliteConnection connection, string table) =>
-        await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            $"SELECT rowid FROM sqlite_master WHERE type = 'table' AND name = '{table}'",
-            cancellationToken: TestContext.Current.CancellationToken));
 
     private sealed record ColumnRow(string Name, string Type, long NotNull, long Pk);
 }
