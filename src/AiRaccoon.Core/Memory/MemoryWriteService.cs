@@ -42,11 +42,13 @@ public interface IMemoryWriteService
 public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue) : IMemoryWriteService
 {
     /// <summary>
-    ///     Above the scorer's range, so an explicit request outranks every inference. Eviction is
+    ///     Derived from <see cref="PromotionScorer.MaxScore" /> — the scorer's declared output
+    ///     ceiling — plus a full point, so an explicit request outranks every inference even if that
+    ///     ceiling is retuned later (docs/adr/0067, owner ruling P1.2-b, 2026-09-22). Eviction is
     ///     deliberately left untouched: a request that cannot fit shows up in the queue's own metrics
     ///     rather than being silently dropped, and that is reversible if it proves wrong.
     /// </summary>
-    public const double AgentRequestedScore = 1.0;
+    public const double AgentRequestedScore = PromotionScorer.MaxScore + 1.0;
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request,
         CancellationToken cancellationToken = default)
