@@ -275,6 +275,11 @@ public sealed partial class SqliteConnectionFactory(
                 {
                     Log.WatchOverlapMigrationSkippedProject(logger, warning.ProjectId, warning.Reason);
                 }
+
+                if (overlapResult.ScopelessEntriesRemoved > 0)
+                {
+                    Log.ScopelessEntriesRemoved(logger, overlapResult.ScopelessEntriesRemoved);
+                }
             }
 
             return connection;
@@ -361,5 +366,9 @@ public sealed partial class SqliteConnectionFactory(
         [LoggerMessage(EventId = 903, Level = LogLevel.Warning,
             Message = "watch overlap migration: skipped project {ProjectId}, its watches were left untouched ({Reason})")]
         public static partial void WatchOverlapMigrationSkippedProject(ILogger logger, string projectId, string reason);
+
+        [LoggerMessage(EventId = 904, Level = LogLevel.Information,
+            Message = "schema migration: removed {Count} entries row(s) with neither a scope nor a workspace_id — unreachable by every tier")]
+        public static partial void ScopelessEntriesRemoved(ILogger logger, long count);
     }
 }
