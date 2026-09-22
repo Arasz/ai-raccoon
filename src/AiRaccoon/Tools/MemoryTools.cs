@@ -244,13 +244,8 @@ public sealed partial class MemoryTools(
             RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, canonical);
         }
 
-        // QueryLengthGuard is always on -- a fact about the embedding window, not a togglable
-        // policy like the guard above -- so it is evaluated unconditionally, never through
-        // IQueryGuardService (a disabled guard must not silence it). It applies identically
-        // whichever kind was requested, since both corpora search the same query text.
-        var lengthBudget = await MemoryQueryBudgetTokensAsync(cancellationToken);
-        var warning = SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query, lengthBudget),
-            await MemoryEngineWarningAsync(parsedKind, cancellationToken), dispatch.CodeWarning);
+        var warning = await ComposeWarningAsync(guard.Verdict, query, parsedKind, dispatch.CodeWarning,
+            cancellationToken);
         var result = BuildSearchResultList(dispatch, warning, searchQuery);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
 
@@ -287,6 +282,20 @@ public sealed partial class MemoryTools(
             throw new McpException(
                 $"invalid-params: codeMinRelativeScore must be between 0 and 1 inclusive (was {codeMinRelativeScore}).");
         }
+    }
+
+    /// <summary>
+    ///     memory_search's one warning string. QueryLengthGuard is always on -- a fact about the
+    ///     embedding window, not a togglable policy -- so it is evaluated here unconditionally, never
+    ///     through IQueryGuardService (a disabled guard must not silence it), against the active
+    ///     memory engine's budget whichever kind was requested.
+    /// </summary>
+    private async Task<string?> ComposeWarningAsync(QueryGuardVerdict guardVerdict, string query,
+        SearchKind kind, string? codeWarning, CancellationToken cancellationToken)
+    {
+        var lengthBudget = await MemoryQueryBudgetTokensAsync(cancellationToken);
+        return SearchWarnings.Compose(guardVerdict, QueryLengthGuard.Evaluate(query, lengthBudget),
+            await MemoryEngineWarningAsync(kind, cancellationToken), codeWarning);
     }
 
     /// <summary>
