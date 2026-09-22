@@ -30,6 +30,10 @@ flowchart LR
 
 ## What's new
 
+- **BREAKING: the proxy spawns its own private backend — attaching to a running server is now an explicit `--attach`, and settings commands attach-or-start.** (1.43.0) [ADR-0105](docs/adr/0105-private-spawn-is-the-launch-default.md)
+- **`memory_search` reports the content cosine as evidence, enforces an absolute relevance floor with an explicit unranked marker, and names the floor when it truncates.** (1.43.0)
+- **`memory_delete` removes the whole write (all N chunks), and sync tombstones are label-aware (bank schema v15) — a label-scoped delete no longer tombstones a peer's same-hash row under another label, and a re-created fact survives its tombstone.** (1.43.0)
+- **Corrupt bank exits 26, Ctrl-C exits 130, refusals name their remedy, and refused queries are redacted from logs and spans.** (1.43.0)
 - **BREAKING: `--transport stdio` and `--transport https` are removed — bare `ai-raccoon` is proxy-only, full servers come only from `serve`.** (1.42.0) [ADR-0104](docs/adr/0104-remove-the-stdio-full-server-mode.md)
 - **Run-once project-ids repair with P3 enforcement.** (1.41.0) [ADR-0100](docs/adr/0100-repair-folds-all-committed-scopes.md) · [ADR-0101](docs/adr/0101-repair-verdicts-ignore-telemetry-workspaces-block.md) · [ADR-0102](docs/adr/0102-durable-alias-map-with-p3-enforcement.md) · [ADR-0103](docs/adr/0103-run-until-fixed-loop-with-falsifiable-verdict.md)
 - **Pre-filled project-ids repair template.** (1.40.0) [ADR-0099](docs/adr/0099-empty-default-alias-map.md)
