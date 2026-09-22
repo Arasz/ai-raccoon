@@ -13,7 +13,7 @@ version: 1.0.0
 author: ai-badger
 license: MIT
 platforms: [linux, macos]
-scope: optIn
+scope: default
 metadata:
   hermes:
     tags: [review, parallel, evidence, adversarial, planning]

@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -107,6 +108,35 @@ def _install_node(dep: Dict[str, Any]) -> List[str]:
         errors.append(f"{pkg}: npm install timed out (120s)")
     except FileNotFoundError:
         errors.append(f"{pkg}: npm not found on PATH")
+    return errors
+
+
+def _install_system(dep: Dict[str, Any]) -> List[str]:
+    """Run a declared install command for one `system` dependency entry.
+
+    The command text is split with `shlex.split` and executed with
+    `shell=False`, so no command text ever reaches a shell. Returns a list
+    of error strings (empty on success).
+    """
+    errors: List[str] = []
+    pkg = dep["package"]
+    command = dep.get("command", "")
+    argv = shlex.split(command)
+    if not argv:
+        return [f"{pkg}: empty install command"]
+    try:
+        result = subprocess.run(
+            argv, capture_output=True, text=True, timeout=120, check=False,
+            shell=False,
+        )
+        if result.returncode != 0:
+            errors.append(f"{pkg}: install command failed — {result.stderr.strip()}")
+    except subprocess.TimeoutExpired:
+        errors.append(f"{pkg}: install command timed out (120s)")
+    except FileNotFoundError:
+        errors.append(f"{pkg}: install command not found: {argv[0]}")
+    except OSError as exc:
+        errors.append(f"{pkg}: install command failed — {exc}")
     return errors
 
 
@@ -242,6 +272,20 @@ def run_dependency_check(
             eco = dep["ecosystem"]
             pkg = dep["package"]
 
+            if eco == "system":
+                # Presence-only: `package` names the binary; no version probe exists.
+                if shutil.which(pkg):
+                    already_present.append(pkg)
+                elif allow_install and dep.get("command"):
+                    dep_errors = _install_system(dep)
+                    if dep_errors:
+                        errors.extend(dep_errors)
+                    else:
+                        installed.append(pkg)
+                else:
+                    hints.append(_pending_hint(dep))
+                continue
+
             if not allow_install:
                 hints.append(_pending_hint(dep))
                 continue
@@ -272,6 +316,15 @@ def run_dependency_check(
 def _pending_hint(dep: Dict[str, Any]) -> str:
     """What would be installed, and what to run to allow it."""
     pkg = dep["package"]
+    if dep["ecosystem"] == "system":
+        name = dep.get("name", pkg)
+        hint = f"{name}: not found on PATH"
+        note = dep.get("note")
+        if note:
+            hint += f" — {note}"
+        if dep.get("command"):
+            hint += " Re-run with --execute to allow it, or install it yourself."
+        return hint
     if dep["ecosystem"] == "node":
         where = "globally (npm install -g)"
     elif dep.get("venv"):

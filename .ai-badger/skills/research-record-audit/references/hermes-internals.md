@@ -85,5 +85,5 @@ con = sqlite3.connect('file:~/.hermes/state.db?mode=ro', uri=True)
   `<dir>/<session-id>/subagents/*.jsonl` (a layout Hermes does not produce).
 - `task_tracker.py` `_session_or_die()`: demands `--session-id` when resolution fails
   (prints guidance, `sys.exit(2)`).
-- `current-session.json` writers: `session_start_hook.py` AND `user_prompt_hook.py`, both
+- Session-store writers: `session_start_hook.py` AND `user_prompt_hook.py`, both
   via `tracker_lib.save_current_session()` (:328) — all Claude-only hooks.

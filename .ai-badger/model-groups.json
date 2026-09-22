@@ -1,9 +1,9 @@
 {
   "$schema": "../../schemas/model-groups.schema.json",
-  "frameworkVersion": "0.167.1",
+    "frameworkVersion": "0.172.1",
   "registryVersion": 1,
-  "measuredAt": "2026-09-05",
-  "source": "task-brief 2026-09-05 (brief-range grounding; memory context model-tiers-research unavailable to lanes; verified in-session)",
+    "measuredAt": "2026-09-21",
+    "source": "task-brief 2026-09-21 (medium tier rotates to deepseek-v4.1-flash, matching the 0.168.0 high rotation; deepseek-v4.1-flash pricing measured 2026-09-11 against pi models-store and the OpenRouter models API; earlier pins per task-brief 2026-09-05)",
   "groups": {
     "low": [
       {
@@ -64,16 +64,15 @@
     ],
     "medium": [
       {
-        "id": "openrouter/meta/muse-spark-1.3-contributor",
+          "id": "openrouter/deepseek/deepseek-v4.1-flash",
         "preferred": true,
         "pricing": {
-          "inputPerM": 0.1,
-          "outputPerM": 0.2,
+            "inputPerM": 0.15,
+            "outputPerM": 0.6,
           "currency": "USD"
         },
-        "evidence": "Medium-tier preferred: cheapest brief-range pin; contributor twin with identical weights (weightsId muse-spark-1.3-weights) (source: task-brief 2026-09-05).",
-        "weightsId": "muse-spark-1.3-weights",
-        "measuredAt": "2026-09-05"
+          "evidence": "Medium-tier preferred from 2026-09-21: performance-adequate flash pin at 0.15 in / 0.60 out per M; pi models-store and the OpenRouter models API agree (source: task-brief 2026-09-11 pricing; medium rotation 2026-09-21).",
+          "measuredAt": "2026-09-11"
       },
       {
         "id": "openrouter/xiaomi/mimo-v2.5-pro",
@@ -116,7 +115,7 @@
           "outputPerM": 4.25,
           "currency": "USD"
         },
-        "evidence": "Full-price twin of the contributor preferred; identical weights (weightsId muse-spark-1.3-weights) (source: task-brief 2026-09-05).",
+          "evidence": "Full-price twin of the demoted contributor (demoted tail in medium and high); identical weights (weightsId muse-spark-1.3-weights) (source: task-brief 2026-09-05; medium demotion 2026-09-21).",
         "weightsId": "muse-spark-1.3-weights",
         "measuredAt": "2026-09-05"
       },
@@ -168,20 +167,33 @@
         "status": "demoted",
         "revisionWatch": true,
         "measuredAt": "2026-09-05"
-      }
-    ],
-    "high": [
+      },
       {
         "id": "openrouter/meta/muse-spark-1.3-contributor",
-        "preferred": true,
+          "preferred": false,
         "pricing": {
           "inputPerM": 0.1,
           "outputPerM": 0.2,
           "currency": "USD"
         },
-        "evidence": "High-tier preferred: contributor twin with identical weights (weightsId muse-spark-1.3-weights); reused from medium by design (source: task-brief 2026-09-05).",
+          "evidence": "Demoted from medium-tier preferred on 2026-09-21 when deepseek-v4.1-flash took index 0; remains the contributor twin with identical weights (weightsId muse-spark-1.3-weights); display-only tail, never auto-failover; revisit before any other refresh (source: task-brief 2026-09-21 demotion; price measured 2026-09-05).",
         "weightsId": "muse-spark-1.3-weights",
+          "status": "demoted",
+          "revisionWatch": true,
         "measuredAt": "2026-09-05"
+      }
+    ],
+      "high": [
+          {
+              "id": "openrouter/deepseek/deepseek-v4.1-flash",
+              "preferred": true,
+              "pricing": {
+                  "inputPerM": 0.15,
+                  "outputPerM": 0.6,
+                  "currency": "USD"
+              },
+              "evidence": "High-tier preferred from 2026-09-11: performance-adequate flash pin at 0.15 in / 0.60 out per M; pi models-store and the OpenRouter models API agree (source: task-brief 2026-09-11).",
+              "measuredAt": "2026-09-11"
       },
       {
         "id": "openrouter/anthropic/claude-opus-5",
@@ -207,6 +219,20 @@
         },
         "evidence": "High-tier ceiling: dearest brief-range pin, last by price order (source: task-brief 2026-09-05).",
         "measuredAt": "2026-09-05"
+      },
+          {
+              "id": "openrouter/meta/muse-spark-1.3-contributor",
+              "preferred": false,
+              "pricing": {
+                  "inputPerM": 0.1,
+                  "outputPerM": 0.2,
+                  "currency": "USD"
+              },
+              "evidence": "Demoted from high-tier preferred on 2026-09-11 when deepseek-v4.1-flash took index 0; now a demoted tail pin in both high and medium, and the contributor twin with identical weights (weightsId muse-spark-1.3-weights); display-only tail, never auto-failover; revisit before any other refresh (plan-review N1, matching the schema's revisionWatch clause) (source: task-brief 2026-09-11 demotion; medium demotion 2026-09-21; price measured 2026-09-05).",
+              "weightsId": "muse-spark-1.3-weights",
+              "status": "demoted",
+              "revisionWatch": true,
+              "measuredAt": "2026-09-05"
       }
     ]
   }

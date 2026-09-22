@@ -81,7 +81,9 @@ cd <root-to-verify> || exit 1
 git status --short | grep -q . && { echo "FAIL: tree not clean"; exit 1; }
 BUILD=$(dotnet build --nologo -v q 2>&1)
 echo "$BUILD" | grep -q "0 Error(s)" || { echo "FAIL build"; exit 1; }
-FULL=$(dotnet test --nologo 2>&1)
+# --nologo is VSTest-only; under MTP it is forwarded to the testhost, which aborts
+# with 'Unknown option' (zero tests, exit 5; dotnet/sdk#55309). MTP: no --nologo.
+FULL=$(dotnet test 2>&1)
 echo "$FULL" | grep -q "Passed!" || { echo "FAIL suite"; exit 1; }
 echo "$FULL" | grep -q "Failed:     0" || { echo "FAIL suite-count"; exit 1; }
 echo "PASS build 0 errors"
