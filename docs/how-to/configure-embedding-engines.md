@@ -14,7 +14,7 @@ AiRaccoon supports two vector embedding engines:
 
 ```mermaid
 graph LR
-    subgraph Local ["Local ONNX Engine (Default)"]
+    subgraph Local ["Local ONNX Engine (recommended)"]
         ONNX["Bundled all-MiniLM-L6-v2\n(int8 quantized, ~23MB)"]
         L_Prop["• 100% Offline\n• ~9ms / query\n• Zero API cost"]
     end
@@ -32,7 +32,7 @@ graph LR
 
 | Engine | Model | Latency | Offline | MRR Score |
 |---|---|---|---|---|
-| **Local (Default)** | `all-MiniLM-L6-v2` (int8) | ~9 ms | Yes | 0.836 |
+| **Local (recommended)** | `all-MiniLM-L6-v2` (int8) | ~9 ms | Yes | 0.836 |
 | **Remote OpenAI** | `text-embedding-3-small` | ~60-120 ms | No | 0.854 |
 | **Remote Local LLM** | `bge-m3` (via Ollama) | ~25-50 ms | Yes | 0.858 |
 
@@ -40,7 +40,7 @@ graph LR
 
 ## Engine configuration recipes
 
-### Recipe 1: Use local bundled ONNX model (Default)
+### Recipe 1: Use local bundled ONNX model (recommended)
 
 Switch to or restore the bundled ONNX model:
 
