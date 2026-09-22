@@ -191,8 +191,9 @@ public sealed class ReciprocalRankFusionEvidenceTests
     }
 
     /// <summary>
-    ///     The vector leg's candidate Ranking is the fused cosine: it attaches to vector
-    ///     participants only, and the FTS leg's (negative BM25) Ranking is never read.
+    ///     The vector leg's ContentCosine is the raw content cosine: it attaches to vector
+    ///     participants only, and no leg's Ranking (negative BM25 is healthy) is ever read for
+    ///     evidence.
     /// </summary>
     [Fact]
     public void FuseWithEvidence_VectorLeg_AttachesCosineOnlyToVectorParticipants()
