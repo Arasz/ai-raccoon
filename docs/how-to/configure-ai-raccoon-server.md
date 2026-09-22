@@ -194,6 +194,7 @@ delivered never reports success:
 | `18` | the server could not be reached or auto-started within the acquire budget |
 | `23` | the server answered but failed with a 5xx — a server-side fault, distinct from `15` (`InvalidArgument`, "you mistyped") |
 | `25` | the settings server refused `settings model reset` / `settings model embedding reset` because a model migration outbox row is open (ADR-0076) — every MCP tool call is refused until it finishes; nothing was deleted |
+| `130` | the command was cancelled before it finished (Ctrl-C / SIGTERM); the command changed nothing |
 
 **Why it works this way.** Two processes writing one SQLite file is a lock-contention problem nobody
 chose; it accumulated one command family at a time. Routing every settings write through the server

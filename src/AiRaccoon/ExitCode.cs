@@ -88,5 +88,9 @@ public static class ExitCode
     /// at all) and <see cref="FailedToOpenEncryptedBank" /> (a real database whose open failed).</summary>
     public const int BankCorrupted = 26;
 
+    /// <summary>The command was cancelled before it finished (Ctrl-C / SIGTERM — 130 is 128 +
+    /// SIGINT(2), the shell's conventional interrupt code); the command changed nothing.</summary>
+    public const int Interrupted = 130;
+
     public const int Success = 0;
 }
