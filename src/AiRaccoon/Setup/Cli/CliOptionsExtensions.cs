@@ -28,7 +28,10 @@ public static class CliOptionsExtensions
                 Quiet = options.Quiet
             };
 
-            return new ServerConfig(options.Port, options.Transport, infrastructureOptions);
+            return new ServerConfig(options.Port, options.Transport, infrastructureOptions)
+            {
+                Attach = options.Attach
+            };
         }
     }
 }

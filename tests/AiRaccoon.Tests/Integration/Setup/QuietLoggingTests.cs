@@ -187,7 +187,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         var (stdout, stderr) = await ConsoleCapture.RunAsync(async () =>
         {
             var exit = await new AppRunner(CliSettingsBackend.AcquireAsync, AppHost).Run(
-                ["--quiet", "--data-root", options.DataRoot, "--port", port.ToString()]);
+                ["--quiet", "--attach", "--data-root", options.DataRoot, "--port", port.ToString()]);
         });
 
         stdout.ShouldBeEmpty();
@@ -211,7 +211,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         var (_, stderr) = await ConsoleCapture.RunAsync(async () =>
         {
             await new AppRunner(CliSettingsBackend.AcquireAsync, AppHost).Run(
-                ["--data-root", options.DataRoot, "--port", port.ToString()]);
+                ["--attach", "--data-root", options.DataRoot, "--port", port.ToString()]);
         });
 
         stderr.ShouldContain("System.Net.Http");

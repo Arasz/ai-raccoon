@@ -43,7 +43,16 @@ internal static class BackendLaunchArguments
               $"start the server manually first: ai-raccoon {string.Join(' ', ServeArguments(config))}, then retry"
             : "the running executable path is unknown";
 
-    public static string[] ServeArguments(ServerConfig config)
+    public static string[] ServeArguments(ServerConfig config) => Arguments(config, config.Port);
+
+    /// <summary>
+    ///     The private-spawn arguments (F70/K1): the same launch identity with <c>--port 0</c>, so
+    ///     the OS picks an ephemeral port and only this child can print the URL it bound. The
+    ///     launcher never probes the configured port on this path.
+    /// </summary>
+    public static string[] PrivateServeArguments(ServerConfig config) => Arguments(config, 0);
+
+    private static string[] Arguments(ServerConfig config, int port)
     {
         var arguments = new List<string>
         {
@@ -55,7 +64,7 @@ internal static class BackendLaunchArguments
             arguments.Add("--quiet");
         }
 
-        arguments.AddRange(["serve", "--port", config.Port.ToString(CultureInfo.InvariantCulture)]);
+        arguments.AddRange(["serve", "--port", port.ToString(CultureInfo.InvariantCulture)]);
         return [.. arguments];
     }
 }

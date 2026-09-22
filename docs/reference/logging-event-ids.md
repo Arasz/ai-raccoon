@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **181** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **183** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -30,6 +30,12 @@ refusal itself adds no `[LoggerMessage]` (it reuses `ToolRefusals` 911).)
 (Remeasured 2026-09-14, fix/search-quality-busy-log: **181** —
 `SqliteSearchQualityService` 964, the best-effort search_quality row skipped on a
 busy bank; 965 keeps genuine failures with their exception.)
+
+(Remeasured 2026-09-22, PSR P1.3/K1: **183** — `BackendLauncher` 631/632, the
+private-spawn start line and the private-backend-never-reported-a-URL failure. Both
+land inside the launcher's existing 633-635 block rather than at 641, which
+`EventIdBlocks_DoNotInterleaveBetweenOwners` would read as overlapping
+`ProxyForwarder`'s 636-639.)
 
 Worth recording why this doc exists at all: colliding ids compile, log, and pass every
 assertion that isn't specifically checking for the collision — a duplicate is invisible
@@ -73,7 +79,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 610-612 | `src/AiRaccoon/Hosting/Watchdog/IdleWatchdog.cs` |
 | 620-623 | `src/AiRaccoon/Hosting/Node/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
 | 630 | `src/AiRaccoon/Hosting/Proxy/ProxyRunner.cs` (ADR-0020) |
-| 633-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs` (ADR-0020; path corrected 2026-08-22 — moved from `Setup/Serve/`. 635's message extended with the captured stderr, delta-review plan C1) |
+| 631-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs` (ADR-0020; path corrected 2026-08-22 — moved from `Setup/Serve/`. 635's message extended with the captured stderr, delta-review plan C1. 631/632 added 2026-09-22, PSR P1.3/K1 — 631 is the private-spawn start line, 632 the private backend that never reported a URL; 633-635 are the attach path unchanged) |
 | 636-639 | `src/AiRaccoon/Hosting/Proxy/ProxyForwarder.cs` (ADR-0020) |
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
 | 650-656 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043) |

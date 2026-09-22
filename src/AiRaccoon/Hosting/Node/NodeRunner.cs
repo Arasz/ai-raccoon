@@ -38,6 +38,7 @@ internal partial class NodeRunner(
             Port = options.Port,
             IdleTimeout = IdleTimeoutParser.TryParse(options.IdleTimeout, out var idleTimeout) ? idleTimeout : DefaultOptions.IdleTimeout,
             Restarting = options.Restart,
+            Attaching = options.Attach,
             TokenFile = new McpTokenFile(cliInput.ServerConfig.Options.DataRoot)
         };
         WarnOnNonHttpTransport(cliInput.ServerConfig, cliInput.Options.IsTransportExplicit, streams);
@@ -80,7 +81,11 @@ internal partial class NodeRunner(
 
         if (!descriptor.Restarting)
         {
-            return PreBind.ExitWith(await ReportAttachedAsync(descriptor, streams));
+            // F70/K1: the pre-check proved an ai-raccoon server owns the port. Attaching to it is
+            // the explicit opt-in; the default serves on its own port instead.
+            return PreBind.ExitWith(descriptor.Attaching
+                ? await ReportAttachedAsync(descriptor, streams)
+                : await RefuseExistingServerAsync(descriptor, streams));
         }
 
         var restartResult = await serverRestart.CycleAsync(descriptor.Port, descriptor.TokenFile, ctx);
@@ -199,7 +204,9 @@ internal partial class NodeRunner(
         switch (RestartTransition.AfterBindRefused(believed, afterBind, descriptor.Restarting))
         {
             case BindRefusal.Attach:
-                return await ReportAttachedAsync(descriptor, streams);
+                return descriptor.Attaching
+                    ? await ReportAttachedAsync(descriptor, streams)
+                    : await RefuseExistingServerAsync(descriptor, streams);
             case BindRefusal.LostThePort:
                 Log.RestartLostThePort(logger, port);
                 await streams.WriteErrorLineAsync(
@@ -215,6 +222,18 @@ internal partial class NodeRunner(
                 await streams.WriteErrorLineAsync($"ai-raccoon: port {port} is in use — pass --port 0 for a random port, or free the port");
                 return ExitCode.PortInUse;
         }
+    }
+
+    /// <summary>
+    ///     F70/K1: an ai-raccoon server already owns the port and --attach was not given. The
+    ///     operator is told which flag reuses it rather than the launch silently joining it.
+    /// </summary>
+    private async Task<int> RefuseExistingServerAsync(NodeLaunchDescriptor descriptor, StandardStreams streams)
+    {
+        Log.PortInUse(logger, descriptor.Port);
+        await streams.WriteErrorLineAsync(
+            $"ai-raccoon: port {descriptor.Port} is in use by an ai-raccoon server — pass --attach to use it, or --port 0 to start a private one");
+        return ExitCode.PortInUse;
     }
 
     /// <summary>
@@ -277,6 +296,7 @@ internal partial class NodeRunner(
         public required int Port { get; init; }
         public required TimeSpan IdleTimeout { get; set; }
         public required bool Restarting { get; init; }
+        public required bool Attaching { get; init; }
         public required McpTokenFile TokenFile { get; init; }
         public string Token { get; init; } = "";
 

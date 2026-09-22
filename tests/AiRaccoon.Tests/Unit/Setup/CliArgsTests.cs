@@ -2,6 +2,7 @@ using System.CommandLine;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
+using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Setup.Cli.Render;
 using Shouldly;
 using Xunit;
@@ -647,6 +648,77 @@ public class CliArgsTests
         parsed.ParsedCliArgs.GetValue(CliCommandTree.ServeFormatOption).ShouldBe("claude");
     }
 
+    /// <summary>
+    ///     F70/K1: --attach is the explicit opt-in to the shared server, on the launch root (the
+    ///     proxy) and after the serve verb. Unknown before the ruling, so both spellings must parse.
+    /// </summary>
+    [Fact]
+    public void Parse_AttachFlag_BeforeVerb_Parses()
+    {
+        CliArgs.TryParse(["--attach"], out var parsed);
+
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Parse_ServeAttach_Parses()
+    {
+        CliArgs.TryParse(["serve", "--attach"], out var parsed);
+
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["serve"]);
+    }
+
+    [Fact]
+    public void Parse_AttachFlag_BeforeVerb_SetsTheLaunchIdentity()
+    {
+        CliArgs.TryParse(["--attach"], out var parsed);
+
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.Options.Attach.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Parse_ServeAttach_ReachesTheServeOptions()
+    {
+        CliArgs.TryParse(["serve", "--attach"], out var parsed);
+
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.ParsedCliArgs.GetServeOptions().Options!.Node.Attach.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Parse_RootAttachBeforeVerb_ReachesTheServeOptions()
+    {
+        CliArgs.TryParse(["--attach", "serve"], out var parsed);
+
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.ParsedCliArgs.GetServeOptions().Options!.Node.Attach.ShouldBeTrue();
+    }
+
+    /// <summary>
+    ///     The launch identity reads the root option instance, not the name: with a verb present,
+    ///     two options spell --attach and the by-name lookup resolves to serve's implicit default.
+    /// </summary>
+    [Fact]
+    public void Parse_RootAttachBeforeVerb_SetsTheLaunchIdentity()
+    {
+        CliArgs.TryParse(["--attach", "serve"], out var parsed);
+
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.Options.Attach.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Parse_NoAttach_ReachesTheServeOptionsAsFalse()
+    {
+        CliArgs.TryParse(["serve"], out var parsed);
+
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.ParsedCliArgs.GetServeOptions().Options!.Node.Attach.ShouldBeFalse();
+    }
+
     [Fact]
     public void Parse_ServeInvalidIdleTimeout_ReturnsError()
     {
@@ -676,6 +748,7 @@ public class CliArgsTests
         help.ShouldContain("--idle-timeout");
         help.ShouldContain("--mcp-entry");
         help.ShouldContain("--format");
+        help.ShouldContain("--attach");
         help.ShouldContain("ai-raccoon serve > serve.log 2>&1 &");
         help.ShouldContain("always HTTP");
     }
@@ -934,4 +1007,5 @@ public class CliArgsTests
         CliArgs.TryParse(["--transport", "https"], out var https).ShouldBeTrue();
         https!.Errors.ShouldNotBeEmpty();
     }
+
 }

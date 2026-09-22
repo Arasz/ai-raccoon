@@ -10,9 +10,11 @@ namespace AiRaccoon.Hosting.Proxy;
 internal sealed class BackendStartException(string message, Exception inner) : Exception(message, inner);
 
 /// <summary>
-///     Acquires a live ai-raccoon HTTP backend for the proxy (ADR-0020): probe first, else start
-///     `ai-raccoon serve` and poll the probe until it answers or the budget expires. Never kills,
-///     signals or terminates the backend — lifetime belongs to IdleWatchdog alone.
+///     Acquires a live ai-raccoon HTTP backend for the proxy (ADR-0020). The default path is
+///     private spawn (F70/K1): start `ai-raccoon serve --port 0` and trust only the URL that child
+///     prints, so no pre-existing listener is ever contacted. The explicit attach path keeps the
+///     legacy behaviour: probe first, else start `serve` on the port and poll. Never kills, signals
+///     or terminates the backend — lifetime belongs to IdleWatchdog alone.
 /// </summary>
 internal sealed partial class BackendLauncher : IBackendLauncher
 {
@@ -42,6 +44,49 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         Guard.IsGreaterThan(_budget, TimeSpan.Zero);
     }
 
+    /// <summary>
+    ///     Starts a private backend and returns the URL it printed. The launch arguments carry
+    ///     <c>--port 0</c>, so the OS picks the port; the URL comes only from this child's stdout,
+    ///     never from a probe of a port anything else could already hold (F70/K1).
+    /// </summary>
+    public async Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments,
+        CancellationToken ctx)
+    {
+        Guard.IsNotNullOrWhiteSpace(fileName);
+        Guard.IsNotNull(arguments);
+
+        Log.StartingPrivateBackend(_logger);
+        var (backend, stderr, urlLine) = Start(fileName, arguments);
+
+        using var budget = new CancellationTokenSource(_budget, _timeProvider);
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(ctx, budget.Token);
+        using var timer = new PeriodicTimer(PollInterval, _timeProvider);
+        try
+        {
+            while (!urlLine.IsCompletedSuccessfully && !backend.HasExited)
+            {
+                await timer.WaitForNextTickAsync(waiting.Token);
+            }
+        }
+        catch (OperationCanceledException) when (budget.IsCancellationRequested && !ctx.IsCancellationRequested)
+        {
+            // The budget expired, not the caller's token: report the failure rather than throwing.
+        }
+
+        // The last check also covers a URL that arrived exactly as the budget expired: the child
+        // printed it after binding, so the backend is live whatever the clock says.
+        if (urlLine.IsCompletedSuccessfully && urlLine.Result is { } reported)
+        {
+            Log.BackendLive(_logger, reported);
+            return new BackendResult(reported, null);
+        }
+
+        var exitCode = backend.HasExited ? backend.ExitCode : (int?)null;
+        var captured = stderr.Snapshot();
+        Log.PrivateBackendUnavailable(_logger, (int)_budget.TotalSeconds, exitCode, captured ?? string.Empty);
+        return new BackendResult(null, exitCode, captured);
+    }
+
     /// <summary>Returns the backend URL on the port, starting the given command when nothing answers.</summary>
     public async Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments,
         CancellationToken ctx)
@@ -57,7 +102,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         }
 
         Log.StartingBackend(_logger, port);
-        var (backend, stderr) = Start(fileName, arguments);
+        var (backend, stderr, _) = Start(fileName, arguments);
 
         // A cold start pays the encryption-key resolve, the bank decrypt probe and the ONNX model
         // load, so a first probe miss is expected: poll until it answers or the budget expires.
@@ -126,10 +171,11 @@ internal sealed partial class BackendLauncher : IBackendLauncher
     /// <summary>
     ///     Starts the backend with all three pipes redirected and both output pipes drained on
     ///     background tasks: the proxy's own stdout is the JSON-RPC channel, and an unread pipe
-    ///     buffer blocks the child. Stdout stays discarded — it is not the proxy's to relay — but
-    ///     stderr is captured (bounded) so a failure can report why, not just an exit code.
+    ///     buffer blocks the child. Stdout stays out of the proxy's stdout — the URL it reports is
+    ///     read on the pipe and handed back as a task, not relayed — and stderr is captured (bounded)
+    ///     so a failure can report why, not just an exit code.
     /// </summary>
-    private static (Process Backend, TailCapture Stderr) Start(string fileName, IReadOnlyList<string> arguments)
+    private static (Process Backend, TailCapture Stderr, Task<string?> UrlLine) Start(string fileName, IReadOnlyList<string> arguments)
     {
         var startInfo = new ProcessStartInfo(fileName)
         {
@@ -153,26 +199,58 @@ internal sealed partial class BackendLauncher : IBackendLauncher
             throw new BackendStartException($"could not start {fileName} ({ex.Message})", ex);
         }
 
-        _ = DrainAsync(backend.StandardOutput);
+        var urlLine = WatchUrlLineAsync(backend.StandardOutput);
         var stderr = new TailCapture(StderrCaptureCharLimit);
         _ = CaptureAsync(backend.StandardError, stderr);
-        return (backend, stderr);
+        return (backend, stderr, urlLine);
     }
 
-    private static async Task DrainAsync(TextReader pipe)
+    /// <summary>
+    ///     Completes with the first loopback MCP URL the child prints (serve prints exactly one
+    ///     line after binding) and keeps draining its stdout afterwards. The URL can only come from
+    ///     this child's pipe, which is what makes the private path attach-proof.
+    /// </summary>
+    private static Task<string?> WatchUrlLineAsync(TextReader pipe)
     {
-        try
+        var reported = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = Task.Run(async () =>
         {
-            var buffer = new char[4096];
-            while (await pipe.ReadAsync(buffer) > 0)
+            // Discarded after the URL is found: the backend's output is not the proxy's to relay,
+            // and an unread pipe would block the child.
+            string? url = null;
+            try
             {
-                // Discarded: the backend's own output is not the proxy's to relay.
+                while (await pipe.ReadLineAsync().ConfigureAwait(false) is { } line)
+                {
+                    if (url is null && TryParseBackendUrl(line) is { } parsed)
+                    {
+                        url = parsed;
+                        reported.TrySetResult(parsed);
+                    }
+                }
             }
-        }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+            {
+                // The pipe closed with the backend; nothing left to read.
+            }
+
+            // EOF without a URL still completes the task, so the budget loop can tell "no more
+            // output" from "still waiting" rather than polling the file handle.
+            reported.TrySetResult(url);
+        });
+        return reported.Task;
+    }
+
+    private static string? TryParseBackendUrl(string line)
+    {
+        if (!Uri.TryCreate(line.Trim(), UriKind.Absolute, out var uri))
         {
-            // The pipe closed with the backend; nothing left to drain.
+            return null;
         }
+
+        return uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback && uri.AbsolutePath == "/mcp"
+            ? uri.ToString()
+            : null;
     }
 
     private static async Task CaptureAsync(TextReader pipe, TailCapture capture)
@@ -222,6 +300,10 @@ internal sealed partial class BackendLauncher : IBackendLauncher
 
     internal static partial class Log
     {
+        [LoggerMessage(EventId = 631, Level = LogLevel.Information,
+            Message = "ai-raccoon: starting a private backend on an ephemeral port")]
+        public static partial void StartingPrivateBackend(ILogger logger);
+
         [LoggerMessage(EventId = 633, Level = LogLevel.Information, Message = "ai-raccoon: starting the backend on port {Port}")]
         public static partial void StartingBackend(ILogger logger, int port);
 
@@ -231,5 +313,9 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         [LoggerMessage(EventId = 635, Level = LogLevel.Error,
             Message = "ai-raccoon: the backend at {Url} did not answer within {BudgetSeconds}s (serve exit {ServeExitCode}) stderr: {ServeStderr}")]
         public static partial void BackendUnavailable(ILogger logger, string url, int budgetSeconds, int? serveExitCode, string serveStderr);
+
+        [LoggerMessage(EventId = 632, Level = LogLevel.Error,
+            Message = "ai-raccoon: the private backend did not report a URL within {BudgetSeconds}s (serve exit {ServeExitCode}) stderr: {ServeStderr}")]
+        public static partial void PrivateBackendUnavailable(ILogger logger, int budgetSeconds, int? serveExitCode, string serveStderr);
     }
 }

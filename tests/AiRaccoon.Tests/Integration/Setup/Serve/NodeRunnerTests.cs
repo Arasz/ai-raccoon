@@ -129,7 +129,8 @@ public sealed class NodeRunnerTests : IDisposable
         try
         {
             // Attach + --mcp-entry: the entry for the OWNER's bound port is printed (F7).
-            await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString(), "--mcp-entry", "--format", "hermes"]);
+            // --attach is the explicit opt-in (F70/K1): without it the second serve refuses the port.
+            await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString(), "--attach", "--mcp-entry", "--format", "hermes"]);
             var secondExit = await second.Exit;
 
             secondExit.ShouldBe(ExitCode.Success);
@@ -149,6 +150,36 @@ public sealed class NodeRunnerTests : IDisposable
         {
             TestData.DeleteTempRoot(secondRoot);
         }
+
+        var firstExit = await first.StopAsync();
+        firstExit.ShouldBe(ExitCode.Success);
+    }
+
+    /// <summary>
+    ///     F70/K1: a plain `serve` on a port an ai-raccoon server already owns must not attach --
+    ///     the private-spawn default refuses it, and the owner keeps serving. --attach is the
+    ///     explicit way back to the shared server.
+    /// </summary>
+    [RetryFact]
+    public async Task BusyPortWithAiRaccoonServer_WithoutAttach_ReturnsPortInUse_AndLeavesTheOwnerServing()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
+        await using var first = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        await first.WaitForUrlAsync(TestContext.Current.CancellationToken);
+
+        await using var second = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var secondExit = await second.Exit;
+
+        secondExit.ShouldBe(ExitCode.PortInUse);
+        second.Stdout.ShouldBeEmpty();
+        second.Stderr.ShouldContain("in use");
+        second.Stderr.ShouldContain("--attach");
+        second.Stderr.ShouldNotContain("attached");
+        second.Stderr.ShouldNotContain("   at ");
+        first.Exit.IsCompleted.ShouldBeFalse("the owner must keep serving");
 
         var firstExit = await first.StopAsync();
         firstExit.ShouldBe(ExitCode.Success);

@@ -9,9 +9,11 @@ namespace AiRaccoon.Hosting.Proxy;
 /// <summary>
 ///     Owns every backend session the forwarder is handed, including the ones it swaps away: the
 ///     forwarder only ever replaces its reference. Re-opening re-runs the acquire, so a backend
-///     that died is started again. processPath is this process's own path (Environment.ProcessPath
-///     in production): the backend is another ai-raccoon started as `serve`, so an unpackaged host
-///     cannot be it.
+///     that died is started again. By default the acquire is a private spawn (F70/K1): the proxy
+///     starts its own backend on an ephemeral port and never attaches to a pre-existing listener;
+///     <see cref="ServerConfig.Attach" /> opts into the shared server. processPath is this process's
+///     own path (Environment.ProcessPath in production): the backend is another ai-raccoon started
+///     as `serve`, so an unpackaged host cannot be it.
 /// </summary>
 public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, string? processPath, ServerConfig config) : IBackendSessions
 {
@@ -31,13 +33,17 @@ public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClien
         var acquired = await AcquireBackend(ctx);
         if (acquired.Url is null)
         {
+            var reason = config.Attach
+                ? $"no MCP backend at {ServerProbe.EndpointFor(config.Port)} (serve exit {acquired.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})"
+                : $"no MCP backend could be started on a private port (serve exit {acquired.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})";
             throw new BackendUnavailableException(Unavailable(
-                $"no MCP backend at {ServerProbe.EndpointFor(config.Port)} (serve exit {acquired.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})" +
-                (acquired.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty)));
+                reason + (acquired.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty)));
         }
 
         var token = _tokenFile.Read() ?? throw new BackendUnavailableException(Unavailable(
-            $"the backend at {acquired.Url} is listening but {_tokenFile.Path} holds no token — a serve on another data root may own port {config.Port}"));
+            config.Attach
+                ? $"the backend at {acquired.Url} is listening but {_tokenFile.Path} holds no token — a serve on another data root may own port {config.Port}"
+                : $"the private backend at {acquired.Url} is listening but {_tokenFile.Path} holds no token"));
 
         Url = acquired.Url;
         var session = await OpenSessionAsync(new Uri(acquired.Url), token, revision, ctx);
@@ -65,18 +71,18 @@ public sealed class BackendSessions(IBackendLauncher backendLauncher, IHttpClien
         var executable = BackendLaunchArguments.Executable(processPath) ?? throw new BackendUnavailableException(
             Unavailable(BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)));
 
-        BackendResult acquired;
         try
         {
-            acquired = await backendLauncher.AcquireAsync(config.Port, executable, BackendLaunchArguments.ServeArguments(config),
-                ctx);
+            // F70/K1: the default starts a private backend whose URL only this child can report;
+            // the legacy attach-or-start path is reachable only through the explicit opt-in.
+            return config.Attach
+                ? await backendLauncher.AcquireAsync(config.Port, executable, BackendLaunchArguments.ServeArguments(config), ctx)
+                : await backendLauncher.StartPrivateAsync(executable, BackendLaunchArguments.PrivateServeArguments(config), ctx);
         }
         catch (BackendStartException ex)
         {
             throw new BackendUnavailableException(Unavailable(ex.Message));
         }
-
-        return acquired;
     }
 
     /// <summary>A refused session is a diagnosable failure, not an unhandled crash on the client's stdio.</summary>

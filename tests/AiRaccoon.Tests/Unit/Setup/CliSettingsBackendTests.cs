@@ -151,6 +151,11 @@ public sealed class CliSettingsBackendTests
 
         public string? FileName { get; private set; }
 
+        /// <summary>CliSettingsBackend keeps the legacy attach-or-start path (ADR-0075 §5.1); the
+        /// private spawn is the proxy's default, not this transport's.</summary>
+        public Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ctx) =>
+            throw new NotSupportedException("CliSettingsBackend uses AcquireAsync");
+
         public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments, CancellationToken ctx)
         {
             Calls++;

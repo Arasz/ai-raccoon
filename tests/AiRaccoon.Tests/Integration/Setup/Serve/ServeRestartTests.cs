@@ -246,7 +246,7 @@ public sealed class ServeRestartTests : IDisposable
     }
 
     [RetryFact]
-    public async Task WithoutRestart_AnExistingServerIsStillAttachedTo()
+    public async Task WithoutRestart_WithAttach_AnExistingServerIsStillAttachedTo()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -256,7 +256,8 @@ public sealed class ServeRestartTests : IDisposable
         await using var old = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         await WaitForUrlAsync(old);
 
-        await using var second = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        // --attach is the explicit opt-in (F70/K1): without it a plain serve now refuses the port.
+        await using var second = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--attach"]);
         var exit = await second.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.Success);

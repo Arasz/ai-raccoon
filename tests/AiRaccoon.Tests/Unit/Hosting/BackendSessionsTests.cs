@@ -55,7 +55,7 @@ public sealed class BackendSessionsTests
     }
 
     [Fact]
-    public async Task OpenAsync_WhenTheLauncherFindsNoUrl_ThrowsUnavailable_NamingThePort_AndStderr()
+    public async Task OpenAsync_WhenTheLauncherFindsNoUrl_ThrowsUnavailable_WithThePrivateFailureAndStderr()
     {
         var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "ai-raccoon: could not decrypt the bank"));
         await using var sessions = Subject(launcher, AppHost, Config(54232, "/tmp/unused"));
@@ -63,9 +63,28 @@ public sealed class BackendSessionsTests
         var error = await Should.ThrowAsync<BackendUnavailableException>(() =>
             sessions.OpenAsync(null, TestContext.Current.CancellationToken));
 
-        error.Message.ShouldContain("54232");
+        // F70/K1: the default is private spawn, so the failure is about the private port, not
+        // about an endpoint on the configured one — that URL is only dialled behind --attach.
+        error.Message.ShouldContain("private port");
         error.Message.ShouldContain("could not decrypt the bank");
         launcher.FileName.ShouldBe(AppHost);
+        launcher.PrivateCalls.ShouldBe(1);
+        launcher.AttachCalls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task OpenAsync_WithAttach_WhenTheLauncherFindsNoUrl_NamesTheConfiguredEndpoint()
+    {
+        var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "ai-raccoon: could not decrypt the bank"));
+        await using var sessions = Subject(launcher, AppHost, Config(54232, "/tmp/unused") with { Attach = true });
+
+        var error = await Should.ThrowAsync<BackendUnavailableException>(() =>
+            sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+
+        error.Message.ShouldContain($"http://127.0.0.1:54232/mcp");
+        error.Message.ShouldContain("could not decrypt the bank");
+        launcher.PrivateCalls.ShouldBe(0);
+        launcher.AttachCalls.ShouldBe(1);
     }
 
     [Fact]
@@ -115,11 +134,24 @@ public sealed class BackendSessionsTests
 
         public int Calls { get; private set; }
 
+        public int PrivateCalls { get; private set; }
+
+        public int AttachCalls { get; private set; }
+
         public string? FileName { get; private set; }
+
+        public Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ctx)
+        {
+            Calls++;
+            PrivateCalls++;
+            FileName = fileName;
+            return _throws is null ? Task.FromResult(_result) : Task.FromException<BackendResult>(_throws);
+        }
 
         public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments, CancellationToken ctx)
         {
             Calls++;
+            AttachCalls++;
             FileName = fileName;
             return _throws is null ? Task.FromResult(_result) : Task.FromException<BackendResult>(_throws);
         }

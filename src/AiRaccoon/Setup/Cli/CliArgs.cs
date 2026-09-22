@@ -183,6 +183,9 @@ internal static class CliArgs
             Port = parseResult.ReadOption("--port", DefaultOptions.Port, collectedErrors),
             IsPortExplicit = parseResult.GetResult("--port") is OptionResult { Tokens.Count: > 0 },
             IsTransportExplicit = parseResult.GetResult("--transport") is OptionResult { Tokens.Count: > 0 },
-            Quiet = parseResult.ReadOption("--quiet", false, collectedErrors, false)
+            Quiet = parseResult.ReadOption("--quiet", false, collectedErrors, false),
+            // Instance-based, not by name: with a verb in the args, two options spell --attach
+            // (this tree's and serve's), and the by-name lookup resolves to serve's implicit default.
+            Attach = parseResult.ReadOption(CliCommandTree.AttachOption, false, collectedErrors, false)
         });
 }
