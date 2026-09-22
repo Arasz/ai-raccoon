@@ -267,7 +267,10 @@ public sealed class MemorySearchKindToolTests
         var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "code",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        envelope.Data!.Warning.ShouldNotBeNull().ShouldContain(CodeSearchWarnings.EngineNotConfigured);
+        var warning = envelope.Data!.Warning.ShouldNotBeNull();
+        warning.ShouldContain(CodeSearchWarnings.EngineNotConfigured);
+        warning.ShouldNotContain(SearchWarnings.EngineNotConfiguredPrefix,
+            customMessage: "kind=code never runs the memory leg; the memory note leaking here would be F6's fix bleeding across sections");
     }
 
     /// <summary>
