@@ -1393,5 +1393,205 @@ public sealed class MemorySchemaVersionTests
         await Should.NotThrowAsync(() => MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken));
     }
 
+    // ── v17: entries workspace-XOR-scope CHECK closes the NEITHER gap (F34) ──
+
+    /// <summary>Gate (a): a row with neither a scope nor a workspace_id must be rejected outright —
+    /// before the fix, SQLite passed a CHECK that evaluated to NULL for exactly this shape.</summary>
+    [RetryFact]
+    public async Task EnsureAsync_FreshBank_RejectsAnEntryWithNeitherScopeNorWorkspace()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var ex = await Should.ThrowAsync<SqliteException>(() => connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at)
+            VALUES ('h-neither', 'p.md', 'v', NULL, 'acme', NULL, 1, 1)
+            """,
+            cancellationToken: TestContext.Current.CancellationToken)));
+        ex.Message.ShouldContain("CHECK");
+    }
+
+    /// <summary>Gate (d), regression control: the both-set case must still fail — the fix only
+    /// closes the NEITHER gap, it must not loosen the pre-existing BOTH guard.</summary>
+    [RetryFact]
+    public async Task EnsureAsync_FreshBank_StillRejectsAnEntryWithBothScopeAndWorkspace()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('ws-both', 'acme', 'Active', 1)",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        var ex = await Should.ThrowAsync<SqliteException>(() => connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at)
+            VALUES ('h-both', 'p.md', 'v', 'project', 'acme', 'ws-both', 1, 1)
+            """,
+            cancellationToken: TestContext.Current.CancellationToken)));
+        ex.Message.ShouldContain("CHECK");
+    }
+
+    /// <summary>
+    ///     Gate (b): a v16 bank carrying one pre-F34 NULL/NULL row alongside a normal row from every
+    ///     tier must migrate to v17 with the NULL/NULL row (and its FTS/vec companion rows) gone,
+    ///     every other row surviving with its original rowid (FTS/vec0 key on it), FTS still finding
+    ///     the survivors, and every entries-bound trigger still firing afterward. Positive control: a
+    ///     delete after the migration still writes its tombstone — ruling out "the rebuild quietly
+    ///     broke sync_tombstones too" passing this gate by accident.
+    /// </summary>
+    [RetryFact]
+    public async Task EnsureAsync_OnAV16Bank_WithANeitherRow_RemovesIt_PreservesEveryOtherRowsRowid_AndKeepsFtsAndTriggersWorking()
+    {
+        await using var connection = await OpenV16BankAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('ws-1', 'acme', 'Active', 1)",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        var neitherId = await InsertEntryAsync(connection, "h-neither", "neither.md", scope: null, projectId: "acme", workspaceId: null);
+        // Give the doomed row FTS + vec/structure companion rows too, so their removal is proven,
+        // not merely assumed because the parent row disappeared (the AFTER UPDATE OF embed_state /
+        // structure_embedding triggers, not the INSERT, are what actually populate vec0).
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET embed_state = 'embedded', embedding = @blob, structure_embedding = @blob WHERE id = @id",
+            new { id = neitherId, blob = EmbeddingBlob.ToBytes(new float[384]) },
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        var sharedId = await InsertEntryAsync(connection, "h-shared", "shared.md", scope: "shared", projectId: "acme", workspaceId: null);
+        var projectRowId = await InsertEntryAsync(connection, "h-project", "project.md", scope: "project", projectId: "acme", workspaceId: null);
+        var customId = await InsertEntryAsync(connection, "h-custom", "custom.md", scope: "custom", projectId: "acme", workspaceId: null);
+        var workspaceRowId = await InsertEntryAsync(connection, "h-workspace", "workspace.md", scope: null, projectId: "acme", workspaceId: "ws-1");
+
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM entries_fts", cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(5L, "every seeded row, including the doomed one, must be indexed before the migration runs");
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM vec_entries", cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(1L, "only the doomed row was marked embedded");
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM vec_structure", cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(1L, "only the doomed row carries a structure vector");
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+
+        // The NEITHER row, and every one of its companion rows, is gone.
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM entries WHERE hash = 'h-neither'",
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(0L);
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM entries_fts WHERE rowid = @id", new { id = neitherId },
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(0L, "the doomed row's FTS companion row must go with it");
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM vec_entries WHERE rowid = @id", new { id = neitherId },
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(0L, "the doomed row's vec_entries companion row must go with it");
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM vec_structure WHERE rowid = @id", new { id = neitherId },
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(0L, "the doomed row's vec_structure companion row must go with it");
+
+        // Every other row survives with its exact original rowid.
+        var survivors = (await connection.QueryAsync<(string Hash, long Id)>(new CommandDefinition(
+                "SELECT hash AS Hash, id AS Id FROM entries",
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ToDictionary(r => r.Hash, r => r.Id, StringComparer.Ordinal);
+        survivors.Count.ShouldBe(4);
+        survivors["h-shared"].ShouldBe(sharedId);
+        survivors["h-project"].ShouldBe(projectRowId);
+        survivors["h-custom"].ShouldBe(customId);
+        survivors["h-workspace"].ShouldBe(workspaceRowId);
+
+        // FTS still finds every survivor by its rowid — proves the rebuild's copy kept ids intact
+        // and the pre-existing FTS shadow data still resolves against them.
+        foreach (var id in survivors.Values)
+        {
+            (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM entries_fts WHERE rowid = @id", new { id },
+                    cancellationToken: TestContext.Current.CancellationToken)))
+                .ShouldBe(1L, $"survivor row {id} must still resolve through entries_fts");
+        }
+
+        // Every entries-bound derived object the rebuild had to recreate is back.
+        (await IndexExistsAsync(connection, "uq_entries_shared_bucket")).ShouldBeTrue();
+        (await IndexExistsAsync(connection, "uq_entries_committed_bucket")).ShouldBeTrue();
+        (await IndexExistsAsync(connection, "uq_entries_workspace_bucket")).ShouldBeTrue();
+        (await IndexExistsAsync(connection, "idx_entries_source_id")).ShouldBeTrue();
+
+        // Triggers still fire after the rebuild: a fresh insert is indexed by entries_fts_ai...
+        var freshId = await InsertEntryAsync(connection, "h-fresh", "fresh.md", scope: "project", projectId: "acme", workspaceId: null);
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM entries_fts WHERE rowid = @id", new { id = freshId },
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(1L, "entries_fts_ai must still fire on a post-migration insert");
+
+        // ...and a delete removes it again via entries_fts_ad.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM entries WHERE id = @id", new { id = freshId },
+            cancellationToken: TestContext.Current.CancellationToken));
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM entries_fts WHERE rowid = @id", new { id = freshId },
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(0L, "entries_fts_ad must still fire on a post-migration delete");
+
+        // Positive control: a real delete-then-tombstone (MemorySql.TombstoneFromPredicate, the
+        // production write path) must still succeed after the rebuild — proves sync_tombstones and
+        // its identity index survived untouched, not merely that entries itself still works.
+        await connection.ExecuteAsync(new CommandDefinition(
+            MemorySql.TombstoneFromPredicate("hash = @hash AND project_id = @projectId"),
+            new { hash = "h-shared", projectId = "acme", deletedAt = 999L },
+            cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM entries WHERE hash = 'h-shared'",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sync_tombstones WHERE hash = 'h-shared' AND deleted_at = 999",
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(1L, "a delete after the migration must still write its tombstone");
+    }
+
+    /// <summary>
+    ///     Builds a v16-shaped bank: a full, current-shape bank (every trigger, index and companion
+    ///     table created exactly as production does, via a real <see cref="MemorySchema.EnsureAsync" />
+    ///     on a fresh file), with the entries table's pre-F34 CHECK patched back in via a direct
+    ///     <c>sqlite_master</c> edit — the only thing F34 changed — and stamped at user_version 16.
+    ///     Faithful to a real bank without hand-duplicating fifteen-plus DDL statements a second time.
+    /// </summary>
+    private static async Task<SqliteConnection> OpenV16BankAsync()
+    {
+        var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            PRAGMA writable_schema = ON;
+            UPDATE sqlite_master
+               SET sql = replace(sql, 'scope IS NOT NULL AND scope IN', 'scope IN')
+             WHERE type = 'table' AND name = 'entries';
+            PRAGMA writable_schema = RESET;
+            PRAGMA user_version = 16;
+            """,
+            cancellationToken: TestContext.Current.CancellationToken));
+        return connection;
+    }
+
+    private static async Task<long> InsertEntryAsync(SqliteConnection connection, string hash, string path,
+        string? scope, string projectId, string? workspaceId)
+    {
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at, embed_state)
+            VALUES (@hash, @path, 'seeded', @scope, @projectId, @workspaceId, 1, 1, 'pending')
+            """,
+            new { hash, path, scope, projectId, workspaceId },
+            cancellationToken: TestContext.Current.CancellationToken));
+        return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT id FROM entries WHERE hash = @hash", new { hash },
+            cancellationToken: TestContext.Current.CancellationToken));
+    }
+
     private sealed record ColumnRow(string Name, string Type, long NotNull, long Pk);
 }
