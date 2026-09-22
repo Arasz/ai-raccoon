@@ -26,12 +26,17 @@ public sealed class ReciprocalRankFusionEvidenceTests
 
     private const int Limit = 10;
 
+    // F19: this fixture's vector-leg candidates use the same numeral for Ranking and
+    // ContentCosine — realistic dual-vector rows carry two independent values (the fused
+    // score that orders them vs. the row's own raw content cosine), but these tests exercise
+    // the generic evidence-extraction plumbing (leg naming, non-finite rules, floor/order),
+    // not the fused-vs-content distinction, so one shared literal per candidate stays legible.
     private static MemorySearchResult Candidate(
         string hash,
         double ranking,
         string path,
         string? sourceFile = null,
-        int chunkIndex = 0) => new(hash, ranking, path, "snippet", sourceFile, chunkIndex);
+        int chunkIndex = 0) => new(hash, ranking, path, "snippet", sourceFile, chunkIndex, ContentCosine: ranking);
 
     private static IReadOnlyList<MemorySearchResult> RankAndFloor(
         IReadOnlyList<MemorySearchResult> fused,

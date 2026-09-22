@@ -10,11 +10,13 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Unit.Search;
 
 /// <summary>
-///     P3 contract pin + rule matrix for the S1 cosine transport (plan §§2-4, normative §9 M3/M4).
-///     (a) The vector candidate Ranking IS the fused cosine: FusedRank.Score must survive
-///     BuildDualVectorResults and ByCosine verbatim into FuseWithEvidence's "vector" leg, whose
-///     Ranking becomes evidence Cosine. (b) Non-finite rule matrix at the consumption point.
-///     (c) Negative BM25 is health: Fuse never reads any Ranking but the "vector" leg's.
+///     P3 contract pin + rule matrix for the S1 cosine transport (plan §§2-4, normative §9 M3/M4),
+///     revised for F19: evidence Cosine is the vector leg's raw content cosine
+///     (<see cref="MemorySearchResult.ContentCosine" />), never the alpha-fused
+///     <see cref="MemorySearchResult.Ranking" /> that orders candidates. (a) BuildDualVectorResults
+///     carries both scores verbatim, and ContentCosine (not Ranking) survives ByCosine into
+///     FuseWithEvidence's "vector" leg evidence. (b) Non-finite rule matrix at the consumption
+///     point. (c) Negative BM25 is health: Fuse never reads any Ranking but the "vector" leg's.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -26,8 +28,8 @@ public sealed class VectorCosineTransportTests
 
     private const double Tolerance = 1e-9;
 
-    private static MemorySearchResult Candidate(string hash, double ranking, string path) =>
-        new(hash, ranking, path, "snippet");
+    private static MemorySearchResult Candidate(string hash, double ranking, string path, double? contentCosine = null) =>
+        new(hash, ranking, path, "snippet", ContentCosine: contentCosine);
 
     private static SqliteMemoryStore.VectorRow Row(string hash) =>
         new SqliteMemoryStore.VectorRow { Hash = hash, Path = $"{hash}.md", Value = $"value {hash}" };
@@ -36,32 +38,40 @@ public sealed class VectorCosineTransportTests
         new SqliteMemoryStore.SearchRow { Hash = hash, Ranking = ranking, Path = $"{hash}.md", Value = $"value {hash}" };
 
     /// <summary>
-    ///     Builders carry scores verbatim: fused cosines (zero and negative are legitimate per
-    ///     SimFromDistance) and raw BM25 magnitudes (routinely negative) reach Ranking untouched.
+    ///     Builders carry both scores verbatim and independently: the alpha-fused score (zero and
+    ///     negative are legitimate per SimFromDistance) reaches Ranking, and the row's own raw
+    ///     content cosine reaches ContentCosine — the two differ whenever structure fusion blended
+    ///     in a non-zero or absent structure term (F19). FTS results carry no ContentCosine: raw
+    ///     BM25 magnitudes (routinely negative) reach Ranking untouched.
     /// </summary>
     [Fact]
     public void Builders_CarryScoresVerbatim_IncludingNegativeAndZero()
     {
         var built = SqliteMemoryStore.BuildDualVectorResults(
         [
-            (Row: Row("h1"), Score: 0.95),
-            (Row: Row("h2"), Score: 0.0),
-            (Row: Row("h3"), Score: -0.4),
+            (Row: Row("h1"), Score: 0.95, ContentCosine: 0.8),
+            (Row: Row("h2"), Score: 0.0, ContentCosine: 0.0),
+            (Row: Row("h3"), Score: -0.4, ContentCosine: -0.6),
         ]);
 
         built.Select(candidate => candidate.Hash).ShouldBe(["h1", "h2", "h3"]);
         built.Select(candidate => candidate.Ranking).ShouldBe([0.95, 0.0, -0.4]);
+        built.Select(candidate => candidate.ContentCosine).ShouldBe([0.8, 0.0, -0.6]);
 
         var fts = SqliteMemoryStore.BuildFtsResults([FtsRow("h1", -9.0), FtsRow("h2", -0.25)]);
 
         fts.Select(candidate => candidate.Ranking).ShouldBe([-9.0, -0.25]);
+        fts.ShouldAllBe(candidate => candidate.ContentCosine == null);
     }
 
     /// <summary>
-    ///     End-to-end transport pin: StructureFusion FusedRank.Score flows through
-    ///     BuildDualVectorResults and ByCosine into evidence Cosine bit-identical, while the FTS
-    ///     leg (opposite order, negative BM25) shapes ranks only. A refactor corrupting the
-    ///     implicit Ranking-carries-cosine chain breaks this test.
+    ///     F19 gate: the vector leg's raw content cosine — not the alpha-fused Ranking that orders
+    ///     it — is what survives BuildDualVectorResults and ByCosine into evidence Cosine. h1 has a
+    ///     participating structure hit (fused 0.7, content 0.9 — the positive control: a structure
+    ///     vector must not perturb the reported cosine); h2/h3 have none (fused = 0.5 × content
+    ///     exactly, the F19 red state) — both must report their content cosine, not the fused
+    ///     score. The fused Ranking is unchanged by this fix: it still drives BuildDualVectorResults
+    ///     ordering and the served result count/shape below, pinned alongside the cosine assertions.
     /// </summary>
     [Fact]
     public void FusedScore_SurvivesThroughByCosine_ToEvidenceCosine()
@@ -77,6 +87,19 @@ public sealed class VectorCosineTransportTests
         scoreByHash["h2"].ShouldBe(0.1, Tolerance);
         scoreByHash["h3"].ShouldBe(-0.15, Tolerance);
 
+        // The content-only cosines fed into StructureFusion.Rank above — the ground truth a
+        // consumer reading evidence Cosine as "content similarity" expects back verbatim.
+        var contentCosineByHash = new Dictionary<string, double>(StringComparer.Ordinal)
+        {
+            ["h1"] = 0.9,
+            ["h2"] = 0.2,
+            ["h3"] = -0.3,
+        };
+        // h2/h3 (no structure hit) reproduce the review's measured red state exactly: fused is
+        // half of content, because alpha defaults to 0.5 and an absent structure sim scores 0.
+        (scoreByHash["h2"] / contentCosineByHash["h2"]).ShouldBe(0.5, Tolerance);
+        (scoreByHash["h3"] / contentCosineByHash["h3"]).ShouldBe(0.5, Tolerance);
+
         var rowsByHash = new Dictionary<string, SqliteMemoryStore.VectorRow>(StringComparer.Ordinal)
         {
             ["h1"] = Row("h1"),
@@ -84,10 +107,11 @@ public sealed class VectorCosineTransportTests
             ["h3"] = Row("h3"),
         };
         var built = SqliteMemoryStore.BuildDualVectorResults(
-            [.. fused.Select(rank => (Row: rowsByHash[rank.Hash], Score: rank.Score))]);
+            [.. fused.Select(rank => (Row: rowsByHash[rank.Hash], rank.Score, ContentCosine: (double?)contentCosineByHash[rank.Hash]))]);
         foreach (var candidate in built)
         {
-            candidate.Ranking.ShouldBe(scoreByHash[candidate.Hash]);
+            candidate.Ranking.ShouldBe(scoreByHash[candidate.Hash], "the fused score still orders candidates, unchanged by F19");
+            candidate.ContentCosine.ShouldBe(contentCosineByHash[candidate.Hash]);
         }
 
         var searchResults = new SearchResults();
@@ -102,6 +126,7 @@ public sealed class VectorCosineTransportTests
         foreach (var candidate in vectorCandidates)
         {
             candidate.Ranking.ShouldBe(scoreByHash[candidate.Hash]);
+            candidate.ContentCosine.ShouldBe(contentCosineByHash[candidate.Hash]);
         }
 
         var fts = SqliteMemoryStore.BuildFtsResults([FtsRow("h3", -9.0), FtsRow("h2", -5.0), FtsRow("h1", -1.0)]);
@@ -109,10 +134,11 @@ public sealed class VectorCosineTransportTests
             [new NamedWeightedCandidates(fts, 1.0, "fts"), new NamedWeightedCandidates(vectorCandidates, 1.0, "vector")],
             K, 0, Limit);
 
-        wired.Results.Count.ShouldBe(3);
+        wired.Results.Count.ShouldBe(3, "the fused Ranking/RRF math is untouched by F19 — same served count");
         foreach (var hash in new[] { "h1", "h2", "h3" })
         {
-            wired.EvidenceByHash[hash].Cosine.ShouldBe(scoreByHash[hash]);
+            wired.EvidenceByHash[hash].Cosine.ShouldBe(contentCosineByHash[hash],
+                "evidence Cosine is the row's own content cosine, never the alpha-fused score");
         }
     }
 
@@ -125,7 +151,7 @@ public sealed class VectorCosineTransportTests
     public void OnlyLegNamedVector_SuppliesCosine_OrdinalMatch()
     {
         var fts = new[] { Candidate("a", 0.99, "a.md") };
-        var nearMiss = new[] { Candidate("a", 0.42, "a.md") };
+        var nearMiss = new[] { Candidate("a", 0.42, "a.md", contentCosine: 0.42) };
 
         var wired = ReciprocalRankFusion.FuseWithEvidence(
             [new NamedWeightedCandidates(fts, 1.0, "fts"), new NamedWeightedCandidates(nearMiss, 1.0, "Vector")],
@@ -144,18 +170,18 @@ public sealed class VectorCosineTransportTests
     }
 
     /// <summary>
-    ///     Non-finite rule matrix: NaN and ±Inf vector Rankings all null Cosine while strength,
+    ///     Non-finite rule matrix: NaN and ±Inf ContentCosine values all null Cosine while strength,
     ///     legs, and serving survive (fail-open). DECISION (confirm-and-keep, not narrow): P2's
     ///     IsFinite extension to Inf stays — System.Text.Json rejects ALL non-finite doubles (M2
-    ///     premise), so Inf would crash the S3/quality JSON write exactly like NaN; a fused cosine
-    ///     is bounded in [-1,1] (SimFromDistance maps [0,2] there, Fused is a convex combination),
-    ///     so ±Inf is corruption, never signal; narrowing would keep a crash path for zero gain.
+    ///     premise), so Inf would crash the S3/quality JSON write exactly like NaN; a content cosine
+    ///     is bounded in [-1,1] (SimFromDistance maps [0,2] there), so ±Inf is corruption, never
+    ///     signal; narrowing would keep a crash path for zero gain.
     /// </summary>
     [Theory]
     [InlineData(double.NaN)]
     [InlineData(double.PositiveInfinity)]
     [InlineData(double.NegativeInfinity)]
-    public void NonFiniteVectorRanking_NullsCosineAndKeepsStrengthAndLegs(double cosine)
+    public void NonFiniteContentCosine_NullsCosineAndKeepsStrengthAndLegs(double cosine)
     {
         var fts = new[]
         {
@@ -164,8 +190,8 @@ public sealed class VectorCosineTransportTests
         };
         var vector = new[]
         {
-            Candidate("bad", cosine, "bad.md"),
-            Candidate("ok", 0.5, "ok.md"),
+            Candidate("bad", 0.0, "bad.md", contentCosine: cosine),
+            Candidate("ok", 0.0, "ok.md", contentCosine: 0.5),
         };
 
         var wired = ReciprocalRankFusion.FuseWithEvidence(
@@ -194,9 +220,9 @@ public sealed class VectorCosineTransportTests
         };
         var vector = new[]
         {
-            Candidate("neg", -1.0, "neg.md"),
-            Candidate("zero", 0.0, "zero.md"),
-            Candidate("one", 1.0, "one.md"),
+            Candidate("neg", 0.0, "neg.md", contentCosine: -1.0),
+            Candidate("zero", 0.0, "zero.md", contentCosine: 0.0),
+            Candidate("one", 0.0, "one.md", contentCosine: 1.0),
         };
 
         var wired = ReciprocalRankFusion.FuseWithEvidence(
@@ -223,8 +249,8 @@ public sealed class VectorCosineTransportTests
         };
         var vector = new[]
         {
-            Candidate("mid", 0.6, "mid.md"),
-            Candidate("best", 0.4, "best.md"),
+            Candidate("mid", 0.0, "mid.md", contentCosine: 0.6),
+            Candidate("best", 0.0, "best.md", contentCosine: 0.4),
         };
 
         var wired = ReciprocalRankFusion.FuseWithEvidence(
@@ -255,8 +281,8 @@ public sealed class VectorCosineTransportTests
     {
         var vector = new[]
         {
-            Candidate("b", 0.8, "b.md"),
-            Candidate("a", 0.7, "a.md"),
+            Candidate("b", 0.0, "b.md", contentCosine: 0.8),
+            Candidate("a", 0.0, "a.md", contentCosine: 0.7),
         };
         FuseWithEvidenceResult Run(IReadOnlyList<MemorySearchResult> fts) =>
             ReciprocalRankFusion.FuseWithEvidence(
