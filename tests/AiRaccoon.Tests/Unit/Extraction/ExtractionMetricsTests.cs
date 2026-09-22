@@ -99,7 +99,7 @@ public sealed class ExtractionMetricsTests
         private readonly HashSet<(string ProjectId, string Hash)> _discarded = [];
         private readonly List<PromotionQueueRow> _rows = [];
 
-        public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
+        public Task<UpsertOutcome> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default)
         {
             var added = 0;
@@ -120,7 +120,7 @@ public sealed class ExtractionMetricsTests
                 }
             }
 
-            return Task.FromResult(added);
+            return Task.FromResult(new UpsertOutcome(added, []));
         }
 
         public Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,

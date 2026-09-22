@@ -77,10 +77,11 @@ public sealed class PromotionQueueDiscardTests : IDisposable
         await _queueStore.DiscardAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
         await _queueStore.RememberDiscardsAsync("acme", [entry.Hash], TestContext.Current.CancellationToken);
 
-        var added = await _queueStore.UpsertAsync("acme", [Candidate(entry.Hash, "discarded fact", 1.0)],
+        var upsert = await _queueStore.UpsertAsync("acme", [Candidate(entry.Hash, "discarded fact", 1.0)],
             TestContext.Current.CancellationToken);
 
-        added.ShouldBe(0);
+        upsert.Inserted.ShouldBe(0);
+        upsert.Refused.ShouldBe([entry.Hash], "the store must surface the refused hash, not just drop it from the count");
         (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken)).ShouldBeEmpty(
             "a discarded hash must not be re-queued");
     }
@@ -121,7 +122,8 @@ public sealed class PromotionQueueDiscardTests : IDisposable
             [Candidate("dead-hash", "rejected", 1.0), Candidate("fresh-hash", "fresh", 1.0)],
             TestContext.Current.CancellationToken);
 
-        added.ShouldBe(1);
+        added.Inserted.ShouldBe(1);
+        added.Refused.ShouldBe(["dead-hash"]);
         (await _queueStore.ListAsync("acme", TestContext.Current.CancellationToken))
             .Select(r => r.Hash).ShouldBe(["fresh-hash"]);
     }
@@ -161,6 +163,10 @@ public sealed class PromotionQueueDiscardTests : IDisposable
             TestContext.Current.CancellationToken);
 
         outcome.Evicted.Count.ShouldBe(1);
+        outcome.NotQueued.ShouldBe([outcome.Evicted[0].Hash],
+            "a candidate evicted by this same pass is not in the queue when it ends");
+        outcome.Refused.ShouldBeEmpty(
+            "capacity eviction is not a refusal — Refused must name only the store's rejected upserts");
         (await DiscardCountAsync("acme", TestContext.Current.CancellationToken)).ShouldBe(0,
             "capacity eviction must not be recorded as a rejection");
     }

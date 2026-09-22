@@ -113,6 +113,8 @@ public sealed class PromotionQueueServiceTests : IDisposable
             [Candidate("h1", "fact one refreshed", 2.0)], TestContext.Current.CancellationToken);
 
         outcome.Upserted.ShouldBe(0, "h1 already occupied a queue slot; the queue did not grow");
+        outcome.NotQueued.ShouldBeEmpty(
+            "a refreshed row is still queued — NotQueued must not mistake a refresh for a refusal");
         _metrics.Snapshots.Select(s => s.Stats.PerProject["acme"]).ShouldBe([1, 1],
             "RecordSnapshot must report the real persisted queue size, not the SQLite conflict-update count");
     }
