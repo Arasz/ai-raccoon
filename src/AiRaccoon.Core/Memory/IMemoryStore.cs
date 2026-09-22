@@ -15,7 +15,12 @@ public interface IMemoryStore : IModelMigrationStore
     /// </summary>
     Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default);
 
-    Task<bool> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default);
+    /// <summary>
+    ///     Deletes the whole write behind <paramref name="hash" /> and returns the number of rows
+    ///     removed (N7): every chunk of a multi-chunk write shares its path, so the write is gone
+    ///     as a unit, not one chunk of it. A hash unknown to the project reports 0.
+    /// </summary>
+    Task<int> DeleteAsync(string projectId, string hash, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Deletes hash within one scope only — the sweep's own delete (H2), so a project-scoped

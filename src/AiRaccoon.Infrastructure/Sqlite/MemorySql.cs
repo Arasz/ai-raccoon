@@ -161,11 +161,19 @@ internal static class MemorySql
                                                         ORDER BY v.distance, e.path
                                                         """;
 
-    // @scope null preserves memory_delete's documented reach ("wherever this hash lives",
-    // including a shared row); a caller that enumerated one scope (the sweep, H2) passes it so
-    // the delete cannot also remove a sibling row sharing this hash in another scope/workspace.
+    // @scope null is memory_delete (N7/F26): the whole write behind the hash goes, every chunk
+    // sharing its path — plus the hash itself wherever it lives. @scope set is the sweep's own
+    // delete (H2): chunk-exact, so a project-scoped pass cannot touch a sibling row sharing the
+    // hash in another scope/workspace.
     public const string DeleteByHashAndProject =
-        "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId AND (@scope IS NULL OR scope IS @scope)";
+        "DELETE FROM entries WHERE project_id = @projectId AND " +
+        "((@scope IS NULL AND (hash = @hash OR (@path IS NOT NULL AND path = @path))) " +
+        "OR (@scope IS NOT NULL AND scope = @scope AND hash = @hash))";
+
+    // The write's path is what makes the whole-write delete whole (N7/F26); resolved before the
+    // delete so the predicate stays a plain parameter comparison.
+    public const string SelectPathByHashAndProject =
+        "SELECT path FROM entries WHERE hash = @hash AND project_id = @projectId LIMIT 1";
 
     // Sync propagates deletes through tombstones (FR-NM-8): the row's committed scope is
     // recorded before the delete so sync can suppress resurrection and ship the tombstone.

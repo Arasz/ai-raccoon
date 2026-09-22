@@ -428,6 +428,28 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         (await _store.GetStatsAsync("acme", TestContext.Current.CancellationToken)).EntryCount.ShouldBe(1);
     }
 
+    /// <summary>
+    ///     N7 (owner ruling, F26): one multi-chunk write creates N rows under one path, and
+    ///     memory_delete on the returned hash must remove the whole write — not 1 of N.
+    /// </summary>
+    [RetryFact]
+    public async Task Delete_OfAMultiChunkWrite_RemovesEveryRowOfThatWrite()
+    {
+        var content = string.Join("\n\n",
+            Enumerable.Range(1, 5).Select(i => $"paragraph {i} of the one long note"));
+        var entry = await _store.WriteAsync(new MemoryWriteRequest("acme", content),
+            TestContext.Current.CancellationToken);
+
+        var rowsBefore = await CountRowsForPathAsync(entry.Path);
+        rowsBefore.ShouldBeGreaterThan(1, "the fixture must produce a multi-chunk write");
+        (await ReadRowAsync(entry.Hash)).ShouldNotBeNull("the returned hash is the write's first chunk");
+
+        await _store.DeleteAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
+
+        (await CountRowsForPathAsync(entry.Path)).ShouldBe(0,
+            "memory_delete must remove the whole write, not one of its N rows");
+    }
+
     [RetryFact]
     public async Task Delete_WhenTombstoneInsertFails_RollsBackTheEntryDeleteToo()
     {
@@ -938,6 +960,13 @@ public sealed class SqliteMemoryStoreTests : IDisposable
             LIMIT 1
             """,
             new { hash });
+    }
+
+    private async Task<long> CountRowsForPathAsync(string path)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM entries WHERE path = @path", new { path });
     }
 
     private async Task<EntryRow?> ReadRowByProjectAsync(string projectId, string hash)
