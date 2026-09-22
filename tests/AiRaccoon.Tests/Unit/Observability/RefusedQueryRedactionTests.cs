@@ -6,6 +6,8 @@ using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Projects;
+using AiRaccoon.Core.SearchQuality;
+using AiRaccoon.Observability;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.DependencyInjection;
@@ -120,12 +122,28 @@ public sealed class RefusedQueryRedactionTests
         record.Message.ShouldContain(ContentHash.OfValue(Canary));
     }
 
-    private static MemoryTools CreateTools(FakeStore store, ILogger<MemoryTools>? logger = null)
+    [Fact]
+    public async Task SuccessfulSearch_StillHandsTheQueryText_ToTheQualityRecord()
+    {
+        // Positive control: the redaction covers the server's own channels only — the successful
+        // path must keep handing the caller's exact text to search_quality, where grading reads it.
+        var quality = new CapturingSearchQualityService();
+        var tools = CreateTools(new FakeStore(), quality: quality);
+
+        const string query = "why did the hunter2 password rotation fail";
+        await tools.Search("acme", query, sessionId: "sess-test",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        quality.Queries.ShouldHaveSingleItem().ShouldBe(query);
+    }
+
+    private static MemoryTools CreateTools(FakeStore store, ILogger<MemoryTools>? logger = null,
+        ISearchQualityService? quality = null)
     {
         var access = new MemoryAccessGuard(store);
         var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new StubMigrationGate(migrated: false));
         return new MemoryTools(store, gate,
-            new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
+            new SearchDispatcher(store, new NoOpCodeSearchService(), quality ?? new NoOpSearchQualityService()),
             new QueryGuardService(store),
             new MemoryWriteService(store, new FakePromotionQueue()),
             new NoOpMeasurementRecorder(),
@@ -154,6 +172,40 @@ public sealed class RefusedQueryRedactionTests
 
     private static string TextOf(CallToolResult result) =>
         string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+
+    /// <summary>Captures the query text a successful search must keep — the search_quality row grading reads back.</summary>
+    private sealed class CapturingSearchQualityService : ISearchQualityService
+    {
+        public List<string> Queries { get; } = [];
+
+        public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
+            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles,
+            CancellationToken ct = default, IReadOnlyList<RetrievalEvidence>? evidence = null)
+        {
+            Queries.Add(query);
+            return Task.CompletedTask;
+        }
+
+        public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
+            string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles,
+            CancellationToken ct = default, IReadOnlyList<RetrievalEvidence>? evidence = null)
+        {
+            Queries.Add(query);
+            return Task.CompletedTask;
+        }
+
+        public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null,
+            CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
+            CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
+            CancellationToken ct = default) => Task.FromResult(new SearchQualityMetrics(0, 0, 0, 0, 0, 0, 0));
+
+        public Task<int> PurgeOlderThanAsync(long nowUnixSeconds, int retentionDays,
+            CancellationToken cancellationToken = default) => Task.FromResult(0);
+    }
 
     private sealed class FakeStore : FakeMemoryStore
     {
