@@ -101,13 +101,13 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     {
         var first = await _store.UpsertAsync("acme",
             [Candidate("h1", "fact one", 1.5)], TestContext.Current.CancellationToken);
-        first.ShouldBe(1);
+        first.Inserted.ShouldBe(1);
 
         _clock.Advance(TimeSpan.FromDays(1));
         var second = await _store.UpsertAsync("acme",
             [Candidate("h1", "fact one refreshed", 3.0), Candidate("h2", "fact two", 2.0)],
             TestContext.Current.CancellationToken);
-        second.ShouldBe(1, "h1 already existed (a refresh, not a new row); only h2 is genuinely new");
+        second.Inserted.ShouldBe(1, "h1 already existed (a refresh, not a new row); only h2 is genuinely new");
 
         var rows = await _store.ListAsync("acme", TestContext.Current.CancellationToken);
         rows.Count.ShouldBe(2);
@@ -123,12 +123,12 @@ public sealed class SqlitePromotionQueueStoreTests : IDisposable
     {
         var first = await _store.UpsertAsync("acme",
             [Candidate("h1", "fact one", 1.0)], TestContext.Current.CancellationToken);
-        first.ShouldBe(1);
+        first.Inserted.ShouldBe(1);
 
         var second = await _store.UpsertAsync("acme",
             [Candidate("h1", "fact one refreshed", 2.0)], TestContext.Current.CancellationToken);
 
-        second.ShouldBe(0, "h1 already occupied a queue slot; re-proposing it must not report queue growth");
+        second.Inserted.ShouldBe(0, "h1 already occupied a queue slot; re-proposing it must not report queue growth");
     }
 
     /// <summary>scorer_version stamps every row (defaults to 0 on the bank column, but a candidate

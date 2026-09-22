@@ -29,6 +29,7 @@ public sealed class AgentRequestedPromotionQueueTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("agent-requested-promotion");
     private readonly SqliteConnectionFactory _factory;
+    private readonly IMemoryStore _store;
     private readonly SqlitePromotionQueueStore _queueStore;
     private readonly PromotionQueueService _queue;
     private readonly MemoryWriteService _writes;
@@ -39,14 +40,14 @@ public sealed class AgentRequestedPromotionQueueTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         var clock = new FakeTimeProvider(FixedNow);
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new StubChunker(), clock,
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         _queueStore = new SqlitePromotionQueueStore(_factory, clock);
-        _queue = new PromotionQueueService(_queueStore, store, new UniformCountEvictionPolicy(),
+        _queue = new PromotionQueueService(_queueStore, _store, new UniformCountEvictionPolicy(),
             new NoopMetrics(), NullLogger<PromotionQueueService>.Instance, clock);
-        _writes = new MemoryWriteService(store, _queue);
-        _runner = new SharedExtractionRunner(store, new SharedExtractionService(), _queue, clock);
+        _writes = new MemoryWriteService(_store, _queue);
+        _runner = new SharedExtractionRunner(_store, new SharedExtractionService(), _queue, clock);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -107,6 +108,96 @@ public sealed class AgentRequestedPromotionQueueTests : IDisposable
             new CommandDefinition("SELECT count(*) FROM promotion_queue WHERE project_id = @ProjectId",
                 new { ProjectId }, cancellationToken: TestContext.Current.CancellationToken));
         queued.ShouldBe(0);
+    }
+
+    /// <summary>
+    ///     F25's eviction arm, red at HEAD: at capacity this pass's own eviction removes the
+    ///     just-inserted agent row. <c>NotQueued</c> is the union of refused and evicted, and the
+    ///     write collapsed it to the refusal text — "(discarded earlier or already shared)" — for a
+    ///     row the queue had actually evicted at capacity. The response must name the real cause.
+    /// </summary>
+    [RetryFact]
+    public async Task WriteAtCapacity_EvictedByItsOwnPass_ReportsEviction_NotRefusal()
+    {
+        await _store.SetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, "1",
+            TestContext.Current.CancellationToken);
+        await _queueStore.UpsertAsync(ProjectId,
+            [new QueueCandidate("seed-hash", "seed.md", "a higher-scored seed fact", null, 2.0, ["organic-note"])],
+            TestContext.Current.CancellationToken);
+
+        var entry = await _writes.WriteAsync(
+            new MemoryWriteRequest(ProjectId, Content) { Context = ContextNaming.SharedContext },
+            TestContext.Current.CancellationToken);
+
+        entry.Stored.ShouldBeTrue();
+        entry.Reason!.ShouldNotContain("discarded earlier or already shared");
+        entry.Reason.ShouldBe("not-queued: agent-requested-share evicted (queue at capacity)",
+            "the response must name the real cause: this pass's own capacity eviction");
+
+        var queued = await _queueStore.ListAsync(ProjectId, TestContext.Current.CancellationToken);
+        queued.Select(r => r.Hash).ShouldBe(["seed-hash"],
+            "the 2.0 seed outscored the 1.0 agent request, which became the eviction victim");
+    }
+
+    /// <summary>
+    ///     F25's shared-twin refusal arm: the discard arm is covered above, but the other reason
+    ///     <c>PromotionQueueSql.Upsert</c> refuses — a value already in the shared tier — is not.
+    ///     No discard is recorded, so the shared-value guard is the only cause the refusal can have.
+    /// </summary>
+    [RetryFact]
+    public async Task RewriteAfterShare_ReportsRefusal_AndLeavesTheQueueEmpty()
+    {
+        var entry = await _writes.WriteAsync(
+            new MemoryWriteRequest(ProjectId, Content) { Context = ContextNaming.SharedContext },
+            TestContext.Current.CancellationToken);
+        (await _queueStore.ListAsync(ProjectId, TestContext.Current.CancellationToken)).Count.ShouldBe(1);
+
+        var shared = await _store.ShareAsync(ProjectId, entry.Hash, TestContext.Current.CancellationToken);
+        shared.Created.ShouldBeTrue();
+
+        var rewritten = await _writes.WriteAsync(
+            new MemoryWriteRequest(ProjectId, Content) { Context = ContextNaming.SharedContext },
+            TestContext.Current.CancellationToken);
+
+        rewritten.Stored.ShouldBeTrue("the project row still lands; only the promotion request is refused");
+        rewritten.Reason.ShouldBe("not-queued: agent-requested-share refused (discarded earlier or already shared)",
+            "F25: the shared value twin refused the upsert, so the response must not claim a queued review");
+        rewritten.Reason!.ShouldNotContain("queued-for-promotion");
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var queued = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition("SELECT count(*) FROM promotion_queue WHERE project_id = @ProjectId",
+                new { ProjectId }, cancellationToken: TestContext.Current.CancellationToken));
+        queued.ShouldBe(0);
+        var discards = await connection.ExecuteScalarAsync<long>(
+            new CommandDefinition("SELECT count(*) FROM promotion_discards WHERE project_id = @ProjectId",
+                new { ProjectId }, cancellationToken: TestContext.Current.CancellationToken));
+        discards.ShouldBe(0,
+            "no discard was recorded — the shared-value guard is the only reason the upsert can be refused");
+    }
+
+    /// <summary>
+    ///     K2's stamp mechanism, pinned at its boundary (§3c): the stamp survives only while it
+    ///     equals the current scorer version. A bump retires every agent-requested row through
+    ///     <c>ClearStaleAsync</c> — the owner chose stamp over exempting the reason, so this is the
+    ///     documented behaviour. If a future change exempts the reason (or re-stamps on read), this
+    ///     test is the red that says the documented behaviour moved.
+    /// </summary>
+    [RetryFact]
+    public async Task BumpedScorerVersion_ClearsTheStampedAgentRow()
+    {
+        await _writes.WriteAsync(
+            new MemoryWriteRequest(ProjectId, Content) { Context = ContextNaming.SharedContext },
+            TestContext.Current.CancellationToken);
+        (await _queueStore.ListAsync(ProjectId, TestContext.Current.CancellationToken)).Count.ShouldBe(1);
+
+        var cleared = await _queueStore.ClearStaleAsync(ProjectId, PromotionScorer.Version + 1,
+            TestContext.Current.CancellationToken);
+
+        cleared.ShouldBe(1,
+            "a version bump retires every row stamped by the old scorer — the documented K2 trade-off");
+        (await _queueStore.ListAsync(ProjectId, TestContext.Current.CancellationToken)).ShouldBeEmpty(
+            "the agent stamp is generation-scoped: at PromotionScorer.Version + 1 the row is stale and cleared");
     }
 
     private sealed class NoopMetrics : IPromotionQueueMetrics

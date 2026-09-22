@@ -60,9 +60,20 @@ public sealed record ProposeOutcome(int Upserted, IReadOnlyList<EvictedRow> Evic
     ///     Candidate hashes absent from the queue once the pass finished: refused (a remembered
     ///     discard or an already-shared value twin) or evicted by the same pass. Upserted counts new
     ///     rows only, so a refused candidate is indistinguishable from a refreshed one without this.
+    ///     This is the state — <see cref="Refused" /> names the cause.
     /// </summary>
     public IReadOnlyList<string> NotQueued { get; init; } = [];
+
+    /// <summary>
+    ///     The subset of candidates whose upsert the store refused — a remembered discard or an
+    ///     already-shared value twin (docs/adr/0026). Distinct from a capacity eviction, which also
+    ///     leaves the candidate in <see cref="NotQueued" /> but did not refuse the request.
+    /// </summary>
+    public IReadOnlyList<string> Refused { get; init; } = [];
 }
+
+/// <summary>What one upsert pass persisted: the genuinely new rows, and the candidates the store refused (a remembered discard or an already-shared value twin).</summary>
+public sealed record UpsertOutcome(int Inserted, IReadOnlyList<string> Refused);
 
 /// <summary>One candidate that could not be promoted: claimed from the queue but never shared.</summary>
 public sealed record PromoteFailure(string ProjectId, string Hash, string Reason);

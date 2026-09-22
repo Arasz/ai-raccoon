@@ -16,6 +16,14 @@ public static class PromotionReasons
     /// </summary>
     public const string AgentRequestedRefused =
         "not-queued: agent-requested-share refused (discarded earlier or already shared)";
+
+    /// <summary>
+    ///     The write asked for promotion, and the pass's own capacity eviction removed the row
+    ///     before it could be reviewed (docs/adr/0007). The queue did not refuse the request — it
+    ///     could not hold it — so the response must not claim a discard or shared-twin refusal.
+    /// </summary>
+    public const string AgentRequestedEvicted =
+        "not-queued: agent-requested-share evicted (queue at capacity)";
 }
 
 /// <summary>
@@ -74,12 +82,16 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
             .ConfigureAwait(false);
 
         // F25: the upsert is refused for a remembered discard or an already-shared value twin, so
-        // the queue — not the call — decides which reason is true here.
+        // the queue — not the call — decides which reason is true here. Refused and NotQueued are
+        // split because NotQueued is the state (absent from the queue) and a capacity eviction also
+        // produces it; only Refused names a rejection of the request itself.
         return entry with
         {
-            Reason = outcome.NotQueued.Contains(entry.Hash, StringComparer.Ordinal)
+            Reason = outcome.Refused.Contains(entry.Hash, StringComparer.Ordinal)
                 ? PromotionReasons.AgentRequestedRefused
-                : $"queued-for-promotion: {PromotionReasons.AgentRequestedShare}"
+                : outcome.NotQueued.Contains(entry.Hash, StringComparer.Ordinal)
+                    ? PromotionReasons.AgentRequestedEvicted
+                    : $"queued-for-promotion: {PromotionReasons.AgentRequestedShare}"
         };
     }
 }

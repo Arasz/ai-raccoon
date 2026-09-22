@@ -38,7 +38,7 @@ public sealed partial class PromotionQueueService(
             Log.Pruned(logger, projectId, pruned);
         }
 
-        var upserted = await queue.UpsertAsync(projectId, candidates, cancellationToken).ConfigureAwait(false);
+        var upsert = await queue.UpsertAsync(projectId, candidates, cancellationToken).ConfigureAwait(false);
 
         var cap = await ReadCapAsync(cancellationToken).ConfigureAwait(false);
         var evicted = new List<EvictedRow>();
@@ -74,8 +74,8 @@ public sealed partial class PromotionQueueService(
             .ToList();
 
         metrics.RecordSnapshot(stats, cap);
-        Log.Proposed(logger, projectId, upserted, evicted.Count);
-        return new ProposeOutcome(upserted, evicted) { NotQueued = notQueued };
+        Log.Proposed(logger, projectId, upsert.Inserted, evicted.Count);
+        return new ProposeOutcome(upsert.Inserted, evicted) { NotQueued = notQueued, Refused = upsert.Refused };
     }
 
     public async Task<PromoteOutcome> PromoteAsync(IReadOnlyList<string> projectIds, int limit, double? minScore = null,
