@@ -52,7 +52,23 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
 
         await using (connection)
         {
-            var report = await SchemaDoctor.DiagnoseAsync(connection, cancellationToken);
+            SchemaDoctorReport report;
+            try
+            {
+                report = await SchemaDoctor.DiagnoseAsync(connection, cancellationToken);
+            }
+            catch (SqliteException ex) when (ex.SqliteErrorCode == NotADatabaseErrorCode)
+            {
+                // Microsoft.Data.Sqlite defers the "file is not a database" verdict to the first
+                // statement, which is inside DiagnoseAsync — OpenBankReadOnlyAsync above cannot see
+                // it. Mapped here so the operator gets the documented corrupt-bank code instead of
+                // the catch-all's "you mistyped" (15).
+                Log.BankIsNotADatabase(logger, bankPath, ex);
+                await streams.WriteErrorLineAsync(
+                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); restore it from a backup or check --data-root");
+                return ExitCode.BankCorrupted;
+            }
+
             var engines = new Dictionary<CorpusEngineProbe, CorpusEngineState>();
             foreach (var probe in CorpusEngineProbe.All)
             {
@@ -314,10 +330,26 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         _ => "model migration: none open"
     };
 
-    /// <summary>Unix seconds as an absolute UTC instant — mirrors WatchCommands.FormatTimestamp (:185); the second copy is deliberate (R1 S8).</summary>
-    private static string FormatTimestamp(long unixSeconds) =>
-        DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime
+    /// <summary>SQLITE_NOTADB (26): the file exists but is not a database (or not this key's database).</summary>
+    private const int NotADatabaseErrorCode = 26;
+
+    /// <summary>DateTimeOffset.FromUnixTimeSeconds' accepted bounds — checked before the call so a
+    /// stored value outside them renders as data, not as a raw .NET parameter message.</summary>
+    private const long MinUnixTimeSeconds = -62_135_596_800;
+
+    private const long MaxUnixTimeSeconds = 253_402_300_799;
+
+    /// <summary>Unix seconds as an absolute UTC instant — mirrors WatchCommands.FormatTimestamp (:185); the second copy is deliberate (R1 S8). An out-of-range value degrades to a marker naming the stored value (F7).</summary>
+    private static string FormatTimestamp(long unixSeconds)
+    {
+        if (unixSeconds is < MinUnixTimeSeconds or > MaxUnixTimeSeconds)
+        {
+            return $"<unrepresentable unix time {unixSeconds}>";
+        }
+
+        return DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime
             .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+    }
 
     private enum MigrationRead
     {
@@ -346,5 +378,8 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
 
         [LoggerMessage(EventId = 1001, Level = LogLevel.Warning, Message = "doctor: could not open the bank at {BankPath} read-only")]
         public static partial void FailedToOpenBank(ILogger logger, string bankPath, Exception exception);
+
+        [LoggerMessage(EventId = 1002, Level = LogLevel.Warning, Message = "doctor: the bank at {BankPath} is not a SQLite database")]
+        public static partial void BankIsNotADatabase(ILogger logger, string bankPath, Exception exception);
     }
 }

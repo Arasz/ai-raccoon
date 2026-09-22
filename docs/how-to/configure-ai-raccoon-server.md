@@ -383,6 +383,7 @@ model migration is open (schema shape is still healthy), so it composes into a s
 | `20` | the bank's `user_version` is newer than this binary supports |
 | `22` | no bank file exists at the resolved path — distinct from HEALTHY, so a wrong `--data-root` is never mistaken for a healthy bank |
 | `24` | MODEL MIGRATION OPEN — an embedding-engine re-embed is in progress; every MCP tool call is refused until it finishes (ADR-0076). Only reported when the schema shape is healthy (`19`/`20` take precedence), so `exit == 24` is itself a positive statement that the shape is clean. Scripts that want the old semantics test `rc == 0 || rc == 24` |
+| `26` | the bank file exists but is not a SQLite database — corrupt, or not readable with the resolved encryption key; restore it from a backup or check `--data-root` |
 
 If the bank is encrypted and the passphrase cannot be resolved, that is reported as a *read* failure
 and is distinguishable from a shape problem — a locked bank is not a broken one.
