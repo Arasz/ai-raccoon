@@ -44,10 +44,7 @@ public sealed class MemoryAccessGuard(IMemoryStore store) : IMemoryAccessGuard
         }
 
         var required = AccessModePolicy.RequiredFor(requirement);
-        var requiredText = AccessModePolicy.Serialize(required);
         throw new AccessDeniedException(
-            $"{toolName} requires mode {requiredText} (current {AccessModePolicy.Serialize(mode)}); " +
-            $"run 'ai-raccoon settings access set {projectId} {requiredText}' to raise this project's mode, " +
-            $"or 'ai-raccoon settings access default set {requiredText}' for all projects");
+            $"{toolName} requires mode {AccessModePolicy.Serialize(required)} (current {AccessModePolicy.Serialize(mode)})");
     }
 }

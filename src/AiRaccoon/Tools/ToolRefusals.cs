@@ -81,21 +81,6 @@ internal static partial class ToolRefusals
     internal static readonly IReadOnlyCollection<string> DirectThrowPrefixes = ["invalid-params"];
 
     /// <summary>
-    ///     The remedy clause appended to a mapped refusal whose own message names none — what an
-    ///     agent relays to its human (F53). Access-denied is absent on purpose: MemoryAccessGuard,
-    ///     its only raiser, builds the remedy into the exception message itself. Keys are prefixes
-    ///     from <see cref="RefusalPrefixes" />; a prefix without an entry is refused unchanged.
-    /// </summary>
-    internal static readonly IReadOnlyDictionary<string, string> RefusalRemedies = new Dictionary<string, string>
-    {
-        ["path-outside-scope"] = " Run 'ai-raccoon settings ingest scope add <projectId|*> <path>' to allow it.",
-        ["watching-disabled"] = " Run 'ai-raccoon settings watch enable <projectId|*>' to enable it."
-    };
-
-    /// <summary>The remedy clause for a refusal prefix, or empty when the prefix has none.</summary>
-    internal static string RemedyFor(string prefix) => RefusalRemedies.GetValueOrDefault(prefix, string.Empty);
-
-    /// <summary>
     ///     The wire prefix for a call cancelled while its request connection was still live.
     ///     Kept out of <see cref="RefusalPrefixes" /> on purpose: <see cref="PrefixFor" /> matches
     ///     the exact type, so a table entry could not cover the <see cref="OperationCanceledException" />
@@ -157,7 +142,7 @@ internal static partial class ToolRefusals
             }
             catch (Exception ex) when (PrefixFor(ex) is { } prefix)
             {
-                return Refused(request, $"{prefix}: {ex.Message}{RemedyFor(prefix)}", prefix, LevelFor(prefix));
+                return Refused(request, $"{prefix}: {ex.Message}", prefix, LevelFor(prefix));
             }
             catch (Exception ex) when (ex.IsBankBusy())
             {

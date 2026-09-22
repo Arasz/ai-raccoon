@@ -120,8 +120,7 @@ public sealed class AccessModeGuardTests
                 TestContext.Current.CancellationToken));
 
         // The "access-denied:" wire prefix is added by the CallToolFilter (ToolRefusalsTests), not the guard itself.
-        // F53: the refusal names the remedy so an agent can relay what to run.
-        ex.Message.ShouldBe("memory_delete requires mode full (current rw); run 'ai-raccoon settings access set acme full' to raise this project's mode, or 'ai-raccoon settings access default set full' for all projects");
+        ex.Message.ShouldBe("memory_delete requires mode full (current rw)");
     }
 
     // Scenario 5: forgetting knobs denied in rw, policy unchanged.
