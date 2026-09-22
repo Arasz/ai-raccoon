@@ -282,6 +282,49 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
             "eventual convergence after GC and a later re-push");
     }
 
+    /// <summary>
+    ///     Label-aware tombstones: a label-scoped context delete must reach the same label on a
+    ///     peer and nothing else — the peer's same-hash row under another label survives the pull,
+    ///     and the peer's other-label row still arrives at the deleter (the tombstone suppresses
+    ///     only its own label). Red at base: one (project, hash, scope) tombstone kills both of the
+    ///     peer's rows and suppresses the other-label row everywhere.
+    /// </summary>
+    [RetryFact]
+    public async Task LabelScopedContextDelete_KillsThePeersSameLabelRow_ButNotItsSameHashOtherLabelRow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var peerFactory = NewPeerFactory("peer");
+        var peerStore = NewPeerStore(peerFactory);
+
+        var project = await _store.WriteAsync(new MemoryWriteRequest(Project, Content), ct);
+        await _store.AddContentAsync(Project, project.Path, Content,
+            ContextNaming.LabelContext(Project, "ctxA"), cancellationToken: ct);
+        var peerSameLabel = await peerStore.AddContentAsync(Project, project.Path, Content,
+            ContextNaming.LabelContext(Project, "ctxA"), cancellationToken: ct);
+        var peerOtherLabel = await peerStore.AddContentAsync(Project, project.Path, Content,
+            ContextNaming.LabelContext(Project, "other"), cancellationToken: ct);
+        peerSameLabel.Entry.Hash.ShouldBe(project.Hash, "arrange: the peer's same-label row shares the hash");
+        peerOtherLabel.Entry.Hash.ShouldBe(project.Hash, "arrange: the peer's other-label row shares the hash");
+
+        await Sync(_factory).MemorySyncAsync(Project, ObjectKey, ct);
+        await Sync(peerFactory).MemorySyncAsync(Project, ObjectKey, ct);
+
+        _time.Advance(TimeSpan.FromSeconds(10));
+        var deleted = await _store.DeleteContextAsync(Project,
+            ContextNaming.LabelContext(Project, "ctxA"), ct);
+        deleted.ShouldBe(1, "arrange: the label-scoped delete reaches exactly the deleter's own label row");
+
+        await Sync(_factory).MemorySyncAsync(Project, ObjectKey, ct);
+        await Sync(peerFactory).MemorySyncAsync(Project, ObjectKey, ct);
+
+        (await CountLabelRowsAsync(peerFactory, project.Hash, "ctxA", ct)).ShouldBe(0,
+            "positive control: the same-label row is the deleted row and must die on the peer");
+        (await CountLabelRowsAsync(peerFactory, project.Hash, "other", ct)).ShouldBe(1,
+            "a label-scoped delete must not reach a same-hash row under a different label");
+        (await CountLabelRowsAsync(_factory, project.Hash, "other", ct)).ShouldBe(1,
+            "the tombstone suppresses its own label only — the peer's other-label row must still arrive");
+    }
+
     private SyncService Sync(SqliteConnectionFactory factory) => new(_cloud,
         ct => factory.OpenBankAsync(ct), OpenSnapshotAsync, OpenSnapshotAsync, _time,
         NullLogger<SyncService>.Instance);
@@ -335,6 +378,15 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
         return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
             "SELECT count(*) FROM sync_tombstones WHERE project_id = @projectId AND hash = @hash",
             new { projectId = Project, hash }, cancellationToken: ct));
+    }
+
+    private static async Task<int> CountLabelRowsAsync(SqliteConnectionFactory factory, string hash, string label,
+        CancellationToken ct)
+    {
+        await using var connection = await factory.OpenBankAsync(ct);
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*) FROM entries WHERE project_id = @projectId AND hash = @hash AND context_label = @label",
+            new { projectId = Project, hash, label }, cancellationToken: ct));
     }
 
     private static async Task<int> CountWorkspaceTombstonesAsync(SqliteConnectionFactory factory, string hash,
