@@ -978,12 +978,19 @@ internal static class MemorySchema
             throw;
         }
 
-        // The rebuild frees pages into the free list; the FILE does not shrink until VACUUM, and the
-        // maintenance service's vacuum clock is per-process and seeded on first run, so a bank only
-        // ever opened by short-lived processes never reaches it. Measured on a 183 MB bank: the
-        // migration freed 42.0 MB and the file did not move; VACUUM returned 53.2 MB in 0.6 s.
-        // Outside the transaction because VACUUM cannot run inside one, and best-effort because a
-        // deferred reclaim is not a reason to fail a migration that already succeeded.
+        await VacuumBestEffortAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Reclaims the pages a table rebuild freed: the FILE does not shrink until VACUUM, and the
+    ///     maintenance service's vacuum clock is per-process and seeded on first run, so a bank only
+    ///     ever opened by short-lived processes never reaches it. Measured on a 183 MB bank: the
+    ///     migration freed 42.0 MB and the file did not move; VACUUM returned 53.2 MB in 0.6 s.
+    ///     Outside the transaction because VACUUM cannot run inside one, and best-effort because a
+    ///     deferred reclaim is not a reason to fail a migration that already succeeded.
+    /// </summary>
+    private static async Task VacuumBestEffortAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
         try
         {
             await connection.ExecuteAsync(new CommandDefinition("VACUUM;", cancellationToken: cancellationToken))
@@ -1361,6 +1368,12 @@ internal static class MemorySchema
                 .ConfigureAwait(false);
             throw;
         }
+
+        // The rebuild's DROP frees the old table's pages only after the new table allocated its own
+        // root page, so unlike the v11 rebuild they are not reused and the reclaim has to run here
+        // too — same reasoning as the v9 rebuild's vacuum. Or Vec0PartitionKeyDemotionTests'
+        // freelist-0 contract reads 1 the moment a v15 bank is migrated.
+        await VacuumBestEffortAsync(connection, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>The v11-era shape of <c>sync_tombstones</c>: declared types, NOT NULL, and the pk position of every composite-key member.</summary>
