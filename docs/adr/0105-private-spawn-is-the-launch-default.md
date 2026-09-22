@@ -1,6 +1,8 @@
 # 0105 — The default launch starts its own backend; attaching is opt-in
 
-Date: 2026-09-22 (owner ruling K1) · implementation PSR P1.3; join-review follow-up same day
+Date: 2026-09-22 (owner ruling K1) · implementation PSR P1.3; join-review follow-up same
+day; owner re-ruling the same evening (K1a/N1: settings verbs back to attach-or-start,
+the proxy owns its private backend's lifetime, disclosure for what outlives a command)
 
 Status: Accepted
 
@@ -68,13 +70,14 @@ child prints on its stdout pipe. `--attach` is the explicit opt-in to the shared
   endpoint — was not taken: `/observability` is self-asserted, and a challenge-response
   would add an unauthenticated cryptographic oracle and a new wire contract to preserve a
   convenience whose trust meaning `--attach` already expresses.
-- **Settings commands.** `CliSettingsBackend` acquires like the proxy: private spawn by
-  default, `--attach` for the legacy attach-or-start path. The port is validated only on
-  the attach path, because the private path pins `--port 0` for the child. The earlier
-  claim that this path was "out of F70's blast radius" is withdrawn — the join review
-  measured the token reaching a squatter through it, which is falsification, not a scope
-  call. The CLI's command-level routing (which verbs go through the server at all) is
-  unchanged.
+- **Settings commands (re-ruled 2026-09-22 evening, K1a).** A server-routed CLI verb never
+  owns its backend: `CliSettingsBackend` keeps the legacy attach-or-start acquire on the
+  configured port — "no own backend - attach - the same rules as usual - CLI - only proxy -
+  if no server is running - we start it". Whatever already answers the port is trusted
+  with the data root's token, exactly like `serve --attach` and the proxy's `--attach`:
+  the squatter exposure on this one path is a ruled acceptance, recorded here rather than
+  fixed. The private spawn this path briefly carried is withdrawn again. The CLI's
+  command-level routing (which verbs go through the server at all) is unchanged.
 - **Private channel and TOCTOU.** The private channel stays an ephemeral TCP loopback
   port. K1 permitted a `0600` unix socket; the MCP client's HTTP transport addresses a
   URL, so a unix-socket endpoint would need a custom connect path and a non-URL channel
@@ -89,6 +92,17 @@ child prints on its stdout pipe. `--attach` is the explicit opt-in to the shared
 - **Shared verdict untouched.** `ServerProbe` and its `Answered` rule are not narrowed.
   The verdict also serves `serve` attach and `WaitForPortToFreeAsync`'s `NotListening`
   requirement; the change belongs at the token-send and attach decisions, where it is.
+- **Private backend lifetime (2026-09-22 evening, K1a).** The proxy owns what it starts:
+  on shutdown `BackendSessions` stops every private backend it acquired over the
+  token-guarded `POST /shutdown` — the product's own stop path — and waits for the port to
+  free. Nothing is killed; a backend that cannot be stopped within the bound is reported
+  and left to its idle timeout. An attached shared server is never stopped: it serves
+  other clients too. Measured defect before this ruling: every proxy run left its private
+  backend live.
+- **Disclosure (residual of the CLI-backend lifetime, ruling N1).** The 4-hour idle
+  watchdog on the shared path stays intended — no lifetime change — but a settings
+  command now says the backend outlives it and names how to stop it, where before the
+  only line was "starting the backend on port N".
 - **Parser flag arity.** `CliArgs.ContainsVerb` no longer treats a bool root flag as
   consuming the next token. `--attach settings …` previously hid the verb behind the flag,
   so a malformed subcommand fell back to the launch-root parse and exited 9 with
@@ -109,10 +123,13 @@ child prints on its stdout pipe. `--attach` is the explicit opt-in to the shared
   and exits 0. It refuses with exit 3 unless `--attach` is given. The owning process is
   never touched on either path.
 - **Default change.** A settings verb (`settings …`, `model …`, `watch registered`,
-  `noise entries`, `repair`, …) against a busy ai-raccoon port no longer reuses that
-  server; it starts its own private backend (which the idle watchdog later stops).
-  `--attach` keeps the shared-server shape; the suites whose whole point is that shape
-  (`CliContractTests`, `CliBankWriteTests`) now pass it explicitly.
+  `noise entries`, `repair`, …) reuses whatever answers the configured port and starts
+  one there when nothing does — the shape it had before this ADR's first cut, no flag
+  needed. The backend it starts outlives the command under the 4h idle watchdog
+  (ruling N1: lifetime unchanged) and the command now says so, naming the stop.
+- **Default change.** The proxy's private backend does not outlive the proxy: it stops
+  with it. Only a backend left behind by an unreachable stop (warning) or started on the
+  shared path by hand or by a settings command is left to the watchdog.
 - **Restart UX change.** A user who ran `serve --restart` bare against a live server gets
   exit 3 and a line naming `--attach` and the manual stop, instead of a silent token
   handover. `serve --restart --attach` is the documented cycle path from here on.
@@ -142,8 +159,12 @@ child prints on its stdout pipe. `--attach` is the explicit opt-in to the shared
 - **A name-based identity check.** Rejected by the plan's review and inherited here:
   `/observability`'s name is self-asserted, and `serverInfo.name` rides after the token.
 - **Leaving the settings path as the legacy acquire.** Rejected after the join review
-  measured the token arriving at a squatter: the proxy's rule is the launch rule, and the
-  CLI's own transport is a launch.
+  measured the token arriving at a squatter — then taken again by the owner's same-day
+  evening ruling (K1a): a CLI settings verb is a one-shot against the shared server, not
+  a launch, so its exposure is accepted and recorded here and only the proxy keeps the
+  private spawn. What carries the difference is lifetime: the proxy owns and stops what
+  it starts, while a settings command's backend is deliberately shared and long-lived
+  (N1, disclosed).
 
 ## Evidence
 
@@ -185,6 +206,28 @@ Consumers re-run green on the touched surface: `CliArgsTests` 99/99, `CliContrac
 3/3, `CliBankWriteTests.ReadCommand_CommitsNothingToTheBank` + `AWriteCommand_IsSeen`
 31/31, plus `NodeRunnerTests`, `BackendLauncherTests`, `BackendSessionsTests`,
 `QuietLoggingTests`, `AppRunnerSettingsRoutingTests` and the attach-parsing tests (77/77).
+
+Owner-ruling follow-up gates (2026-09-22 evening, K1a/N1), each watched red then green:
+
+- `CliSettingsSharedBackendTests.NSettingsCommands_AgainstAScratchRootWithNoServerRunning_
+  ReuseOneSharedBackendOnTheConfiguredPort` — red under a mutated private-spawn acquire:
+  "command 1 left no shared backend answering on the configured port 59158 — it must have
+  started its own instead of attaching"; green: three plain settings invocations are
+  served by one pid on the configured port.
+- The F38 disclosure pair — `CliSettingsSharedBackendTests.ASettingsCommand_PrintsThatThe
+  BackendOutlivesIt_AndHowToStopIt` and `CliSettingsBackendTests.AcquireAsync_WhenIt
+  Succeeds_LogsThatTheBackendOutlivesTheCommand` — red with the disclosure line removed:
+  `run.Stderr.Contains("keeps running after this command exits") should be True but was
+  False` and "logger.Collector.GetSnapshot() should have single item but had 0"; green:
+  the line names the lifetime and `serve --restart --attach --port N`.
+- `CliSettingsTokenExposureTests` now pins the ruled acceptance instead of a refusal: the
+  shared acquire sends the token to whatever answers the configured port, with a
+  real-server read-through as its positive control.
+- `ProxyPrivateBackendLifetimeTests.Shutdown_StopsThePrivateBackendTheProxyStarted` — red:
+  "the private backend on port 59496 still holds the port after the proxy shut down — the
+  proxy must stop the backend it started, not leave it to the idle watchdog"; green: the
+  port frees right after `BackendSessions` disposes. The positive control
+  `Shutdown_WithAttach_NeverStopsTheSharedBackend` holds throughout.
 
 Post-change grep: `--attach` appears in the launch and serve help text and the docs that
 describe them; the probe and restart code paths carry no attach default change.

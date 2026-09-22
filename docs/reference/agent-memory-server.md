@@ -469,7 +469,13 @@ never in the environment and never in tracked files.
 The server parses its own arguments (System.CommandLine 2.0.10) before the host
 builds. Launch-identity flags are CLI-only; a verb runs a one-shot config command
 against the bank (results to stdout), bare `ai-raccoon` (with optional launch flags)
-runs the server.
+runs the server. A server-routed verb (`settings …`, `model …`, `watch registered`,
+`noise entries`, `repair`, …) reaches its backend the way the CLI always did: it
+attaches to the server already on `--port` and starts one there when nothing answers
+(owner ruling 2026-09-22, [ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)).
+That backend is shared and outlives the command under the 4h idle watchdog, so the
+command says so on stderr and names how to stop it:
+`ai-raccoon serve --restart --attach --port <n>`.
 
 | Option | Values | Default |
 |---|---|---|
@@ -477,7 +483,7 @@ runs the server.
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
 | `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only, and the default proxy picks its own ephemeral port | `7721` |
-| `--attach` | flag (the shared-server opt-in; `serve --restart` also needs it to stop an existing server) | off |
+| `--attach` | flag (the proxy's shared-server opt-in — a settings verb attaches-or-starts regardless; `serve --restart` also needs it to stop an existing server) | off |
 | `--quiet` | flag | off |
 
 `proxy` is the default and the zero-config path
@@ -490,7 +496,10 @@ restoring the client's own request id on the response. It never dials
 configured port cannot receive the loopback token or a tool payload
 ([ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). `--attach`
 opts into the shared-server path instead: probe the configured port, attach
-when an ai-raccoon server answers, and start one there when nothing does. No
+when an ai-raccoon server answers, and start one there when nothing does. The
+private backend is the proxy's alone and stops with it over the token-guarded
+`POST /shutdown` when the proxy shuts down; an attached shared server is never
+stopped — it serves other clients too. No
 tool method is named in the proxy, so a new tool needs no proxy change. If the backend can neither be reached nor
 started within its budget, the process exits `ExitCode.ProxyBackendUnavailable`
 (6) with one stderr line of this exact form (`BackendSessions.Unavailable()`,
@@ -541,8 +550,9 @@ removal release.
 ### Serve mode
 
 Since ADR-0020, `serve` is not only a manual verb. The default `proxy`
-transport starts its own `serve --port 0` backend at proxy startup, and a
-client that connects and never calls a tool still leaves that backend running.
+transport starts its own `serve --port 0` backend at proxy startup and stops
+that backend again when the proxy shuts down; while the proxy lives, a client
+that connects and never calls a tool still leaves that backend running.
 This section describes `serve` itself, whether started by the proxy or run by
 hand.
 
