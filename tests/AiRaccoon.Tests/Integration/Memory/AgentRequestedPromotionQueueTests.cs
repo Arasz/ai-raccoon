@@ -111,10 +111,14 @@ public sealed class AgentRequestedPromotionQueueTests : IDisposable
     }
 
     /// <summary>
-    ///     F25's eviction arm, red at HEAD: at capacity this pass's own eviction removes the
-    ///     just-inserted agent row. <c>NotQueued</c> is the union of refused and evicted, and the
-    ///     write collapsed it to the refusal text — "(discarded earlier or already shared)" — for a
-    ///     row the queue had actually evicted at capacity. The response must name the real cause.
+    ///     F25's eviction arm: at capacity this pass's own eviction can still remove the
+    ///     just-inserted agent row — priority (P1.2-b) only guarantees an agent row outranks every
+    ///     scorer inference, not every other row in the queue. Seeded above
+    ///     <see cref="MemoryWriteService.AgentRequestedScore" /> on purpose, so this stays true after
+    ///     P1.2-b: nothing about the priority fix should make the eviction-honesty mapping itself
+    ///     untestable. <c>NotQueued</c> is the union of refused and evicted, and the write must not
+    ///     collapse it to the refusal text — "(discarded earlier or already shared)" — for a row the
+    ///     queue actually evicted at capacity.
     /// </summary>
     [RetryFact]
     public async Task WriteAtCapacity_EvictedByItsOwnPass_ReportsEviction_NotRefusal()
@@ -122,7 +126,10 @@ public sealed class AgentRequestedPromotionQueueTests : IDisposable
         await _store.SetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, "1",
             TestContext.Current.CancellationToken);
         await _queueStore.UpsertAsync(ProjectId,
-            [new QueueCandidate("seed-hash", "seed.md", "a higher-scored seed fact", null, 2.0, ["organic-note"])],
+            [
+                new QueueCandidate("seed-hash", "seed.md", "a higher-priority seed fact", null,
+                    MemoryWriteService.AgentRequestedScore + 1.0, ["organic-note"])
+            ],
             TestContext.Current.CancellationToken);
 
         var entry = await _writes.WriteAsync(
@@ -136,7 +143,68 @@ public sealed class AgentRequestedPromotionQueueTests : IDisposable
 
         var queued = await _queueStore.ListAsync(ProjectId, TestContext.Current.CancellationToken);
         queued.Select(r => r.Hash).ShouldBe(["seed-hash"],
-            "the 2.0 seed outscored the 1.0 agent request, which became the eviction victim");
+            "the higher-priority seed outscored the agent request, which became the eviction victim");
+    }
+
+    /// <summary>
+    ///     P1.2-b gate, red first: <see cref="MemoryWriteService.AgentRequestedScore" /> must outrank
+    ///     the scorer's real ceiling, not just the old literal 1.0. Seeded at
+    ///     <see cref="PromotionScorer.MaxScore" /> — the highest score any scorer inference can ever
+    ///     produce — so an agent row that still loses to it proves the constant is not truly above
+    ///     the scorer's range. Red today: <c>AgentRequestedScore</c> (1.0) is far below
+    ///     <c>PromotionScorer.MaxScore</c> (4.0), so the agent row is the eviction victim.
+    /// </summary>
+    [RetryFact]
+    public async Task WriteAtCapacity_OutranksAMaxScoreScorerRow_ScorerRowIsEvicted_NotTheAgentRow()
+    {
+        await _store.SetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, "1",
+            TestContext.Current.CancellationToken);
+        await _queueStore.UpsertAsync(ProjectId,
+            [
+                new QueueCandidate("seed-hash", "seed.md", "the scorer's own ceiling", null,
+                    PromotionScorer.MaxScore, ["organic-note"])
+            ],
+            TestContext.Current.CancellationToken);
+
+        var entry = await _writes.WriteAsync(
+            new MemoryWriteRequest(ProjectId, Content) { Context = ContextNaming.SharedContext },
+            TestContext.Current.CancellationToken);
+
+        entry.Stored.ShouldBeTrue();
+        entry.Reason.ShouldBe("queued-for-promotion: agent-requested-share",
+            "an explicit request must outrank even the scorer's own maximum score");
+
+        var queued = await _queueStore.ListAsync(ProjectId, TestContext.Current.CancellationToken);
+        queued.Select(r => r.Hash).ShouldBe([entry.Hash],
+            "the agent's priority score outranks PromotionScorer.MaxScore, so the seed is the eviction victim");
+    }
+
+    /// <summary>
+    ///     P1.2-b positive control: agent priority beats every scorer inference, but it is not
+    ///     immortality — two agent-requested rows tied at the same priority score still yield to
+    ///     capacity. Guards against a fix that special-cases the priority score out of eviction
+    ///     entirely (e.g. an "always keep" branch), which would satisfy the gate above for the wrong
+    ///     reason.
+    /// </summary>
+    [RetryFact]
+    public async Task TwoAgentRequestedRows_AtCapacity_CapacityStillEvictsOne()
+    {
+        await _store.SetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, "1",
+            TestContext.Current.CancellationToken);
+        await _queueStore.UpsertAsync(ProjectId,
+            [
+                new QueueCandidate("agent-hash-1", "a.md", "first agent request", null,
+                    MemoryWriteService.AgentRequestedScore, [PromotionReasons.AgentRequestedShare]),
+                new QueueCandidate("agent-hash-2", "b.md", "second agent request", null,
+                    MemoryWriteService.AgentRequestedScore, [PromotionReasons.AgentRequestedShare])
+            ],
+            TestContext.Current.CancellationToken);
+
+        await _queue.ProposeAsync(ProjectId, [], TestContext.Current.CancellationToken);
+
+        var remaining = await _queueStore.ListAsync(ProjectId, TestContext.Current.CancellationToken);
+        remaining.Count.ShouldBe(1,
+            "agent priority is not immortality: capacity still evicts one of two rows tied at the top score");
     }
 
     /// <summary>
@@ -198,6 +266,79 @@ public sealed class AgentRequestedPromotionQueueTests : IDisposable
             "a version bump retires every row stamped by the old scorer — the documented K2 trade-off");
         (await _queueStore.ListAsync(ProjectId, TestContext.Current.CancellationToken)).ShouldBeEmpty(
             "the agent stamp is generation-scoped: at PromotionScorer.Version + 1 the row is stale and cleared");
+    }
+
+    /// <summary>
+    ///     P1.2-a gate, red first: on an embedded bank the row becomes a genuine extraction
+    ///     candidate, so the next propose pass re-scores it and — before this fix — the upsert
+    ///     replaces `reasons`/`score` wholesale (<c>PromotionQueueSql.Upsert</c>'s
+    ///     <c>ON CONFLICT DO UPDATE</c>), erasing the only mark of the agent's request along with its
+    ///     priority score. Owner ruling P1.2-a (2026-09-22): the label — and with it the priority —
+    ///     must survive, merged with whatever the scorer adds.
+    /// </summary>
+    [RetryFact]
+    public async Task AgentRequestedRow_SurvivesAnEmbeddedProposePass_KeepsTheLabelAndThePriorityScore()
+    {
+        var entry = await _writes.WriteAsync(
+            new MemoryWriteRequest(ProjectId, Content) { Context = ContextNaming.SharedContext },
+            TestContext.Current.CancellationToken);
+        entry.Stored.ShouldBeTrue();
+
+        await MarkEmbeddedAsync(entry.Hash);
+
+        await _runner.ProposeAsync(ProjectId, new SharedIndex([], []), includeTtlRows: false, limit: 20,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var surviving = await _queueStore.ListAsync(ProjectId, TestContext.Current.CancellationToken);
+        surviving.Count.ShouldBe(1);
+        surviving[0].Hash.ShouldBe(entry.Hash);
+        surviving[0].Reasons.ShouldContain(PromotionReasons.AgentRequestedShare,
+            "a re-score must not erase the only mark of an explicit agent request");
+        surviving[0].Score.ShouldBe(MemoryWriteService.AgentRequestedScore,
+            "the priority score must survive a re-score, not be replaced by the scorer's own value");
+    }
+
+    /// <summary>
+    ///     P1.2-a positive control: preservation is agent-request-specific, not a blanket "never
+    ///     re-score an already-queued row" — an ordinary row seeded with a stale score/reason must
+    ///     still be overwritten by a live re-score. Guards against a fix that freezes every queued
+    ///     row instead of only the ones carrying <see cref="PromotionReasons.AgentRequestedShare" />.
+    /// </summary>
+    [RetryFact]
+    public async Task PlainOrganicRow_IsReScoredNormally_NotPinnedToAStaleReasonOrScore()
+    {
+        var entry = await _writes.WriteAsync(new MemoryWriteRequest(ProjectId, Content),
+            TestContext.Current.CancellationToken);
+        entry.Stored.ShouldBeTrue();
+
+        await MarkEmbeddedAsync(entry.Hash);
+
+        // A stale queue row for this same hash, seeded directly as if an earlier pass had scored it
+        // very differently — the next propose pass must overwrite it with the scorer's live output.
+        await _queueStore.UpsertAsync(ProjectId,
+            [new QueueCandidate(entry.Hash, entry.Path, entry.Value, null, 0.01, ["stale-seed-reason"],
+                PromotionScorer.Version)],
+            TestContext.Current.CancellationToken);
+
+        await _runner.ProposeAsync(ProjectId, new SharedIndex([], []), includeTtlRows: false, limit: 20,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var queued = await _queueStore.ListAsync(ProjectId, TestContext.Current.CancellationToken);
+        queued.Count.ShouldBe(1);
+        queued[0].Hash.ShouldBe(entry.Hash);
+        queued[0].Score.ShouldNotBe(0.01, "an ordinary row's stale score must be replaced by a live re-score");
+        queued[0].Reasons.ShouldNotContain("stale-seed-reason",
+            "an ordinary row's stale reasons must be replaced, not merged, by a live re-score");
+        queued[0].Reasons.ShouldNotContain(PromotionReasons.AgentRequestedShare,
+            "an ordinary write was never an agent request, so nothing merges the tag onto it");
+    }
+
+    private async Task MarkEmbeddedAsync(string hash)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(
+            new CommandDefinition("UPDATE entries SET embed_state = 'embedded' WHERE hash = @Hash",
+                new { Hash = hash }, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private sealed class NoopMetrics : IPromotionQueueMetrics
