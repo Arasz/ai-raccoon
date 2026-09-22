@@ -209,7 +209,6 @@ config channel (see [Command-line options](#command-line-options)).
   same commit, no stale-vector window — and the `code-reindex` maintenance job signals the embed
   topic's single consumer (`EmbedDrainService`, ADR-0091) whenever it finds pending rows, on its
   own on-demand
->>>>>>> origin/main
   cadence, rather than re-embedding inline itself; there is no outbox, no relay wait, and memory
   tools are never blocked.
   `ai-raccoon model code set default` downloads `faxenoff/code-daemon-embed-v1` (187 MB, if not
