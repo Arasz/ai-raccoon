@@ -134,12 +134,14 @@ public sealed partial class MemoryTools(
     public async Task<ApiEnvelope<SearchResultList>> Search(
         [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description(
-            "The search query. Semantic matching only sees roughly the first 254 tokens (~1,000 " +
-            "characters of English prose, approximate) — for a long paste (a log, stack trace, test " +
-            "output), search its identifying line (exception type, error code, failing test name) " +
-            "instead of the whole dump. Keyword matching still covers the query in full. When kind " +
-            "is code or both, the code leg's own engine window is wider (510 tokens for " +
-            "code-daemon-embed-v1) — a query trimmed for code may still fit the memory leg in full.")]
+            "The search query. Semantic matching only sees roughly the first N tokens — the active " +
+            "memory embedding engine's own window (254 tokens for the bundled model; a manifest " +
+            "model's is wider, and a result warning names the real number when a query is long " +
+            "enough to hit it) — for a long paste (a log, stack trace, test output), search its " +
+            "identifying line (exception type, error code, failing test name) instead of the whole " +
+            "dump. Keyword matching still covers the query in full. When kind is code or both, the " +
+            "code leg has its own, separately-sized engine window and its own trim warning — a query " +
+            "trimmed for one leg may still fit the other in full.")]
         string query,
         [Description(
             "The calling agent's session id. Required attribution, stored verbatim on the search_quality row; " +
