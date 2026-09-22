@@ -168,7 +168,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         // and waiting for it to settle keeps it from being mistaken for a write the verb under test
         // made — the assertions below only care about what the verb itself commits.
         var warmup = await RaccoonProcess.RunAsync(
-            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture), "settings", "sweep", "show"],
+            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture), "--attach", "settings", "sweep", "show"],
             HardCap, TestContext.Current.CancellationToken);
         warmup.ExitCode.ShouldBe(0, $"warm-up failed; stderr: {warmup.Stderr}");
         await WaitForBankToSettleAsync(TestContext.Current.CancellationToken);
@@ -208,7 +208,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         var before = await BankContent.SnapshotAsync(_factory, TestContext.Current.CancellationToken);
 
         var run = await RaccoonProcess.RunAsync(
-            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture), .. argv],
+            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture), "--attach", .. argv],
             HardCap, TestContext.Current.CancellationToken);
         run.ExitCode.ShouldBe(0, $"'{label}' failed; stderr: {run.Stderr}");
 
@@ -232,7 +232,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         await using var observer = await BankCommitObserver.OpenAsync(_factory, TestContext.Current.CancellationToken);
 
         var run = await RaccoonProcess.RunAsync(
-            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture),
+            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture), "--attach",
                 "settings", "sweep", "threshold", "set", "0.42"],
             HardCap, TestContext.Current.CancellationToken);
         run.ExitCode.ShouldBe(0, $"the writer must exit cleanly; stderr: {run.Stderr}");
@@ -270,7 +270,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         var before = await BankContent.SnapshotAsync(_factory, TestContext.Current.CancellationToken);
 
         var run = await RaccoonProcess.RunAsync(
-            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture), .. argv],
+            ["--data-root", _dataRoot, "--port", _port.ToString(CultureInfo.InvariantCulture), "--attach", .. argv],
             HardCap, TestContext.Current.CancellationToken);
         run.ExitCode.ShouldBe(0, $"'{label}' failed; stderr: {run.Stderr}");
 

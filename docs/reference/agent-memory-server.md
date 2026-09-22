@@ -471,23 +471,38 @@ never in the environment and never in tracked files.
 The server parses its own arguments (System.CommandLine 2.0.10) before the host
 builds. Launch-identity flags are CLI-only; a verb runs a one-shot config command
 against the bank (results to stdout), bare `ai-raccoon` (with optional launch flags)
-runs the server.
+runs the server. A server-routed verb (`settings …`, `model …`, `watch registered`,
+`noise entries`, `repair`, …) reaches its backend the way the CLI always did: it
+attaches to the server already on `--port` and starts one there when nothing answers
+(owner ruling 2026-09-22, [ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)).
+That backend is shared and outlives the command under the 4h idle watchdog, so the
+command says so on stderr and names how to stop it:
+`ai-raccoon serve --restart --attach --port <n>`.
 
 | Option | Values | Default |
 |---|---|---|
 | `--transport` | `proxy`, `http` (`stdio` and `https` are rejected at parse) | `proxy` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
-| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only — the proxy has to dial a port it knows | `7721` |
+| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only, and the default proxy picks its own ephemeral port | `7721` |
+| `--attach` | flag (the proxy's shared-server opt-in — a settings verb attaches-or-starts regardless; `serve --restart` also needs it to stop an existing server) | off |
 | `--quiet` | flag | off |
 
 `proxy` is the default and the zero-config path
 ([ADR 0020](../adr/0020-always-on-http-stdio-proxy.md)): bare `ai-raccoon`
-opens no bank, resolves no encryption key, and loads no embedding model — it
-probes `http://127.0.0.1:<port>/mcp`, spawns `ai-raccoon serve` when nothing
-answers, and forwards every JSON-RPC message to it, restoring the client's
-own request id on the response. No tool method is named in the proxy, so a
-new tool needs no proxy change. If the backend can neither be reached nor
+opens no bank, resolves no encryption key, and loads no embedding model. It
+starts its own `ai-raccoon serve --port 0` backend, takes the bound URL from
+that child's stdout alone, and forwards every JSON-RPC message to it,
+restoring the client's own request id on the response. It never dials
+`http://127.0.0.1:<port>/mcp` on this path, so a process that merely holds the
+configured port cannot receive the loopback token or a tool payload
+([ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). `--attach`
+opts into the shared-server path instead: probe the configured port, attach
+when an ai-raccoon server answers, and start one there when nothing does. The
+private backend is the proxy's alone and stops with it over the token-guarded
+`POST /shutdown` when the proxy shuts down; an attached shared server is never
+stopped — it serves other clients too. No
+tool method is named in the proxy, so a new tool needs no proxy change. If the backend can neither be reached nor
 started within its budget, the process exits `ExitCode.ProxyBackendUnavailable`
 (6) with one stderr line of this exact form (`BackendSessions.Unavailable()`,
 quoted verbatim from the P5 pass):
@@ -536,35 +551,46 @@ removal release.
 
 ### Serve mode
 
-Since ADR-0020, `serve` is not only a manual verb — it is autostarted by the
-default `proxy` transport, at proxy startup, whenever nothing already answers on
-the port. A client that connects and never calls a tool still leaves a backend
-running. This section describes `serve` itself, whether started by the proxy or
-run by hand.
+Since ADR-0020, `serve` is not only a manual verb. The default `proxy`
+transport starts its own `serve --port 0` backend at proxy startup and stops
+that backend again when the proxy shuts down; while the proxy lives, a client
+that connects and never calls a tool still leaves that backend running.
+This section describes `serve` itself, whether started by the proxy or run by
+hand.
 
 `ai-raccoon serve` is the HTTP mode as a first-class verb: it forces the http
 transport, applies a 4h idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0`
 disables), prints the bound URL to stdout, and stays in the foreground —
-background it with `ai-raccoon serve > serve.log 2>&1 &` (POSIX). If the port
-already hosts an ai-raccoon server, `serve` attaches to it and exits 0; the
-owning process keeps the watchdog, and the attached run never touches the bank.
-A busy port held by a foreign listener fails fast with exit code 3 and a
-`--port 0` hint.
+background it with `ai-raccoon serve > serve.log 2>&1 &` (POSIX). A busy port
+held by a foreign listener fails fast with exit code 3 and a `--port 0` hint.
+A port already held by an ai-raccoon server is refused the same way unless
+`--attach` is given: `serve --attach` attaches to that server and exits 0, the
+owning process keeps the watchdog, and the attached run never touches the bank
+([ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). Without the
+flag, nothing is asked to stop and nothing is joined.
 
-`serve --restart` cycles that server instead of attaching to it (ADR-0022).
-Attaching is wrong on exactly one path — an update: `dotnet tool update`
-replaces the binary while the always-on backend keeps the old assembly loaded,
-so every later client attaches to the stale one. `--restart` asks the running
-server to stop over `POST /shutdown` (token-guarded, POST-only), waits for the
-port to free, then serves in its place; with nothing listening it is a plain
-`serve`. The stop gets 10s in total — the host's stated `ShutdownTimeout`,
+`serve --restart --attach` cycles that server instead of attaching to it
+(ADR-0022). Attaching is wrong on exactly one path — an update: `dotnet tool
+update` replaces the binary while the always-on backend keeps the old assembly
+loaded, so every later client attaches to the stale one. `--restart` asks the
+running server to stop over `POST /shutdown` (token-guarded, POST-only), waits
+for the port to free, then serves in its place; with nothing listening it is a
+plain `serve`. Cycling sends the listener the data root's token, so it is an
+attach-shaped trust decision: without `--attach`, a listener that identifies as
+an ai-raccoon server is refused before the token file is read, with exit 3 and
+a line naming `--attach`, the token it would send, and the manual stop
+(`ai-raccoon serve observability pid --port <n>`, then serve again) — a
+self-asserted `/observability` name no longer earns the token (F70/K1,
+[ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). The stop gets
+10s in total — the host's stated `ShutdownTimeout`,
 shared by in-flight calls and every background service, not a per-call
 guarantee — after which what is left is aborted and the proxy's documented
 at-least-once retry re-issues it against the new backend. The port is then
 given 20s to free.
 
 `--restart` kills no process and never falls back to attaching. Every way the
-cycle can fail exits `8` with a line naming the port and the manual escape:
+cycle can fail exits `10`-`14` or `16` with a line naming the port and the
+manual escape:
 the server refuses our token (it serves another data root), it has no
 `/shutdown` (too old to be cycled — the first update *onto* this version still
 needs the old process stopped by hand), our data root holds no token to

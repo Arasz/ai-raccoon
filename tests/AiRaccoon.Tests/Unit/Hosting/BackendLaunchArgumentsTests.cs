@@ -47,6 +47,23 @@ public sealed class BackendLaunchArgumentsTests
     public void Executable_WithNoArguments_DelegatesToTheLiveProcessPath() =>
         BackendLaunchArguments.Executable().ShouldBe(BackendLaunchArguments.Executable(Environment.ProcessPath));
 
+    /// <summary>
+    ///     F70/K1: the private path pins --port 0 so the OS picks the ephemeral port the launcher
+    ///     reads back from the child's stdout, while the attach path keeps the configured port.
+    ///     Both carry the launch identity, --quiet included.
+    /// </summary>
+    [Fact]
+    public void ServeArguments_PinTheConfiguredPort_AndPrivateArgumentsPinEphemeral()
+    {
+        var config = new ServerConfig(58432, McpTransport.Http,
+            new InfrastructureOptions { DataRoot = "/tmp/some-root", Scope = InstallScope.User, Quiet = true });
+
+        BackendLaunchArguments.ServeArguments(config).ShouldBe(
+            ["--data-root", "/tmp/some-root", "--install-scope", "user", "--quiet", "serve", "--port", "58432"]);
+        BackendLaunchArguments.PrivateServeArguments(config).ShouldBe(
+            ["--data-root", "/tmp/some-root", "--install-scope", "user", "--quiet", "serve", "--port", "0"]);
+    }
+
     [Fact]
     public void UnavailableExecutableMessage_ForAnUnpackagedInvocation_NamesTheShapeAndTheManualServeCommand()
     {

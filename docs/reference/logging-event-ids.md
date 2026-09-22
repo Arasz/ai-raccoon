@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **181** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **187** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -30,6 +30,28 @@ refusal itself adds no `[LoggerMessage]` (it reuses `ToolRefusals` 911).)
 (Remeasured 2026-09-14, fix/search-quality-busy-log: **181** —
 `SqliteSearchQualityService` 964, the best-effort search_quality row skipped on a
 busy bank; 965 keeps genuine failures with their exception.)
+
+(Remeasured 2026-09-22, PSR P1.3/K1: **183** — `BackendLauncher` 631/632, the
+private-spawn start line and the private-backend-never-reported-a-URL failure. Both
+land inside the launcher's existing 633-635 block rather than at 641, which
+`EventIdBlocks_DoNotInterleaveBetweenOwners` would read as overlapping
+`ProxyForwarder`'s 636-639.)
+
+(Remeasured 2026-09-22, PSR P1.3 join-review follow-up: **184** — `ServerRestart` 657,
+the attach-required refusal: a self-asserted /observability name no longer buys the
+data root's token on `serve --restart`; the id extends the restart's own 650-656 block.)
+
+(Remeasured 2026-09-22, PSR W1 P1.3 owner ruling 2026-09-22: **185** —
+`CliSettingsBackend` 687, the F38 residual disclosure: a settings command's shared
+backend outlives it, and the acquire now says so and names the stop command. New
+block below the 680-686 control-plane endpoint rows, with 700 the next owner's
+first id.)
+
+(Remeasured 2026-09-22, PSR W1 P1.3 lane A: **187** — `BackendSessions` 688-689,
+the private backend's shutdown stop: 688 it stopped with the proxy, 689 it did not
+stop within the bound and is left to its idle timeout. New block directly above
+`CliSettingsBackend`'s 687 in value order — the two new owners' blocks are
+adjacent but disjoint.)
 
 Worth recording why this doc exists at all: colliding ids compile, log, and pass every
 assertion that isn't specifically checking for the collision — a duplicate is invisible
@@ -73,10 +95,10 @@ One block per source file that owns a `Log` class or equivalent:
 | 610-612 | `src/AiRaccoon/Hosting/Watchdog/IdleWatchdog.cs` |
 | 620-623 | `src/AiRaccoon/Hosting/Node/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
 | 630 | `src/AiRaccoon/Hosting/Proxy/ProxyRunner.cs` (ADR-0020) |
-| 633-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs` (ADR-0020; path corrected 2026-08-22 — moved from `Setup/Serve/`. 635's message extended with the captured stderr, delta-review plan C1) |
+| 631-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs` (ADR-0020; path corrected 2026-08-22 — moved from `Setup/Serve/`. 635's message extended with the captured stderr, delta-review plan C1. 631/632 added 2026-09-22, PSR P1.3/K1 — 631 is the private-spawn start line, 632 the private backend that never reported a URL; 633-635 are the attach path unchanged) |
 | 636-639 | `src/AiRaccoon/Hosting/Proxy/ProxyForwarder.cs` (ADR-0020) |
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
-| 650-656 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043) |
+| 650-657 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043; 657 is the attach-required refusal before the token is read, F70/K1) |
 | 660 | `src/AiRaccoon/Hosting/Node/ShutdownEndpoint.cs` (ADR-0022) |
 | 670-675 | `src/AiRaccoon/Settings/SettingsEndpoint.cs` (ADR-0075: the control-plane settings resource; 672/673 log the key only, never the value — sync credentials and the embedding API key go through here; 674 is the model-migration outbox commit, ADR-0076; 675 added 2026-08-21: the code corpus's own activation commit, no outbox, docs/work/2026-08-21-code-search-implementation-plan.md §3.3) |
 | 680-681 | `src/AiRaccoon/Settings/RepairEndpoint.cs` (ADR-0075 amendment: the control-plane repair resource — 680 is a report served, 681 is a repair_requests outbox commit) |
@@ -84,6 +106,8 @@ One block per source file that owns a `Log` class or equivalent:
 | 684 | `src/AiRaccoon/Settings/MaintenanceStatsEndpoint.cs` (ADR-0075 amendment: the control-plane maintenance-stats resource — read-only, no outbox) |
 | 685 | `src/AiRaccoon/Settings/NoiseSummaryEndpoint.cs` (ADR-0075 amendment: the control-plane noise-summary resource — read-only, no outbox; closes `noise entries`' latent bank-open) |
 | 686 | `src/AiRaccoon/Settings/WatchRegisteredEndpoint.cs` (ADR-0075 amendment: the control-plane watch-registered resource — read-only, no outbox; closes `watch registered`'s latent bank-open) |
+| 687 | `src/AiRaccoon/Settings/CliSettingsBackend.cs` (added 2026-09-22, owner ruling N1: the F38 residual disclosure — a settings command's acquired backend keeps running after the command exits, and the line names how to stop it; the 4h idle watchdog stays intended, so this is disclosure only) |
+| 688-689 | `src/AiRaccoon/Hosting/Proxy/BackendSessions.cs` (added 2026-09-22, owner ruling 2026-09-22: the private backend's lifetime belongs to the proxy that started it — 688 it stopped with the proxy over the token-guarded /shutdown, 689 it did not stop within the bound and is left to its idle timeout; an attached shared server is never stopped) |
 | 700, 702-704, 707-709 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` (701/705/706 removed 2026-08-11: per-element eviction/failure logs de-noised; 708 = prune summary; 709 added 2026-08-14 = stale promotion claims reclaimed, ADR-0037) |
 | 710-711 | `src/AiRaccoon.Infrastructure/Maintenance/ProjectIdsRepairJob.cs` (ADR-0099: a stored `repair_requests.map_json` that bypassed endpoint validation — the poll refuses to fold and leaves the request open for a corrected `--apply`; 711 added 2026-09-05, Package F of docs/work/air-run-once-repair-fully-converges-plan.md: the per-pass result receipt — one Information line per requested run stamping folds/drops/retires applied, rows moved, and chunk rows repositioned) |
 | 713 | `src/AiRaccoon.Infrastructure/Maintenance/ProjectIdAliasCacheHostedService.cs` (Package E1: the startup warm of the choke-point alias cache failed — P3 enforcement stays disarmed until the next reload; fail-open, never blocks startup) |

@@ -78,6 +78,13 @@ ai-raccoon serve --idle-timeout 30m
 ai-raccoon serve --idle-timeout 0
 ```
 
+A one-shot CLI settings command that finds no server on `--port` starts one there and
+leaves it running under this watchdog — deliberately shared and long-lived. The command
+discloses that on stderr (`ai-raccoon: the backend on port <n> keeps running after this
+command exits …`) and names the stop:
+`ai-raccoon serve --restart --attach --port <n>`. The proxy is different: its private
+backend is stopped when the proxy itself shuts down.
+
 ---
 
 ## Zero-downtime server updates
