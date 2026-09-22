@@ -97,7 +97,7 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
         var tools = new MemoryTools(_store, gate,
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(_settings), new MemoryWriteService(_store, new FakePromotionQueue()),
-            new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
+            new NoOpMeasurementRecorder(), _settings, NullLogger<MemoryTools>.Instance);
 
         var response = await tools.Search("acme", "quick fox", sessionId: "sess-test", kind: "memory",
             cancellationToken: TestContext.Current.CancellationToken);

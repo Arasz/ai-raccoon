@@ -98,7 +98,7 @@ public sealed class PromotionQueueServiceGuardTests
         public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
-        public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
+        public Task<UpsertOutcome> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
@@ -149,7 +149,7 @@ public sealed class PromotionQueueServiceGuardTests
         public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
             (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
-        public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
+        public Task<UpsertOutcome> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

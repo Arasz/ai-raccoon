@@ -62,7 +62,8 @@ public sealed class SharedExtractionRunner(
                 .ToList();
             if (toQueue.Count > 0)
             {
-                await queue.ProposeAsync(projectId, ToQueueCandidates(rows, toQueue), cancellationToken)
+                var existingByHash = existingQueueRows.ToDictionary(r => r.Hash, StringComparer.Ordinal);
+                await queue.ProposeAsync(projectId, ToQueueCandidates(rows, toQueue, existingByHash), cancellationToken)
                     .ConfigureAwait(false);
             }
         }
@@ -72,18 +73,33 @@ public sealed class SharedExtractionRunner(
 
     /// <summary>
     ///     Queue candidates carry the FULL value and the extraction score; the preview-only
-    ///     ShareCandidate is joined back to its source row for those fields.
+    ///     ShareCandidate is joined back to its source row for those fields. A row already carrying
+    ///     <see cref="PromotionReasons.AgentRequestedShare" /> keeps that reason and its priority
+    ///     score across the re-score (docs/adr/0067, owner ruling P1.2-a, 2026-09-22) — the scorer's
+    ///     own reasons are merged in rather than replacing it, so the request stays visible and
+    ///     ranked correctly for as long as the row exists.
     /// </summary>
     private static IReadOnlyList<QueueCandidate> ToQueueCandidates(
-        IReadOnlyList<ExtractionCandidateRow> rows, IReadOnlyList<ShareCandidate> candidates)
+        IReadOnlyList<ExtractionCandidateRow> rows, IReadOnlyList<ShareCandidate> candidates,
+        IReadOnlyDictionary<string, PromotionQueueRow> existingByHash)
     {
         var byHash = rows.ToDictionary(r => r.Hash, StringComparer.Ordinal);
         return
         [
-            .. candidates
-                .Select(c => byHash.TryGetValue(c.Hash, out var row)
-                    ? new QueueCandidate(c.Hash, c.Path, row.Value, row.SourceFile, c.Score, c.Reasons, PromotionScorer.Version)
-                    : new QueueCandidate(c.Hash, c.Path, c.ValuePreview, null, c.Score, c.Reasons, PromotionScorer.Version))
+            .. candidates.Select(c =>
+            {
+                var (value, sourceFile) = byHash.TryGetValue(c.Hash, out var row)
+                    ? (row.Value, row.SourceFile)
+                    : (c.ValuePreview, (string?)null);
+                var (score, reasons) = existingByHash.TryGetValue(c.Hash, out var existing) &&
+                                        existing.Reasons.Contains(PromotionReasons.AgentRequestedShare, StringComparer.Ordinal)
+                    ? (MemoryWriteService.AgentRequestedScore, MergeAgentRequestedReasons(c.Reasons))
+                    : (c.Score, c.Reasons);
+                return new QueueCandidate(c.Hash, c.Path, value, sourceFile, score, reasons, PromotionScorer.Version);
+            })
         ];
     }
+
+    private static IReadOnlyList<string> MergeAgentRequestedReasons(IReadOnlyList<string> scorerReasons) =>
+        [PromotionReasons.AgentRequestedShare, .. scorerReasons.Where(r => r != PromotionReasons.AgentRequestedShare)];
 }

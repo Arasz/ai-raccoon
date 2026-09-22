@@ -36,7 +36,7 @@ public sealed class MemorySearchFusionSignalMetricsTests
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()),
             recorder ?? _recorder,
-            NullLogger<MemoryTools>.Instance);
+            new InMemorySettings(), NullLogger<MemoryTools>.Instance);
 
     private void StubTwoLegSearch()
     {

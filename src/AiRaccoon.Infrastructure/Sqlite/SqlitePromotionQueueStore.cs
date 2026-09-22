@@ -22,12 +22,12 @@ public sealed class SqlitePromotionQueueStore(
             .ConfigureAwait(false);
     }
 
-    public async Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
+    public async Task<UpsertOutcome> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
         CancellationToken cancellationToken = default)
     {
         if (rows.Count == 0)
         {
-            return 0;
+            return new UpsertOutcome(0, []);
         }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
@@ -79,7 +79,7 @@ public sealed class SqlitePromotionQueueStore(
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return hashes.Count(h => !existing.Contains(h)) - refused.Count;
+        return new UpsertOutcome(hashes.Count(h => !existing.Contains(h)) - refused.Count, [.. refused]);
     }
 
     public async Task<IReadOnlyList<PromotionQueueRow>> ListAsync(string? projectId,

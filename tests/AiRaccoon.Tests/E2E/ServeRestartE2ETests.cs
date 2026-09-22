@@ -13,9 +13,10 @@ using AiRaccoon.Tests.TestHelpers;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     `serve --restart` against a real second process (ADR-0022): the running server exits, the
-///     port frees, and what answers afterwards is a different process reporting this binary's
-///     version. Also pins the bounded wait — a server that will not go produces a non-zero exit.
+///     `serve --restart --attach` against a real second process (ADR-0022): the running server
+///     exits, the port frees, and what answers afterwards is a different process reporting this
+///     binary's version. Also pins the bounded wait — a server that will not go produces a non-zero
+///     exit. `--attach` is the F70/K1 opt-in that authorises sending the listener the token.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
@@ -127,7 +128,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
     }
 
     private ServeHarness StartRestartInProcess(int port) =>
-        ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"],
+        ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"],
             TimeSpan.FromSeconds(180));
 
     private static async Task<JsonDocument> WaitForServerAsync(int port)

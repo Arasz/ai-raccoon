@@ -7,6 +7,7 @@ using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Projects;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,16 +28,20 @@ public sealed class MemorySearchEvidenceEnvelopeTests
 {
     private readonly SpyCodeSearchService _codeSearch = new();
     private readonly FakeStore _store = new();
+    private readonly InMemorySettings _settings = new();
     private readonly MemoryTools _tools;
 
     public MemorySearchEvidenceEnvelopeTests()
     {
+        // An engine is configured so the envelope stays the legacy shape: this suite asserts the
+        // EVIDENCE fields are additive, not that a fresh bank carries the F6 warning.
+        _settings.Values[EmbeddingSettingsKeys.Provider] = "local";
         var access = new MemoryAccessGuard(_store);
         var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(migrated: false));
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, new NoOpSearchQualityService()),
-            new QueryGuardService(new InMemorySettings()),
+            new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
-            NullLogger<MemoryTools>.Instance);
+            _settings, NullLogger<MemoryTools>.Instance);
     }
 
     /// <summary>

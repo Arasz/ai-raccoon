@@ -187,7 +187,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         /// <summary>Simulates promotion_queue.claimed_at — (project, hash) pairs currently claimed.</summary>
         public HashSet<(string ProjectId, string Hash)> Claimed { get; } = [];
 
-        public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
+        public Task<UpsertOutcome> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
