@@ -29,7 +29,8 @@ public sealed partial class MemoryTools(
     IMeasurementRecorder measurements,
     ISettingsStore settings,
     ILogger<MemoryTools> logger,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    IEmbeddingService? embeddings = null)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -245,7 +246,8 @@ public sealed partial class MemoryTools(
         // policy like the guard above -- so it is evaluated unconditionally, never through
         // IQueryGuardService (a disabled guard must not silence it). It applies identically
         // whichever kind was requested, since both corpora search the same query text.
-        var warning = SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query),
+        var lengthBudget = await MemoryQueryBudgetTokensAsync(cancellationToken);
+        var warning = SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query, lengthBudget),
             await MemoryEngineWarningAsync(parsedKind, cancellationToken), dispatch.CodeWarning);
         var result = BuildSearchResultList(dispatch, warning, searchQuery);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
@@ -299,6 +301,27 @@ public sealed partial class MemoryTools(
 
         var provider = await settings.GetSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken);
         return SearchWarnings.MemoryEngineWarning(provider);
+    }
+
+    /// <summary>
+    ///     pi-badger-integration F1: QueryLengthGuard's reported budget must track the ACTIVE memory
+    ///     engine, not the bundled model's fixed 254 -- resolved via IEmbeddingService.ResolveChunkBudgetFor
+    ///     (D6/D9), the same number EntryEmbedder.EmbedQueryAsync will actually trim to. An unconfigured
+    ///     provider resolves as "local" (the bundled model the remedy activates), so the guard's number
+    ///     still matches what a fresh bank would do once fixed. embeddings is optional (DI-resolved in
+    ///     production, like timeProvider); a caller that supplies none keeps the bundled 254 unchanged.
+    /// </summary>
+    private async Task<int> MemoryQueryBudgetTokensAsync(CancellationToken cancellationToken)
+    {
+        if (embeddings is null)
+        {
+            return QueryLengthGuard.BundledBudgetTokens;
+        }
+
+        var provider = await settings.GetSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken);
+        var model = await settings.GetSettingAsync(EmbeddingSettingsKeys.Model, cancellationToken);
+        var resolvedProvider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
+        return embeddings.ResolveChunkBudgetFor(new EmbeddingSettings(resolvedProvider, model, null, null));
     }
 
     /// <summary>
