@@ -25,7 +25,8 @@ public sealed class HowToSettingsExitTableTests
             [ExitCode.SettingsServerRefused] = ("SettingsServerRefused", "refused the loopback token"),
             [ExitCode.SettingsServerUnavailable] = ("SettingsServerUnavailable", "within the acquire budget"),
             [ExitCode.SettingsServerError] = ("SettingsServerError", "answered but failed"),
-            [ExitCode.ModelResetRefused] = ("ModelResetRefused", "outbox row is open")
+            [ExitCode.ModelResetRefused] = ("ModelResetRefused", "outbox row is open"),
+            [ExitCode.Interrupted] = ("Interrupted", "cancelled before it finished")
         };
 
     [Fact]

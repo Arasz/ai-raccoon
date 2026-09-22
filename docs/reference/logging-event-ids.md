@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **187** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **188** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -31,27 +31,17 @@ refusal itself adds no `[LoggerMessage]` (it reuses `ToolRefusals` 911).)
 `SqliteSearchQualityService` 964, the best-effort search_quality row skipped on a
 busy bank; 965 keeps genuine failures with their exception.)
 
-(Remeasured 2026-09-22, PSR P1.3/K1: **183** — `BackendLauncher` 631/632, the
-private-spawn start line and the private-backend-never-reported-a-URL failure. Both
-land inside the launcher's existing 633-635 block rather than at 641, which
-`EventIdBlocks_DoNotInterleaveBetweenOwners` would read as overlapping
-`ProxyForwarder`'s 636-639.)
-
-(Remeasured 2026-09-22, PSR P1.3 join-review follow-up: **184** — `ServerRestart` 657,
-the attach-required refusal: a self-asserted /observability name no longer buys the
-data root's token on `serve --restart`; the id extends the restart's own 650-656 block.)
-
-(Remeasured 2026-09-22, PSR W1 P1.3 owner ruling 2026-09-22: **185** —
-`CliSettingsBackend` 687, the F38 residual disclosure: a settings command's shared
-backend outlives it, and the acquire now says so and names the stop command. New
-block below the 680-686 control-plane endpoint rows, with 700 the next owner's
-first id.)
-
 (Remeasured 2026-09-22, PSR W1 P1.3 lane A: **187** — `BackendSessions` 688-689,
 the private backend's shutdown stop: 688 it stopped with the proxy, 689 it did not
 stop within the bound and is left to its idle timeout. New block directly above
 `CliSettingsBackend`'s 687 in value order — the two new owners' blocks are
 adjacent but disjoint.)
+
+(Remeasured 2026-09-22, task/psr-w3-p31 (merged after the P1.3 line above): **188** —
+`DoctorCommands` 1016, the bank-is-not-a-database warning behind exit 26 (F7). The
+whole block relocated to 1014-1016: the new id could not grow in place because 1002
+was already `EmbedDrainReporter`'s, the same wedge as 416/418/424. +1 over the 187
+above — the branch measured 182 against its own pre-P1.3 base.)
 
 Worth recording why this doc exists at all: colliding ids compile, log, and pass every
 assertion that isn't specifically checking for the collision — a duplicate is invisible
@@ -123,7 +113,8 @@ One block per source file that owns a `Log` class or equivalent:
 | 961 | `src/AiRaccoon.Infrastructure/Metrics/SqliteMetricsStore.cs` (WP3: the save-time query-identity allowlist) |
 | 970-974 | `src/AiRaccoon.Infrastructure/Metrics/MetricsFlusher.cs` (WP3; moved from 962-964 and extended to 973-974 — the bounded shutdown-time final flush, review-fixes blocker 2 — freeing room the old block did not have: it sat wedged between SqliteMetricsStore's 961 and SqliteSearchQualityService's 965) |
 | 964-965 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteSearchQualityService.cs` (WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: `RecordSearchSafeAsync`'s best-effort failure. 964 added 2026-09-14, fix/search-quality-busy-log: the write lost the lock to another writer (SQLITE_BUSY/LOCKED anywhere in the chain) now logs one friendly Warning with no exception — the same raw-exception noise class the tool path's 912 had; grew the block downward into the room `MetricsFlusher` vacated with its 962-964 move. 965 stays for the genuine failures and keeps the exception attached) |
-| 1000-1001 | `src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs` (GH #357: `doctor`'s key-resolution and bank-open failure logs) |
+| 1000-1001 | *(retired 2026-09-22, task/psr-w3-p31)* — was `src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs`'s key-resolution and bank-open failure logs (GH #357). Relocated to 1014-1016 to add the bank-is-not-a-database warning without extending into `EmbedDrainReporter` (1002-1013), which `EventIdBlocks_DoNotInterleaveBetweenOwners` forbids — the same convention as the 418/419 and 424/425 moves. Retired, never reused, same convention as 400/416/512/516 |
+| 1014-1016 | `src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs` (relocated from 1000-1001 on 2026-09-22, task/psr-w3-p31: 1014 is `FailedToResolveKey` (ex-1000) and 1015 is `FailedToOpenBank` (ex-1001), both unchanged in behavior, only the id moved. 1016 is new — the bank exists but is not a SQLite database (SQLITE_NOTADB), the log half of F7's documented exit 26) |
 | 1002-1013 | `src/AiRaccoon.Infrastructure/Embedding/EmbedDrainReporter.cs` (relocated 2026-08-26 from `EmbedDrainService.cs` — the whole nested Log class moved so the migration relay reports through the same declarations instead of a second copy; moving only the pass ids would have left EmbedDrainService owning 1004/1006 inside the reporter's 1002-1013 span, which `EventIdBlocks_DoNotInterleaveBetweenOwners` forbids, same wedge as 416/418/424. 1002-1007 unchanged in behavior, only the owning type moved. 1008-1013 new, LANE P4: the migration relay had no log line at all — 1008 the drain starting with rows owed, 1009 a stale lease reclaimed from a dead holder (the shape `PromotionQueueService`'s 709 already logs for promotion claims), 1010 the lease held by another relay pass (was a silent `return false`), 1011 the migration already finished by another pass (also silent), 1012 no embedding provider configured — observability only, one Warning per process per migration; the drain still throws and the bank stays ToolGate-locked until the model-reset guard lands (its own follow-up), 1013 a time-strided progress heartbeat — one line per lease TTL, O(elapsed time) not O(rows)) |
 
 ## How this table is produced
