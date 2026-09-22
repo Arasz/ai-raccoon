@@ -27,7 +27,7 @@ internal static class CliCommandTree
     /// </summary>
     internal static readonly Option<int> LaunchPortOption = new("--port")
     {
-        Description = "HTTP backend port the proxy dials or starts (1-65535); 0 is serve-only",
+        Description = "HTTP backend port for --attach (1-65535); the default launch starts its own backend on an ephemeral port",
         HelpName = "port",
         DefaultValueFactory = _ => 7721
     };
@@ -58,13 +58,13 @@ internal static class CliCommandTree
     /// </summary>
     internal static readonly Option<bool> AttachOption = new("--attach")
     {
-        Description = "Attach to the ai-raccoon server already listening on --port instead of starting a private backend"
+        Description = "Trust and reuse the ai-raccoon server already listening on --port instead of starting a private backend; serve --restart also needs it to stop that server"
     };
 
     /// <summary>Serve's own --attach (the opt-in spelling after the verb); the root option is the fallback.</summary>
     internal static readonly Option<bool> ServeAttachOption = new("--attach")
     {
-        Description = "Attach to the ai-raccoon server already on the port instead of refusing it (default: refuse; --port 0 starts a private server)"
+        Description = "Attach to the ai-raccoon server already on the port instead of refusing it; --restart also needs it to stop the server (default: refuse; --port 0 starts a private server)"
     };
 
     internal static readonly Option<string> ServeFormatOption = CreateFormatOption();

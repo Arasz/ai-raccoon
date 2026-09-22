@@ -88,7 +88,7 @@ internal partial class NodeRunner(
                 : await RefuseExistingServerAsync(descriptor, streams));
         }
 
-        var restartResult = await serverRestart.CycleAsync(descriptor.Port, descriptor.TokenFile, ctx);
+        var restartResult = await serverRestart.CycleAsync(descriptor.Port, descriptor.TokenFile, descriptor.Attaching, ctx);
         if (RestartTransition.MayBind(restartResult.Outcome))
         {
             return PreBind.Bind(restartResult.Outcome);
@@ -245,6 +245,10 @@ internal partial class NodeRunner(
         {
             RestartOutcome.Foreign => (
                 $"ai-raccoon: port {descriptor.Port} is held by a listener that does not identify as an ai-raccoon server — stop it yourself, or serve on another port",
+                ExitCode.PortInUse),
+            RestartOutcome.AttachRequired => (
+                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it identifies as an ai-raccoon server, and cycling it would send it the token in {descriptor.TokenFile.Path}. " +
+                $"Pass --attach to trust the listener on this port, or stop it yourself first (ai-raccoon serve observability pid --port {descriptor.Port}), then run serve again",
                 ExitCode.PortInUse),
             RestartOutcome.NoToken => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: {descriptor.TokenFile.Path} holds no token, so it cannot be asked to stop — it may serve another data root; stop it " +

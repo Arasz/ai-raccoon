@@ -45,6 +45,7 @@ public class RestartTransitionTests
 
     [Theory]
     [InlineData(RestartOutcome.Foreign)]
+    [InlineData(RestartOutcome.AttachRequired)]
     [InlineData(RestartOutcome.NoToken)]
     [InlineData(RestartOutcome.Refused)]
     [InlineData(RestartOutcome.Unsupported)]

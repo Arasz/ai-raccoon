@@ -3,10 +3,10 @@ using System.Globalization;
 namespace AiRaccoon.Hosting.Common;
 
 /// <summary>
-///     The launch identity a caller hands <c>BackendLauncher.AcquireAsync</c> to auto-start
-///     <c>ai-raccoon serve</c> on <see cref="ServerConfig.Port" />: the flags every backend needs
-///     regardless of who is acquiring it (the proxy, or a CLI settings command, ADR-0075
-///     §5.1) precede the verb.
+///     The launch identity a caller hands the backend launcher to acquire an
+///     <c>ai-raccoon serve</c>: the flags every backend needs regardless of who is acquiring it
+///     (the proxy, or a CLI settings command, ADR-0075 §5.1) precede the verb. The private-spawn
+///     arguments pin <c>--port 0</c>; the attach arguments carry the configured port.
 /// </summary>
 internal static class BackendLaunchArguments
 {

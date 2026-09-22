@@ -127,20 +127,27 @@ internal static class CliArgs
     private static List<string> DistinctErrors(ParseResult parseResult) => [.. parseResult.Errors.Select(e => e.Message).Distinct(StringComparer.Ordinal)];
 
     /// <summary>
-    ///     True when the args name a top-level verb (skipping options and their values). The verb set
-    ///     is read off the root that was just parsed, so there is no list to keep in step with the tree.
+    ///     True when the args name a top-level verb. The verb and flag sets are read off the root
+    ///     that was just parsed, so neither has to be kept in step with the tree by hand. A
+    ///     value-taking option consumes the next token; a flag option (bool) never does — otherwise
+    ///     `--attach settings …` would hide the verb behind the flag and hand the launch-root
+    ///     fallback a command path it already resolved (exit 9 instead of the verb's own 15).
     /// </summary>
     private static bool ContainsVerb(string[] args, Command root)
     {
         var verbs = root.Children.OfType<Command>()
             .SelectMany(command => command.Aliases.Append(command.Name))
             .ToHashSet(StringComparer.Ordinal);
+        var flagOptions = root.Options
+            .Where(option => option.ValueType == typeof(bool))
+            .SelectMany(option => option.Aliases.Append(option.Name))
+            .ToHashSet(StringComparer.Ordinal);
         for (var i = 0; i < args.Length; i++)
         {
             var token = args[i];
             if (token.StartsWith("--", StringComparison.Ordinal))
             {
-                if (!token.Contains('=') && !token.Contains(':'))
+                if (!token.Contains('=') && !token.Contains(':') && !flagOptions.Contains(token))
                 {
                     i++; // the option's value
                 }

@@ -12,9 +12,9 @@ internal sealed class BackendStartException(string message, Exception inner) : E
 /// <summary>
 ///     Acquires a live ai-raccoon HTTP backend for the proxy (ADR-0020). The default path is
 ///     private spawn (F70/K1): start `ai-raccoon serve --port 0` and trust only the URL that child
-///     prints, so no pre-existing listener is ever contacted. The explicit attach path keeps the
-///     legacy behaviour: probe first, else start `serve` on the port and poll. Never kills, signals
-///     or terminates the backend — lifetime belongs to IdleWatchdog alone.
+///     prints while it is still alive, so no pre-existing listener is ever contacted. The explicit
+///     attach path keeps the legacy behaviour: probe first, else start `serve` on the port and poll.
+///     Never kills, signals or terminates the backend — lifetime belongs to IdleWatchdog alone.
 /// </summary>
 internal sealed partial class BackendLauncher : IBackendLauncher
 {
@@ -45,9 +45,11 @@ internal sealed partial class BackendLauncher : IBackendLauncher
     }
 
     /// <summary>
-    ///     Starts a private backend and returns the URL it printed. The launch arguments carry
-    ///     <c>--port 0</c>, so the OS picks the port; the URL comes only from this child's stdout,
-    ///     never from a probe of a port anything else could already hold (F70/K1).
+    ///     Starts a private backend and returns the URL it printed while the child is still alive.
+    ///     The launch arguments carry <c>--port 0</c>, so the OS picks the port; the URL comes only
+    ///     from this child's stdout, never from a probe of a port anything else could already hold
+    ///     (F70/K1). A child that printed its URL and exited is reported as a failure rather than
+    ///     handed back, because its port is already free for a racer to take.
     /// </summary>
     public async Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments,
         CancellationToken ctx)
@@ -74,8 +76,11 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         }
 
         // The last check also covers a URL that arrived exactly as the budget expired: the child
-        // printed it after binding, so the backend is live whatever the clock says.
-        if (urlLine.IsCompletedSuccessfully && urlLine.Result is { } reported)
+        // printed it after binding, so the backend is live whatever the clock says. The liveness
+        // half is F70/K1's TOCTOU close: a URL from a child that already exited would point at a
+        // port a racer can bind, and the caller dials it with the token. The wait loop only wakes
+        // on its poll interval, so a print-then-exit child is reaped before this check runs.
+        if (urlLine.IsCompletedSuccessfully && urlLine.Result is { } reported && !backend.HasExited)
         {
             Log.BackendLive(_logger, reported);
             return new BackendResult(reported, null);
