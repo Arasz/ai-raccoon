@@ -23,6 +23,17 @@ namespace AiRaccoon.Tests.Integration.Sync;
 ///     predicate actually deleted, and a fact re-created after its delete outlives its tombstone.
 ///     Real <see cref="SqliteMemoryStore"/> deletes plus the real <see cref="SyncService"/> merge —
 ///     a hand-SQL tombstone replay is not a gate.
+///     <para>
+///         Known model limitations the join review measured and the plan accepted — documented
+///         here, not gates this suite fixes. (1) Context-delete label collateral:
+///         <c>sync_tombstones</c> carries no <c>context_label</c> (<c>MemorySchema.cs</c>), so a
+///         context delete tombstones <c>(project, hash, scope)</c> and the apply step deletes a
+///         peer's same-hash row under a different label on its next pull. (2) Same-second re-create
+///         dies: timestamps are whole seconds, so a re-create with
+///         <c>created_at == deleted_at</c> is deleted again — the deliberate cost of the
+///         <c>&lt;=</c> age guard, whose <c>&lt;</c> alternative would break same-second delete
+///         propagation.
+///     </para>
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -221,6 +232,54 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
 
         (await CountEntriesAsync(_factory, entry.Hash, ct)).ShouldBe(1,
             "a row created after its tombstone must not be deleted by it");
+    }
+
+    /// <summary>
+    ///     P2.2 convergence, multi-replica: a peer that already holds the tombstone keeps
+    ///     suppressing the re-created row through the merge's NOT EXISTS leg, which carries no age
+    ///     comparison — so convergence is partial until the peer's tombstone is GC'd in a later pull
+    ///     and the re-creator re-pushes. Pins the documented partial behaviour so it is a contract,
+    ///     not a surprise.
+    /// </summary>
+    [RetryFact]
+    public async Task ReCreate_OnReplicaHoldingTheTombstone_IsSuppressedUntilLaterGc()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var peerFactory = NewPeerFactory("peer");
+
+        var entry = await _store.WriteAsync(new MemoryWriteRequest(Project, Content), ct);
+        await Sync(_factory).MemorySyncAsync(Project, ObjectKey, ct);
+        await Sync(peerFactory).MemorySyncAsync(Project, ObjectKey, ct);
+
+        _time.Advance(TimeSpan.FromSeconds(10));
+        (await _store.DeleteAsync(Project, entry.Hash, ct)).ShouldBeTrue();
+        await Sync(_factory).MemorySyncAsync(Project, ObjectKey, ct);
+        await Sync(peerFactory).MemorySyncAsync(Project, ObjectKey, ct);
+        (await CountEntriesAsync(peerFactory, entry.Hash, ct)).ShouldBe(0, "the delete reached the peer");
+
+        _time.Advance(TimeSpan.FromSeconds(10));
+        var reCreated = await _store.WriteAsync(new MemoryWriteRequest(Project, Content), ct);
+        reCreated.Hash.ShouldBe(entry.Hash, "arrange: the re-created fact carries the same content hash");
+        await Sync(_factory).MemorySyncAsync(Project, ObjectKey, ct);
+        (await CountEntriesAsync(_factory, entry.Hash, ct)).ShouldBe(1,
+            "the re-creator's own row survives its own tombstone");
+
+        await Sync(peerFactory).MemorySyncAsync(Project, ObjectKey, ct);
+        (await CountEntriesAsync(peerFactory, entry.Hash, ct)).ShouldBe(0,
+            "PARTIAL: the peer still holds the tombstone, so the merge's NOT EXISTS leg suppresses the re-created row");
+
+        // Convergence needs both halves: the peer's next pull GCs the aged tombstone, and the
+        // re-creator must push again because the peer's row-less snapshot replaced the cloud copy.
+        // The peer's next pull then merges the re-created row.
+        _time.Advance(TimeSpan.FromSeconds(10));
+        await Sync(peerFactory).MemorySyncAsync(Project, ObjectKey, ct);
+        _time.Advance(TimeSpan.FromSeconds(10));
+        await Sync(_factory).MemorySyncAsync(Project, ObjectKey, ct);
+        _time.Advance(TimeSpan.FromSeconds(10));
+        await Sync(peerFactory).MemorySyncAsync(Project, ObjectKey, ct);
+
+        (await CountEntriesAsync(peerFactory, entry.Hash, ct)).ShouldBe(1,
+            "eventual convergence after GC and a later re-push");
     }
 
     private SyncService Sync(SqliteConnectionFactory factory) => new(_cloud,
