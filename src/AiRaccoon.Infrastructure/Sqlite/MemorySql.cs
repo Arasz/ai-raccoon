@@ -173,13 +173,17 @@ internal static class MemorySql
     // delete's own predicate reaches — never one arbitrarily-ordered probe row — inside the
     // caller's transaction. The committed-scope filter is mandatory: a workspace row's scope is
     // NULL, and tombstoning it would delete a same-hash workspace row on another replica and push
-    // scratch content off-machine. The upsert refreshes deleted_at so a later delete still
-    // suppresses under the P2.2 age guard; INSERT OR IGNORE would keep the older value.
+    // scratch content off-machine. The tombstone carries the deleted row's own context_label
+    // (NULL for project/shared scope, the real label for custom scope) so a label-scoped delete
+    // cannot suppress a peer's same-hash row under a different label. The upsert refreshes
+    // deleted_at so a later delete still suppresses under the P2.2 age guard; INSERT OR IGNORE
+    // would keep the older value. The conflict target matches TombstoneIndexDdl's COALESCE-based
+    // unique index (MemorySchema.cs) — SQLite never dedupes raw NULLs against each other.
     public static string TombstoneFromPredicate(string predicate) =>
-        "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) " +
-        "SELECT DISTINCT project_id, hash, scope, @deletedAt FROM entries " +
+        "INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at) " +
+        "SELECT DISTINCT project_id, hash, scope, context_label, @deletedAt FROM entries " +
         $"WHERE {predicate} AND scope IN ('project', 'custom', 'shared') " +
-        "ON CONFLICT(project_id, hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
+        "ON CONFLICT(project_id, hash, scope, COALESCE(context_label, '')) DO UPDATE SET deleted_at = excluded.deleted_at";
 
     // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read before the
     // delete so the row's group can be recomputed afterward.

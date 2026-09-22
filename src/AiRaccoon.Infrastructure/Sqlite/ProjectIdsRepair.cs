@@ -201,8 +201,8 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             {
                 var stepTombstoned = await connection.ExecuteAsync(new CommandDefinition(
                         """
-                        INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at)
-                        SELECT project_id, hash, scope, @now FROM entries
+                        INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at)
+                        SELECT project_id, hash, scope, context_label, @now FROM entries
                         WHERE project_id = @dropped AND scope IN ('project', 'custom', 'shared')
                         """,
                         new { dropped, now }, cancellationToken: cancellationToken))

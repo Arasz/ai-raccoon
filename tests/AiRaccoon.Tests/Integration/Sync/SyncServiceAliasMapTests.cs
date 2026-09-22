@@ -45,7 +45,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         [Winner],
         [Dropped]);
 
-    private static string BankDdl(bool withAliasTable) => $$"""
+    private static string BankDdl(bool withAliasTable, bool withContextLabelColumn = true) => $$"""
         CREATE TABLE IF NOT EXISTS entries (
             id INTEGER PRIMARY KEY,
             hash TEXT,
@@ -80,7 +80,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NULL, created_at INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS sync_tombstones (project_id TEXT NOT NULL, hash TEXT NOT NULL, scope TEXT NOT NULL,
-            deleted_at INTEGER NOT NULL, PRIMARY KEY (project_id, hash, scope));
+            {{(withContextLabelColumn ? "context_label TEXT NULL, " : "")}}deleted_at INTEGER NOT NULL, PRIMARY KEY (project_id, hash, scope));
         CREATE TABLE IF NOT EXISTS memory_source (
             id INTEGER PRIMARY KEY,
             source_type TEXT NOT NULL,
@@ -90,12 +90,13 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         {{(withAliasTable ? ProjectIdAliases.TableDdl + ";" : "")}}
         """;
 
-    private async Task CreateBankAsync(string path, bool withAliasTable, CancellationToken ct)
+    private async Task CreateBankAsync(string path, bool withAliasTable, CancellationToken ct,
+        bool withContextLabelColumn = true)
     {
         await using var conn = new SqliteConnection($"Data Source={path}");
         await conn.OpenAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = BankDdl(withAliasTable);
+        cmd.CommandText = BankDdl(withAliasTable, withContextLabelColumn);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

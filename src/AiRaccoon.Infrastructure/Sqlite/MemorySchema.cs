@@ -38,6 +38,21 @@ internal static class MemorySchema
                                           """;
 
     /// <summary>
+    ///     Tombstone identity uniqueness (label-aware). Same NULL-safe idiom as
+    ///     <see cref="BucketIndexDdl" />'s <c>COALESCE(context_label, '')</c>: SQLite treats every
+    ///     NULL as distinct for uniqueness, so a raw <c>context_label</c> column could never dedupe
+    ///     — or upsert-refresh — two legacy (label-less) tombstones for the same identity. Split
+    ///     from <see cref="Ddl" /> like <see cref="BucketIndexDdl" />: a legacy bank's table must be
+    ///     rebuilt (its old <c>(project_id, hash, scope)</c> PRIMARY KEY cannot admit two rows
+    ///     differing only by label) before this index can be created — that rebuild is
+    ///     <see cref="MigrateToV15Async" />'s job.
+    /// </summary>
+    private const string TombstoneIndexDdl = """
+                                             CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_tombstones_identity
+                                                 ON sync_tombstones(project_id, hash, scope, COALESCE(context_label, ''));
+                                             """;
+
+    /// <summary>
     ///     The schema shape this build creates. Bumped by one per shipped schema change, with a
     ///     matching ladder step in <see cref="MigrateToV1Async" />/<see cref="MigrateToV2Async" />/
     ///     <see cref="MigrateToV3Async" />/<see cref="MigrateToV4Async" />/<see cref="MigrateToV5Async" />/<see cref="MigrateToV6Async" />/
@@ -47,12 +62,13 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV11Async" />,
     ///     <see cref="MigrateToV12Async" /> (ADR-0097),
     ///     <see cref="MigrateToV13Async" /> (ADR-0099),
-    ///     <see cref="MigrateToV14Async" /> (Package D, durable alias-map table). Not every schema change needs a ladder
+    ///     <see cref="MigrateToV14Async" /> (Package D, durable alias-map table),
+    ///     <see cref="MigrateToV15Async" /> (label-aware sync tombstones). Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 14;
+    internal const int CurrentVersion = 15;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -284,12 +300,17 @@ internal static class MemorySchema
 
                                           CREATE INDEX IF NOT EXISTS idx_noise_entries_expires_at ON noise_entries(expires_at);
 
+                                          -- No inline PRIMARY KEY: the identity (project_id, hash, scope,
+                                          -- context_label) has a nullable member, and SQLite never dedupes
+                                          -- NULLs against each other in a key — TombstoneIndexDdl's
+                                          -- COALESCE-based unique index is the real uniqueness (same idiom as
+                                          -- uq_entries_committed_bucket).
                                           CREATE TABLE IF NOT EXISTS sync_tombstones (
                                               project_id TEXT NOT NULL,
                                               hash TEXT NOT NULL,
                                               scope TEXT NOT NULL,
-                                              deleted_at INTEGER NOT NULL,
-                                              PRIMARY KEY (project_id, hash, scope)
+                                              context_label TEXT NULL,
+                                              deleted_at INTEGER NOT NULL
                                           );
 
                                           -- File-watcher feature: persisted watch registrations and per-path
@@ -675,6 +696,8 @@ internal static class MemorySchema
         {
             await connection.ExecuteAsync(
                 new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                new CommandDefinition(TombstoneIndexDdl, cancellationToken: cancellationToken)).ConfigureAwait(false);
             // source_id index: created here for fresh banks (DDL already has the column),
             // and in MigrateToV5Async for v4→v5 migration banks.
             await connection.ExecuteAsync(
@@ -787,6 +810,11 @@ internal static class MemorySchema
         if (healthy && storedVersion < 14)
         {
             await MigrateToV14Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 15)
+        {
+            await MigrateToV15Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
@@ -1255,6 +1283,82 @@ internal static class MemorySchema
         {
             await connection.ExecuteAsync(
                     new CommandDefinition(ProjectIdAliases.TableDdl, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>
+    ///     v14→v15 (label-aware tombstones): <c>sync_tombstones</c> gains <c>context_label</c>, so a
+    ///     context-scoped delete tombstones only its own label instead of every label sharing the
+    ///     same (project, hash, scope) — the join review measured a context delete on one replica
+    ///     deleting a peer's same-hash row under a different label. NULL means "matches any label",
+    ///     which is exactly today's behaviour, so every pre-existing tombstone keeps working
+    ///     unchanged. The old <c>(project_id, hash, scope)</c> PRIMARY KEY cannot admit two rows that
+    ///     differ only by label (ALTER TABLE cannot drop a PRIMARY KEY), so the table is rebuilt —
+    ///     same <c>BEGIN IMMEDIATE</c>/rename/copy/drop shape as <see cref="MigrateToV11Async" />,
+    ///     re-probed under the write lock for the same concurrent-opener reason. The replacement
+    ///     uniqueness is <see cref="TombstoneIndexDdl" />.
+    /// </summary>
+    private static async Task MigrateToV15Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            // Re-probed under the write lock: another opener may have migrated between the
+            // ladder's version read and this BEGIN.
+            var columns = (await connection.QueryAsync<string>(
+                    new CommandDefinition(
+                        "SELECT name FROM pragma_table_info('sync_tombstones')",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList();
+
+            if (!columns.Contains("context_label", StringComparer.Ordinal))
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("ALTER TABLE sync_tombstones RENAME TO sync_tombstones_v14",
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            """
+                            CREATE TABLE sync_tombstones (
+                                project_id TEXT NOT NULL,
+                                hash TEXT NOT NULL,
+                                scope TEXT NOT NULL,
+                                context_label TEXT NULL,
+                                deleted_at INTEGER NOT NULL
+                            )
+                            """,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            """
+                            INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at)
+                            SELECT project_id, hash, scope, NULL, deleted_at FROM sync_tombstones_v14
+                            """,
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition("DROP TABLE sync_tombstones_v14", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition(TombstoneIndexDdl, cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
 
             await connection.ExecuteAsync(
