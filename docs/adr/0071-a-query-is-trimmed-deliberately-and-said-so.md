@@ -108,3 +108,23 @@ room to grow for #522's new session-created event, so the whole block relocated 
 orphaning that event in a type of its own. `EmbeddingService.Log.QueryTrimmedToWindow` is
 now **EventId 426**; `QueryTruncationTests.QueryTrimmedEventId` follows it. **418 is retired,
 not reused** — see `docs/reference/logging-event-ids.md`.
+
+## Amendment (2026-09-23) — the caller-visible warning's number is the active engine's, not a constant
+
+`QueryLengthGuard` (the `memory_search` warning this record's decision produced) hardcoded
+"roughly the first 254 tokens (~1,000 characters)" — the bundled model's own window, stated as
+if every engine used it. A manifest-local memory engine's real budget
+(`IEmbeddingService.ResolveChunkBudgetFor`) can be wider — up to 510 content tokens for a model
+whose manifest declares an 8,190-token context window (D6) — so the guard was silently wrong in
+both directions for that engine: warning below its real threshold, and naming the wrong number
+above it (cross-project finding pi-badger-integration F1).
+
+`QueryLengthGuard.Evaluate` now takes the caller's token budget (default: the bundled 254, so a
+caller that supplies none is unaffected) and scales its char threshold from it using the bundled
+model's own chars-per-token ratio. `MemoryTools.Search` resolves the memory leg's real budget from
+`embedding.provider`/`embedding.model` before evaluating the guard. The `memory_search` tool's
+`query` description — a compile-time `[Description]` constant, so it cannot name a live number —
+was reworded to state what holds for every engine instead of the bundled model's own figures.
+
+Nothing else this record decided changes: the query is still trimmed before the generator sees
+it, and both events (414 stored-content, 426 query) stay separately countable.
