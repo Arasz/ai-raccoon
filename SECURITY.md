@@ -158,6 +158,11 @@ the caller-supplied path — `PathOutsideScopeException` renders `Path '<absolut
 the ingest scope.` — so an **absolute filesystem path** can reach the collector, directory names
 included. No entry content, no query text, no file contents.
 
+**Refused search queries stay with their sender.** When the query guard refuses a
+machine-output-shaped query, the error result echoes the query text back to the caller who
+sent it — but the server's own channels get a fingerprint instead (policy name, query length,
+content hash). No log line and no span carries the refused text.
+
 The exposure this creates is: whoever can read your collector learns your **project
 names**, any absolute paths that appear in refusals, and your usage pattern. Do not use a project id that is itself sensitive (a
 client name, an unreleased codename) if you point `OTEL_EXPORTER_OTLP_ENDPOINT` at a

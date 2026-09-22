@@ -639,7 +639,9 @@ public class MemoryToolsTests
         _store.LastQuery.ShouldNotBeNull();
         result.Data!.Warning.ShouldBeNull();
         logger.Collector.LatestRecord.Message.ShouldContain("Refuse");
-        logger.Collector.LatestRecord.Message.ShouldContain("Background process");
+        // The verdict is recorded; the query text is not — the fingerprint (policy, length, hash) names it instead.
+        logger.Collector.LatestRecord.Message.ShouldContain("MachineOutputQuery");
+        logger.Collector.LatestRecord.Message.ShouldNotContain("Background process");
     }
 
     [Fact]
@@ -983,9 +985,9 @@ public class MemoryToolsTests
             return Task.FromResult(new SearchResults([], SearchTimings.Empty, Fusion));
         }
 
-        public override Task<bool> DeleteAsync(string projectId, string hash,
+        public override Task<int> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+            Task.FromResult(1);
 
         public override Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
             Task.FromResult(GetEntry);

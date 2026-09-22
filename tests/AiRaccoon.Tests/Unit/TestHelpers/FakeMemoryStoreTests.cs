@@ -61,8 +61,8 @@ public sealed class FakeMemoryStoreTests
 
     private sealed class DeletingStore : FakeMemoryStore
     {
-        public override Task<bool> DeleteAsync(string projectId, string hash,
+        public override Task<int> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+            Task.FromResult(1);
     }
 }

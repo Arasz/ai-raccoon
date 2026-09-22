@@ -161,24 +161,38 @@ internal static class MemorySql
                                                         ORDER BY v.distance, e.path
                                                         """;
 
-    // @scope null preserves memory_delete's documented reach ("wherever this hash lives",
-    // including a shared row); a caller that enumerated one scope (the sweep, H2) passes it so
-    // the delete cannot also remove a sibling row sharing this hash in another scope/workspace.
-    public const string DeleteByHashAndProjectPredicate =
-        "hash = @hash AND project_id = @projectId AND (@scope IS NULL OR scope IS @scope)";
+    // @scope null is memory_delete (N7/F26): every row sharing the write's path goes, not just
+    // the reported hash — a manual memory_write's N chunks share one content-addressed path. The
+    // "(source_file IS NULL OR source_file <> path)" guard keeps this off an ingested/mirrored
+    // file's rows, where FileIngestor always sets source_file = path for its own group: those stay
+    // reachable only by their exact hash (DeleteBySourcePath/the watcher own the whole-file delete,
+    // never memory_delete — see SqliteMemoryStoreChunkColumnMaintenanceTests). @scope set is the
+    // sweep's own delete (H2): chunk-exact, so a project-scoped pass cannot touch a sibling row
+    // sharing the hash in another scope/workspace.
+    public const string DeleteMatchPredicate =
+        "project_id = @projectId AND " +
+        "((@scope IS NULL AND (hash = @hash OR " +
+        "(@path IS NOT NULL AND path = @path AND (source_file IS NULL OR source_file <> path)))) " +
+        "OR (@scope IS NOT NULL AND scope = @scope AND hash = @hash))";
 
-    public const string DeleteByHashAndProject = "DELETE FROM entries WHERE " + DeleteByHashAndProjectPredicate;
+    public const string DeleteByHashAndProject = "DELETE FROM entries WHERE " + DeleteMatchPredicate;
+
+    // The write's path is what makes the whole-write delete whole (N7/F26); resolved before the
+    // delete so the predicate stays a plain parameter comparison.
+    public const string SelectPathByHashAndProject =
+        "SELECT path FROM entries WHERE hash = @hash AND project_id = @projectId LIMIT 1";
 
     // Sync propagates deletes through tombstones (FR-NM-8). The set is derived from the rows the
-    // delete's own predicate reaches — never one arbitrarily-ordered probe row — inside the
-    // caller's transaction. The committed-scope filter is mandatory: a workspace row's scope is
-    // NULL, and tombstoning it would delete a same-hash workspace row on another replica and push
-    // scratch content off-machine. The tombstone carries the deleted row's own context_label
-    // (NULL for project/shared scope, the real label for custom scope) so a label-scoped delete
-    // cannot suppress a peer's same-hash row under a different label. The upsert refreshes
-    // deleted_at so a later delete still suppresses under the P2.2 age guard; INSERT OR IGNORE
-    // would keep the older value. The conflict target matches TombstoneIndexDdl's COALESCE-based
-    // unique index (MemorySchema.cs) — SQLite never dedupes raw NULLs against each other.
+    // delete's own predicate reaches — memory_delete's is the whole write (N7/F26), so a
+    // multi-chunk write's untombstoned siblings cannot resurrect on the next sync pull — inside the
+    // caller's transaction, before the delete runs. The committed-scope filter is mandatory: a
+    // workspace row's scope is NULL, and tombstoning it would delete a same-hash workspace row on
+    // another replica and push scratch content off-machine. The tombstone carries the deleted row's
+    // own context_label (NULL for project/shared scope, the real label for custom scope) so a
+    // label-scoped delete cannot suppress a peer's same-hash row under a different label. The upsert
+    // refreshes deleted_at so a later delete still suppresses under the P2.2 age guard; INSERT OR
+    // IGNORE would keep the older value. The conflict target matches TombstoneIndexDdl's
+    // COALESCE-based unique index (MemorySchema.cs) — SQLite never dedupes raw NULLs against each other.
     public static string TombstoneFromPredicate(string predicate) =>
         "INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at) " +
         "SELECT DISTINCT project_id, hash, scope, context_label, @deletedAt FROM entries " +

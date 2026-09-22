@@ -103,7 +103,9 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
 
         await Sync(_factory).MemorySyncAsync(Project, ObjectKey, ct);
 
-        (await _store.DeleteAsync(Project, project.Hash, ct)).ShouldBeTrue();
+        (await _store.DeleteAsync(Project, project.Hash, ct)).ShouldBe(3,
+            "F26: the whole-write delete reaches all three rows sharing the write's path — the two " +
+            "committed twins and the workspace twin; only the committed ones are tombstoned below");
 
         (await TombstoneScopesAsync(_factory, project.Hash, ct)).ShouldBe(["custom", "project"],
             "one tombstone per committed scope the delete reached");
@@ -251,7 +253,7 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
         await Sync(peerFactory).MemorySyncAsync(Project, ObjectKey, ct);
 
         _time.Advance(TimeSpan.FromSeconds(10));
-        (await _store.DeleteAsync(Project, entry.Hash, ct)).ShouldBeTrue();
+        (await _store.DeleteAsync(Project, entry.Hash, ct)).ShouldBe(1);
         await Sync(_factory).MemorySyncAsync(Project, ObjectKey, ct);
         await Sync(peerFactory).MemorySyncAsync(Project, ObjectKey, ct);
         (await CountEntriesAsync(peerFactory, entry.Hash, ct)).ShouldBe(0, "the delete reached the peer");

@@ -27,7 +27,8 @@ naming the probed directory. An explicit id always wins and never consults the r
 The exceptions: `memory_promotion_list`, whose omitted id means all-projects (its
 cross-project feature) and never cwd-defaults, and `project_id_token_get`, which mints
 one and so takes none. Writes land in `project:<id>` by default; naming a `workspaceId`
-routes them into that workspace's isolated context.
+routes them into that workspace's isolated context, and it wins over `context` when both
+are supplied (the sandbox has priority, so a workspace write never lands project-wide).
 
 10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
 2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),
@@ -42,14 +43,14 @@ config channel (see [Command-line options](#command-line-options)).
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
 | `memory_get`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
-| `memory_search`                | `projectId`, `query`, `sessionId!`, `scope=all\|project\|shared`, `workspaceId?`, `limit=8`, `minRelativeScore=0.6`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` (default `both`) | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], evidenceByHash?:{<hash>:{hash, fusionStrength, legs:[{legName, rank}], cosine?}}, fusionStats?:{topMargin?, topVsMedian?, maxPossible, participatingLegs}, warning?}` |
+| `memory_search`                | `projectId`, `query`, `sessionId!`, `scope=all\|project\|shared`, `workspaceId?`, `limit=8`, `minRelativeScore=0.6`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` (default `both`) | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], evidenceByHash?:{<hash>:{hash, fusionStrength, legs:[{legName, rank}], cosine?}}, fusionStats?:{topMargin?, topVsMedian?, maxPossible, participatingLegs}, unranked?:true, truncation?:[{floor, threshold, dropped}], warning?}` |
 | `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`, `servedRank?`                                                                                                                    | `{recorded: true}`                                                                                 |
 | `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: true}`                                                                                 |
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
 | `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
 | `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
 | `memory_share_extract`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...], absorbed, skippedDuplicates, failures: [...]}`         |
-| `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: 0\|1}`                                                                                  |
+| `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: n}`                                                                                     |
 | `memory_delete_context`        | `projectId`, `context`                                                                                                                                      | `{deleted: n}`                                                                                     |
 | `memory_ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
 | `memory_ingest_directory`      | `projectId`, `path`, `context?`                                                                                                                             | `{scanned: n}`                                                                                     |
@@ -76,6 +77,17 @@ config channel (see [Command-line options](#command-line-options)).
   when named); `scope=project` searches `project:<id>` only; `scope=shared` searches the
   `shared` promotion tier only. Workspace scratch is never included in `scope=all` — it is
   only visible to a search that names that `workspaceId`.
+- **`memory_search` relevance floors:** `minRelativeScore` is relative to the response's own
+  top hit (rank 1 always scores 1.0), so an absolute relevance floor sits on top of it: rows
+  whose fused content cosine is below 0.35 are dropped, and a query nothing answers comes back
+  empty instead of a confident top hit. `minRelativeScore=0` is full recall and turns off every
+  score floor. Rows that survive with no absolute backing at all (a flat top margin, one
+  participating leg) carry `unranked: true`: their ranking is rank-derived only, so read them
+  as candidates to verify, not as answers. A response short of its requested `limit` reports
+  each cut as `truncation:[{floor, threshold, dropped}]`, one entry per floor that dropped
+  candidates (`minRelativeScore` and/or `absoluteRelevance`). A response that fills `limit`
+  carries no `truncation`, and neither does one that is short because the bank simply ends:
+  the marker distinguishes "the floor cut this" from "this is all there is".
 - **`memory_search` `kind` values:** `kind=both` (default since 1.34.0) runs both hybrids
   independently and returns both sections (no cross-corpus fusion — each section is ranked by
   its own FTS5+vec0 hybrid). `kind=memory` is the pre-1.34 default behavior, unchanged — no
@@ -1087,7 +1099,12 @@ the passphrase the bank is plaintext (backward compatible).
 ## Deletion and sync semantics
 
 - Deletes are permanent — there is no trash or recovery.
-- `memory_delete` targets one hash wherever it lives, including a `shared` row;
+- `memory_delete` targets the whole write behind one hash, wherever it lives, including a
+  `shared` row: a multi-chunk `memory_write` produces N rows under one content-addressed path,
+  and any of their hashes deletes all of them, not just the chunk it names. The response's
+  `deleted` count is the true number of rows removed (N7). An ingested/watched file keeps its
+  own narrower reach — deleting one of its chunks by hash removes only that chunk (its siblings
+  share the real file path with `source_file`, which excludes them from the whole-write match);
   `memory_delete_context` deletes every entry under a context label. Nothing forbids
   targeting `shared` — use it deliberately.
 - Deleting a synced context (`shared`, `project:<id>`, custom) removes rows locally;

@@ -55,7 +55,9 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (request.Context != ContextNaming.SharedContext)
+        // The workspace wins over the shared request (owner ruling K5): a scratch write is not a
+        // promotion request, so it never reaches the queue and never gets the shared rewrite.
+        if (request.Context != ContextNaming.SharedContext || !string.IsNullOrWhiteSpace(request.WorkspaceId))
         {
             return await store.WriteAsync(request, cancellationToken).ConfigureAwait(false);
         }

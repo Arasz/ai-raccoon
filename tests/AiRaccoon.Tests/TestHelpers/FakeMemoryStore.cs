@@ -26,14 +26,14 @@ public class FakeMemoryStore : IMemoryStore, ISettingsStore
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(SearchAsync));
 
-    public virtual Task<bool> DeleteAsync(string projectId, string hash,
+    public virtual Task<int> DeleteAsync(string projectId, string hash,
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(DeleteAsync));
 
     /// <summary>Forwards to <see cref="DeleteAsync" /> — see the remarks on this type.</summary>
-    public virtual Task<bool> DeleteInScopeAsync(string projectId, string hash, string scope,
+    public virtual async Task<bool> DeleteInScopeAsync(string projectId, string hash, string scope,
         CancellationToken cancellationToken = default) =>
-        DeleteAsync(projectId, hash, cancellationToken);
+        await DeleteAsync(projectId, hash, cancellationToken).ConfigureAwait(false) > 0;
 
     /// <summary>
     ///     Declared virtual here rather than left to IMemoryStore's default implementation: a

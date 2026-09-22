@@ -1,5 +1,7 @@
+using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Workspace;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -29,17 +31,18 @@ public sealed class SharedWriteIsAPromotionRequestTests : IDisposable
     private readonly SqliteConnectionFactory _factory;
     private readonly FakePromotionQueue _queue = new();
     private readonly IMemoryWriteService _writes;
+    private readonly SqliteMemoryStore _store;
 
     public SharedWriteIsAPromotionRequestTests()
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+        _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(),
             new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         // A recording queue, not the real graph: this gate is about what the WRITE path decides.
         // That a proposed candidate persists is PromotionQueueService's own contract and its tests.
-        _writes = new MemoryWriteService(store, _queue);
+        _writes = new MemoryWriteService(_store, _queue);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -82,5 +85,67 @@ public sealed class SharedWriteIsAPromotionRequestTests : IDisposable
             TestContext.Current.CancellationToken);
 
         _queue.LastCandidates.ShouldBeNull("only an explicit `shared` write is a promotion request");
+    }
+
+    /// <summary>
+    ///     K5 (owner ruling, F24): supplying an explicit context inside an active workspace must not
+    ///     bypass the sandbox. The row lands in the outbox, not in the named context and not
+    ///     project-wide, and no promotion candidate is minted for scratch content.
+    /// </summary>
+    [RetryFact]
+    public async Task WorkspaceWrite_WithAnExplicitContext_LandsInTheOutbox_AndQueuesNothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var workspace = await BeginWorkspaceAsync(ct);
+
+        var entry = await _writes.WriteAsync(
+            new MemoryWriteRequest(ProjectId, Content, Context: "design-notes", WorkspaceId: workspace.Id), ct);
+
+        entry.Stored.ShouldBeTrue();
+        entry.Context.ShouldBe($"workspace:{workspace.Id}", "the sandbox has priority over the explicit context");
+
+        await using var connection = await _factory.OpenBankAsync(ct);
+        var rows = await connection.QueryAsync<(string? Scope, string? ContextLabel, string? WorkspaceId)>(
+            "SELECT scope AS Scope, context_label AS ContextLabel, workspace_id AS WorkspaceId FROM entries");
+        var row = rows.ShouldHaveSingleItem();
+        row.WorkspaceId.ShouldBe(workspace.Id);
+        row.Scope.ShouldBeNull();
+        row.ContextLabel.ShouldBeNull("the context label is dropped when the workspace wins");
+        _queue.LastCandidates.ShouldBeNull("scratch content is not a promotion request");
+    }
+
+    /// <summary>
+    ///     The measured F24 case with `context=shared`: before the fix the shared rewrite won and the
+    ///     row landed project-wide plus a promotion candidate, with the outbox empty. The workspace
+    ///     now wins entirely — outbox row, no shared row, no project row, no candidate.
+    /// </summary>
+    [RetryFact]
+    public async Task WorkspaceWrite_WithSharedContext_LandsInTheOutbox_AndQueuesNothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var workspace = await BeginWorkspaceAsync(ct);
+
+        var entry = await _writes.WriteAsync(
+            new MemoryWriteRequest(ProjectId, Content, Context: ContextNaming.SharedContext, WorkspaceId: workspace.Id), ct);
+
+        entry.Stored.ShouldBeTrue();
+        entry.Context.ShouldBe($"workspace:{workspace.Id}", "the sandbox has priority over the shared request");
+        entry.Reason.ShouldBeNull("a workspace write is scratch, never a promotion request");
+
+        await using var connection = await _factory.OpenBankAsync(ct);
+        (await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM entries WHERE scope = 'shared'"))
+            .ShouldBe(0, "naming `shared` inside a workspace must not create a shared row");
+        (await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM entries WHERE scope = 'project'"))
+            .ShouldBe(0, "the workspace wins over the project rewrite the shared path used to apply");
+        (await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM entries WHERE workspace_id = @ws",
+                new { ws = workspace.Id }))
+            .ShouldBe(1, "the row is in the outbox");
+        _queue.LastCandidates.ShouldBeNull("no promotion candidate is minted for scratch content");
+    }
+
+    private async Task<Workspace> BeginWorkspaceAsync(CancellationToken cancellationToken)
+    {
+        var workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow));
+        return await workspaces.BeginAsync(ProjectId, cancellationToken: cancellationToken);
     }
 }

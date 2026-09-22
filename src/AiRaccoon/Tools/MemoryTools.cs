@@ -50,18 +50,18 @@ public sealed partial class MemoryTools(
 
     [McpServerTool(Name = TnMemoryWrite)]
     [Description(
-        "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace. A write may be refused (e.g. it matched a noise policy) — check stored: a refused write has stored=false and a reason naming what rejected it, and hash is empty.")]
+        "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace, and workspace_id wins over context when both are supplied (the sandbox has priority). A write may be refused (e.g. it matched a noise policy) — check stored: a refused write has stored=false and a reason naming what rejected it, and hash is empty.")]
     public async Task<ApiEnvelope<WriteResult>> Write(
         [Description("The project id; every memory operation is scoped to a project.")]
         [Optional][DefaultParameterValue("")] string projectId,
         [Description("The content to remember.")]
         string content,
-        [Description("When set, the write lands in this workspace's isolated context instead of the project context.")]
+        [Description("When set, the write lands in this workspace's isolated context instead of the project context. Wins over context when both are supplied (the sandbox has priority).")]
         string? workspaceId = null,
         [Description("Provenance only: which agent wrote this.")]
         string? agentId = null,
         [Description(
-            "Optional context label for this entry, instead of the default project/workspace context. A context organises entries inside the project; it does not hide them — a plain project search still finds them.")]
+            "Optional context label for this entry, instead of the default project/workspace context. A context organises entries inside the project; it does not hide them — a plain project search still finds them. Ignored when workspace_id is supplied: the workspace wins (the sandbox has priority).")]
         string? context = null,
         [Description("Optional original file path the content came from; chunks of one file share it.")]
         string? sourceFile = null,
@@ -125,7 +125,11 @@ public sealed partial class MemoryTools(
         + "and participatingLegs). A flat margin plus a single-leg top is the measurable 'best of a bad lot' "
         + "signature — a thin response, not a verdict. "
         + "These signals claim no relevance (no relevance value is computed); margins are computed over the PRE-floor "
-        + "candidate population, not the served set.")]
+        + "candidate population, not the served set. A response with unranked: true ranks rows that carry "
+        + "no absolute relevance backing (flat margin, one leg, no row clearing the absolute relevance floor) "
+        + "— candidates to verify, not answers. An absolute relevance floor drops rows whose fused content "
+        + "cosine is below 0.35 outright, so a zero-overlap query comes back empty. A response short of "
+        + "its requested limit reports the cuts as truncation:[{floor, threshold, dropped}].")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
         [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
         [Description(
@@ -144,13 +148,14 @@ public sealed partial class MemoryTools(
         string scope = "all",
         [Description("When set, also searches this workspace's isolated context.")]
         string? workspaceId = null,
-        [Description("Maximum results (default 8).")]
+        [Description("Maximum results (default 8). The score floors can serve fewer than this even when the bank holds more matches; when that shortens the response, truncation names the floor that dropped rows and how many.")]
         int limit = SearchDefaults.Limit,
         [Description(
             "Relative floor: keeps results scoring at least this fraction of THIS response's top hit (default 0.6). " +
             "Ranking is normalized per response, so rank 1 always scores 1.0 even when nothing in the bank answers the " +
             "query — a high score is not evidence of a good match, and this is not an absolute quality bar. Use it to " +
-            "keep only hits in the same league as the best one; see ADR-0047 and ADR-0096.")]
+            "keep only hits in the same league as the best one; see ADR-0047 and ADR-0096. Pass 0 for full recall: " +
+            "it disables every score floor, the absolute relevance floor included.")]
         double minRelativeScore = SearchDefaults.MinRelativeScore,
         [Description(
             "RRF cutoff for the hybrid fusion (bank setting retrieval.rrfK, else 60); a result scores weight / (k + rank) per modality list.")]
@@ -208,12 +213,16 @@ public sealed partial class MemoryTools(
         if (guard.Shadowed is { } suppressed)
         {
             Log.QueryGuardShadowVerdict(logger, suppressed.Tier.ToString(), canonical,
-                suppressed.PolicyName ?? string.Empty, QuerySnippet(query));
+                suppressed.PolicyName ?? string.Empty, QueryFingerprint(query));
         }
 
         if (guard.Verdict.Tier == QueryGuardTier.Refuse)
         {
-            throw new McpException($"invalid-params: {guard.Verdict.Guidance} Refused query: {QuerySnippet(query)}");
+            // The caller gets its own query text back in the error result; the server's own
+            // channels (log line, OTLP span) carry only the fingerprint below.
+            throw new RefusedQueryException(
+                $"invalid-params: {guard.Verdict.Guidance} Refused query: {QuerySnippet(query)}",
+                $"invalid-params: {guard.Verdict.Guidance} Refused query fingerprint ({guard.Verdict.PolicyName}): {QueryFingerprint(query)}");
         }
 
         var correlationId = Guid.CreateVersion7().ToString("N");
@@ -238,7 +247,7 @@ public sealed partial class MemoryTools(
         // whichever kind was requested, since both corpora search the same query text.
         var warning = SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query),
             await MemoryEngineWarningAsync(parsedKind, cancellationToken), dispatch.CodeWarning);
-        var result = BuildSearchResultList(dispatch, warning);
+        var result = BuildSearchResultList(dispatch, warning, searchQuery);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
 
         // ADR-0094: SearchDispatcher records a search_quality row for every kind, so every
@@ -300,9 +309,11 @@ public sealed partial class MemoryTools(
     ///     placeholder. Iterates memory Results only: code hashes live in a separate namespace
     ///     (§8) and floored-out sidecar entries stay out (S10 bounded payload: returned rows
     ///     only). An empty served set carries no evidence and no stats (G3). Ranking is never
-    ///     touched in name, position, or semantics.
+    ///     touched in name, position, or semantics. The absolute-relevance judgement runs first
+    ///     (SearchRelevance.Judge): it drops rows below the absolute floor and decides the unranked
+    ///     marker, and the join below covers the surviving rows only.
     /// </summary>
-    private static SearchResultList BuildSearchResultList(SearchDispatchResult dispatch, string? warning)
+    private static SearchResultList BuildSearchResultList(SearchDispatchResult dispatch, string? warning, SearchQuery query)
     {
         if (dispatch.Results.Count == 0)
         {
@@ -310,13 +321,20 @@ public sealed partial class MemoryTools(
         }
 
         var sidecar = dispatch.MemorySearchResults;
-        if (sidecar?.EvidenceByHash is not { } evidence)
+        var judgement = SearchRelevance.Judge(dispatch.Results, sidecar?.EvidenceByHash, sidecar?.Stats, query.MinRelativeScore);
+        var truncation = TruncationFor(judgement.Results.Count, dispatch.Results.Count, query, sidecar?.DroppedByFloor ?? 0);
+        if (judgement.Results.Count == 0)
         {
-            return new SearchResultList(dispatch.Results, warning, dispatch.CodeResults, null, sidecar?.Stats);
+            return new SearchResultList(judgement.Results, warning, dispatch.CodeResults, Truncation: truncation);
         }
 
-        var joined = new Dictionary<string, RetrievalEvidence>(dispatch.Results.Count, StringComparer.Ordinal);
-        foreach (var result in dispatch.Results)
+        if (sidecar?.EvidenceByHash is not { } evidence)
+        {
+            return new SearchResultList(judgement.Results, warning, dispatch.CodeResults, null, sidecar?.Stats, judgement.Unranked, truncation);
+        }
+
+        var joined = new Dictionary<string, RetrievalEvidence>(judgement.Results.Count, StringComparer.Ordinal);
+        foreach (var result in judgement.Results)
         {
             if (evidence.TryGetValue(result.Hash, out var item))
             {
@@ -324,8 +342,36 @@ public sealed partial class MemoryTools(
             }
         }
 
-        return new SearchResultList(dispatch.Results, warning, dispatch.CodeResults,
-            joined.Count > 0 ? joined : null, sidecar.Stats);
+        return new SearchResultList(judgement.Results, warning, dispatch.CodeResults,
+            joined.Count > 0 ? joined : null, sidecar.Stats, judgement.Unranked, truncation);
+    }
+
+    /// <summary>
+    ///     A response short of its requested limit reports the floor cuts that shortened it: one
+    ///     entry per floor that dropped candidates (name, threshold, count). A response that fills
+    ///     the limit stays clean, and so does one that is short because the bank simply ends.
+    /// </summary>
+    private static IReadOnlyList<FloorTruncation>? TruncationFor(
+        int served, int preAbsoluteCount, SearchQuery query, int droppedByRelativeFloor)
+    {
+        if (served >= query.Limit)
+        {
+            return null;
+        }
+
+        List<FloorTruncation>? truncation = null;
+        if (droppedByRelativeFloor > 0)
+        {
+            (truncation ??= []).Add(new FloorTruncation(SearchRelevance.RelativeFloorName, query.MinRelativeScore, droppedByRelativeFloor));
+        }
+
+        var droppedByAbsoluteFloor = preAbsoluteCount - served;
+        if (droppedByAbsoluteFloor > 0)
+        {
+            (truncation ??= []).Add(new FloorTruncation(SearchRelevance.AbsoluteRelevanceFloorName, SearchRelevance.AbsoluteRelevanceFloor, droppedByAbsoluteFloor));
+        }
+
+        return truncation;
     }
 
     /// <summary>
@@ -388,10 +434,10 @@ public sealed partial class MemoryTools(
 
     [McpServerTool(Name = TnMemoryDelete)]
     [Description(
-        "Deletes a specific memory entry by its content hash. Idempotent: an unknown hash is not an error — it reports deleted=0.")]
+        "Deletes the whole memory behind a content hash: a multi-chunk memory_write's chunks share one write, so any of its chunk hashes deletes all of them, not just one. Idempotent: an unknown hash is not an error — it reports the true row count, 0 for an unknown hash.")]
     public async Task<ApiEnvelope<DeletedResult>> Delete(
         [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
-        [Description("The content hash to delete.")]
+        [Description("The content hash to delete — any chunk of a multi-chunk write reaches the whole write.")]
         string hash,
         CancellationToken cancellationToken = default)
     {
@@ -399,7 +445,7 @@ public sealed partial class MemoryTools(
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var deleted = await store.DeleteAsync(canonical, hash, cancellationToken);
-        var result = new DeletedResult(deleted ? 1 : 0);
+        var result = new DeletedResult(deleted);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
@@ -490,6 +536,9 @@ public sealed partial class MemoryTools(
     ///     <see cref="JsonIgnoreCondition.WhenWritingNull" />) for kind=memory — the pinned envelope
     ///     contract (docs/work/2026-08-21-code-search-implementation-plan.md §3.6): kind=memory
     ///     serializes the exact legacy shape, no "code" key at all.
+    ///     Unranked is the explicit marker for rankings with no absolute relevance backing, and
+    ///     Truncation reports the floor cuts behind a response short of its limit; both are omitted
+    ///     from the wire unless set (<see cref="JsonIgnoreCondition.WhenWritingDefault" />).
     /// </summary>
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record SearchResultList(
@@ -500,7 +549,15 @@ public sealed partial class MemoryTools(
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        FusionStats? FusionStats = null);
+        FusionStats? FusionStats = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        bool Unranked = false,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<FloorTruncation>? Truncation = null);
+
+    /// <summary>One score floor's truncation report: which floor, its threshold, and how many candidates it dropped.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record FloorTruncation(string Floor, double Threshold, int Dropped);
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
     public sealed record ListResult(JsonNode Files);
@@ -605,19 +662,23 @@ public sealed partial class MemoryTools(
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRunRegex();
 
-    /// <summary>Single-line, whitespace-collapsed echo of the query for refusal diagnostics, capped at 200 chars.</summary>
+    /// <summary>Single-line, whitespace-collapsed echo of the query for the caller's own refusal result, capped at 200 chars.</summary>
     private static string QuerySnippet(string query)
     {
         var collapsed = WhitespaceRunRegex().Replace(query, " ").Trim();
         return collapsed.Length <= 200 ? collapsed : collapsed[..200] + "…";
     }
 
+    /// <summary>The refused query's raw length and content hash — the whole identity server-side channels keep, never its text.</summary>
+    private static string QueryFingerprint(string query) =>
+        $"{query.Length} chars, sha256 {ContentHash.OfValue(query)}";
+
     private static partial class Log
     {
         /// <summary>Kept here, not in Core: the guard decides, the host reports (docs/adr/0065).</summary>
         [LoggerMessage(EventId = 920, Level = LogLevel.Information,
-            Message = "Query guard (shadow) would have returned {Tier} for project {ProjectId} via {PolicyName}; query: {Query}")]
-        public static partial void QueryGuardShadowVerdict(ILogger logger, string tier, string projectId, string policyName, string query);
+            Message = "Query guard (shadow) would have returned {Tier} for project {ProjectId} via {PolicyName}; query fingerprint: {QueryFingerprint}")]
+        public static partial void QueryGuardShadowVerdict(ILogger logger, string tier, string projectId, string policyName, string queryFingerprint);
 
         [LoggerMessage(EventId = 921, Level = LogLevel.Warning,
             Message = "Failed to record search phase measurements for correlation {CorrelationId}")]

@@ -268,11 +268,11 @@ public sealed class MemoryToolsAccessModeTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new SearchResults(StubResults, SearchTimings.Empty));
 
-        public override Task<bool> DeleteAsync(string projectId, string hash,
+        public override Task<int> DeleteAsync(string projectId, string hash,
             CancellationToken cancellationToken = default)
         {
             DeletedHashes.Add(hash);
-            return Task.FromResult(true);
+            return Task.FromResult(1);
         }
 
         public override Task<int> DeleteContextAsync(string projectId, string context,
