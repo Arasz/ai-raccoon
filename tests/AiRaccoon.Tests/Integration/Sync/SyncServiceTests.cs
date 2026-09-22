@@ -632,6 +632,80 @@ public class SyncServiceTests : IDisposable
         }
     }
 
+    /// <summary>
+    ///     Gate (c), F34: a remote pushed by an older peer may still hold a row with neither a
+    ///     scope nor a workspace_id (the CHECK-gap the NULL/NULL row exploited before it was
+    ///     tightened). The merge must complete and simply not import that one row — not throw
+    ///     (which would abort the whole pull on a CHECK violation) and not import it (which would
+    ///     resurrect exactly the unreachable shape F34 describes).
+    /// </summary>
+    [RetryFact]
+    public async Task MemorySync_RemoteHasAScopelessRow_CompletesAndDoesNotImportIt()
+    {
+        var cloud = new FakeCloudStore();
+
+        var remotePath = Path.GetTempFileName();
+        try
+        {
+            await using (var conn = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+            {
+                await using var insert = conn.CreateCommand();
+                insert.CommandText = """
+                                     INSERT INTO entries (hash, path, value, scope, project_id, workspace_id, created_at, updated_at)
+                                     VALUES ('remote-neither', 'neither.md', 'remote content', NULL, 'acme', NULL, 1, 1)
+                                     """;
+                await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            File.Delete(remotePath);
+        }
+
+        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
+                                 VALUES ('local-hash', 'local.md', 'local content', 'project', 'acme', 1, 1)
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var service = new SyncService(cloud,
+            ct => CreateAndOpenAsync(BankPath, ct),
+            OpenSnapshotAsync,
+            async (path, ct) =>
+            {
+                var c = new SqliteConnection($"Data Source={path}");
+                await c.OpenAsync(ct);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        // The pull must complete — a CHECK violation on the scopeless row would abort the whole
+        // merge transaction, losing the local row's chance to push too.
+        await Should.NotThrowAsync(() =>
+            service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
+
+        await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
+        {
+            await conn.OpenAsync(TestContext.Current.CancellationToken);
+            await using var count = conn.CreateCommand();
+            count.CommandText = "SELECT COUNT(*) FROM entries WHERE hash = 'remote-neither'";
+            var countScalar = await count.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            countScalar.ShouldNotBeNull();
+            ((long)countScalar).ShouldBe(0, "a scopeless remote row must not be imported by the merge");
+
+            await using var localCount = conn.CreateCommand();
+            localCount.CommandText = "SELECT COUNT(*) FROM entries WHERE hash = 'local-hash'";
+            var localScalar = await localCount.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+            localScalar.ShouldNotBeNull();
+            ((long)localScalar).ShouldBe(1, "the local row must survive the merge untouched");
+        }
+    }
+
     [RetryFact]
     public async Task MemorySync_CorruptRemoteSnapshot_NeverReplacesLocal()
     {
