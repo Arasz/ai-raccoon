@@ -65,16 +65,25 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
                 continue;
             }
 
-            await connection.ExecuteAsync(new CommandDefinition(
-                    "DELETE FROM entries WHERE id = @id", new { id = row.Id }, cancellationToken: cancellationToken))
+            // residual #4: each piece is a fragment of row.Value, so with split.Count > 1 none of
+            // them can equal it byte-for-byte — row.Hash never survives this replace. Computed
+            // before the delete so TombstoneAndDeleteRowAsync can tell a genuinely vanishing hash
+            // (tombstone it) from one this same operation re-inserts (never tombstone a hash a
+            // peer's copy still legitimately backs).
+            var pieceHashes = split
+                .Select(piece => (Piece: piece, Hash: ContentHash.Of(row.Path ?? string.Empty, piece)))
+                .ToList();
+
+            await TombstoneAndDeleteRowAsync(connection, row,
+                pieceHashes.Select(p => p.Hash).ToHashSet(StringComparer.Ordinal), now, cancellationToken)
                 .ConfigureAwait(false);
 
-            foreach (var piece in split)
+            foreach (var (piece, hash) in pieceHashes)
             {
                 await connection.ExecuteAsync(new CommandDefinition(MemorySql.InsertEntry,
                         new
                         {
-                            hash = ContentHash.Of(row.Path ?? string.Empty, piece),
+                            hash,
                             path = row.Path,
                             value = piece,
                             sourceFile = row.SourceFile,
@@ -106,6 +115,43 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
                 new CommandDefinition("SELECT SUM(length(value)) FROM entries", cancellationToken: cancellationToken))
             .ConfigureAwait(false) ?? 0;
         return new ChunkBackfillReport(rows.Count, replaced, pieces, charsBefore, charsAfter);
+    }
+
+    /// <summary>
+    ///     residual #4: tombstones <paramref name="row" />'s hash — unless <paramref name="survivingHashes" />
+    ///     (this same split's own piece hashes) still backs it, in which case a tombstone would wrongly
+    ///     delete a peer's live copy of content this operation is only re-writing — then deletes it, in
+    ///     one transaction so a crash between the two can never leave the tombstone without its delete
+    ///     (or vice versa).
+    /// </summary>
+    private static async Task TombstoneAndDeleteRowAsync(SqliteConnection connection, Row row,
+        IReadOnlySet<string> survivingHashes, long deletedAt, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            if (!survivingHashes.Contains(row.Hash))
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                        MemorySql.TombstoneFromPredicate("id = @id"),
+                        new { id = row.Id, deletedAt }, cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                    "DELETE FROM entries WHERE id = @id", new { id = row.Id }, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>The same resolution the ingest path uses, read from the same settings. Internal for the

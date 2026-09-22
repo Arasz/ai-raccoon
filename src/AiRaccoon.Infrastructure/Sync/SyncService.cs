@@ -520,16 +520,26 @@ public partial class SyncService(
                     "context_label", cancellationToken).ConfigureAwait(false);
                 var remoteContextLabelColumn = remoteHasContextLabel ? "context_label" : "NULL";
 
+                // F36: this pull's own instant, stamped as received_at on every tombstone the merge
+                // below learns about — reused unchanged for the last_pull_at watermark further down,
+                // so a tombstone this very pass just merged can never itself be older than the
+                // watermark it advances to.
+                var pullNow = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+
                 // Merge sync_tombstones: union, folding loser ids so an unrepaired replica's
                 // loser tombstone meets the repair's rewritten winner-keyed one (OR IGNORE dedups
-                // against uq_sync_tombstones_identity, MemorySchema.cs).
+                // against uq_sync_tombstones_identity, MemorySchema.cs). received_at is THIS bank's
+                // clock (F36), never the remote's deleted_at — OR IGNORE leaves an already-known
+                // tombstone's received_at untouched, so re-learning it from a second peer does not
+                // reset when this bank first received it.
                 await using (var mergeTombstones = conn.CreateCommand())
                 {
                     var foldedTombstoneProject = FoldRemoteProjectId("project_id", ResolveAliasMap());
                     mergeTombstones.CommandText = $"""
-                                                  INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at)
-                                                  SELECT {foldedTombstoneProject}, hash, scope, {remoteContextLabelColumn}, deleted_at FROM remote.sync_tombstones
+                                                  INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at, received_at)
+                                                  SELECT {foldedTombstoneProject}, hash, scope, {remoteContextLabelColumn}, deleted_at, @receivedAt FROM remote.sync_tombstones
                                                   """;
+                    mergeTombstones.Parameters.AddWithValue("@receivedAt", pullNow);
                     await mergeTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
@@ -560,7 +570,13 @@ public partial class SyncService(
                     await applyTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
-                // GC tombstones: remove rows older than the last pull watermark.
+                // GC tombstones: remove rows this bank received before the last pull watermark.
+                // F36: compares received_at (this bank's own clock) against the watermark (also this
+                // bank's own clock) — never deleted_at, a remote replica's clock, which is what let a
+                // fresh remote deletion be inserted and destroyed in the very pass that just merged
+                // it. Both write paths (this merge and MemorySql.TombstoneFromPredicate) always set
+                // received_at, and the v16 migration backfills every pre-existing row — COALESCE is
+                // belt-and-suspenders for a row that somehow still carries NULL, never the intended path.
                 await using (var watermarkCmd = conn.CreateCommand())
                 {
                     watermarkCmd.CommandText = "SELECT value FROM sync_meta WHERE key = 'last_pull_at'";
@@ -568,19 +584,19 @@ public partial class SyncService(
                     if (long.TryParse(lastPullStr, out var lastPull))
                     {
                         await using var gc = conn.CreateCommand();
-                        gc.CommandText = "DELETE FROM sync_tombstones WHERE deleted_at < @watermark";
+                        gc.CommandText = "DELETE FROM sync_tombstones WHERE COALESCE(received_at, deleted_at) < @watermark";
                         gc.Parameters.AddWithValue("@watermark", lastPull);
                         await gc.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                     }
                 }
 
-                // Record last pull timestamp.
-                var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+                // Record last pull timestamp — the same instant just stamped as this pull's
+                // received_at above.
                 await using (var updateWatermark = conn.CreateCommand())
                 {
                     updateWatermark.CommandText =
                         "INSERT INTO sync_meta (key, value) VALUES ('last_pull_at', @value) ON CONFLICT(key) DO UPDATE SET value = excluded.value";
-                    updateWatermark.Parameters.AddWithValue("@value", now.ToString());
+                    updateWatermark.Parameters.AddWithValue("@value", pullNow.ToString());
                     await updateWatermark.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 

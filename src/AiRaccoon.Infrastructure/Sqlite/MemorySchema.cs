@@ -58,12 +58,13 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV12Async" /> (ADR-0097),
     ///     <see cref="MigrateToV13Async" /> (ADR-0099),
     ///     <see cref="MigrateToV14Async" /> (Package D, durable alias-map table),
-    ///     <see cref="MigrateToV15Async" /> (label-aware sync tombstones). Not every schema change needs a ladder
+    ///     <see cref="MigrateToV15Async" /> (label-aware sync tombstones),
+    ///     <see cref="MigrateToV16Async" /> (F36, receipt-time tombstone GC). Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 15;
+    internal const int CurrentVersion = 16;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -299,13 +300,18 @@ internal static class MemorySchema
                                           -- context_label) has a nullable member, and SQLite never dedupes
                                           -- NULLs against each other in a key — TombstoneIndexDdl's
                                           -- COALESCE-based unique index is the real uniqueness (same idiom as
-                                          -- uq_entries_committed_bucket).
+                                          -- uq_entries_committed_bucket). received_at (F36, v16) is THIS
+                                          -- bank's own clock: equal to deleted_at for a locally-originated
+                                          -- tombstone, but the pull merge's own "now" for one learned from a
+                                          -- peer — GC compares it, never the remote deleted_at, against the
+                                          -- local watermark.
                                           CREATE TABLE IF NOT EXISTS sync_tombstones (
                                               project_id TEXT NOT NULL,
                                               hash TEXT NOT NULL,
                                               scope TEXT NOT NULL,
                                               context_label TEXT NULL,
-                                              deleted_at INTEGER NOT NULL
+                                              deleted_at INTEGER NOT NULL,
+                                              received_at INTEGER NULL
                                           );
 
                                           -- File-watcher feature: persisted watch registrations and per-path
@@ -810,6 +816,11 @@ internal static class MemorySchema
         if (healthy && storedVersion < 15)
         {
             await MigrateToV15Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (healthy && storedVersion < 16)
+        {
+            await MigrateToV16Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
@@ -1374,6 +1385,54 @@ internal static class MemorySchema
         // too — same reasoning as the v9 rebuild's vacuum. Or Vec0PartitionKeyDemotionTests'
         // freelist-0 contract reads 1 the moment a v15 bank is migrated.
         await VacuumBestEffortAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     v15→v16 (F36): <c>sync_tombstones</c> gains <c>received_at</c> — a plain <c>ALTER TABLE
+    ///     ADD COLUMN</c>, no rebuild, since the v15 table already carries no PK for this to conflict
+    ///     with. Existing rows backfill <c>received_at = deleted_at</c>: the best available answer for
+    ///     a row this binary cannot ask "when did THIS bank first learn of you" — same clock, so GC's
+    ///     old (buggy) comparison is exactly what a pre-fix row keeps until it is next refreshed by a
+    ///     local delete or a pull merge.
+    /// </summary>
+    private static async Task MigrateToV16Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            var columns = (await connection.QueryAsync<string>(
+                    new CommandDefinition(
+                        "SELECT name FROM pragma_table_info('sync_tombstones')",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList();
+
+            if (!columns.Contains("received_at", StringComparer.Ordinal))
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            "ALTER TABLE sync_tombstones ADD COLUMN received_at INTEGER NULL",
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            "UPDATE sync_tombstones SET received_at = deleted_at WHERE received_at IS NULL",
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>The v11-era shape of <c>sync_tombstones</c>: declared types, NOT NULL, and the pk position of every composite-key member.</summary>

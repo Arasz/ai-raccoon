@@ -135,6 +135,12 @@ public sealed partial class SqliteMemoryStore
     ///         `promotion_queue` row forever. <see cref="MemorySql.DeleteDiscardedQueueRowsForSourcePath" />
     ///         sweeps that residue explicitly, scoped to this path.
     ///     </para>
+    ///     <para>
+    ///         Residual #4: the entries leg is tombstoned before it deletes (same predicate,
+    ///         <see cref="MemorySql.TombstoneFromPredicate" />), inside the caller's transaction — a
+    ///         stale chunk a watcher CHANGE prunes must not resurrect on a peer's next sync pull. The
+    ///         code-corpus leg is never tombstoned: `code_entries` has no `scope` column and never syncs.
+    ///     </para>
     /// </summary>
     private async Task PruneAsync(SqliteConnection connection, string projectId, string path,
         IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken)
@@ -149,10 +155,29 @@ public sealed partial class SqliteMemoryStore
                 Def(MemorySql.DeleteDiscardedQueueRowsForSourcePath,
                     new { projectId, path, pathPrefix = LikePattern.Escape(path) + "/%" }, cancellationToken))
             .ConfigureAwait(false);
-        await connection.ExecuteAsync(keep.Count == 0
-                ? Def(MemorySql.DeleteAllChunksForPath, new { projectId, path }, cancellationToken)
-                : Def(MemorySql.DeleteChunksForPathExcept, new { projectId, path, keep }, cancellationToken))
-            .ConfigureAwait(false);
+
+        var deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        if (keep.Count == 0)
+        {
+            await connection.ExecuteAsync(
+                    Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteAllChunksForPathPredicate),
+                        new { projectId, path, deletedAt }, cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteAllChunksForPath, new { projectId, path }, cancellationToken))
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await connection.ExecuteAsync(
+                    Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteChunksForPathExceptPredicate),
+                        new { projectId, path, keep, deletedAt }, cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    Def(MemorySql.DeleteChunksForPathExcept, new { projectId, path, keep }, cancellationToken))
+                .ConfigureAwait(false);
+        }
+
         if (keepCode is not null)
         {
             var codeParams = new
