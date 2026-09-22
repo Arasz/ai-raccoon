@@ -33,6 +33,16 @@ Install `ai-raccoon` with the .NET 10 SDK:
 dotnet tool install -g ai-raccoon
 ```
 
+### Activate semantic search
+
+A fresh install has no memory embedding engine, so `memory_search` runs keyword-only until you activate the bundled model:
+
+```bash
+ai-raccoon model embedding set local
+```
+
+The model ships with the tool, so this needs no network access; it activates the engine and re-embeds pending entries in the background.
+
 ### Migrating from `arasz.ai-raccoon`
 
 If you used the preview package `arasz.ai-raccoon`, uninstall it first. The package moved to `ai-raccoon`, but both use the same binary name (`ai-raccoon`). Your existing memory database under `~/.ai-raccoon` stays untouched:
@@ -103,7 +113,7 @@ When your agent starts up, it connects through the proxy to the backend memory s
 Confirm the install actually works by asking your agent to write and then find a memory:
 
 1. Ask it to call `memory_write` with `projectId="get-started"` and `content="AiRaccoon install verification note"`.
-2. Ask it to call `memory_search` with `projectId="get-started"` and `query="install verification"`.
+2. Ask it to call `memory_search` with `projectId="get-started"`, `sessionId="<your agent's session id>"`, and `query="install verification"`.
 
 A successful search returns the note you just wrote in its `results`. If it comes back empty, re-check Step 3's `.mcp.json` entry and confirm your agent actually connected to the `ai-raccoon` server.
 

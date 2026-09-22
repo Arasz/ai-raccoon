@@ -54,6 +54,14 @@ Install the global CLI tool (`ai-raccoon`):
 dotnet tool install -g ai-raccoon
 ```
 
+Activate the bundled local embedding engine. A fresh bank has no memory engine until you run it:
+
+```bash
+ai-raccoon model embedding set local
+```
+
+Until then `memory_search` is keyword-only and says so in its `warning`.
+
 Add AiRaccoon to your agent's `.mcp.json`:
 
 ```json

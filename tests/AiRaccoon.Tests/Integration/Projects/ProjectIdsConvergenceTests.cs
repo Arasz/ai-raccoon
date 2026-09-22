@@ -350,7 +350,7 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
         new(_store, gate,
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
-            NoOpMeasurementRecorder.Instance, NullLogger<MemoryTools>.Instance);
+            NoOpMeasurementRecorder.Instance, new InMemorySettings(), NullLogger<MemoryTools>.Instance);
 
     private static IReadOnlyList<string> PinsCanon(ProjectIdsFoldPlan plan) =>
         plan.Pinned.Select(pin => $"{pin.Bucket}|{pin.ProjectId}|{pin.Reason}").ToList();
