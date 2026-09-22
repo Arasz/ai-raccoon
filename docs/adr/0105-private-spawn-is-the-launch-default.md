@@ -141,6 +141,41 @@ child prints on its stdout pipe. `--attach` is the explicit opt-in to the shared
   `BackendSessionsTokenExposureTests`, `CliSettingsTokenExposureTests` and
   `BackendLauncherTests.StartPrivate_*`.
 
+## Concurrent access — one bank, more than one process
+
+The private-spawn default makes two backends on one data root a normal state: a bare proxy
+launch leaves its own backend on an ephemeral port while a `serve` on the same root keeps
+running. The evening ruling removed that state from the settings verbs (K1a: attach-or-start)
+but not from the proxy — there the second writer is the accepted price of never attaching,
+which is the trust decision F70 removed. The state is safe by construction and costs
+throughput, not integrity:
+
+- **Storage.** Every connection opens the bank WAL with `busy_timeout=5000`
+  (`SqliteConnectionFactory.OpenWithPragmasAsync`, plus `DefaultTimeout = 5` on the
+  connection string): readers never block readers, and a writer that loses the race waits up
+  to 5s instead of failing. The wait is load-bearing — the watch digest fans out concurrent
+  writes (concurrency 4) through `BEGIN IMMEDIATE`, and a lost-race failure would drop the
+  event for good.
+- **The residual is a defined refusal, not corruption.** A writer held past the timeout
+  surfaces as the `bank-busy` tool refusal (`ToolRefusals.BankBusyPrefix`): SQLITE_BUSY (5) /
+  SQLITE_LOCKED (6) only, logged at Warning as an expected refusal, and the call is retriable.
+  Real faults carried by the same exception type (26, "file is not a database") stay
+  unmapped — one classification (`ExceptionExtensions.IsBankBusy`, the #640 consolidation).
+- **Migrations cannot race.** Every ladder step runs under `BEGIN IMMEDIATE` and re-probes
+  under the write lock (e.g. `MigrateToV15Async` re-reads `pragma_table_info` because another
+  opener may have migrated between the ladder's version read and the BEGIN). Two processes
+  opening a pre-migration bank migrate it once; the loser sees the migrated shape and skips
+  the rebuild.
+- **What it costs.** Sustained dual writers serialize on the write lock (WP12's convoy), so
+  heavy write load through both backends degrades to single-writer throughput and can still
+  trip `bank-busy` above the 5s bound. WAL checkpoints (`wal_checkpoint(TRUNCATE)` per
+  process at startup/shutdown and on the maintenance cadence) interleave safely but add
+  brief lock holds. This is the contention cost the owner priced when re-ruling the settings
+  verbs (K1a); for the proxy it is accepted in exchange for never attaching by default.
+- **What would remove it.** Attaching (`--attach`) collapses to one writer by construction —
+  which is exactly the trust trade the section on private spawn makes. The unix-socket
+  transport above is unrelated: it hardens the channel, not the shared bank.
+
 ## Alternatives rejected
 
 - **Mutual proof.** The listener would have to return a value derived from the token file
