@@ -40,6 +40,7 @@ public class MemoryToolsTests
     private readonly SyncTools _syncTools;
     private readonly MemoryTools _tools;
     private readonly WorkspaceTools _workspace;
+    private readonly CountingEmbeddingService _embeddings = new();
 
     public MemoryToolsTests()
     {
@@ -48,7 +49,7 @@ public class MemoryToolsTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var gate = new ToolGate(access, _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
-        _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, NullLogger<MemoryTools>.Instance);
+        _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, NullLogger<MemoryTools>.Instance, embeddings: _embeddings);
         _share = new ShareTools(_store, gate, new ShareExtractService(_store,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
                 new FakeTimeProvider(FixedNow)), _queue));
@@ -623,6 +624,33 @@ public class MemoryToolsTests
         var result = await _tools.Search("acme", query, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    // pi-badger-integration F1: the guard's number must track the ACTIVE memory engine, not the
+    // bundled default -- a manifest engine's real budget (IEmbeddingService.ResolveChunkBudgetFor)
+    // is wider than 254, so its own threshold is wider too.
+
+    [Fact]
+    public async Task Search_WithAManifestEngineBudget_AQueryOverTheBundledThresholdButWithinItsOwn_HasNoWarning()
+    {
+        _embeddings.ChunkBudgetOverride = 510;
+        var query = new string('a', 1500); // over the bundled 1,000-char threshold, under 510 tokens' own (~2,008)
+
+        var result = await _tools.Search("acme", query, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithAManifestEngineBudget_AQueryBeyondItsOwnThreshold_WarnsNamingThatBudget()
+    {
+        _embeddings.ChunkBudgetOverride = 510;
+        var query = new string('a', 2500); // beyond 510 tokens' own (~2,008-char) threshold
+
+        var result = await _tools.Search("acme", query, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
+        result.Data!.Warning.ShouldContain("510");
     }
 
     [Fact]
