@@ -7,13 +7,16 @@ namespace AiRaccoon.Core.Memory;
 ///     <see cref="Timings" /> rides out with the results so the host can tag and record them
 ///     without a side channel back into the store. <see cref="Fusion" /> is null on every default
 ///     search — it is set only when the no-fusion-regression flag is on (docs/adr/0078).
+///     <see cref="DroppedByFloor" /> counts the candidates minRelativeScore dropped before the
+///     limit cut, so a response short of its limit can say why.
 /// </summary>
 public sealed record SearchResults(
     IReadOnlyList<MemorySearchResult> Results,
     SearchTimings Timings,
     FusionDiff? Fusion = null,
     IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash = null,
-    FusionStats? Stats = null);
+    FusionStats? Stats = null,
+    int DroppedByFloor = 0);
 
 /// <summary>Per-phase durations for one <see cref="IMemoryStore.SearchAsync" /> call, plus the measured total (docs/adr/0079).</summary>
 public sealed record SearchTimings(

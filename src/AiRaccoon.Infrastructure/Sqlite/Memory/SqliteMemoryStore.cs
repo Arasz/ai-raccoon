@@ -616,7 +616,7 @@ public sealed partial class SqliteMemoryStore(
         searchTimingsCollector.Bump = timeProvider.GetElapsedTime(bumpStart);
 
         return new Core.Memory.SearchResults(deferredResults.Results, searchTimingsCollector.ToCollected(timeProvider), deferredResults.FusionDiff,
-            deferredResults.EvidenceByHash, deferredResults.Stats);
+            deferredResults.EvidenceByHash, deferredResults.Stats, deferredResults.DroppedByFloor);
     }
 
     private async Task<AdjustedSearchResult> AdjustMergedResults(SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan queryPlan, QueryVector queryVector,
@@ -636,24 +636,26 @@ public sealed partial class SqliteMemoryStore(
             return new AdjustedSearchResult(merged, timeProvider.GetElapsedTime(adjustmentStart))
             {
                 EvidenceByHash = fusedSearchResult.EvidenceByHash,
-                Stats = fusedSearchResult.Stats
+                Stats = fusedSearchResult.Stats,
+                DroppedByFloor = mergedSearchResult.DroppedByFloor
             };
         }
 
-        var adjusted = SearchResultMerger.Merge(NoFusionRegression.Reorder(merged, legs), query, parameters, queryPlan);
-        return new AdjustedSearchResult(adjusted, timeProvider.GetElapsedTime(adjustmentStart))
+        var outcome = SearchResultMerger.MergeCounting(NoFusionRegression.Reorder(merged, legs), query, parameters, queryPlan);
+        return new AdjustedSearchResult(outcome.Results, timeProvider.GetElapsedTime(adjustmentStart))
         {
-            FusionDiff = FusionDiff.Between(merged, adjusted),
+            FusionDiff = FusionDiff.Between(merged, outcome.Results),
             EvidenceByHash = fusedSearchResult.EvidenceByHash,
-            Stats = fusedSearchResult.Stats
+            Stats = fusedSearchResult.Stats,
+            DroppedByFloor = mergedSearchResult.DroppedByFloor + outcome.DroppedByFloor
         };
     }
 
     private MergedSearchResult SearchResultMerge(SearchQuery query, SearchParameters parameters, FtsQueryPlan queryPlan, FusedSearchResult fusedResult)
     {
         var mergeStart = timeProvider.GetTimestamp();
-        var merged = SearchResultMerger.Merge(fusedResult.Results, query, parameters, queryPlan);
-        return new MergedSearchResult(merged, timeProvider.GetElapsedTime(mergeStart));
+        var outcome = SearchResultMerger.MergeCounting(fusedResult.Results, query, parameters, queryPlan);
+        return new MergedSearchResult(outcome.Results, timeProvider.GetElapsedTime(mergeStart)) { DroppedByFloor = outcome.DroppedByFloor };
     }
 
     private FusedSearchResult SearchResultFusion(SearchQuery query, SearchParameters parameters, SearchResults searchResults)
@@ -911,7 +913,8 @@ public sealed partial class SqliteMemoryStore(
         {
             FusionDiff = adjustedSearch.FusionDiff,
             EvidenceByHash = adjustedSearch.EvidenceByHash,
-            Stats = adjustedSearch.Stats
+            Stats = adjustedSearch.Stats,
+            DroppedByFloor = adjustedSearch.DroppedByFloor
         };
     }
 

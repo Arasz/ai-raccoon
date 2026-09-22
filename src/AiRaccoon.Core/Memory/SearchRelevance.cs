@@ -4,7 +4,7 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
-///     The served rows after K6's absolute-relevance judgement, and whether their ranking may be
+///     The served rows after the absolute-relevance judgement, and whether their ranking may be
 ///     read as relevance at all.
 /// </summary>
 public sealed record RelevanceJudgement(IReadOnlyList<MemorySearchResult> Results, bool Unranked);
@@ -12,10 +12,15 @@ public sealed record RelevanceJudgement(IReadOnlyList<MemorySearchResult> Result
 /// <summary>
 ///     "Is anything here actually relevant?" — the absolute signal ADR-0047 deferred: a floor on
 ///     the fused content cosine, plus the explicit unranked marker for rankings with no absolute
-///     backing. Pure decisions over served rows and their evidence (docs/adr/0047 follow-up, K6).
+///     backing. Pure decisions over served rows and their evidence (docs/adr/0047 follow-up).
 /// </summary>
 public static class SearchRelevance
 {
+    /// <summary>The wire name of the relative floor (SearchQuery.MinRelativeScore), for the truncation marker.</summary>
+    public const string RelativeFloorName = "minRelativeScore";
+
+    /// <summary>The wire name of the absolute floor below, for the truncation marker.</summary>
+    public const string AbsoluteRelevanceFloorName = "absoluteRelevance";
     /// <summary>
     ///     Below this cosine a row is not relevant. Splits the gap the review measured: a
     ///     zero-overlap query's best row reached 0.074 while the bundled MiniLM family scores

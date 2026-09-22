@@ -37,6 +37,7 @@ public sealed record AdjustedSearchResult(IReadOnlyList<MemorySearchResult> Resu
     public FusionDiff? FusionDiff { get; init; }
     public IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash { get; init; }
     public FusionStats? Stats { get; init; }
+    public int DroppedByFloor { get; init; }
 }
 
 public sealed record DeferredSearchResult(IReadOnlyList<MemorySearchResult> Results, TimeSpan SearchTiming) : SearchResult(Results, SearchTiming)
@@ -49,6 +50,10 @@ public sealed record DeferredSearchResult(IReadOnlyList<MemorySearchResult> Resu
     public required FusionDiff? FusionDiff { get; init; }
     public IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash { get; init; }
     public FusionStats? Stats { get; init; }
+    public int DroppedByFloor { get; init; }
 }
 
-public sealed record MergedSearchResult(IReadOnlyList<MemorySearchResult> Results, TimeSpan SearchTiming) : SearchResult(Results, SearchTiming);
+public sealed record MergedSearchResult(IReadOnlyList<MemorySearchResult> Results, TimeSpan SearchTiming) : SearchResult(Results, SearchTiming)
+{
+    public int DroppedByFloor { get; init; }
+}
