@@ -114,6 +114,36 @@ public sealed class MemorySearchEvidenceEnvelopeTests
     }
 
     /// <summary>
+    ///     The ContentCosine transport exists for the evidence join only, never for the response
+    ///     contract: a vector-sourced result row keeps its documented keys
+    ///     (docs/reference/agent-memory-server.md) while the served hash's magnitude reaches the
+    ///     wire as the evidence cosine. Positive controls in the same capture: the in-memory row
+    ///     still carries ContentCosine (the transport is intact) and the serialized evidence
+    ///     still carries a "cosine" key.
+    /// </summary>
+    [Fact]
+    public async Task Search_VectorSourcedResult_KeepsContentCosineOffTheWire()
+    {
+        _store.StubResults = [new MemorySearchResult("mem1", 0.5, "a.md", "first", ContentCosine: 0.87)];
+        _store.StubEvidence = new Dictionary<string, RetrievalEvidence>(StringComparer.Ordinal)
+        {
+            ["mem1"] = new RetrievalEvidence("mem1", 0.5, [new LegRank("vector", 1)], 0.87),
+        };
+        _store.StubStats = new FusionStats(0.2, null, 0.0328, ["vector"]);
+
+        var envelope = await _tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Results.ShouldHaveSingleItem().ContentCosine.ShouldBe(0.87,
+            "positive control: the in-memory transport still carries the cosine");
+        envelope.Data!.EvidenceByHash.ShouldNotBeNull()["mem1"].Cosine.ShouldBe(0.87,
+            "the wire's magnitude is the evidence cosine");
+        var json = JsonSerializer.Serialize(envelope.Data, McpJsonUtilities.DefaultOptions);
+        json.ShouldContain("\"cosine\"");
+        json.ShouldNotContain("contentCosine");
+    }
+
+    /// <summary>
     ///     F2: the S3 join is by hash, never by position — served [mem2, mem1] against a sidecar
     ///     inserted [mem1, mem2]. A positional coupling (the exact alternative M5 rejected) would
     ///     pin mem1's strength-0.95 two-leg evidence onto mem2 and fail the per-row assertions.

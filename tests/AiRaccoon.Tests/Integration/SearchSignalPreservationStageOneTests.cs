@@ -155,7 +155,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
                 "strength is raw/maxPossible over the observed ranks — the §3 formula, live");
             if (vectorRank.ContainsKey(hash))
             {
-                item.Cosine.ShouldNotBeNull("a vector-participating hash carries its fused cosine");
+                item.Cosine.ShouldNotBeNull("a vector-participating hash carries its content cosine");
                 double.IsFinite(item.Cosine.Value).ShouldBeTrue("only finite cosines ever reach the wire (P3 rule)");
             }
             else
@@ -423,7 +423,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
             "the pin is meaningless unless the vector leg genuinely fired");
         var evidence = both.Data!.EvidenceByHash.ShouldNotBeNull();
         evidence.Values.Where(row => row.Cosine is not null).ShouldNotBeEmpty(
-            "vector-participating rows carry their fused cosine");
+            "vector-participating rows carry their content cosine");
         traced.Count.ShouldBe(ExpectedVectorStatementCount,
             "G5 on the both-legs path: capture adds zero SQL beyond the pinned search shape");
     }
