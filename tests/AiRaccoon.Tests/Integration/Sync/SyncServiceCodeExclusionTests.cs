@@ -455,7 +455,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
                               name TEXT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, closed_at INTEGER NULL);
                           CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                           CREATE TABLE IF NOT EXISTS sync_tombstones (project_id TEXT NOT NULL, hash TEXT NOT NULL, scope TEXT NOT NULL,
-                              deleted_at INTEGER NOT NULL, PRIMARY KEY (project_id, hash, scope));
+                              deleted_at INTEGER NOT NULL, received_at INTEGER NULL, PRIMARY KEY (project_id, hash, scope));
                           CREATE TABLE IF NOT EXISTS memory_source (
                               id INTEGER PRIMARY KEY,
                               source_type TEXT NOT NULL,
