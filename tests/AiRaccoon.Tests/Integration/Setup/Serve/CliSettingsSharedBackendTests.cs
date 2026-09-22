@@ -93,9 +93,9 @@ public sealed class CliSettingsSharedBackendTests : IAsyncLifetime
             HardCap, TestContext.Current.CancellationToken);
 
         run.ExitCode.ShouldBe(0, $"command failed; stderr: {run.Stderr}");
-        run.Stderr.ShouldContain("keeps running after this command exits",
+        run.Stderr.Contains("keeps running after this command exits").ShouldBe(true,
             $"stderr never disclosed that the backend outlives the command; full stderr:\n{run.Stderr}");
-        run.Stderr.ShouldContain($"--port {_port}",
+        run.Stderr.Contains($"--port {_port}").ShouldBe(true,
             $"the disclosure line must name the port to stop; full stderr:\n{run.Stderr}");
     }
 
