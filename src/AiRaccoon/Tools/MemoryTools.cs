@@ -9,6 +9,7 @@ using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
+using AiRaccoon.Infrastructure.Embedding;
 using FluentValidation;
 using JetBrains.Annotations;
 using ModelContextProtocol;
@@ -26,6 +27,7 @@ public sealed partial class MemoryTools(
     IQueryGuardService queryGuard,
     IMemoryWriteService writes,
     IMeasurementRecorder measurements,
+    ISettingsStore settings,
     ILogger<MemoryTools> logger,
     TimeProvider? timeProvider = null)
 {
@@ -107,15 +109,21 @@ public sealed partial class MemoryTools(
         + "section ranked by its own hybrid. Every search records a search_quality row and returns meta.correlationId "
         + "for grade and follow-through. Memory and both store the memory leg count and files. Code stores the code "
         + "count with an empty file list. Code paths never enter the table. A result warning of '"
+        + SearchWarnings.EngineNotConfiguredPrefix + "' means the memory section is keyword-only because the memory "
+        + "embedding engine is not installed: relay '" + EmbeddingEngineSetup.DefaultModelCommand + "' to the user "
+        + "once and treat the memory hits as incomplete; re-running the search changes nothing until that command runs. "
+        + "A result warning of '"
         + CodeSearchWarnings.EngineNotConfiguredPrefix + "' means the code section is keyword-only because the code "
         + "embedding engine is not installed: relay '" + CodeEngineSetup.DefaultModelCommand + "' to the user once and "
         + "treat the code hits as incomplete; re-running the search changes nothing until that command runs. "
         + "The response may carry an evidenceByHash map (hash → retrieval evidence): fusionStrength (0-1, the fraction of the strongest leg "
         + "agreement this query could have produced — ~0.95 means every firing leg ranked it first, ~0.2 is thin), "
         + "legs (which legs agreed and at which ranks; a single-leg entry is itself a thin-response tell), and cosine "
-        + "(the fused vector similarity when a vector leg participated). The response may carry fusionStats "
-        + "(topMargin/topVsMedian over pre-normalization raws, plus maxPossible and participatingLegs). A flat margin "
-        + "plus a single-leg top is the measurable 'best of a bad lot' signature — a thin response, not a verdict. "
+        + "(the vector leg's raw content-embedding similarity to the query, when a vector leg participated and "
+        + "reported one — a hash-comparable magnitude, never the structure-blended score legs/order use). The "
+        + "response may carry fusionStats (topMargin/topVsMedian over pre-normalization raws, plus maxPossible "
+        + "and participatingLegs). A flat margin plus a single-leg top is the measurable 'best of a bad lot' "
+        + "signature — a thin response, not a verdict. "
         + "These signals claim no relevance (no relevance value is computed); margins are computed over the PRE-floor "
         + "candidate population, not the served set. A response with unranked: true ranks rows that carry "
         + "no absolute relevance backing (flat margin, one leg, no row clearing the absolute relevance floor) "
@@ -237,7 +245,8 @@ public sealed partial class MemoryTools(
         // policy like the guard above -- so it is evaluated unconditionally, never through
         // IQueryGuardService (a disabled guard must not silence it). It applies identically
         // whichever kind was requested, since both corpora search the same query text.
-        var warning = ComposeWarning(SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query)), dispatch.CodeWarning);
+        var warning = SearchWarnings.Compose(guard.Verdict, QueryLengthGuard.Evaluate(query),
+            await MemoryEngineWarningAsync(parsedKind, cancellationToken), dispatch.CodeWarning);
         var result = BuildSearchResultList(dispatch, warning, searchQuery);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
 
@@ -276,14 +285,21 @@ public sealed partial class MemoryTools(
         }
     }
 
-    private static string? ComposeWarning(string? primary, string? extra) =>
-        (primary, extra) switch
+    /// <summary>
+    ///     The memory leg's engine note: `embedding.provider` unset means FTS5-only memory search
+    ///     (F6), the same state doctor reports. Null for kind=code, whose leg never runs — reading
+    ///     the setting then would be work with no consumer.
+    /// </summary>
+    private async Task<string?> MemoryEngineWarningAsync(SearchKind kind, CancellationToken cancellationToken)
+    {
+        if (kind == SearchKind.Code)
         {
-            (null, null) => null,
-            (not null, null) => primary,
-            (null, not null) => extra,
-            _ => $"{primary} {extra}"
-        };
+            return null;
+        }
+
+        var provider = await settings.GetSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken);
+        return SearchWarnings.MemoryEngineWarning(provider);
+    }
 
     /// <summary>
     ///     S3 join: the P4 sidecar onto the MCP envelope by hash. Dict-by-hash (not a parallel
@@ -514,11 +530,12 @@ public sealed partial class MemoryTools(
     public sealed record GetResult(string Hash, string Value, string Path, string Context, long CreatedAt);
 
     /// <summary>
-    ///     Warning is set only by the query guard's annotate tier (docs/adr/0040) or the code
-    ///     section's degraded-mode note: a non-null value never changes Results. Code is null (and
-    ///     omitted from the wire, <see cref="JsonIgnoreCondition.WhenWritingNull" />) for kind=memory
-    ///     — the pinned envelope contract (docs/work/2026-08-21-code-search-implementation-plan.md
-    ///     §3.6): kind=memory serializes the exact legacy shape, no "code" key at all.
+    ///     Warning is set only by the query guard's annotate tier (docs/adr/0040) or a corpus's
+    ///     degraded-mode note (the memory engine's, or the code section's): a non-null value never
+    ///     changes Results. Code is null (and omitted from the wire,
+    ///     <see cref="JsonIgnoreCondition.WhenWritingNull" />) for kind=memory — the pinned envelope
+    ///     contract (docs/work/2026-08-21-code-search-implementation-plan.md §3.6): kind=memory
+    ///     serializes the exact legacy shape, no "code" key at all.
     ///     Unranked is the explicit marker for rankings with no absolute relevance backing, and
     ///     Truncation reports the floor cuts behind a response short of its limit; both are omitted
     ///     from the wire unless set (<see cref="JsonIgnoreCondition.WhenWritingDefault" />).

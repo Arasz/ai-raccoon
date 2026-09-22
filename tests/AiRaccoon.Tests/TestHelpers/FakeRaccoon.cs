@@ -1,4 +1,5 @@
 using System.Net;
+using AiRaccoon.Hosting.Node;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -15,6 +16,7 @@ internal sealed class FakeRaccoon : IAsyncDisposable
     private const string JsonRpcRefusal = """{"jsonrpc":"2.0","id":null,"error":{"code":-32001,"message":"nope"}}""";
 
     private readonly WebApplication _app;
+    private readonly List<string> _shutdownTokenHeaders = [];
 
     private FakeRaccoon(WebApplication app, int port)
     {
@@ -25,6 +27,19 @@ internal sealed class FakeRaccoon : IAsyncDisposable
     public int Port { get; }
 
     public int ShutdownRequests { get; private set; }
+
+    /// <summary>Every X-AiRaccoon-Token value /shutdown received — the F70 measurement: a listener
+    /// that merely claims the name must never see the data root's token.</summary>
+    public IReadOnlyList<string> ShutdownTokenHeaders
+    {
+        get
+        {
+            lock (_shutdownTokenHeaders)
+            {
+                return [.. _shutdownTokenHeaders];
+            }
+        }
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -49,8 +64,17 @@ internal sealed class FakeRaccoon : IAsyncDisposable
         app.MapGet("/observability", () => version is null
             ? Results.Json(new { name, pid = Environment.ProcessId, otlp })
             : Results.Json(new { name, version, pid = Environment.ProcessId, otlp }));
-        app.MapPost("/shutdown", () =>
+        app.MapPost("/shutdown", (HttpContext context) =>
         {
+            var token = context.Request.Headers[McpTokenGate.HeaderName].ToString();
+            if (token.Length > 0)
+            {
+                lock (fake._shutdownTokenHeaders)
+                {
+                    fake._shutdownTokenHeaders.Add(token);
+                }
+            }
+
             fake.ShutdownRequests++;
             return Results.StatusCode((int)shutdownStatus);
         });

@@ -197,7 +197,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         var secondRoot = TestData.CreateTempRoot("ai-raccoon-observability-attach");
         try
         {
-            await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString()]);
+            await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString(), "--attach"]);
             var secondExit = await second.Exit;
             secondExit.ShouldBe(ExitCode.Success);
 

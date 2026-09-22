@@ -34,7 +34,7 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 
 | Surface                    | What it does                                                                                                                                                                            | Who controls the input                        |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|
-| proxy transport (default)  | Reads MCP JSON-RPC from the client's stdin and forwards every message to one `ai-raccoon serve` backend over loopback HTTP, starting it if none is listening (ADR-0020). Opens no bank, holds no key, runs no tool. The only stdio shape left is this proxy wire: the `stdio` transport value was removed outright (ADR-0104) | The MCP client that launched the process      |
+| proxy transport (default)  | Reads MCP JSON-RPC from the client's stdin and forwards every message to its own `ai-raccoon serve --port 0` backend over loopback HTTP, taking the bound URL from that child's stdout (ADR-0105). `--attach` opts into reusing a server on the configured port instead (ADR-0020). Opens no bank, holds no key, runs no tool. The only stdio shape left is this proxy wire: the `stdio` transport value was removed outright (ADR-0104) | The MCP client that launched the process      |
 | `serve` HTTP endpoint (autostarted) | Serves MCP over Streamable HTTP at `/mcp` on `localhost`. **Guarded by a loopback token** read from `<data-root>/mcp-token` (0600), presented as `X-AiRaccoon-Token` or `Authorization: Bearer`; on the default **proxy path** the proxy supplies it itself, so no client config carries a secret there — a client connected **directly** to this endpoint, bypassing the proxy, does carry one (e.g. in `~/.claude.json` or `~/.hermes/.env`) | Any local process that can read the token file |
 | bare `--transport http` | Parses but launches the proxy like any bare run (ADR-0104). There is no ungated direct launch anymore | The MCP client that launched the process |
 | `/observability` endpoint (HTTP mode) | Returns the server's PID, binary version and OTLP export state on the same loopback port as `/mcp`                                                                          | Any process that can reach the listening port |
@@ -63,6 +63,18 @@ machine means anything running as you. `/observability` stays unauthenticated by
 it returns a PID and OTLP on/off, nothing that touches the bank, and discovery depends on
 it (ADR-0008).
 
+**The default launch no longer hands that token to whoever holds the port.** The proxy
+used to dial the configured port and treat any listener answering `/mcp` with a JSON-RPC
+body as the backend, so a local process that bound the port first received the token and
+every tool payload (F70). Since ADR-0105 the proxy starts its own `serve --port 0`
+backend and trusts only the URL that child prints on its stdout pipe, and it refuses to
+dial the URL that child printed after it has exited. The same rule governs the
+server-routed CLI commands (`settings …`, `model …`, `watch registered`, `noise entries`,
+`repair`, …): `CliSettingsBackend` starts its own private backend instead of attaching to
+whatever holds `--port`. `--attach` is the explicit opt-in to the shared server on both
+paths, and it keeps the old exposure by design: asking for the shared server is asking to
+trust whoever holds the port.
+
 **The token now also authorises stopping the server (ADR-0022).** `serve --restart` cycles
 the running backend by asking it to stop over `POST /shutdown`, so a token holder can shut
 memory down as well as call tools. That is a small addition to an already-large authority:
@@ -73,7 +85,12 @@ cross-origin `POST` can be a CORS *simple request* and reach the port unprefligh
 cannot carry a custom header without a preflight, and that preflight fails. It goes through
 the same `FixedTimeEquals` comparison as `/mcp`, answers every unauthorised call identically whether
 the header is absent, the wrong length or simply wrong, and is **not mapped at all** on a
-host with no token.
+host with no token. `serve --restart` itself no longer reads or sends that token to a
+listener that merely answers `/observability` with the ai-raccoon name: the join review
+measured the handover, and cycling an existing server is now an attach-shaped trust
+decision that requires `--attach`, refusing with exit 3 and a line naming the flag
+otherwise. `--attach` here means the same as everywhere else — trust the listener on this
+port.
 
 **One known gap, stated rather than implied, and one retired.** The ungated
 direct `--transport http` launch this section used to warn about is gone: a bare

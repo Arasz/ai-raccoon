@@ -27,7 +27,7 @@ internal static class CliCommandTree
     /// </summary>
     internal static readonly Option<int> LaunchPortOption = new("--port")
     {
-        Description = "HTTP backend port the proxy dials or starts (1-65535); 0 is serve-only",
+        Description = "HTTP backend port for --attach (1-65535); the default launch starts its own backend on an ephemeral port",
         HelpName = "port",
         DefaultValueFactory = _ => 7721
     };
@@ -50,6 +50,21 @@ internal static class CliCommandTree
     internal static readonly Option<bool> ServeRestartOption = new("--restart")
     {
         Description = "Stop the ai-raccoon server already on the port and serve in its place (a plain start when none is)"
+    };
+
+    /// <summary>
+    ///     F70/K1: the explicit opt-in to the shared server. False (the default) makes a launch
+    ///     start its own private backend instead of attaching to whatever holds the port.
+    /// </summary>
+    internal static readonly Option<bool> AttachOption = new("--attach")
+    {
+        Description = "Trust and reuse the ai-raccoon server already listening on --port instead of starting a private backend; serve --restart also needs it to stop that server"
+    };
+
+    /// <summary>Serve's own --attach (the opt-in spelling after the verb); the root option is the fallback.</summary>
+    internal static readonly Option<bool> ServeAttachOption = new("--attach")
+    {
+        Description = "Attach to the ai-raccoon server already on the port instead of refusing it; --restart also needs it to stop the server (default: refuse; --port 0 starts a private server)"
     };
 
     internal static readonly Option<string> ServeFormatOption = CreateFormatOption();
@@ -120,6 +135,7 @@ internal static class CliCommandTree
         root.Add(new Option<string>("--data-root") { Description = "Bank data root (must precede the verb)", HelpName = "path" });
         root.Add(new Option<InstallScope>("--install-scope") { Description = "Install scope (must precede the verb)", HelpName = "user|project" });
         root.Add(new Option<bool>("--quiet") { Description = "Quiet mode: every log level goes to a file beside the bank, nothing reaches stdout/stderr" });
+        root.Add(AttachOption);
         root.Add(LaunchPortOption);
         root.Add(new Option<string>("--environment") { Hidden = true });
         root.Add(new Option<string>("--contentRoot") { Hidden = true });
@@ -626,6 +642,7 @@ internal static class CliCommandTree
             ServeMcpEntryOption,
             ServeFormatOption,
             ServeRestartOption,
+            ServeAttachOption,
             ObservabilityCommand()
         };
         // SetAction exists only because System.CommandLine requires a subcommand unless the

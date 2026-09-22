@@ -18,6 +18,13 @@ public enum RestartOutcome
     /// <summary>Something is listening but does not identify as an ai-raccoon server.</summary>
     Foreign,
 
+    /// <summary>
+    ///     The listener identifies as an ai-raccoon server, but `--attach` was not given. A
+    ///     self-asserted name is not proof of identity (F70/K1), so the restart refuses before
+    ///     reading or sending the token — cycling means handing the token to whoever holds the port.
+    /// </summary>
+    AttachRequired,
+
     /// <summary>No token to present, so nothing was asked to stop.</summary>
     NoToken,
 

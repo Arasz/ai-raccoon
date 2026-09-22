@@ -190,9 +190,13 @@ public sealed class CliContractTests : IAsyncLifetime
         }
     }
 
+    /// <summary>Root args shared by every process this fixture runs. `--attach` is the F70/K1
+    /// opt-in: the recorded contract is the shared-server shape (one auto-started server reused by
+    /// every scenario), which the default private spawn would replace with one backend per
+    /// invocation — a different contract, and a different stderr line on the cold scenario.</summary>
     private static Task<ProcessRun> RunAsync(string dataRoot, int port, string[] argv) =>
         RaccoonProcess.RunAsync(
-            ["--data-root", dataRoot, "--port", port.ToString(CultureInfo.InvariantCulture), .. argv],
+            ["--data-root", dataRoot, "--port", port.ToString(CultureInfo.InvariantCulture), "--attach", .. argv],
             HardCap, TestContext.Current.CancellationToken);
 
     private static string Normalize(string stream) => stream.ReplaceLineEndings("\n").Trim('\n');

@@ -35,7 +35,7 @@ public sealed class MemorySearchFloorTruncationTests
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
-            NullLogger<MemoryTools>.Instance);
+            new InMemorySettings(), NullLogger<MemoryTools>.Instance);
     }
 
     /// <summary>

@@ -313,18 +313,25 @@ public sealed partial class SqliteMemoryStore(
         {
             parameters.Add(key, value);
         }
+        parameters.Add("deletedAt", timeProvider.GetUtcNow().ToUnixTimeSeconds());
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        return await connection.ExecuteAsync(
-                new CommandDefinition($"DELETE FROM entries WHERE {filter}", parameters,
+        return await InTransactionAsync(connection, async () =>
+        {
+            await connection.ExecuteAsync(new CommandDefinition(MemorySql.TombstoneFromPredicate(filter), parameters,
                     cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                .ConfigureAwait(false);
+            return await connection.ExecuteAsync(new CommandDefinition($"DELETE FROM entries WHERE {filter}", parameters,
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
     ///     Removes every committed chunk of one source path and its subtree (directory delete
-    ///     cascades), plus the per-path watch fingerprints, in the same transaction — a
-    ///     delete-then-recreate cycle must not hash-skip back to stale chunks. Watch registration survives.
+    ///     cascades), plus the per-path watch fingerprints and their sync tombstones, in the same
+    ///     transaction — a delete-then-recreate cycle must not hash-skip back to stale chunks.
+    ///     Watch registration survives.
     /// </summary>
     public async Task<int> DeleteSourcePathAsync(string projectId, string path,
         CancellationToken cancellationToken = default)
@@ -333,38 +340,30 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-
-        await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
-        try
+        var pathPrefix = LikePattern.Escape(path) + "/%";
+        var parameters = new
         {
-            var pathPrefix = LikePattern.Escape(path) + "/%";
+            projectId, path, pathPrefix, deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
+        };
+        return await InTransactionAsync(connection, async () =>
+        {
+            await connection.ExecuteAsync(
+                    Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteBySourcePathPredicate), parameters, cancellationToken))
+                .ConfigureAwait(false);
             var deleted = await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
+                    Def(MemorySql.DeleteBySourcePath, parameters, cancellationToken))
                 .ConfigureAwait(false);
             // Code corpus leg (docs/work/2026-08-21-code-search-implementation-plan.md §3.5):
             // unconditional — each ingestor self-filters on re-ingest, so the digest needs no
             // classification here. A no-op for a memory-only path (idx_code_entries_path-backed).
             await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteCodeBySourcePath, new { projectId, path, pathPrefix }, cancellationToken))
+                    Def(MemorySql.DeleteCodeBySourcePath, parameters, cancellationToken))
                 .ConfigureAwait(false);
             await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteWatchFilesByProjectPathCascade,
-                        new { projectId, path, pathPrefix }, cancellationToken))
-                .ConfigureAwait(false);
-            await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                    Def(MemorySql.DeleteWatchFilesByProjectPathCascade, parameters, cancellationToken))
                 .ConfigureAwait(false);
             return deleted;
-        }
-        catch
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
-            throw;
-        }
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<MemoryStats> GetStatsAsync(string projectId, CancellationToken cancellationToken = default)
@@ -665,7 +664,7 @@ public sealed partial class SqliteMemoryStore(
         var vectorCandidates = ModalityCandidates.ByCosine(searchResults);
         // S1 capture (Stage 1): FuseWithEvidence fuses exactly like Fuse while attaching each
         // served hash's pre-normalization evidence. Leg names reuse the ModalityLeg vocabulary
-        // from LegsFor ("fts"/"vector") — "vector" is the name the seam reads the fused cosine by.
+        // from LegsFor ("fts"/"vector") — "vector" is the name the seam reads the content cosine by.
         // The carry below is an O(1) reference handoff, keyed by hash: the Merger's
         // reorder/consolidation/drop needs no remapping, and no SQL is issued anywhere on it.
         var fused = ReciprocalRankFusion.FuseWithEvidence(
@@ -767,7 +766,7 @@ public sealed partial class SqliteMemoryStore(
             // Tombstones every row about to be removed (N7/F26) — not just the reported hash —
             // before the delete runs, from the identical predicate, in the same transaction.
             await connection.ExecuteAsync(
-                    Def(MemorySql.TombstoneFromPredicate,
+                    Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteMatchPredicate),
                         new
                         {
                             hash, projectId, scope, path,
@@ -854,8 +853,19 @@ public sealed partial class SqliteMemoryStore(
             .GroupBy(row => row.Hash, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
-        var ranked = fused.Select(rank => (Row: byHash[rank.Hash], rank.Score)).ToList();
-        foreach (var (row, _) in ranked)
+        // The content leg's own raw cosine, keyed independently of byHash above: byHash keeps
+        // whichever row (content or structure) grouped first, which is never a reliable source
+        // for "this hash's content similarity" once a hash appears in both legs.
+        var contentSimByHash = contentRows
+            .GroupBy(row => row.Hash, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => StructureFusion.SimFromDistance(group.First().Distance), StringComparer.Ordinal);
+
+        var ranked = fused.Select(rank => (
+                Row: byHash[rank.Hash],
+                rank.Score,
+                ContentCosine: contentSimByHash.TryGetValue(rank.Hash, out var contentCosine) ? contentCosine : (double?)null))
+            .ToList();
+        foreach (var (row, _, _) in ranked)
         {
             byHashIndex.ValueByHash[row.Hash] = row.Value;
         }
@@ -864,15 +874,18 @@ public sealed partial class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Maps ranked vector rows to results carrying the fused cosine score as <see cref="MemorySearchResult.Ranking" />
-    ///     (see docs/adr/0006-rrf-parameter-optimization.md); <see cref="MemorySearchResult.Snippet" /> stays unresolved.
+    ///     Maps ranked vector rows to results carrying the alpha-fused score as <see cref="MemorySearchResult.Ranking" />
+    ///     (ordering only, see docs/adr/0006-rrf-parameter-optimization.md) and the row's own raw content
+    ///     cosine as <see cref="MemorySearchResult.ContentCosine" /> — the two diverge whenever structure
+    ///     fusion blends in a non-zero, or absent, structure term. <see cref="MemorySearchResult.Snippet" />
+    ///     stays unresolved.
     /// </summary>
     internal static IReadOnlyList<MemorySearchResult> BuildDualVectorResults(
-        IReadOnlyList<(VectorRow Row, double Score)> ranked) =>
+        IReadOnlyList<(VectorRow Row, double Score, double? ContentCosine)> ranked) =>
     [
         .. ranked.Select(item => new MemorySearchResult(
             item.Row.Hash, item.Score, item.Row.Path, string.Empty,
-            item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks))
+            item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks, item.ContentCosine))
     ];
 
     /// <summary>
@@ -1043,6 +1056,29 @@ public sealed partial class SqliteMemoryStore(
     private static CommandDefinition Def(string sql, object? parameters = null,
         CancellationToken cancellationToken = default) =>
         new(sql, parameters, cancellationToken: cancellationToken);
+
+    private static async Task<T> InTransactionAsync<T>(SqliteConnection connection, Func<Task<T>> work,
+        CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            var result = await work().ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            return result;
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+    }
 
     private static partial class Log
     {

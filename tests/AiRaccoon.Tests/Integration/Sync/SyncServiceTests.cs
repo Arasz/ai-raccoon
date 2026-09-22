@@ -66,7 +66,7 @@ public class SyncServiceTests : IDisposable
                           CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                           CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NULL, created_at INTEGER NOT NULL);
                           CREATE TABLE IF NOT EXISTS sync_tombstones (project_id TEXT NOT NULL, hash TEXT NOT NULL, scope TEXT NOT NULL,
-                              deleted_at INTEGER NOT NULL, PRIMARY KEY (project_id, hash, scope));
+                              context_label TEXT NULL, deleted_at INTEGER NOT NULL, PRIMARY KEY (project_id, hash, scope));
                           CREATE TABLE IF NOT EXISTS memory_source (
                               id INTEGER PRIMARY KEY,
                               source_type TEXT NOT NULL,
@@ -318,12 +318,13 @@ public class SyncServiceTests : IDisposable
         }
 
         // Remote tombstone for the middle chunk, no entries of its own: the merge's
-        // tombstone-apply path must remove h2 locally.
+        // tombstone-apply path must remove h2 locally. deleted_at must be at or after the
+        // row's created_at (2) — the K3 age guard leaves newer re-creations alone.
         var remotePath = Path.Combine(_dataRoot, "remote.db");
         await using (var remote = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
         {
             await using var tomb = remote.CreateCommand();
-            tomb.CommandText = "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES ('acme', 'h2', 'project', 1)";
+            tomb.CommandText = "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES ('acme', 'h2', 'project', 100)";
             await tomb.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 

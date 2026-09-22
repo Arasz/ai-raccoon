@@ -28,7 +28,8 @@ public sealed class HowToExitTableTests
             [ExitCode.SchemaVerificationFailed] = ("SchemaVerificationFailed", "the bank's actual schema", true),
             [ExitCode.SchemaNewerThanBinary] = ("SchemaNewerThanBinary", "user_version", true),
             [ExitCode.NoBank] = ("NoBank", "no bank file exists at the resolved path", true),
-            [ExitCode.ModelMigrationOpen] = ("ModelMigrationOpen", "every MCP tool call is refused until", true)
+            [ExitCode.ModelMigrationOpen] = ("ModelMigrationOpen", "every MCP tool call is refused until", true),
+            [ExitCode.BankCorrupted] = ("BankCorrupted", "the bank file exists but is not a SQLite database", true)
         };
 
     [Fact]

@@ -126,6 +126,7 @@ public sealed class SearchLimitTruncationTests : IDisposable
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(store, new FakePromotionQueue()),
             new NoOpMeasurementRecorder(),
+            new InMemorySettings(),
             NullLogger<MemoryTools>.Instance);
     }
 

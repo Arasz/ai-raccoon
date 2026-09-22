@@ -17,8 +17,9 @@ namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
 ///     BackendLauncher acceptance (ADR-0020): the proxy's stdout stays clean, a missing backend is
-///     started and polled until it answers, an existing one is attached to without a spawn, and a
-///     backend that cannot start fails inside the budget instead of hanging.
+///     started and polled until it answers, an existing one is attached to without a spawn, a
+///     backend that cannot start fails inside the budget instead of hanging, and a private child
+///     that printed its URL and died is not handed back for the caller to dial (F70/K1 TOCTOU).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -189,6 +190,79 @@ public sealed class BackendLauncherTests : IDisposable
         result.ServeExitCode.ShouldBe(7);
         result.ServeStderr.ShouldNotBeNull();
         result.ServeStderr.ShouldContain("could not decrypt the bank");
+    }
+
+    /// <summary>
+    ///     F70/K1 private spawn: the URL is taken only from the child's own stdout. A child that
+    ///     prints it is trusted, whatever else might be listening; this test's child is a shell so
+    ///     the mechanics are pinned without a real serve.
+    /// </summary>
+    [RetryFact]
+    public async Task StartPrivate_WhenTheChildReportsAUrl_ReturnsThatUrl()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake child is a POSIX shell script");
+
+        var result = await Launcher().StartPrivateAsync("sh",
+            ["-c", "echo http://127.0.0.1:54321/mcp; sleep 1"], TestContext.Current.CancellationToken);
+
+        result.Url.ShouldBe("http://127.0.0.1:54321/mcp");
+        result.ServeExitCode.ShouldBeNull();
+    }
+
+    /// <summary>
+    ///     The defect this gates: a child that starts and then fails used to leave the operator with
+    ///     a bare exit code, exactly as on the attach path.
+    /// </summary>
+    [RetryFact]
+    public async Task StartPrivate_WhenTheChildExitsWithStderr_SurfacesItInTheResult()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake failing child is a POSIX shell script");
+
+        var result = await Launcher().StartPrivateAsync("sh",
+            ["-c", "echo 'ai-raccoon: could not decrypt the bank' 1>&2; exit 7"], TestContext.Current.CancellationToken);
+
+        result.Url.ShouldBeNull();
+        result.ServeExitCode.ShouldBe(7);
+        result.ServeStderr.ShouldNotBeNull();
+        result.ServeStderr.ShouldContain("could not decrypt the bank");
+    }
+
+    /// <summary>
+    ///     The defect this gates: a child that printed its URL and exited left the URL in the
+    ///     return value, and the caller then dialled the freed ephemeral port — where a racer
+    ///     binding it would receive the token. The child's death has to reach the caller instead.
+    /// </summary>
+    [RetryFact]
+    public async Task StartPrivate_WhenTheChildPrintsAUrlThenExits_DoesNotReturnTheUrl()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake child is a POSIX shell script");
+
+        var result = await Launcher().StartPrivateAsync("sh",
+            ["-c", "echo http://127.0.0.1:54321/mcp; exit 7"], TestContext.Current.CancellationToken);
+
+        result.Url.ShouldBeNull("a URL from a child that already exited must never be dialled");
+        result.ServeExitCode.ShouldBe(7);
+    }
+
+    /// <summary>A child that never prints a URL is given the same budget as the attach path.</summary>
+    [RetryFact]
+    public async Task StartPrivate_WhenTheChildNeverReportsAUrl_GivesUpAtTheBudget()
+    {
+        var clock = new FakeTimeProvider();
+        var timers = new TimerRegistrations(clock);
+        var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
+            timers, NullLogger<BackendLauncher>.Instance);
+
+        var acquire = launcher.StartPrivateAsync("sleep", ["10"], TestContext.Current.CancellationToken);
+        (await timers.WaitForAsync(2, TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the launcher never registered its timers");
+        acquire.IsCompleted.ShouldBeFalse();
+
+        clock.Advance(BackendLauncher.DefaultBudget);
+        var result = await acquire.WaitAsync(TestContext.Current.CancellationToken);
+
+        result.Url.ShouldBeNull();
+        result.ServeExitCode.ShouldBeNull();
     }
 
     [RetryFact]

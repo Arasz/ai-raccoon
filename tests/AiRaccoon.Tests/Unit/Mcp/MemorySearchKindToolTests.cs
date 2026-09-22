@@ -5,6 +5,7 @@ using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.SearchQuality;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Tests;
@@ -41,6 +42,7 @@ public sealed class MemorySearchKindToolTests
     private readonly SpyCodeSearchService _codeSearch = new();
     private readonly SpySearchQualityService _quality = new();
     private readonly FakeStore _store = new();
+    private readonly InMemorySettings _settings = new();
     private readonly MemoryTools _tools;
 
     public MemorySearchKindToolTests()
@@ -48,9 +50,9 @@ public sealed class MemorySearchKindToolTests
         var access = new MemoryAccessGuard(_store);
         var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, _quality),
-            new QueryGuardService(new InMemorySettings()),
+            new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
-            NullLogger<MemoryTools>.Instance);
+            _settings, NullLogger<MemoryTools>.Instance);
     }
 
     [Fact]
@@ -265,18 +267,65 @@ public sealed class MemorySearchKindToolTests
         var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "code",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        envelope.Data!.Warning.ShouldNotBeNull().ShouldContain(CodeSearchWarnings.EngineNotConfigured);
+        var warning = envelope.Data!.Warning.ShouldNotBeNull();
+        warning.ShouldContain(CodeSearchWarnings.EngineNotConfigured);
+        warning.ShouldNotContain(SearchWarnings.EngineNotConfiguredPrefix,
+            customMessage: "kind=code never runs the memory leg; the memory note leaking here would be F6's fix bleeding across sections");
     }
 
+    /// <summary>
+    ///     F6: a fresh bank has no memory engine (`embedding.provider` unset), so `kind=memory`
+    ///     search runs keyword-only. The warning must say so and name the one command that fixes
+    ///     it, the memory twin of the code-section warning. Watched red before the fix: this slot
+    ///     used to pin `Warning.ShouldBeNull()` — today's defect, asserted as correct.
+    /// </summary>
     [Fact]
-    public async Task Search_KindMemory_HasNoEngineNotConfiguredWarning()
+    public async Task Search_KindMemory_WithNoEngineConfigured_WarnsAndNamesTheRemedy()
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
 
         var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory",
             cancellationToken: TestContext.Current.CancellationToken);
 
+        envelope.Data!.Warning.ShouldNotBeNull()
+            .ShouldContain("memory engine not configured");
+        envelope.Data!.Warning.ShouldContain(EmbeddingEngineSetup.DefaultModelCommand,
+            customMessage: "a warning that cannot name the remedy is the F6 defect with new text");
+    }
+
+    /// <summary>
+    ///     The positive control for the warning above: a bank WITH a memory engine configured
+    ///     returns no memory-engine warning, so "warn always" cannot satisfy both tests.
+    /// </summary>
+    [Fact]
+    public async Task Search_KindMemory_WithAnEngineConfigured_HasNoMemoryEngineWarning()
+    {
+        _settings.Values[EmbeddingSettingsKeys.Provider] = "local";
+        _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
+
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory",
+            cancellationToken: TestContext.Current.CancellationToken);
+
         envelope.Data!.Warning.ShouldBeNull();
+    }
+
+    /// <summary>
+    ///     With neither engine configured, kind=both carries both section-scoped notes — the
+    ///     composition must not let one replace the other.
+    /// </summary>
+    [Fact]
+    public async Task Search_KindBoth_WithNeitherEngineConfigured_CarriesBothWarnings()
+    {
+        _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
+        _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
+        _codeSearch.StubWarning = CodeSearchWarnings.EngineNotConfigured;
+
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "both",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Warning.ShouldNotBeNull()
+            .ShouldContain(SearchWarnings.EngineNotConfiguredPrefix);
+        envelope.Data!.Warning.ShouldContain(CodeSearchWarnings.EngineNotConfiguredPrefix);
     }
 
     /// <summary>
@@ -335,8 +384,8 @@ public sealed class MemorySearchKindToolTests
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
         var recorder = new SpyMeasurementRecorder();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
-            new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(new InMemorySettings()),
-            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+            new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(_settings),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _settings, NullLogger<MemoryTools>.Instance);
 
         await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "both", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -351,8 +400,8 @@ public sealed class MemorySearchKindToolTests
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         var recorder = new SpyMeasurementRecorder();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
-            new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(new InMemorySettings()),
-            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, NullLogger<MemoryTools>.Instance);
+            new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(_settings),
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _settings, NullLogger<MemoryTools>.Instance);
 
         await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -383,12 +432,14 @@ public sealed class MemorySearchKindToolTests
 
     /// <summary>
     ///     The default kind is both (2026-08-24 default flip): a default search runs the code leg
-    ///     too, and with no engine configured it must degrade — FTS5-only results plus an
-    ///     EngineNotConfigured warning — never refuse. The memory leg is unaffected.
+    ///     too, and with no code engine configured it must degrade — FTS5-only results plus an
+    ///     EngineNotConfigured warning — never refuse. The memory engine is configured here so the
+    ///     test isolates the code leg's note from the memory leg's own (F6).
     /// </summary>
     [Fact]
-    public async Task Search_KindBoth_WithNoEngineConfigured_DegradesToFtsOnlyWithWarning()
+    public async Task Search_KindBoth_WithNoCodeEngineConfigured_DegradesToFtsOnlyWithWarning()
     {
+        _settings.Values[EmbeddingSettingsKeys.Provider] = "local";
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
         _codeSearch.StubWarning = CodeSearchWarnings.EngineNotConfigured;
@@ -449,9 +500,9 @@ public sealed class MemorySearchKindToolTests
             NullLogger<SqliteSearchQualityService>.Instance);
         var tools = new MemoryTools(_store,
             new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
-            new SearchDispatcher(_store, _codeSearch, quality), new QueryGuardService(new InMemorySettings()),
+            new SearchDispatcher(_store, _codeSearch, quality), new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
-            NullLogger<MemoryTools>.Instance);
+            _settings, NullLogger<MemoryTools>.Instance);
 
         var envelope = await tools.Search("acme", "widgets", sessionId: "sess-xyz", kind: "memory",
             cancellationToken: TestContext.Current.CancellationToken);

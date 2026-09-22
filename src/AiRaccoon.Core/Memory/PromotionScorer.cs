@@ -15,6 +15,16 @@ internal static class PromotionScorer
     /// </summary>
     internal const int Version = 2;
 
+    /// <summary>
+    ///     The scorer's declared output range (docs/adr/0018-promotion-scoring-v2.md round-3 lane-A
+    ///     section) — every Score() clamps into it. <see cref="MemoryWriteService.AgentRequestedScore" />
+    ///     is defined relative to <see cref="MaxScore" /> so it stays above every inference this scorer
+    ///     can produce, even if this range is retuned later (docs/adr/0067, owner ruling 2026-09-22).
+    /// </summary>
+    internal const double MinScore = 0.0;
+
+    internal const double MaxScore = 4.0;
+
     private const int MinWordsFloor = 8;
     private const double MinWordsCap = 0.50;
     private const int ShortChunkWords = 25;
@@ -53,7 +63,7 @@ internal static class PromotionScorer
         if (features.NWords < MinWordsFloor)
         {
             reasons.Add("too-short");
-            return (Math.Clamp(Math.Min(prior, MinWordsCap), 0.0, 4.0), reasons);
+            return (Math.Clamp(Math.Min(prior, MinWordsCap), MinScore, MaxScore), reasons);
         }
 
         if (HardNoiseChannels.Contains(archetype))
@@ -73,7 +83,7 @@ internal static class PromotionScorer
                 reasons.Add("doc-index-lift");
             }
 
-            return (Math.Clamp(prior + lift, 0.0, 4.0), reasons);
+            return (Math.Clamp(prior + lift, MinScore, MaxScore), reasons);
         }
 
         if (archetype == ProvenanceArchetype.OrganicNote)
@@ -87,12 +97,12 @@ internal static class PromotionScorer
         {
             var noteEvidence = PromotionContentEvidence.EvaluateAutoMemoryNote(features);
             reasons.AddRange(noteEvidence.Reasons);
-            return (Math.Clamp(prior + noteEvidence.Adjustment, 0.0, 4.0), reasons);
+            return (Math.Clamp(prior + noteEvidence.Adjustment, MinScore, MaxScore), reasons);
         }
 
         var evidence = PromotionContentEvidence.Evaluate(features, archetype);
         reasons.AddRange(evidence.Reasons);
-        var score = Math.Clamp(prior + evidence.Adjustment, 0.0, 4.0);
+        var score = Math.Clamp(prior + evidence.Adjustment, MinScore, MaxScore);
         if (features.NWords < ShortChunkWords)
         {
             score = Math.Min(score, ShortChunkCap);

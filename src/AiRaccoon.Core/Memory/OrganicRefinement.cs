@@ -164,7 +164,7 @@ internal static class OrganicRefinement
         }
 
         delta = Math.Clamp(delta, DeltaLo, DeltaHi);
-        var score = Math.Clamp(baseScore + delta, 0.0, 4.0);
+        var score = Math.Clamp(baseScore + delta, PromotionScorer.MinScore, PromotionScorer.MaxScore);
         return new OrganicRefinementResult(score, reasons);
     }
 }

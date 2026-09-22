@@ -1,6 +1,8 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using AiRaccoon.Infrastructure.Embedding;
+using Microsoft.ML.OnnxRuntime;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
@@ -60,10 +62,11 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
             ProcessArchitecture: RuntimeInformation.ProcessArchitecture.ToString(),
             OsDescription: RuntimeInformation.OSDescription,
             BuildVersion: typeof(EmbeddingService).Assembly.GetName().Version?.ToString() ?? "unknown",
-            Engine: "OnnxEmbeddingGenerator — bundled all-MiniLM-L6-v2 qint8, mean-pool + L2, 256 window (pre-WP3 refactor)",
+            OnnxRuntimeVersion: CurrentOnnxRuntimeVersion(),
+            Engine: "OnnxEmbeddingGenerator — bundled all-MiniLM-L6-v2 qint8, mean-pool + L2, 256 window",
             ModelSha256: BundledModel.ModelSha256,
             VocabSha256: BundledModel.VocabSha256,
-            CaptureCommand: "dotnet test --filter \"FullyQualifiedName~MiniLmGoldenVectorTests.CaptureGoldenVectors\""),
+            CaptureCommand: "AIRACCOON_GOLDEN_CAPTURE=1 dotnet test --project tests/AiRaccoon.Tests --filter-method '*MiniLmGoldenVectorTests.CaptureGoldenVectors'"),
             entries);
 
         var path = Path.Combine(FindRepoRoot(), GoldenRelativePath);
@@ -119,7 +122,9 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
                 }
 
                 mismatchedBits.ShouldBe(0,
-                    $"entry {entry.Id}: {mismatchedBits}/{expected.Length} float32 values differ bit-for-bit from the golden capture — the WP3 refactor changed engine output");
+                    $"entry {entry.Id}: {mismatchedBits}/{expected.Length} float32 values differ bit-for-bit from the golden capture "
+                    + $"(captured on ONNX Runtime {golden.Provenance.OnnxRuntimeVersion ?? "unrecorded"}, running {CurrentOnnxRuntimeVersion()}) — "
+                    + "the engine output changed; a runtime bump re-captures, anything else is a regression");
             }
 
             // Numeric secondary. 1e-6 is a SAME-ARCH bound: the bundled model is qint8, and x64
@@ -202,6 +207,10 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
         return na == 0 || nb == 0 ? 0 : dot / (Math.Sqrt(na) * Math.Sqrt(nb));
     }
 
+    private static string CurrentOnnxRuntimeVersion() =>
+        typeof(InferenceSession).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        ?? typeof(InferenceSession).Assembly.GetName().Version?.ToString() ?? "unknown";
+
     private static float[] FromBase64(string base64)
     {
         var bytes = Convert.FromBase64String(base64);
@@ -217,6 +226,7 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
         string ProcessArchitecture,
         string OsDescription,
         string BuildVersion,
+        string? OnnxRuntimeVersion,
         string Engine,
         string ModelSha256,
         string VocabSha256,

@@ -147,6 +147,7 @@ public sealed class RefusedQueryRedactionTests
             new QueryGuardService(store),
             new MemoryWriteService(store, new FakePromotionQueue()),
             new NoOpMeasurementRecorder(),
+            store,
             logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MemoryTools>.Instance);
     }
 

@@ -10,8 +10,10 @@ namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
 ///     `serve --restart` acceptance (ADR-0022): plain-serve behaviour when nothing is listening,
-///     a real cycle when a server is, and a loud non-zero exit for every way the cycle can fail —
-///     never a silent attach to the server it was asked to replace.
+///     a real cycle when a server is and the operator opts in with `--attach`, and a loud
+///     non-zero exit for every way the cycle can fail — never a silent attach to the server it
+///     was asked to replace, and never the token to a listener that merely claims the name
+///     (F70/K1).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -51,7 +53,9 @@ public sealed class ServeRestartTests : IDisposable
             await using var old = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
             await WaitForUrlAsync(old);
 
-            await using var restarted = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+            // --attach is the explicit opt-in (F70/K1): restarting a listener sends it the data
+            // root's token, so a bare --restart refuses it. This is the opted-in cycle control.
+            await using var restarted = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"]);
             var url = await WaitForUrlAsync(restarted);
 
             // The old server really exited — its own run completed, it was not merely bypassed.
@@ -63,6 +67,37 @@ public sealed class ServeRestartTests : IDisposable
             (await ProbeAsync(port)).ShouldBeTrue();
             (await restarted.StopAsync()).ShouldBe(ExitCode.Success);
         });
+    }
+
+    /// <summary>
+    ///     The join-review gap: restart identified the listener by the self-asserted
+    ///     /observability name and sent it the real token on /shutdown. Without --attach it must
+    ///     refuse before the token file is even read, so a squatter that self-identifies receives
+    ///     nothing — not even a shutdown request.
+    /// </summary>
+    [RetryFact]
+    public async Task RestartWithoutAttach_AgainstAnAiRaccoonListener_RefusesAndSendsNoToken()
+    {
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        // The squatter holds a real token's path: before the fix it received the value byte-for-byte.
+        (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        lease.ReleaseForBind();
+        await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
+            TestContext.Current.CancellationToken);
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+
+        var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
+
+        fake.ShutdownTokenHeaders.ShouldBeEmpty(
+            "restart handed the data root's token to a listener that merely claimed the /observability name");
+        fake.ShutdownRequests.ShouldBe(0);
+        exit.ShouldBe(ExitCode.PortInUse);
+        run.Stderr.ShouldContain("--attach");
+        run.Stderr.ShouldContain("stop it yourself");
+        run.Stdout.ShouldBeEmpty();
     }
 
     /// <summary>Runs the body on a fresh port while a restart keeps losing the port to another process.</summary>
@@ -101,7 +136,7 @@ public sealed class ServeRestartTests : IDisposable
         lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
             TestContext.Current.CancellationToken);
-        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"]);
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
@@ -123,7 +158,7 @@ public sealed class ServeRestartTests : IDisposable
         lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.NotFound,
             TestContext.Current.CancellationToken);
-        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"]);
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
@@ -142,7 +177,7 @@ public sealed class ServeRestartTests : IDisposable
         lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
             TestContext.Current.CancellationToken);
-        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"]);
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
@@ -188,7 +223,7 @@ public sealed class ServeRestartTests : IDisposable
         lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.NotFound,
             TestContext.Current.CancellationToken, version: null);
-        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"]);
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
@@ -246,7 +281,7 @@ public sealed class ServeRestartTests : IDisposable
     }
 
     [RetryFact]
-    public async Task WithoutRestart_AnExistingServerIsStillAttachedTo()
+    public async Task WithoutRestart_WithAttach_AnExistingServerIsStillAttachedTo()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -256,7 +291,8 @@ public sealed class ServeRestartTests : IDisposable
         await using var old = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         await WaitForUrlAsync(old);
 
-        await using var second = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        // --attach is the explicit opt-in (F70/K1): without it a plain serve now refuses the port.
+        await using var second = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--attach"]);
         var exit = await second.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.Success);

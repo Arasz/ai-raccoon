@@ -7,6 +7,7 @@ using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Projects;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,16 +28,20 @@ public sealed class MemorySearchEvidenceEnvelopeTests
 {
     private readonly SpyCodeSearchService _codeSearch = new();
     private readonly FakeStore _store = new();
+    private readonly InMemorySettings _settings = new();
     private readonly MemoryTools _tools;
 
     public MemorySearchEvidenceEnvelopeTests()
     {
+        // An engine is configured so the envelope stays the legacy shape: this suite asserts the
+        // EVIDENCE fields are additive, not that a fresh bank carries the F6 warning.
+        _settings.Values[EmbeddingSettingsKeys.Provider] = "local";
         var access = new MemoryAccessGuard(_store);
         var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(migrated: false));
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, new NoOpSearchQualityService()),
-            new QueryGuardService(new InMemorySettings()),
+            new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
-            NullLogger<MemoryTools>.Instance);
+            _settings, NullLogger<MemoryTools>.Instance);
     }
 
     /// <summary>
@@ -106,6 +111,36 @@ public sealed class MemorySearchEvidenceEnvelopeTests
         json.ShouldContain("evidenceByHash");
         json.ShouldContain("fusionStrength");
         json.ShouldContain("fusionStats");
+    }
+
+    /// <summary>
+    ///     The ContentCosine transport exists for the evidence join only, never for the response
+    ///     contract: a vector-sourced result row keeps its documented keys
+    ///     (docs/reference/agent-memory-server.md) while the served hash's magnitude reaches the
+    ///     wire as the evidence cosine. Positive controls in the same capture: the in-memory row
+    ///     still carries ContentCosine (the transport is intact) and the serialized evidence
+    ///     still carries a "cosine" key.
+    /// </summary>
+    [Fact]
+    public async Task Search_VectorSourcedResult_KeepsContentCosineOffTheWire()
+    {
+        _store.StubResults = [new MemorySearchResult("mem1", 0.5, "a.md", "first", ContentCosine: 0.87)];
+        _store.StubEvidence = new Dictionary<string, RetrievalEvidence>(StringComparer.Ordinal)
+        {
+            ["mem1"] = new RetrievalEvidence("mem1", 0.5, [new LegRank("vector", 1)], 0.87),
+        };
+        _store.StubStats = new FusionStats(0.2, null, 0.0328, ["vector"]);
+
+        var envelope = await _tools.Search("acme", "widgets", kind: "memory", sessionId: "sess-test",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Results.ShouldHaveSingleItem().ContentCosine.ShouldBe(0.87,
+            "positive control: the in-memory transport still carries the cosine");
+        envelope.Data!.EvidenceByHash.ShouldNotBeNull()["mem1"].Cosine.ShouldBe(0.87,
+            "the wire's magnitude is the evidence cosine");
+        var json = JsonSerializer.Serialize(envelope.Data, McpJsonUtilities.DefaultOptions);
+        json.ShouldContain("\"cosine\"");
+        json.ShouldNotContain("contentCosine");
     }
 
     /// <summary>

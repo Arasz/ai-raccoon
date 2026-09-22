@@ -98,9 +98,12 @@ config channel (see [Command-line options](#command-line-options)).
   only (omit them to use the same values as the memory section) — the only per-section knobs.
   Every other per-call tuning arg (`rrfK`/`ftsWeight`/`vectorWeight`/`candidateWindow`) applies
   to the code section too, at the same value passed for memory's (ADR-0088 decision 5; no
-  separate `codeRrfK`/etc. namespace). Code search degrades by configuration state: with no
-  `embedding.codeModel` configured, it is FTS5-only and carries a `warning`
-  (`"code engine not configured — FTS5-only results"`); once a code engine is configured
+  separate `codeRrfK`/etc. namespace). Memory search degrades by configuration state too: with no
+  `embedding.provider` configured, it is FTS5-only and carries a `warning`
+  (`"memory engine not configured — the memory section is FTS5-only"`); `ai-raccoon model embedding
+  set local` activates the bundled engine. Code search degrades the same way: with no
+  `embedding.codeModel` configured, it is FTS5-only and carries its own `warning`
+  (`"code engine not configured — the code section is FTS5-only"`); once a code engine is configured
   (`model code set local`, below) it runs the full vec0 hybrid, fused with the same weighted RRF
   as memory (`retrieval.rrfK`/`ftsWeight`/`vectorWeight`, or the per-call args above —
   `retrieval.structureAlpha` is read but never applied, since code has no structure modality); a
@@ -221,7 +224,6 @@ config channel (see [Command-line options](#command-line-options)).
   same commit, no stale-vector window — and the `code-reindex` maintenance job signals the embed
   topic's single consumer (`EmbedDrainService`, ADR-0091) whenever it finds pending rows, on its
   own on-demand
->>>>>>> origin/main
   cadence, rather than re-embedding inline itself; there is no outbox, no relay wait, and memory
   tools are never blocked.
   `ai-raccoon model code set default` downloads `faxenoff/code-daemon-embed-v1` (187 MB, if not
@@ -241,8 +243,8 @@ config channel (see [Command-line options](#command-line-options)).
   (semantic, when an embedding engine is configured). The two ranked lists are fused
   with Reciprocal Rank Fusion (RRF): each result's score = Σ weight / (k + rank) per
   modality, then normalized so the top result is 1.0 (range 0..1). `rrfK=60` (default),
-  `ftsWeight=1`, `vectorWeight=1` (default 1:1). When no engine is configured, search
-  degrades to FTS5-only — never crashes. The FTS5 MATCH expression is constructed per
+  `ftsWeight=1`, `vectorWeight=1` (default 1:1). When no memory engine is configured, search
+  degrades to FTS5-only, carries the `warning` that names the remedy, and never crashes. The FTS5 MATCH expression is constructed per
   query (plan C Wave 1): stopwords are stripped and the remaining content tokens joined
   with AND when there are ≤4 (precision), with an OR fallback — all query tokens plus
   quoted adjacent-token bigram phrases — whenever the AND under-matches (zero rows,
@@ -481,23 +483,38 @@ never in the environment and never in tracked files.
 The server parses its own arguments (System.CommandLine 2.0.10) before the host
 builds. Launch-identity flags are CLI-only; a verb runs a one-shot config command
 against the bank (results to stdout), bare `ai-raccoon` (with optional launch flags)
-runs the server.
+runs the server. A server-routed verb (`settings …`, `model …`, `watch registered`,
+`noise entries`, `repair`, …) reaches its backend the way the CLI always did: it
+attaches to the server already on `--port` and starts one there when nothing answers
+(owner ruling 2026-09-22, [ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)).
+That backend is shared and outlives the command under the 4h idle watchdog, so the
+command says so on stderr and names how to stop it:
+`ai-raccoon serve --restart --attach --port <n>`.
 
 | Option | Values | Default |
 |---|---|---|
 | `--transport` | `proxy`, `http` (`stdio` and `https` are rejected at parse) | `proxy` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
-| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only — the proxy has to dial a port it knows | `7721` |
+| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only, and the default proxy picks its own ephemeral port | `7721` |
+| `--attach` | flag (the proxy's shared-server opt-in — a settings verb attaches-or-starts regardless; `serve --restart` also needs it to stop an existing server) | off |
 | `--quiet` | flag | off |
 
 `proxy` is the default and the zero-config path
 ([ADR 0020](../adr/0020-always-on-http-stdio-proxy.md)): bare `ai-raccoon`
-opens no bank, resolves no encryption key, and loads no embedding model — it
-probes `http://127.0.0.1:<port>/mcp`, spawns `ai-raccoon serve` when nothing
-answers, and forwards every JSON-RPC message to it, restoring the client's
-own request id on the response. No tool method is named in the proxy, so a
-new tool needs no proxy change. If the backend can neither be reached nor
+opens no bank, resolves no encryption key, and loads no embedding model. It
+starts its own `ai-raccoon serve --port 0` backend, takes the bound URL from
+that child's stdout alone, and forwards every JSON-RPC message to it,
+restoring the client's own request id on the response. It never dials
+`http://127.0.0.1:<port>/mcp` on this path, so a process that merely holds the
+configured port cannot receive the loopback token or a tool payload
+([ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). `--attach`
+opts into the shared-server path instead: probe the configured port, attach
+when an ai-raccoon server answers, and start one there when nothing does. The
+private backend is the proxy's alone and stops with it over the token-guarded
+`POST /shutdown` when the proxy shuts down; an attached shared server is never
+stopped — it serves other clients too. No
+tool method is named in the proxy, so a new tool needs no proxy change. If the backend can neither be reached nor
 started within its budget, the process exits `ExitCode.ProxyBackendUnavailable`
 (6) with one stderr line of this exact form (`BackendSessions.Unavailable()`,
 quoted verbatim from the P5 pass):
@@ -546,35 +563,46 @@ removal release.
 
 ### Serve mode
 
-Since ADR-0020, `serve` is not only a manual verb — it is autostarted by the
-default `proxy` transport, at proxy startup, whenever nothing already answers on
-the port. A client that connects and never calls a tool still leaves a backend
-running. This section describes `serve` itself, whether started by the proxy or
-run by hand.
+Since ADR-0020, `serve` is not only a manual verb. The default `proxy`
+transport starts its own `serve --port 0` backend at proxy startup and stops
+that backend again when the proxy shuts down; while the proxy lives, a client
+that connects and never calls a tool still leaves that backend running.
+This section describes `serve` itself, whether started by the proxy or run by
+hand.
 
 `ai-raccoon serve` is the HTTP mode as a first-class verb: it forces the http
 transport, applies a 4h idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0`
 disables), prints the bound URL to stdout, and stays in the foreground —
-background it with `ai-raccoon serve > serve.log 2>&1 &` (POSIX). If the port
-already hosts an ai-raccoon server, `serve` attaches to it and exits 0; the
-owning process keeps the watchdog, and the attached run never touches the bank.
-A busy port held by a foreign listener fails fast with exit code 3 and a
-`--port 0` hint.
+background it with `ai-raccoon serve > serve.log 2>&1 &` (POSIX). A busy port
+held by a foreign listener fails fast with exit code 3 and a `--port 0` hint.
+A port already held by an ai-raccoon server is refused the same way unless
+`--attach` is given: `serve --attach` attaches to that server and exits 0, the
+owning process keeps the watchdog, and the attached run never touches the bank
+([ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). Without the
+flag, nothing is asked to stop and nothing is joined.
 
-`serve --restart` cycles that server instead of attaching to it (ADR-0022).
-Attaching is wrong on exactly one path — an update: `dotnet tool update`
-replaces the binary while the always-on backend keeps the old assembly loaded,
-so every later client attaches to the stale one. `--restart` asks the running
-server to stop over `POST /shutdown` (token-guarded, POST-only), waits for the
-port to free, then serves in its place; with nothing listening it is a plain
-`serve`. The stop gets 10s in total — the host's stated `ShutdownTimeout`,
+`serve --restart --attach` cycles that server instead of attaching to it
+(ADR-0022). Attaching is wrong on exactly one path — an update: `dotnet tool
+update` replaces the binary while the always-on backend keeps the old assembly
+loaded, so every later client attaches to the stale one. `--restart` asks the
+running server to stop over `POST /shutdown` (token-guarded, POST-only), waits
+for the port to free, then serves in its place; with nothing listening it is a
+plain `serve`. Cycling sends the listener the data root's token, so it is an
+attach-shaped trust decision: without `--attach`, a listener that identifies as
+an ai-raccoon server is refused before the token file is read, with exit 3 and
+a line naming `--attach`, the token it would send, and the manual stop
+(`ai-raccoon serve observability pid --port <n>`, then serve again) — a
+self-asserted `/observability` name no longer earns the token (F70/K1,
+[ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). The stop gets
+10s in total — the host's stated `ShutdownTimeout`,
 shared by in-flight calls and every background service, not a per-call
 guarantee — after which what is left is aborted and the proxy's documented
 at-least-once retry re-issues it against the new backend. The port is then
 given 20s to free.
 
 `--restart` kills no process and never falls back to attaching. Every way the
-cycle can fail exits `8` with a line naming the port and the manual escape:
+cycle can fail exits `10`-`14` or `16` with a line naming the port and the
+manual escape:
 the server refuses our token (it serves another data root), it has no
 `/shutdown` (too old to be cycled — the first update *onto* this version still
 needs the old process stopped by hand), our data root holds no token to
@@ -1012,12 +1040,12 @@ source of truth; a test cross-checks this table against it.
 
 | Prefix | Condition | Example message |
 |---|---|---|
-| `path-outside-scope` | Ingest/watch path falls outside the project's declared ingest scope | `path-outside-scope: Path '<path>' is outside the ingest scope.` |
+| `path-outside-scope` | Ingest/watch path falls outside the project's declared ingest scope | `path-outside-scope: Path '<path>' is outside the ingest scope. Run 'ai-raccoon settings ingest scope add <projectId|*> <path>' to allow it.` |
 | `path-not-found` | Ingest/watch path does not exist | `path-not-found: Path '<path>' does not exist.` |
 | `unknown-workspace` | `workspaceId` does not exist, or is not active, for the project | `unknown-workspace: Workspace '<id>' does not exist for project '<project>'.` |
 | `unknown-hash` | `hash` (e.g. passed to `memory_share`) does not exist in the project's scope | `unknown-hash: No entry with hash '<hash>' in project '<project>'.` |
 | `schema-version-unsupported` | The bank's stored schema version is newer than this binary supports (issue #200) | `schema-version-unsupported: bank schema v<n> is newer than this binary supports (v<m>); update ai-raccoon` |
-| `watching-disabled` | Watching is disabled for the project | `watching-disabled: Watching is disabled for project '<project>'.` |
+| `watching-disabled` | Watching is disabled for the project | `watching-disabled: Watching is disabled for project '<project>'. Run 'ai-raccoon settings watch enable <projectId|*> true' to enable it.` |
 | `watch-overlap` | `memory_watch_add`'s path is already covered by an existing watch (no overlapping watches — the broader watch wins; adding a broader watch instead prunes the narrower ones rather than refusing) | `watch-overlap: Path '<path>' is already covered by watch '<covering-path>'.` |
 | `sync-not-configured` | No sync credentials configured | `sync-not-configured: Memory sync is not configured or its connection string is invalid. Run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted.` |
 | `sync-auth-failed` | Sync credentials missing/invalid, or a 401/403 from the cloud provider | `sync-auth-failed: Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).` (Azure) / `sync-auth-failed: AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon sync show'.` (S3) |
@@ -1026,7 +1054,7 @@ source of truth; a test cross-checks this table against it.
 | `sync-network` | Network-level failure during sync push/pull. A missing bucket/container (404) on **push** also lands here; on **pull** a 404 means "no remote snapshot yet" and returns null instead — it is not a refusal | `sync-network: <detail>` |
 | `sync-corrupt-file` | `PRAGMA quick_check` failed on the pulled remote snapshot — the local DB is not replaced | `sync-corrupt-file: <detail>` |
 | `sync-tampered-remote` | The pulled remote snapshot's embedded HMAC authenticity tag does not match its bytes, **or** the blob has no tag at all for an objectKey this bank has previously verified one for (checked before `PRAGMA quick_check` and before `ATTACH`) — the local DB is not replaced. An encrypted bank keys the tag from its own passphrase via `HKDF`; a headerless remote is accepted with a logged warning only the first time this objectKey is ever seen (trust-on-first-use). An encrypted bank synced by ≥1.31 cannot be pulled by <1.31 — upgrade both ends of an encrypted sync pair together | `sync-tampered-remote: <detail>` |
-| `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation | `access-denied: <detail>` |
+| `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation; the refusal names the `settings access` remedy | `access-denied: <tool> requires mode <required> (current <mode>); run 'ai-raccoon settings access set <project> <required>' to raise this project's mode, or 'ai-raccoon settings access default set <required>' for all projects` |
 | `project-not-registered` | A write/destructive call named a `projectId` with no registry row and no existing rows either (ADR-0089) — reads are never refused. A legacy raw-text id the bank already holds rows for keeps working, with a one-time warning, instead of this refusal | `project-not-registered: Project '<id>' is not registered. Call project_id_token_get to mint and register a project id before writing.` |
 | `project-retired` | A write/destructive call named a `projectId` the project-ids repair dropped with a tombstone (Package E of the run-once repair plan) — resurrecting it by write is refused with the repair attribution. Reads still pass through, and an alias loser folds to its winner instead of refusing | `project-retired: Project '<id>' is retired: the project-ids repair attributed it as dropped test residue and deleted its rows with a tombstone. Writes under a retired id are refused — write under the canonical project id instead.` |
 | `context-outside-project` | A write's `context` names a project other than the request's `project_id` | `context-outside-project: Context '<context>' writes into a project other than '<project_id>'. A write may only target its own project.` |
@@ -1037,7 +1065,7 @@ source of truth; a test cross-checks this table against it.
 | `bank-busy` | A transient write-lock loss: SQLITE_BUSY (5) / SQLITE_LOCKED (6) anywhere in the exception chain (WP12's write-lock convoy — another writer holds the bank's write lock past the busy timeout). Special-cased in `ToolRefusals.Filter` rather than tabled by exception type, because the same `SqliteException` also carries non-transient faults (26, `file is not a database`) that stay unmapped. The call did not happen; retry it. The search's access-rating bump is best-effort on top of this: `memory_search` returns its results and logs one Warning instead (EventId 897) when only that bookkeeping write loses the race | `bank-busy: the bank is busy (another writer holds the lock); retry the call` |
 | `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model embedding set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes (memory_write)` |
 | `embedding-install-replaced` | The bundled embedding model/vocab could not be resolved because the install this server process started from (`AppContext.BaseDirectory`) no longer exists on disk — replaced or removed out from under a still-running server (e.g. `dotnet tool update` moving the outgoing version into `.store/.stage` and deleting it; already-mapped assemblies keep the process serving MCP calls even though its own install root is gone). A plain `InvalidOperationException` from the same lookup still means the asset is genuinely missing next to a live install and stays unmapped — only this replaced-install case is refused, because only a restart fixes it | `embedding-install-replaced: Bundled embedding model 'model_qint8_arm64.onnx' could not be resolved: the install this server started from ('<dir>') no longer exists, likely replaced by a tool update (e.g. 'dotnet tool update'). Restart the MCP server (or its host) to pick up the new install.` |
-| `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only silently, no refusal). Affects `memory_search kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model code set local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
+| `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only with a section warning, no refusal). Affects `memory_search kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model code set local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
 a key, or any other unmapped exception — is a genuine failure, not a refusal, and its message
@@ -1082,6 +1110,12 @@ the passphrase the bank is plaintext (backward compatible).
 - Deleting a synced context (`shared`, `project:<id>`, custom) removes rows locally;
   the deletion is pushed as a tombstone on the next `memory_sync`, so the removal
   propagates to the cloud copy.
+- Tombstones are label-aware: each deletion carries its context label, so a
+  label-scoped delete (`memory_delete_context` on one label, or `memory_delete` of
+  a row that lived under a label) removes only that label's rows on other replicas —
+  a peer's same-hash row under a different label survives and keeps syncing.
+  Label-less tombstones (a whole `shared` or `project:<id>` context delete, or a
+  tombstone written before labels were tracked) keep their reach over every label.
 - Workspace contexts are never synced, so `memory_workspace_discard` and consolidation's
   discard have no cloud counterpart.
 
