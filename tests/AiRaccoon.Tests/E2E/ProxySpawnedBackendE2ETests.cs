@@ -49,7 +49,9 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     The proxy never kills the daemon it started, so the test does — via the PID
+    ///     The proxy never kills a daemon it merely *attached* to — its own private spawns are
+    ///     stopped at shutdown (ProxyPrivateBackendLifetimeTests owns that contract) — so this
+    ///     --attach test does it instead — via the PID
     ///     /observability reports, which stays open by design. A daemon that survives this holds the
     ///     port and the bank for the rest of the run, so teardown fails rather than going quiet.
     /// </summary>
