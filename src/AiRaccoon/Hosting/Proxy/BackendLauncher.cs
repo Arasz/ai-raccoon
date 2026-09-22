@@ -14,7 +14,9 @@ internal sealed class BackendStartException(string message, Exception inner) : E
 ///     private spawn (F70/K1): start `ai-raccoon serve --port 0` and trust only the URL that child
 ///     prints while it is still alive, so no pre-existing listener is ever contacted. The explicit
 ///     attach path keeps the legacy behaviour: probe first, else start `serve` on the port and poll.
-///     Never kills, signals or terminates the backend — lifetime belongs to IdleWatchdog alone.
+///     Never kills, signals or terminates the backend itself: the proxy stops the private
+///     backends it starts over the token-guarded /shutdown when it shuts down (owner ruling
+///     2026-09-22), and a shared backend's lifetime belongs to IdleWatchdog alone.
 /// </summary>
 internal sealed partial class BackendLauncher : IBackendLauncher
 {
