@@ -143,6 +143,56 @@ public sealed class VectorCosineTransportTests
     }
 
     /// <summary>
+    ///     Positive control for the gate above: genuinely similar vectors — a near-duplicate entry
+    ///     embedding and its query — derive their content cosine from their own coordinates (the
+    ///     dot product of L2-normalized vectors, the vec0 cosine metric), and that magnitude
+    ///     survives distance → SimFromDistance → BuildDualVectorResults → ByCosine →
+    ///     FuseWithEvidence verbatim as evidence Cosine. A null, constant, or halved score cannot
+    ///     satisfy this together with the gate above: a similar pair must read high (~1).
+    /// </summary>
+    [Fact]
+    public void GenuinelySimilarVectors_ReportsHighContentCosineThroughTheTransport()
+    {
+        var query = L2([1.0, 0.4, -0.2]);
+        var entry = L2([1.0, 0.4005, -0.1997]);
+        var contentCosine = query.Zip(entry, (left, right) => left * right).Sum();
+        contentCosine.ShouldBeGreaterThan(0.999,
+            "the fixture vectors must be genuinely similar, or this positive control proves nothing");
+
+        // The store's own derivation: vec0 reports cosine distance, SimFromDistance maps it back.
+        var distance = 1.0 - contentCosine;
+        StructureFusion.SimFromDistance(distance).ShouldBe(contentCosine, Tolerance);
+
+        // The measured red state for a row with no structure vector: fused is exactly half the
+        // content cosine — far from the similarity a reader of evidence Cosine must see.
+        var fusedScore = StructureFusion.Rank([new VectorHit("near", contentCosine)], [], 0.5, 10).Single().Score;
+        fusedScore.ShouldBe(contentCosine / 2, Tolerance);
+
+        var built = SqliteMemoryStore.BuildDualVectorResults(
+        [(Row: new SqliteMemoryStore.VectorRow { Hash = "near", Path = "near.md", Value = "value near", Distance = distance },
+              Score: fusedScore,
+              ContentCosine: StructureFusion.SimFromDistance(distance))]);
+
+        var searchResults = new SearchResults();
+        searchResults.AddResults(
+            new VectorSearchResult(built, TimeSpan.Zero),
+            new FtsSearchResult([], TimeSpan.Zero));
+        var wired = ReciprocalRankFusion.FuseWithEvidence(
+            [new NamedWeightedCandidates(ModalityCandidates.ByCosine(searchResults), 1.0, "vector")],
+            K, 0, Limit);
+
+        var reported = wired.EvidenceByHash["near"].Cosine.ShouldNotBeNull();
+        reported.ShouldBe(contentCosine, Tolerance, "the transport preserves the real content cosine end to end");
+        reported.ShouldBeGreaterThan(0.99, "a genuinely similar vector reports a high cosine");
+    }
+
+    private static double[] L2(double[] vector)
+    {
+        var norm = Math.Sqrt(vector.Sum(component => component * component));
+        return [.. vector.Select(component => component / norm)];
+    }
+
+    /// <summary>
     ///     Only the leg named exactly "vector" (ordinal, matching LegsFor) supplies Cosine: a
     ///     near-miss name still votes in ranks but yields null Cosine, while a high FTS Ranking
     ///     is never mistaken for one.
