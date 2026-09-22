@@ -48,18 +48,18 @@ public sealed partial class MemoryTools(
 
     [McpServerTool(Name = TnMemoryWrite)]
     [Description(
-        "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace. A write may be refused (e.g. it matched a noise policy) — check stored: a refused write has stored=false and a reason naming what rejected it, and hash is empty.")]
+        "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace, and workspace_id wins over context when both are supplied (the sandbox has priority). A write may be refused (e.g. it matched a noise policy) — check stored: a refused write has stored=false and a reason naming what rejected it, and hash is empty.")]
     public async Task<ApiEnvelope<WriteResult>> Write(
         [Description("The project id; every memory operation is scoped to a project.")]
         [Optional][DefaultParameterValue("")] string projectId,
         [Description("The content to remember.")]
         string content,
-        [Description("When set, the write lands in this workspace's isolated context instead of the project context.")]
+        [Description("When set, the write lands in this workspace's isolated context instead of the project context. Wins over context when both are supplied (the sandbox has priority).")]
         string? workspaceId = null,
         [Description("Provenance only: which agent wrote this.")]
         string? agentId = null,
         [Description(
-            "Optional context label for this entry, instead of the default project/workspace context. A context organises entries inside the project; it does not hide them — a plain project search still finds them.")]
+            "Optional context label for this entry, instead of the default project/workspace context. A context organises entries inside the project; it does not hide them — a plain project search still finds them. Ignored when workspace_id is supplied: the workspace wins (the sandbox has priority).")]
         string? context = null,
         [Description("Optional original file path the content came from; chunks of one file share it.")]
         string? sourceFile = null,

@@ -27,7 +27,8 @@ naming the probed directory. An explicit id always wins and never consults the r
 The exceptions: `memory_promotion_list`, whose omitted id means all-projects (its
 cross-project feature) and never cwd-defaults, and `project_id_token_get`, which mints
 one and so takes none. Writes land in `project:<id>` by default; naming a `workspaceId`
-routes them into that workspace's isolated context.
+routes them into that workspace's isolated context, and it wins over `context` when both
+are supplied (the sandbox has priority, so a workspace write never lands project-wide).
 
 10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
 2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),

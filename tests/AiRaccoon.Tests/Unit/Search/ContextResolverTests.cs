@@ -9,12 +9,14 @@ namespace AiRaccoon.Tests.Unit.Search;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class ContextResolverTests
 {
+    /// <summary>K5 (owner ruling, F24): the sandbox has priority — a workspace write with an
+    /// explicit context still lands in the workspace, never in the named context.</summary>
     [Fact]
-    public void Resolve_WithExplicitContext_UsesItOverWorkspaceAndProject()
+    public void Resolve_WithWorkspaceIdAndExplicitContext_LetsTheWorkspaceWin()
     {
         var request = new MemoryWriteRequest("acme", "note", "docs:api", WorkspaceId: "ws-1");
 
-        ContextResolver.Resolve(request).ShouldBe("docs:api");
+        ContextResolver.Resolve(request).ShouldBe("workspace:ws-1");
     }
 
     [Fact]
