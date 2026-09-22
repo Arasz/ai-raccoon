@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **183** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **184** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -36,6 +36,10 @@ private-spawn start line and the private-backend-never-reported-a-URL failure. B
 land inside the launcher's existing 633-635 block rather than at 641, which
 `EventIdBlocks_DoNotInterleaveBetweenOwners` would read as overlapping
 `ProxyForwarder`'s 636-639.)
+
+(Remeasured 2026-09-22, PSR P1.3 join-review follow-up: **184** — `ServerRestart` 657,
+the attach-required refusal: a self-asserted /observability name no longer buys the
+data root's token on `serve --restart`; the id extends the restart's own 650-656 block.)
 
 Worth recording why this doc exists at all: colliding ids compile, log, and pass every
 assertion that isn't specifically checking for the collision — a duplicate is invisible
@@ -82,7 +86,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 631-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs` (ADR-0020; path corrected 2026-08-22 — moved from `Setup/Serve/`. 635's message extended with the captured stderr, delta-review plan C1. 631/632 added 2026-09-22, PSR P1.3/K1 — 631 is the private-spawn start line, 632 the private backend that never reported a URL; 633-635 are the attach path unchanged) |
 | 636-639 | `src/AiRaccoon/Hosting/Proxy/ProxyForwarder.cs` (ADR-0020) |
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
-| 650-656 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043) |
+| 650-657 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043; 657 is the attach-required refusal before the token is read, F70/K1) |
 | 660 | `src/AiRaccoon/Hosting/Node/ShutdownEndpoint.cs` (ADR-0022) |
 | 670-675 | `src/AiRaccoon/Settings/SettingsEndpoint.cs` (ADR-0075: the control-plane settings resource; 672/673 log the key only, never the value — sync credentials and the embedding API key go through here; 674 is the model-migration outbox commit, ADR-0076; 675 added 2026-08-21: the code corpus's own activation commit, no outbox, docs/work/2026-08-21-code-search-implementation-plan.md §3.3) |
 | 680-681 | `src/AiRaccoon/Settings/RepairEndpoint.cs` (ADR-0075 amendment: the control-plane repair resource — 680 is a report served, 681 is a repair_requests outbox commit) |

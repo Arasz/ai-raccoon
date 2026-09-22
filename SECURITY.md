@@ -67,9 +67,13 @@ it (ADR-0008).
 used to dial the configured port and treat any listener answering `/mcp` with a JSON-RPC
 body as the backend, so a local process that bound the port first received the token and
 every tool payload (F70). Since ADR-0105 the proxy starts its own `serve --port 0`
-backend and trusts only the URL that child prints on its stdout pipe. `--attach` is the
-explicit opt-in to the shared server, and it keeps the old exposure by design: asking for
-the shared server is asking to trust whoever holds the port.
+backend and trusts only the URL that child prints on its stdout pipe, and it refuses to
+dial the URL that child printed after it has exited. The same rule governs the
+server-routed CLI commands (`settings …`, `model …`, `watch registered`, `noise entries`,
+`repair`, …): `CliSettingsBackend` starts its own private backend instead of attaching to
+whatever holds `--port`. `--attach` is the explicit opt-in to the shared server on both
+paths, and it keeps the old exposure by design: asking for the shared server is asking to
+trust whoever holds the port.
 
 **The token now also authorises stopping the server (ADR-0022).** `serve --restart` cycles
 the running backend by asking it to stop over `POST /shutdown`, so a token holder can shut
@@ -81,7 +85,12 @@ cross-origin `POST` can be a CORS *simple request* and reach the port unprefligh
 cannot carry a custom header without a preflight, and that preflight fails. It goes through
 the same `FixedTimeEquals` comparison as `/mcp`, answers every unauthorised call identically whether
 the header is absent, the wrong length or simply wrong, and is **not mapped at all** on a
-host with no token.
+host with no token. `serve --restart` itself no longer reads or sends that token to a
+listener that merely answers `/observability` with the ai-raccoon name: the join review
+measured the handover, and cycling an existing server is now an attach-shaped trust
+decision that requires `--attach`, refusing with exit 3 and a line naming the flag
+otherwise. `--attach` here means the same as everywhere else — trust the listener on this
+port.
 
 **One known gap, stated rather than implied, and one retired.** The ungated
 direct `--transport http` launch this section used to warn about is gone: a bare
