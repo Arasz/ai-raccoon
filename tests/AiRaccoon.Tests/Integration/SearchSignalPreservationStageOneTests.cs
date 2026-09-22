@@ -562,12 +562,14 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
     {
         var gate = new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(),
             new NeverMigratingStore(), new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(migrated: false));
+        var settings = new InMemorySettings();
         return new MemoryTools(store, gate,
             new SearchDispatcher(store, codeSearch ?? new NoOpCodeSearchService(),
                 quality ?? new NoOpSearchQualityService()),
-            new QueryGuardService(new InMemorySettings()),
+            new QueryGuardService(settings),
             new MemoryWriteService(store, new FakePromotionQueue()),
             recorder ?? new NoOpMeasurementRecorder(),
+            settings,
             NullLogger<MemoryTools>.Instance);
     }
 
