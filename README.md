@@ -48,6 +48,8 @@ flowchart LR
 
 > 📜 **Older releases:** See [What's new history](docs/reference/whats-new-history.md) for highlights from 1.6.0 through 1.32.0.
 
+> 🏷️ **A release tag isn't proof of a nuget.org package.** See [Releases and publishing](docs/reference/releases-and-publishing.md) for the two-system model and how to check what's actually installable.
+
 ---
 
 ## Quick Start
