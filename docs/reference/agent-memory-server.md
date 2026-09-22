@@ -86,9 +86,12 @@ config channel (see [Command-line options](#command-line-options)).
   only (omit them to use the same values as the memory section) — the only per-section knobs.
   Every other per-call tuning arg (`rrfK`/`ftsWeight`/`vectorWeight`/`candidateWindow`) applies
   to the code section too, at the same value passed for memory's (ADR-0088 decision 5; no
-  separate `codeRrfK`/etc. namespace). Code search degrades by configuration state: with no
-  `embedding.codeModel` configured, it is FTS5-only and carries a `warning`
-  (`"code engine not configured — FTS5-only results"`); once a code engine is configured
+  separate `codeRrfK`/etc. namespace). Memory search degrades by configuration state too: with no
+  `embedding.provider` configured, it is FTS5-only and carries a `warning`
+  (`"memory engine not configured — the memory section is FTS5-only"`); `ai-raccoon model embedding
+  set local` activates the bundled engine. Code search degrades the same way: with no
+  `embedding.codeModel` configured, it is FTS5-only and carries its own `warning`
+  (`"code engine not configured — the code section is FTS5-only"`); once a code engine is configured
   (`model code set local`, below) it runs the full vec0 hybrid, fused with the same weighted RRF
   as memory (`retrieval.rrfK`/`ftsWeight`/`vectorWeight`, or the per-call args above —
   `retrieval.structureAlpha` is read but never applied, since code has no structure modality); a
@@ -228,8 +231,8 @@ config channel (see [Command-line options](#command-line-options)).
   (semantic, when an embedding engine is configured). The two ranked lists are fused
   with Reciprocal Rank Fusion (RRF): each result's score = Σ weight / (k + rank) per
   modality, then normalized so the top result is 1.0 (range 0..1). `rrfK=60` (default),
-  `ftsWeight=1`, `vectorWeight=1` (default 1:1). When no engine is configured, search
-  degrades to FTS5-only — never crashes. The FTS5 MATCH expression is constructed per
+  `ftsWeight=1`, `vectorWeight=1` (default 1:1). When no memory engine is configured, search
+  degrades to FTS5-only, carries the `warning` that names the remedy, and never crashes. The FTS5 MATCH expression is constructed per
   query (plan C Wave 1): stopwords are stripped and the remaining content tokens joined
   with AND when there are ≤4 (precision), with an OR fallback — all query tokens plus
   quoted adjacent-token bigram phrases — whenever the AND under-matches (zero rows,
@@ -1024,7 +1027,7 @@ source of truth; a test cross-checks this table against it.
 | `bank-busy` | A transient write-lock loss: SQLITE_BUSY (5) / SQLITE_LOCKED (6) anywhere in the exception chain (WP12's write-lock convoy — another writer holds the bank's write lock past the busy timeout). Special-cased in `ToolRefusals.Filter` rather than tabled by exception type, because the same `SqliteException` also carries non-transient faults (26, `file is not a database`) that stay unmapped. The call did not happen; retry it. The search's access-rating bump is best-effort on top of this: `memory_search` returns its results and logs one Warning instead (EventId 897) when only that bookkeeping write loses the race | `bank-busy: the bank is busy (another writer holds the lock); retry the call` |
 | `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model embedding set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes (memory_write)` |
 | `embedding-install-replaced` | The bundled embedding model/vocab could not be resolved because the install this server process started from (`AppContext.BaseDirectory`) no longer exists on disk — replaced or removed out from under a still-running server (e.g. `dotnet tool update` moving the outgoing version into `.store/.stage` and deleting it; already-mapped assemblies keep the process serving MCP calls even though its own install root is gone). A plain `InvalidOperationException` from the same lookup still means the asset is genuinely missing next to a live install and stays unmapped — only this replaced-install case is refused, because only a restart fixes it | `embedding-install-replaced: Bundled embedding model 'model_qint8_arm64.onnx' could not be resolved: the install this server started from ('<dir>') no longer exists, likely replaced by a tool update (e.g. 'dotnet tool update'). Restart the MCP server (or its host) to pick up the new install.` |
-| `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only silently, no refusal). Affects `memory_search kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model code set local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
+| `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only with a section warning, no refusal). Affects `memory_search kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model code set local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
 a key, or any other unmapped exception — is a genuine failure, not a refusal, and its message

@@ -2,6 +2,10 @@
 
 Select, configure, and switch embedding models for vector search.
 
+> **A fresh bank has no memory engine.** Memory search runs keyword-only until you run
+> `ai-raccoon model embedding set local` (Recipe 1, the recommended engine). The `warning`
+> on a `memory_search` result says so, and `doctor` reports the same state.
+
 ---
 
 ## Supported embedding engines
