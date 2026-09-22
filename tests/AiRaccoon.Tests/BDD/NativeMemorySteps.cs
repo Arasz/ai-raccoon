@@ -559,7 +559,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var sql = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries'");
         sql.ShouldNotBeNull();
-        sql.ShouldContain("(workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL)");
+        sql.ShouldContain("(workspace_id IS NULL AND scope IS NOT NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL)");
     }
 
     [When(@"I call memory_workspace_consolidate with keep=\[""([^""]*)""\]")]
