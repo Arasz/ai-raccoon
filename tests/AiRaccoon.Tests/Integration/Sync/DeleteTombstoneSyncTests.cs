@@ -24,14 +24,13 @@ namespace AiRaccoon.Tests.Integration.Sync;
 ///     Real <see cref="SqliteMemoryStore"/> deletes plus the real <see cref="SyncService"/> merge —
 ///     a hand-SQL tombstone replay is not a gate.
 ///     <para>
-///         Known model limitations the join review measured and the plan accepted — documented
-///         here, not gates this suite fixes. (1) Context-delete label collateral:
-///         <c>sync_tombstones</c> carries no <c>context_label</c> (<c>MemorySchema.cs</c>), so a
-///         context delete tombstones <c>(project, hash, scope)</c> and the apply step deletes a
-///         peer's same-hash row under a different label on its next pull. (2) Same-second re-create
-///         dies: timestamps are whole seconds, so a re-create with
-///         <c>created_at == deleted_at</c> is deleted again — the deliberate cost of the
-///         <c>&lt;=</c> age guard, whose <c>&lt;</c> alternative would break same-second delete
+///         Tombstones are label-aware: each carries the deleted row's own <c>context_label</c>, so
+///         a label-scoped delete only tombstones the same label on a peer while the same-label row
+///         still dies, and a NULL label (label-less rows, pre-v15 tombstones) keeps its
+///         whole-context reach over every label. Known model limitation, measured and accepted:
+///         same-second re-create dies — timestamps are whole seconds, so a re-create with
+///         <c>created_at == deleted_at</c> is deleted again, the deliberate cost of the
+///         <c>&lt;=</c> age guard whose <c>&lt;</c> alternative would break same-second delete
 ///         propagation.
 ///     </para>
 /// </summary>

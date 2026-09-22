@@ -38,14 +38,9 @@ internal static class MemorySchema
                                           """;
 
     /// <summary>
-    ///     Tombstone identity uniqueness (label-aware). Same NULL-safe idiom as
-    ///     <see cref="BucketIndexDdl" />'s <c>COALESCE(context_label, '')</c>: SQLite treats every
-    ///     NULL as distinct for uniqueness, so a raw <c>context_label</c> column could never dedupe
-    ///     — or upsert-refresh — two legacy (label-less) tombstones for the same identity. Split
-    ///     from <see cref="Ddl" /> like <see cref="BucketIndexDdl" />: a legacy bank's table must be
-    ///     rebuilt (its old <c>(project_id, hash, scope)</c> PRIMARY KEY cannot admit two rows
-    ///     differing only by label) before this index can be created — that rebuild is
-    ///     <see cref="MigrateToV15Async" />'s job.
+    ///     Tombstone identity uniqueness (label-aware): SQLite never dedupes raw NULLs, so the
+    ///     identity is a <c>COALESCE(context_label, '')</c> unique index like <see cref="BucketIndexDdl" />;
+    ///     legacy banks reach it via <see cref="MigrateToV15Async" />'s table rebuild.
     /// </summary>
     private const string TombstoneIndexDdl = """
                                              CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_tombstones_identity
@@ -1014,7 +1009,7 @@ internal static class MemorySchema
             .ConfigureAwait(false);
 
     /// <summary>
-    ///     Ladder step 11: the <c>sync_tombstones</c> table must carry the Ddl's exact composite
+    ///     Ladder step 11: the <c>sync_tombstones</c> table must carry the v11-era exact composite
     ///     shape — <c>project_id TEXT NOT NULL PRIMARY KEY</c>, and <c>hash</c>/<c>scope</c> also
     ///     members of the composite <c>PRIMARY KEY (project_id, hash, scope)</c>. A legacy bank that
     ///     had <c>project_id</c> added via ALTER TABLE carries it as plain <c>TEXT</c> — the DDL's
@@ -1299,16 +1294,10 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     v14→v15 (label-aware tombstones): <c>sync_tombstones</c> gains <c>context_label</c>, so a
-    ///     context-scoped delete tombstones only its own label instead of every label sharing the
-    ///     same (project, hash, scope) — the join review measured a context delete on one replica
-    ///     deleting a peer's same-hash row under a different label. NULL means "matches any label",
-    ///     which is exactly today's behaviour, so every pre-existing tombstone keeps working
-    ///     unchanged. The old <c>(project_id, hash, scope)</c> PRIMARY KEY cannot admit two rows that
-    ///     differ only by label (ALTER TABLE cannot drop a PRIMARY KEY), so the table is rebuilt —
-    ///     same <c>BEGIN IMMEDIATE</c>/rename/copy/drop shape as <see cref="MigrateToV11Async" />,
-    ///     re-probed under the write lock for the same concurrent-opener reason. The replacement
-    ///     uniqueness is <see cref="TombstoneIndexDdl" />.
+    ///     v14→v15 (label-aware tombstones): <c>sync_tombstones</c> gains <c>context_label</c> and
+    ///     drops its PRIMARY KEY (two labels' tombstones for one identity must coexist), so the
+    ///     table is rebuilt like <see cref="MigrateToV11Async" /> — uniqueness moves to
+    ///     <see cref="TombstoneIndexDdl" />, and a NULL label keeps the legacy "any label" reach.
     /// </summary>
     private static async Task MigrateToV15Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -1374,7 +1363,7 @@ internal static class MemorySchema
         }
     }
 
-    /// <summary>The exact Ddl shape of <c>sync_tombstones</c>: declared types, NOT NULL, and the pk position of every composite-key member.</summary>
+    /// <summary>The v11-era shape of <c>sync_tombstones</c>: declared types, NOT NULL, and the pk position of every composite-key member.</summary>
     private static bool ShapeMatchesDdl(IReadOnlyList<PragmaColumnRow> columnRows)
     {
         foreach (var expected in new[]

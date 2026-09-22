@@ -91,12 +91,9 @@ public partial class SyncService(
     }
 
     /// <summary>
-    ///     Label-aware tombstones (v15): a remote pushed by an older binary has <c>sync_tombstones</c>
-    ///     without <c>context_label</c>. Probed the same way <see cref="AliasTableExistsAsync" />
-    ///     probes a whole table, so a pull from that remote merges instead of throwing "no such
-    ///     column". An old remote's tombstones carry no label concept at all, which is exactly the
-    ///     NULL-means-any-label semantics this feature already gives a legacy row — so treating the
-    ///     missing column as NULL is not a special case, it is the same rule applied one level up.
+    ///     A remote pushed by a pre-label binary has <c>sync_tombstones</c> without
+    ///     <c>context_label</c>; probed like <see cref="AliasTableExistsAsync" /> so its label-blind
+    ///     tombstones merge as the "any label" NULL instead of throwing "no such column".
     /// </summary>
     private static async Task<bool> ColumnExistsAsync(SqliteConnection conn, string schema, string table,
         string column, CancellationToken cancellationToken)
