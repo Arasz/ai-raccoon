@@ -476,16 +476,22 @@ runs the server.
 | `--transport` | `proxy`, `http` (`stdio` and `https` are rejected at parse) | `proxy` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
-| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only — the proxy has to dial a port it knows | `7721` |
+| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only, and the default proxy picks its own ephemeral port | `7721` |
+| `--attach` | flag | off |
 | `--quiet` | flag | off |
 
 `proxy` is the default and the zero-config path
 ([ADR 0020](../adr/0020-always-on-http-stdio-proxy.md)): bare `ai-raccoon`
-opens no bank, resolves no encryption key, and loads no embedding model — it
-probes `http://127.0.0.1:<port>/mcp`, spawns `ai-raccoon serve` when nothing
-answers, and forwards every JSON-RPC message to it, restoring the client's
-own request id on the response. No tool method is named in the proxy, so a
-new tool needs no proxy change. If the backend can neither be reached nor
+opens no bank, resolves no encryption key, and loads no embedding model. It
+starts its own `ai-raccoon serve --port 0` backend, takes the bound URL from
+that child's stdout alone, and forwards every JSON-RPC message to it,
+restoring the client's own request id on the response. It never dials
+`http://127.0.0.1:<port>/mcp` on this path, so a process that merely holds the
+configured port cannot receive the loopback token or a tool payload
+([ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). `--attach`
+opts into the shared-server path instead: probe the configured port, attach
+when an ai-raccoon server answers, and start one there when nothing does. No
+tool method is named in the proxy, so a new tool needs no proxy change. If the backend can neither be reached nor
 started within its budget, the process exits `ExitCode.ProxyBackendUnavailable`
 (6) with one stderr line of this exact form (`BackendSessions.Unavailable()`,
 quoted verbatim from the P5 pass):
@@ -534,20 +540,22 @@ removal release.
 
 ### Serve mode
 
-Since ADR-0020, `serve` is not only a manual verb — it is autostarted by the
-default `proxy` transport, at proxy startup, whenever nothing already answers on
-the port. A client that connects and never calls a tool still leaves a backend
-running. This section describes `serve` itself, whether started by the proxy or
-run by hand.
+Since ADR-0020, `serve` is not only a manual verb. The default `proxy`
+transport starts its own `serve --port 0` backend at proxy startup, and a
+client that connects and never calls a tool still leaves that backend running.
+This section describes `serve` itself, whether started by the proxy or run by
+hand.
 
 `ai-raccoon serve` is the HTTP mode as a first-class verb: it forces the http
 transport, applies a 4h idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0`
 disables), prints the bound URL to stdout, and stays in the foreground —
-background it with `ai-raccoon serve > serve.log 2>&1 &` (POSIX). If the port
-already hosts an ai-raccoon server, `serve` attaches to it and exits 0; the
-owning process keeps the watchdog, and the attached run never touches the bank.
-A busy port held by a foreign listener fails fast with exit code 3 and a
-`--port 0` hint.
+background it with `ai-raccoon serve > serve.log 2>&1 &` (POSIX). A busy port
+held by a foreign listener fails fast with exit code 3 and a `--port 0` hint.
+A port already held by an ai-raccoon server is refused the same way unless
+`--attach` is given: `serve --attach` attaches to that server and exits 0, the
+owning process keeps the watchdog, and the attached run never touches the bank
+([ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). Without the
+flag, nothing is asked to stop and nothing is joined.
 
 `serve --restart` cycles that server instead of attaching to it (ADR-0022).
 Attaching is wrong on exactly one path — an update: `dotnet tool update`
