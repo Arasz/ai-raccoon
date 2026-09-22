@@ -59,12 +59,14 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV13Async" /> (ADR-0099),
     ///     <see cref="MigrateToV14Async" /> (Package D, durable alias-map table),
     ///     <see cref="MigrateToV15Async" /> (label-aware sync tombstones),
-    ///     <see cref="MigrateToV16Async" /> (F36, receipt-time tombstone GC). Not every schema change needs a ladder
+    ///     <see cref="MigrateToV16Async" /> (F36, receipt-time tombstone GC),
+    ///     <see cref="MigrateToV17Async" /> (F34, the workspace-XOR-scope CHECK rejects NEITHER, not
+    ///     just BOTH). Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 16;
+    internal const int CurrentVersion = 17;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -125,7 +127,9 @@ internal static class MemorySchema
         """;
 
     // workspace_id carries its own FK to workspaces and a CHECK enforcing "workspace XOR
-    // committed scope": an entry is either workspace-scratch or one of shared/project/custom, never both.
+    // committed scope": an entry is either workspace-scratch or one of shared/project/custom, never
+    // both AND NEVER NEITHER (F34) — `scope IS NOT NULL` in the workspace-less arm is load-bearing:
+    // without it, a NULL/NULL row makes the whole CHECK evaluate NULL, which SQLite passes.
     private static readonly string Ddl = $"""
                                           CREATE TABLE IF NOT EXISTS workspaces (
                                               id TEXT PRIMARY KEY,
@@ -163,7 +167,7 @@ internal static class MemorySchema
                                               total_chunks INTEGER NOT NULL DEFAULT 0,
                                               source_id INTEGER NULL,
                                               FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
-                                              CHECK ((workspace_id IS NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
+                                              CHECK ((workspace_id IS NULL AND scope IS NOT NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
                                           );
 
                                           CREATE TABLE IF NOT EXISTS settings (
@@ -823,6 +827,12 @@ internal static class MemorySchema
             await MigrateToV16Async(connection, cancellationToken).ConfigureAwait(false);
         }
 
+        var scopelessEntriesRemoved = 0L;
+        if (healthy && storedVersion < 17)
+        {
+            scopelessEntriesRemoved = await MigrateToV17Async(connection, cancellationToken).ConfigureAwait(false);
+        }
+
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
         // digest on a degraded (unhealthy) run would let EnsureCheapAsync trust a bank whose ladder
         // never completed, the same bug this reordering exists to close (Data F1 / D5).
@@ -833,6 +843,11 @@ internal static class MemorySchema
             {
                 await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
             }
+        }
+
+        if (scopelessEntriesRemoved > 0)
+        {
+            overlapResult = overlapResult with { ScopelessEntriesRemoved = scopelessEntriesRemoved };
         }
 
         return overlapResult;
@@ -1433,6 +1448,210 @@ internal static class MemorySchema
                 .ConfigureAwait(false);
             throw;
         }
+    }
+
+    /// <summary>
+    ///     v16→v17 (F34): the workspace-XOR-scope CHECK reads <c>(workspace_id IS NULL AND scope IN
+    ///     (...)) OR (workspace_id IS NOT NULL AND scope IS NULL)</c> — SQLite passes a CHECK that
+    ///     evaluates to NULL, so a row with BOTH null (neither tier) slips through: unreachable by
+    ///     every tier's own predicates, uncounted, never tombstoned, and exactly the shape the sync
+    ///     merge's <c>WHERE r.workspace_id IS NULL</c> guard admits from a remote. Fixed by adding
+    ///     <c>scope IS NOT NULL</c> to the workspace-less arm so the neither case evaluates FALSE.
+    ///     SQLite cannot ALTER a CHECK in place, so <c>entries</c> is rebuilt like
+    ///     <see cref="MigrateToV15Async" /> — rename, recreate, copy every column (id included, so
+    ///     FTS/vec0's rowid-keyed rows stay correctly addressed), drop the renamed original. The
+    ///     scope-less rows are deleted FIRST, while the table still carries its real name and
+    ///     triggers, so <c>entries_fts</c>/<c>vec_entries</c>/<c>vec_structure</c>/
+    ///     <c>promotion_queue</c> clean up exactly the way an ordinary delete always does — the
+    ///     rebuild's copy then has nothing left to filter. Dropping the renamed original also drops
+    ///     every trigger and index that followed it through the rename (SQLite ties both to the
+    ///     table), so this step recreates all of them, identically to <see cref="Ddl" />,
+    ///     <see cref="BucketIndexDdl" /> and <see cref="PromotionQueueTriggerDdl" />, before COMMIT.
+    /// </summary>
+    /// <returns>How many scope-less rows were deleted — 0 on a bank that never had one.</returns>
+    private static async Task<long> MigrateToV17Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        long scopelessCount;
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            scopelessCount = await connection.ExecuteScalarAsync<long>(
+                    new CommandDefinition(
+                        "SELECT count(*) FROM entries WHERE scope IS NULL AND workspace_id IS NULL",
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            if (scopelessCount > 0)
+            {
+                // Fires entries_fts_ad / vec_entries_ad / vec_structure_ad / promotion_queue_entries_ad
+                // exactly as a normal delete would — the row is unreachable by every tier, so nothing
+                // in the copy below needs to filter it out again.
+                await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            "DELETE FROM entries WHERE scope IS NULL AND workspace_id IS NULL",
+                            cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+            }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ALTER TABLE entries RENAME TO entries_v16", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        CREATE TABLE entries (
+                            id INTEGER PRIMARY KEY,
+                            hash TEXT,
+                            path TEXT,
+                            value TEXT,
+                            source_file TEXT,
+                            section TEXT,
+                            scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
+                            project_id TEXT NULL,
+                            context_label TEXT NULL,
+                            workspace_id TEXT NULL,
+                            agent_id TEXT NULL,
+                            created_at INTEGER NOT NULL,
+                            updated_at INTEGER NOT NULL,
+                            access_count INTEGER NOT NULL DEFAULT 0,
+                            last_accessed_at INTEGER NULL,
+                            rating REAL NOT NULL DEFAULT 0.5,
+                            ttl_days INTEGER NULL,
+                            embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
+                            embedding BLOB NULL,
+                            heading_path TEXT NULL,
+                            structure_embedding BLOB NULL,
+                            chunk_index INTEGER NOT NULL DEFAULT -1,
+                            total_chunks INTEGER NOT NULL DEFAULT 0,
+                            source_id INTEGER NULL,
+                            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
+                            CHECK ((workspace_id IS NULL AND scope IS NOT NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
+                        )
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            // Explicit column list, id included: the rebuild must preserve every surviving row's
+            // rowid, since entries_fts (content_rowid='id') and vec_entries/vec_structure
+            // (rowid = entry id) address their rows by it.
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        INSERT INTO entries (id, hash, path, value, source_file, section, scope, project_id,
+                                              context_label, workspace_id, agent_id, created_at, updated_at,
+                                              access_count, last_accessed_at, rating, ttl_days, embed_state,
+                                              embedding, heading_path, structure_embedding, chunk_index,
+                                              total_chunks, source_id)
+                        SELECT id, hash, path, value, source_file, section, scope, project_id,
+                               context_label, workspace_id, agent_id, created_at, updated_at,
+                               access_count, last_accessed_at, rating, ttl_days, embed_state,
+                               embedding, heading_path, structure_embedding, chunk_index,
+                               total_chunks, source_id
+                        FROM entries_v16
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("DROP TABLE entries_v16", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        $"""
+                         CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                             INSERT INTO entries_fts(rowid, value, source_file, section)
+                             VALUES (new.id, new.value, new.source_file, new.section);
+                         END;
+
+                         CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
+                             INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                             VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                         END;
+
+                         CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
+                             INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                             VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                             INSERT INTO entries_fts(rowid, value, source_file, section)
+                             VALUES (new.id, new.value, new.source_file, new.section);
+                         END;
+
+                         CREATE TRIGGER vec_entries_au AFTER UPDATE OF embed_state ON entries
+                         WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
+                         BEGIN
+                             DELETE FROM vec_entries WHERE rowid = NEW.id;
+                             INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
+                         END;
+
+                         CREATE TRIGGER vec_entries_pending AFTER UPDATE OF embed_state ON entries
+                         WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                         BEGIN
+                             DELETE FROM vec_entries WHERE rowid = OLD.id;
+                         END;
+
+                         CREATE TRIGGER vec_entries_ad AFTER DELETE ON entries BEGIN
+                             DELETE FROM vec_entries WHERE rowid = OLD.id;
+                         END;
+
+                         CREATE TRIGGER vec_structure_ad AFTER DELETE ON entries BEGIN
+                             DELETE FROM vec_structure WHERE rowid = OLD.id;
+                         END;
+
+                         CREATE TRIGGER vec_structure_au AFTER UPDATE OF structure_embedding ON entries
+                         WHEN NEW.structure_embedding IS NOT NULL
+                         BEGIN
+                             DELETE FROM vec_structure WHERE rowid = NEW.id;
+                             INSERT INTO vec_structure(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.structure_embedding);
+                         END;
+
+                         CREATE TRIGGER vec_structure_pending AFTER UPDATE OF embed_state ON entries
+                         WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                         BEGIN
+                             DELETE FROM vec_structure WHERE rowid = OLD.id;
+                         END;
+                         """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition(PromotionQueueTriggerDdl, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        CREATE INDEX idx_entries_scope_project ON entries(scope, project_id);
+                        CREATE INDEX idx_entries_hash ON entries(hash);
+                        CREATE INDEX idx_entries_workspace ON entries(workspace_id);
+                        CREATE INDEX idx_entries_embed_state ON entries(embed_state, project_id);
+                        CREATE INDEX idx_entries_source_id ON entries(source_id);
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
+        }
+
+        // Same reclaim reasoning as the v9/v15 rebuilds: the DROP's freed pages are not reused by
+        // the new table's own root page, so the file does not shrink without an explicit VACUUM.
+        await VacuumBestEffortAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        return scopelessCount;
     }
 
     /// <summary>The v11-era shape of <c>sync_tombstones</c>: declared types, NOT NULL, and the pk position of every composite-key member.</summary>
@@ -2374,8 +2593,13 @@ internal static class MemorySchema
     /// its watches are left untouched rather than risk failing the whole bank open (S8).</summary>
     internal sealed record WatchOverlapPruneWarning(string ProjectId, string Reason);
 
-    /// <summary>The unconditional no-overlapping-watches prune step's outcome for one bank open.</summary>
+    /// <summary>
+    ///     The unconditional no-overlapping-watches prune step's outcome for one bank open, plus
+    ///     (F34) the count of scope-less/workspace-less <c>entries</c> rows the v17 ladder step
+    ///     deleted on THIS open — zero on every open that does not run that one-time step.
+    /// </summary>
     internal sealed record WatchOverlapPruneResult(
         IReadOnlyList<PrunedWatch> Pruned,
-        IReadOnlyList<WatchOverlapPruneWarning> Warnings);
+        IReadOnlyList<WatchOverlapPruneWarning> Warnings,
+        long ScopelessEntriesRemoved = 0);
 }

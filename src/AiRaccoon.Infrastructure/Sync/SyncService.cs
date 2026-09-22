@@ -461,6 +461,12 @@ public partial class SyncService(
                                                       'pending', NULL
                                                FROM remote.entries r
                                                WHERE r.workspace_id IS NULL
+                                                 -- A remote pushed by an older peer may still hold a row with
+                                                 -- neither a scope nor a workspace_id (F34) — the local CHECK
+                                                 -- rejects that shape outright, so admitting it here would abort
+                                                 -- the whole merge on a constraint violation instead of just
+                                                 -- skipping the one unreachable row.
+                                                 AND r.scope IS NOT NULL
                                                  AND NOT EXISTS (
                                                      SELECT 1 FROM sync_tombstones t
                                                      WHERE t.hash = r.hash
