@@ -318,12 +318,13 @@ public class SyncServiceTests : IDisposable
         }
 
         // Remote tombstone for the middle chunk, no entries of its own: the merge's
-        // tombstone-apply path must remove h2 locally.
+        // tombstone-apply path must remove h2 locally. deleted_at must be at or after the
+        // row's created_at (2) — the K3 age guard leaves newer re-creations alone.
         var remotePath = Path.Combine(_dataRoot, "remote.db");
         await using (var remote = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
         {
             await using var tomb = remote.CreateCommand();
-            tomb.CommandText = "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES ('acme', 'h2', 'project', 1)";
+            tomb.CommandText = "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES ('acme', 'h2', 'project', 100)";
             await tomb.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 

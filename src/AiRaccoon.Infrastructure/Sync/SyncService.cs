@@ -512,14 +512,23 @@ public partial class SyncService(
 
                 // Apply tombstones: delete rows locally that remote deleted — the remote side folds
                 // too, so a loser tombstone from an unrepaired replica still deletes the locally
-                // folded winner row.
+                // folded winner row. K3 (D27): only rows at or older than the tombstone are deleted,
+                // so a fact re-created after its delete (created_at > deleted_at) survives. Partial
+                // for multi-replica convergence: a replica already holding the tombstone still
+                // suppresses the re-created row through the merge's NOT EXISTS leg above, which has
+                // no age comparison.
                 await using (var applyTombstones = conn.CreateCommand())
                 {
-                    var foldedApplyProject = FoldRemoteProjectId("project_id", ResolveAliasMap());
+                    var foldedApplyProject = FoldRemoteProjectId("t.project_id", ResolveAliasMap());
                     applyTombstones.CommandText = $"""
                                                   DELETE FROM entries
-                                                  WHERE (hash, COALESCE(scope, 'workspace'), project_id)
-                                                      IN (SELECT hash, scope, {foldedApplyProject} FROM remote.sync_tombstones)
+                                                  WHERE EXISTS (
+                                                      SELECT 1 FROM remote.sync_tombstones t
+                                                      WHERE t.hash = entries.hash
+                                                        AND t.scope = COALESCE(entries.scope, 'workspace')
+                                                        AND {foldedApplyProject} = entries.project_id
+                                                        AND entries.created_at <= t.deleted_at
+                                                  )
                                                   """;
                     await applyTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }

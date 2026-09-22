@@ -164,16 +164,25 @@ internal static class MemorySql
     // @scope null preserves memory_delete's documented reach ("wherever this hash lives",
     // including a shared row); a caller that enumerated one scope (the sweep, H2) passes it so
     // the delete cannot also remove a sibling row sharing this hash in another scope/workspace.
-    public const string DeleteByHashAndProject =
-        "DELETE FROM entries WHERE hash = @hash AND project_id = @projectId AND (@scope IS NULL OR scope IS @scope)";
+    public const string DeleteByHashAndProjectPredicate =
+        "hash = @hash AND project_id = @projectId AND (@scope IS NULL OR scope IS @scope)";
 
-    // Sync propagates deletes through tombstones (FR-NM-8): the row's committed scope is
-    // recorded before the delete so sync can suppress resurrection and ship the tombstone.
-    public const string SelectScopeByHashAndProject =
-        "SELECT scope FROM entries WHERE hash = @hash AND project_id = @projectId AND (@scope IS NULL OR scope IS @scope)";
+    public const string DeleteByHashAndProject = "DELETE FROM entries WHERE " + DeleteByHashAndProjectPredicate;
 
-    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read alongside
-    // SelectScopeByHashAndProject, before the delete, so the row's group can be recomputed afterward.
+    // Sync propagates deletes through tombstones (FR-NM-8). The set is derived from the rows the
+    // delete's own predicate reaches — never one arbitrarily-ordered probe row — inside the
+    // caller's transaction. The committed-scope filter is mandatory: a workspace row's scope is
+    // NULL, and tombstoning it would delete a same-hash workspace row on another replica and push
+    // scratch content off-machine. The upsert refreshes deleted_at so a later delete still
+    // suppresses under the P2.2 age guard; INSERT OR IGNORE would keep the older value.
+    public static string TombstoneFromPredicate(string predicate) =>
+        "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) " +
+        "SELECT DISTINCT project_id, hash, COALESCE(scope, 'workspace'), @deletedAt FROM entries " +
+        $"WHERE {predicate} AND scope IN ('project', 'custom', 'shared') " +
+        "ON CONFLICT(project_id, hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
+
+    // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read before the
+    // delete so the row's group can be recomputed afterward.
     public const string SelectDeleteRecomputeContext = """
                                                        SELECT scope AS Scope, context_label AS ContextLabel,
                                                               workspace_id AS WorkspaceId, source_file AS SourceFile,
@@ -183,21 +192,18 @@ internal static class MemorySql
                                                          AND (@scope IS NULL OR scope IS @scope)
                                                        """;
 
-    public const string UpsertTombstone =
-        "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@projectId, @hash, @scope, @deletedAt) " +
-        "ON CONFLICT(project_id, hash, scope) DO UPDATE SET deleted_at = excluded.deleted_at";
-
     // Mirror delete/rename: removes committed chunks of the source path and its subtree (directory
     // delete cascades; workspace scratch is transient and stays), plus per-path watch fingerprints
     // so a delete-then-recreate cycle cannot hash-skip back to stale chunks. Watch registration survives.
     // Matching is on `path`, not `source_file`: mirror/ingest rows carry the real file path in both
     // columns, while manual memory_write rows carry path = <sha256(content)>.md and merely cite the
     // file in source_file — the digest owns the mirror rows, never manual rows that cite the file.
-    public const string DeleteBySourcePath = """
-                                             DELETE FROM entries
-                                             WHERE project_id = @projectId AND workspace_id IS NULL
-                                               AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
-                                             """;
+    public const string DeleteBySourcePathPredicate = """
+                                                      project_id = @projectId AND workspace_id IS NULL
+                                                        AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
+                                                      """;
+
+    public const string DeleteBySourcePath = "DELETE FROM entries WHERE " + DeleteBySourcePathPredicate;
 
     // A replace deletes every chunk of the path and re-inserts them, so promotion_queue_entries_ad
     // (ADR-0023) fires even for chunks whose text is unchanged and which return under the same hash.
