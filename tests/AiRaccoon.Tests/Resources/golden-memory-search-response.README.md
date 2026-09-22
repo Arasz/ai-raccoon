@@ -23,3 +23,8 @@ capture the same way before comparing.
 prove the post-feature `kind=memory` response is semantically identical to this file — same
 keys, order, and values, modulo `Meta.CorrelationId` — i.e. it never gains a `code` key and
 never reorders `results`.
+
+A later regeneration touched exactly the two `evidenceByHash.*.cosine` values (each exactly
+double the previous): that field is the raw content-embedding cosine to the query, while the
+capture before it carried the alpha-fused content/structure score, which for a row with no
+structure vector is half the content cosine. Keys, order, and every other value are unchanged.

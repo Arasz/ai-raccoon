@@ -10,8 +10,10 @@ namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 /// </summary>
 internal static class ReciprocalRankFusion
 {
-    // The leg whose candidate Ranking is the fused cosine (see BuildDualVectorResults):
-    // the only Ranking this seam ever reads. Leg names reuse the ModalityLeg vocabulary.
+    // The leg whose candidate ContentCosine is evidence Cosine (see BuildDualVectorResults):
+    // the only ContentCosine this seam ever reads — never Ranking, which on this leg is the
+    // alpha-fused score that orders candidates, not a similarity. Leg names reuse the
+    // ModalityLeg vocabulary.
     private const string VectorLegName = "vector";
 
     public static IReadOnlyList<MemorySearchResult> Fuse(
@@ -31,9 +33,11 @@ internal static class ReciprocalRankFusion
     /// <summary>
     ///     S1 capture: fuses exactly like <see cref="Fuse" /> while attaching each served hash's
     ///     pre-normalization evidence. Stats describe the pre-floor population; the sidecar
-    ///     covers served rows only. A non-finite vector Ranking nulls that hash's Cosine and
-    ///     keeps its strength and legs; every other leg's Ranking (negative BM25 is healthy)
-    ///     is never read and flows through untouched.
+    ///     covers served rows only. Evidence Cosine is the vector leg's raw content cosine, never
+    ///     the alpha-fused Ranking that orders it — the two diverge whenever structure fusion
+    ///     blends in a non-zero, or absent, structure term. A non-finite content cosine nulls
+    ///     that hash's Cosine and keeps its strength and legs; every leg's Ranking (negative BM25
+    ///     is healthy) is never read for evidence and flows through untouched.
     /// </summary>
     public static FuseWithEvidenceResult FuseWithEvidence(
         IReadOnlyList<NamedWeightedCandidates> legs,
@@ -64,9 +68,9 @@ internal static class ReciprocalRankFusion
                 hashes.Add(candidate.Hash);
                 scores[candidate.Hash] = scores.GetValueOrDefault(candidate.Hash) + leg.Weight / (k + rank);
                 payloads.TryAdd(candidate.Hash, candidate);
-                if (isVector)
+                if (isVector && candidate.ContentCosine is { } contentCosine)
                 {
-                    cosines.TryAdd(candidate.Hash, candidate.Ranking);
+                    cosines.TryAdd(candidate.Hash, contentCosine);
                 }
             }
 

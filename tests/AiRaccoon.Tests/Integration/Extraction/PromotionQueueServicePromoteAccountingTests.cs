@@ -191,7 +191,7 @@ public sealed class PromotionQueueServicePromoteAccountingTests : IDisposable
             CancellationToken cancellationToken = default) =>
             (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
 
-        public Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
+        public Task<UpsertOutcome> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

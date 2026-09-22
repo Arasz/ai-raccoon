@@ -16,6 +16,13 @@ public sealed record ServerConfig(int Port, McpTransport Transport, Infrastructu
     public string? McpToken { get; init; }
 
     /// <summary>
+    ///     Explicit opt-in (F70/K1) to reusing an ai-raccoon server already listening on
+    ///     <see cref="Port" />. False — the default — makes the proxy start a private backend on an
+    ///     ephemeral port instead of attaching to any pre-existing listener.
+    /// </summary>
+    public bool Attach { get; init; }
+
+    /// <summary>
     ///     Prints the launch identity and never the token: for `serve` all logging goes to stderr, so
     ///     the synthesised ToString would put the loopback secret there on any future log line. A
     ///     property added later is omitted until it is listed here, which is the safe direction.

@@ -3,10 +3,10 @@ using System.Globalization;
 namespace AiRaccoon.Hosting.Common;
 
 /// <summary>
-///     The launch identity a caller hands <c>BackendLauncher.AcquireAsync</c> to auto-start
-///     <c>ai-raccoon serve</c> on <see cref="ServerConfig.Port" />: the flags every backend needs
-///     regardless of who is acquiring it (the proxy, or a CLI settings command, ADR-0075
-///     §5.1) precede the verb.
+///     The launch identity a caller hands the backend launcher to acquire an
+///     <c>ai-raccoon serve</c>: the flags every backend needs regardless of who is acquiring it
+///     (the proxy, or a CLI settings command, ADR-0075 §5.1) precede the verb. The private-spawn
+///     arguments pin <c>--port 0</c>; the attach arguments carry the configured port.
 /// </summary>
 internal static class BackendLaunchArguments
 {
@@ -43,7 +43,16 @@ internal static class BackendLaunchArguments
               $"start the server manually first: ai-raccoon {string.Join(' ', ServeArguments(config))}, then retry"
             : "the running executable path is unknown";
 
-    public static string[] ServeArguments(ServerConfig config)
+    public static string[] ServeArguments(ServerConfig config) => Arguments(config, config.Port);
+
+    /// <summary>
+    ///     The private-spawn arguments (F70/K1): the same launch identity with <c>--port 0</c>, so
+    ///     the OS picks an ephemeral port and only this child can print the URL it bound. The
+    ///     launcher never probes the configured port on this path.
+    /// </summary>
+    public static string[] PrivateServeArguments(ServerConfig config) => Arguments(config, 0);
+
+    private static string[] Arguments(ServerConfig config, int port)
     {
         var arguments = new List<string>
         {
@@ -55,7 +64,7 @@ internal static class BackendLaunchArguments
             arguments.Add("--quiet");
         }
 
-        arguments.AddRange(["serve", "--port", config.Port.ToString(CultureInfo.InvariantCulture)]);
+        arguments.AddRange(["serve", "--port", port.ToString(CultureInfo.InvariantCulture)]);
         return [.. arguments];
     }
 }

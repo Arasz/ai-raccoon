@@ -82,7 +82,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
         await File.WriteAllBytesAsync(bank, garbage, TestContext.Current.CancellationToken);
 
         await using var client = await AiRaccoonProcess.ConnectAsync(
-            ["--data-root", _proxyRoot, "--port", _port.ToString()], TestContext.Current.CancellationToken);
+            ["--data-root", _proxyRoot, "--port", _port.ToString(), "--attach"], TestContext.Current.CancellationToken);
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         tools.ShouldNotBeEmpty();
@@ -96,7 +96,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
         await using var direct = await ConnectDirectlyAsync();
 
         await using var client = await AiRaccoonProcess.ConnectAsync(
-            ["--data-root", _proxyRoot, "--port", _port.ToString()], TestContext.Current.CancellationToken);
+            ["--data-root", _proxyRoot, "--port", _port.ToString(), "--attach"], TestContext.Current.CancellationToken);
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
         var expected = await direct.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
 
@@ -131,7 +131,9 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
                 HardCap, TestContext.Current.CancellationToken);
 
             run.ExitCode.ShouldBe(ExitCode.ProxyBackendUnavailable);
-            run.Stderr.ShouldContain($"http://127.0.0.1:{port}/mcp");
+            // F70/K1: the default is private spawn, so the failure names the private port rather
+            // than an endpoint on the configured one.
+            run.Stderr.ShouldContain("no MCP backend could be started on a private port");
             run.Stderr.ShouldContain($"serve exit {ExitCode.FailedToOpenEncryptedBank}");
             run.Stderr.ShouldContain("no in-process fallback exists");
             run.Stderr.ShouldContain("ai-raccoon serve --port");

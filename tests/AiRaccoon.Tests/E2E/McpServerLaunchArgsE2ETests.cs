@@ -134,8 +134,10 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
         }
         finally
         {
-            // The proxy never kills the daemon it started (ProxySpawnedBackendE2ETests owns that
-            // contract); this test stops it so it cannot hold the bank past teardown.
+            // The proxy stops the private backend it spawned when it shuts down
+            // (ProxyPrivateBackendLifetimeTests owns that contract — this is the bare launch, no
+            // --attach); this stop is belt-and-braces, so a proxy that died early cannot hold the
+            // bank past teardown.
             await StopSpawnedBackendAsync(port, dataRoot);
             TestData.DeleteTempRoot(dataRoot);
         }

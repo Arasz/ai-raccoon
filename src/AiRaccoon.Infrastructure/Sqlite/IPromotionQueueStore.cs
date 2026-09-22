@@ -9,8 +9,13 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// </summary>
 public interface IPromotionQueueStore
 {
-    /// <summary>Upsert by (project_id, hash), in one transaction: inserts keep the first created_at; re-propose refreshes score/value/reasons/updated_at. Returns the count of genuinely new rows — a re-propose of an existing hash does not count.</summary>
-    Task<int> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
+    /// <summary>
+    ///     Upsert by (project_id, hash), in one transaction: inserts keep the first created_at;
+    ///     re-propose refreshes score/value/reasons/updated_at. Returns the genuinely new row count
+    ///     plus the hashes the WHERE clauses refused (a remembered discard or an already-shared value
+    ///     twin) — a re-propose of an existing hash is neither new nor refused.
+    /// </summary>
+    Task<UpsertOutcome> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
         CancellationToken cancellationToken = default);
 
     /// <summary>Queued rows, score DESC then created_at ASC (stable review order); all projects when projectId is null.</summary>

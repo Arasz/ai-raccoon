@@ -262,7 +262,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
         var tools = new MemoryTools(memoryStore, gate,
             new SearchDispatcher(memoryStore, new SqliteCodeSearchService(_factory, new FakeCodeEmbedder()), new NoOpSearchQualityService()),
             new QueryGuardService(settings), new MemoryWriteService(memoryStore, new FakePromotionQueue()),
-            new NoOpMeasurementRecorder(), NullLogger<MemoryTools>.Instance);
+            new NoOpMeasurementRecorder(), settings, NullLogger<MemoryTools>.Instance);
 
         var envelope = await tools.Search("acme", "anything", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 

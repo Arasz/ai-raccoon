@@ -663,7 +663,7 @@ public sealed partial class SqliteMemoryStore(
         var vectorCandidates = ModalityCandidates.ByCosine(searchResults);
         // S1 capture (Stage 1): FuseWithEvidence fuses exactly like Fuse while attaching each
         // served hash's pre-normalization evidence. Leg names reuse the ModalityLeg vocabulary
-        // from LegsFor ("fts"/"vector") — "vector" is the name the seam reads the fused cosine by.
+        // from LegsFor ("fts"/"vector") — "vector" is the name the seam reads the content cosine by.
         // The carry below is an O(1) reference handoff, keyed by hash: the Merger's
         // reorder/consolidation/drop needs no remapping, and no SQL is issued anywhere on it.
         var fused = ReciprocalRankFusion.FuseWithEvidence(
@@ -844,8 +844,19 @@ public sealed partial class SqliteMemoryStore(
             .GroupBy(row => row.Hash, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
-        var ranked = fused.Select(rank => (Row: byHash[rank.Hash], rank.Score)).ToList();
-        foreach (var (row, _) in ranked)
+        // The content leg's own raw cosine, keyed independently of byHash above: byHash keeps
+        // whichever row (content or structure) grouped first, which is never a reliable source
+        // for "this hash's content similarity" once a hash appears in both legs.
+        var contentSimByHash = contentRows
+            .GroupBy(row => row.Hash, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => StructureFusion.SimFromDistance(group.First().Distance), StringComparer.Ordinal);
+
+        var ranked = fused.Select(rank => (
+                Row: byHash[rank.Hash],
+                rank.Score,
+                ContentCosine: contentSimByHash.TryGetValue(rank.Hash, out var contentCosine) ? contentCosine : (double?)null))
+            .ToList();
+        foreach (var (row, _, _) in ranked)
         {
             byHashIndex.ValueByHash[row.Hash] = row.Value;
         }
@@ -854,15 +865,18 @@ public sealed partial class SqliteMemoryStore(
     }
 
     /// <summary>
-    ///     Maps ranked vector rows to results carrying the fused cosine score as <see cref="MemorySearchResult.Ranking" />
-    ///     (see docs/adr/0006-rrf-parameter-optimization.md); <see cref="MemorySearchResult.Snippet" /> stays unresolved.
+    ///     Maps ranked vector rows to results carrying the alpha-fused score as <see cref="MemorySearchResult.Ranking" />
+    ///     (ordering only, see docs/adr/0006-rrf-parameter-optimization.md) and the row's own raw content
+    ///     cosine as <see cref="MemorySearchResult.ContentCosine" /> — the two diverge whenever structure
+    ///     fusion blends in a non-zero, or absent, structure term. <see cref="MemorySearchResult.Snippet" />
+    ///     stays unresolved.
     /// </summary>
     internal static IReadOnlyList<MemorySearchResult> BuildDualVectorResults(
-        IReadOnlyList<(VectorRow Row, double Score)> ranked) =>
+        IReadOnlyList<(VectorRow Row, double Score, double? ContentCosine)> ranked) =>
     [
         .. ranked.Select(item => new MemorySearchResult(
             item.Row.Hash, item.Score, item.Row.Path, string.Empty,
-            item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks))
+            item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks, item.ContentCosine))
     ];
 
     /// <summary>

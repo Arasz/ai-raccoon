@@ -5,8 +5,9 @@ public sealed record LegRank(string LegName, int Rank);
 
 /// <summary>
 ///     Absolute pre-normalization evidence for one hash: the fraction of the strongest agreement
-///     this query could have produced, which legs agreed at which ranks, and the fused vector
-///     cosine when a vector leg participated (null until the S2 capture lane fills it in).
+///     this query could have produced, which legs agreed at which ranks, and the vector leg's raw
+///     content-embedding cosine to the query when a vector leg participated and reported one
+///     (never the alpha-fused content/structure score used for ordering).
 /// </summary>
 public sealed record RetrievalEvidence(
     string Hash,

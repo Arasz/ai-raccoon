@@ -41,10 +41,14 @@ would be **store → queue → store** — a genuine cycle at singleton scope, r
 service-locator closure, which is the smell the architecture lane filed as F15. A **third** service
 composing both ports has no cycle. `MemoryWriteService` is that service.
 
-**Score.** `AgentRequestedScore = 1.0`, above the scorer's range, so an explicit request outranks every
-inference. Eviction is deliberately **untouched**: a request that cannot fit shows up in the queue's own
-metrics rather than being silently dropped. That is reversible if it proves wrong; silently dropping an
-agent's explicit request would be the exact failure mode this campaign exists to find.
+**Score.** `AgentRequestedScore` is derived from `PromotionScorer.MaxScore` — the V2 scorer's declared
+0–4 clamp — plus a full point, so an explicit request outranks every inference even if that ceiling is
+retuned later. (The original `1.0` literal was **not** above the scorer's range: `OrganicNote`'s fitted
+prior alone is 2.00, so a plain organic write regularly outscored an explicit agent request and became
+the natural capacity-eviction victim — corrected by owner ruling P1.2-b, 2026-09-22.) Eviction is
+deliberately **untouched**: a request that cannot fit shows up in the queue's own metrics rather than
+being silently dropped. That is reversible if it proves wrong; silently dropping an agent's explicit
+request would be the exact failure mode this campaign exists to find.
 
 ## What was rejected
 
@@ -59,7 +63,10 @@ Trading one silent behaviour for another to save a wave is not a saving.
   changes the write path, not history.
 - `MemoryTools.Write` delegates to `IMemoryWriteService`; the tool holds no branch of its own.
 - An agent-requested candidate is distinguishable in `memory_promotion_list` by its reason, which is
-  what the acceptance criteria asked for.
+  what the acceptance criteria asked for — including across a later re-score: the propose pass merges
+  the scorer's reasons into `agent-requested-share` rather than replacing it, and keeps the priority
+  score, so the request stays visible and correctly ranked for as long as the row exists (owner ruling
+  P1.2-a, 2026-09-22).
 - **Open, and deliberately not decided here:** whether an agent-requested candidate should bypass
   capacity eviction. Left as "score high, evict normally" because that is the reversible half.
 
