@@ -68,7 +68,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder,
-            new InMemorySettings(), NullLogger<MemoryTools>.Instance);
+            new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
     private async Task<int> CountMetricsRowsAsync()
     {

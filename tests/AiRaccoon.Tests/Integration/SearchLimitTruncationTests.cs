@@ -127,7 +127,8 @@ public sealed class SearchLimitTruncationTests : IDisposable
             new MemoryWriteService(store, new FakePromotionQueue()),
             new NoOpMeasurementRecorder(),
             new InMemorySettings(),
-            NullLogger<MemoryTools>.Instance);
+            NullLogger<MemoryTools>.Instance,
+            new CountingEmbeddingService());
     }
 
     private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate

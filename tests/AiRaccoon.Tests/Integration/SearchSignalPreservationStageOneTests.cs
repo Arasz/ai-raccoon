@@ -570,7 +570,8 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
             new MemoryWriteService(store, new FakePromotionQueue()),
             recorder ?? new NoOpMeasurementRecorder(),
             settings,
-            NullLogger<MemoryTools>.Instance);
+            NullLogger<MemoryTools>.Instance,
+            new CountingEmbeddingService());
     }
 
     private static void EvidenceShouldMatch(RetrievalEvidence actual, RetrievalEvidence expected)

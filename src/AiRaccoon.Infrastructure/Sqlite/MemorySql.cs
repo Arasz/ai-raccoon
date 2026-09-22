@@ -193,11 +193,16 @@ internal static class MemorySql
     // refreshes deleted_at so a later delete still suppresses under the P2.2 age guard; INSERT OR
     // IGNORE would keep the older value. The conflict target matches TombstoneIndexDdl's
     // COALESCE-based unique index (MemorySchema.cs) — SQLite never dedupes raw NULLs against each other.
+    // received_at (F36) is this bank's OWN clock, always equal to deleted_at for a locally-originated
+    // tombstone — only SyncService's pull merge writes a received_at that differs from deleted_at
+    // (the remote replica's clock), which is the whole point: GC compares receipt time, never a
+    // remote clock, against the local watermark.
     public static string TombstoneFromPredicate(string predicate) =>
-        "INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at) " +
-        "SELECT DISTINCT project_id, hash, scope, context_label, @deletedAt FROM entries " +
+        "INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at, received_at) " +
+        "SELECT DISTINCT project_id, hash, scope, context_label, @deletedAt, @deletedAt FROM entries " +
         $"WHERE {predicate} AND scope IN ('project', 'custom', 'shared') " +
-        "ON CONFLICT(project_id, hash, scope, COALESCE(context_label, '')) DO UPDATE SET deleted_at = excluded.deleted_at";
+        "ON CONFLICT(project_id, hash, scope, COALESCE(context_label, '')) DO UPDATE SET " +
+        "deleted_at = excluded.deleted_at, received_at = excluded.received_at";
 
     // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read before the
     // delete so the row's group can be recomputed afterward.
@@ -912,18 +917,23 @@ internal static class MemorySql
 
     // Defect B: after a direct ingest reports the chunk set it wrote or rediscovered, everything
     // else stored under that exact path is a leftover of a previous chunking. Exact path only —
-    // no subtree leg — so re-ingesting one file can never reach a sibling.
-    public const string DeleteChunksForPathExcept = """
-                                                    DELETE FROM entries
-                                                    WHERE project_id = @projectId AND workspace_id IS NULL
-                                                      AND path = @path AND hash NOT IN @keep
-                                                    """;
+    // no subtree leg — so re-ingesting one file can never reach a sibling. The predicate is split
+    // out (residual #4) so PruneAsync can tombstone exactly what this reaches
+    // (TombstoneFromPredicate) before the delete runs — a stale chunk a replace prunes must not
+    // resurrect on a peer's next sync pull.
+    public const string DeleteChunksForPathExceptPredicate = """
+                                                              project_id = @projectId AND workspace_id IS NULL
+                                                                AND path = @path AND hash NOT IN @keep
+                                                              """;
 
-    public const string DeleteAllChunksForPath = """
-                                                 DELETE FROM entries
-                                                 WHERE project_id = @projectId AND workspace_id IS NULL
-                                                   AND path = @path
-                                                 """;
+    public const string DeleteChunksForPathExcept = "DELETE FROM entries WHERE " + DeleteChunksForPathExceptPredicate;
+
+    public const string DeleteAllChunksForPathPredicate = """
+                                                           project_id = @projectId AND workspace_id IS NULL
+                                                             AND path = @path
+                                                           """;
+
+    public const string DeleteAllChunksForPath = "DELETE FROM entries WHERE " + DeleteAllChunksForPathPredicate;
 
     // #436, code-corpus leg of Defect B: same predicate as DeleteCodeBySourcePath (path or
     // subtree prefix) — inert for a single file, since no sibling file's path can equal

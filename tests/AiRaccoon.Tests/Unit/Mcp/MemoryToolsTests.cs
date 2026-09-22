@@ -40,6 +40,7 @@ public class MemoryToolsTests
     private readonly SyncTools _syncTools;
     private readonly MemoryTools _tools;
     private readonly WorkspaceTools _workspace;
+    private readonly CountingEmbeddingService _embeddings = new();
 
     public MemoryToolsTests()
     {
@@ -48,7 +49,7 @@ public class MemoryToolsTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow));
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var gate = new ToolGate(access, _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
-        _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, NullLogger<MemoryTools>.Instance);
+        _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, NullLogger<MemoryTools>.Instance, embeddings: _embeddings);
         _share = new ShareTools(_store, gate, new ShareExtractService(_store,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,
                 new FakeTimeProvider(FixedNow)), _queue));
@@ -311,7 +312,7 @@ public class MemoryToolsTests
         var recorder = new RecordingMeasurementRecorder();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
-            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance);
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
         var envelope = await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
         var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
@@ -334,7 +335,7 @@ public class MemoryToolsTests
         _store.Fusion = new FusionDiff(1, 2, 3);
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
-            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance);
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
         var envelope = await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
         var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
@@ -354,7 +355,7 @@ public class MemoryToolsTests
         var recorder = new RecordingMeasurementRecorder();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
-            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance);
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
         await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -374,7 +375,7 @@ public class MemoryToolsTests
         var time = new FakeTimeProvider(FixedNow);
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
-            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance, time);
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService(), time);
 
         await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -388,7 +389,7 @@ public class MemoryToolsTests
         var recorder = new RecordingMeasurementRecorder { ThrowOnRecord = new InvalidOperationException("boom") };
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
-            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance);
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
         var envelope = await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -408,7 +409,7 @@ public class MemoryToolsTests
         var recorder = new RecordingMeasurementRecorder { ThrowOnRecord = new InvalidOperationException("boom") };
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store),
-            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance);
+            new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _store, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
         await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -625,12 +626,39 @@ public class MemoryToolsTests
         result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
     }
 
+    // pi-badger-integration F1: the guard's number must track the ACTIVE memory engine, not the
+    // bundled default -- a manifest engine's real budget (IEmbeddingService.ResolveChunkBudgetFor)
+    // is wider than 254, so its own threshold is wider too.
+
+    [Fact]
+    public async Task Search_WithAManifestEngineBudget_AQueryOverTheBundledThresholdButWithinItsOwn_HasNoWarning()
+    {
+        _embeddings.ChunkBudgetOverride = 510;
+        var query = new string('a', 1500); // over the bundled 1,000-char threshold, under 510 tokens' own (~2,008)
+
+        var result = await _tools.Search("acme", query, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Search_WithAManifestEngineBudget_AQueryBeyondItsOwnThreshold_WarnsNamingThatBudget()
+    {
+        _embeddings.ChunkBudgetOverride = 510;
+        var query = new string('a', 2500); // beyond 510 tokens' own (~2,008-char) threshold
+
+        var result = await _tools.Search("acme", query, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Data!.Warning.ShouldNotBeNullOrWhiteSpace();
+        result.Data!.Warning.ShouldContain("510");
+    }
+
     [Fact]
     public async Task Search_InShadowMode_RecordsTheRefuseVerdict_ButStillReturnsResults()
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
-            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, logger);
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, logger, new CountingEmbeddingService());
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
         var result = await tools.Search("acme", RealHermesProcessNotification, sessionId: "sess-test",
@@ -649,7 +677,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
-            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, logger);
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, logger, new CountingEmbeddingService());
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
         await tools.Search("acme", "why did the auth build start failing", sessionId: "sess-test",
@@ -663,7 +691,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
-            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, logger);
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, logger, new CountingEmbeddingService());
         _store.Settings[QueryGuardConfigKeys.EnabledGlobal] = "false";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
 
@@ -734,7 +762,7 @@ public class MemoryToolsTests
     {
         var logger = new FakeLogger<MemoryTools>();
         var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
-            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, logger);
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(), _store, logger, new CountingEmbeddingService());
         _store.Settings[QueryGuardConfigKeys.StructuralEnabledGlobal] = "true";
         _store.Settings[QueryGuardConfigKeys.StructuralThresholdGlobal] = "0.0";
         _store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";

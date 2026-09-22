@@ -27,7 +27,10 @@ public sealed class CountingEmbeddingService : IEmbeddingService
 
     public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 
-    public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
+    /// <summary>Drives a test through a manifest-sized budget without a real manifest on disk.</summary>
+    public int? ChunkBudgetOverride { get; set; }
+
+    public int ResolveChunkBudgetFor(EmbeddingSettings settings) => ChunkBudgetOverride ?? OnnxEmbeddingGenerator.MaxContentTokens;
 
     public int ResolveDimensions(EmbeddingSettings settings) => 384;
 
