@@ -1,9 +1,9 @@
-namespace AiRaccoon.Core.Memory;
+using System.Text.Json.Serialization;
 
 /// <param name="ContentCosine">
 ///     The vector leg's raw content-embedding cosine similarity to the query — set only by the
-///     dual-vector builder, distinct from <paramref name="Ranking" /> (which for that leg carries
-///     the alpha-fused content/structure score used for ordering, see StructureFusion.Fused).
+///     dual-vector builder, distinct from <paramref name="Ranking" /> (the alpha-fused score that
+///     orders that leg). Transport-only for the evidence join: never serialized to the response.
 /// </param>
 public sealed record MemorySearchResult(
     string Hash,
@@ -13,4 +13,4 @@ public sealed record MemorySearchResult(
     string? SourceFile = null,
     int ChunkIndex = 0,
     int TotalChunks = 0,
-    double? ContentCosine = null);
+    [property: JsonIgnore] double? ContentCosine = null);
