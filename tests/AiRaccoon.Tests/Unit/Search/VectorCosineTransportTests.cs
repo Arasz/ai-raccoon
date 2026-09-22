@@ -10,8 +10,8 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Unit.Search;
 
 /// <summary>
-///     P3 contract pin + rule matrix for the S1 cosine transport (plan §§2-4, normative §9 M3/M4),
-///     revised for F19: evidence Cosine is the vector leg's raw content cosine
+///     P3 contract pin + rule matrix for the S1 cosine transport (plan §§2-4, normative §9 M3/M4):
+///     evidence Cosine is the vector leg's raw content cosine
 ///     (<see cref="MemorySearchResult.ContentCosine" />), never the alpha-fused
 ///     <see cref="MemorySearchResult.Ranking" /> that orders candidates. (a) BuildDualVectorResults
 ///     carries both scores verbatim, and ContentCosine (not Ranking) survives ByCosine into
@@ -41,7 +41,7 @@ public sealed class VectorCosineTransportTests
     ///     Builders carry both scores verbatim and independently: the alpha-fused score (zero and
     ///     negative are legitimate per SimFromDistance) reaches Ranking, and the row's own raw
     ///     content cosine reaches ContentCosine — the two differ whenever structure fusion blended
-    ///     in a non-zero or absent structure term (F19). FTS results carry no ContentCosine: raw
+    ///     in a non-zero or absent structure term. FTS results carry no ContentCosine: raw
     ///     BM25 magnitudes (routinely negative) reach Ranking untouched.
     /// </summary>
     [Fact]
@@ -65,11 +65,11 @@ public sealed class VectorCosineTransportTests
     }
 
     /// <summary>
-    ///     F19 gate: the vector leg's raw content cosine — not the alpha-fused Ranking that orders
+    ///     Gate: the vector leg's raw content cosine — not the alpha-fused Ranking that orders
     ///     it — is what survives BuildDualVectorResults and ByCosine into evidence Cosine. h1 has a
     ///     participating structure hit (fused 0.7, content 0.9 — the positive control: a structure
     ///     vector must not perturb the reported cosine); h2/h3 have none (fused = 0.5 × content
-    ///     exactly, the F19 red state) — both must report their content cosine, not the fused
+    ///     exactly, the measured red state) — both must report their content cosine, not the fused
     ///     score. The fused Ranking is unchanged by this fix: it still drives BuildDualVectorResults
     ///     ordering and the served result count/shape below, pinned alongside the cosine assertions.
     /// </summary>
@@ -110,7 +110,7 @@ public sealed class VectorCosineTransportTests
             [.. fused.Select(rank => (Row: rowsByHash[rank.Hash], rank.Score, ContentCosine: (double?)contentCosineByHash[rank.Hash]))]);
         foreach (var candidate in built)
         {
-            candidate.Ranking.ShouldBe(scoreByHash[candidate.Hash], "the fused score still orders candidates, unchanged by F19");
+            candidate.Ranking.ShouldBe(scoreByHash[candidate.Hash], "the fused score still orders candidates, unchanged by this fix");
             candidate.ContentCosine.ShouldBe(contentCosineByHash[candidate.Hash]);
         }
 
@@ -134,7 +134,7 @@ public sealed class VectorCosineTransportTests
             [new NamedWeightedCandidates(fts, 1.0, "fts"), new NamedWeightedCandidates(vectorCandidates, 1.0, "vector")],
             K, 0, Limit);
 
-        wired.Results.Count.ShouldBe(3, "the fused Ranking/RRF math is untouched by F19 — same served count");
+        wired.Results.Count.ShouldBe(3, "the fused Ranking/RRF math is untouched by this fix — same served count");
         foreach (var hash in new[] { "h1", "h2", "h3" })
         {
             wired.EvidenceByHash[hash].Cosine.ShouldBe(contentCosineByHash[hash],

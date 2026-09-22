@@ -113,9 +113,11 @@ public sealed partial class MemoryTools(
         + "The response may carry an evidenceByHash map (hash → retrieval evidence): fusionStrength (0-1, the fraction of the strongest leg "
         + "agreement this query could have produced — ~0.95 means every firing leg ranked it first, ~0.2 is thin), "
         + "legs (which legs agreed and at which ranks; a single-leg entry is itself a thin-response tell), and cosine "
-        + "(the fused vector similarity when a vector leg participated). The response may carry fusionStats "
-        + "(topMargin/topVsMedian over pre-normalization raws, plus maxPossible and participatingLegs). A flat margin "
-        + "plus a single-leg top is the measurable 'best of a bad lot' signature — a thin response, not a verdict. "
+        + "(the vector leg's raw content-embedding similarity to the query, when a vector leg participated and "
+        + "reported one — a hash-comparable magnitude, never the structure-blended score legs/order use). The "
+        + "response may carry fusionStats (topMargin/topVsMedian over pre-normalization raws, plus maxPossible "
+        + "and participatingLegs). A flat margin plus a single-leg top is the measurable 'best of a bad lot' "
+        + "signature — a thin response, not a verdict. "
         + "These signals claim no relevance (no relevance value is computed); margins are computed over the PRE-floor "
         + "candidate population, not the served set.")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
