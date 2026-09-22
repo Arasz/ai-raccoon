@@ -373,13 +373,13 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 1000, Level = LogLevel.Warning, Message = "doctor: could not resolve the encryption key")]
+        [LoggerMessage(EventId = 1014, Level = LogLevel.Warning, Message = "doctor: could not resolve the encryption key")]
         public static partial void FailedToResolveEncryptionKey(ILogger logger, Exception exception);
 
-        [LoggerMessage(EventId = 1001, Level = LogLevel.Warning, Message = "doctor: could not open the bank at {BankPath} read-only")]
+        [LoggerMessage(EventId = 1015, Level = LogLevel.Warning, Message = "doctor: could not open the bank at {BankPath} read-only")]
         public static partial void FailedToOpenBank(ILogger logger, string bankPath, Exception exception);
 
-        [LoggerMessage(EventId = 1002, Level = LogLevel.Warning, Message = "doctor: the bank at {BankPath} is not a SQLite database")]
+        [LoggerMessage(EventId = 1016, Level = LogLevel.Warning, Message = "doctor: the bank at {BankPath} is not a SQLite database")]
         public static partial void BankIsNotADatabase(ILogger logger, string bankPath, Exception exception);
     }
 }
