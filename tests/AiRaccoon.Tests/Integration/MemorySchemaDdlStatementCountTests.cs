@@ -63,9 +63,15 @@ public sealed class MemorySchemaDdlStatementCountTests
         // its probes are excluded from the count above), +3 the v13 repair_requests.map_json
         // ensure (ADR-0099: sqlite_master probe + pragma_table_info probe + ALTER TABLE when
         // the column is absent), +1 the Package-D project_id_aliases table (a single
-        // CREATE TABLE IF NOT EXISTS — no column ensure needed). The project-scoped
-        // tombstone repair (5 statements) moved to MigrateToV11Async in the version ladder.
-        CountDdl(statements).ShouldBe(63, Report(statements));
+        // CREATE TABLE IF NOT EXISTS — no column ensure needed), +2 the P2-B
+        // EnsureCodeFtsIdentifiersAsync skip check (docs/adr/0108: a single
+        // pragma_table_info('code_fts') probe traced twice — the query and its synthetic PRAGMA
+        // notification, same as every other pragma probe in this trace); its sibling
+        // EnsureCodeIdentifiersColumnAsync reuses code_entries's table/column names, so its own
+        // probes fall under the existing code_entries exclusion above and add nothing here. The
+        // project-scoped tombstone repair (5 statements) moved to MigrateToV11Async in the
+        // version ladder.
+        CountDdl(statements).ShouldBe(65, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)

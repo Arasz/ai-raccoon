@@ -1,4 +1,5 @@
 using System.Globalization;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -89,6 +90,24 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         strongest.Hash.ShouldBe("hash-1", "the row repeating the term three times must rank ahead of the row with one occurrence");
         strongest.Ranking.ShouldBeGreaterThan(weakest.Ranking,
             "a genuinely weaker match must normalize below the top hit, not tie with it");
+    }
+
+    /// <summary>
+    ///     P2-B (docs/adr/0108): plain FTS5 tokenization never splits a camelCase identifier, so
+    ///     "overlap" can only match "WatchOverlapResolver" through the derived identifiers column —
+    ///     red on main, where that column does not exist.
+    /// </summary>
+    [RetryFact]
+    public async Task Search_SubwordQuery_MatchesCamelCaseIdentifier()
+    {
+        var value = "sealed class WatchOverlapResolver { }";
+        await SeedAsync(id: 1, projectId: "acme", path: "src/Watch/WatchOverlapResolver.cs", value: value,
+            lineStart: 1, lineEnd: 1, identifiers: IdentifierSplitter.Identifiers(value));
+
+        var results = await _service.SearchAsync(new CodeSearchQuery("acme", "overlap", 20, 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.Results.ShouldHaveSingleItem().Hash.ShouldBe("hash-1");
     }
 
     [RetryFact]
@@ -325,15 +344,16 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
             new { id, embedding = EmbeddingBlob.ToBytes(vector) }, cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    private async Task SeedAsync(long id, string projectId, string path, string value, int lineStart, int lineEnd)
+    private async Task SeedAsync(long id, string projectId, string path, string value, int lineStart, int lineEnd,
+        string identifiers = "")
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            INSERT INTO code_entries (id, hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at)
-            VALUES (@id, @hash, @path, @value, @path, @lineStart, @lineEnd, @projectId, 1, 1)
+            INSERT INTO code_entries (id, hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at, identifiers)
+            VALUES (@id, @hash, @path, @value, @path, @lineStart, @lineEnd, @projectId, 1, 1, @identifiers)
             """,
-            new { id, hash = $"hash-{id}", path, value, lineStart, lineEnd, projectId },
+            new { id, hash = $"hash-{id}", path, value, lineStart, lineEnd, projectId, identifiers },
             cancellationToken: TestContext.Current.CancellationToken));
     }
 }
