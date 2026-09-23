@@ -178,6 +178,9 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     public async Task QuietProxy_HttpClientRelayLogs_StayOutOfStderr()
     {
         var options = QuietOptions(InstallScope.User);
+        // F39: the proxy's auto-launch refuses an empty non-default root before it probes, so a
+        // fixture that means to relay must hold a real bank.
+        await TestData.SeedBankAsync(options, TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
@@ -200,6 +203,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     public async Task LoudProxy_HttpClientRelayLogs_ReachStderr()
     {
         var options = LoudOptions(InstallScope.User);
+        await TestData.SeedBankAsync(options, TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();

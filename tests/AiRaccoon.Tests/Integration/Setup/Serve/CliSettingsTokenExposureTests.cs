@@ -45,6 +45,9 @@ public sealed class CliSettingsTokenExposureTests : IDisposable
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
+        // F39: the shared acquire refuses an empty non-default root before it probes, so this
+        // fixture seeds a real bank — the exposure it records rides on the acquire running at all.
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
         // A real token on disk, exactly as a live data root would hold one: the shared acquire reads
         // it after the probe and sends it to whatever answered, which is the measurement this test
         // records as the accepted (not refused) behaviour.

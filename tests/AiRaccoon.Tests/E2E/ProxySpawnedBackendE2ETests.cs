@@ -41,11 +41,13 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     private LoopbackPort _lease = null!;
     private int _port;
 
-    public ValueTask InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         _lease = LoopbackPort.Reserve();
         _port = _lease.Port;
-        return ValueTask.CompletedTask;
+        // F39: the proxy's auto-launch refuses an empty non-default root before it probes or spawns;
+        // the spawned `serve` still mints the token it asserts on, but the bank must already exist.
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
     }
 
     /// <summary>

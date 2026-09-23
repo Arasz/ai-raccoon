@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Settings;
 
 namespace AiRaccoon.Setup.Cli.Commands;
@@ -164,6 +165,13 @@ internal sealed class ConfigCommands(
             // CliFailureFormatting, which would double it.
             await streams.WriteErrorLineAsync(ex.Message);
             return ExitCode.SettingsServerError;
+        }
+        catch (BankMissingException ex)
+        {
+            // F39: the guard already names the resolved path and the remedy; unprefixed like the
+            // three settings exceptions above.
+            await streams.WriteErrorLineAsync(ex.Message);
+            return ExitCode.NoBank;
         }
         catch (OperationCanceledException) when (ctx.IsCancellationRequested)
         {

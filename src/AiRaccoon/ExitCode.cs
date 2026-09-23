@@ -62,7 +62,9 @@ public static class ExitCode
     public const int ModelDownloadFailed = 21;
 
     /// <summary>`doctor` (delta review C3): no bank file exists at the resolved path — distinct
-    /// from HEALTHY (0), so a wrong `--data-root` cannot read as a healthy bank.</summary>
+    /// from HEALTHY (0), so a wrong `--data-root` cannot read as a healthy bank. Also returned by a
+    /// client auto-launch (F39: the proxy's private spawn, a settings verb's shared attach-or-start)
+    /// refusing to mint a bank at a non-default root that does not have one yet.</summary>
     public const int NoBank = 22;
 
     /// <summary>A settings command (delta review C2) reached a server that answered but failed

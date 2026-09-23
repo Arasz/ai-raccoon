@@ -38,6 +38,9 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
+        // F39: the proxy's auto-launch refuses an empty non-default root before it probes, so the
+        // private-spawn gate this test measures must start from a real bank.
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         using var squatter = new Squatter();
         var privatePort = 0;

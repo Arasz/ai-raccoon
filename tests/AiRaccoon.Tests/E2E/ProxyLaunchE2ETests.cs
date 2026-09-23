@@ -47,6 +47,9 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
         // This fixture's backend is deliberately ungated — the backend is incidental to what these
         // tests measure. The proxy still reads a token, so mint one the way serve would.
         // ProxySpawnedBackendE2ETests is the path that goes through a real gate.
+        // F39: the proxy's auto-launch also checks the resolved root holds a bank before it probes,
+        // so seed one — the token alone would no longer let a plain launch through.
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_proxyRoot), TestContext.Current.CancellationToken);
         await new McpTokenFile(_proxyRoot).EnsureAsync(TestContext.Current.CancellationToken);
     }
 

@@ -40,6 +40,9 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
         lease.ReleaseForBind();
         _backend = StartGatedServe();
         await WaitForBackendAsync();
+        // F39: the proxy's auto-launch refuses an empty non-default root before it dials, so seed
+        // the bank — the refusal under test is the gate's token verdict, not a missing bank.
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_proxyRoot), TestContext.Current.CancellationToken);
         // A well-formed token that is deliberately not the backend's: the proxy reads this root,
         // the gate compares the other. Minted rather than written, so the refusal is the gate's
         // verdict on a real token and not the reader rejecting the file's shape.

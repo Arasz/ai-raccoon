@@ -176,6 +176,8 @@ public sealed partial class BackendSessions(IBackendLauncher backendLauncher, IH
         var executable = BackendLaunchArguments.Executable(processPath) ?? throw new BackendUnavailableException(
             Unavailable(BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)));
 
+        BankPresenceGuard.EnsureExists(config.Options);
+
         try
         {
             // F70/K1: the default starts a private backend whose URL only this child can report;

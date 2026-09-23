@@ -30,12 +30,14 @@ public sealed class CliSettingsSharedBackendTests : IAsyncLifetime
     private LoopbackPort? _portLease;
     private int _port;
 
-    public ValueTask InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         _portLease = LoopbackPort.Reserve();
         _port = _portLease.Port;
         _portLease.ReleaseForBind();
-        return ValueTask.CompletedTask;
+        // F39: the settings verb's auto-launch refuses an empty non-default root before it probes;
+        // this fixture means to exercise attach-or-start on a live root, so it starts from a real bank.
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
     }
 
     public async ValueTask DisposeAsync()

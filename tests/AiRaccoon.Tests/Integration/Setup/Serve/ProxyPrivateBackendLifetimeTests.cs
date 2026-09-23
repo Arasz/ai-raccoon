@@ -51,6 +51,9 @@ public sealed class ProxyPrivateBackendLifetimeTests : IDisposable
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
+        // F39: the proxy's auto-launch refuses an empty non-default root before it spawns, so the
+        // private-backend lifetime gate must start from a real bank.
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
         var sessions = Subject(lease.Port);
         try

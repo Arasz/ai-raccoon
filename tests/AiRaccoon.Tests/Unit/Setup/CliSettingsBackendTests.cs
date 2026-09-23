@@ -40,6 +40,9 @@ public sealed class CliSettingsBackendTests
         var dataRoot = TestData.CreateTempRoot("cli-settings-backend-ok");
         try
         {
+            // F39: the shared acquire refuses an empty non-default root before it probes, so a
+            // fixture that means to exercise the launcher/token path must hold a real bank.
+            await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(dataRoot), TestContext.Current.CancellationToken);
             await new McpTokenFile(dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
             var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:1/mcp", null));
 
@@ -67,6 +70,7 @@ public sealed class CliSettingsBackendTests
         var dataRoot = TestData.CreateTempRoot("cli-settings-backend-disclosure");
         try
         {
+            await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(dataRoot), TestContext.Current.CancellationToken);
             await new McpTokenFile(dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
             var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54222/mcp", null));
             var logger = new FakeLogger();
@@ -128,37 +132,61 @@ public sealed class CliSettingsBackendTests
     [Fact]
     public async Task AcquireAsync_WhenTheLauncherFindsNoUrl_ThrowsUnavailable_NamingThePort()
     {
-        var launcher = new FakeBackendLauncher(new BackendResult(null, 3));
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("cli-settings-backend-no-url", TestContext.Current.CancellationToken);
+        try
+        {
+            var launcher = new FakeBackendLauncher(new BackendResult(null, 3));
 
-        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
-            CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(54217, "/tmp/unused"), new FakeLogger(),
-                TestContext.Current.CancellationToken));
+            var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+                CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(54217, dataRoot), new FakeLogger(),
+                    TestContext.Current.CancellationToken));
 
-        error.Message.ShouldContain("54217");
+            error.Message.ShouldContain("54217");
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
     }
 
     [Fact]
     public async Task AcquireAsync_WhenTheLauncherFindsNoUrl_ButCapturedStderr_IncludesItInTheMessage()
     {
-        var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "ai-raccoon: could not decrypt the bank"));
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("cli-settings-backend-stderr", TestContext.Current.CancellationToken);
+        try
+        {
+            var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "ai-raccoon: could not decrypt the bank"));
 
-        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
-            CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(54219, "/tmp/unused"), new FakeLogger(),
-                TestContext.Current.CancellationToken));
+            var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+                CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(54219, dataRoot), new FakeLogger(),
+                    TestContext.Current.CancellationToken));
 
-        error.Message.ShouldContain("could not decrypt the bank");
+            error.Message.ShouldContain("could not decrypt the bank");
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
     }
 
     [Fact]
     public async Task AcquireAsync_WhenTheLauncherThrowsBackendStart_WrapsAsUnavailable()
     {
-        var launcher = new FakeBackendLauncher(new BackendStartException("could not start it", new InvalidOperationException()));
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("cli-settings-backend-start-throws", TestContext.Current.CancellationToken);
+        try
+        {
+            var launcher = new FakeBackendLauncher(new BackendStartException("could not start it", new InvalidOperationException()));
 
-        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
-            CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(54218, "/tmp/unused"), new FakeLogger(),
-                TestContext.Current.CancellationToken));
+            var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+                CliSettingsBackend.AcquireAsync(launcher, AppHost, Config(54218, dataRoot), new FakeLogger(),
+                    TestContext.Current.CancellationToken));
 
-        error.Message.ShouldContain("could not start it");
+            error.Message.ShouldContain("could not start it");
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
     }
 
     [Fact]
@@ -167,6 +195,9 @@ public sealed class CliSettingsBackendTests
         var dataRoot = TestData.CreateTempRoot("cli-settings-backend-no-token");
         try
         {
+            // The bank must exist (F39) while the token deliberately does not — that absence is
+            // the verdict this test pins.
+            await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(dataRoot), TestContext.Current.CancellationToken);
             var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:1/mcp", null));
 
             var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>

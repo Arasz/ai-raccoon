@@ -389,7 +389,7 @@ model migration is open (schema shape is still healthy), so it composes into a s
 | `2` | the bank could not be opened read-only |
 | `19` | SHAPE MISMATCH — the bank's actual schema differs from this binary's DDL |
 | `20` | the bank's `user_version` is newer than this binary supports |
-| `22` | no bank file exists at the resolved path — distinct from HEALTHY, so a wrong `--data-root` is never mistaken for a healthy bank |
+| `22` | no bank file exists at the resolved path — distinct from HEALTHY, so a wrong `--data-root` is never mistaken for a healthy bank. A client auto-launch (the proxy, a settings verb) returns the same code when it refuses to mint one at a non-default root |
 | `24` | MODEL MIGRATION OPEN — an embedding-engine re-embed is in progress; every MCP tool call is refused until it finishes (ADR-0076). Only reported when the schema shape is healthy (`19`/`20` take precedence), so `exit == 24` is itself a positive statement that the shape is clean. Scripts that want the old semantics test `rc == 0 || rc == 24` |
 | `26` | the bank file exists but is not a SQLite database — corrupt, or not readable with the resolved encryption key; restore it from a backup or check `--data-root` |
 

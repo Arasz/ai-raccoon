@@ -51,6 +51,8 @@ internal static partial class CliSettingsBackend
         var executable = BackendLaunchArguments.Executable(processPath) ??
                          throw new SettingsServerUnavailableException($"ai-raccoon: {BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)}");
 
+        BankPresenceGuard.EnsureExists(config.Options);
+
         BackendResult acquired;
         try
         {

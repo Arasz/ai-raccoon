@@ -62,6 +62,8 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
         await _backend.StartAsync(TestContext.Current.CancellationToken);
         // Ungated on purpose: this fixture records headers, it does not check them. The proxy still
         // reads a token, so mint one the way serve would.
+        // F39: the proxy's auto-launch also refuses an empty root, so seed the bank first.
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
         await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
     }
 

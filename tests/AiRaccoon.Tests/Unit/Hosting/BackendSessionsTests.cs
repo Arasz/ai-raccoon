@@ -57,46 +57,70 @@ public sealed class BackendSessionsTests
     [Fact]
     public async Task OpenAsync_WhenTheLauncherFindsNoUrl_ThrowsUnavailable_WithThePrivateFailureAndStderr()
     {
-        var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "ai-raccoon: could not decrypt the bank"));
-        await using var sessions = Subject(launcher, AppHost, Config(54232, "/tmp/unused"));
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-private-no-url", TestContext.Current.CancellationToken);
+        try
+        {
+            var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "ai-raccoon: could not decrypt the bank"));
+            await using var sessions = Subject(launcher, AppHost, Config(54232, dataRoot));
 
-        var error = await Should.ThrowAsync<BackendUnavailableException>(() =>
-            sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+            var error = await Should.ThrowAsync<BackendUnavailableException>(() =>
+                sessions.OpenAsync(null, TestContext.Current.CancellationToken));
 
-        // F70/K1: the default is private spawn, so the failure is about the private port, not
-        // about an endpoint on the configured one — that URL is only dialled behind --attach.
-        error.Message.ShouldContain("private port");
-        error.Message.ShouldContain("could not decrypt the bank");
-        launcher.FileName.ShouldBe(AppHost);
-        launcher.PrivateCalls.ShouldBe(1);
-        launcher.AttachCalls.ShouldBe(0);
+            // F70/K1: the default is private spawn, so the failure is about the private port, not
+            // about an endpoint on the configured one — that URL is only dialled behind --attach.
+            error.Message.ShouldContain("private port");
+            error.Message.ShouldContain("could not decrypt the bank");
+            launcher.FileName.ShouldBe(AppHost);
+            launcher.PrivateCalls.ShouldBe(1);
+            launcher.AttachCalls.ShouldBe(0);
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
     }
 
     [Fact]
     public async Task OpenAsync_WithAttach_WhenTheLauncherFindsNoUrl_NamesTheConfiguredEndpoint()
     {
-        var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "ai-raccoon: could not decrypt the bank"));
-        await using var sessions = Subject(launcher, AppHost, Config(54232, "/tmp/unused") with { Attach = true });
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-attach-no-url", TestContext.Current.CancellationToken);
+        try
+        {
+            var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "ai-raccoon: could not decrypt the bank"));
+            await using var sessions = Subject(launcher, AppHost, Config(54232, dataRoot) with { Attach = true });
 
-        var error = await Should.ThrowAsync<BackendUnavailableException>(() =>
-            sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+            var error = await Should.ThrowAsync<BackendUnavailableException>(() =>
+                sessions.OpenAsync(null, TestContext.Current.CancellationToken));
 
-        error.Message.ShouldContain($"http://127.0.0.1:54232/mcp");
-        error.Message.ShouldContain("could not decrypt the bank");
-        launcher.PrivateCalls.ShouldBe(0);
-        launcher.AttachCalls.ShouldBe(1);
+            error.Message.ShouldContain($"http://127.0.0.1:54232/mcp");
+            error.Message.ShouldContain("could not decrypt the bank");
+            launcher.PrivateCalls.ShouldBe(0);
+            launcher.AttachCalls.ShouldBe(1);
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
     }
 
     [Fact]
     public async Task OpenAsync_WhenTheLauncherThrowsBackendStart_WrapsAsUnavailable()
     {
-        var launcher = new FakeBackendLauncher(new BackendStartException("could not start it", new InvalidOperationException()));
-        await using var sessions = Subject(launcher, AppHost, Config(54233, "/tmp/unused"));
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-start-throws", TestContext.Current.CancellationToken);
+        try
+        {
+            var launcher = new FakeBackendLauncher(new BackendStartException("could not start it", new InvalidOperationException()));
+            await using var sessions = Subject(launcher, AppHost, Config(54233, dataRoot));
 
-        var error = await Should.ThrowAsync<BackendUnavailableException>(() =>
-            sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+            var error = await Should.ThrowAsync<BackendUnavailableException>(() =>
+                sessions.OpenAsync(null, TestContext.Current.CancellationToken));
 
-        error.Message.ShouldContain("could not start it");
+            error.Message.ShouldContain("could not start it");
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
     }
 
     [Fact]
@@ -105,6 +129,9 @@ public sealed class BackendSessionsTests
         var dataRoot = TestData.CreateTempRoot("backend-sessions-no-token");
         try
         {
+            // The bank must exist (F39) while the token deliberately does not — that absence is
+            // the verdict this test pins.
+            await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(dataRoot), TestContext.Current.CancellationToken);
             var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:1/mcp", null));
             await using var sessions = Subject(launcher, AppHost, Config(1, dataRoot));
 

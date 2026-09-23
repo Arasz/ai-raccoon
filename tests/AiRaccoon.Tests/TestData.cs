@@ -247,6 +247,26 @@ public static class TestData
     public static InfrastructureOptions CreateProjectOptions(string dataRoot, string rid = "osx-arm64") =>
         new() { DataRoot = dataRoot, Rid = rid, Scope = InstallScope.Project };
 
+    /// <summary>
+    ///     Seeds a real bank at the resolved path through the production factory/schema path (F39
+    ///     fixtures): a guard that checks <see cref="File.Exists(string)" /> must see a genuine bank,
+    ///     not an empty temp root — this is the one place every auto-launch fixture creates one.
+    /// </summary>
+    public static async Task SeedBankAsync(InfrastructureOptions options, CancellationToken cancellationToken = default)
+    {
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>A fresh <see cref="CreateTempRoot" /> with a real bank already seeded at it (User
+    /// scope) — for an auto-launch fixture the F39 no-mint guard must let straight through.</summary>
+    public static async Task<string> CreateTempRootWithBankAsync(string prefix = "ai-raccoon-tests", CancellationToken cancellationToken = default)
+    {
+        var root = CreateTempRoot(prefix);
+        await SeedBankAsync(CreateInfrastructureOptions(root), cancellationToken).ConfigureAwait(false);
+        return root;
+    }
+
     /// <summary>Idempotent, retry-tolerant teardown for a <see cref="CreateTempRoot"/> directory: a
     /// directory already gone is success (not a spurious Dispose failure), a transient lock — a
     /// handle not yet closed, a scan racing teardown — gets a few short retries. A lock that never

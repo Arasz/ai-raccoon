@@ -31,6 +31,11 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
             await streams.WriteErrorLineAsync(ex.Message);
             return ExitCode.ProxyBackendUnavailable;
         }
+        catch (BankMissingException ex)
+        {
+            await streams.WriteErrorLineAsync(ex.Message);
+            return ExitCode.NoBank;
+        }
 
         var options = new McpServerOptions { ServerInfo = backend.ServerInfo };
 
