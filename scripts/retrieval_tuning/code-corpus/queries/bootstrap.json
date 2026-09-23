@@ -1,0 +1,443 @@
+[
+  {
+    "id": "bootstrap-001",
+    "category": "behaviour-nl",
+    "query": "generating a modifier class per named aspect ratio that sets a custom property consumed by the padding-top trick",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "small",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/helpers/_ratio.scss",
+    "expectedLines": [
+      22,
+      26
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "bootstrap-002",
+    "category": "identifier-fragment",
+    "query": "ratio aspect before pseudo",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "small",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/helpers/_ratio.scss",
+    "expectedLines": [
+      1,
+      20
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "bootstrap-003",
+    "category": "behaviour-nl",
+    "query": "switching between a prefers-color-scheme media query and a data attribute selector depending on a color mode configuration flag, optionally scoping to the root element",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "small",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/mixins/_color-mode.scss",
+    "expectedLines": [
+      2,
+      20
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-004",
+    "category": "identifier-fragment",
+    "query": "color mode root media",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "small",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/mixins/_color-mode.scss",
+    "expectedLines": [
+      1,
+      21
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "bootstrap-005",
+    "category": "behaviour-nl",
+    "query": "forcing a transition to none under a reduced-motion media query, but only once more than one value was actually passed in",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "small",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/mixins/_transition.scss",
+    "expectedLines": [
+      15,
+      25
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-006",
+    "category": "identifier-fragment",
+    "query": "transition warn none keyword",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "small",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/mixins/_transition.scss",
+    "expectedLines": [
+      1,
+      26
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "bootstrap-007",
+    "category": "behaviour-nl",
+    "query": "rounding just the first and last menu item's top or bottom corners instead of the whole menu when the menu has no vertical padding",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "medium",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_dropdown.scss",
+    "expectedLines": [
+      71,
+      81
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-008",
+    "category": "identifier-fragment",
+    "query": "dropup caret pointing upward",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "medium",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_dropdown.scss",
+    "expectedLines": [
+      113,
+      126
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-009",
+    "category": "path-context",
+    "query": "far down the dropdown partial, redefining every link, divider and header color as a dark palette variant of the menu",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "medium",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_dropdown.scss",
+    "expectedLines": [
+      235,
+      250
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "bootstrap-010",
+    "category": "behaviour-nl",
+    "query": "copying alignment and wrap rules onto the navbar's direct container children since nested elements don't automatically pick up the parent's flex settings",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "medium",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_navbar.scss",
+    "expectedLines": [
+      38,
+      58
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "bootstrap-011",
+    "category": "identifier-fragment",
+    "query": "toggler icon collapsed button",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "medium",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_navbar.scss",
+    "expectedLines": [
+      149,
+      169
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-012",
+    "category": "path-context",
+    "query": "well into the navbar partial, generating one expand breakpoint variant that switches the nav list back to a row and hides the toggler button above that width",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "medium",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_navbar.scss",
+    "expectedLines": [
+      192,
+      258
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "bootstrap-013",
+    "category": "behaviour-nl",
+    "query": "picking whichever foreground color among light, dark, white and black clears a minimum contrast ratio against a given background, else falling back to the closest one found",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "medium",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_functions.scss",
+    "expectedLines": [
+      153,
+      171
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-014",
+    "category": "identifier-fragment",
+    "query": "luminance channel weight map",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "medium",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_functions.scss",
+    "expectedLines": [
+      183,
+      196
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-015",
+    "category": "path-context",
+    "query": "near the bottom of the math helpers, a long division implemented digit by digit because native division breaks on certain unit combinations",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "medium",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_functions.scss",
+    "expectedLines": [
+      262,
+      302
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "bootstrap-016",
+    "category": "behaviour-nl",
+    "query": "building the focus ring color utility values by looping over every theme color and turning each into an rgba css variable reference",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "large",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_utilities.scss",
+    "expectedLines": [
+      87,
+      94
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-017",
+    "category": "identifier-fragment",
+    "query": "translate middle transform x y",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "large",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_utilities.scss",
+    "expectedLines": [
+      118,
+      127
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-018",
+    "category": "path-context",
+    "query": "far into the utilities map, the link underline opacity entries scoped to the hover state at ten distinct percentage steps",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "large",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_utilities.scss",
+    "expectedLines": [
+      647,
+      659
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "bootstrap-019",
+    "category": "behaviour-nl",
+    "query": "deriving one spacing value from the difference between two line-height-based measurements so a logo caption doesn't look taller or shorter than the text beside it in the top bar",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "large",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_variables.scss",
+    "expectedLines": [
+      1196,
+      1200
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "bootstrap-020",
+    "category": "identifier-fragment",
+    "query": "focus ring blur opacity width",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "large",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_variables.scss",
+    "expectedLines": [
+      568,
+      574
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-021",
+    "category": "path-context",
+    "query": "well past the color and spacing tokens, the offcanvas panel's width, height and transition duration defaults",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "large",
+    "family": "bootstrap",
+    "expectedSource": "bootstrap/scss/_variables.scss",
+    "expectedLines": [
+      1719,
+      1735
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  }
+]

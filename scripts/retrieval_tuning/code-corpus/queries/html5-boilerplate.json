@@ -1,0 +1,86 @@
+[
+  {
+    "id": "html5-boilerplate-001",
+    "category": "behaviour-nl",
+    "query": "declaring the page's open graph title, type, url and image metadata all left empty for the site owner to fill in",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "small",
+    "family": "html5-boilerplate",
+    "expectedSource": "html5-boilerplate/src/index.html",
+    "expectedLines": [
+      11,
+      15
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "html5-boilerplate-002",
+    "category": "identifier-fragment",
+    "query": "apple touch icon manifest theme",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "small",
+    "family": "html5-boilerplate",
+    "expectedSource": "html5-boilerplate/src/index.html",
+    "expectedLines": [
+      17,
+      22
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "html5-boilerplate-003",
+    "category": "behaviour-nl",
+    "query": "shrinking the not-found page's heading and message width once the viewport drops to 280 pixels or narrower",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "small",
+    "family": "html5-boilerplate",
+    "expectedSource": "html5-boilerplate/src/404.html",
+    "expectedLines": [
+      40,
+      52
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "html5-boilerplate-004",
+    "category": "identifier-fragment",
+    "query": "table cell vertical align body",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "small",
+    "family": "html5-boilerplate",
+    "expectedSource": "html5-boilerplate/src/404.html",
+    "expectedLines": [
+      14,
+      27
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  }
+]

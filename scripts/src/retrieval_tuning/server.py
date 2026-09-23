@@ -130,14 +130,24 @@ def start_server(
     log_path: Optional[Path] = None,
     skip_health_check: bool = False,
     start_timeout: float = _BIND_TIMEOUT_SECONDS,
+    idle_timeout: Optional[str] = None,
 ) -> ScratchServer:
-    """Start one scratch server (--port 0), read its port + token, prove readiness."""
+    """Start one scratch server (--port 0), read its port + token, prove readiness.
+
+    `idle_timeout` (90s/30m/4h/1d, or "0" to disable — serve's own --idle-timeout
+    span) is appended to argv ONLY when given, so every existing caller's argv is
+    unchanged. A long drain generates no MCP activity, so a long-running caller
+    (the code-eval runner) must pass "0": serve's default idle watchdog can kill
+    the backend mid-drain otherwise.
+    """
     root = Path(data_root)
     assert_safe_data_root(root)  # raises BEFORE anything is spawned
     root.mkdir(parents=True, exist_ok=True)
     log_path = Path(log_path) if log_path is not None else root / "serve.log"
 
     argv = [binary, "--data-root", str(root), "serve", "--port", "0"]
+    if idle_timeout is not None:
+        argv += ["--idle-timeout", str(idle_timeout)]
     with open(log_path, "wb") as log_file:
         proc = subprocess.Popen(argv, stdout=log_file, stderr=subprocess.STDOUT)
 
