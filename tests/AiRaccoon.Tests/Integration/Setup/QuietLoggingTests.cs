@@ -56,6 +56,34 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     }
 
     /// <summary>
+    ///     ADR-0106 D1: quiet mode opens its log beside the bank before `serve` mints anything, so on a
+    ///     fresh project root the log is what creates the state directory. It must create it
+    ///     owner-only, or the token and key mint that follows refuses the directory as shared.
+    /// </summary>
+    [RetryFact]
+    public async Task Quiet_InAFreshProjectRoot_LeavesAStateDirectoryServeCanMintInto()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = TestData.CreateTempRoot("quiet-fresh-project");
+        _dataRoots.Add(root);
+        var options = TestData.CreateProjectOptions(root);
+
+        using (new QuietFileLoggerProvider(LogFilePath(options)))
+        {
+        }
+
+        File.Exists(LogFilePath(options)).ShouldBeTrue();
+        File.GetUnixFileMode(Path.GetDirectoryName(LogFilePath(options))!)
+            .ShouldBe(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        (await new McpTokenFile(options).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        (await new IdentityKeyFile(options).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+    }
+
+    /// <summary>
     ///     Renamed off the deleted stdio host (P2 red-first rename): quiet routing is a property
     ///     of the sole host now, not of a transport shape.
     /// </summary>

@@ -20,4 +20,19 @@ public static class BankPaths
             InstallScope.Project => Path.Combine(options.DataRoot, ".ai-raccoon"),
             _ => throw new ArgumentOutOfRangeException(nameof(options.Scope), options.Scope, "Unknown install scope.")
         };
+
+    /// <summary>
+    ///     Creates a missing state directory owner-only (0700 on POSIX), whichever process gets there
+    ///     first; an existing directory is left exactly as it is.
+    /// </summary>
+    public static void CreateDirectory(string directory)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(directory);
+            return;
+        }
+
+        Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
 }
