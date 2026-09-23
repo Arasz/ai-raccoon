@@ -106,4 +106,35 @@ public sealed class WatchRetryPolicyTests
         policy.ShouldAttempt("acme", "/repo", T0).ShouldBeTrue();
         policy.IsStopped("acme", "/repo").ShouldBeFalse();
     }
+
+    /// <summary>
+    ///     The scheduler runs watch jobs on parallel tasks against one singleton policy; concurrent
+    ///     failures on many watches must neither throw nor lose a watch's backoff.
+    /// </summary>
+    [Fact]
+    public void RecordFailure_FromParallelJobs_KeepsEveryWatchsBackoff()
+    {
+        var policy = new WatchRetryPolicy();
+        const int watches = 20_000;
+
+        Parallel.For(0, watches, i => policy.RecordFailure("acme", $"/repo/{i}", T0));
+
+        Enumerable.Range(0, watches).Count(i => policy.ShouldAttempt("acme", $"/repo/{i}", T0))
+            .ShouldBe(0, "every failed watch must be backing off");
+    }
+
+    /// <summary>Five concurrent failures on one watch are five failures: the read-modify-write must not lose one.</summary>
+    [Fact]
+    public void RecordFailure_ConcurrentOnOneWatch_CountsEveryFailure()
+    {
+        for (var round = 0; round < 2_000; round++)
+        {
+            var policy = new WatchRetryPolicy();
+            var path = $"/repo/{round}";
+
+            Parallel.For(0, 5, _ => policy.RecordFailure("acme", path, T0));
+
+            policy.IsStopped("acme", path).ShouldBeTrue($"round {round}: a failure was lost");
+        }
+    }
 }
