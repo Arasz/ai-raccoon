@@ -218,7 +218,8 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
     private async Task<MemoryEntry> SeedProseBankAsync(CancellationToken ct)
     {
         var ticket = await _store.WriteAsync(new MemoryWriteRequest(ProjectId,
-            "Deploy blocked on AIR-4471 until the staging certificate is rotated in the vault."), ct);
+            "Grandmother's orchard: pick the apples after the first frost, press them for cider, and store the jars "
+            + "in the cool cellar beside the potatoes. Recipe card AIR-4471."), ct);
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId,
             "The harbor ledger tracks anchovy shipments that arrive in the morning."), ct);
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId,
