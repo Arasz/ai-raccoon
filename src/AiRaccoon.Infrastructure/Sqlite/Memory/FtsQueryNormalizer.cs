@@ -38,7 +38,7 @@ internal static partial class FtsQueryNormalizer
             case 0:
                 return new FtsQueryPlan("", null, 0);
             case 1:
-                return new FtsQueryPlan(tokens[0], null, 1);
+                return new FtsQueryPlan(tokens[0], null, 1) { MatchesAllTerms = true };
         }
 
 
@@ -53,7 +53,7 @@ internal static partial class FtsQueryNormalizer
             return new FtsQueryPlan(
                 string.Join(" AND ", tokens),
                 string.Join(" OR ", rawTokens.Concat(bigrams)),
-                tokens.Count);
+                tokens.Count) { MatchesAllTerms = true };
         }
 
         return new FtsQueryPlan(string.Join(" OR ", rawTokens), null, tokens.Count);
@@ -67,4 +67,7 @@ internal static partial class FtsQueryNormalizer
 public sealed record FtsQueryPlan(string Expression, string? Fallback, int TokenCount)
 {
     public bool IsPathQuery { get; init; }
+
+    /// <summary>True when <see cref="Expression" /> requires every content term, so a row it matches contains the whole query.</summary>
+    public bool MatchesAllTerms { get; init; }
 }

@@ -46,6 +46,37 @@ public sealed class AppRunnerUnrecognisedVerbTests : IDisposable
     }
 
     /// <summary>
+    ///     ADR-0106 D4: an unrecognized token is unparseable whether it comes before or after a
+    ///     verb, so a stray `--attach` exits 9 in both spellings — not the verb's 15.
+    /// </summary>
+    [Theory]
+    [InlineData("--attach")]
+    [InlineData("serve", "--attach")]
+    [InlineData("settings", "noise", "show", "--attach")]
+    public async Task StrayAttach_FailsToParse_InEitherSpelling(params string[] args)
+    {
+        var runner = new AppRunner();
+
+        var exitCode = await runner.Run(["--data-root", _dataRoot, .. args]);
+
+        exitCode.ShouldBe(ExitCode.FailedToParseCliArgs);
+    }
+
+    /// <summary>
+    ///     The other half of D4: a known verb whose own argument fails validation keeps
+    ///     InvalidArgument (15), so the 9 above cannot be won by mapping every verb error to 9.
+    /// </summary>
+    [Fact]
+    public async Task KnownVerb_MissingRequiredArgument_StaysInvalidArgument()
+    {
+        var runner = new AppRunner();
+
+        var exitCode = await runner.Run(["--data-root", _dataRoot, "settings", "access", "set"]);
+
+        exitCode.ShouldBe(ExitCode.InvalidArgument);
+    }
+
+    /// <summary>
     ///     The guard on the guard: a bare invocation carries no parse error, so it must still be
     ///     free to launch. Without this, "make every parse error fatal" could be satisfied by
     ///     refusing everything.

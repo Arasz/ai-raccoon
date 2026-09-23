@@ -4,7 +4,8 @@ namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
 ///     Source-affinity ranking (see docs/adr/0005-source-affinity-ranking.md): adjacent-chunk boost, source
-///     consolidation, document-first tie-break over the fused list. λ = 0 is a no-op.
+///     consolidation, document-first tie-break over the fused list. λ = 0 is a no-op. A leader
+///     (the row every leg ranked first) stays first: no boost lifts another row above it.
 /// </summary>
 internal static class SourceAffinityRanker
 {
@@ -12,7 +13,8 @@ internal static class SourceAffinityRanker
         IReadOnlyList<MemorySearchResult> candidates,
         double lambda,
         double consolidationThreshold,
-        DocScoreFormula formula)
+        DocScoreFormula formula,
+        string? leader = null)
     {
         if (lambda <= 0.0 || candidates.Count == 0)
         {
@@ -30,6 +32,10 @@ internal static class SourceAffinityRanker
             candidate => candidate.Ranking
                          + lambda * SiblingCount(candidate, bySource, maxRaw, consolidationThreshold),
             StringComparer.Ordinal);
+        if (leader is not null && scores.TryGetValue(leader, out var leaderScore))
+        {
+            scores[leader] = Math.Max(leaderScore, scores.Values.Max());
+        }
 
         var docScore = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var candidate in candidates)
@@ -46,7 +52,8 @@ internal static class SourceAffinityRanker
         }
 
         var order = candidates
-            .OrderByDescending(candidate => scores[candidate.Hash])
+            .OrderByDescending(candidate => string.Equals(candidate.Hash, leader, StringComparison.Ordinal))
+            .ThenByDescending(candidate => scores[candidate.Hash])
             .ThenByDescending(candidate => candidate.SourceFile is null
                 ? scores[candidate.Hash]
                 : docScore[candidate.SourceFile])
