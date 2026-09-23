@@ -8,20 +8,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from bundle import (  # noqa: E402
-    CODE_TOKENIZER_NAME,
-    CODE_TOKENIZER_SHA256,
-    CODE_TOKENIZER_URL,
+    BUNDLED_DIR,
+    BUNDLED_FILES,
+    BUNDLED_MANIFEST,
     GGUF_NAME,
     GGUF_SHA256,
     GGUF_URL,
-    MODEL_NAME,
-    MODEL_SHA256,
-    MODEL_URL,
     VOCAB_NAME,
     VOCAB_SHA256,
     VOCAB_URL,
 )
-from download import Sha256MismatchError, fetch_verified  # noqa: E402
+from download import Sha256MismatchError, fetch_verified, sha256_file  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -30,12 +27,15 @@ def main(argv):
     model = argv[0] if argv else "onnx"
     out_dir = argv[1] if len(argv) > 1 else None
     if model == "onnx":
-        target_dir = Path(out_dir) if out_dir else REPO_ROOT / "src" / "AiRaccoon" / "Models"
-        entries = [
-            (MODEL_NAME, MODEL_URL, MODEL_SHA256),
-            (VOCAB_NAME, VOCAB_URL, VOCAB_SHA256),
-            (CODE_TOKENIZER_NAME, CODE_TOKENIZER_URL, CODE_TOKENIZER_SHA256),
-        ]
+        models_dir = Path(out_dir) if out_dir else REPO_ROOT / "src" / "AiRaccoon" / "Models"
+        fetch_verified(VOCAB_NAME, VOCAB_URL, VOCAB_SHA256, models_dir)
+        target_dir = models_dir / BUNDLED_DIR
+        entries = list(BUNDLED_FILES)
+        manifest_name, manifest_sha = BUNDLED_MANIFEST
+        manifest = target_dir / manifest_name
+        if not manifest.is_file() or sha256_file(manifest) != manifest_sha:
+            print("FAIL: %s is missing or does not match its pin (it is committed, never fetched)" % manifest, file=sys.stderr)
+            return 1
     elif model == "gguf":
         default_root = os.environ.get("AIRACCOON_DATA_ROOT") or str(Path.home() / ".ai-raccoon")
         target_dir = Path(out_dir) if out_dir else Path(default_root) / "models"
@@ -47,7 +47,7 @@ def main(argv):
         fetch_verified(name, url, sha, target_dir)
     if model == "onnx":
         print("")
-        print("bundled model ready — it ships inside the tool package (packed from src/AiRaccoon/Models).")
+        print("bundled model ready — it ships inside the tool package (packed from src/AiRaccoon/Models/%s)." % BUNDLED_DIR)
         print("custom path override: 'ai-raccoon model embedding set local /path/to/model.onnx' (the embedding.model settings row)")
     return 0
 

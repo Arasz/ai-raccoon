@@ -22,9 +22,9 @@ public static class SearchRelevance
     /// <summary>The wire name of the absolute floor below, for the truncation marker.</summary>
     public const string AbsoluteRelevanceFloorName = "absoluteRelevance";
     /// <summary>
-    ///     Below this cosine a row is not relevant. Splits the gap the review measured: a
-    ///     zero-overlap query's best row reached 0.074 while the bundled MiniLM family scores
-    ///     related prose at 0.45 and above.
+    ///     The default floor, for an engine whose manifest declares no <c>relevanceFloor</c>: below
+    ///     this cosine a row is not relevant. Calibrated for MiniLM (a zero-overlap query's best row
+    ///     reached 0.074, related prose 0.45 and above); other engines' cosines sit elsewhere (ADR-0108).
     /// </summary>
     public const double AbsoluteRelevanceFloor = 0.35;
 
@@ -44,14 +44,16 @@ public static class SearchRelevance
         IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash,
         FusionStats? stats,
         double minRelativeScore,
-        IReadOnlySet<string>? allTermsMatched = null)
+        IReadOnlySet<string>? allTermsMatched = null,
+        double? relevanceFloor = null)
     {
         Guard.IsNotNull(results);
+        var floor = relevanceFloor ?? AbsoluteRelevanceFloor;
 
         var rows = minRelativeScore > 0
-            ? (IReadOnlyList<MemorySearchResult>)[.. results.Where(row => !BelowAbsoluteFloor(row, evidenceByHash, allTermsMatched))]
+            ? (IReadOnlyList<MemorySearchResult>)[.. results.Where(row => !BelowAbsoluteFloor(row, evidenceByHash, allTermsMatched, floor))]
             : results;
-        var unranked = rows.Count > 0 && IsFlatSingleLeg(stats) && !rows.Any(row => HasAbsoluteBacking(row, evidenceByHash, allTermsMatched));
+        var unranked = rows.Count > 0 && IsFlatSingleLeg(stats) && !rows.Any(row => HasAbsoluteBacking(row, evidenceByHash, allTermsMatched, floor));
         return new RelevanceJudgement(rows, unranked);
     }
 
@@ -62,12 +64,12 @@ public static class SearchRelevance
         allTermsMatched is not null && allTermsMatched.Contains(result.Hash);
 
     private static bool BelowAbsoluteFloor(MemorySearchResult result, IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash,
-        IReadOnlySet<string>? allTermsMatched) =>
-        !MatchesAllTerms(result, allTermsMatched) && CosineOf(result, evidenceByHash) is { } cosine && cosine < AbsoluteRelevanceFloor;
+        IReadOnlySet<string>? allTermsMatched, double floor) =>
+        !MatchesAllTerms(result, allTermsMatched) && CosineOf(result, evidenceByHash) is { } cosine && cosine < floor;
 
     private static bool HasAbsoluteBacking(MemorySearchResult result, IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash,
-        IReadOnlySet<string>? allTermsMatched) =>
-        MatchesAllTerms(result, allTermsMatched) || CosineOf(result, evidenceByHash) is { } cosine && cosine >= AbsoluteRelevanceFloor;
+        IReadOnlySet<string>? allTermsMatched, double floor) =>
+        MatchesAllTerms(result, allTermsMatched) || CosineOf(result, evidenceByHash) is { } cosine && cosine >= floor;
 
     private static bool IsFlatSingleLeg(FusionStats? stats) =>
         stats is { ParticipatingLegs.Count: 1, TopMargin: { } margin } && margin < FlatTopMargin;

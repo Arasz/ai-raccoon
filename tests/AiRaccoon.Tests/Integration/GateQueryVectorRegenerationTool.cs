@@ -61,7 +61,7 @@ public sealed class GateQueryVectorRegenerationTool(ITestOutputHelper output)
             DateTime.UtcNow.ToString("yyyy-MM-dd"),
             DescribeArithmeticPath(),
             RuntimeInformation.FrameworkDescription,
-            BundledModel.ModelSha256,
+            "4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474",
             BundledModel.VocabSha256,
             EmbeddingDimension,
             vectors);

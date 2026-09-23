@@ -9,7 +9,7 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     P2-B (docs/work/2026-09-23-code-retrieval-eval-plan.md §P2, docs/adr/0108): the digest-gated,
+///     P2-B (docs/work/2026-09-23-code-retrieval-eval-plan.md §P2, docs/adr/0109): the digest-gated,
 ///     no-ladder-step migration that adds <c>code_entries.identifiers</c> and rebuilds
 ///     <c>code_fts</c> to a 3-column shape on a bank stamped before this task's Ddl change.
 /// </summary>

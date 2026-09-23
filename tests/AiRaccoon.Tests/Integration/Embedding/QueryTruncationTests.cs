@@ -93,11 +93,12 @@ public sealed class QueryTruncationTests : IDisposable
     public async Task AQueryExactlyAtTheWindow_IsNotTrimmed()
     {
         await using var connection = await OpenConfiguredAsync();
-        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
-        var atLimit = TokenBudget.Trim(LongQuery(),
-            OnnxEmbeddingGenerator.MaxContentTokens, text => tokenizer.CountTokens(text));
-        tokenizer.CountTokens(atLimit).ShouldBe(OnnxEmbeddingGenerator.MaxContentTokens,
-            "the fixture must sit exactly on the limit, or this tests nothing");
+        var bundled = new EmbeddingSettings("local", null, null, null);
+        var service = TestData.CreateEmbeddingService();
+        var tokenizer = service.ResolveTokenizer(bundled)!;
+        var window = service.ResolveChunkBudgetFor(bundled);
+        var atLimit = TokenBudget.Trim(LongQuery(), window, text => tokenizer.CountTokens(text));
+        tokenizer.CountTokens(atLimit).ShouldBe(window, "the fixture must sit exactly on the limit, or this tests nothing");
         var embedder = TestData.CreateEntryEmbedder(new EmbeddingService(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, _timeProvider), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
 
         await embedder.EmbedQueryAsync(connection, atLimit, TestContext.Current.CancellationToken);

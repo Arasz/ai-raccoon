@@ -179,7 +179,7 @@ public class ConfigCommandsAccessModelTests
         exit.ShouldBe(0);
         store.Settings["embedding.provider"].ShouldBe("local");
         store.Settings.ShouldNotContainKey("embedding.model");
-        store.Settings["embedding.engine"].ShouldBe("local:bundled");
+        store.Settings["embedding.engine"].ShouldStartWith("local:bundled#");
         stdout.ShouldContain("local");
     }
 

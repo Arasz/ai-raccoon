@@ -8,9 +8,6 @@ namespace AiRaccoon.Core.Memory.Code;
 /// </summary>
 public static class CodeEngineSetup
 {
-    /// <summary>The Hugging Face repo the code corpus's default embedding engine is published at.</summary>
-    public const string DefaultModelRepoId = "faxenoff/code-daemon-embed-v1";
-
-    /// <summary>Downloads <see cref="DefaultModelRepoId" /> if it is not already on disk, then activates it.</summary>
+    /// <summary>Activates the bundled engine (ADR-0108) for the code corpus; nothing is downloaded.</summary>
     public const string DefaultModelCommand = "ai-raccoon model code set default";
 }

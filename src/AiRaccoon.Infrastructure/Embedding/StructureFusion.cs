@@ -17,6 +17,8 @@ public static class StructureFusion
     /// <summary>vec0 cosine distance in [0, 2] to cosine similarity in [-1, 1] (embeddings are L2-normalized).</summary>
     public static double SimFromDistance(double distance) => 1.0 - distance;
 
+    private static double Rescale(double sim, double floor) => floor > 0 ? Math.Max(0.0, (sim - floor) / (1.0 - floor)) : sim;
+
     /// <summary>
     ///     An absent <paramref name="structureSim" /> scores as zero, so a row with no structure
     ///     embedding is capped at <paramref name="alpha" /> of what a headed row can reach. That
@@ -34,8 +36,13 @@ public static class StructureFusion
     ///     Ranks the union of both modalities' candidate hits by fused score, descending,
     ///     with an ordinal-hash tie-break so equal scores stay deterministic.
     /// </summary>
+    /// <summary>
+    ///     Fuses content and structure similarities (ADR-0004). With <paramref name="similarityFloor" />
+    ///     above 0, each similarity is first rescaled so the engine's relevance floor maps to 0 — the
+    ///     scale on which "no heading = structure 0" was measured (ADR-0108).
+    /// </summary>
     public static IReadOnlyList<FusedRank> Rank(
-        IEnumerable<VectorHit> content, IEnumerable<VectorHit> structure, double alpha, int limit)
+        IEnumerable<VectorHit> content, IEnumerable<VectorHit> structure, double alpha, int limit, double similarityFloor = 0.0)
     {
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(structure);
@@ -43,10 +50,10 @@ public static class StructureFusion
 
         var contentSims = content
             .GroupBy(hit => hit.Hash, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First().Sim, StringComparer.Ordinal);
+            .ToDictionary(group => group.Key, group => Rescale(group.First().Sim, similarityFloor), StringComparer.Ordinal);
         var structureSims = structure
             .GroupBy(hit => hit.Hash, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First().Sim, StringComparer.Ordinal);
+            .ToDictionary(group => group.Key, group => Rescale(group.First().Sim, similarityFloor), StringComparer.Ordinal);
 
         return
         [

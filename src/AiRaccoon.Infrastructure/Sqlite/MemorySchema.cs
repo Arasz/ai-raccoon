@@ -519,7 +519,7 @@ internal static class MemorySchema
                                               total_chunks INTEGER NOT NULL DEFAULT 0
                                           );
 
-                                          -- embed_attempts (S2) and identifiers (P2-B, docs/adr/0108) are NOT declared
+                                          -- embed_attempts (S2) and identifiers (P2-B, docs/adr/0109) are NOT declared
                                           -- here: ALTER TABLE ADD COLUMN isn't idempotent under a race (two connections
                                           -- opening the bank at once, e.g. the maintenance hosted service and the first
                                           -- real request, can both see it missing before either commits), unlike every
@@ -540,7 +540,7 @@ internal static class MemorySchema
                                           -- re-runs this block (integration review, code-search-implementation-plan §3.1).
                                           DROP INDEX IF EXISTS idx_code_entries_path;
 
-                                          -- identifiers (P2-B, docs/adr/0108): a derived, space-joined lowercase word
+                                          -- identifiers (P2-B, docs/adr/0109): a derived, space-joined lowercase word
                                           -- list of every multi-part identifier in `value` (IdentifierSplitter), equal
                                           -- bm25 weight with the other two columns — no column weighting, no query-side
                                           -- change (MATCH stays unqualified). CREATE ... IF NOT EXISTS only takes effect
@@ -684,7 +684,7 @@ internal static class MemorySchema
             await EnsureSearchQualityResultFeaturesColumnAsync(connection, cancellationToken).ConfigureAwait(false);
             await EnsureRepairRequestsMapJsonColumnAsync(connection, cancellationToken).ConfigureAwait(false);
 
-            // P2-B (docs/adr/0108): identifiers column first, then the code_fts rebuild that reads
+            // P2-B (docs/adr/0109): identifiers column first, then the code_fts rebuild that reads
             // it — EnsureCodeFtsIdentifiersAsync's backfill assumes the column already exists.
             await EnsureCodeIdentifiersColumnAsync(connection, cancellationToken).ConfigureAwait(false);
             await EnsureCodeFtsIdentifiersAsync(connection, cancellationToken).ConfigureAwait(false);
@@ -1817,7 +1817,7 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     P2-B (docs/adr/0108): adds code_entries.identifiers if it is missing — same tolerant
+    ///     P2-B (docs/adr/0109): adds code_entries.identifiers if it is missing — same tolerant
     ///     shape as <see cref="EnsureCodeEmbedAttemptsColumnAsync" /> (pragma probe + duplicate-column
     ///     catch for two connections racing the same digest mismatch). Called only from inside the
     ///     Ddl block's own digest-mismatch branch, before <see cref="EnsureCodeFtsIdentifiersAsync" />,
@@ -1855,7 +1855,7 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     P2-B (docs/adr/0108): rebuilds <c>code_fts</c> from a 2-column to a 3-column shape
+    ///     P2-B (docs/adr/0109): rebuilds <c>code_fts</c> from a 2-column to a 3-column shape
     ///     (value, source_file, identifiers) on a bank stamped before this task's Ddl change — a
     ///     legacy <c>code_fts</c> already exists, so the Ddl block's own
     ///     <c>CREATE VIRTUAL TABLE IF NOT EXISTS</c>/<c>CREATE TRIGGER IF NOT EXISTS</c> statements

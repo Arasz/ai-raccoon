@@ -24,6 +24,14 @@ public interface IEntryEmbedder
     Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken);
 
     /// <summary>
+    ///     Opens a migration when the configured engine's fingerprint no longer matches the one the
+    ///     bank recorded (a tool upgrade that changes the bundled model, ADR-0108), so the bank
+    ///     re-embeds with no model-set command. False when nothing changed, no engine is recorded, or
+    ///     a migration is already open.
+    /// </summary>
+    Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken);
+
+    /// <summary>
     ///     Brings vec0 (`vec_entries`/`vec_structure`) to the configured engine's dimension (plan
     ///     D3). Server-only by construction: reached only from <c>NodeRunner</c> (before it binds
     ///     the port) and from this type's own <see cref="DrainMigrationAsync" /> — never from a CLI

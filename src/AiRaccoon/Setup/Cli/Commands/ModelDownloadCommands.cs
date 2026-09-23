@@ -43,20 +43,6 @@ internal sealed class ModelDownloadCommands(
         return await ExecuteAsync(request, streams, true, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>
-    ///     #422: the download half of <c>model code set default</c>. Same service, same pins, same
-    ///     target-directory convention as <c>model download</c> — it just knows the repo id, so a
-    ///     fresh install never has to.
-    /// </summary>
-    public Task<int> DownloadDefaultCodeModelAsync(string targetDir, StandardStreams streams,
-        CancellationToken cancellationToken) =>
-        ExecuteAsync(
-            new ModelDownloadRequest(CodeEngineSetup.DefaultModelRepoId, "main", targetDir,
-                Confirm: message => PromptConfirm(streams, message)),
-            // No "activate it next" hint: this call IS the download half of an activating verb, and
-            // pointing at 'model embedding set local' here would send the reader at the MEMORY engine.
-            streams, activationHint: false, cancellationToken);
-
     private async Task<int> ExecuteAsync(ModelDownloadRequest request, StandardStreams streams,
         bool activationHint, CancellationToken cancellationToken)
     {

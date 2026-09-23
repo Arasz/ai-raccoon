@@ -318,6 +318,15 @@ public static class TestData
         new EventPump<EmbedDrainRequest>(new PumpTopic(EmbedDrainService.PumpCeiling, EmbedDrainService.PumpCapacity, Coalesce: true));
 
     /// <summary>BundledModel with a null logger and a factory that never opens real connections; the model copy beside the test host makes EnsureAsync return all-present.</summary>
+    /// <summary>The int8 all-MiniLM-L6-v2 the product bundled before ADR-0108, kept as a test asset for engine-mechanics tests.</summary>
+    public static string MiniLmModelPath() => RepoFile("tests/AiRaccoon.Tests/TestData/Models/model_qint8_arm64.onnx");
+
+    /// <summary>File name of <see cref="MiniLmModelPath" />.</summary>
+    public const string MiniLmModelFileName = "model_qint8_arm64.onnx";
+
+    /// <summary>code-daemon-embed-v1's sentencepiece model, the code counting tokenizer before ADR-0108.</summary>
+    public static string CodeDaemonSentencePiecePath() => RepoFile("tests/AiRaccoon.Tests/TestData/Models/code-sentencepiece.bpe.model");
+
     public static BundledModel CreateBundledModel() => new(NullLogger<BundledModel>.Instance, new NoopHttpClientFactory());
 
     /// <summary>EmbeddingService with a null logger — the constructor requires a real <see cref="ILogger{TCategoryName}"/> now that it is DI-registered, so tests that don't care about logging use this.</summary>

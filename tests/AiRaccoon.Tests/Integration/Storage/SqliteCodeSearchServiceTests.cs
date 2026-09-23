@@ -93,7 +93,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     P2-B (docs/adr/0108): plain FTS5 tokenization never splits a camelCase identifier, so
+    ///     P2-B (docs/adr/0109): plain FTS5 tokenization never splits a camelCase identifier, so
     ///     "overlap" can only match "WatchOverlapResolver" through the derived identifiers column —
     ///     red on main, where that column does not exist.
     /// </summary>

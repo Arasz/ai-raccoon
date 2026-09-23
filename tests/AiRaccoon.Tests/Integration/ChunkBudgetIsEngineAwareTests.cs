@@ -70,15 +70,10 @@ public sealed class ChunkBudgetIsEngineAwareTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
         entries.Count.ShouldBeGreaterThan(1);
 
-        var bert = BertTokenizer.Create(BundledModel.ResolveVocabPath(), new BertOptions
-        {
-            LowerCaseBeforeTokenization = true,
-            ApplyBasicTokenization = true,
-            SplitOnSpecialTokens = true,
-            IndividuallyTokenizeCjk = true,
-            RemoveNonSpacingMarks = true
-        });
-        entries.ShouldAllBe(entry => bert.EncodeToIds(entry.Value, true, true, true).Count <= 256);
+        var bundled = new EmbeddingSettings("local", null, null, null);
+        var engineTokenizer = TestData.CreateEmbeddingService().ResolveTokenizer(bundled)!;
+        var engineWindow = TestData.CreateEmbeddingService().ResolveChunkBudgetFor(bundled) + engineTokenizer.SpecialTokenReservation;
+        entries.ShouldAllBe(entry => engineTokenizer.EncodeToIds(entry.Value, true).Count <= engineWindow);
 
         _logger.Collector.GetSnapshot().ShouldNotContain(record => record.Id.Id == 414);
     }

@@ -55,6 +55,8 @@ public sealed class FakeCodeEmbeddingService : IEmbeddingService
 
     public string DocumentText(EmbeddingSettings settings, string text) => text;
 
+    public double? RelevanceFloor(EmbeddingSettings settings) => null;
+
     /// <summary>
     ///     Derived from the chunker, not restated (#422: this fake held its own copy of the old 126
     ///     and quietly failed every activation scenario when the real budget moved).

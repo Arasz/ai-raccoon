@@ -544,9 +544,9 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
     private static string CopyBundledModelToATempPath()
     {
         var path = Path.Combine(Path.GetTempPath(), "ai-raccoon-crash-recovery-model",
-            Guid.NewGuid().ToString("N"), BundledModel.ModelFileName);
+            Guid.NewGuid().ToString("N"), TestData.MiniLmModelFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.Copy(BundledModel.ResolveModelPath(), path);
+        File.Copy(TestData.MiniLmModelPath(), path);
         return path;
     }
 

@@ -4,7 +4,7 @@ namespace AiRaccoon.Core.Ingestion;
 
 /// <summary>
 ///     Splits an identifier into its lowercase word parts, and extracts the multi-part identifiers
-///     embedded in a code chunk for <c>code_entries.identifiers</c> (docs/adr/0108). <see cref="Split" />
+///     embedded in a code chunk for <c>code_entries.identifiers</c> (docs/adr/0109). <see cref="Split" />
 ///     matches the Python reference `split_identifier` (scripts/src/retrieval_tuning/code_corpus.py)
 ///     byte-for-byte: boundaries are separators (<c>_ - .</c> and whitespace), a lower-to-upper case
 ///     transition, an acronym run followed by a new capitalised word, and letter/digit transitions.

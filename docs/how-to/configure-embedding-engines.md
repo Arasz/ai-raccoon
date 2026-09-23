@@ -50,6 +50,25 @@ ai-raccoon model embedding set local
 
 *The local model needs no network access and runs in-process via ONNX Runtime.*
 
+The bundled model is granite-embedding-small-english-r2 (fp16, 384 dimensions, Apache-2.0), and
+the code corpus uses the same one (Recipe 5). It replaced all-MiniLM-L6-v2 in 1.47.0, and a bank
+embedded with the old model re-embeds once on its own after the upgrade
+([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)).
+
+On macOS the session runs on the GPU through ONNX Runtime's WebGPU provider, which takes far less
+CPU per embed. Other platforms run on the CPU. `settings model device` changes where local sessions
+run, taking effect on the next server restart:
+
+```bash
+ai-raccoon settings model device auto   # default: the bundled model on the GPU, other models on the CPU
+ai-raccoon settings model device gpu    # every local model on the GPU where the platform has one
+ai-raccoon settings model device cpu    # never the GPU
+```
+
+`auto` keeps downloaded models on the CPU because a quantized (int8) model produces slightly
+different vectors on the GPU than the ones already stored from the CPU. Switch to `gpu` only for
+a model whose bank you are happy to have embedded on the GPU from the start.
+
 ### Recipe 2: Configure OpenAI embeddings
 
 Use official OpenAI text embeddings:
@@ -164,10 +183,10 @@ configured independently of everything above — activating it never touches
 ai-raccoon model code set default
 ```
 
-That is the whole recipe. It downloads `faxenoff/code-daemon-embed-v1` (187 MB) into
-`<data-root>/models/faxenoff__code-daemon-embed-v1` if it is not already there, and then
-activates it. Run it again later and it only re-activates — nothing is re-fetched, and a
-manifest whose `pooling.mode` the graph contradicts is corrected in that same pass.
+That is the whole recipe. It activates the bundled model (the same one memory uses, so one session
+serves both) and marks the code corpus's rows pending for the code-reindex job. Nothing is
+downloaded. Before 1.47.0 this command downloaded `faxenoff/code-daemon-embed-v1`; a corpus still
+on that model keeps it until you run the command again.
 
 It is the one command every surface that can notice a missing code engine quotes: the
 `code engine not configured` search warning, `ai-raccoon doctor`, the MCP server

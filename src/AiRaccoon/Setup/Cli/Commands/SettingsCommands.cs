@@ -215,42 +215,19 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
             codeEngine, streams, cancellationToken);
 
     /// <summary>
-    ///     #422: `model code set default` is the one command every "no code engine" surface quotes.
-    ///     It downloads <see cref="CodeEngineSetup.DefaultModelRepoId" /> into the usual
-    ///     <c>&lt;data-root&gt;/models/&lt;slug&gt;</c> when it is not already there, then activates
-    ///     it — deliberately both halves, because a hint that leaves the reader to construct a path
-    ///     for a second command is one nobody completes. An already-downloaded directory is
-    ///     re-activated without re-fetching 187 MB.
+    ///     `model code set default` is the one command every "no code engine" surface quotes: it
+    ///     activates the bundled engine (ADR-0108) for the code corpus. Nothing is downloaded — the
+    ///     model ships inside the tool, and memory uses the same one.
     /// </summary>
-    internal async Task<int> ModelSetCodeDefaultAsync(ModelDownloadCommands modelDownload,
-        ICodeEngineStore codeEngine, string dataRoot, StandardStreams streams, CancellationToken cancellationToken)
-    {
-        Guard.IsNotNullOrWhiteSpace(dataRoot);
-        var targetDir = Path.GetFullPath(Path.Combine(dataRoot, "models",
-            ModelSlug.Sanitize(CodeEngineSetup.DefaultModelRepoId)));
-
-        if (File.Exists(Path.Combine(targetDir, EmbeddingManifest.FileName)))
-        {
-            await streams.WriteOutputLineAsync(
-                $"{CodeEngineSetup.DefaultModelRepoId} is already downloaded at {targetDir}; activating it");
-        }
-        else
-        {
-            var exit = await modelDownload.DownloadDefaultCodeModelAsync(targetDir, streams, cancellationToken);
-            if (exit != ErrorCode.Ok.Success)
-            {
-                return exit;
-            }
-        }
-
-        return await ActivateCodeDirectoryAsync(targetDir, codeEngine, streams, cancellationToken);
-    }
+    internal Task<int> ModelSetCodeDefaultAsync(ICodeEngineStore codeEngine, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        ActivateCodeDirectoryAsync(BundledModel.SettingValue, codeEngine, streams, cancellationToken);
 
     private async Task<int> ActivateCodeDirectoryAsync(string fullPath, ICodeEngineStore codeEngine,
         StandardStreams streams, CancellationToken cancellationToken)
     {
         new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())
-            .Load(fullPath);
+            .Load(BundledModel.IsBundled(fullPath) ? BundledModel.ResolveDirectory() : fullPath);
 
         await codeEngine.ActivateCodeEngineAsync(fullPath, cancellationToken);
         await streams.WriteOutputLineAsync(
@@ -303,6 +280,23 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         // parse above — but it goes through the shared helper anyway so this line can never drift.
         await streams.WriteOutputLineAsync(
             $"embedding threads set to {EmbeddingService.ThreadCountDisplay(threads)} ({EmbeddingService.ThreadCountSource(raw)}); takes effect on the next server restart");
+        return 0;
+    }
+
+    /// <summary>`settings model device auto|gpu|cpu` (ADR-0108); anything else is refused, nothing written.</summary>
+    public async Task<int> ModelDeviceSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken)
+    {
+        var raw = parseResult.GetValue<string>("device")!.Trim().ToLowerInvariant();
+        if (!EmbeddingDeviceSetting.Values.Contains(raw, StringComparer.Ordinal))
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: invalid device '{raw}' (expected one of: {string.Join(", ", EmbeddingDeviceSetting.Values)})");
+            return ErrorCode.Usage.InvalidValue;
+        }
+
+        await store.SetSettingAsync(EmbeddingSettingsKeys.Device, raw, cancellationToken);
+        await streams.WriteOutputLineAsync($"embedding device set to {raw}; takes effect on the next server restart");
         return 0;
     }
 

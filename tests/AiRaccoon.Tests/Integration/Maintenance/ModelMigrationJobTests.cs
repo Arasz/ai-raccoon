@@ -42,9 +42,9 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
 
         _otherModelPath = Path.Combine(Path.GetTempPath(), "ai-raccoon-custom-model", Guid.NewGuid().ToString("N"),
-            BundledModel.ModelFileName);
+            TestData.MiniLmModelFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(_otherModelPath)!);
-        File.Copy(BundledModel.ResolveModelPath(), _otherModelPath);
+        File.Copy(TestData.MiniLmModelPath(), _otherModelPath);
     }
 
     public ValueTask DisposeAsync()
@@ -145,6 +145,33 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         (await IsOpenAsync()).ShouldBeTrue();
     }
 
+    [RetryFact]
+    public async Task HasWorkAsync_WhenTheBundledEngineChangedUnderAStoredEngine_OpensAMigration()
+    {
+        // A bank embedded by the pre-ADR-0108 bundled engine stored the fingerprint "local:bundled".
+        await _store.StartModelMigrationAsync("local", null, null, TestContext.Current.CancellationToken);
+        var entry = await _store.WriteAsync(new MemoryWriteRequest("acme", "embedded by the old bundled engine"),
+            TestContext.Current.CancellationToken);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE settings SET value = 'local:bundled' WHERE key = @key", new { key = EmbeddingSettingsKeys.Engine },
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeTrue(
+            "an upgrade that changes the bundled model must re-embed on its own, with no model-set command");
+        (await ReadRowStateAsync(entry.Hash)).ShouldBe("pending");
+    }
+
+    [RetryFact]
+    public async Task HasWorkAsync_WhenTheStoredEngineIsCurrent_OpensNothing()
+    {
+        await _store.StartModelMigrationAsync("local", null, null, TestContext.Current.CancellationToken);
+        await _store.WriteAsync(new MemoryWriteRequest("acme", "already current"), TestContext.Current.CancellationToken);
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+
+        (await NewJob().HasWorkAsync(connection, TestContext.Current.CancellationToken)).ShouldBeFalse();
+    }
+
     private async Task<MemoryEntry> OpenAMigrationAsync()
     {
         await _store.StartModelMigrationAsync("local", null, null, TestContext.Current.CancellationToken);
@@ -232,6 +259,8 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
         public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 
         public string DocumentText(EmbeddingSettings settings, string text) => text;
+
+        public double? RelevanceFloor(EmbeddingSettings settings) => null;
 
         public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
 

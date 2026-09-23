@@ -27,7 +27,6 @@ namespace AiRaccoon.Tests.Integration;
 public sealed class ChunkBudgetWithNoProviderTests : IAsyncLifetime
 {
     /// <summary>The bundled model's window; the budget must leave room for [CLS] and [SEP].</summary>
-    private const int BertWindow = 256;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
@@ -70,22 +69,17 @@ public sealed class ChunkBudgetWithNoProviderTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
         entries.Count.ShouldBeGreaterThan(1);
 
-        var bert = BertTokenizer.Create(BundledModel.ResolveVocabPath(), new BertOptions
-        {
-            LowerCaseBeforeTokenization = true,
-            ApplyBasicTokenization = true,
-            SplitOnSpecialTokens = true,
-            IndividuallyTokenizeCjk = true,
-            RemoveNonSpacingMarks = true
-        });
+        var bundled = new EmbeddingSettings("local", null, null, null);
+        var engineTokenizer = TestData.CreateEmbeddingService().ResolveTokenizer(bundled)!;
+        var engineWindow = TestData.CreateEmbeddingService().ResolveChunkBudgetFor(bundled) + engineTokenizer.SpecialTokenReservation;
 
         var oversized = entries
-            .Select(entry => (entry.Path, Tokens: bert.EncodeToIds(entry.Value, true, true, true).Count))
-            .Where(row => row.Tokens > BertWindow)
+            .Select(entry => (entry.Path, Tokens: engineTokenizer.EncodeToIds(entry.Value, true).Count))
+            .Where(row => row.Tokens > engineWindow)
             .ToList();
 
         oversized.ShouldBeEmpty(
-            $"{oversized.Count} of {entries.Count} chunks exceed the bundled model's {BertWindow}-token "
+            $"{oversized.Count} of {entries.Count} chunks exceed the bundled model's {engineWindow}-token "
             + $"window; worst {(oversized.Count == 0 ? 0 : oversized.Max(row => row.Tokens))} tokens. "
             + "Configuring the engine later re-embeds but never re-chunks, so these boundaries are permanent.");
     }

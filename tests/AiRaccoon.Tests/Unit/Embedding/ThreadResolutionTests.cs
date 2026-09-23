@@ -67,7 +67,7 @@ public sealed class ThreadResolutionTests
     [InlineData(0)]
     public void Generator_ReportsTheIntraOpThreadsItWasBuiltWith(int threads)
     {
-        using var generator = new OnnxEmbeddingGenerator(BundledModel.ResolveModelPath(),
+        using var generator = new OnnxEmbeddingGenerator(TestData.MiniLmModelPath(),
             WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()),
             EmbeddingService.BundledDescriptor, NullLogger.Instance, threads);
 

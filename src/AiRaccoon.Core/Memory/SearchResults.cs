@@ -19,7 +19,8 @@ public sealed record SearchResults(
     IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash = null,
     FusionStats? Stats = null,
     int DroppedByFloor = 0,
-    IReadOnlySet<string>? AllTermsMatched = null);
+    IReadOnlySet<string>? AllTermsMatched = null,
+    double? RelevanceFloor = null);
 
 /// <summary>Per-phase durations for one <see cref="IMemoryStore.SearchAsync" /> call, plus the measured total (docs/adr/0079).</summary>
 public sealed record SearchTimings(

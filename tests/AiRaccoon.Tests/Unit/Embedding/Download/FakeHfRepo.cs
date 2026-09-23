@@ -153,7 +153,7 @@ namespace AiRaccoon.Tests.Unit.Embedding.Download;
         {
             var onnx = TestOnnx.MinimalModelWithExternalData("model.onnx_data", outputs: ["last_hidden_state"]);
             var data = "external-weights-bytes"u8.ToArray();
-            var spm = File.ReadAllBytes(CodeTokenizer.ResolveModelPath());
+            var spm = File.ReadAllBytes(TestData.CodeDaemonSentencePiecePath());
             var padToken = declareUnresolvablePiece ? "<not-a-real-piece>" : "<pad>";
             var repo = new FakeRepo
             {

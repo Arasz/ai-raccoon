@@ -26,7 +26,8 @@ public sealed class QueryTrimSharesTheLocalTokenizerTests
             return OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
         });
         var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), localTokenizer, new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()), NoOpMeasurementRecorder.Instance, TimeProvider.System);
-        var settings = new EmbeddingSettings("local", null, null, null);
+        // The legacy single-file path is what still counts with the shared WordPiece LocalTokenizer (ADR-0108).
+        var settings = new EmbeddingSettings("local", TestData.MiniLmModelPath(), null, null);
 
         service.TrimQueryToWindow(settings, LongQuery());
         service.TrimQueryToWindow(settings, LongQuery());

@@ -32,6 +32,7 @@ public class SettingsCommandsTests
                 ["model", "embedding", "set", "local"] => commands.ModelSetLocalAsync(parsed.ParsedCliArgs, store, store, streams, ct),
                 ["settings", "model", "show"] => commands.ModelShowAsync(store, streams, ct),
                 ["settings", "model", "threads"] => commands.ModelThreadsSetAsync(parsed.ParsedCliArgs, store, streams, ct),
+                ["settings", "model", "device"] => commands.ModelDeviceSetAsync(parsed.ParsedCliArgs, store, streams, ct),
                 ["settings", "retrieval", "alpha", "set"] => commands.RetrievalAlphaSetAsync(parsed.ParsedCliArgs, store, streams, ct),
                 ["settings", "retrieval", "alpha", "show"] => commands.RetrievalAlphaShowAsync(store, streams, ct),
                 ["settings", "retrieval", "fusion", "enable"] => commands.RetrievalFusionSetAsync(true, store, streams, ct),
@@ -179,6 +180,33 @@ public class SettingsCommandsTests
 
         exit.ShouldBe(0);
         stdout.ShouldContain("provider: (none");
+    }
+
+    [Theory]
+    [InlineData("gpu", "gpu")]
+    [InlineData("CPU", "cpu")]
+    [InlineData("auto", "auto")]
+    public async Task ModelDeviceSet_StoresTheDevice(string argument, string stored)
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, stdout, _) = await Run(["settings", "model", "device", argument], store);
+
+        exit.ShouldBe(0);
+        store.Settings["embedding.device"].ShouldBe(stored);
+        stdout.ShouldContain("next server restart");
+    }
+
+    [Fact]
+    public async Task ModelDeviceSet_UnknownDevice_IsRefused_AndNothingIsWritten()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, stderr) = await Run(["settings", "model", "device", "tpu"], store);
+
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        stderr.ShouldContain("auto, gpu, cpu");
+        store.Settings.ShouldNotContainKey("embedding.device");
     }
 
     [Fact]

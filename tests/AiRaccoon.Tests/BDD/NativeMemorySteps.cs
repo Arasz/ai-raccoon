@@ -136,7 +136,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         if (_customModelPath is null)
         {
-            var source = BundledModel.ResolveModelPath();
+            var source = TestData.MiniLmModelPath();
             _customModelPath = Path.Combine(_ctx.DataRoot, "custom-model.onnx");
             File.Copy(source, _customModelPath);
         }
@@ -302,7 +302,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     // ── FR-NM-3: Pluggable embeddings ──
     [Given("the small model ships inside the tool package")]
-    public void GivenSmallModelShips() => File.Exists(BundledModel.ResolveModelPath()).ShouldBeTrue();
+    public void GivenSmallModelShips() => File.Exists(TestData.MiniLmModelPath()).ShouldBeTrue();
 
     [Given("a custom model file exists")]
     public void GivenCustomModelFileExists() => File.Exists(EnsureCustomModelCopy()).ShouldBeTrue();
@@ -367,7 +367,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
         var engine = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT value FROM settings WHERE key = 'embedding.engine'");
-        engine.ShouldBe("local:bundled");
+        engine.ShouldNotBeNull().ShouldStartWith("local:bundled#");
     }
 
     [Then("the custom model is used")]

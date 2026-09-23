@@ -520,7 +520,8 @@ public sealed partial class SqliteMemoryStore(
         searchTimingsCollector.Bump = timeProvider.GetElapsedTime(bumpStart);
 
         return new Core.Memory.SearchResults(deferredResults.Results, searchTimingsCollector.ToCollected(timeProvider), deferredResults.FusionDiff,
-            deferredResults.EvidenceByHash, deferredResults.Stats, deferredResults.DroppedByFloor, searchResults.AllTermsMatched);
+            deferredResults.EvidenceByHash, deferredResults.Stats, deferredResults.DroppedByFloor, searchResults.AllTermsMatched,
+            queryVector.RelevanceFloor);
     }
 
     private async Task<AdjustedSearchResult> AdjustMergedResults(SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan queryPlan, QueryVector queryVector,
@@ -698,7 +699,7 @@ public sealed partial class SqliteMemoryStore(
         var fused = StructureFusion.Rank(
             contentRows.Select(row => new VectorHit(row.Hash, StructureFusion.SimFromDistance(row.Distance))),
             structureRows.Select(row => new VectorHit(row.Hash, StructureFusion.SimFromDistance(row.Distance))),
-            queryVector.Alpha, limit);
+            queryVector.Alpha, limit, queryVector.RelevanceFloor ?? 0.0);
 
         var byHash = contentRows.Concat(structureRows)
             .GroupBy(row => row.Hash, StringComparer.Ordinal)

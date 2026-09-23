@@ -894,7 +894,7 @@ internal static class MemorySql
     // (project_id, path, hash) — no bucket (scope/context_label/workspace_id) columns, code is
     // project-scoped only. Same ON CONFLICT DO NOTHING + post-conflict re-read shape as
     // InsertEntry/SelectChunkIdByPathAndHashInBucket above.
-    // P2-B (docs/adr/0108): identifiers is filled at insert time from the chunk's own value, via
+    // P2-B (docs/adr/0109): identifiers is filled at insert time from the chunk's own value, via
     // CodeIngestor — never derived in SQL, since only IdentifierSplitter (C#) knows how to split it.
     public const string InsertCodeEntry = """
                                           INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end,

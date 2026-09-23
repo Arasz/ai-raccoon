@@ -118,6 +118,16 @@ jobs:
           # dependency re-resolved on every run — the same hazard this workflow already
           # avoids by pinning every action to a commit SHA.
           global-json-file: global.json
+      - name: Cache the bundled model weights (ADR-0108)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/Models/granite-embedding-small-english-r2/model_fp16.onnx_data
+          key: bundled-granite-small-fp16-28d16e29cd623f25
+      - name: Fetch and verify the bundled model
+        if: needs.changes.outputs.code == 'true'
+        # The 97 MB weights are not committed (ADR-0108); the script is a no-op on a verified cache hit.
+        run: python3 scripts/download-embedding-model.py
       - name: Build
         if: needs.changes.outputs.code == 'true'
         # nuget.config references the gitignored local feed .nupkg-local/; make it
@@ -161,6 +171,16 @@ jobs:
           # dependency re-resolved on every run — the same hazard this workflow already
           # avoids by pinning every action to a commit SHA.
           global-json-file: global.json
+      - name: Cache the bundled model weights (ADR-0108)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/Models/granite-embedding-small-english-r2/model_fp16.onnx_data
+          key: bundled-granite-small-fp16-28d16e29cd623f25
+      - name: Fetch and verify the bundled model
+        if: needs.changes.outputs.code == 'true'
+        # The 97 MB weights are not committed (ADR-0108); the script is a no-op on a verified cache hit.
+        run: python3 scripts/download-embedding-model.py
       - name: Build
         if: needs.changes.outputs.code == 'true'
         run: mkdir -p .nupkg-local && dotnet build --nologo
@@ -212,6 +232,16 @@ jobs:
           # dependency re-resolved on every run — the same hazard this workflow already
           # avoids by pinning every action to a commit SHA.
           global-json-file: global.json
+      - name: Cache the bundled model weights (ADR-0108)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/Models/granite-embedding-small-english-r2/model_fp16.onnx_data
+          key: bundled-granite-small-fp16-28d16e29cd623f25
+      - name: Fetch and verify the bundled model
+        if: needs.changes.outputs.code == 'true'
+        # The 97 MB weights are not committed (ADR-0108); the script is a no-op on a verified cache hit.
+        run: python3 scripts/download-embedding-model.py
       - name: Build
         if: needs.changes.outputs.code == 'true'
         run: mkdir -p .nupkg-local && dotnet build --nologo
@@ -298,6 +328,14 @@ jobs:
           # dependency re-resolved on every run — the same hazard this workflow already
           # avoids by pinning every action to a commit SHA.
           global-json-file: global.json
+      - name: Cache the bundled model weights (ADR-0108)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/Models/granite-embedding-small-english-r2/model_fp16.onnx_data
+          key: bundled-granite-small-fp16-28d16e29cd623f25
+      - name: Fetch and verify the bundled model
+        # The 97 MB weights are not committed (ADR-0108); the script is a no-op on a verified cache hit.
+        run: python3 scripts/download-embedding-model.py
       - name: Build
         run: mkdir -p .nupkg-local && dotnet build --nologo
       - name: Nightly-tagged tests
