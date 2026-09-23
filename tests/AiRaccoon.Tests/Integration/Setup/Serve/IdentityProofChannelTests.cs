@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
 using AiRaccoon.Tests.TestHelpers;
@@ -149,6 +150,50 @@ public sealed class IdentityProofChannelTests : IAsyncLifetime
         finally
         {
             await host.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    /// <summary>
+    ///     F1's gate: a real backend on port Q answers the challenge the client sent to port P (a
+    ///     real relay holds the same root and key). The signature binds Q, so the transcript
+    ///     reconstructed at P does not verify — a relay cannot stand in for the dialled listener.
+    /// </summary>
+    [RetryFact]
+    public async Task Relay_SameRootBackendOnAnotherPort_IsNotProven()
+    {
+        using var key = await MintAsync();
+        using var backendLease = LoopbackPort.Reserve();
+        var backendPort = backendLease.Port;
+        var backend = McpServerSetup.CreateServerHost(Config(backendPort));
+        backendLease.ReleaseForBind();
+        await backend.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            using var relayLease = LoopbackPort.Reserve();
+            var relayPort = relayLease.Port;
+            relayLease.ReleaseForBind();
+            await using var relay = await FakeRaccoon.StartAsync(relayPort, HttpStatusCode.Accepted,
+                TestContext.Current.CancellationToken, proof: new FakeRaccoonProof
+                {
+                    Signer = key,
+                    RootFp = IdentityProof.RootFingerprint(_dataRoot),
+                    RelayTo = new Uri($"http://127.0.0.1:{backendPort}{IdentityProof.EndpointPath}")
+                });
+
+            var prover = new IdentityProver(Options, Client);
+
+            // Positive control: the backend this client actually dialled proves.
+            (await prover.ProveAsync(new Uri($"http://127.0.0.1:{backendPort}/mcp"),
+                TestContext.Current.CancellationToken)).ShouldBeNull();
+
+            // The relayed answer from the same root's key on another port must not.
+            (await prover.ProveAsync(new Uri($"http://127.0.0.1:{relayPort}/mcp"),
+                    TestContext.Current.CancellationToken))
+                .ShouldBe(IdentityProofFailure.BadSignature);
+        }
+        finally
+        {
+            await backend.StopAsync(TestContext.Current.CancellationToken);
         }
     }
 
