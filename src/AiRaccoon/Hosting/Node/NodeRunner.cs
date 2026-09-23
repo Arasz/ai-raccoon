@@ -57,6 +57,15 @@ internal partial class NodeRunner(
             return ExitCode.McpTokenUnavailable;
         }
 
+        // The identity key is the trust anchor a client verifies before it hands over the token; only
+        // serve mints it, in the same state directory, before the listener binds (ADR-0106 D1).
+        var identityKeyFile = new IdentityKeyFile(cliInput.ServerConfig.Options);
+        if (await identityKeyFile.EnsureAsync(ctx) is null)
+        {
+            await streams.WriteErrorLineAsync($"ai-raccoon: {identityKeyFile.RefusalReason ?? $"cannot read or create the identity key at {identityKeyFile.Path} — check its permissions, or remove it and start serve again"}");
+            return ExitCode.McpTokenUnavailable;
+        }
+
         Log.McpTokenReady(logger, tokenFile.Path);
 
         return await StartHttpMcpServer(descriptor with { Token = mcpToken }, preBind.Believed, streams, ctx);

@@ -34,7 +34,11 @@ public sealed class NoHandRolledCryptoTests
         // Narrowed to this one small component (not all of SyncService.cs) so the allowlist keeps
         // meaning "here is exactly where a raw primitive appears", not "here is a whole file that
         // happens to also do other things".
-        "AiRaccoon.Infrastructure/Sync/SyncBlobAuthenticator.cs"
+        "AiRaccoon.Infrastructure/Sync/SyncBlobAuthenticator.cs",
+        // D1/D2 identity proof: SHA-256 is the domain-separated transcript digest and the keyId /
+        // root fingerprint — a signature and content address, never key derivation (ECDSA with the
+        // platform key is the only primitive used, and no key material is derived from the hash).
+        "AiRaccoon/Hosting/Common/IdentityProof.cs"
     };
 
     /// <summary>The one file allowed to build a bank key; its legacy path exists only to rekey old banks (ADR-0012).</summary>
