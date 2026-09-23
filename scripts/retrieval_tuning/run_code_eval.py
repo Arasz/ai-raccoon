@@ -163,6 +163,14 @@ def delete_watches(db_path) -> int:
         conn.close()
 
 
+HIT_FIELDS = ("hash", "ranking", "path", "lineStart", "lineEnd")
+
+
+def hit_record(entry: dict, results: list[dict]) -> dict:
+    """One query's ranked hits, trimmed to the fields scoring reads, for offline re-ranking."""
+    return {"id": entry["id"], "hits": [{k: hit.get(k) for k in HIT_FIELDS} for hit in results]}
+
+
 def prepare_reused_bank(reuse_bank, data_root) -> Path:
     """Copy a whole bank directory (already ingested + drained) into data_root,
     with its watches rows deleted. No re-ingest/re-drain follows this."""
@@ -408,18 +416,24 @@ def run(args) -> dict:
             add_ingest_scope(args.binary, server.data_root, server.port, args.corpus_root)
             server.client.ingest_directory(DEFAULT_PROJECT_ID, str(args.corpus_root))
             drain_seconds = drain_code_embeddings(data_root / "memory.db")
+        elif args.drain:
+            # The copied bank keeps its code engine setting; the server's reindex job drains it.
+            drain_seconds = drain_code_embeddings(data_root / "memory.db")
 
         query_scores = []
+        hits: list[dict] = []
         for entry in queries:
             results = server.client.memory_search(
                 project_id=entry.get("targetProjectId") or DEFAULT_PROJECT_ID,
                 query=entry["query"],
                 scope=entry.get("targetScope") or "all",
-                limit=10,
+                limit=args.fetch_limit,
                 min_relative_score=0.0,
                 kind="code",
             )
-            query_scores.append(scoring.score_query(results, entry))
+            if args.save_hits:
+                hits.append(hit_record(entry, results))
+            query_scores.append(scoring.score_query(results[:10], entry))
         metrics = scoring.summarize(query_scores, config=dict(settings_dict))
 
         chunk_counts: dict = {}
@@ -438,6 +452,7 @@ def run(args) -> dict:
         "drainSeconds": drain_seconds,
         "chunkCounts": chunk_counts,
         "metrics": metrics.as_dict(),
+        "hits": hits if args.save_hits else None,
     }
     return report
 
@@ -454,6 +469,12 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, default=None,
                         help="MANIFEST.json for the chunk-counts-by-language/band report")
     parser.add_argument("--allow-busy", action="store_true")
+    parser.add_argument("--fetch-limit", type=int, default=10, dest="fetch_limit",
+                        help="hits requested per query; scoring always uses the top 10")
+    parser.add_argument("--drain", action="store_true",
+                        help="with --reuse-bank: wait for pending code rows to embed (a bank re-chunked offline)")
+    parser.add_argument("--save-hits", action="store_true", dest="save_hits",
+                        help="also write hits-<arm>.json with every query's raw ranked hits")
     return parser.parse_args(argv)
 
 
@@ -468,6 +489,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     out_dir = Path(args.out)
     json_path = out_dir / f"results-{args.arm}.json"
     md_path = out_dir / f"results-{args.arm}.md"
+    hits = report.pop("hits", None)
+    if hits is not None:
+        (out_dir / f"hits-{args.arm}.json").write_text(json.dumps(hits, indent=1) + "\n")
     json_path.write_text(json.dumps(report, indent=2) + "\n")
     md_path.write_text(render_markdown(args.arm, report))
 

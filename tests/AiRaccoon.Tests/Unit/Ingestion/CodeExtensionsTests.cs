@@ -32,7 +32,7 @@ public sealed class CodeExtensionsTests
         [
             ".cs", ".fs", ".fsx", ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs",
             ".java", ".kt", ".kts", ".swift", ".rb", ".php", ".c", ".h", ".cc", ".cpp",
-            ".hpp", ".m", ".mm", ".scala", ".lua"
+            ".hpp", ".m", ".mm", ".scala", ".lua", ".html", ".htm", ".css", ".scss", ".sql"
         ], ignoreOrder: true);
     }
 

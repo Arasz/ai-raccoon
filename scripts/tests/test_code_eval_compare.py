@@ -166,3 +166,18 @@ class TestTargetCategoryMustImprove:
         )
         assert result["verdict"] == "DROP"
         assert result["targetDelta"] is not None and result["targetDelta"] < 0
+
+
+class TestPairing:
+    """The bootstrap must difference each query against itself; varied baselines expose a mis-pairing."""
+
+    def test_uniform_gain_over_varied_baselines_gives_a_zero_width_interval(self):
+        baselines = [0.0, 1.0, 0.5, 0.387, 0.631, 0.0, 0.9, 0.431]
+        baseline_rows = [_row(f"q{i}", score) for i, score in enumerate(baselines)]
+        arm_rows = [_row(f"q{i}", score + 0.05) for i, score in reversed(list(enumerate(baselines)))]
+
+        diffs = compare.ndcg5_diffs(compare.pair_by_id(baseline_rows, arm_rows))
+        ci = compare.paired_bootstrap_ci(diffs)
+
+        assert ci["ciLow"] == pytest.approx(0.05)
+        assert ci["ciHigh"] == pytest.approx(0.05)

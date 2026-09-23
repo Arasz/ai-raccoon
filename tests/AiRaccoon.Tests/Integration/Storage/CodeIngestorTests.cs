@@ -221,6 +221,38 @@ public sealed class CodeIngestorTests : IDisposable
         }
     }
 
+    /// <summary>P2-B: the identifiers column is filled at insert time from the chunk's own text, not left empty.</summary>
+    [RetryFact]
+    public async Task IngestFileAsync_StoresIdentifiersSplitFromChunkText()
+    {
+        await AllowScopeAsync(_dataRoot);
+        var file = await WriteFileAsync(_dataRoot, "A.cs", "class WatchOverlapResolver\n{\n}\n");
+
+        await _ingestor.IngestFileAsync(_conn, "acme", file, TestContext.Current.CancellationToken);
+
+        var row = (await CodeRowsAsync(file)).ShouldHaveSingleItem();
+        ((string)row.identifiers).ShouldBe("watch overlap resolver");
+    }
+
+    /// <summary>D-E11's position-refresh path (dedup rediscovery) is unchanged: it never touches identifiers.</summary>
+    [RetryFact]
+    public async Task Reingest_FileGainsLeadingLines_LeavesIdentifiersUntouched()
+    {
+        await AllowScopeAsync(_dataRoot);
+        var file = await WriteFileAsync(_dataRoot, "A.cs", "class WatchOverlapResolver\n{\n}\n");
+        await _ingestor.IngestFileAsync(_conn, "acme", file, TestContext.Current.CancellationToken);
+        var before = (await CodeRowsAsync(file)).Single();
+        ((string)before.identifiers).ShouldBe("watch overlap resolver");
+
+        await File.WriteAllTextAsync(file, "\n\nclass WatchOverlapResolver\n{\n}\n",
+            TestContext.Current.CancellationToken);
+        await _ingestor.IngestFileAsync(_conn, "acme", file, TestContext.Current.CancellationToken);
+
+        var after = (await CodeRowsAsync(file)).Single();
+        ((int)after.id).ShouldBe((int)before.id, "dedup rediscovery updates the existing row, not a new one");
+        ((string)after.identifiers).ShouldBe((string)before.identifiers);
+    }
+
     [RetryFact]
     public async Task IngestFileAsync_ConcurrentSameFile_SingleChunkSetNoDuplicateRows()
     {

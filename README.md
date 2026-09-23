@@ -42,6 +42,7 @@ What to do when you upgrade past each version. A version not listed here needs n
 
 ## What's new
 
+- Code search matches words inside identifiers (`overlap` finds `WatchOverlapResolver`) and indexes HTML, CSS/SCSS and SQL files. (1.48.0) [ADR-0109](docs/adr/0109-code-fts-carries-a-derived-identifiers-column.md) · [results](docs/work/2026-09-23-code-retrieval-eval-results.md)
 - One bundled embedding model for memory and code, granite-embedding-small-english-r2, which beats the old defaults on every retrieval eval, and runs on the GPU where available (macOS). (1.47.0) [ADR-0108](docs/adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)
 - `model download` accepts any model that ships a `tokenizer.json` (granite-embedding r2, gte-modernbert, jina-code, Qwen3-Embedding, EmbeddingGemma), and embeds with the model's query and document prompts. (1.46.0) [survey](docs/work/2026-09-23-embedding-model-survey.md)
 - Every failure has its own two-digit exit code, grouped by category (`ErrorCode.Bank.NoBank` = `31`). (1.45.0) [ADR-0107](docs/adr/0107-categorized-two-digit-exit-codes.md)

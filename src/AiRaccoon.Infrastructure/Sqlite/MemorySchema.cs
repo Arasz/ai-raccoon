@@ -70,6 +70,7 @@ internal static class MemorySchema
 
     private const int DefaultEmbeddingDimension = 384;
 
+
     /// <summary>
     ///     Backfill cutoff for the v12 <c>search_quality.kind</c> column (ADR-0097):
     ///     <c>git show -s --format=%ct 356afe95</c> — the commit whose rows predate kind
@@ -518,13 +519,14 @@ internal static class MemorySchema
                                               total_chunks INTEGER NOT NULL DEFAULT 0
                                           );
 
-                                          -- embed_attempts (S2) is NOT declared here: ALTER TABLE ADD COLUMN isn't
-                                          -- idempotent under a race (two connections opening the bank at once, e.g.
-                                          -- the maintenance hosted service and the first real request, can both see
-                                          -- it missing before either commits), unlike every CREATE/DROP ... IF
-                                          -- [NOT] EXISTS statement in this block — see EnsureCodeEmbedAttemptsColumnAsync,
-                                          -- called right after this block runs (same digest-mismatch-only cadence,
-                                          -- never on a steady-state open) and tolerant of losing that race.
+                                          -- embed_attempts (S2) and identifiers (P2-B, docs/adr/0109) are NOT declared
+                                          -- here: ALTER TABLE ADD COLUMN isn't idempotent under a race (two connections
+                                          -- opening the bank at once, e.g. the maintenance hosted service and the first
+                                          -- real request, can both see it missing before either commits), unlike every
+                                          -- CREATE/DROP ... IF [NOT] EXISTS statement in this block — see
+                                          -- EnsureCodeEmbedAttemptsColumnAsync/EnsureCodeIdentifiersColumnAsync, called
+                                          -- right after this block runs (same digest-mismatch-only cadence, never on a
+                                          -- steady-state open) and tolerant of losing that race.
 
                                           CREATE UNIQUE INDEX IF NOT EXISTS uq_code_chunk ON code_entries(project_id, path, hash);
                                           CREATE INDEX IF NOT EXISTS idx_code_entries_project ON code_entries(project_id);
@@ -538,28 +540,35 @@ internal static class MemorySchema
                                           -- re-runs this block (integration review, code-search-implementation-plan §3.1).
                                           DROP INDEX IF EXISTS idx_code_entries_path;
 
+                                          -- identifiers (P2-B, docs/adr/0109): a derived, space-joined lowercase word
+                                          -- list of every multi-part identifier in `value` (IdentifierSplitter), equal
+                                          -- bm25 weight with the other two columns — no column weighting, no query-side
+                                          -- change (MATCH stays unqualified). CREATE ... IF NOT EXISTS only takes effect
+                                          -- on a fresh bank; a legacy 2-column code_fts is rebuilt by
+                                          -- EnsureCodeFtsIdentifiersAsync, called right after this block runs.
                                           CREATE VIRTUAL TABLE IF NOT EXISTS code_fts USING fts5(
                                               value,
                                               source_file,
+                                              identifiers,
                                               content='code_entries',
                                               content_rowid='id'
                                           );
 
                                           CREATE TRIGGER IF NOT EXISTS code_fts_ai AFTER INSERT ON code_entries BEGIN
-                                              INSERT INTO code_fts(rowid, value, source_file)
-                                              VALUES (new.id, new.value, new.source_file);
+                                              INSERT INTO code_fts(rowid, value, source_file, identifiers)
+                                              VALUES (new.id, new.value, new.source_file, new.identifiers);
                                           END;
 
                                           CREATE TRIGGER IF NOT EXISTS code_fts_ad AFTER DELETE ON code_entries BEGIN
-                                              INSERT INTO code_fts(code_fts, rowid, value, source_file)
-                                              VALUES ('delete', old.id, old.value, old.source_file);
+                                              INSERT INTO code_fts(code_fts, rowid, value, source_file, identifiers)
+                                              VALUES ('delete', old.id, old.value, old.source_file, old.identifiers);
                                           END;
 
-                                          CREATE TRIGGER IF NOT EXISTS code_fts_au AFTER UPDATE OF value, source_file ON code_entries BEGIN
-                                              INSERT INTO code_fts(code_fts, rowid, value, source_file)
-                                              VALUES ('delete', old.id, old.value, old.source_file);
-                                              INSERT INTO code_fts(rowid, value, source_file)
-                                              VALUES (new.id, new.value, new.source_file);
+                                          CREATE TRIGGER IF NOT EXISTS code_fts_au AFTER UPDATE OF value, source_file, identifiers ON code_entries BEGIN
+                                              INSERT INTO code_fts(code_fts, rowid, value, source_file, identifiers)
+                                              VALUES ('delete', old.id, old.value, old.source_file, old.identifiers);
+                                              INSERT INTO code_fts(rowid, value, source_file, identifiers)
+                                              VALUES (new.id, new.value, new.source_file, new.identifiers);
                                           END;
 
                                           -- vec0 for the code corpus: `ctx` is the project id directly — code is project-scoped
@@ -674,6 +683,11 @@ internal static class MemorySchema
             await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
             await EnsureSearchQualityResultFeaturesColumnAsync(connection, cancellationToken).ConfigureAwait(false);
             await EnsureRepairRequestsMapJsonColumnAsync(connection, cancellationToken).ConfigureAwait(false);
+
+            // P2-B (docs/adr/0109): identifiers column first, then the code_fts rebuild that reads
+            // it — EnsureCodeFtsIdentifiersAsync's backfill assumes the column already exists.
+            await EnsureCodeIdentifiersColumnAsync(connection, cancellationToken).ConfigureAwait(false);
+            await EnsureCodeFtsIdentifiersAsync(connection, cancellationToken).ConfigureAwait(false);
 
             var testHook = TestOnlyAfterDdlHookAsync.Value;
             if (testHook is not null)
@@ -1799,6 +1813,145 @@ internal static class MemorySchema
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
+        }
+    }
+
+    /// <summary>
+    ///     P2-B (docs/adr/0109): adds code_entries.identifiers if it is missing — same tolerant
+    ///     shape as <see cref="EnsureCodeEmbedAttemptsColumnAsync" /> (pragma probe + duplicate-column
+    ///     catch for two connections racing the same digest mismatch). Called only from inside the
+    ///     Ddl block's own digest-mismatch branch, before <see cref="EnsureCodeFtsIdentifiersAsync" />,
+    ///     whose backfill reads this column.
+    /// </summary>
+    private static async Task EnsureCodeIdentifiersColumnAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'code_entries'",
+                cancellationToken: cancellationToken))
+            .ConfigureAwait(false) > 0;
+        if (!hasTable)
+        {
+            return; // the Ddl block just above creates code_entries; nothing to alter yet
+        }
+
+        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('code_entries')", cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).Contains("identifiers", StringComparer.Ordinal);
+        if (hasColumn)
+        {
+            return;
+        }
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                    "ALTER TABLE code_entries ADD COLUMN identifiers TEXT NOT NULL DEFAULT ''",
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+        {
+        }
+    }
+
+    /// <summary>
+    ///     P2-B (docs/adr/0109): rebuilds <c>code_fts</c> from a 2-column to a 3-column shape
+    ///     (value, source_file, identifiers) on a bank stamped before this task's Ddl change — a
+    ///     legacy <c>code_fts</c> already exists, so the Ddl block's own
+    ///     <c>CREATE VIRTUAL TABLE IF NOT EXISTS</c>/<c>CREATE TRIGGER IF NOT EXISTS</c> statements
+    ///     no-op against it. Skips entirely once <c>code_fts</c> already carries the column (a fresh
+    ///     bank, or an already-migrated one) — a no-op must never re-run the backfill, which would
+    ///     recompute every row's identifiers from its current <c>value</c> and silently discard
+    ///     whatever a caller wrote there directly. Otherwise: backfill every row's identifiers from
+    ///     its value (<see cref="IdentifierSplitter" />), then drop and recreate
+    ///     <c>code_fts</c> and its 3 triggers in the new shape and run <c>'rebuild'</c> — all inside
+    ///     one <c>BEGIN IMMEDIATE</c>, so a crash mid-rebuild cannot leave a bank without a working
+    ///     FTS index (same shape as the <c>entries_fts</c> rebuild in <see cref="MigrateToV9Async" />).
+    /// </summary>
+    private static async Task<bool> CodeFtsHasIdentifiersAsync(SqliteConnection connection,
+        CancellationToken cancellationToken) =>
+        (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('code_fts')", cancellationToken: cancellationToken))
+            .ConfigureAwait(false)).Contains("identifiers", StringComparer.Ordinal);
+
+    private static async Task EnsureCodeFtsIdentifiersAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        if (await CodeFtsHasIdentifiersAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        try
+        {
+            // Re-checked under the write lock: a connection that raced the same digest mismatch may
+            // have finished the rebuild while this one waited on BEGIN IMMEDIATE.
+            if (await CodeFtsHasIdentifiersAsync(connection, cancellationToken).ConfigureAwait(false))
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            var rows = (await connection.QueryAsync<(long Id, string Value)>(new CommandDefinition(
+                    "SELECT id, value FROM code_entries", cancellationToken: cancellationToken))
+                .ConfigureAwait(false)).ToList();
+            await connection.ExecuteAsync(new CommandDefinition(
+                    "UPDATE code_entries SET identifiers = @identifiers WHERE id = @id",
+                    rows.Select(row => new { id = row.Id, identifiers = IdentifierSplitter.Identifiers(row.Value) }),
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        DROP TRIGGER IF EXISTS code_fts_ai;
+                        DROP TRIGGER IF EXISTS code_fts_ad;
+                        DROP TRIGGER IF EXISTS code_fts_au;
+                        DROP TABLE IF EXISTS code_fts;
+
+                        CREATE VIRTUAL TABLE code_fts USING fts5(
+                            value,
+                            source_file,
+                            identifiers,
+                            content='code_entries',
+                            content_rowid='id'
+                        );
+
+                        CREATE TRIGGER code_fts_ai AFTER INSERT ON code_entries BEGIN
+                            INSERT INTO code_fts(rowid, value, source_file, identifiers)
+                            VALUES (new.id, new.value, new.source_file, new.identifiers);
+                        END;
+
+                        CREATE TRIGGER code_fts_ad AFTER DELETE ON code_entries BEGIN
+                            INSERT INTO code_fts(code_fts, rowid, value, source_file, identifiers)
+                            VALUES ('delete', old.id, old.value, old.source_file, old.identifiers);
+                        END;
+
+                        CREATE TRIGGER code_fts_au AFTER UPDATE OF value, source_file, identifiers ON code_entries BEGIN
+                            INSERT INTO code_fts(code_fts, rowid, value, source_file, identifiers)
+                            VALUES ('delete', old.id, old.value, old.source_file, old.identifiers);
+                            INSERT INTO code_fts(rowid, value, source_file, identifiers)
+                            VALUES (new.id, new.value, new.source_file, new.identifiers);
+                        END;
+
+                        INSERT INTO code_fts(code_fts) VALUES('rebuild');
+                        """,
+                        cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
+            throw;
         }
     }
 
