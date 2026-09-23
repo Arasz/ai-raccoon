@@ -1,8 +1,17 @@
 {
- "lastUpdated": "2026-09-23T14:20:00+02:00",
+ "lastUpdated": "2026-09-23T18:00:00+02:00",
  "notesRef": ".ai-badger/status-notes.json",
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
+  {
+   "id": "air-backfill-chunker-named-tuple-types",
+   "title": "ChunkBackfill picks its chunker per file type (re-runs as chunk-backfill-v2); declared tuple types -> named record structs; released 1.44.5",
+   "pr": 674,
+   "merged": true,
+   "date": "2026-09-23",
+   "hasNotes": false,
+   "summary": "P1 routing: memory_write notes (no source_file or path != source_file) -> markdown; file rows -> handler chunker via IFileTypeMatcher; unowned extension -> PlainTextChunker (the fallback); JobName chunk-backfill-v2 so every bank re-runs once. Tests T1,T2,T4,T5,T6,T7, each red under its own mutation. Sweep: 61 declared tuple sites in src+benchmarks -> 40 types (readonly record struct; Dapper rows AliasRow/PolicyCount are sealed classes because record ctor matching needs exact types); WatchKey owns its equality, WatchKeyComparer deleted. Union of touched suites 1894 passed locally; PR merged before build-slow/bdd finished (main build is the CI verdict). Also #676: claude-review loads review plugins, 150 turns, fails only without a 'Reviewed <sha>' verdict."
+  },
   {
    "id": "air-backend-launch-identity-proof",
    "title": "Attach-or-start + per-root ECDSA identity proof (ADR-0106, reverts ADR-0105; F49, F39) — released 1.44.0",
@@ -104,7 +113,7 @@
    "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
   }
  ],
- "next": "Owner: approve publish.yml production gate for 1.44.0; confirm R1 (Retry=Never carve-out). Then ADR-0106 follow-ups #658 (stateful client double fallback), #659 (690/691 under --quiet), #660 (SDK stdio tree kill), #661 (event-id recipe quick-task). Harness follow-ups still open: A1 -> D -> F (docs/work/2026-09-10-harness-followups-definition.md).",
+ "next": "Owner: approve publish.yml production gate for 1.44.5. Next task: structured config chunkers (XML/YAML/TOML) + file-type registry + PlainTextChunker as the one fallback, seed docs/work/2026-09-23-structured-config-chunkers-seed.md (parsers: Tomlyn, SharpYaml; 1.45.0 feature). Still open from before: ADR-0106 follow-ups #658-#661; harness follow-ups A1 -> D -> F.",
  "filedNotStarted": [
   "#477 no job-level metrics (feature gap)",
   "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
