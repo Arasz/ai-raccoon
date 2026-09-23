@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
@@ -265,6 +266,57 @@ public sealed class BackendLauncherTests : IDisposable
         result.ServeExitCode.ShouldBeNull();
     }
 
+    /// <summary>
+    ///     The defect this gates: a private child that never reported its URL was left running once
+    ///     the budget expired. Nothing else holds it — the caller got no URL to stop it through — so
+    ///     the launcher that started it must stop it.
+    /// </summary>
+    [RetryFact]
+    public async Task StartPrivate_WhenTheChildNeverReportsAUrl_StopsItAtTheBudget()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake child is a POSIX shell script");
+        var clock = new FakeTimeProvider();
+        var timers = new TimerRegistrations(clock);
+        var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
+            timers, NullLogger<BackendLauncher>.Instance);
+        var pidFile = Path.Combine(_dataRoot, "child.pid");
+
+        var start = launcher.StartPrivateAsync("sh", SilentChild(pidFile), TestContext.Current.CancellationToken);
+        (await timers.WaitForAsync(2, TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the launcher never registered its timers");
+        var pid = await ChildPidAsync(pidFile);
+
+        clock.Advance(BackendLauncher.DefaultBudget);
+        var result = await start.WaitAsync(TestContext.Current.CancellationToken);
+
+        result.Url.ShouldBeNull();
+        (await ExitsWithinAsync(pid, TimeSpan.FromSeconds(10))).ShouldBeTrue(
+            $"the private child (pid {pid}) never reported a URL but is still running after the budget expired");
+    }
+
+    /// <summary>A caller that gives up mid-start leaves nobody holding the child either.</summary>
+    [RetryFact]
+    public async Task StartPrivate_WhenTheCallerCancels_StopsTheChild()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake child is a POSIX shell script");
+        var clock = new FakeTimeProvider();
+        var timers = new TimerRegistrations(clock);
+        var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
+            timers, NullLogger<BackendLauncher>.Instance);
+        var pidFile = Path.Combine(_dataRoot, "child.pid");
+        using var caller = new CancellationTokenSource();
+
+        var start = launcher.StartPrivateAsync("sh", SilentChild(pidFile), caller.Token);
+        (await timers.WaitForAsync(2, TestContext.Current.CancellationToken))
+            .ShouldBeTrue("the launcher never registered its timers");
+        var pid = await ChildPidAsync(pidFile);
+        await caller.CancelAsync();
+
+        await Should.ThrowAsync<OperationCanceledException>(() => start.WaitAsync(TestContext.Current.CancellationToken));
+        (await ExitsWithinAsync(pid, TimeSpan.FromSeconds(10))).ShouldBeTrue(
+            $"the private child (pid {pid}) is still running after its caller cancelled the start");
+    }
+
     [RetryFact]
     public async Task Acquire_WhenTheBackendCannotBeStarted_FailsWithTheCommandItTried()
     {
@@ -317,6 +369,48 @@ public sealed class BackendLauncherTests : IDisposable
         TimeProvider.System, NullLogger<BackendLauncher>.Instance);
 
     private static string UrlFor(int port) => $"http://127.0.0.1:{port}/mcp";
+
+    /// <summary>A child that records its pid, then outlives any budget without printing a URL.</summary>
+    private static string[] SilentChild(string pidFile) => ["-c", "echo $$ > \"$0.tmp\" && mv \"$0.tmp\" \"$0\"; exec sleep 60", pidFile];
+
+    private static async Task<int> ChildPidAsync(string pidFile)
+    {
+        using var bound = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        bound.CancelAfter(TimeSpan.FromSeconds(10));
+        while (!File.Exists(pidFile))
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(20), bound.Token);
+        }
+
+        return int.Parse((await File.ReadAllTextAsync(pidFile, bound.Token)).Trim(), CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<bool> ExitsWithinAsync(int pid, TimeSpan bound)
+    {
+        Process process;
+        try
+        {
+            process = Process.GetProcessById(pid);
+        }
+        catch (ArgumentException)
+        {
+            return true;
+        }
+
+        using (process)
+        {
+            try
+            {
+                await process.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(bound);
+                return true;
+            }
+            catch (TimeoutException)
+            {
+                RaccoonProcess.KillTree(process);
+                return false;
+            }
+        }
+    }
 
     /// <summary>A short idle timeout so a spawned backend retires on its own — nothing here ever kills it.</summary>
     private string[] ServeArguments(int port) =>

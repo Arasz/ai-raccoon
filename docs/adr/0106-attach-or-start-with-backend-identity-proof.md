@@ -40,7 +40,8 @@ initial acquire, `serve --restart`'s shutdown request, and the proxy's dispose-t
 private backends it started. A listener that cannot prove at any of those moments is sent nothing and
 reported as not stopped. A private fallback child that fails its own proof at acquire is sent nothing either;
 the launch that spawned it holds its process and stops it at once, rather than leaving it to its idle
-timeout.
+timeout. A private child that never reports its URL within the startup budget, or whose
+start the caller cancels, is stopped the same way before the failure is returned.
 
 ### D1 — Trust anchor: a per-root ECDSA P-256 key
 

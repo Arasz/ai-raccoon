@@ -43,9 +43,6 @@ public sealed partial class BackendSessions(
     /// </summary>
     internal readonly record struct AcquireOutcome(BackendResult Result, bool Fallback, ProbeVerdict Verdict, IdentityProofFailure? ProofFailure);
 
-    /// <summary>How long a killed fallback child that failed its own proof is given to be reaped.</summary>
-    private static readonly TimeSpan UnprovenChildExitWait = TimeSpan.FromSeconds(5);
-
     /// <summary>How often the stop path re-checks that the private backend let go of its port.</summary>
     private static readonly TimeSpan StopPollInterval = TimeSpan.FromMilliseconds(200);
 
@@ -127,26 +124,8 @@ public sealed partial class BackendSessions(
 
         // The child cannot be sent the token, so /shutdown is closed to it; the proxy spawned it and
         // holds its process, so it stops it now rather than leaving it to its idle timeout.
-        await StopUnprovenChildAsync(result.Child);
+        await BackendLauncher.StopChildAsync(result.Child);
         return new AcquireOutcome(result with { Url = null, Child = null }, true, verdict, failure);
-    }
-
-    private static async Task StopUnprovenChildAsync(Process? child)
-    {
-        if (child is null)
-        {
-            return;
-        }
-
-        try
-        {
-            child.Kill(entireProcessTree: true);
-            await child.WaitForExitAsync().WaitAsync(UnprovenChildExitWait);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or TimeoutException)
-        {
-            // Already gone, or the OS would not say: nothing is left to send it either way.
-        }
     }
 
     public async Task<McpClient> OpenAsync(string? revision, CancellationToken ctx)
