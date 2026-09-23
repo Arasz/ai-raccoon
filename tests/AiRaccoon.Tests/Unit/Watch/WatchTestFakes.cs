@@ -97,10 +97,7 @@ internal sealed class TempDir : IDisposable
 /// <summary>In-memory IWatchStore: watches + per-file fingerprints, with call counters.</summary>
 internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
 {
-    private static readonly WatchKeyComparer KeyComparer = WatchKeyComparer.Instance;
-
-    public Dictionary<(string ProjectId, string Path), (long CreatedAt, long LastChangeTs)> Watches { get; } =
-        new(KeyComparer);
+    public Dictionary<WatchKey, (long CreatedAt, long LastChangeTs)> Watches { get; } = new();
 
     public Dictionary<string, (string Hash, long UpdatedAt)> FileHashes { get; } = new(StringComparer.Ordinal);
 
@@ -126,7 +123,7 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
     public Task AddWatchAsync(string projectId, string path, long createdAt, long lastChangeTs,
         CancellationToken cancellationToken = default)
     {
-        Watches.TryAdd((projectId, path), (createdAt, lastChangeTs));
+        Watches.TryAdd(new WatchKey(projectId, path), (createdAt, lastChangeTs));
         AddWatchCalls++;
         return Task.CompletedTask;
     }
@@ -134,7 +131,7 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
     /// <summary>Mirrors the real cascade delete: fingerprints at or under the watch path die with it.</summary>
     public Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
-        Watches.Remove((projectId, path));
+        Watches.Remove(new WatchKey(projectId, path));
         foreach (var key in FileHashes.Keys
                      .Where(k => k.StartsWith($"{projectId}\u0000", StringComparison.Ordinal) &&
                                  IngestPath.IsWithinScope(k[(projectId.Length + 1)..], path))
@@ -186,9 +183,9 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         CancellationToken cancellationToken = default)
     {
         UpdateLastChangeCalls++;
-        if (Watches.TryGetValue((projectId, path), out var watch))
+        if (Watches.TryGetValue(new WatchKey(projectId, path), out var watch))
         {
-            Watches[(projectId, path)] = (watch.CreatedAt, lastChangeTs);
+            Watches[new WatchKey(projectId, path)] = (watch.CreatedAt, lastChangeTs);
         }
 
         return Task.CompletedTask;
