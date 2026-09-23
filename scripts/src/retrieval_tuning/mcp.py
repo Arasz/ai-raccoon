@@ -18,6 +18,10 @@ PROTOCOL_VERSION = "2025-06-18"
 CLIENT_INFO = {"name": "retrieval-tuning-harness", "version": "0.1.0"}
 
 
+# memory_search requires a sessionId; the harness attributes every search_quality row to this one.
+HARNESS_SESSION_ID = "retrieval-tuning-harness"
+
+
 class McpError(RuntimeError):
     """An MCP-level failure: JSON-RPC error, HTTP error, or an unparseable response."""
 
@@ -108,7 +112,10 @@ class MCPClient:
         content = result.get("content", [])
         for item in content:
             if item.get("type") == "text":
-                return json.loads(item["text"])
+                try:
+                    return json.loads(item["text"])
+                except json.JSONDecodeError:
+                    raise McpError(f"{name} returned non-JSON text (a tool error): {item['text'][:300]}") from None
         return result
 
     @staticmethod
@@ -158,6 +165,7 @@ class MCPClient:
             "scope": scope,
             "limit": limit,
             "minRelativeScore": min_relative_score,
+            "sessionId": HARNESS_SESSION_ID,
         }
         if kind is not None:
             arguments["kind"] = kind
