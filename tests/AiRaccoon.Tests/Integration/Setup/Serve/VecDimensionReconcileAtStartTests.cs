@@ -59,7 +59,7 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
         await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         (await VecTableSqlAsync("vec_entries")).ShouldContain("float[1024]",
             customMessage: "the next serve must reconcile vec0 to the changed engine before it accepts a tool call");
         (await VecTableSqlAsync("vec_structure")).ShouldContain("float[1024]");
@@ -81,7 +81,7 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
         await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         // A reconcile that (incorrectly) ran DDL on a match would DROP + recreate the table and,
         // per D3, never repopulate it — the seeded row would be gone. Its survival is the proof.
         (await VecRowCountAsync("vec_entries")).ShouldBe(1,
@@ -105,7 +105,7 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
         await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         (await VecTableSqlAsync("vec_code")).ShouldContain("float[1024]",
             customMessage: "the next serve must reconcile vec_code to the code engine's dimension before a tool call");
     }
@@ -125,7 +125,7 @@ public sealed class VecDimensionReconcileAtStartTests : IDisposable
         await run.WaitForUrlAsync(TestContext.Current.CancellationToken);
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         (await VecRowCountAsync("vec_code")).ShouldBe(1,
             customMessage: "a missing codeDimensions row must default to 768 and NOT drop the populated index");
         (await VecTableSqlAsync("vec_code")).ShouldContain("float[768]");

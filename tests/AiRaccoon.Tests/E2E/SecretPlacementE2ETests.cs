@@ -61,14 +61,14 @@ public sealed class SecretPlacementE2ETests : IAsyncLifetime
                 "--port", port.ToString(CultureInfo.InvariantCulture)
             ], ProxyProcess.Stateless);
             (await proxy.ListToolsAsync(Ct)).ShouldNotBeEmpty();
-            (await proxy.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, proxy.Stderr);
+            (await proxy.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
 
             var show = await RaccoonProcess.RunAsync(
             [
                 "--data-root", _root, "--install-scope", "project", "--quiet",
                 "--port", port.ToString(CultureInfo.InvariantCulture), "settings", "sweep", "show"
             ], HardCap, Ct);
-            show.ExitCode.ShouldBe(ExitCode.Success, show.Stderr);
+            show.ExitCode.ShouldBe(ErrorCode.Ok.Success, show.Stderr);
         }
 
         // The top level holds the state directory and nothing else: no token, no key, no lock, no log, no bank.
@@ -97,7 +97,7 @@ public sealed class SecretPlacementE2ETests : IAsyncLifetime
                 "--port", port.ToString(CultureInfo.InvariantCulture)
             ], ProxyProcess.Stateless);
             (await proxy.ListToolsAsync(Ct)).ShouldNotBeEmpty();
-            (await proxy.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, proxy.Stderr);
+            (await proxy.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
             (proxy.Stderr + ReadQuietLog(options)).ShouldNotContain("did not prove", Case.Sensitive,
                 "the restored key must prove to the restored root");
         }

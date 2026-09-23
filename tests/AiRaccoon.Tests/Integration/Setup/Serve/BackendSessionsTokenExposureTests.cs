@@ -59,7 +59,7 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
         (await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken))
             .ShouldBeTrue("a proven shared server must outlive the client that attached to it");
 
-        (await server.StopAsync()).ShouldBe(ExitCode.Success);
+        (await server.StopAsync()).ShouldBe(ErrorCode.Ok.Success);
     }
 
     /// <summary>

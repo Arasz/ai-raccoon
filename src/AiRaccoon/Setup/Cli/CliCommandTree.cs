@@ -630,7 +630,7 @@ internal static class CliCommandTree
         };
         // SetAction exists only because System.CommandLine requires a subcommand unless the
         // command declares its own action; Program.cs actually routes on CommandPath. Do not remove.
-        serve.SetAction(_ => ExitCode.Success);
+        serve.SetAction(_ => ErrorCode.Ok.Success);
         return serve;
     }
 

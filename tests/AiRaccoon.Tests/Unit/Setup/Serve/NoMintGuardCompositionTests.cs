@@ -39,7 +39,7 @@ public sealed class NoMintGuardCompositionTests
             var exit = await TestData.CreateProxyRunner().RunAsync(config,
                 new StandardStreams(TextReader.Null, TextWriter.Null, stderr), AppHost, TestContext.Current.CancellationToken);
 
-            exit.ShouldBe(ExitCode.NoBank);
+            exit.ShouldBe(ErrorCode.Bank.NoBank);
             stderr.ToString().ShouldContain(dataRoot);
             new DirectoryInfo(dataRoot).EnumerateFileSystemInfos().ShouldBeEmpty(
                 "a refused auto-launch must mint nothing under the resolved root");
@@ -58,7 +58,7 @@ public sealed class NoMintGuardCompositionTests
         {
             var (exit, stderr) = await RunSettingsShowAsync(dataRoot);
 
-            exit.ShouldBe(ExitCode.NoBank);
+            exit.ShouldBe(ErrorCode.Bank.NoBank);
             stderr.ShouldContain(dataRoot);
             new DirectoryInfo(dataRoot).EnumerateFileSystemInfos().ShouldBeEmpty(
                 "a refused auto-launch must mint nothing under the resolved root");
@@ -85,7 +85,7 @@ public sealed class NoMintGuardCompositionTests
 
             var (exit, _, stderr) = await CliRun.RunAsync(["--data-root", dataRoot, "model", "code", "set", "default"], commands);
 
-            exit.ShouldBe(ExitCode.NoBank, stderr);
+            exit.ShouldBe(ErrorCode.Bank.NoBank, stderr);
             stderr.ShouldContain(dataRoot);
             new DirectoryInfo(dataRoot).EnumerateFileSystemInfos().ShouldBeEmpty(
                 "a refused auto-launch verb must fetch and create nothing under the resolved root");
@@ -114,8 +114,8 @@ public sealed class NoMintGuardCompositionTests
 
             var (settingsExit, _) = await RunSettingsShowAsync(settingsRoot);
 
-            proxyExit.ShouldBe(ExitCode.NoBank);
-            settingsExit.ShouldBe(ExitCode.NoBank);
+            proxyExit.ShouldBe(ErrorCode.Bank.NoBank);
+            settingsExit.ShouldBe(ErrorCode.Bank.NoBank);
         }
         finally
         {

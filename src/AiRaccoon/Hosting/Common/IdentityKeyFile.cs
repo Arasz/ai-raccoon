@@ -50,6 +50,9 @@ public sealed class IdentityKeyFile
     /// <summary>Why the last ensure or read refused, with the remedy; null when it did not.</summary>
     public string? RefusalReason { get; private set; }
 
+    /// <summary>True when the last ensure refused because the state directory or a secret file is not owner-only.</summary>
+    public bool NotOwnerOnly { get; private set; }
+
     /// <summary>True when the last ensure tightened an owned state directory others could only read to 0700.</summary>
     public bool TightenedStateDirectory { get; private set; }
 
@@ -60,6 +63,7 @@ public sealed class IdentityKeyFile
     public async Task<ECDsa?> EnsureAsync(CancellationToken cancellationToken)
     {
         RefusalReason = null;
+        NotOwnerOnly = false;
         TightenedStateDirectory = false;
         try
         {
@@ -84,6 +88,7 @@ public sealed class IdentityKeyFile
         }
         catch (OwnerOnlyViolation ex)
         {
+            NotOwnerOnly = true;
             RefusalReason = ex.Message;
             return null;
         }
@@ -251,6 +256,7 @@ public sealed class IdentityKeyFile
         }
         catch (OwnerOnlyViolation ex)
         {
+            NotOwnerOnly = true;
             RefusalReason = ex.Message;
             return null;
         }

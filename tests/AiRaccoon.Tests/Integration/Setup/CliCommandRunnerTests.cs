@@ -63,8 +63,8 @@ public sealed class CliCommandRunnerTests : IDisposable
     {
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "settings", "access", "default", "set", "bogus"]);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
-        exit.ShouldNotBe(ExitCode.FailedToResolveEncryptionKey);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        exit.ShouldNotBe(ErrorCode.Key.Unresolved);
         stderr.ShouldContain("invalid access mode");
     }
 
@@ -102,7 +102,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     {
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "settings", "access", "set"], expectParseErrors: true);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.MissingValue);
         CountOccurrences(stderr, "Required argument missing for command: 'set'.").ShouldBe(1);
     }
 
@@ -152,7 +152,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     /// documented warning path; the DI-composed command must not hand the Bitwarden provider
     /// an env-source EncryptionData (Guard: "encryptionData.SecretId must not be null").</summary>
     [RetryFact]
-    public async Task EncryptionUnset_EnvKeyedBankNoPassphrase_WarnsAndExitsKeyResolutionFailure()
+    public async Task EncryptionUnset_EnvKeyedBankNoPassphrase_WarnsAndExitsNoEnvPassphrase()
     {
         // Create the bank first: on a missing bank, unset takes the clean-reset path (exit 0).
         // `encryption show` opens the bank directly (ADR-0075 §5.3 opt-out); a `settings ...` verb
@@ -162,7 +162,7 @@ public sealed class CliCommandRunnerTests : IDisposable
 
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "encryption", "unset"]);
 
-        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
+        exit.ShouldBe(ErrorCode.Key.NoEnvPassphrase);
         stderr.ShouldContain("no AIRACCOON_DB_PASSPHRASE set");
         stderr.ShouldNotContain("must not be null");
     }

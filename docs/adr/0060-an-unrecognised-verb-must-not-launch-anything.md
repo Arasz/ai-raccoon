@@ -79,6 +79,22 @@ contradicted `--dims`, a server 400, an undialable `--port`) stays 15. A bank th
 opened is 2, a migration-open refusal is 25 on every model verb, Ctrl-C is 130, and anything
 else is the new `CommandFailed` (27). Pinned by `CommandFailureExitCodeTests`.
 
+## Amendment (2026-09-23): renumbered by ADR-0107
+
+[ADR-0107](0107-categorized-two-digit-exit-codes.md) replaces every number this record
+names with a categorized two-digit code; nothing about the decision above changes, only
+what the process prints. `ExitCode.FailedToParseCliArgs` (9) is now
+`ErrorCode.Usage.Unparseable` (11); `ExitCode.InvalidArgument` (15) split into several
+`Usage.*` and other-category cases by what specifically was wrong — a bad value is
+`Usage.InvalidValue` (10), a missing one is `Usage.MissingValue` (12), an undialable
+`--port` is `Usage.UndialablePort` (13), a removed `--transport` value is
+`Usage.RemovedTransport` (14), and a rejected server 400 is `Usage.RequestRejected` (17).
+`ExitCode.CommandFailed` (27), the catch-all this record's own amendment introduced, is
+now `Internal.Unexpected` (90) as its general case, with several narrower cases (a bank
+that cannot be opened is `Bank.OpenFailed` 30, a migration-open refusal on a model verb
+is `Server.MigrationRefused` 59) carved out of what `27` used to swallow. Ctrl-C stays
+`Ok.SIGC` (130), unrenumbered.
+
 ## Evidence
 
 `tests/AiRaccoon.Tests/Unit/Setup/Serve/AppRunnerUnrecognisedVerbTests.cs`. Both failing cases were

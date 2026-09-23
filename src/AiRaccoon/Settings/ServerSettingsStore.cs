@@ -9,8 +9,11 @@ using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Settings;
 
-/// <summary>The settings server could not be reached; nothing was read or written.</summary>
-internal sealed class SettingsServerUnavailableException(string message, Exception? inner = null) : Exception(message, inner);
+/// <summary>The settings server could not be reached; nothing was read or written. <see cref="Code" /> names the case.</summary>
+internal sealed class SettingsServerUnavailableException(int code, string message, Exception? inner = null) : Exception(message, inner)
+{
+    public int Code { get; } = code;
+}
 
 /// <summary>The settings server answered but refused the credential.</summary>
 internal sealed class SettingsServerRefusedException(string message) : Exception(message);
@@ -218,7 +221,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         }
         catch (Exception ex) when (ex is HttpRequestException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            throw new SettingsServerUnavailableException(
+            throw new SettingsServerUnavailableException(ErrorCode.Reach.StoppedAnswering,
                 $"ai-raccoon: no settings server answered at {_client.BaseAddress} ({ex.Message})", ex);
         }
     }

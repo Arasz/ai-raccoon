@@ -40,7 +40,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, @out, err) = await Run(repo, ["model", "download", repo.RepoId]);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         @out.ShouldContain($"downloaded {repo.RepoId}");
         @out.ShouldContain(EmbeddingManifest.FileName);
         @out.ShouldContain("model embedding set local");
@@ -57,7 +57,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, @out, err) = await Run(repo, ["model", "download", repo.RepoId, "--dry-run"]);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         @out.ShouldContain("onnx/model.onnx");
         @out.ShouldContain("onnx/model.onnx_data");
         @out.ShouldContain(repo.OnnxSha[..16]);
@@ -68,37 +68,37 @@ public class ModelDownloadCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task ShaMismatch_ExitNonZero_WithActionableMessage()
+    public async Task ShaMismatch_ExitsChecksumMismatch_WithActionableMessage()
     {
         var repo = FakeRepo.BgeM3(_server, corruptOnnx: true);
 
         var (exit, @out, err) = await Run(repo, ["model", "download", repo.RepoId]);
 
-        exit.ShouldBe(ExitCode.ModelDownloadFailed);
+        exit.ShouldBe(ErrorCode.Model.ChecksumMismatch);
         @out.ShouldBeEmpty();
         err.ShouldContain("sha256 mismatch");
         err.ShouldContain(repo.OnnxSha);
     }
 
     [Fact]
-    public async Task MissingRepo_ExitNonZero_WithActionableMessage()
+    public async Task MissingRepo_ExitsRepoNotFound_WithActionableMessage()
     {
         var repo = FakeRepo.BgeM3(_server);
 
         var (exit, _, err) = await Run(repo, ["model", "download", "nope/missing"]);
 
-        exit.ShouldBe(ExitCode.ModelDownloadFailed);
+        exit.ShouldBe(ErrorCode.Model.RepoNotFound);
         err.ShouldContain("nope/missing");
     }
 
     [Fact]
-    public async Task LargeDownload_StdinNo_Refuses_ExitInvalidArgument()
+    public async Task LargeDownload_StdinNo_Refuses_ExitConfirmationDeclined()
     {
         var repo = FakeRepo.BgeM3(_server, declaredDataSize: 600L * 1024 * 1024);
 
         var (exit, @out, err) = await Run(repo, ["model", "download", repo.RepoId], stdin: "n\n");
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.ConfirmationDeclined);
         @out.ShouldBeEmpty();
         err.ShouldContain("--yes");
         Directory.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId))).ShouldBeFalse();
@@ -111,7 +111,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, _, err) = await Run(repo, ["model", "download", repo.RepoId], stdin: "y\n");
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         err.ShouldContain("[y/N]");
         File.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId), EmbeddingManifest.FileName)).ShouldBeTrue();
     }
@@ -123,7 +123,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, _, err) = await Run(repo, ["model", "download", repo.RepoId, "--yes"]);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         err.ShouldNotContain("[y/N]");
         File.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId), EmbeddingManifest.FileName)).ShouldBeTrue();
     }
@@ -141,13 +141,13 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, @out, _) = await CliRun.RunAsync(["model", "download", repo.RepoId, "--dry-run"], commands);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         @out.ShouldContain("onnx/model.onnx");
     }
 
-    /// <summary>Nothing answers the Hub at all: a fetch failure, the case 21 names.</summary>
+    /// <summary>Nothing answers the Hub at all, before any file was planned.</summary>
     [Fact]
-    public async Task NoNetwork_ExitsModelDownloadFailed()
+    public async Task NoNetwork_ExitsHubUnreachable()
     {
         using var lease = LoopbackPort.Reserve();
         lease.ReleaseForBind();
@@ -159,8 +159,41 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, _, err) = await CliRun.RunAsync(["model", "download", "org/model", "--dry-run"], commands);
 
-        exit.ShouldBe(ExitCode.ModelDownloadFailed);
+        exit.ShouldBe(ErrorCode.Model.HubUnreachable);
         err.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task AGraphOnnxRuntimeCannotLoad_ExitsRuntimeRejected()
+    {
+        var repo = FakeRepo.BgeM3(_server);
+
+        var (exit, _, _) = await Run(repo, ["model", "download", repo.RepoId], smokeTester: new FakeSmokeTester(ok: false));
+
+        exit.ShouldBe(ErrorCode.Model.RuntimeRejected);
+    }
+
+    [Fact]
+    public async Task NotEnoughFreeSpace_ExitsDiskFull_AndTouchesNothing()
+    {
+        var repo = FakeRepo.BgeM3(_server);
+
+        var (exit, _, err) = await Run(repo, ["model", "download", repo.RepoId], diskSpace: new FakeDiskSpace(0));
+
+        exit.ShouldBe(ErrorCode.Environment.DiskFull);
+        err.ShouldContain("insufficient disk space");
+        Directory.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId))).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task AFileNotInTheRepoTree_ExitsRepoUnsupported()
+    {
+        var repo = FakeRepo.BgeM3(_server);
+
+        var (exit, _, err) = await Run(repo, ["model", "download", repo.RepoId, "--file", "onnx/nope.onnx"]);
+
+        exit.ShouldBe(ErrorCode.Model.RepoUnsupported);
+        err.ShouldContain("onnx/nope.onnx");
     }
 
     [Fact]
@@ -178,7 +211,7 @@ public class ModelDownloadCommandTests : IDisposable
         var (exit, _, _) = await CliRun.RunAsync(["model", "download", repo.RepoId, "--dir", Path.Combine(_dataRoot, "m")],
             (parsed, streams, _) => commands.RunAsync(parsed, streams, cts.Token));
 
-        exit.ShouldBe(ExitCode.Interrupted);
+        exit.ShouldBe(ErrorCode.Ok.SIGC);
     }
 
     [Fact]
@@ -189,17 +222,18 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, @out, _) = await Run(repo, ["model", "download", repo.RepoId, "--dir", customDir]);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         @out.ShouldContain(customDir);
         File.Exists(Path.Combine(customDir, EmbeddingManifest.FileName)).ShouldBeTrue();
     }
 
-    private async Task<(int Exit, string Out, string Err)> Run(FakeRepo repo, string[] args, string? stdin = null)
+    private async Task<(int Exit, string Out, string Err)> Run(FakeRepo repo, string[] args, string? stdin = null,
+        IOnnxSmokeTester? smokeTester = null, IDiskSpaceProvider? diskSpace = null)
     {
         var httpFactory = new SingletonHttpClientFactory(new HttpClient());
         var commands = new ModelDownloadCommands(httpFactory,
-            smokeTester: new FakeSmokeTester(ok: true),
-            diskSpace: new FakeDiskSpace(long.MaxValue),
+            smokeTester: smokeTester ?? new FakeSmokeTester(ok: true),
+            diskSpace: diskSpace ?? new FakeDiskSpace(long.MaxValue),
             endpoint: _server.BaseUrl);
         return await CliRun.RunAsync(args, (parsed, streams, ct) =>
             commands.RunAsync(parsed.ParsedCliArgs, _dataRoot, streams, ct), stdin is null ? null : new StringReader(stdin));

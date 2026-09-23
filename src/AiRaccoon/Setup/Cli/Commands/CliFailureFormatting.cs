@@ -19,7 +19,7 @@ internal static class CliFailureFormatting
     internal static bool BlamesDataRoot(Exception ex) =>
         ex is UnauthorizedAccessException || (ex is IOException io && (IsReadOnly(io) || IsTooLong(io)));
 
-    private static bool IsReadOnly(IOException io) => io.Message.Contains("Read-only file system", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsReadOnly(IOException io) => io.Message.Contains("Read-only file system", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsTooLong(IOException io) => io.Message.Contains("too long", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsTooLong(IOException io) => io is PathTooLongException || io.Message.Contains("too long", StringComparison.OrdinalIgnoreCase);
 }

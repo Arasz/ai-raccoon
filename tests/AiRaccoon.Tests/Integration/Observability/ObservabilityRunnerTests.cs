@@ -45,7 +45,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         {
             var run = await RunObservabilityAsync("counters", port);
 
-            run.Exit.ShouldBe(ExitCode.Success);
+            run.Exit.ShouldBe(ErrorCode.Ok.Success);
             run.Stdout.ShouldBe($"dotnet-counters monitor -p {Environment.ProcessId}{Environment.NewLine}");
             run.Stderr.ShouldBeEmpty();
         }
@@ -68,7 +68,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         {
             var run = await RunObservabilityAsync("trace", port);
 
-            run.Exit.ShouldBe(ExitCode.Success);
+            run.Exit.ShouldBe(ErrorCode.Ok.Success);
             run.Stdout.ShouldBe($"dotnet-trace collect -p {Environment.ProcessId} --providers {string.Join(',', OtlpNames.Sources)}{Environment.NewLine}");
             run.Stderr.ShouldBeEmpty();
         }
@@ -91,7 +91,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         {
             var run = await RunObservabilityAsync("pid", port);
 
-            run.Exit.ShouldBe(ExitCode.Success);
+            run.Exit.ShouldBe(ErrorCode.Ok.Success);
             run.Stdout.ShouldBe($"{Environment.ProcessId}{Environment.NewLine}");
             run.Stderr.ShouldBeEmpty();
         }
@@ -102,7 +102,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
     }
 
     [RetryFact]
-    public async Task NoServerListening_ReturnsNoServerRunning_WithAStartHint()
+    public async Task NoServerListening_ReturnsNothingListening_WithAStartHint()
     {
         await using var env = await AcquireCleanEnvAsync();
         using var lease = LoopbackPort.Reserve();
@@ -111,7 +111,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         lease.ReleaseForBind(); // nothing bound to it
         var run = await RunObservabilityAsync("pid", port);
 
-        run.Exit.ShouldBe(ExitCode.NoServerRunning);
+        run.Exit.ShouldBe(ErrorCode.Reach.NothingListening);
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain($"no server is listening on port {port}");
         run.Stderr.ShouldContain($"ai-raccoon serve --port {port}");
@@ -119,7 +119,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
     }
 
     [RetryFact]
-    public async Task ForeignListener_ReturnsPortInUse_WithNoStackTrace()
+    public async Task ForeignListener_ReturnsForeignListener_WithNoStackTrace()
     {
         await using var env = await AcquireCleanEnvAsync();
         using var holder = LoopbackPort.Occupy();
@@ -127,7 +127,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
 
         var run = await RunObservabilityAsync("pid", port);
 
-        run.Exit.ShouldBe(ExitCode.PortInUse);
+        run.Exit.ShouldBe(ErrorCode.Port.ForeignListener);
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain($"port {port} is in use by another process");
         run.Stderr.ShouldContain("it is not an ai-raccoon server");
@@ -147,7 +147,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         {
             var run = await RunObservabilityAsync("otlp", port);
 
-            run.Exit.ShouldBe(ExitCode.OtlpNotEnabled);
+            run.Exit.ShouldBe(ErrorCode.Server.OtlpNotEnabled);
             run.Stdout.ShouldBeEmpty();
             run.Stderr.ShouldContain($"OTLP export is not enabled on the server on port {port}");
             run.Stderr.ShouldContain("OTEL_EXPORTER_OTLP_ENDPOINT");
@@ -174,7 +174,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
 
             var run = await RunObservabilityAsync("otlp", port);
 
-            run.Exit.ShouldBe(ExitCode.Success);
+            run.Exit.ShouldBe(ErrorCode.Ok.Success);
             run.Stdout.ShouldBe($"http://127.0.0.1:4317{Environment.NewLine}");
             run.Stderr.ShouldContain("ai-raccoon: exporting OTLP over grpc");
         }
@@ -197,15 +197,15 @@ public sealed class ObservabilityRunnerTests : IDisposable
         // Same root: the second serve proves the owner holds this root's identity key and exits 0.
         await using var second = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         var secondExit = await second.Exit;
-        secondExit.ShouldBe(ExitCode.Success);
+        secondExit.ShouldBe(ErrorCode.Ok.Success);
 
         var run = await RunObservabilityAsync("pid", port);
 
-        run.Exit.ShouldBe(ExitCode.Success);
+        run.Exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stdout.ShouldBe($"{Environment.ProcessId}{Environment.NewLine}");
 
         var firstExit = await first.StopAsync();
-        firstExit.ShouldBe(ExitCode.Success);
+        firstExit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -248,7 +248,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         {
             var oldServerRun = await RunObservabilityAsync("pid", oldServerPort);
             oldServerRun.Stdout.ShouldBeEmpty();
-            oldServerRun.Exit.ShouldBe(ExitCode.NoServerRunning);
+            oldServerRun.Exit.ShouldBe(ErrorCode.Server.TooOldForObservability);
             oldServerRun.Stderr.ShouldContain("does not expose /observability");
         }
         finally
