@@ -123,6 +123,19 @@ A fresh ingest and drain with the product binary built from the PR branch (`1.46
 
 **Evidence:** arm `final`, `compare_code_eval.py results-b1-run1.json results-final.json --target-category identifier-fragment` → `KEEP`.
 
+### F11 — Swapping the code engine to granite-embedding-small-r2 is worth more than any change measured here [READ]
+
+The #687 session ran this corpus and runner through its product binary.
+
+| engine | nDCG@5 | nDCG@10 | hit@1 | hit@5 | held-out nDCG@5 | drain |
+|---|---|---|---|---|---|---|
+| code-daemon-embed-v1 (main) | 0.501 | 0.506 | 0.446 | 0.581 | 0.607 | 120 s |
+| bundled granite fp16 (#687) | 0.603 | 0.591 | 0.554 | 0.660 | 0.750 | 44 s |
+
+Both runs are without this PR's HTML/CSS/SQL indexing, so those languages score 0 in both. The code-daemon row reproduces this record's B0 exactly. The two PRs compose: P1 and P2 change indexing and the keyword leg, #687 the vector leg. The combined gain is unmeasured.
+
+**Evidence:** bus message from the #687 session to this session, 2026-09-23 20:44 UTC, citing `run_code_eval.py` on the #686 corpus.
+
 ## Still open
 
 - **Whether a larger held-out set would settle AST chunking.** Its +0.018 point estimate needs about three times the held-out queries to resolve.
