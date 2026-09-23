@@ -58,13 +58,43 @@ sequenceDiagram
     autonumber
     participant Client as MCP Client / Proxy
     participant Server as ai-raccoon serve
-    participant TokenFile as <data-root>/mcp-token
+    participant TokenFile as Bank state directory
     
-    Server->>TokenFile: Mint random token (0600 permissions)
+    Server->>TokenFile: Mint random token + identity-key (0600 permissions)
+    Client->>Server: POST /identity/prove (nonce, rootFp, keyId)
+    Server-->>Client: Signature over identity-key
     Client->>TokenFile: Read token from disk
     Client->>Server: HTTP POST /mcp<br/>Header: X-AiRaccoon-Token or Authorization: Bearer
     Server-->>Client: 200 OK (RPC Stream)
 ```
+
+The token and the new identity-key both live in the bank state directory
+([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), F49): the data
+root itself for a user-scope install (`~/.ai-raccoon/mcp-token`), or
+`<data-root>/.ai-raccoon/mcp-token` for a project-scope one. A client attaches to a
+listener only after it proves it holds this root's identity key over the bounded
+`/identity/prove` challenge — the launch section below covers attach-or-start itself.
+
+### Backend launch: attach-or-start behind the identity proof
+
+`serve`, a bare `ai-raccoon` proxy launch, and every server-routed settings verb probe
+the configured `--port` first. A **proven** listener there is attached to and nothing
+new starts; nothing answering starts one on that port; a listener that answers but
+cannot prove it holds this root's identity key is treated as untrusted
+([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), reverting
+[ADR-0105](../adr/0105-private-spawn-is-the-launch-default.md)):
+
+- The proxy and settings verbs fall back to a private, proof-gated backend instead —
+  never a secret byte reaches the unproven listener.
+- `serve` itself refuses with exit code `3` after the proof attempt, naming the manual
+  remedy (stop the listener yourself, or pass `--port 0` for a private one) — never a
+  flag, since `--attach` no longer exists (passing it is an unrecognized argument, exit
+  9).
+
+A `--data-root` that resolves to neither the default root nor an existing bank refuses
+before any of this — a client auto-launch never mints a bank at a typo'd path (F39,
+`ExitCode.NoBank` = `22`), with a line naming the fix:
+`ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon serve --data-root <path>', or check --data-root for a typo`.
 
 ### Idle watchdog
 
@@ -78,12 +108,14 @@ ai-raccoon serve --idle-timeout 30m
 ai-raccoon serve --idle-timeout 0
 ```
 
-A one-shot CLI settings command that finds no server on `--port` starts one there and
-leaves it running under this watchdog — deliberately shared and long-lived. The command
-discloses that on stderr (`ai-raccoon: the backend on port <n> keeps running after this
-command exits …`) and names the stop:
-`ai-raccoon serve --restart --attach --port <n>`. The proxy is different: its private
-backend is stopped when the proxy itself shuts down.
+A one-shot CLI settings command that attaches to a proven listener, or finds none and
+starts one, leaves that shared backend running under this watchdog — deliberately
+shared and long-lived. The command discloses that on stderr (`ai-raccoon: the backend
+on port <n> keeps running after this command exits, under its own idle timeout …`) and
+names the stop: `ai-raccoon serve --restart --port <n>`. A listener that could not
+prove got a private, 5-minute-bounded fallback instead, so there is nothing further to
+stop by hand. The proxy is different again: its own private fallback is stopped when
+the proxy itself shuts down.
 
 ---
 
