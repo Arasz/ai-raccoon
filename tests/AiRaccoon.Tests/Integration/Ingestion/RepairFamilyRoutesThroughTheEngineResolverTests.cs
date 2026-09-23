@@ -124,7 +124,8 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         File.Copy(spmPath, Path.Combine(dir, "sp.model"), overwrite: true);
         await using var connection = await OpenBankWithSettingsAsync("local", dir, TestContext.Current.CancellationToken);
 
-        var backfill = new ChunkBackfill(TestData.RealMarkdownChunker(), TimeProvider.System, Service());
+        var backfill = new ChunkBackfill(Matcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
+            TimeProvider.System, Service());
         var (budget, _, countTokens) = await backfill.BudgetAsync(connection, TestContext.Current.CancellationToken);
 
         budget.ShouldBe(EmbeddingService.MaxManifestChunkTokens);
