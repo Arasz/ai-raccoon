@@ -102,7 +102,9 @@ public sealed class EmbeddingManifestLoader(
             manifest.Onnx.TokenEmbeddingsOutput ?? manifest.Pooling.OutputNames?.TokenEmbeddings ?? "last_hidden_state",
             manifest.Onnx.EmbeddingOutput,
             manifest.Onnx.Files[0].Path,
-            files);
+            files,
+            manifest.QueryInstruction,
+            manifest.DocumentInstruction);
     }
 
     /// <summary>Manifest file paths stay inside the model directory — never rooted, never escaping.</summary>

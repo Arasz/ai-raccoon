@@ -51,6 +51,21 @@ public static class EmbeddingMath
     /// <summary>Row-0 CLS pooling + L2-normalization (bge-m3's default pooling shape, plan D1).</summary>
     public static float[] ClsPoolAndNormalize(ReadOnlySpan<float> hidden, int dim) => L2Normalize(ClsPool(hidden, dim));
 
+    /// <summary>Takes the hidden state of the last position the mask marks active (decoder embedders).
+    /// A sequence with no active tokens yields the zero vector.</summary>
+    public static float[] LastTokenPool(ReadOnlySpan<float> hidden, ReadOnlySpan<int> mask, int seqLen, int dim)
+    {
+        for (var s = seqLen - 1; s >= 0; s--)
+        {
+            if (mask[s] != 0)
+            {
+                return [.. hidden.Slice(s * dim, dim)];
+            }
+        }
+
+        return new float[dim];
+    }
+
     /// <summary>
     ///     L2-normalizes in place of the vector copy; the zero vector stays zero (matches the
     ///     bundled mean path's guard).

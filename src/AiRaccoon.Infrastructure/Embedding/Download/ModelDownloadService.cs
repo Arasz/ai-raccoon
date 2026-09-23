@@ -281,7 +281,7 @@ public sealed class ModelDownloadService(
             }
         }
 
-        foreach (var name in new[] { "1_Pooling/config.json", "modules.json" })
+        foreach (var name in new[] { "1_Pooling/config.json", "modules.json", ModelDownloadPlanner.SentenceTransformersConfigFileName })
         {
             if (tree.Any(e => e.Path == name))
             {
@@ -447,7 +447,7 @@ public sealed class ModelDownloadService(
             plan.Dimensions,
             plan.ContextWindowTokens,
             plan.Normalization,
-            null,
+            plan.QueryInstruction,
             RequiresTokenTypeIds: plan.RequiresTokenTypeIds,
             MRL: new MRLInfo(false, null),
             // D2: trust-on-first-download, same as the tokenizer/onnx pins below — not an
@@ -460,7 +460,8 @@ public sealed class ModelDownloadService(
                 new TokenizerOptionsManifest(plan.AddBeginOfSentence, plan.AddEndOfSentence, plan.SpecialTokens,
                     plan.VocabOffset)),
             Onnx: new OnnxManifest(plan.Inputs, plan.EmbeddingOutput, plan.TokenEmbeddingsOutput,
-                [.. plan.ModelFiles.Select(Pinned)]));
+                [.. plan.ModelFiles.Select(Pinned)]),
+            DocumentInstruction: plan.DocumentInstruction);
 
         var errors = manifestValidator.Validate(manifest);
         if (errors.Count > 0)

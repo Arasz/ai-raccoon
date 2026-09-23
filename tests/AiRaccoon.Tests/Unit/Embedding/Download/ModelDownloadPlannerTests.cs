@@ -142,6 +142,23 @@ public class ModelDownloadPlannerTests
     }
 
     [Fact]
+    public void ExternalData_GlobFallback_TakesOnlyTheSelectedModelsOwnData()
+    {
+        // onnx-community exports keep every variant's data beside each other in onnx/.
+        var tree = BgeM3Tree().Concat([
+            new HfTreeEntry("onnx/model_quantized.onnx", "file", 598_902, null),
+            new HfTreeEntry("onnx/model_quantized.onnx_data", "file", 51_885_568, null),
+            new HfTreeEntry("onnx/model_fp16.onnx_data", "file", 97_402_880, null)
+        ]).ToList();
+
+        var full = Planner().BuildPlan("test/model", "main", tree, BgeM3Raw(), probe: null);
+        var quantized = Planner().BuildPlan("test/model", "main", tree, BgeM3Raw(), probe: null, ["onnx/model_quantized.onnx"]);
+
+        full.ModelFiles.Select(f => f.Path).ShouldBe(["onnx/model.onnx", "onnx/model.onnx_data"]);
+        quantized.ModelFiles.Select(f => f.Path).ShouldBe(["onnx/model_quantized.onnx", "onnx/model_quantized.onnx_data"]);
+    }
+
+    [Fact]
     public void ExternalData_DeclaredByProbe_ButMissingFromTree_Fails()
     {
         var tree = BgeM3Tree().Where(e => e.Path != "onnx/model.onnx_data").ToList();
@@ -161,6 +178,10 @@ public class ModelDownloadPlannerTests
     [InlineData("gpt2", "tokenizer.json", "tokenizer-json")]
     [InlineData("llama", "tokenizer.json", "tokenizer-json")]
     [InlineData("qwen2", "tokenizer.json", "tokenizer-json")]
+    [InlineData("qwen3", "tokenizer.json", "tokenizer-json")]
+    [InlineData("modernbert", "tokenizer.json", "tokenizer-json")]
+    [InlineData("gemma3_text", "tokenizer.json", "tokenizer-json")]
+    [InlineData("nomic_bert", "tokenizer.json", "tokenizer-json")]
     public void TokenizerPairing_ByModelType(string modelType, string expectedFile, string expectedFamily)
     {
         var tree = new List<HfTreeEntry>
@@ -174,18 +195,109 @@ public class ModelDownloadPlannerTests
             ["tokenizer_config.json"] = XlmRobertaTokenizerConfig
         };
 
-        if (expectedFamily == "tokenizer-json")
-        {
-            // D5 gate: tokenizer-json downloads are refused until ML.Tokenizers can consume them.
-            var ex = Should.Throw<ModelDownloadPlanException>(() =>
-                Planner().BuildPlan("test/model", "main", tree, raw, NoExternalProbe()));
-            ex.Message.ShouldContain("tokenizer-json");
-            return;
-        }
-
         var plan = Planner().BuildPlan("test/model", "main", tree, raw, NoExternalProbe());
         plan.TokenizerFiles.Select(f => f.Path).ShouldBe([expectedFile]);
         plan.TokenizerFamily.ShouldBe(FamilyOf(expectedFamily));
+    }
+
+    [Fact]
+    public void BertModelType_WithoutVocabTxt_PairsTheTokenizerJson()
+    {
+        // jinaai/jina-embeddings-v2-base-code: model_type bert, but a BPE tokenizer.json and no vocab.txt.
+        var tree = new List<HfTreeEntry> { Onnx, Config, TokenizerConfig, new("tokenizer.json", "file", 100, null) };
+
+        var plan = Planner().BuildPlan("jinaai/jina-embeddings-v2-base-code", "main", tree, BertRaw(BertTokenizerConfig), NoExternalProbe());
+
+        plan.TokenizerFamily.ShouldBe(TokenizerFamily.TokenizerJson);
+        plan.TokenizerFiles.Select(f => f.Path).ShouldBe(["tokenizer.json"]);
+    }
+
+    [Fact]
+    public void WordPieceRepo_WithoutAddedTokensDecoder_UsesItsTokenizerJson_InsteadOfRefusing()
+    {
+        // BAAI/bge-small-en-v1.5: vocab.txt and tokenizer.json, no added_tokens_decoder — the
+        // tokenizer.json pins its own special-token ids, so nothing has to be guessed.
+        var tree = new List<HfTreeEntry> { Onnx, Config, TokenizerConfig, Vocab, new("tokenizer.json", "file", 100, null) };
+
+        var plan = Planner().BuildPlan("BAAI/bge-small-en-v1.5", "main", tree, BertRaw(BertTokenizerConfigNoDecoder), NoExternalProbe());
+
+        plan.TokenizerFamily.ShouldBe(TokenizerFamily.TokenizerJson);
+        plan.TokenizerFiles.Select(f => f.Path).ShouldBe(["tokenizer.json"]);
+        plan.SpecialTokens.ShouldBeEmpty();
+        plan.SpecialTokensPending.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void WordPieceRepo_WithoutDecoderOrTokenizerJson_StillRefuses()
+    {
+        var tree = new List<HfTreeEntry> { Onnx, Config, TokenizerConfig, Vocab };
+
+        var ex = Should.Throw<ModelDownloadPlanException>(() =>
+            Planner().BuildPlan("test/model", "main", tree, BertRaw(BertTokenizerConfigNoDecoder), NoExternalProbe()));
+
+        ex.Message.ShouldContain("added_tokens_decoder");
+    }
+
+    [Theory]
+    [InlineData("qwen3")]
+    [InlineData("qwen2")]
+    [InlineData("llama")]
+    public void DecoderModelType_WithoutPoolingProvenance_DefaultsToLastToken(string modelType)
+    {
+        // onnx-community/Qwen3-Embedding-0.6B-ONNX ships no 1_Pooling and no pooled graph output;
+        // a decoder embedder reads the final token, so cls would read the first token of the prompt.
+        var tree = new List<HfTreeEntry> { Onnx, Config, TokenizerConfig, new("tokenizer.json", "file", 100, null) };
+
+        var plan = Planner().BuildPlan("test/model", "main", tree, BgeM3Raw(modelType), NoExternalProbe() with { OutputNames = ["last_hidden_state"] });
+
+        plan.PoolingMode.ShouldBe(PoolingMode.LastToken);
+        plan.PoolingProvenance.ShouldContain("placeholder");
+    }
+
+    [Fact]
+    public void SentenceTransformersPrompts_BecomeTheQueryAndDocumentInstructions()
+    {
+        var raw = BgeM3Raw();
+        raw["config_sentence_transformers.json"] =
+            """{"prompts": {"query": "task: search result | query: ", "document": "title: none | text: ", "Clustering": "task: clustering | query: "}}""";
+
+        var plan = Planner().BuildPlan("google/embeddinggemma-300m", "main", BgeM3Tree(), raw, BgeM3Probe());
+
+        plan.QueryInstruction.ShouldBe("task: search result | query: ");
+        plan.DocumentInstruction.ShouldBe("title: none | text: ");
+    }
+
+    [Fact]
+    public void EmptyOrMissingPrompts_LeaveBothInstructionsNull()
+    {
+        var raw = BgeM3Raw();
+        raw["config_sentence_transformers.json"] = """{"prompts": {"query": "", "document": ""}}""";
+
+        var withEmpty = Planner().BuildPlan("test/model", "main", BgeM3Tree(), raw, BgeM3Probe());
+        var without = Planner().BuildPlan("test/model", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
+
+        withEmpty.QueryInstruction.ShouldBeNull();
+        withEmpty.DocumentInstruction.ShouldBeNull();
+        without.QueryInstruction.ShouldBeNull();
+        without.DocumentInstruction.ShouldBeNull();
+    }
+
+    [Fact]
+    public void DecoderKeyValueCacheOutputs_AreNeverTakenForThePooledEmbedding()
+    {
+        // onnx-community/Qwen3-Embedding-0.6B-ONNX: last_hidden_state plus present.N.key/value per layer.
+        var tree = new List<HfTreeEntry> { Onnx, Config, TokenizerConfig, new("tokenizer.json", "file", 100, null) };
+        var probe = NoExternalProbe() with
+        {
+            InputNames = ["input_ids", "attention_mask", "position_ids", "past_key_values.0.key", "past_key_values.0.value"],
+            OutputNames = ["last_hidden_state", "present.0.key", "present.0.value"]
+        };
+
+        var plan = Planner().BuildPlan("onnx-community/Qwen3-Embedding-0.6B-ONNX", "main", tree, BgeM3Raw("qwen3"), probe);
+
+        plan.EmbeddingOutput.ShouldBeNull();
+        plan.TokenEmbeddingsOutput.ShouldBe("last_hidden_state");
+        plan.PoolingMode.ShouldBe(PoolingMode.LastToken);
     }
 
     [Fact]
@@ -604,6 +716,18 @@ public class ModelDownloadPlannerTests
         "sentencepiece" => TokenizerFamily.SentencePiece,
         _ => TokenizerFamily.TokenizerJson
     };
+
+    private const string BertTokenizerConfigNoDecoder =
+        """
+        { "cls_token": "[CLS]", "sep_token": "[SEP]", "unk_token": "[UNK]", "pad_token": "[PAD]" }
+        """;
+
+    private static Dictionary<string, string> BertRaw(string tokenizerConfig) =>
+        new()
+        {
+            ["onnx/config.json"] = """{"model_type": "bert", "hidden_size": 384, "max_position_embeddings": 512}""",
+            ["onnx/tokenizer_config.json"] = tokenizerConfig
+        };
 
     private const string BertTokenizerConfig =
         """

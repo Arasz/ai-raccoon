@@ -18,6 +18,7 @@ public sealed class EmbeddingTokenizerFactory : ITokenizerFactory
                 descriptor.SentencePieceOptions
                 ?? throw new InvalidOperationException(
                     $"Manifest for '{descriptor.Model}' declares the sentencepiece family without tokenizer.options.")),
+            "tokenizer-json" => TokenizerJsonEmbeddingTokenizer.Create(Path.Combine(modelDirectory, descriptor.TokenizerFile)),
             var family => throw new InvalidOperationException(
                 $"Tokenizer family '{family}' is not supported (manifest model '{descriptor.Model}').")
         };
