@@ -1,0 +1,233 @@
+{
+  "run": {
+    "date": "2026-09-23",
+    "branch": "detached at tag v1.44.0 (build) / chore/checklist-1-44-0 (report)",
+    "commit": "29368f9716fdaa7d139dddd8e6538b19f0007dac (v1.44.0); main is already at 1.44.1 (f39a2860, proxy follow-ups only)",
+    "data-root": "<scratch>/dr (user scope, server :58803) and <scratch>/repo (project scope); a python squatter on :59106. Never ~/.ai-raccoon; 7721 answered 401 before and after and was never bound. All scratch processes stopped after the run.",
+    "note": "The global tool was already the published 1.44.0 package (nuspec commit = tag). Checked first whether the list needed updating: no template item is for a deleted feature, but the template has no step for ADR-0106 attach-or-start/identity proof, the F39/F49 fixes, the F6 engine warning, or the absolute-relevance floor, and does not carry the busy-bank item the 1.42.3 run added. These are added as run items here."
+  },
+  "derived": {
+    "version": "1.44.0",
+    "mcp-tool-count": "29",
+    "mcp-prompt-count": "2",
+    "note": "python3 .claude/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py <v1.44.0 worktree> -> version=1.44.0 mcp-tool-count=29 mcp-prompt-count=2"
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "docs/work/checklist/2026-09-14-v1-42-3-release.json",
+      "prior-claim": "source-path-anchor-resolves-its-chunk: pass — 'probe/dome.md#Dusk Operations' returned hash 3107e895 rank 1, chunkIndex 0, totalChunks 1.",
+      "what-is-actually-true": "The step could not fail on chunk selection: the file had one chunk and the bank one entry, so anything returned was 'the exact chunk'. With two sections of one file, the wrong section ranks first even with every floor off, and by default nothing is returned since 1.43.0.",
+      "evidence": "This run's source-path-anchor-resolves-its-chunk and full-recall-ranking-order items.",
+      "so-what": "Anchor steps must write at least two sections of the same file and assert the named one comes back first."
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-09-14-v1-42-3-release.json",
+      "prior-claim": "memory-search-hybrid-retrieval passes only on a zero-overlap semantic query.",
+      "what-is-actually-true": "That shape proves the vector leg but cannot see a floor that drops keyword-only hits; the 1.43.0 floor shipped and passed a checklist that could not have caught it.",
+      "evidence": "absolute-relevance-floor-keeps-exact-matches: 'AIR-4471' -> [] with dropped 4.",
+      "so-what": "The hybrid step needs the mirror image: a bare identifier query that only BM25 can carry."
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool is this build and `ai-raccoon --version` matches derived.version",
+      "command": "detached worktree at tag v1.44.0: MSBUILDDISABLENODEREUSE=1 dotnet build AiRaccoon.slnx -c Release ; dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=osx-arm64 -p:SuppressDeployToLocalSource=true -o <scratch>/pack ; nuget flatcontainer index ; dotnet tool list -g ; ai-raccoon --version ; grep version/commit in the installed store's nuspec",
+      "evidence": "Build: 0 Warning(s) 0 Error(s). Pack: 'Successfully created package ai-raccoon.osx-arm64.1.44.0.nupkg' and 'ai-raccoon.1.44.0.nupkg'. Feed: [..., '1.42.5', '1.44.0']. Global: 'ai-raccoon 1.44.0'. --version -> 1.44.0+29368f9716fdaa7d139dddd8e6538b19f0007dac. nuspec: <version>1.44.0</version> commit=\"29368f9716fdaa7d139dddd8e6538b19f0007dac\" = v1.44.0.",
+      "observed-result": "The tag builds and packs clean; the installed global tool is the published 1.44.0 package, built from the tagged commit.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Deviation: the global tool was not force-updated, because the published 1.44.0 package was already installed and its nuspec commit matches the tag exactly. Reinstalling the same version would have cycled the owner's live proxies for no new evidence. Instrument: nuspec commit SHA + --version SHA against `git rev-parse v1.44.0`."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port proves the listener, then cycles it; port 7721 is never touched",
+      "command": "curl -X POST :7721/mcp (before) ; ai-raccoon --data-root <scratch>/dr serve --port 0 --idle-timeout 0 ; read port from serve1.log ; ai-raccoon --data-root <scratch>/dr serve --port 58803 --restart ; ps -p 86155 ; curl :7721 (after)",
+      "evidence": "7721 before: 401. serve1.log: 'Now listening on: http://127.0.0.1:58803' / 'http://127.0.0.1:58803/mcp'. restart.log: '[650] asking the server on port 58803 to stop (pid 86155, 1.44.0+29368f97…)' / '[651] the server on port 58803 (pid 86155) stopped and the port is free' / 'Now listening on: http://127.0.0.1:58803'. old pid: gone; new pid 95622; memory_stats afterwards -> entries 5. 7721 after: 401.",
+      "observed-result": "Binds an ephemeral port and reports it; --restart proves the listener, stops it and rebinds the same port; the owner's 7721 server was untouched.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0106 (restart proves before its token-bearing /shutdown)."
+    },
+    {
+      "item": "attach-or-start-identity-proof",
+      "expected-result": "ADR-0106: a proven listener is attached (nothing spawned); an unproven listener gets zero secret bytes: `serve` and `serve --restart` refuse with exit 3; a settings verb falls back to a private backend with the 690 disclosure",
+      "command": "python squatter on an ephemeral port (59106) answering 200 + jsonrpc body, logging every request ; serve --port 59106 ; --port 59106 settings model show ; serve --port 59106 --restart ; scan squat.log for the X-AiRaccoon-Token header and the token bytes ; count serve processes before/after `--port 58803 settings model show`",
+      "evidence": "serve: exit=3, 'port 59106 is in use by a listener that did not prove it serves this data root'. settings: exit=0, '[690] the listener on port 59106 did not prove it serves this data root (Malformed); starting a private backend…', '[631] starting a private backend on an ephemeral port', output 'provider: local'. restart: exit=3, '[657] … did not prove it holds this data root's identity key (Malformed); nothing is asked to stop'. Squatter received only 'POST /mcp - no-token' and 'POST /identity/prove - no-token' across all three runs (no header, token bytes absent). Proven attach: servers before: 1, after: 1.",
+      "observed-result": "The squatter never saw the token; every refusal and fallback happened as the ADR describes; attaching to a proven server spawned nothing.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "F70 stays closed under the ADR-0106 design."
+    },
+    {
+      "item": "attach-flag-removed",
+      "expected-result": "ADR-0106 D5: `--attach` (root and post-verb) is an unrecognized argument, exit 9",
+      "command": "ai-raccoon --data-root <scratch>/dr --attach settings model show ; ai-raccoon --data-root <scratch>/dr serve --attach --port 0 ; read src/AiRaccoon/AppRunner.cs:50-77 and tests/AiRaccoon.Tests/Unit/Setup/CliArgsTests.cs:666-677 at v1.44.0",
+      "evidence": "Both: exit=15, 'Unrecognized command or argument '--attach'.' AppRunner: a known verb's parse error routes through RunCliCommand and 'keeps ExitCode.InvalidArgument (15)'; only a verb-less launch returns FailedToParseCliArgs (9). The test ServeAttach_IsAnUnrecognizedArgument_Exit9 asserts parse errors and absent Attach properties only; it never checks an exit code (its comment claims 'AppRunner maps parse errors to 9').",
+      "observed-result": "The flag is rejected, but with exit 15, not the 9 that ADR-0106 D4/D5 promise. The test named Exit9 cannot fail on the exit code.",
+      "status": "fail",
+      "accepted": null,
+      "acceptance-reason": "Owner to rule: correct the ADR (15 for a verb-bearing command) or change AppRunner; either way the test needs an argv-level exit-code assertion. Not yet tracked."
+    },
+    {
+      "item": "f39-no-mint-guard",
+      "expected-result": "ADR-0106 D4: a settings verb against a non-default data root with no bank refuses with exit 22 and creates nothing",
+      "command": "ai-raccoon --data-root <scratch>/dr-typo --port 58803 settings model show ; ls -la <scratch>/dr-typo",
+      "evidence": "exit=22, 'ai-raccoon: no bank exists at '<scratch>/dr-typo/memory.db' — create it with …'. ls: No such file or directory.",
+      "observed-result": "Refused before anything was created.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches D4."
+    },
+    {
+      "item": "f49-secret-layout",
+      "expected-result": "ADR-0106 D1/D7: identity-key and mcp-token are 0600 in the bank state directory (0700): the data root for user scope, <root>/.ai-raccoon for project scope; nothing 0600 at a project root's top level",
+      "command": "ai-raccoon --data-root <scratch>/repo --install-scope project serve --port 0 ; find <scratch>/repo -maxdepth 2 | stat ; stat <scratch>/dr <scratch>/dr/identity-key <scratch>/dr/mcp-token",
+      "evidence": "repo/ drwxr-xr-x holds only .ai-raccoon/ (drwx------), which holds identity-key -rw-------, mcp-token -rw-------, memory.db. User scope: dr drwx------, identity-key -rw-------, mcp-token -rw-------. First serve on dr logged '[692] the state directory … was readable by other users and was tightened to owner-only (0700)'.",
+      "observed-result": "Layout and permissions match D7; the 0755→0700 tightening is logged once.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches D1/D7."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "tools/call memory_write {clean astrolabe sentence, sourceFile /notes/observatory.md, section 'Brass instruments'} ; tools/call memory_write {'[IMPORTANT: Background process 12345 finished with exit 0 after 12s]'}",
+      "evidence": "clean -> {\"hash\":\"bca97d00…\",\"stored\":true}. rejected -> {\"hash\":\"\",\"path\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}.",
+      "observed-result": "Stored writes return a real hash; a rejection is reported with its reason and an empty hash.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0032."
+    },
+    {
+      "item": "memory-engine-unconfigured-warning",
+      "expected-result": "F6 (1.43.0): on a bank with no memory embedding engine, memory_search carries the 'memory engine not configured' warning naming the remedy",
+      "command": "fresh scratch bank (settings model show -> 'provider: (none — FTS5-only search)') ; tools/call memory_search {'astrolabe observatory', kind memory}",
+      "evidence": "warning: \"memory engine not configured — the memory section is FTS5-only; run 'ai-raccoon model embedding set local' to download and activate the default memory embedding model\"; results still returned (keyword leg).",
+      "observed-result": "Warning present with the exact remedy; after `model embedding set local` it is gone (next item).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches the F6 fix."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking, on a query keyword match cannot carry",
+      "command": "ai-raccoon --data-root <scratch>/dr --port 58803 model embedding set local ; memory_embed_pending -> processed 2 ; tools/call memory_search {'an antique navigation instrument reflecting evening light in a stargazing room', kind memory, scope project}",
+      "evidence": "results: [('bca97d00', 1, 'The brass astrolabe sat on the observato')]; warning: None; evidence legs [{'legName':'vector','rank':1}], cosine 0.506.",
+      "observed-result": "Zero-literal-overlap query found the astrolabe entry at rank 1 on the vector leg alone.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The vector leg is live and carries retrieval."
+    },
+    {
+      "item": "absolute-relevance-floor-keeps-exact-matches",
+      "expected-result": "The 1.43.0 absolute-relevance floor (SearchRelevance.AbsoluteRelevanceFloor 0.35 on the content cosine, #646) drops irrelevant rows but never an exact keyword match",
+      "command": "memory_write 'Error code AIR-4471 means the bank write lock timed out…' ; memory_search {'AIR-4471'} ; {'what does error AIR-4471 mean'} ; {'why did the bank write lock time out'} ; read src/AiRaccoon.Core/Memory/SearchRelevance.cs at v1.44.0 ; git diff v1.44.0 origin/main -- SearchRelevance.cs MemoryTools.cs",
+      "evidence": "'AIR-4471' -> results [] truncation [{'floor':'absoluteRelevance','threshold':0.35,'dropped':4}]. The two prose queries -> the AIR-4471 entry, fts rank 1 + vector rank 1, cosine 0.644/0.647. SearchRelevance.Judge drops any row with cosine < 0.35 whenever minRelativeScore > 0, whatever its keyword rank. Unchanged on main (1.44.1).",
+      "observed-result": "An identifier, error code or path query whose only real signal is lexical returns nothing by default: the floor removes the exact keyword hit because its embedding cosine is low.",
+      "status": "fail",
+      "accepted": null,
+      "acceptance-reason": "Regression from 1.43.0 (#646). Not tracked; #367 (hybrid RRF ranks near-literal matches worse) is related but different. Needs an issue and an owner ruling (for example, exempt rows the fts leg ranks)."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a reachable hash; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "tools/call memory_get {hash bca97d00…} ; tools/call memory_get {hash 000…0}",
+      "evidence": "known -> value 'The brass astrolabe sat on the observatory windowsill, catching the amber lamplight…', context project:chk1440. unknown -> isError:true 'unknown-hash: No entry with hash '0000…0000' in project 'chk1440'.'",
+      "observed-result": "Content by hash; unknown hash refused.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0035."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "two sections of /notes/observatory.md written ('Brass instruments' chunk 0, 'Coastal duties' chunk 1) ; memory_search {'/notes/observatory.md#Coastal duties'} and the 'notes/…' and 'observatory.md#…' spellings ; again with minRelativeScore 0",
+      "evidence": "All three default spellings -> results [] truncation [{'floor':'absoluteRelevance','threshold':0.35,'dropped':3}]. minRelativeScore 0 -> [('bca97d00', chunk 0 'The brass astrolabe'), ('6130a183', chunk 1 'The lighthouse keeper'), …]; the anchored chunk is fts rank 1 but ranked 2nd, cosine 0.26.",
+      "observed-result": "The anchor does not resolve by default (the floor drops it), and with full recall the wrong section of the file ranks first.",
+      "status": "fail",
+      "accepted": null,
+      "acceptance-reason": "Same root cause as absolute-relevance-floor-keeps-exact-matches for the empty result. Not tracked."
+    },
+    {
+      "item": "full-recall-ranking-order",
+      "expected-result": "With minRelativeScore 0 (ADR-0096 full-recall hatch) a row both legs rank first stays first",
+      "command": "watched file probe/harbor.md ('The harbormaster posts tide tables…') ; memory_search {'harbormaster tide tables', minRelativeScore 0} with default sourceLambda, then sourceLambda 0, consolidationThreshold 0, both",
+      "evidence": "Default: 1.0 astrolabe [vector rank 3, cos 0.18], 0.986 lighthouse [vector rank 4, cos 0.16], 0.936 harbor [fts 1 + vector 1, cos 0.70]. sourceLambda 0: 1.0 harbor, 0.984 keeper, 0.968 astrolabe… consolidationThreshold 0 alone: harbor first too. With the default floor on, only harbor is served.",
+      "observed-result": "The adjacent-sibling boost (sourceLambda 0.1) lifts two weak chunks of the same file above a two-leg rank-1 hit. The default floor currently masks it.",
+      "status": "fail",
+      "accepted": null,
+      "acceptance-reason": "Separate defect from the floor; related to #367. Not tracked."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, clean content passes, and rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "grep INoiseFilterPolicy registrations (AppRegistrations.cs:329, HermesProcessNoisePolicy only) ; memory_write '[IMPORTANT: Background process 12345 …]', 'received signal 15', and near-miss control 'The keeper received signal flags from passing ships at dawn.' ; ai-raccoon … noise entries",
+      "evidence": "Two rejections: stored false, reason 'rejected by noise policy 'HermesBackgroundProcessLog''. Near miss: stored true, hash 1e6a45b0…. noise entries -> 'total: 2' / 'HermesBackgroundProcessLog: 2'.",
+      "observed-result": "The one registered policy rejects both shapes, lets the near miss through, and records both rejections.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Negative control present."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "refuse and annotate tiers per ADR-0040; the structural detector is off until enabled (ADR-0041)",
+      "command": "settings queryguard list ; memory_search with the verbatim RealHermesProcessNotification and RealStackTracePaste fixtures from QueryGuardPolicyTests.cs ; raw SSE bytes of the refuse probe",
+      "evidence": "list -> 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'. refuse -> isError:true 'invalid-params: This looks like tool output rather than a question…'; raw bytes contain '\"isError\":true'. annotate -> isError:null, warning 'This query contains what looks like log or stack-trace output…', search executed (results [] after the absolute floor dropped 3).",
+      "observed-result": "Both tiers behave; structural is off.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0040/0041 and the pinned raw-HTTP envelope."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state, and the watched content is searchable",
+      "command": "memory_watch_add before enabling ; settings ingest scope add '*' <scratch>/probe ; settings watch enable '*' true ; memory_watch_add ; memory_watch_status ; memory_search {'harbormaster tide tables', minRelativeScore 0}",
+      "evidence": "before enable -> 'watching-disabled: … Run 'ai-raccoon settings watch enable <projectId|*> true''. status -> [{path '<scratch>/probe', state 'Healthy', lastSync '2026-09-23T12:47:07Z'}]. harbor.md chunk found (fts 1 + vector 1).",
+      "observed-result": "Registration visible with state; the file was ingested.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Non-empty assertion on content."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports proposed candidates accurately; an already-shared entry is not re-queued",
+      "command": "memory_share {bca97d00} ; memory_share_extract {projectIds [chk1440], mode propose, limit 5} ; memory_promotion_list {projectId chk1440}",
+      "evidence": "share -> {shared:true, context:'shared'}. propose -> candidates 17c44c93 (1.37, organic-note), 6130a183 (1.37), 1e6a45b0 (1.07, very-short-penalty), harbor.md…. list -> the same hashes, scores and reasons. astrolabe (already shared) in queue: False. memory_stats meta waitingPromotionsCount 4.",
+      "observed-result": "The queue matches the proposal exactly and excludes the shared entry.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Content assertions, not an empty list."
+    },
+    {
+      "item": "busy-bank-refusal-and-best-effort-bump",
+      "expected-result": "with another writer holding the write lock: memory_search returns results and logs one Warning (897/964, no exception); a write is refused as bank-busy at Warning (911), never 912",
+      "command": "python3 sqlite3 BEGIN IMMEDIATE on <scratch>/dr/memory.db held 25 s ; memory_search ; memory_write ; grep serve1.log",
+      "evidence": "search -> results returned (17c44c93…). write -> isError:true 'bank-busy: the bank is busy (another writer holds the lock); retry the call'. Log: 1× warn SqliteMemoryStore[897] 'Access-rating bump skipped for 5 result(s)…', 1× warn SqliteSearchQualityService[964], 1× warn ToolRefusals[911]; Exception/stack lines: 0; no 912.",
+      "observed-result": "Unchanged from 1.42.3.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches #637/#639."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "tools/list ; prompts/list ; tools/call across the run",
+      "evidence": "tools/list -> 29: code_get … project_id_token_get. prompts/list -> 2 ['workspace-consolidation-guide','memory-usage-guide']. Called live this run: project_id_token_get, memory_write, memory_search, memory_get, memory_embed_pending, memory_stats, memory_watch_add, memory_watch_status, memory_share, memory_share_extract, memory_promotion_list.",
+      "observed-result": "Listed counts equal the derived 29/2. 11 of 29 tools exercised; the rest are listed, not called.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Counts match the tree; reachability of the uncalled 18 is list-level only."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "extract ids from all scratch logs ; resolve each against the reference's ranges at v1.44.0",
+      "evidence": "Emitted: 428 510 525 603 631 650 651 657 660 672 673 674 687 690 692 897 899 910 911 964 1003 — each resolves (e.g. 657 -> 650-657 ServerRestart, 690 -> 688-691 BackendSessions (logged under the CliSettingsBackend category), 692 -> OwnerOnlyFile). Unresolved: none.",
+      "observed-result": "All ids resolve, including the ADR-0106 ids 657, 690 and 692.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Nothing unresolved."
+    }
+  ]
+}
