@@ -19,6 +19,14 @@
     "gin",
     "html5-boilerplate"
   ],
+  "selfHeldOut": [
+    "src/AiRaccoon.Infrastructure/Sqlite/NoiseShadowObserver.cs",
+    "src/AiRaccoon.Infrastructure/Embedding/Download/OnnxGraphProbe.cs",
+    "src/AiRaccoon.Infrastructure/Sqlite/MemorySql.cs",
+    "scripts/src/retrieval_tuning/repo_data.py",
+    "scripts/src/retrieval_tuning/scoring.py",
+    "scripts/retrieval_tuning/committee_grade.py"
+  ],
   "files": [
     {
       "family": "serde",

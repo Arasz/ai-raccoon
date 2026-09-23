@@ -144,6 +144,7 @@ def build(seed: dict) -> dict:
     manifest = {
         "languages": seed["languages"],
         "heldOutFamilies": seed["heldOutFamilies"],
+        "selfHeldOut": seed["selfHeldOut"],
         "files": rows,
     }
     CODE_CORPUS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -177,6 +178,8 @@ def check(seed: dict) -> list[str]:
         problems.append("MANIFEST.json 'languages' disagrees with the seed — rebuild")
     if manifest.get("heldOutFamilies") != seed.get("heldOutFamilies"):
         problems.append("MANIFEST.json 'heldOutFamilies' disagrees with the seed — rebuild")
+    if manifest.get("selfHeldOut") != seed.get("selfHeldOut"):
+        problems.append("MANIFEST.json 'selfHeldOut' disagrees with the seed — rebuild")
 
     problems.extend(code_corpus.validate_manifest(manifest, REPO_ROOT))
     return problems
