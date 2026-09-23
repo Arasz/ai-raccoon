@@ -1702,7 +1702,7 @@ internal static class MemorySchema
             .ConfigureAwait(false);
 
         var resolver = new WatchOverlapResolver();
-        var toPrune = new List<(string ProjectId, PrunedWatch Pruned)>();
+        var toPrune = new List<ProjectPrune>();
         var warnings = new List<WatchOverlapPruneWarning>();
         foreach (var group in rows.GroupBy(r => r.ProjectId, StringComparer.Ordinal))
         {
@@ -1711,7 +1711,7 @@ internal static class MemorySchema
             {
                 foreach (var pruned in resolver.SelectPruned(candidates))
                 {
-                    toPrune.Add((group.Key, pruned));
+                    toPrune.Add(new ProjectPrune(group.Key, pruned));
                 }
             }
             catch (Exception ex)
@@ -2588,6 +2588,8 @@ internal static class MemorySchema
     private sealed record TombstoneRow(string ProjectId, string Hash, string Scope, long DeletedAt);
 
     private sealed record WatchRow(string ProjectId, string Path, long CreatedAt);
+
+    private readonly record struct ProjectPrune(string ProjectId, PrunedWatch Pruned);
 
     /// <summary>One project's watch-overlap resolution failed on this bank open and was skipped —
     /// its watches are left untouched rather than risk failing the whole bank open (S8).</summary>

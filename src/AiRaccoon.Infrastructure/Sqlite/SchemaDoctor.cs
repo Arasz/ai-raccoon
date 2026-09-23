@@ -56,7 +56,7 @@ internal static class SchemaDoctor
 
         foreach (var (type, name) in expectedObjects)
         {
-            if (!actualObjects.Contains((type, name)))
+            if (!actualObjects.Contains(new SchemaObject(type, name)))
             {
                 findings.Add(new SchemaFinding(name, $"missing {type}"));
                 continue;
@@ -72,14 +72,14 @@ internal static class SchemaDoctor
     }
 
     /// <summary>Every non-sqlite_ table/index/trigger — the object inventory both sides are diffed against.</summary>
-    private static async Task<HashSet<(string Type, string Name)>> ObjectInventoryAsync(SqliteConnection connection,
+    private static async Task<HashSet<SchemaObject>> ObjectInventoryAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
     {
         var rows = await connection.QueryAsync<ObjectRow>(
             new CommandDefinition(
                 "SELECT type, name FROM sqlite_master WHERE type IN ('table','index','trigger') AND name NOT LIKE 'sqlite_%'",
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
-        return [.. rows.Select(r => (r.Type, r.Name))];
+        return [.. rows.Select(r => new SchemaObject(r.Type, r.Name))];
     }
 
     /// <summary>Column-level diff for a table both sides agree exists — the "different shape" #357 is about.</summary>
@@ -132,6 +132,8 @@ internal static class SchemaDoctor
     private sealed record ColumnRow(string Name, string Type, long NotNull, long Pk);
 
     private readonly record struct ColumnShape(string Type, bool NotNull, bool IsPrimaryKey);
+
+    private readonly record struct SchemaObject(string Type, string Name);
 }
 
 internal enum SchemaDoctorStatus

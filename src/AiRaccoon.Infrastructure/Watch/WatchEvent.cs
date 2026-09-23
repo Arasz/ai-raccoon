@@ -1,5 +1,3 @@
-using AiRaccoon.Core.Ingestion;
-
 namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>Filesystem change kinds entering the pipeline (event source, docs/plans/file-watcher-implementation.md S5).</summary>
@@ -16,14 +14,3 @@ public sealed record WatchEvent(string ProjectId, string Path, WatchEventKind Ki
 
 /// <summary>A pending digest job: the event plus the registered watch it belongs to.</summary>
 public sealed record WatchJob(WatchEvent Event, string WatchPath);
-
-/// <summary>(projectId, path) identity comparer: host-OS path case, ordinal project id.</summary>
-internal sealed class WatchKeyComparer : IEqualityComparer<(string ProjectId, string Path)>
-{
-    public static WatchKeyComparer Instance { get; } = new();
-
-    public bool Equals((string ProjectId, string Path) x, (string ProjectId, string Path) y) =>
-        StringComparer.Ordinal.Equals(x.ProjectId, y.ProjectId) && IngestPath.PathComparer.Equals(x.Path, y.Path);
-
-    public int GetHashCode((string ProjectId, string Path) obj) => HashCode.Combine(StringComparer.Ordinal.GetHashCode(obj.ProjectId), IngestPath.PathComparer.GetHashCode(obj.Path));
-}
