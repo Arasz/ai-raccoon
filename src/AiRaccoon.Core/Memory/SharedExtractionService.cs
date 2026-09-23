@@ -71,7 +71,7 @@ public sealed class SharedExtractionService : ISharedExtractionService
     {
         var sharedValueSet = sharedValues.Select(v => NormalizeWhitespace(v)).ToHashSet(StringComparer.Ordinal);
         var sharedPathSet = sharedPaths.ToHashSet(StringComparer.Ordinal);
-        var scored = new List<(ExtractionCandidateRow Row, double Score, List<string> Reasons)>();
+        var scored = new List<ScoredCandidate>();
         foreach (var row in rows)
         {
             if (row.TtlDays is not null && !includeTtlRows)
@@ -90,7 +90,7 @@ public sealed class SharedExtractionService : ISharedExtractionService
 
             if (score >= CandidateFloor)
             {
-                scored.Add((row, score, reasons));
+                scored.Add(new ScoredCandidate(row, score, reasons));
             }
         }
 
@@ -162,4 +162,6 @@ public sealed class SharedExtractionService : ISharedExtractionService
     private static string NormalizeWhitespace(string value) => string.Concat(value.Where(c => !char.IsWhiteSpace(c)));
 
     private static string Truncate(string value) => value.Length <= PreviewLength ? value : value[..(PreviewLength - 1)] + "…";
+
+    private readonly record struct ScoredCandidate(ExtractionCandidateRow Row, double Score, List<string> Reasons);
 }

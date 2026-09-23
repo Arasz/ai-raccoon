@@ -88,7 +88,7 @@ public static partial class ProjectIdAliases
     public static async Task<ProjectIdAliasMap> LoadAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         Guard.IsNotNull(connection);
-        var rows = await connection.QueryAsync<(string Alias, string? Winner, string Kind)>(
+        var rows = await connection.QueryAsync<AliasRow>(
                 new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
         var aliases = rows
@@ -113,7 +113,7 @@ public static partial class ProjectIdAliases
     {
         Guard.IsNotNull(connection);
         Guard.IsNotNull(logger);
-        var rows = (await connection.QueryAsync<(string Alias, string? Winner, string Kind)>(
+        var rows = (await connection.QueryAsync<AliasRow>(
                 new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken))
             .ConfigureAwait(false)).ToList();
         var skipped = rows.Count(row => row.Kind == KindAlias && row.Winner is null);
@@ -130,5 +130,16 @@ public static partial class ProjectIdAliases
         [LoggerMessage(EventId = 712, Level = LogLevel.Warning,
             Message = "ai-raccoon: project_id_aliases holds {Skipped} 'alias' row(s) with a NULL winner; skipping them on cache reload (a null winner would fold an id to null downstream)")]
         public static partial void SkippedNullWinnerAliasRows(ILogger logger, int skipped);
+    }
+
+    // A plain class, not a record: Dapper's constructor matching requires an exact-type match,
+    // which a nullable Winner column makes brittle — property-set materialization tolerates it.
+    private sealed class AliasRow
+    {
+        public string Alias { get; set; } = "";
+
+        public string? Winner { get; set; }
+
+        public string Kind { get; set; } = "";
     }
 }

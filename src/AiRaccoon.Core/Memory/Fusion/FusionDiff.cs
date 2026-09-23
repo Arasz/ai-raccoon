@@ -1,3 +1,5 @@
+using AiRaccoon.Core.Metrics;
+
 namespace AiRaccoon.Core.Memory.Fusion;
 
 /// <summary>
@@ -22,11 +24,11 @@ public sealed record FusionDiff(double Top1Changed, double Top1RankDelta, double
     public static IReadOnlyList<string> MetricNames { get; } = [Top1ChangedMetric, Top1RankDeltaMetric, Top5MovedMetric];
 
     /// <summary>This instance as measurement rows, in the same order as <see cref="MetricNames" />.</summary>
-    public IReadOnlyList<(string Name, double Value, string Unit)> Measurements() =>
+    public IReadOnlyList<GaugeReading> Measurements() =>
     [
-        (MetricNames[0], Top1Changed, "flag"),
-        (MetricNames[1], Top1RankDelta, "ranks"),
-        (MetricNames[2], Top5Moved, "results")
+        new(MetricNames[0], Top1Changed, "flag"),
+        new(MetricNames[1], Top1RankDelta, "ranks"),
+        new(MetricNames[2], Top5Moved, "results")
     ];
 
     public static FusionDiff Between(

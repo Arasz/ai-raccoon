@@ -42,7 +42,7 @@ public partial class ObservabilityRunner(IHttpClientFactory httpClientFactory) :
             {
                 Log.EndpointMissing(logger, port);
                 await streams.WriteErrorLineAsync($"ai-raccoon: the server on port {port} does not expose /observability — upgrade it to read its PID");
-                return ExitCode.NoServerRunning;
+                return ErrorCode.Server.TooOldForObservability;
             }
 
             if (!response.IsSuccessStatusCode)
@@ -61,7 +61,7 @@ public partial class ObservabilityRunner(IHttpClientFactory httpClientFactory) :
 
             Log.NoServerListening(logger, port);
             await streams.WriteErrorLineAsync($"ai-raccoon: no server is listening on port {port} — start one with 'ai-raccoon serve --port {port}'");
-            return ExitCode.NoServerRunning;
+            return ErrorCode.Reach.NothingListening;
         }
         catch (JsonException)
         {
@@ -96,7 +96,7 @@ public partial class ObservabilityRunner(IHttpClientFactory httpClientFactory) :
     private async Task<int> PrintAsync(StandardStreams streams, string line)
     {
         await streams.WriteOutputLineAsync(line);
-        return ExitCode.Success;
+        return ErrorCode.Ok.Success;
     }
 
     private async Task<int> RunOtlpAsync(ServerInfo info, int port, StandardStreams streams, ILogger logger)
@@ -105,19 +105,19 @@ public partial class ObservabilityRunner(IHttpClientFactory httpClientFactory) :
         {
             Log.OtlpNotEnabled(logger, port);
             await streams.WriteErrorLineAsync($"ai-raccoon: OTLP export is not enabled on the server on port {port} — set OTEL_EXPORTER_OTLP_ENDPOINT before starting it");
-            return ExitCode.OtlpNotEnabled;
+            return ErrorCode.Server.OtlpNotEnabled;
         }
 
         await streams.WriteOutputLineAsync(info.Otlp.Endpoint ?? "");
         await streams.WriteErrorLineAsync($"ai-raccoon: exporting OTLP over {info.Otlp.Protocol}");
-        return ExitCode.Success;
+        return ErrorCode.Ok.Success;
     }
 
     private static async Task<int> ReportForeignListenerAsync(ILogger logger, int port, StandardStreams streams)
     {
         Log.ForeignListener(logger, port);
         await streams.WriteErrorLineAsync($"ai-raccoon: port {port} is in use by another process — it is not an ai-raccoon server");
-        return ExitCode.PortInUse;
+        return ErrorCode.Port.ForeignListener;
     }
 
     /// <summary>

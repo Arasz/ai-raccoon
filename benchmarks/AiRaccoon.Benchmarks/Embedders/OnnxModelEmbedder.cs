@@ -20,7 +20,13 @@ public sealed class OnnxModelEmbedder : EmbeddingBackend
     ///     and the tokenizer files.
     /// </param>
     public OnnxModelEmbedder(string modelDirectory)
-        : base(CreateFromManifest(modelDirectory, out var name))
+        : this(new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(modelDirectory),
+            modelDirectory)
+    {
+    }
+
+    private OnnxModelEmbedder(EngineDescriptor descriptor, string modelDirectory)
+        : base(CreateFromManifest(descriptor, modelDirectory, out var name), descriptor.QueryInstruction, descriptor.DocumentInstruction)
     {
         _name = name;
     }
@@ -37,12 +43,8 @@ public sealed class OnnxModelEmbedder : EmbeddingBackend
     protected override string BackendName => _name;
 
     private static IEmbeddingGenerator<string, Embedding<float>> CreateFromManifest(
-        string modelDirectory, out string name)
+        EngineDescriptor descriptor, string modelDirectory, out string name)
     {
-        var serializer = new EmbeddingManifestSerializer();
-        var validator = new EmbeddingManifestValidator();
-        var loader = new EmbeddingManifestLoader(serializer, validator);
-        var descriptor = loader.Load(modelDirectory);
         var tokenizer = new EmbeddingTokenizerFactory().Create(descriptor, modelDirectory);
         var generator = new OnnxEmbeddingGenerator(
             Path.Combine(modelDirectory, descriptor.OnnxModelFile),

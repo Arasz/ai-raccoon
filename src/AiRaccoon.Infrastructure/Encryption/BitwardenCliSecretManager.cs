@@ -4,8 +4,19 @@ using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Infrastructure.Encryption;
 
-/// <summary>bws could not be invoked or did not produce usable output.</summary>
-public sealed class BwsInvocationException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
+/// <summary>How a bws run failed.</summary>
+public enum BwsFailure
+{
+    NotInstalled,
+    TimedOut,
+    Failed
+}
+
+/// <summary>bws could not be invoked or did not produce usable output; <see cref="Failure" /> says how.</summary>
+public sealed class BwsInvocationException(BwsFailure failure, string message, Exception? inner = null) : InvalidOperationException(message, inner)
+{
+    public BwsFailure Failure { get; } = failure;
+}
 
 /// <summary>Runs the bws CLI with redirected output and a hard timeout.</summary>
 public sealed class BitwardenCliSecretManager : ICliSecretManager
@@ -50,11 +61,11 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
         Process process;
         try
         {
-            process = Process.Start(startInfo) ?? throw new BwsInvocationException(NotFoundText);
+            process = Process.Start(startInfo) ?? throw new BwsInvocationException(BwsFailure.NotInstalled, NotFoundText);
         }
         catch (Exception ex) when (ex is FileNotFoundException or Win32Exception)
         {
-            throw new BwsInvocationException(NotFoundText);
+            throw new BwsInvocationException(BwsFailure.NotInstalled, NotFoundText);
         }
 
         using (process)
@@ -77,7 +88,7 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
                 await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
                 if (timeoutCts.IsCancellationRequested)
                 {
-                    throw new BwsInvocationException($"bws timed out after {(int)timeout.TotalSeconds}s");
+                    throw new BwsInvocationException(BwsFailure.TimedOut, $"bws timed out after {(int)timeout.TotalSeconds}s");
                 }
 
                 throw; // the caller's own token cancelled the run — propagate as-is
@@ -88,7 +99,7 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
 
             if (process.ExitCode == 0 && string.IsNullOrWhiteSpace(stdout))
             {
-                throw new BwsInvocationException("bws returned no output");
+                throw new BwsInvocationException(BwsFailure.Failed, "bws returned no output");
             }
 
             return new BwsResult(process.ExitCode, stdout, stderr);

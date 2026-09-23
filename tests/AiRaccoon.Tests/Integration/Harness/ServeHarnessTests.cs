@@ -21,7 +21,7 @@ public sealed class ServeHarnessTests
     {
         var stdout = new LockingWriter();
         stdout.WriteLine(Url);
-        await using var harness = Harness(stdout, new LockingWriter(), Task.FromResult(ExitCode.Success));
+        await using var harness = Harness(stdout, new LockingWriter(), Task.FromResult(ErrorCode.Ok.Success));
 
         var line = await harness.WaitForUrlAsync(TestContext.Current.CancellationToken);
 
@@ -34,7 +34,7 @@ public sealed class ServeHarnessTests
         var stdout = new LockingWriter();
         stdout.WriteLine("warming up the bank");
         stdout.WriteLine(Url);
-        await using var harness = Harness(stdout, new LockingWriter(), Task.FromResult(ExitCode.Success));
+        await using var harness = Harness(stdout, new LockingWriter(), Task.FromResult(ErrorCode.Ok.Success));
 
         var line = await harness.WaitForUrlAsync(TestContext.Current.CancellationToken);
 
@@ -46,13 +46,13 @@ public sealed class ServeHarnessTests
     {
         var stderr = new LockingWriter();
         stderr.WriteLine("port 5150 is in use");
-        await using var harness = Harness(new LockingWriter(), stderr, Task.FromResult(ExitCode.PortInUse));
+        await using var harness = Harness(new LockingWriter(), stderr, Task.FromResult(ErrorCode.Port.InUse));
 
         var error = await Should.ThrowAsync<InvalidOperationException>(
             async () => await harness.WaitForUrlAsync(TestContext.Current.CancellationToken));
 
         error.Message.ShouldContain("a URL line");
-        error.Message.ShouldContain(ExitCode.PortInUse.ToString());
+        error.Message.ShouldContain(ErrorCode.Port.InUse.ToString());
         error.Message.ShouldContain("port 5150 is in use");
     }
 
@@ -73,7 +73,7 @@ public sealed class ServeHarnessTests
         }
         finally
         {
-            pending.SetResult(ExitCode.Success);
+            pending.SetResult(ErrorCode.Ok.Success);
             await harness.DisposeAsync();
         }
     }

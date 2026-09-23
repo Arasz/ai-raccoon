@@ -160,15 +160,13 @@ public class EmbeddingManifestValidatorTests
     }
 
     [Fact]
-    public void TokenizerJson_Rejected_WithD5GateMessage()
+    public void TokenizerJsonFamily_Manifest_HasNoErrors()
     {
-        // D5: tokenizer-json is gated on an ML.Tokenizers capability check (deferred) — the
-        // manifest contract rejects it until the engine can actually consume HF tokenizer.json.
-        var errors = new EmbeddingManifestValidator().Validate(Parse("malformed/tokenizer-json-deferred.json"));
+        // The D5 gate is lifted: TokenizerJsonEmbeddingTokenizer implements the family, so a
+        // well-formed tokenizer-json manifest validates cleanly like any other family.
+        var errors = new EmbeddingManifestValidator().Validate(Parse("qwen-tokenizer-json.json"));
 
-        errors.ShouldHaveSingleItem();
-        errors[0].ShouldContain("tokenizer-json");
-        errors[0].ShouldContain("not yet supported");
+        errors.ShouldBeEmpty();
     }
 
     [Fact]

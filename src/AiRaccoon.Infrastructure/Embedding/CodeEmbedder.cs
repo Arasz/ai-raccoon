@@ -88,7 +88,7 @@ public sealed partial class CodeEmbedder(
         var embedded = 0;
         for (var offset = 0; offset < rows.Count; offset += BatchSize)
         {
-            var slice = rows.Skip(offset).Take(BatchSize).ToList();
+            var slice = rows.Skip(offset).Take(BatchSize).Select(row => row with { Value = embeddings.DocumentText(settings, row.Value) }).ToList();
             embedded += await EmbedSliceAsync(connection, generator, slice, engine, cancellationToken)
                 .ConfigureAwait(false);
         }

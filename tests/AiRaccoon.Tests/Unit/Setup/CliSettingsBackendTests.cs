@@ -138,6 +138,7 @@ public sealed class CliSettingsBackendTests
                     new FakeLogger(), TestContext.Current.CancellationToken));
 
             error.Message.ShouldContain("54226");
+            error.Code.ShouldBe(ErrorCode.Reach.PrivateFallbackFailed);
         }
         finally
         {
@@ -146,11 +147,11 @@ public sealed class CliSettingsBackendTests
     }
 
     [Fact]
-    public async Task AcquireAsync_WhenThePortIsOutOfRange_RejectsTheArgument_WithoutCallingTheLauncher()
+    public async Task AcquireAsync_WhenThePortIsOutOfRange_RefusesItAsUndialable_WithoutCallingTheLauncher()
     {
         var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:0/mcp", null));
 
-        var error = await Should.ThrowAsync<ArgumentException>(() =>
+        var error = await Should.ThrowAsync<UndialablePortException>(() =>
             CliSettingsBackend.AcquireAsync(launcher, new FakeIdentityProver(), new FakeServerProbe(ProbeVerdict.Answered),
                 AppHost, Config(0, "/tmp/unused"), new FakeLogger(), TestContext.Current.CancellationToken));
 
@@ -168,6 +169,7 @@ public sealed class CliSettingsBackendTests
                 DotnetHost, Config(54220, "/tmp/unused"), new FakeLogger(), TestContext.Current.CancellationToken));
 
         error.Message.ShouldContain("dotnet host");
+        error.Code.ShouldBe(ErrorCode.Reach.AutoStartUnsupported);
         error.Message.ShouldContain("serve --port 54220");
         launcher.Calls.ShouldBe(0);
     }
@@ -182,6 +184,7 @@ public sealed class CliSettingsBackendTests
                 null, Config(54221, "/tmp/unused"), new FakeLogger(), TestContext.Current.CancellationToken));
 
         error.Message.ShouldContain("unknown");
+        error.Code.ShouldBe(ErrorCode.Reach.AutoStartUnsupported);
         launcher.Calls.ShouldBe(0);
     }
 
@@ -198,6 +201,7 @@ public sealed class CliSettingsBackendTests
                     AppHost, Config(54217, dataRoot), new FakeLogger(), TestContext.Current.CancellationToken));
 
             error.Message.ShouldContain("54217");
+            error.Code.ShouldBe(ErrorCode.Reach.Unavailable);
         }
         finally
         {
@@ -238,6 +242,7 @@ public sealed class CliSettingsBackendTests
                     AppHost, Config(54218, dataRoot), new FakeLogger(), TestContext.Current.CancellationToken));
 
             error.Message.ShouldContain("could not start it");
+            error.Code.ShouldBe(ErrorCode.Reach.StartFailed);
         }
         finally
         {
@@ -261,6 +266,7 @@ public sealed class CliSettingsBackendTests
                     AppHost, Config(1, dataRoot), new FakeLogger(), TestContext.Current.CancellationToken));
 
             error.Message.ShouldContain(McpTokenFile.FileName);
+            error.Code.ShouldBe(ErrorCode.Server.NoToken);
         }
         finally
         {

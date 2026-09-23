@@ -1,0 +1,317 @@
+[
+  {
+    "id": "orleans-dashboard-001",
+    "category": "behaviour-nl",
+    "query": "clicking the dark or light theme link stops the browser from following the href before flipping which button looks active",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "small",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/components/theme-buttons.jsx",
+    "expectedLines": [
+      13,
+      27
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "orleans-dashboard-002",
+    "category": "identifier-fragment",
+    "query": "theme button light dark switch",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "small",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/components/theme-buttons.jsx",
+    "expectedLines": [
+      3,
+      49
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "orleans-dashboard-003",
+    "category": "behaviour-nl",
+    "query": "toggling which grains are hidden by clicking visible or hidden updates settings for either the system or dashboard grain list depending on a preference flag",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "small",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/components/checkbox-filter.jsx",
+    "expectedLines": [
+      15,
+      27
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "orleans-dashboard-004",
+    "category": "identifier-fragment",
+    "query": "filter hidden checkbox grains",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "small",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/components/checkbox-filter.jsx",
+    "expectedLines": [
+      3,
+      51
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "orleans-dashboard-005",
+    "category": "behaviour-nl",
+    "query": "first previous next and last paging links only render when there is a page before or after the current one, computed from a fixed page size of 25",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "small",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/reminders/reminders.jsx",
+    "expectedLines": [
+      9,
+      61
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "orleans-dashboard-006",
+    "category": "identifier-fragment",
+    "query": "table reminders rendered list",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "small",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/reminders/reminders.jsx",
+    "expectedLines": [
+      25,
+      28
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "orleans-dashboard-007",
+    "category": "behaviour-nl",
+    "query": "aggregating activation count, seconds, await time, calls and exceptions across every simple grain stat to compute cluster-wide totals",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "medium",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/overview/overview.jsx",
+    "expectedLines": [
+      39,
+      52
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "orleans-dashboard-008",
+    "category": "identifier-fragment",
+    "query": "cluster graph exception series",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "medium",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/overview/overview.jsx",
+    "expectedLines": [
+      7,
+      35
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "orleans-dashboard-009",
+    "category": "path-context",
+    "query": "in the cluster overview page, the three panels breaking down grain methods by call volume, error percentage and latency",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "medium",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/overview/overview.jsx",
+    "expectedLines": [
+      133,
+      164
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "orleans-dashboard-010",
+    "category": "behaviour-nl",
+    "query": "deciding whether to show a CPU usage gauge with a live chart or a no-data placeholder depending on whether any historical sample reports nonzero CPU",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "medium",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/silos/silo.jsx",
+    "expectedLines": [
+      126,
+      146
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "orleans-dashboard-011",
+    "category": "identifier-fragment",
+    "query": "silo graph exception queue",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "medium",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/silos/silo.jsx",
+    "expectedLines": [
+      9,
+      38
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "orleans-dashboard-012",
+    "category": "path-context",
+    "query": "on an individual silo's page, the panel pairing counters like queue lengths with the silo's raw configuration properties side by side",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "medium",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/silos/silo.jsx",
+    "expectedLines": [
+      231,
+      247
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "orleans-dashboard-013",
+    "category": "behaviour-nl",
+    "query": "clicking a column header toggles that column as the active sort key, flipping direction if it was already the active column",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "medium",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/components/grain-table.jsx",
+    "expectedLines": [
+      46,
+      54
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "orleans-dashboard-014",
+    "category": "identifier-fragment",
+    "query": "grain class dashboard system label",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "medium",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/components/grain-table.jsx",
+    "expectedLines": [
+      56,
+      73
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "orleans-dashboard-015",
+    "category": "path-context",
+    "query": "in the grain breakdown table, the comparator that orders rows by average wait time per call, falling back to raw totals when either side made no calls",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "medium",
+    "family": "orleans-dashboard",
+    "expectedSource": "orleans-dashboard/App/components/grain-table.jsx",
+    "expectedLines": [
+      259,
+      267
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  }
+]

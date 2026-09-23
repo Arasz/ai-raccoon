@@ -1,3 +1,5 @@
+using AiRaccoon.Infrastructure.Encryption;
+using AiRaccoon.Core.Encryption;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
@@ -55,8 +57,8 @@ public sealed class DoctorCommandsTests : IDisposable
     {
         var (exit, _, err) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.NoBank);
-        exit.ShouldNotBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Bank.NoBank);
+        exit.ShouldNotBe(ErrorCode.Ok.Success);
         err.ShouldContain(_factory.BankPath);
     }
 
@@ -89,7 +91,7 @@ public sealed class DoctorCommandsTests : IDisposable
 
         var (exit, outp, err) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         err.ShouldBeEmpty();
         var threads = Math.Max(1, Environment.ProcessorCount / 2);
         Lines(outp).ShouldBe([
@@ -424,7 +426,7 @@ public sealed class DoctorCommandsTests : IDisposable
         var (exit, outp, err) = await Run(CreateDoctor(), ["doctor"]);
 
         FileSha256(_factory.BankPath).ShouldBe(beforeHash, "doctor must never write to a bank it is diagnosing");
-        exit.ShouldBe(ExitCode.SchemaVerificationFailed);          // the SHAPE decides, never these reads
+        exit.ShouldBe(ErrorCode.Bank.SchemaMismatch);          // the SHAPE decides, never these reads
         Lines(outp).ShouldContain($"code engine: {Path.GetFileName(modelDir)} (manifest unreadable) ({modelDir})");
         Lines(outp).ShouldContain("code rows pending: 0");         // code_entries is absent, not broken
         Lines(outp).ShouldContain("memory rows pending: unreadable");
@@ -442,7 +444,7 @@ public sealed class DoctorCommandsTests : IDisposable
 
         var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.SchemaVerificationFailed);          // a missing table IS a shape mismatch
+        exit.ShouldBe(ErrorCode.Bank.SchemaMismatch);          // a missing table IS a shape mismatch
         Lines(outp).ShouldContain("memory rows pending: 0");
         Lines(outp).ShouldContain("code rows pending: 0");
         outp.ShouldContain("status: SHAPE MISMATCH");
@@ -463,7 +465,7 @@ public sealed class DoctorCommandsTests : IDisposable
 
         var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.SchemaVerificationFailed);
+        exit.ShouldBe(ErrorCode.Bank.SchemaMismatch);
         Lines(outp).ShouldContain("memory engine: unreadable (settings table missing or unreadable)");
         Lines(outp).ShouldContain("code engine: unreadable (settings table missing or unreadable)");
         Lines(outp).ShouldContain("memory rows pending: unreadable");
@@ -484,7 +486,7 @@ public sealed class DoctorCommandsTests : IDisposable
 
         var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.SchemaVerificationFailed);
+        exit.ShouldBe(ErrorCode.Bank.SchemaMismatch);
         Lines(outp).ShouldContain("memory engine: unreadable (settings table missing or unreadable)");
         Lines(outp).ShouldContain("code engine: unreadable (settings table missing or unreadable)");
         Lines(outp).ShouldContain("memory rows pending: 0");
@@ -512,7 +514,7 @@ public sealed class DoctorCommandsTests : IDisposable
             await raw.OpenAsync(TestContext.Current.CancellationToken);
         }
 
-        var (_, outp, _) = await Run(CreateDoctor(new ThrowingKeyResolver()), ["doctor"]);
+        var (_, outp, _) = await Run(CreateDoctor(new ThrowingKeyResolver(new InvalidOperationException("simulated encryption key resolution failure"))), ["doctor"]);
 
         outp.ShouldNotContain("ai-raccoon doctor: ");
         outp.ShouldNotContain("status:");
@@ -632,9 +634,9 @@ public sealed class DoctorCommandsTests : IDisposable
         // before the exit-code/content checks below so a mutation is never masked by an earlier failure.
         FileSha256(_factory.BankPath).ShouldBe(beforeHash, "doctor must never write to a bank it is diagnosing, healthy or not");
 
-        exit.ShouldBe(ExitCode.SchemaVerificationFailed);
-        exit.ShouldNotBe(ExitCode.FailedToResolveEncryptionKey);
-        exit.ShouldNotBe(ExitCode.FailedToOpenEncryptedBank);
+        exit.ShouldBe(ErrorCode.Bank.SchemaMismatch);
+        exit.ShouldNotBe(ErrorCode.Key.Unresolved);
+        exit.ShouldNotBe(ErrorCode.Bank.OpenFailed);
         var combined = outp + err;
         combined.ShouldContain("  - entries: missing column");
         combined.ShouldContain("missing column");
@@ -662,8 +664,15 @@ public sealed class DoctorCommandsTests : IDisposable
         afterAppId.ShouldBe(beforeAppId);
     }
 
-    [RetryFact]
-    public async Task Doctor_WhenTheEncryptionKeyCannotBeResolved_ReportsADistinctExitCode()
+    /// <summary>A key source that fails says how it failed; a failure no Key case names stays Unresolved.</summary>
+    [RetryTheory]
+    [InlineData("unnamed", ErrorCode.Key.Unresolved)]
+    [InlineData("bws-missing", ErrorCode.Key.BwsNotInstalled)]
+    [InlineData("bws-timeout", ErrorCode.Key.BwsTimedOut)]
+    [InlineData("bws-failed", ErrorCode.Key.BwsFailed)]
+    [InlineData("secret-not-a-key", ErrorCode.Key.SecretNotAKey)]
+    [InlineData("sidecar", ErrorCode.Key.SourceSidecarInvalid)]
+    public async Task Doctor_WhenTheEncryptionKeyCannotBeResolved_ExitsTheKeyCase(string failure, int expected)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_factory.BankPath)!);
         await using (var raw = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _factory.BankPath, Mode = SqliteOpenMode.ReadWriteCreate }.ToString()))
@@ -671,12 +680,23 @@ public sealed class DoctorCommandsTests : IDisposable
             await raw.OpenAsync(TestContext.Current.CancellationToken);
         }
 
-        var (exit, _, err) = await Run(CreateDoctor(new ThrowingKeyResolver()), ["doctor"]);
+        var (exit, _, err) = await Run(CreateDoctor(new ThrowingKeyResolver(KeyFailure(failure))), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
-        exit.ShouldNotBe(ExitCode.SchemaVerificationFailed);
+        exit.ShouldBe(expected);
         err.ShouldContain("encryption key");
     }
+
+    private static Exception KeyFailure(string name) =>
+        name switch
+        {
+            "unnamed" => new InvalidOperationException("simulated encryption key resolution failure"),
+            "bws-missing" => new BwsInvocationException(BwsFailure.NotInstalled, "bws not found"),
+            "bws-timeout" => new BwsInvocationException(BwsFailure.TimedOut, "bws timed out after 15s"),
+            "bws-failed" => new BwsInvocationException(BwsFailure.Failed, "bws returned no output"),
+            "secret-not-a-key" => new MalformedPrivateKeyException("truncated"),
+            "sidecar" => new EncryptionSourceException("encryption source sidecar 'x' is corrupt: bad json"),
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, null)
+        };
 
     private async Task<(long Version, int AppId)> ReadHeaderAsync()
     {
@@ -732,7 +752,7 @@ public sealed class DoctorCommandsTests : IDisposable
         var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
 
         Lines(outp).ShouldContain("model migration: none open");
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     /// <summary>P1 Decision D: an absent model_migration table is a guard trip — `unreadable`, never 24, and the schema verdict (19) decides the exit.</summary>
@@ -748,8 +768,8 @@ public sealed class DoctorCommandsTests : IDisposable
         var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
 
         Lines(outp).ShouldContain("model migration: unreadable");
-        exit.ShouldBe(ExitCode.SchemaVerificationFailed);          // the missing table IS the shape defect
-        exit.ShouldNotBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Bank.SchemaMismatch);          // the missing table IS the shape defect
+        exit.ShouldNotBe(ErrorCode.Ok.Success);
     }
 
     /// <summary>
@@ -772,7 +792,7 @@ public sealed class DoctorCommandsTests : IDisposable
 
         var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.Success);                          // the schema is healthy; the row is not
+        exit.ShouldBe(ErrorCode.Ok.Success);                          // the schema is healthy; the row is not
         Lines(outp).ShouldContain("model migration: unreadable");
         Lines(outp).ShouldContain("memory rows pending: 0");
         Lines(outp).ShouldContain("status: HEALTHY");
@@ -792,7 +812,7 @@ public sealed class DoctorCommandsTests : IDisposable
 
         var (exit, outp, err) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.BankCorrupted);
+        exit.ShouldBe(ErrorCode.Bank.Corrupted);
         outp.ShouldBeEmpty();
         err.Trim().ShouldBe(
             $"ai-raccoon: doctor: the bank at {_factory.BankPath} exists but is not a SQLite database (SQLite error 26); restore it from a backup or check --data-root");
@@ -814,7 +834,7 @@ public sealed class DoctorCommandsTests : IDisposable
 
         var (exit, outp, err) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.ModelMigrationOpen);
+        exit.ShouldBe(ErrorCode.Bank.MigrationOpen);
         (outp + err).ShouldNotContain("Parameter 'seconds'");
         (outp + err).ShouldNotContain("Valid values are between");
         Lines(outp).ShouldContain(
@@ -884,8 +904,8 @@ public sealed class DoctorCommandsTests : IDisposable
 
         var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.ModelMigrationOpen);
-        exit.ShouldNotBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Bank.MigrationOpen);
+        exit.ShouldNotBe(ErrorCode.Ok.Success);
         Lines(outp).ShouldContain("memory rows pending: 3");
         var timestamp = DateTimeOffset.FromUnixTimeSeconds(1787739481).UtcDateTime
             .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
@@ -909,8 +929,8 @@ public sealed class DoctorCommandsTests : IDisposable
 
         var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.SchemaVerificationFailed);
-        exit.ShouldNotBe(ExitCode.ModelMigrationOpen);
+        exit.ShouldBe(ErrorCode.Bank.SchemaMismatch);
+        exit.ShouldNotBe(ErrorCode.Bank.MigrationOpen);
         var timestamp = DateTimeOffset.FromUnixTimeSeconds(1787739481).UtcDateTime
             .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
         Lines(outp).ShouldContain(
@@ -935,7 +955,7 @@ public sealed class DoctorCommandsTests : IDisposable
 
         var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
 
-        exit.ShouldBe(ExitCode.ModelMigrationOpen);
+        exit.ShouldBe(ErrorCode.Bank.MigrationOpen);
         var timestamp = DateTimeOffset.FromUnixTimeSeconds(1787739481).UtcDateTime
             .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
         Lines(outp).ShouldContain(
@@ -960,8 +980,8 @@ public sealed class DoctorCommandsTests : IDisposable
 
     private static string FileSha256(string path) => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));
 
-    private sealed class ThrowingKeyResolver : IEncryptionKeyResolver
+    private sealed class ThrowingKeyResolver(Exception failure) : IEncryptionKeyResolver
     {
-        public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) => throw new InvalidOperationException("simulated encryption key resolution failure");
+        public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) => throw failure;
     }
 }

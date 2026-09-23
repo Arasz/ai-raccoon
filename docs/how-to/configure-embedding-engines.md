@@ -94,6 +94,30 @@ repo's own `config.json`, `tokenizer_config.json`, `1_Pooling/config.json` and
 `modules.json` rather than guessed. **A model directory without that manifest is
 refused**; only the legacy `model embedding set local <file>.onnx` path keeps the bundled defaults.
 
+Any repo that ships a Hugging Face `tokenizer.json` downloads too, whatever its architecture:
+ModernBERT (`ibm-granite/granite-embedding-english-r2` and its small sibling,
+`Alibaba-NLP/gte-modernbert-base`), `jinaai/jina-embeddings-v2-base-code`, Qwen3-Embedding and
+EmbeddingGemma. AiRaccoon reads that file itself, with no native tokenizer library, and matches
+Hugging Face's token ids exactly. Community ONNX exports keep several variants side by side, so
+pick the one you want with `--file`:
+
+```bash
+ai-raccoon model download onnx-community/embeddinggemma-300m-ONNX --file onnx/model_quantized.onnx
+ai-raccoon model download onnx-community/Qwen3-Embedding-0.6B-ONNX --file onnx/model_int8.onnx --yes
+```
+
+Some models were trained with prompts in front of queries and documents. The download copies
+them from the repo's `config_sentence_transformers.json` into the manifest's `queryInstruction`
+and `documentInstruction`. ONNX mirrors often leave that file out, so check the base model's card
+and set the two fields by hand when they are missing. For EmbeddingGemma they are
+`"task: search result | query: "` and `"title: none | text: "`. Changing either field changes the
+engine fingerprint, which re-embeds the bank.
+
+EmbeddingGemma is covered by the [Gemma Terms of Use](https://ai.google.dev/gemma/terms), not an
+open-source licence. Downloading it for your own use is fine, and the terms claim no rights in the
+vectors it produces. Redistributing the weights carries the notice and pass-through duties in
+section 3.1 of those terms.
+
 **`pooling.mode` comes from the graph, not only from those files.** A repo with no
 `1_Pooling/config.json` leaves the mode to be inferred, and some models pool *inside* their
 own ONNX graph — their token-embeddings output is `[batch, dimensions]`, already a vector, so

@@ -9,7 +9,7 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// </summary>
 public sealed class WatchScanGuard : IWatchScanGuard
 {
-    private readonly Dictionary<(string ProjectId, string Path), Entry> _entries = new(WatchKeyComparer.Instance);
+    private readonly Dictionary<WatchKey, Entry> _entries = new();
     private readonly Lock _gate = new();
 
     public int StartedScans { get; private set; }
@@ -23,7 +23,7 @@ public sealed class WatchScanGuard : IWatchScanGuard
     public Task Run(string projectId, string path, Func<CancellationToken, Task> scan,
         CancellationToken cancellationToken = default)
     {
-        var key = (projectId, IngestPath.Normalize(path));
+        var key = new WatchKey(projectId, IngestPath.Normalize(path));
         Entry entry;
         lock (_gate)
         {
@@ -68,7 +68,7 @@ public sealed class WatchScanGuard : IWatchScanGuard
         Entry? entry;
         lock (_gate)
         {
-            _entries.TryGetValue((projectId, IngestPath.Normalize(path)), out entry);
+            _entries.TryGetValue(new WatchKey(projectId, IngestPath.Normalize(path)), out entry);
         }
 
         entry?.Cts.Cancel();
@@ -93,7 +93,7 @@ public sealed class WatchScanGuard : IWatchScanGuard
     {
         lock (_gate)
         {
-            return _entries.ContainsKey((projectId, IngestPath.Normalize(path)));
+            return _entries.ContainsKey(new WatchKey(projectId, IngestPath.Normalize(path)));
         }
     }
 
@@ -104,7 +104,7 @@ public sealed class WatchScanGuard : IWatchScanGuard
     ///     and completes the joined callers' task — runs on every exit path so a watch is never
     ///     left permanently unscannable (a leaked entry has no TTL to rescue it).
     /// </summary>
-    private void Complete(Entry entry, (string ProjectId, string Path) key, Exception? faulted, bool cancelled)
+    private void Complete(Entry entry, WatchKey key, Exception? faulted, bool cancelled)
     {
         lock (_gate)
         {

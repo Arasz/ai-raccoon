@@ -179,7 +179,7 @@ public sealed partial class SqliteConnectionFactory(
 
         return new BankKeyMismatchException(
             $"the bank at '{BankPath}' is still encrypted under the pre-ADR-0012 key derivation — run 'ai-raccoon encryption migrate' to rekey it",
-            openFailure);
+            openFailure, legacyDerivation: true);
     }
 
     private BankKeyMismatchException NotLegacyKeyed(ResolvedKey resolvedKey, SqliteException openFailure) =>

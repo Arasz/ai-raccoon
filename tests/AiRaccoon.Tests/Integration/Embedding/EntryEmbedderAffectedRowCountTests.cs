@@ -80,6 +80,8 @@ public sealed class EntryEmbedderAffectedRowCountTests : IDisposable
 
         public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 
+        public string DocumentText(EmbeddingSettings settings, string text) => text;
+
         public int ResolveChunkBudgetFor(EmbeddingSettings settings) => 512;
 
         public int ResolveDimensions(EmbeddingSettings settings) => 384;

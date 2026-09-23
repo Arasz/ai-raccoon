@@ -18,19 +18,19 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from retrieval_tuning import repo_data
+
+_SEED = repo_data.CORPORA["code-eval-corpus"]
+
 CODE_CORPUS_DIR = "scripts/retrieval_tuning/code-corpus"
 
-SIZE_BANDS: dict[str, tuple[int, int]] = {
-    "small": (20, 80),
-    "medium": (150, 400),
-    "large": (600, 1500),
-}
+SIZE_BANDS: dict[str, tuple[int, int]] = {band: tuple(bounds) for band, bounds in _SEED["sizeBands"].items()}
 
 FILES_PER_BAND = 3
 BANDS_PER_LANGUAGE = len(SIZE_BANDS)
 FILES_PER_LANGUAGE = FILES_PER_BAND * BANDS_PER_LANGUAGE
 
-ALLOWED_LICENSES = {"MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"}
+ALLOWED_LICENSES = set(_SEED["allowedLicenses"])
 
 MIN_HELD_OUT_FAMILIES = 3
 
@@ -172,6 +172,14 @@ def _check_held_out_families(manifest: dict, files: list[dict], problems: list[s
         )
 
 
+def _check_self_held_out(manifest: dict, files: list[dict], problems: list[str]) -> None:
+    """Every selfHeldOut pin must name a self row; a stale pin silently empties the held-out split."""
+    self_paths = {row["path"] for row in files if row["family"] == SELF_FAMILY}
+    for path in manifest.get("selfHeldOut", []):
+        if path not in self_paths:
+            problems.append(f"selfHeldOut: {path} is not a self row in the corpus")
+
+
 def validate_manifest(manifest: dict, root: Path) -> list[str]:
     """Structural + integrity validation of a loaded MANIFEST.json.
 
@@ -196,9 +204,9 @@ def validate_manifest(manifest: dict, root: Path) -> list[str]:
     _check_licenses(files, root, problems)
     _check_license_enum(files, problems)
     _check_held_out_families(manifest, files, problems)
+    _check_self_held_out(manifest, files, problems)
 
     return problems
-
 
 # ---------------------------------------------------------------------------
 # E2: identifier splitting (the reference the C# IdentifierSplitter matches)

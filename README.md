@@ -28,30 +28,38 @@ flowchart LR
     end
 ```
 
+## Breaking changes
+
+What to do when you upgrade past each version. A version not listed here needs no action.
+
+- 1.45.0: every failure exit code is renumbered into two-digit categories, for example a missing bank is now `31` (was `22`), and `repair project-ids --apply` now exits non-zero when it does not converge. If a script or CI job checks `ai-raccoon` exit codes, update it from the [old → new table](docs/adr/0107-categorized-two-digit-exit-codes.md#old--new-mapping).
+- 1.44.0: `--attach` is removed. Delete it from your MCP client config, and **stop any server an older version started** before running the new one, because mixed versions are not supported. [How-to](docs/how-to/configure-ai-raccoon-server.md#backend-launch-attach-or-start-behind-the-identity-proof)
+- 1.44.0: a launch against a `--data-root` that has no bank no longer creates one. For a new data root, create the bank once with `ai-raccoon --data-root <path> serve`. [How-to](docs/how-to/configure-ai-raccoon-server.md#backend-launch-attach-or-start-behind-the-identity-proof)
+- 1.42.0: `--transport stdio` and `--transport https` are removed. In your MCP client config, replace `--transport stdio` with a bare `ai-raccoon`, and run `ai-raccoon serve` where you ran an HTTPS server. [How-to](docs/how-to/configure-ai-raccoon-server.md#launch-flags)
+- 1.39.0: project ids are no longer folded together automatically. If one project wrote under several ids, merge them once with `ai-raccoon repair project-ids --map <file>`. [ADR-0102](docs/adr/0102-durable-alias-map-with-p3-enforcement.md)
+- 1.38.0: `memory_search` requires `sessionId`. MCP agents pick it up from the tool schema, so only code that calls the tool directly has to add it. [ADR-0097](docs/adr/0097-search-quality-kind-column.md)
+
 ## What's new
 
-- **BREAKING: backends prove who they are — the proxy and settings verbs attach only to a server that proves it holds this data root's identity key, and `--attach` is gone.** (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md)
-- **BREAKING: an auto-launch at an empty, non-default `--data-root` exits 22 with a runnable remedy instead of creating a bank there.** (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md)
-- **The MCP token and identity key live in the bank state directory — `serve` migrates an old top-level token and tightens a readable state directory to owner-only.** (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md) · [SECURITY.md](SECURITY.md)
-- **BREAKING: the proxy spawns its own private backend — attaching to a running server is now an explicit `--attach`, and settings commands attach-or-start.** (1.43.0) [ADR-0105](docs/adr/0105-private-spawn-is-the-launch-default.md) — superseded by ADR-0106 in 1.44.0
-- **`memory_search` reports the content cosine as evidence, enforces an absolute relevance floor with an explicit unranked marker, and names the floor when it truncates.** (1.43.0)
-- **`memory_delete` removes the whole write (all N chunks), and sync tombstones are label-aware (bank schema v15) — a label-scoped delete no longer tombstones a peer's same-hash row under another label, and a re-created fact survives its tombstone.** (1.43.0)
-- **Corrupt bank exits 26, Ctrl-C exits 130, refusals name their remedy, and refused queries are redacted from logs and spans.** (1.43.0)
-- **BREAKING: `--transport stdio` and `--transport https` are removed — bare `ai-raccoon` is proxy-only, full servers come only from `serve`.** (1.42.0) [ADR-0104](docs/adr/0104-remove-the-stdio-full-server-mode.md)
-- **Run-once project-ids repair with P3 enforcement.** (1.41.0) [ADR-0100](docs/adr/0100-repair-folds-all-committed-scopes.md) · [ADR-0101](docs/adr/0101-repair-verdicts-ignore-telemetry-workspaces-block.md) · [ADR-0102](docs/adr/0102-durable-alias-map-with-p3-enforcement.md) · [ADR-0103](docs/adr/0103-run-until-fixed-loop-with-falsifiable-verdict.md)
-- **Pre-filled project-ids repair template.** (1.40.0) [ADR-0099](docs/adr/0099-empty-default-alias-map.md)
-- **BREAKING: the public binary no longer folds any project id automatically — run one mapped repair.** (1.39.0) [ADR-0099](docs/adr/0099-empty-default-alias-map.md)
-- **BREAKING: `memory_search` requires `sessionId`, and each project resolves to exactly one project id.** (1.38.0) [ADR-0097](docs/adr/0097-search-quality-kind-column.md) · [ADR-0098](docs/adr/0098-telemetry-never-syncs.md)
-- **Memory and code engines are now configured separately.** (1.35.0) [How-to](docs/how-to/configure-embedding-engines.md)
-- **The code corpus accepts any embedding dimension.** (1.35.0) [ADR-0093](docs/adr/0093-vec-code-is-dimension-agnostic-through-the-shared-d3-reconciler.md) · [How-to](docs/how-to/search-the-code-corpus.md)
-- **`memory_search` defaults to `kind=both`.** (1.34.0) [ADR-0088](docs/adr/0088-code-search-surface-kind-envelope-no-fusion.md) · [How-to](docs/how-to/search-the-code-corpus.md)
-- **`project_id_token_get` mints and registers a project id.** (1.33.2) [ADR-0089](docs/adr/0089-the-project-id-is-a-guidv7-and-that-is-not-access-control.md)
-- **`memory_performance` now reports the maintenance-job, embed-drain, replace-lock and query-truncation series.** (1.33.2) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
-- **Two knobs bound the embedding engine.** (1.33.0) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
+- `model download` accepts any model that ships a `tokenizer.json` (granite-embedding r2, gte-modernbert, jina-code, Qwen3-Embedding, EmbeddingGemma), and embeds with the model's query and document prompts. (1.46.0) [survey](docs/work/2026-09-23-embedding-model-survey.md)
+- Every failure has its own two-digit exit code, grouped by category (`ErrorCode.Bank.NoBank` = `31`). (1.45.0) [ADR-0107](docs/adr/0107-categorized-two-digit-exit-codes.md)
+- The proxy and settings commands attach only to a server that proves it holds this data root's identity key. (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md)
+- The MCP token and identity key live in the bank state directory, and `serve` tightens a readable state directory to owner-only. (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md) · [SECURITY.md](SECURITY.md)
+- `memory_search` reports the content cosine as evidence, applies an absolute relevance floor, and names the floor when it truncates. (1.43.0)
+- `memory_delete` removes the whole write, and sync tombstones are label-aware. (1.43.0)
+- Refusals name their remedy, and refused queries are redacted from logs and spans. (1.43.0)
+- Run-once project-ids repair with P3 enforcement. (1.41.0) [ADR-0100](docs/adr/0100-repair-folds-all-committed-scopes.md) · [ADR-0101](docs/adr/0101-repair-verdicts-ignore-telemetry-workspaces-block.md) · [ADR-0102](docs/adr/0102-durable-alias-map-with-p3-enforcement.md) · [ADR-0103](docs/adr/0103-run-until-fixed-loop-with-falsifiable-verdict.md)
+- Pre-filled project-ids repair template. (1.40.0) [ADR-0099](docs/adr/0099-empty-default-alias-map.md)
+- Memory and code engines are configured separately. (1.35.0) [How-to](docs/how-to/configure-embedding-engines.md)
+- The code corpus accepts any embedding dimension. (1.35.0) [ADR-0093](docs/adr/0093-vec-code-is-dimension-agnostic-through-the-shared-d3-reconciler.md) · [How-to](docs/how-to/search-the-code-corpus.md)
+- `memory_search` defaults to `kind=both`. (1.34.0) [ADR-0088](docs/adr/0088-code-search-surface-kind-envelope-no-fusion.md) · [How-to](docs/how-to/search-the-code-corpus.md)
+- `project_id_token_get` mints and registers a project id. (1.33.2) [ADR-0089](docs/adr/0089-the-project-id-is-a-guidv7-and-that-is-not-access-control.md)
+- `memory_performance` reports the maintenance-job, embed-drain, replace-lock and query-truncation series. (1.33.2) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
+- Two knobs bound the embedding engine. (1.33.0) [ADR-0091](docs/adr/0091-the-event-pump-never-blocks-a-producer.md)
 
-> 📜 **Older releases:** See [What's new history](docs/reference/whats-new-history.md) for highlights from 1.6.0 through 1.32.0.
+> 📜 Older releases: see [What's new history](docs/reference/whats-new-history.md) for highlights from 1.6.0 through 1.32.0.
 
-> 🏷️ **A release tag isn't proof of a nuget.org package.** See [Releases and publishing](docs/reference/releases-and-publishing.md) for the two-system model and how to check what's actually installable.
+> 🏷️ A release tag isn't proof of a **nuget.org package**. See [Releases and publishing](docs/reference/releases-and-publishing.md) for the two-system model and how to check what's actually installable.
 
 ---
 

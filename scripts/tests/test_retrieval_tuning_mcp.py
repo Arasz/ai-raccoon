@@ -166,6 +166,42 @@ class TestMemorySearch:
             stub.close()
 
 
+class TestIngestDirectory:
+    """memory_ingest_directory's wire shape, pinned to MemoryTools.IngestDirectory's parameters."""
+
+    def _stub(self):
+        return StubMcpServer(
+            [
+                (200, "application/json", sse_frame(rpc_result(1, {}))),
+                (200, "application/json", sse_frame(rpc_result(2, {}))),
+                (200, "application/json", sse_frame(tools_call_result(3, json.dumps({"scanned": 3})))),
+            ]
+        )
+
+    def test_sends_project_and_path_only_by_default(self):
+        stub = self._stub()
+        try:
+            client = make_client(stub)
+            client.initialize()
+            client.ingest_directory(project_id="code-eval", path="/corpus")
+            call = stub.requests[2]["body"]
+            assert call["params"]["name"] == "memory_ingest_directory"
+            assert call["params"]["arguments"] == {"projectId": "code-eval", "path": "/corpus"}
+        finally:
+            stub.close()
+
+    def test_sends_context_only_when_given(self):
+        stub = self._stub()
+        try:
+            client = make_client(stub)
+            client.initialize()
+            client.ingest_directory(project_id="code-eval", path="/corpus", context="eval")
+            args = stub.requests[2]["body"]["params"]["arguments"]
+            assert args == {"projectId": "code-eval", "path": "/corpus", "context": "eval"}
+        finally:
+            stub.close()
+
+
 class TestMemorySearchKind:
     """H8 (plan §12.2): kind plumbing so a code eval can drive memory_search kind=code."""
 
