@@ -27,7 +27,7 @@ public sealed class ModelResetGuardTests
     ///     doubled by <c>CliFailureFormatting</c> ("ai-raccoon: ai-raccoon: …").
     /// </summary>
     [Fact]
-    public async Task ModelReset_StoreThrowsModelMigrationInProgress_Exits25_WithTheUnprefixedMessage()
+    public async Task ModelReset_StoreThrowsModelMigrationInProgress_ExitsMigrationRefused_WithTheUnprefixedMessage()
     {
         var commands = TestData.CreateConfigCommands(new ThrowingResetStore(FrozenResetRefusalMessage),
             settings: new SettingsCommands());
@@ -35,7 +35,7 @@ public sealed class ModelResetGuardTests
         var (exit, @out, err) = await CliRun.RunAsync(["settings", "model", "reset"], commands);
 
         // Literal 25 at RED time; ErrorCode.Server.MigrationRefused lands in the same commit (R2 F1).
-        exit.ShouldBe(25);
+        exit.ShouldBe(ErrorCode.Server.MigrationRefused);
         err.ShouldBe(FrozenResetRefusalMessage + Environment.NewLine);
         @out.ShouldNotContain("embedding engine reset to default: no engine");
     }

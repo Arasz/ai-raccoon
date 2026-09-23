@@ -318,7 +318,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         {
             var exit = await new AppRunner(CliSettingsBackend.AcquireAsync, AppHost).Run(
                 [.. flags, "--data-root", options.DataRoot, "--port", port.ToString()]);
-            exit.ShouldBe(ErrorCode.Reach.BackendUnavailable);
+            exit.ShouldBe(ErrorCode.Reach.StartFailed);
         });
     }
 

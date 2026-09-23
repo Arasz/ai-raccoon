@@ -555,8 +555,8 @@ refuses before the proxy ever probes a port or spawns a process, with exit `31`
 (`ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon --data-root <path> serve', or check --data-root for a typo`; a project-scope launch adds `--install-scope project` before `serve`);
 the default root keeps its unconditional bootstrap. The stdio and https transports were removed outright
 ([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)): on a bare
-launch the removed `stdio` value is an invalid value (exit 10, `Usage.InvalidValue`) with a
-hint naming the proxy and `serve`, and `https` exits 10 too; after `serve`, which takes
+launch the removed `stdio` value exits 14 (`Usage.RemovedTransport`) with a
+hint naming the proxy and `serve`, and `https` exits 14 too; after `serve`, which takes
 no `--transport` at all, the option is unparseable (exit 11, `Usage.Unparseable`). A bare `--transport http`
 still parses but launches the proxy like any bare run. Full servers come
 only from `serve`.
@@ -584,8 +584,8 @@ silence it. A proxy that cannot get a backend says so on the console either way.
 Two floors bound the removal (see [ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)
 for the full contract). Going forward, a client must never pass the removed `stdio`
 or `https` values: the first release carrying the removal (after 1.41.2) rejects
-both at parse, so any launcher still passing them gets exit 11 (`Usage.Unparseable`) with a hint on bare
-launches instead of a server. A bare spawn with no `--transport` at all speaks MCP
+both at parse, so any launcher still passing them gets exit 14 (`Usage.RemovedTransport`) on a bare
+launch, with a hint, instead of a server (exit 11, `Usage.Unparseable`, when it follows `serve`). A bare spawn with no `--transport` at all speaks MCP
 over stdio through the proxy and needs no extra args. Going back, that same bare
 spawn works against any server from 1.6.0 on, the release that made bare launches
 proxy ([ADR-0020](../adr/0020-always-on-http-stdio-proxy.md)). Older servers predate

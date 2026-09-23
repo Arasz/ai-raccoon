@@ -26,7 +26,7 @@ AiRaccoon stores settings directly in the SQLite `memory.db` settings table. Env
 
 Two `--transport` values were removed outright
 ([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)). On a bare launch,
-`stdio` and `https` are invalid values and exit `10` (`Usage.InvalidValue`, `stdio` with a hint); after
+`stdio` and `https` exit `14` (`Usage.RemovedTransport`, `stdio` with a hint); after
 `serve`, which takes no `--transport` at all, the option is unparseable and exits `11` (`Usage.Unparseable`). A bare `--transport http` still parses but launches the
 proxy like any bare run. Full servers come only from `serve`.
 

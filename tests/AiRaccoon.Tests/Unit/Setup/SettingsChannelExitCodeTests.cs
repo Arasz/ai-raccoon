@@ -54,11 +54,11 @@ public sealed class SettingsChannelExitCodeTests
     ///     Found by the 1.32.0 post-publish check after #476: the chunk-budget refusal is the one
     ///     leg SettingsCommands does not pre-check itself, so ServerSettingsStore.ActivateCodeEngineAsync
     ///     is what has to surface the server's reason. This asserts the CLI-facing side of that fix —
-    ///     the exception lands in ConfigCommands' catch-all and exits 15 with the reason in stderr,
+    ///     the exception lands in ConfigCommands' catch-all and exits ManifestRejected with the reason in stderr,
     ///     not "Response status code does not indicate success: 400 (Bad Request)".
     /// </summary>
     [Fact]
-    public async Task ModelSetCodeLocal_OnACodeEngineActivationRefusal_ExitsInvalidArgument_WithTheReason()
+    public async Task ModelSetCodeLocal_OnACodeEngineActivationRefusal_ExitsManifestRejected_WithTheReason()
     {
         var dir = TestData.CreateTempRoot("ai-raccoon-model-set-code-local");
         try
@@ -75,7 +75,7 @@ public sealed class SettingsChannelExitCodeTests
 
             var (exit, _, err) = await CliRun.RunAsync(["model", "code", "set", "local", dir], commands);
 
-            exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+            exit.ShouldBe(ErrorCode.Model.ManifestRejected);
             err.ShouldContain(CodeChunker.DefaultBudget.ToString());
             err.ShouldNotContain("does not indicate success");
         }

@@ -67,13 +67,13 @@ public sealed class AppRunnerUnrecognisedVerbTests : IDisposable
     ///     InvalidArgument (15), so the 9 above cannot be won by mapping every verb error to 9.
     /// </summary>
     [Fact]
-    public async Task KnownVerb_MissingRequiredArgument_StaysInvalidArgument()
+    public async Task KnownVerb_MissingRequiredArgument_IsMissingValue()
     {
         var runner = new AppRunner();
 
         var exitCode = await runner.Run(["--data-root", _dataRoot, "settings", "access", "set"]);
 
-        exitCode.ShouldBe(ErrorCode.Usage.InvalidValue);
+        exitCode.ShouldBe(ErrorCode.Usage.MissingValue);
     }
 
     /// <summary>

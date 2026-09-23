@@ -507,7 +507,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     ///     restoring it is outside this lane's one-hunk allowance — reported, not re-pinned.)
     /// </summary>
     [RetryFact]
-    public async Task Startup_BwsMissing_ServeExits1WithoutBinding()
+    public async Task Startup_BwsMissing_ServeExitsBwsNotInstalledWithoutBinding()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the child launches a shell-based fake; the PATH override is unix-shaped");
 
@@ -520,11 +520,11 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
         var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir, port);
 
-        exit.ShouldBe(ErrorCode.Key.Unresolved);
-        // The pre-P2 in-process server logged the resolve failure and the SQLite engine identity;
-        // serve reports key failures by exit code only — stdout and stderr stay empty.
+        exit.ShouldBe(ErrorCode.Key.BwsNotInstalled);
+        // serve names a key failure on stderr (ADR-0107); stdout stays reserved for the bound URL.
         stdout.ShouldBeEmpty();
-        stderr.ShouldBeEmpty();
+        stderr.ShouldContain("could not resolve the encryption key");
+        stderr.ShouldContain("bws not found");
         (await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken))
             .ShouldBeFalse();
         File.Exists(BankPath()).ShouldBeFalse();
@@ -532,11 +532,12 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
     /// <summary>
     ///     serve semantics for a mismatched key (P2/ADR-0020): the decrypt probe fails SQLCipher
-    ///     code 26 before the bind — exit 2, silent streams, nothing listening, and the bank still
-    ///     opens with the passphrase that keyed it (the failed probe writes nothing).
+    ///     code 26 before the bind — Bank.Corrupted (a wrong key and a corrupt file look the same),
+    ///     a stderr line naming the bank, nothing listening, and the bank still opens with the
+    ///     passphrase that keyed it (the failed probe writes nothing).
     /// </summary>
     [RetryFact]
-    public async Task Startup_WrongKey_ServeExits2LeavingTheBankUntouched()
+    public async Task Startup_WrongKey_ServeExitsCorruptedLeavingTheBankUntouched()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the child launches a shell-based fake; the PATH override is unix-shaped");
 
@@ -555,9 +556,9 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         lease.ReleaseForBind();
         var (exit, stderr, stdout) = await RunServerProcessAsync(Path.GetDirectoryName(_fakeBws)!, port);
 
-        exit.ShouldBe(ErrorCode.Bank.OpenFailed);
+        exit.ShouldBe(ErrorCode.Bank.Corrupted);
         stdout.ShouldBeEmpty();
-        stderr.ShouldBeEmpty();
+        stderr.ShouldContain("could not open the bank");
         (await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken))
             .ShouldBeFalse();
         // The bank is untouched: it still opens with the env passphrase that keyed it (pinned

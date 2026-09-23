@@ -94,10 +94,10 @@ reading the server log changes nothing) and `Bank.RepairWritersActive = 38` (ret
 the writers may stop on their own) — and adds a fourth end state neither the original
 catalog nor the code named separately: **`Bank.RepairAttentionNeeded = 39`** — the run
 converged everything the machine can attribute, and what is left needs a person to say
-which id is correct. That is arguably still success (nothing actionable remains for the
-tool), so it is left at exit `0`, `--apply` and dry run alike; the new code exists so a
-script that wants to know "did a human need to look at this" can ask, without treating it
-as the same outcome as `RepairStuck`.
+which id is correct. The owner ruled this a failure under `--apply`: the operator asked the
+repair to finish, and it cannot without a person, so `--apply` exits `39`. A dry run with
+the same outcome only reports, and still exits `0`. Keeping it apart from `RepairStuck`
+lets a script tell "a person has to attribute ids" from "the loop stopped moving rows".
 
 ## The full code table
 
@@ -227,7 +227,7 @@ environment or the product first.
 |---|---|---|---|
 | 90 | `Internal.Unexpected` | The command failed for a reason no other code names; stderr carries the exception message. | no |
 | 91 | `Internal.ServerError` | A control-plane request reached the server, which failed processing it (HTTP 5xx). | yes |
-| 92 | `Internal.UnusableResponse` | The server answered with a status or body the CLI cannot use (a 4xx other than 400/401/404/409, or a null/malformed JSON body). | no |
+| 92 | `Internal.UnusableResponse` | The server answered with a status the CLI cannot use (a 4xx other than 400, 401, 404 and 409). A null or malformed body still exits `90`; see "Not yet distinguished." | no |
 | 93 | `Internal.ManifestBug` | `model download` succeeded, but the manifest it generated failed validation — a product bug. | no |
 | 94 | `Internal.UnhandledCommand` | A parsed command path has no dispatch arm — the tree and the dispatcher disagree; a product bug. | no |
 | 95 | `Internal.Timeout` | An operation timed out inside the command, outside the paths that already name a timeout. | yes |
@@ -242,7 +242,7 @@ audited catalog found behind that old number today.
 | Old code | New code(s) it splits into |
 |---|---|
 | `1` | `Key.Unresolved` (20), `Key.BwsNotInstalled` (23), `Key.BwsTimedOut` (24), `Key.BwsFailed` (25), `Key.SecretNotAKey` (26), `Key.NoEnvPassphrase` (28) |
-| `2` | `Key.WrongKey` (21), `Key.LegacyKeyDerivation` (22), `Bank.OpenFailed` (30), `Bank.Busy` (33) |
+| `2` | `Key.WrongKey` (21), `Key.LegacyKeyDerivation` (22), `Bank.OpenFailed` (30), `Bank.Corrupted` (32), `Bank.Busy` (33) |
 | `3` | `Port.InUse` (40), `Port.ForeignListener` (41), `Server.Unproven` (50) |
 | `4` | `Server.TooOldForObservability` (56), `Reach.NothingListening` (61) |
 | `5` | `Server.OtlpNotEnabled` (58) |
@@ -278,10 +278,9 @@ principles — it is read off the audited catalog's own "Today" column for each 
 which is itself a record of source-level evidence, not a rule this ADR invents. And it
 does not chase every place a single old number was reached *inconsistently* by call
 site — `Key.SourceSidecarInvalid`, for one, is folded into old `27` here as its general
-case, even though `serve` and `doctor` currently swallow the same exception as a silent
-`1`. That inconsistency is the old scheme's own bug, catalogued in full under
-"Ambiguities" in the source catalog this ADR is built from, and fixing every one of those
-call sites is implementation work this ADR does not gate on.
+case, although `serve` and `doctor` reported the same exception as `1` (serve silently).
+Since 1.45.0 every one of those call sites classifies the exception the same way and
+prints a line naming it, so `serve` no longer exits without saying why.
 
 ## Not yet distinguished
 
@@ -291,11 +290,31 @@ maintained below.
 - **Wrong key vs. corrupt bank.** SQLCipher answers the same SQLITE_NOTADB error for a
   wrong key and for a file that genuinely is not a database, so `Key.WrongKey` (21) and
   `Bank.Corrupted` (32) both still resolve from one ambiguous signal today.
+  A command given an explicit key (`serve`) reports the NOTADB as `Bank.Corrupted` (32);
+  one that resolves the key and tries the pre-ADR-0012 derivation reports `Key.WrongKey`
+  (21). Splitting them needs a key verifier kept outside the bank.
 - **An unreachable embedding endpoint, a bad `base-url`, and a rejected API key all look
   the same.** `model embedding set openai`'s dimension probe wraps every failure in one
   exception, so all three report `Model.EndpointUnreachable` (77) today —
   `Model.BadBaseUrl` (78) is defined in the table above but not yet returned by any code
   path.
+- **A malformed or null server body** exits `Internal.Unexpected` (90), not
+  `Internal.UnusableResponse` (92): only a non-success status is classified today.
+- **A read-only `--data-root`** (82) is still recognised by the OS message text, which
+  depends on platform and locale; a path too long (83) is recognised by type first. Every
+  `UnauthorizedAccessException` is reported as `Environment.PermissionDenied` (81) against
+  `--data-root`, even when the denied path was a `--dir` elsewhere.
+- **A local write failure during a model download** exits `Model.DownloadFailed` (70),
+  not an `Environment` code.
+- **`Server.Unproven` (50)** cannot tell a server on another data root from one too old
+  to hold an identity key, and **`Server.NoToken` (51)** cannot tell another root's server
+  from a deleted token file.
+- **`serve observability`** judges by status alone: a foreign listener that answers 404
+  reads as `Server.TooOldForObservability` (56), and an ai-raccoon 5xx as
+  `Port.ForeignListener` (41).
+- **`Bank.RepairWritersActive` (38) is best-effort**: it is told from `RepairStuck` (37)
+  by census growth between passes, so a writer that deletes as fast as it writes reads
+  as stuck.
 
 ## Consequences
 
@@ -303,8 +322,8 @@ maintained below.
   by number needs updating for 1.45.0. There is no compatibility shim; see "Alternatives
   rejected" for why.
 - `docs/how-to/configure-ai-raccoon-server.md`'s `doctor` and settings exit-code tables,
-  and every other current doc naming an exit code, are renumbered in the same release
-  (tracked outside this ADR, in the docs lane of the 1.45.0 change).
+  and every other current doc naming an exit code, are renumbered in the same release.
+  Each table row names its constant, and a test checks the constant holds the row's code.
 - `ExitCode` is deleted; `ErrorCode` with nested `Ok`/`Usage`/`Key`/`Bank`/`Port`/
   `Server`/`Reach`/`Model`/`Environment`/`Internal` static classes replaces it, one
   constant per case, matching the table above exactly.

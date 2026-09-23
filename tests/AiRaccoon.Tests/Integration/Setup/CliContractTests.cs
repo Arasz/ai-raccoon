@@ -32,7 +32,8 @@ public sealed class CliContractTests : IAsyncLifetime
     private LoopbackPort _portLease = null!;
     private int _port;
 
-    /// <summary>One recorded scenario. Empty expected output means the stream must be empty. Stderr
+    /// <summary>One recorded scenario. Exit is the literal number a script sees (ADR-0107), not a constant, so a
+    /// renumbering shows up here. Empty expected output means the stream must be empty. Stderr
     /// may contain the literal <c>{PORT}</c>, substituted with the instance's own port before comparing.</summary>
     private sealed record Scenario(string[] Argv, int Exit, string Stdout, string Stderr);
 
@@ -51,27 +52,27 @@ public sealed class CliContractTests : IAsyncLifetime
         new(["settings", "sweep", "threshold", "set", "0.5"], 0, "sweep threshold set to 0.5",
             "info: AiRaccoon.Hosting.Proxy.BackendLauncher[633]\n      ai-raccoon: starting the backend on port {PORT}\n" +
             BackendOutlivesCommand),
-        new(["settings", "sweep", "threshold", "set", "5"], ErrorCode.Usage.InvalidValue, "",
+        new(["settings", "sweep", "threshold", "set", "5"], 10, "",
             "ai-raccoon: invalid threshold '5' (expected a number in 0..1)"),
         new(["settings", "sweep", "show"], 0, "enabled: True  interval: 24 h  threshold: 0.5", BackendOutlivesCommand),
         new(["settings", "access", "default", "set", "ro"], 0, "access default set to ro", BackendOutlivesCommand),
-        new(["settings", "access", "default", "set", "bogus"], ErrorCode.Usage.InvalidValue, "",
+        new(["settings", "access", "default", "set", "bogus"], 10, "",
             "ai-raccoon: invalid access mode 'bogus' (expected ro, rw or full)"),
         new(["settings", "access", "list"], 0, "default: ro", BackendOutlivesCommand),
         new(["settings", "queryguard", "enable"], 0, "query guard enabled", BackendOutlivesCommand),
-        new(["settings", "performance", "buffer-capacity", "99999999"], ErrorCode.Usage.InvalidValue, "",
+        new(["settings", "performance", "buffer-capacity", "99999999"], 10, "",
             "ai-raccoon: buffer capacity must be at most 1000000 measurements"),
-        new(["settings", "extract", "mode", "bogus"], ErrorCode.Usage.InvalidValue, "",
+        new(["settings", "extract", "mode", "bogus"], 10, "",
             "ai-raccoon: mode must be 'propose' or 'promote'"),
         new(["settings", "extract", "list"], 0, "enabled: False  mode: propose  interval: 30 min  queue-capacity: 1000  auto-promote-threshold: off", BackendOutlivesCommand),
         new(["settings", "ingest", "scope", "list", "*"], 0, "", BackendOutlivesCommand),
         new(["watch", "registered"], 0, "no registered watches", BackendOutlivesCommand),
         new(["extract", "prune"], 0, "promotion queue: no orphaned candidates found", BackendOutlivesCommand),
-        new(["bogusverb"], ErrorCode.Usage.Unparseable, "", "Unrecognized command or argument 'bogusverb'."),
+        new(["bogusverb"], 11, "", "Unrecognized command or argument 'bogusverb'."),
         // A recognised-but-incomplete command shows help for the command it got as far as
         // (docs/adr/0060 keeps this distinct from the bogusverb row above: that one never
         // resolves a command path, so it gets no help — only its error).
-        new(["settings", "sweep", "bogus"], ErrorCode.Usage.Unparseable, "",
+        new(["settings", "sweep", "bogus"], 11, "",
             "Required command was not provided.\nUnrecognized command or argument 'bogus'.\n\n" +
             "Description:\n" +
             "  Background reaper configuration: the kill switch, the cadence and the rating threshold it deletes below. The reaper is ON by default — 'sweep disable' is how you disarm it. Per-entry TTLs are data, set by the memory_set_ttl tool, not configured here.\n\n" +
@@ -85,7 +86,7 @@ public sealed class CliContractTests : IAsyncLifetime
             "  interval-hours <1..8760>  Sets the reaper cadence in hours (1..8760, default 24); applies live, no server restart needed\n" +
             "  threshold                 Sweep rating threshold\n" +
             "  list, show                Shows the whole policy: enabled, interval hours and threshold (row values, else the defaults)"),
-        new(["model", "embedding", "set", "openai"], ErrorCode.Usage.InvalidValue, "",
+        new(["model", "embedding", "set", "openai"], 12, "",
             "Required argument missing for command: 'openai'.\n\n" +
             "Description:\n" +
             "  Routes through an OpenAI-compatible endpoint; key via --api-key (persisted in settings)\n\n" +

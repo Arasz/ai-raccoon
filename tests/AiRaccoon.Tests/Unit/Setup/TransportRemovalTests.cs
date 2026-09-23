@@ -76,13 +76,13 @@ public sealed class TransportRemovalTests : IDisposable
     }
 
     [Fact]
-    public async Task AppRunner_Stdio_ReturnsFifteenWithoutLaunching()
+    public async Task AppRunner_Stdio_ReturnsRemovedTransportWithoutLaunching()
     {
         var runner = new AppRunner();
 
         var exitCode = await runner.Run(["--transport", "stdio", "--data-root", _dataRoot]);
 
-        exitCode.ShouldBe(ErrorCode.Usage.InvalidValue);
+        exitCode.ShouldBe(ErrorCode.Usage.RemovedTransport);
         // Dead on parse: nothing launched, so no bank and no token file exist.
         File.Exists(Path.Combine(_dataRoot, "memory.db")).ShouldBeFalse();
         File.Exists(Path.Combine(_dataRoot, McpTokenFile.FileName)).ShouldBeFalse();
@@ -144,13 +144,13 @@ public sealed class TransportRemovalTests : IDisposable
     [InlineData("--transport", "stdio")]
     [InlineData("--transport=stdio")]
     [InlineData("--transport:stdio")]
-    public async Task Serve_RemovedStdioSpellings_ReturnFifteen(params string[] transportFlag)
+    public async Task Serve_RemovedStdioSpellings_ReturnRemovedTransport(params string[] transportFlag)
     {
         var runner = new AppRunner();
 
         var exit = await runner.Run([.. transportFlag, "--data-root", _dataRoot, "serve"]);
 
-        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        exit.ShouldBe(ErrorCode.Usage.RemovedTransport);
     }
 
     [Fact]
@@ -165,13 +165,13 @@ public sealed class TransportRemovalTests : IDisposable
     }
 
     [Fact]
-    public async Task Bare_PortZero_IsAnInvalidValue_WithoutDialling()
+    public async Task Bare_PortZero_IsUndialable_WithoutDialling()
     {
         var runner = new AppRunner();
 
         var exit = await runner.Run(["--data-root", _dataRoot, "--port", "0"]);
 
-        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        exit.ShouldBe(ErrorCode.Usage.UndialablePort);
     }
 
     [Theory]
