@@ -390,7 +390,7 @@ public sealed class RepairCommandsTests
 
         var stdout = await RunProjectIdsWithExitAsync(apply: true, inner, scope.DataRoot);
 
-        stdout.Exit.ShouldBe(0);
+        stdout.Exit.ShouldBe(ErrorCode.Bank.RepairStuck, "this fake never applies the request, so the loop ends stuck");
         inner.LastRepairRequest.ShouldBe(RepairKind.ProjectIds);
         inner.LastRepairMapJson.ShouldBeNull();
     }
@@ -709,7 +709,13 @@ public sealed class RepairCommandsTests
     private static async Task<string> RunProjectIdsAsync(bool apply, bool diagnose, InMemorySettings store, string dataRoot, string? mapPath = null)
     {
         var outcome = await RunProjectIdsWithExitAsync(apply, diagnose, store, dataRoot, mapPath);
-        outcome.Exit.ShouldBe(0);
+        // A dry run only reports, so it succeeds. This fake never applies a request, so an --apply
+        // run ends stuck or needing attention; ProjectIdsRepairLoopTests pins those codes.
+        if (!apply)
+        {
+            outcome.Exit.ShouldBe(ErrorCode.Ok.Success);
+        }
+
         return outcome.Stdout;
     }
 

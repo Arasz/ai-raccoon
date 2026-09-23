@@ -300,7 +300,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
             ["settings", "sync", "add", "s3", "http://s3.example.com", "--bucket", "memories"], store,
             new StringReader(""));
 
-        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        exit.ShouldBe(ErrorCode.Usage.MissingValue);
         stderr.ShouldContain("key required");
         store.Settings.ShouldNotContainKey("sync.endpoint");
         store.Settings.ShouldNotContainKey("sync.accessKey");
@@ -377,7 +377,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
         var (exit, _, stderr) = await Run(["settings", "sync", "add", "azure", "memories"], store, new StringReader(""));
 
-        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        exit.ShouldBe(ErrorCode.Usage.MissingValue);
         stderr.ShouldContain("connection string required");
         // Nothing written or deleted: the s3 install stays untouched (no provider flip).
         store.Settings.ShouldNotContainKey("sync.provider");
@@ -578,7 +578,7 @@ public class ConfigCommandsRetrievalSweepSyncTests
 
         var (exit, _, stderr) = await Run(["settings", "sync", "add", "azure", "memories", "--cli"], store);
 
-        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        exit.ShouldBe(ErrorCode.Usage.MissingValue);
         stderr.ShouldContain("--account is required with --cli");
         store.Settings.ShouldBeEmpty();
     }
