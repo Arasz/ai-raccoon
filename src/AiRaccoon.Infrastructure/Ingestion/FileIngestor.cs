@@ -215,7 +215,7 @@ public sealed class FileIngestor(
 
     /// <summary>Leaves every freshly inserted row `embed_state = 'pending'` — the caller enqueues
     /// the corpus's drain once it is safe to (see <see cref="IngestDirectoryAsync" />).</summary>
-    private async Task<(int Rows, List<string> Hashes)> InsertChunksAsync(SqliteConnection connection,
+    private async Task<InsertedChunks> InsertChunksAsync(SqliteConnection connection,
         string projectId, string path, string content, IFileTypeHandler handler, string? context,
         CancellationToken cancellationToken)
     {
@@ -227,7 +227,7 @@ public sealed class FileIngestor(
         var hashes = new List<string>(chunks.Count);
         if (chunks.Count == 0)
         {
-            return (0, hashes);
+            return new InsertedChunks(0, hashes);
         }
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
@@ -306,8 +306,10 @@ public sealed class FileIngestor(
                 .ConfigureAwait(false);
         }
 
-        return (inserted > 0 ? 1 : 0, hashes);
+        return new InsertedChunks(inserted > 0 ? 1 : 0, hashes);
     }
+
+    private readonly record struct InsertedChunks(int Rows, List<string> Hashes);
 
     /// <summary>The engine an unconfigured bank will embed with once one is configured (docs/adr/0063).</summary>
     private const string BundledProvider = "local";
