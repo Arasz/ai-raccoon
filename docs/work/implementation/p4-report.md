@@ -142,4 +142,4 @@ Mutation proof (each mutation applied, gate run, file restored with `git checkou
 2. `b19827e9` prove before attach and cycle; remove `--attach` everywhere.
 3. `71e4a5f4` pin proof-before-token ordering for acquire and dispose stop.
 4. `a0dac5a7` proof-capable restart-timeout fixture; touched Nightly E2E classes green.
-5. Strengthened hanging-probe/unproven-listener gates (this record's commit).
+5. `9daf2d6c` strengthen the hanging-probe/unproven-listener gates; record P4 (this file).
