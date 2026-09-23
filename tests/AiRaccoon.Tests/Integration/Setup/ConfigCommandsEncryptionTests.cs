@@ -154,11 +154,11 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_BwsMissing_ReturnsInstallErrorAndChangesNothing()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsInvocationException(BwsNotFoundText));
+        var runner = new FakeBwsRunner(new BwsInvocationException(BwsFailure.NotInstalled, BwsNotFoundText));
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(ErrorCode.Key.Unresolved);
+        exit.ShouldBe(ErrorCode.Key.BwsNotInstalled);
         err.ShouldContain("bws not found");
         err.ShouldContain("https://bitwarden.com/help/cli/");
         store.Settings.ShouldBeEmpty();

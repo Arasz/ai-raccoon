@@ -15,7 +15,7 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
         if (serverConfig.Port is < 1 or > 65535)
         {
             await streams.WriteErrorLineAsync(Undialable(serverConfig.Port));
-            return ErrorCode.Usage.InvalidValue;
+            return ErrorCode.Usage.UndialablePort;
         }
 
         // The verifier is bound to this launch's resolved root, exactly like the token reader below:
@@ -31,7 +31,7 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
         catch (BackendUnavailableException ex)
         {
             await streams.WriteErrorLineAsync(ex.Message);
-            return ErrorCode.Reach.BackendUnavailable;
+            return ex.Code;
         }
         catch (BankMissingException ex)
         {
@@ -62,5 +62,8 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
     }
 }
 
-/// <summary>Raised when the backend can neither be reached nor started; carries the operator's line.</summary>
-public sealed class BackendUnavailableException(string message) : Exception(message);
+/// <summary>Raised when the backend can neither be reached nor started; carries the operator's line and the code naming the case.</summary>
+public sealed class BackendUnavailableException(int code, string message) : Exception(message)
+{
+    public int Code { get; } = code;
+}

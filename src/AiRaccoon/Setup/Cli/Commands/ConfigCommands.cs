@@ -35,14 +35,6 @@ internal sealed class ConfigCommands(
         var commandPath = cliInput.CommandPath;
         var parsedCliArgs = cliInput.ParsedCliArgs;
 
-        // CliRendering already printed the parse error(s) before this ran (AppRunner.GetCliInput);
-        // dispatching anyway would throw reading an argument System.CommandLine never bound,
-        // landing in the catch below and reformatting the same message a second time.
-        if (cliInput.Errors.Count > 0)
-        {
-            return ErrorCode.Usage.InvalidValue;
-        }
-
         try
         {
             return commandPath switch
@@ -142,7 +134,7 @@ internal sealed class ConfigCommands(
                 ["serve", "observability"] => await serve.Observability(cliInput, streams, ctx),
                 ["serve"] => await serve.StartNode(cliInput, streams, ctx),
                 ["doctor"] => await doctor.RunAsync(streams, ctx),
-                _ => throw new InvalidOperationException($"unhandled command: {string.Join(' ', commandPath)}")
+                _ => throw new UnhandledCommandException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }
         catch (SettingsServerRefusedException ex)
@@ -156,7 +148,7 @@ internal sealed class ConfigCommands(
         catch (SettingsServerUnavailableException ex)
         {
             await streams.WriteErrorLineAsync(ex.Message);
-            return ErrorCode.Reach.Unavailable;
+            return ex.Code;
         }
         catch (SettingsServerErrorException ex)
         {
@@ -185,13 +177,13 @@ internal sealed class ConfigCommands(
         catch (Exception ex)
         {
             await streams.WriteErrorLineAsync(CliFailureFormatting.Format(ex, cliInput.ServerConfig.Options.DataRoot));
-            return CliFailureExitCode.For(ex);
+            return CliFailureErrorCode.For(ex);
         }
     }
 
     /// <summary>
     ///     This verb downloads before it touches the settings store, so the F39 guard the store's
-    ///     acquire would run is run first: a mistyped root gets exit 22, not a model.
+    ///     acquire would run is run first: a mistyped root gets NoBank, not a model.
     /// </summary>
     private async Task<int> ModelSetCodeDefaultAsync(CliInput cliInput, StandardStreams streams, CancellationToken ctx)
     {
@@ -199,3 +191,6 @@ internal sealed class ConfigCommands(
         return await settings.ModelSetCodeDefaultAsync(modelDownload, codeEngine, cliInput.Options.DataRoot, streams, ctx);
     }
 }
+
+/// <summary>A parsed command path has no dispatch arm: the command tree and the dispatcher disagree.</summary>
+internal sealed class UnhandledCommandException(string message) : Exception(message);

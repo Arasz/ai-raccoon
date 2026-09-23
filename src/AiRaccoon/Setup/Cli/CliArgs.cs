@@ -46,7 +46,10 @@ internal static class CliArgs
                 AppendTransportRemovalRejection(args, errors, optionReadResult.Options);
             }
 
-            result = new CliInput(optionReadResult.Options, commandPath, showHelp, showVersion, errors, parseResult);
+            result = new CliInput(optionReadResult.Options, commandPath, showHelp, showVersion, errors, parseResult)
+            {
+                NamesRemovedTransport = !showHelp && !showVersion && NamesRemovedTransport(optionReadResult.Options)
+            };
             return true;
         }
 
@@ -83,7 +86,7 @@ internal static class CliArgs
     /// </summary>
     private static void AppendTransportRemovalRejection(string[] args, List<string> errors, RootCliOptions options)
     {
-        if (!options.IsTransportExplicit || options.Transport is not (McpTransport.Stdio or McpTransport.Https))
+        if (!NamesRemovedTransport(options))
         {
             return;
         }
@@ -91,6 +94,9 @@ internal static class CliArgs
         var raw = TransportValue(args) ?? options.Transport.ToString().ToLowerInvariant();
         errors.Add($"Cannot parse argument '{raw}' as --transport: expected proxy|http.");
     }
+
+    private static bool NamesRemovedTransport(RootCliOptions options) =>
+        options is { IsTransportExplicit: true, Transport: McpTransport.Stdio or McpTransport.Https };
 
     /// <summary>Raw --transport value, last occurrence wins (handles --transport v, --transport=v
     /// and --transport:v, case-preserved for the rejection echo).</summary>

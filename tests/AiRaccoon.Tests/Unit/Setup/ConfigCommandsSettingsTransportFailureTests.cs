@@ -28,14 +28,15 @@ public sealed class ConfigCommandsSettingsTransportFailureTests
     }
 
     [Fact]
-    public async Task ServerUnavailableException_ExitsWithADistinctCode_AndUnprefixedMessage()
+    public async Task ServerUnavailableException_ExitsWithTheCodeItNames_AndUnprefixedMessage()
     {
-        var store = new ThrowingStore(new SettingsServerUnavailableException("ai-raccoon: no settings server answered at http://127.0.0.1:1/"));
+        var store = new ThrowingStore(new SettingsServerUnavailableException(ErrorCode.Reach.StoppedAnswering,
+            "ai-raccoon: no settings server answered at http://127.0.0.1:1/"));
         var commands = TestData.CreateConfigCommands(store, settings: new SettingsCommands());
 
         var (exit, _, err) = await CliRun.RunAsync(["settings", "sweep", "show"], commands);
 
-        exit.ShouldBe(ErrorCode.Reach.Unavailable);
+        exit.ShouldBe(ErrorCode.Reach.StoppedAnswering);
         err.Trim().ShouldBe("ai-raccoon: no settings server answered at http://127.0.0.1:1/");
     }
 

@@ -56,7 +56,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     public async Task ResolveAsync_SidecarEnv_ReturnsEnvValueAndNeverTouchesBws()
     {
         WriteSidecar("""{"source":"env"}""");
-        var runner = new FakeBwsRunner(new BwsInvocationException("bws must not run"));
+        var runner = new FakeBwsRunner(new BwsInvocationException(BwsFailure.Failed, "bws must not run"));
         var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
 
         (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe("env-pass");

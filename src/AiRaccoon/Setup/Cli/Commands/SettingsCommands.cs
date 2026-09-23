@@ -181,21 +181,21 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            throw new InvalidOperationException(
+            throw new EmbeddingEndpointUnreachableException(
                 $"The embedding endpoint for '{model}' could not be reached, so its output dimension is unknown: " +
                 $"{ex.Message}. Fix the endpoint or the API key and re-run; nothing has been changed.", ex);
         }
 
         if (declared is not null && declared.Value != probed)
         {
-            throw new EmbeddingModelRejectedException(
+            throw new EmbeddingDimensionMismatchException(
                 $"Declared --dims {declared.Value} but '{model}' returns {probed}-dimension embeddings. " +
                 $"Re-run with --dims {probed}, or point at a model that matches; nothing has been changed.");
         }
 
         if (declared is null && probed != DefaultRemoteDimensions)
         {
-            throw new EmbeddingModelRejectedException(
+            throw new EmbeddingDimensionMismatchException(
                 $"'{model}' returns {probed}-dimension embeddings, not the assumed {DefaultRemoteDimensions}. " +
                 $"Re-run with --dims {probed} so the bank's vector index can be rebuilt to match.");
         }
@@ -768,3 +768,9 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         return path == "~" ? home : path.StartsWith("~/", StringComparison.Ordinal) ? Path.Combine(home, path[2..]) : path;
     }
 }
+
+/// <summary>model embedding set openai: the embedding endpoint could not be reached or refused the dimension probe.</summary>
+internal sealed class EmbeddingEndpointUnreachableException(string message, Exception inner) : Exception(message, inner);
+
+/// <summary>model embedding set openai: the endpoint's output dimension contradicts what was declared or assumed.</summary>
+internal sealed class EmbeddingDimensionMismatchException(string message) : Exception(message);

@@ -22,13 +22,35 @@ public sealed record ModelDownloadResult(
     string? ManifestPath,
     IReadOnlyList<string> DownloadedFiles);
 
-/// <summary>A download failed after the plan was accepted: SHA mismatch, fetch failure, ORT smoke
-/// failure. The failed run leaves no half-installed model behind.</summary>
-public sealed class ModelDownloadException(string message, Exception? inner = null) : Exception(message, inner);
+/// <summary>Why a download failed after its plan was accepted.</summary>
+public enum ModelDownloadFailure
+{
+    Fetch,
+    ChecksumMismatch,
+    RuntimeRejected,
+    Unplannable,
+    ManifestBug
+}
 
-/// <summary>The run was refused before any download: size confirmation declined or insufficient
-/// disk space. Nothing was touched.</summary>
-public sealed class ModelDownloadRejectedException(string message) : Exception(message);
+/// <summary>A download failed after the plan was accepted; <see cref="Failure" /> says how. The failed
+/// run leaves no half-installed model behind.</summary>
+public sealed class ModelDownloadException(ModelDownloadFailure failure, string message, Exception? inner = null) : Exception(message, inner)
+{
+    public ModelDownloadFailure Failure { get; } = failure;
+}
+
+/// <summary>Why a download was refused before it started.</summary>
+public enum ModelDownloadRejection
+{
+    NotConfirmed,
+    DiskFull
+}
+
+/// <summary>The run was refused before any download; <see cref="Rejection" /> says why. Nothing was touched.</summary>
+public sealed class ModelDownloadRejectedException(ModelDownloadRejection rejection, string message) : Exception(message)
+{
+    public ModelDownloadRejection Rejection { get; } = rejection;
+}
 
 /// <summary>Loads a downloaded ONNX model in ONNX Runtime as an opset compatibility smoke test (D4 m10).</summary>
 public interface IOnnxSmokeTester
@@ -178,7 +200,7 @@ public sealed class ModelDownloadService(
             }
             catch (OnnxSmokeTestException ex)
             {
-                throw new ModelDownloadException(ex.Message, ex);
+                throw new ModelDownloadException(ModelDownloadFailure.RuntimeRejected, ex.Message, ex);
             }
 
             plan = PoolingFromGraph(plan, outputRanks);
@@ -235,7 +257,7 @@ public sealed class ModelDownloadService(
         }
         catch (ModelDownloadPlanException ex)
         {
-            throw new ModelDownloadException(ex.Message, ex);
+            throw new ModelDownloadException(ModelDownloadFailure.Unplannable, ex.Message, ex);
         }
     }
 
@@ -289,7 +311,7 @@ public sealed class ModelDownloadService(
         }
         catch (Exception ex) when (ex is HttpRequestException or EmptyDownloadException)
         {
-            throw new ModelDownloadException($"failed to fetch '{path}' from '{request.RepoId}' at '{request.Revision}': {ex.Message}", ex);
+            throw new ModelDownloadException(ModelDownloadFailure.Fetch, $"failed to fetch '{path}' from '{request.RepoId}' at '{request.Revision}': {ex.Message}", ex);
         }
 
         return Encoding.UTF8.GetString(bytes);
@@ -321,7 +343,7 @@ public sealed class ModelDownloadService(
             var actual = hasher.Sha256OfFile(partPath);
             if (expected is not null && !actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
             {
-                throw new ModelDownloadException(
+                throw new ModelDownloadException(ModelDownloadFailure.ChecksumMismatch,
                     $"sha256 mismatch for '{file.Path}': expected {expected}, got {actual}. " +
                     "The file was deleted — re-run the download; if it keeps failing, the repo changed (re-resolve) or the channel is untrusted.");
             }
@@ -332,7 +354,7 @@ public sealed class ModelDownloadService(
         }
         catch (Exception ex) when (ex is not ModelDownloadException && !cancellationToken.IsCancellationRequested)
         {
-            throw new ModelDownloadException($"failed to download '{file.Path}' from '{request.RepoId}' at '{request.Revision}': {ex.Message}", ex);
+            throw new ModelDownloadException(ModelDownloadFailure.Fetch, $"failed to download '{file.Path}' from '{request.RepoId}' at '{request.Revision}': {ex.Message}", ex);
         }
         finally
         {
@@ -394,7 +416,7 @@ public sealed class ModelDownloadService(
             return;
         }
 
-        throw new ModelDownloadRejectedException(message);
+        throw new ModelDownloadRejectedException(ModelDownloadRejection.NotConfirmed, message);
     }
 
     private void GuardDiskSpace(ModelDownloadPlan plan, string targetDirectory)
@@ -405,7 +427,7 @@ public sealed class ModelDownloadService(
             return;
         }
 
-        throw new ModelDownloadRejectedException(
+        throw new ModelDownloadRejectedException(ModelDownloadRejection.DiskFull,
             $"insufficient disk space: the download needs {plan.TotalSize() / (1024.0 * 1024.0):F1} MiB but only {free / (1024.0 * 1024.0):F1} MiB are free on the volume hosting '{targetDirectory}'");
     }
 
@@ -443,7 +465,7 @@ public sealed class ModelDownloadService(
         var errors = manifestValidator.Validate(manifest);
         if (errors.Count > 0)
         {
-            throw new ModelDownloadException(
+            throw new ModelDownloadException(ModelDownloadFailure.ManifestBug,
                 "the download succeeded but the manifest failed validation — this is a bug: " + string.Join("; ", errors));
         }
 
