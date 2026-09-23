@@ -1,0 +1,78 @@
+[
+  {
+    "id": "F001",
+    "query": "where does greeting a name bump the running greet counter",
+    "category": "behaviour-nl",
+    "kind": "code",
+    "language": "python",
+    "sizeBand": "small",
+    "split": "held-out",
+    "family": "fixture",
+    "expectedSource": "corpus:greeter.py",
+    "expectedLines": [13, 15],
+    "negativeTest": false
+  },
+  {
+    "id": "F002",
+    "query": "shared length overlap",
+    "category": "identifier-fragment",
+    "kind": "code",
+    "language": "csharp",
+    "sizeBand": "small",
+    "split": "held-out",
+    "family": "fixture",
+    "expectedSource": "corpus:IntervalOverlap.cs",
+    "expectedLines": [11, 21],
+    "negativeTest": false
+  },
+  {
+    "id": "F003",
+    "query": "async function that retries a callback with exponential backoff between attempts",
+    "category": "path-context",
+    "kind": "code",
+    "language": "javascript",
+    "sizeBand": "small",
+    "split": "held-out",
+    "family": "fixture",
+    "expectedSource": "corpus:retry.js",
+    "expectedLines": [7, 19],
+    "negativeTest": false
+  },
+  {
+    "id": "F004",
+    "query": "which file holds the tests for the greeter module",
+    "category": "src-vs-test-distractor",
+    "kind": "code",
+    "language": "python",
+    "sizeBand": "small",
+    "split": "tuning",
+    "family": "fixture",
+    "expectedSource": "corpus:test_greeter.py",
+    "expectedLines": [1, 21],
+    "negativeTest": false
+  },
+  {
+    "id": "F005",
+    "query": "test that checks resetting the greeter brings its counter back to zero",
+    "category": "test-intent",
+    "kind": "code",
+    "language": "python",
+    "sizeBand": "small",
+    "split": "tuning",
+    "family": "fixture",
+    "expectedSource": "corpus:test_greeter.py",
+    "expectedLines": [12, 16],
+    "negativeTest": false
+  },
+  {
+    "id": "F006",
+    "query": "postgres connection pool exhaustion retry queue configuration",
+    "category": "negative",
+    "kind": "code",
+    "language": null,
+    "sizeBand": null,
+    "split": "held-out",
+    "family": "fixture",
+    "negativeTest": true
+  }
+]
