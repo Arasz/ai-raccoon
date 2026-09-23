@@ -1,0 +1,191 @@
+[
+  {
+    "id": "bootstrap-docs-examples-001",
+    "category": "behaviour-nl",
+    "query": "the page sidebar stacking a short about blurb, a long chronological list of monthly archive links, and a short list of external profile links",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "medium",
+    "family": "bootstrap-docs-examples",
+    "expectedSource": "bootstrap-docs-examples/docs/examples/blog/index.html",
+    "expectedLines": [
+      127,
+      157
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-docs-examples-002",
+    "category": "identifier-fragment",
+    "query": "blog nav masthead title description",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "medium",
+    "family": "bootstrap-docs-examples",
+    "expectedSource": "bootstrap-docs-examples/docs/examples/blog/index.html",
+    "expectedLines": [
+      36,
+      53
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-docs-examples-003",
+    "category": "path-context",
+    "query": "well into the blog template, a pager linking to the previous and next pages of posts sitting right after the third sample post",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "medium",
+    "family": "bootstrap-docs-examples",
+    "expectedSource": "bootstrap-docs-examples/docs/examples/blog/index.html",
+    "expectedLines": [
+      118,
+      123
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-docs-examples-004",
+    "category": "behaviour-nl",
+    "query": "three placeholder feature columns below the carousel, each pairing a circular image with a heading, a paragraph and a details link",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "medium",
+    "family": "bootstrap-docs-examples",
+    "expectedSource": "bootstrap-docs-examples/docs/examples/carousel/index.html",
+    "expectedLines": [
+      134,
+      154
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-docs-examples-005",
+    "category": "identifier-fragment",
+    "query": "featurette heading push pull column",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "medium",
+    "family": "bootstrap-docs-examples",
+    "expectedSource": "bootstrap-docs-examples/docs/examples/carousel/index.html",
+    "expectedLines": [
+      161,
+      182
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-docs-examples-006",
+    "category": "path-context",
+    "query": "deep in the marketing section below the carousel, alternating a featurette's text and image column order using push and pull classes on the second entry",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "medium",
+    "family": "bootstrap-docs-examples",
+    "expectedSource": "bootstrap-docs-examples/docs/examples/carousel/index.html",
+    "expectedLines": [
+      173,
+      182
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "bootstrap-docs-examples-007",
+    "category": "behaviour-nl",
+    "query": "four button sizes, large default and extra-small, each repeating the full set of contextual color variants from default through link",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "large",
+    "family": "bootstrap-docs-examples",
+    "expectedSource": "bootstrap-docs-examples/docs/examples/theme/index.html",
+    "expectedLines": [
+      83,
+      118
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-docs-examples-008",
+    "category": "identifier-fragment",
+    "query": "theme dropdown sr only labelledby",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "large",
+    "family": "bootstrap-docs-examples",
+    "expectedSource": "bootstrap-docs-examples/docs/examples/theme/index.html",
+    "expectedLines": [
+      345,
+      354
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "bootstrap-docs-examples-009",
+    "category": "path-context",
+    "query": "well past the kitchen-sink theme showcase's buttons and tables, three list group variants moving from plain items to linked items to items with a heading and description",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "large",
+    "family": "bootstrap-docs-examples",
+    "expectedSource": "bootstrap-docs-examples/docs/examples/theme/index.html",
+    "expectedLines": [
+      488,
+      528
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  }
+]
