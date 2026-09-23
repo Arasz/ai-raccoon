@@ -11,8 +11,8 @@ public sealed record RelevanceJudgement(IReadOnlyList<MemorySearchResult> Result
 
 /// <summary>
 ///     "Is anything here actually relevant?" — the absolute signal ADR-0047 deferred: a floor on
-///     the fused content cosine, plus the explicit unranked marker for rankings with no absolute
-///     backing. Pure decisions over served rows and their evidence (docs/adr/0047 follow-up).
+///     the fused content cosine that a row containing every query term is exempt from, plus the
+///     explicit unranked marker for rankings with no absolute backing.
 /// </summary>
 public static class SearchRelevance
 {
@@ -35,34 +35,39 @@ public static class SearchRelevance
     public const double FlatTopMargin = 0.1;
 
     /// <summary>
-    ///     Applies the absolute floor (rows whose measured cosine falls below it are dropped) and
-    ///     computes the unranked marker: served rows with a flat single-leg margin and no row
-    ///     clearing the absolute floor. minRelativeScore 0 is ADR-0096's full-recall hatch and
-    ///     disables every score floor, so that call keeps every ranked row (and stays marked).
+    ///     Applies the absolute floor (a row whose cosine falls below it is dropped unless its text
+    ///     contains every query term) and computes the unranked marker: a flat single-leg margin
+    ///     with no absolutely backed row. minRelativeScore 0 disables every score floor.
     /// </summary>
     public static RelevanceJudgement Judge(
         IReadOnlyList<MemorySearchResult> results,
         IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash,
         FusionStats? stats,
-        double minRelativeScore)
+        double minRelativeScore,
+        IReadOnlySet<string>? allTermsMatched = null)
     {
         Guard.IsNotNull(results);
 
         var rows = minRelativeScore > 0
-            ? (IReadOnlyList<MemorySearchResult>)[.. results.Where(row => !BelowAbsoluteFloor(row, evidenceByHash))]
+            ? (IReadOnlyList<MemorySearchResult>)[.. results.Where(row => !BelowAbsoluteFloor(row, evidenceByHash, allTermsMatched))]
             : results;
-        var unranked = rows.Count > 0 && IsFlatSingleLeg(stats) && !rows.Any(row => ClearsAbsoluteFloor(row, evidenceByHash));
+        var unranked = rows.Count > 0 && IsFlatSingleLeg(stats) && !rows.Any(row => HasAbsoluteBacking(row, evidenceByHash, allTermsMatched));
         return new RelevanceJudgement(rows, unranked);
     }
 
     private static double? CosineOf(MemorySearchResult result, IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash) =>
         evidenceByHash is not null && evidenceByHash.TryGetValue(result.Hash, out var evidence) ? evidence.Cosine : null;
 
-    private static bool BelowAbsoluteFloor(MemorySearchResult result, IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash) =>
-        CosineOf(result, evidenceByHash) is { } cosine && cosine < AbsoluteRelevanceFloor;
+    private static bool MatchesAllTerms(MemorySearchResult result, IReadOnlySet<string>? allTermsMatched) =>
+        allTermsMatched is not null && allTermsMatched.Contains(result.Hash);
 
-    private static bool ClearsAbsoluteFloor(MemorySearchResult result, IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash) =>
-        CosineOf(result, evidenceByHash) is { } cosine && cosine >= AbsoluteRelevanceFloor;
+    private static bool BelowAbsoluteFloor(MemorySearchResult result, IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash,
+        IReadOnlySet<string>? allTermsMatched) =>
+        !MatchesAllTerms(result, allTermsMatched) && CosineOf(result, evidenceByHash) is { } cosine && cosine < AbsoluteRelevanceFloor;
+
+    private static bool HasAbsoluteBacking(MemorySearchResult result, IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash,
+        IReadOnlySet<string>? allTermsMatched) =>
+        MatchesAllTerms(result, allTermsMatched) || CosineOf(result, evidenceByHash) is { } cosine && cosine >= AbsoluteRelevanceFloor;
 
     private static bool IsFlatSingleLeg(FusionStats? stats) =>
         stats is { ParticipatingLegs.Count: 1, TopMargin: { } margin } && margin < FlatTopMargin;

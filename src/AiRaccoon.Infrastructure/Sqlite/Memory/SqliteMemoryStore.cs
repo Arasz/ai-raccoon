@@ -520,7 +520,7 @@ public sealed partial class SqliteMemoryStore(
         searchTimingsCollector.Bump = timeProvider.GetElapsedTime(bumpStart);
 
         return new Core.Memory.SearchResults(deferredResults.Results, searchTimingsCollector.ToCollected(timeProvider), deferredResults.FusionDiff,
-            deferredResults.EvidenceByHash, deferredResults.Stats, deferredResults.DroppedByFloor);
+            deferredResults.EvidenceByHash, deferredResults.Stats, deferredResults.DroppedByFloor, searchResults.AllTermsMatched);
     }
 
     private async Task<AdjustedSearchResult> AdjustMergedResults(SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan queryPlan, QueryVector queryVector,
@@ -629,16 +629,17 @@ public sealed partial class SqliteMemoryStore(
 
         var ftsStart = timeProvider.GetTimestamp();
         var ftsResults = await QueryFtsBatchAsync(connection, query, parameters, plan, queryVector, contextFilter, byHashIndex, cancellationToken);
+        IReadOnlyList<string> allTermsMatched = plan.MatchesAllTerms ? [.. ftsResults.Select(result => result.Hash)] : [];
 
         if (plan.Fallback is null || ftsResults.Count > Math.Max(plan.TokenCount, query.Limit))
         {
-            return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart));
+            return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart)) { AllTermsMatched = allTermsMatched };
         }
 
 
         ftsResults = await QueryFallbackFtsBatchAsync(connection, query, parameters, plan, queryVector, contextFilter, byHashIndex, cancellationToken);
 
-        return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart));
+        return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart)) { AllTermsMatched = allTermsMatched };
     }
 
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,

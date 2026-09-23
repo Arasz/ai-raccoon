@@ -22,7 +22,7 @@ internal static partial class SourcePathQuery
             var isPathQuery = TryBuild(query, out var pathExpression);
             if (isPathQuery)
             {
-                queryPlan = queryPlan with { Expression = pathExpression, Fallback = null, IsPathQuery = isPathQuery };
+                queryPlan = queryPlan with { Expression = pathExpression, Fallback = null, IsPathQuery = isPathQuery, MatchesAllTerms = true };
             }
 
             return queryPlan;

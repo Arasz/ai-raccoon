@@ -216,6 +216,62 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         JsonSerializer.Serialize(envelope.Data, McpJsonUtilities.DefaultOptions).ShouldContain("\"unranked\"");
     }
 
+    /// <summary>
+    ///     A row whose text contains every query term is an answer even when its cosine is under
+    ///     the floor (an identifier such as a ticket key embeds far from prose); its below-floor
+    ///     neighbours that matched only part of the query are still dropped.
+    /// </summary>
+    [Fact]
+    public async Task Search_BelowFloorRowMatchingEveryQueryTerm_IsKeptAndItsPartialNeighbourDropped()
+    {
+        _store.StubResults =
+        [
+            new MemorySearchResult("t1", 1.0, "a.md", "Deploy blocked on AIR-4471"),
+            new MemorySearchResult("t2", 0.98, "b.md", "air freight notes")
+        ];
+        _store.StubEvidence = new Dictionary<string, RetrievalEvidence>(StringComparer.Ordinal)
+        {
+            ["t1"] = new RetrievalEvidence("t1", 0.98, [new LegRank("fts", 1), new LegRank("vector", 2)], 0.21),
+            ["t2"] = new RetrievalEvidence("t2", 0.5, [new LegRank("fts", 2)], 0.12)
+        };
+        _store.StubStats = new FusionStats(0.3, null, 0.0328, ["fts", "vector"]);
+        _store.StubAllTermsMatched = new HashSet<string>(["t1"], StringComparer.Ordinal);
+
+        var envelope = await _tools.Search("acme", "AIR-4471", kind: "memory",
+            sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Results.Select(row => row.Hash).ShouldBe(["t1"]);
+        envelope.Data!.Truncation.ShouldNotBeNull().ShouldHaveSingleItem().Dropped.ShouldBe(1,
+            "the partial match is the one row the absolute floor cut");
+    }
+
+    /// <summary>
+    ///     A flat single-leg response whose top row contains every query term has absolute backing,
+    ///     so it is not marked unranked.
+    /// </summary>
+    [Fact]
+    public async Task Search_FlatSingleLegResponseWithAnAllTermsMatch_IsNotMarkedUnranked()
+    {
+        _store.StubResults =
+        [
+            new MemorySearchResult("k1", 1.0, "a.md", "first"),
+            new MemorySearchResult("k2", 0.98, "b.md", "second")
+        ];
+        _store.StubEvidence = new Dictionary<string, RetrievalEvidence>(StringComparer.Ordinal)
+        {
+            ["k1"] = new RetrievalEvidence("k1", 1.0, [new LegRank("fts", 1)], null),
+            ["k2"] = new RetrievalEvidence("k2", 0.98, [new LegRank("fts", 2)], null)
+        };
+        _store.StubStats = new FusionStats(0.0161, null, 0.0164, ["fts"]);
+        _store.StubAllTermsMatched = new HashSet<string>(["k1"], StringComparer.Ordinal);
+
+        var envelope = await _tools.Search("acme", "AIR-4471", kind: "memory",
+            sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Results.Count.ShouldBe(2);
+        JsonSerializer.Serialize(envelope.Data, McpJsonUtilities.DefaultOptions).ShouldNotContain("unranked");
+    }
+
     private sealed class FakeStore : FakeMemoryStore
     {
         public IReadOnlyList<MemorySearchResult> StubResults { get; set; } = [];
@@ -224,8 +280,11 @@ public sealed class MemorySearchAbsoluteRelevanceTests
 
         public FusionStats? StubStats { get; set; }
 
+        public IReadOnlySet<string>? StubAllTermsMatched { get; set; }
+
         public override Task<SearchResults> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SearchResults(StubResults, SearchTimings.Empty, null, StubEvidence, StubStats));
+            Task.FromResult(new SearchResults(StubResults, SearchTimings.Empty, null, StubEvidence, StubStats,
+                AllTermsMatched: StubAllTermsMatched));
     }
 
     private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
