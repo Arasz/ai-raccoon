@@ -46,7 +46,7 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
 
         var queries = ReadEvalSetQueries();
         var service = TestData.CreateEmbeddingService();
-        using var generator = service.CreateGenerator(new EmbeddingSettings("local", null, null, null));
+        using var generator = service.CreateGenerator(new EmbeddingSettings("local", TestData.MiniLmModelPath(), null, null));
 
         var entries = new List<GoldenEntry>(queries.Count);
         foreach (var (id, query) in queries)
@@ -64,7 +64,7 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
             BuildVersion: typeof(EmbeddingService).Assembly.GetName().Version?.ToString() ?? "unknown",
             OnnxRuntimeVersion: CurrentOnnxRuntimeVersion(),
             Engine: "OnnxEmbeddingGenerator — bundled all-MiniLM-L6-v2 qint8, mean-pool + L2, 256 window",
-            ModelSha256: BundledModel.ModelSha256,
+            ModelSha256: "4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474",
             VocabSha256: BundledModel.VocabSha256,
             CaptureCommand: "AIRACCOON_GOLDEN_CAPTURE=1 dotnet test --project tests/AiRaccoon.Tests --filter-method '*MiniLmGoldenVectorTests.CaptureGoldenVectors'"),
             entries);
@@ -94,7 +94,7 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
             RuntimeInformation.ProcessArchitecture.ToString(), StringComparison.Ordinal);
 
         var service = TestData.CreateEmbeddingService();
-        using var generator = service.CreateGenerator(new EmbeddingSettings("local", null, null, null));
+        using var generator = service.CreateGenerator(new EmbeddingSettings("local", TestData.MiniLmModelPath(), null, null));
 
         foreach (var entry in golden.Entries)
         {

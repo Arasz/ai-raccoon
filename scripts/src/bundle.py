@@ -14,7 +14,7 @@ BUNDLED_FILES = (
     ("tokenizer_config.json", _BUNDLED_REPO + "tokenizer_config.json", "ce06781b38bb393db68c9e0709bddd31ef5d88f2c6fbb3fd9f369778fb85e451"),
 )
 # Written by `ai-raccoon model download`, committed beside the model; verified, never fetched.
-BUNDLED_MANIFEST = ("ai-raccoon.manifest.json", "7988517a61d24360da161b9fcc725c6f1a8ddbc356ec95ea30dccc6a53c0f143")
+BUNDLED_MANIFEST = ("ai-raccoon.manifest.json", "777268daa83ea925bfbfe4e020e62d0232be6df48189280a117a3de65bbd4ff6")
 
 # Legacy single-file path (`model embedding set local <file>.onnx`) still tokenizes with this vocab.
 VOCAB_NAME = "vocab.txt"

@@ -59,15 +59,32 @@ the ceiling, and fp16 (97 MB) does not.
 2. **It is also the code corpus's default engine.** `model code set default` activates the
    bundled engine instead of downloading code-daemon-embed-v1. The code engine stays separately
    configurable, and `model code set local <dir>` still takes any manifest model.
-3. **The bundled engine's fingerprint changes.** Every existing bank re-embeds on upgrade through
-   the model-migration drain (ADR-0076), memory and code alike. That is accepted: one engine, one
-   re-embed, never two diverging vector spaces.
+3. **The bundled engine's fingerprint changes, and memory re-embeds on its own.** The fingerprint
+   is `local:bundled#<sha256 of the bundled manifest>`: stable across installs, changed exactly
+   when the bundled model changes. The model-migration job now reconciles it on every pass, as the
+   code-reindex job already did for code, so a bank embedded by MiniLM migrates on first start with
+   no command (ADR-0076's drain). A code corpus on code-daemon-embed-v1 keeps it until
+   `model code set default` is run, since that engine is a path, not the bundled one. That is
+   accepted: one engine, one re-embed.
 4. **Sessions try the GPU first.** Where the platform's ONNX Runtime build implements a GPU
    execution provider, the session appends it and ONNX Runtime keeps what the GPU cannot run on
    the CPU. The 1.30.0 osx-arm64 build implements WebGPU. Where appending fails, or the build has
    none, the session runs on the CPU and logs which provider it got. A setting forces the CPU for
    machines where the GPU misbehaves.
-5. **The weights are fetched at build time, not committed.** `scripts/src/bundle.py` pins the
+5. **The bundled manifest carries three per-engine values.** `chunkTokens: 254` keeps memory
+   chunks the size every measurement in this ADR used, instead of the min(510, window − 2) its
+   8,190-token window would give. Smaller chunks also cost less per embed. `relevanceFloor: 0.79`
+   replaces search's 0.35 cosine floor, which was calibrated on MiniLM: granite scores off-topic
+   text at up to 0.787 (median 0.735) and relevant text at 0.802 and above (p5), where MiniLM's
+   off-topic maximum was 0.286. Structure fusion (ADR-0004) first rescales similarities so that
+   floor maps to 0. ADR-0004's "a chunk with no heading scores structure 0" was measured where 0 was
+   roughly what unrelated text scored. Without the rescale, a heading-less note (content cosine
+   0.959) ranked fifth behind unrelated headed chunks (0.757). Engines that declare no floor,
+   MiniLM included, fuse exactly as before.
+6. **`embedding.device`** (`settings model device auto|gpu|cpu`). `auto`, the default, puts only
+   the bundled engine on the GPU. A downloaded int8 model would drift from its stored CPU vectors,
+   so it opts in with `gpu`.
+7. **The weights are fetched at build time, not committed.** `scripts/src/bundle.py` pins the
    files and `scripts/download-embedding-model.py` downloads and verifies them into
    `src/AiRaccoon/Models/` before `dotnet pack`, as it already did for the ONNX model. The 97 MB
    `.onnx_data` file is git-ignored.
@@ -79,13 +96,17 @@ the ceiling, and fp16 (97 MB) does not.
 - First start after upgrading re-embeds every bank. ADR-0076 measured roughly 6 minutes of
   refused tool calls on a 25,917-entry bank with the old engine. The new engine is heavier per
   row on the CPU and lighter on the GPU. README's Breaking changes names the cost.
-- The chunk budget for the bundled engine moves from 254 tokens to 510 (ADR-0036: min(510,
-  window − 2)), so new writes chunk larger. Stored chunks are not re-chunked.
+- The bundled engine's memory chunk budget stays 254 tokens (`chunkTokens`). The code corpus keeps
+  its own 510-token chunks, and activation now checks the engine's window, not its memory budget.
+- The code corpus switches with `model code set default`. A corpus left on code-daemon-embed-v1
+  keeps that engine until the command is run.
 - Windows and Linux run on the CPU with the standard package. There, fp16 costs roughly twice
   fp32's CPU time, because ONNX Runtime upcasts it. A DirectML (Windows) or CUDA (Linux) build is
   the follow-up that brings the GPU path to those hosts.
-- Committed fixtures that bake bundled-model vectors (ADR-0049/0050) are regenerated with the new
-  engine.
+- Committed fixtures that bake MiniLM vectors (ADR-0049/0050) keep them: the one gate that embedded
+  its query live now points that bank at the MiniLM test asset, which moved to
+  `tests/AiRaccoon.Tests/TestData/Models/`. Engine-mechanics tests (golden vectors, legacy
+  single-file path) use it too.
 
 ## Alternatives rejected
 

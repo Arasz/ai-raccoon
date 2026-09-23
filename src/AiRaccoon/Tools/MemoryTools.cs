@@ -129,7 +129,8 @@ public sealed partial class MemoryTools(
         + "candidate population, not the served set. A response with unranked: true ranks rows that carry "
         + "no absolute relevance backing (flat margin, one leg, no row clearing the absolute relevance floor or "
         + "containing every query term) — candidates to verify, not answers. An absolute relevance floor drops "
-        + "rows whose fused content cosine is below 0.35 unless the row's text contains every query term (a "
+        + "rows whose fused content cosine is below the engine's calibrated floor (0.79 for the bundled model, 0.35 "
+        + "for an engine that declares none) unless the row's text contains every query term (a "
         + "keyword match on an identifier such as a ticket key is kept whatever its cosine), so a zero-overlap "
         + "query comes back empty. A response short of "
         + "its requested limit reports the cuts as truncation:[{floor, threshold, dropped}].")]
@@ -352,8 +353,9 @@ public sealed partial class MemoryTools(
 
         var sidecar = dispatch.MemorySearchResults;
         var judgement = SearchRelevance.Judge(dispatch.Results, sidecar?.EvidenceByHash, sidecar?.Stats, query.MinRelativeScore,
-            sidecar?.AllTermsMatched);
-        var truncation = TruncationFor(judgement.Results.Count, dispatch.Results.Count, query, sidecar?.DroppedByFloor ?? 0);
+            sidecar?.AllTermsMatched, sidecar?.RelevanceFloor);
+        var truncation = TruncationFor(judgement.Results.Count, dispatch.Results.Count, query, sidecar?.DroppedByFloor ?? 0,
+            sidecar?.RelevanceFloor ?? SearchRelevance.AbsoluteRelevanceFloor);
         if (judgement.Results.Count == 0)
         {
             return new SearchResultList(judgement.Results, warning, dispatch.CodeResults, Truncation: truncation);
@@ -383,7 +385,7 @@ public sealed partial class MemoryTools(
     ///     the limit stays clean, and so does one that is short because the bank simply ends.
     /// </summary>
     private static IReadOnlyList<FloorTruncation>? TruncationFor(
-        int served, int preAbsoluteCount, SearchQuery query, int droppedByRelativeFloor)
+        int served, int preAbsoluteCount, SearchQuery query, int droppedByRelativeFloor, double absoluteFloor)
     {
         if (served >= query.Limit)
         {
@@ -399,7 +401,7 @@ public sealed partial class MemoryTools(
         var droppedByAbsoluteFloor = preAbsoluteCount - served;
         if (droppedByAbsoluteFloor > 0)
         {
-            (truncation ??= []).Add(new FloorTruncation(SearchRelevance.AbsoluteRelevanceFloorName, SearchRelevance.AbsoluteRelevanceFloor, droppedByAbsoluteFloor));
+            (truncation ??= []).Add(new FloorTruncation(SearchRelevance.AbsoluteRelevanceFloorName, absoluteFloor, droppedByAbsoluteFloor));
         }
 
         return truncation;

@@ -56,6 +56,7 @@ internal sealed class ConfigCommands(
                 ["settings", "model", "reset"] => await settings.ModelResetAsync(store, streams, ctx),
                 ["settings", "model", "show"] => await settings.ModelShowAsync(store, streams, ctx),
                 ["settings", "model", "threads"] => await settings.ModelThreadsSetAsync(parsedCliArgs, store, streams, ctx),
+                ["settings", "model", "device"] => await settings.ModelDeviceSetAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "retrieval", "alpha", "set"] => await settings.RetrievalAlphaSetAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "retrieval", "alpha", "show"] => await settings.RetrievalAlphaShowAsync(store, streams, ctx),
                 ["settings", "retrieval", "fusion", "enable"] => await settings.RetrievalFusionSetAsync(true, store, streams, ctx),
@@ -181,14 +182,11 @@ internal sealed class ConfigCommands(
         }
     }
 
-    /// <summary>
-    ///     This verb downloads before it touches the settings store, so the F39 guard the store's
-    ///     acquire would run is run first: a mistyped root gets NoBank, not a model.
-    /// </summary>
+    /// <summary>The F39 guard runs first, so a mistyped root gets NoBank rather than a new bank.</summary>
     private async Task<int> ModelSetCodeDefaultAsync(CliInput cliInput, StandardStreams streams, CancellationToken ctx)
     {
         BankPresenceGuard.EnsureExists(cliInput.ServerConfig.Options);
-        return await settings.ModelSetCodeDefaultAsync(modelDownload, codeEngine, cliInput.Options.DataRoot, streams, ctx);
+        return await settings.ModelSetCodeDefaultAsync(codeEngine, streams, ctx);
     }
 }
 

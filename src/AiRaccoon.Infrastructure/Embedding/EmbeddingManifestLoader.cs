@@ -104,7 +104,9 @@ public sealed class EmbeddingManifestLoader(
             manifest.Onnx.Files[0].Path,
             files,
             manifest.QueryInstruction,
-            manifest.DocumentInstruction);
+            manifest.DocumentInstruction,
+            manifest.RelevanceFloor,
+            manifest.ChunkTokens);
     }
 
     /// <summary>Manifest file paths stay inside the model directory — never rooted, never escaping.</summary>

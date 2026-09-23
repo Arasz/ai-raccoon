@@ -15,7 +15,7 @@ public sealed class BundledModelTests
         Directory.CreateDirectory(tempDir);
         try
         {
-            const string fileName = BundledModel.ModelFileName;
+            const string fileName = TestData.MiniLmModelFileName;
             var flatPath = Path.Combine(tempDir, fileName);
             File.WriteAllText(flatPath, "dummy");
 
@@ -29,34 +29,61 @@ public sealed class BundledModelTests
     }
 
     [Fact]
-    public void ResolveModelPath_WithNonexistentBaseDirectory_BlamesTheReplacedInstall_NotMissingAsset()
+    public void ResolveDirectory_FindsTheBundledManifestDirectory_AboveTheTool()
     {
-        var missingDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var root = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var bundled = Path.Combine(root, "Models", BundledModel.DirectoryName);
+        var toolDir = Path.Combine(root, "tools", "net10.0");
+        Directory.CreateDirectory(bundled);
+        Directory.CreateDirectory(toolDir);
+        try
+        {
+            File.WriteAllText(Path.Combine(bundled, "ai-raccoon.manifest.json"), "{}");
 
-        var ex = Should.Throw<BundledModelInstallReplacedException>(
-            () => BundledModel.ResolveModelPath(null, missingDir));
-
-        ex.Message.ShouldContain(missingDir);
-        ex.Message.ShouldNotContain("model set local");
+            BundledModel.ResolveDirectory(toolDir).ShouldBe(bundled);
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(root);
+        }
     }
 
     [Fact]
-    public void ResolveModelPath_WithExistingEmptyBaseDirectory_KeepsTheModelSetLocalMessage()
+    public void ResolveDirectory_WithNonexistentBaseDirectory_BlamesTheReplacedInstall_NotMissingAsset()
+    {
+        var missingDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+
+        var ex = Should.Throw<BundledModelInstallReplacedException>(() => BundledModel.ResolveDirectory(missingDir));
+
+        ex.Message.ShouldContain(missingDir);
+    }
+
+    [Fact]
+    public void ResolveDirectory_WithExistingEmptyBaseDirectory_NamesTheMissingBundledDirectory()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(tempDir);
         try
         {
-            var ex = Should.Throw<InvalidOperationException>(() => BundledModel.ResolveModelPath(null, tempDir));
+            var ex = Should.Throw<InvalidOperationException>(() => BundledModel.ResolveDirectory(tempDir));
 
             ex.ShouldNotBeOfType<BundledModelInstallReplacedException>();
-            ex.Message.ShouldBe(BundledModel.MissingBundledModelMessage(BundledModel.ModelFileName));
+            ex.Message.ShouldContain(BundledModel.DirectoryName);
         }
         finally
         {
             TestData.DeleteTempRoot(tempDir);
         }
     }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("bundled", true)]
+    [InlineData("BUNDLED", true)]
+    [InlineData("/models/granite", false)]
+    public void IsBundled_NamesTheBundledEngine_ForUnsetOrTheSettingValue(string? model, bool expected) =>
+        BundledModel.IsBundled(model).ShouldBe(expected);
 
     [Fact]
     public void ResolveVocabPath_WithNonexistentBaseDirectory_BlamesTheReplacedInstall_NotMissingAsset()

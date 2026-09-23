@@ -71,12 +71,15 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
 
         var rows = await _store.ListContextAsync(ProjectId, ContextNaming.ProjectContext(ProjectId),
             TestContext.Current.CancellationToken);
-        var tokens = rows.Select(row => (row.Hash, Count: Bert().EncodeToIds(row.Value, true, true, true).Count)).ToList();
+        var bundled = new EmbeddingSettings("local", null, null, null);
+        var engineTokenizer = TestData.CreateEmbeddingService().ResolveTokenizer(bundled)!;
+        var engineWindow = TestData.CreateEmbeddingService().ResolveChunkBudgetFor(bundled) + engineTokenizer.SpecialTokenReservation;
+        var tokens = rows.Select(row => (row.Hash, Count: engineTokenizer.EncodeToIds(row.Value, true).Count)).ToList();
 
         rows.Count.ShouldBeGreaterThan(1,
             $"a {content.Length}-character body must be split; it stored as {rows.Count} row(s) of "
             + $"{string.Join(", ", tokens.Select(t => t.Count))} tokens");
-        tokens.Where(t => t.Count > BertWindow).ShouldBeEmpty(
+        tokens.Where(t => t.Count > engineWindow).ShouldBeEmpty(
             $"every stored row must fit the model that embeds it; worst {tokens.Max(t => t.Count)} tokens");
     }
 

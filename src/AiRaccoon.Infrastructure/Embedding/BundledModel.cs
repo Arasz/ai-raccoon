@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using AiRaccoon.Infrastructure.Assets;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Embedding;
@@ -8,37 +10,39 @@ namespace AiRaccoon.Infrastructure.Embedding;
 public sealed record BundledModelResult(bool AllPresent, IReadOnlyList<string> Errors);
 
 /// <summary>
-///     Locates and bootstraps the bundled int8 all-MiniLM-L6-v2 ONNX model + BERT vocab that ship
-///     inside the tool package (FR-NM-3; see docs/work/features-native-memory/native-memory.feature),
-///     pinned by SHA-256. A custom model path comes from the embedding.model settings row.
+///     Locates and bootstraps the bundled engine (ADR-0108): granite-embedding-small-english-r2
+///     fp16, shipped as a manifest model directory under <c>Models/</c> whose committed
+///     <c>ai-raccoon.manifest.json</c> pins every file by SHA-256. Also ships the legacy BERT vocab
+///     that the single-file <c>.onnx</c> path tokenizes with.
 /// </summary>
 public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClientFactory httpClientFactory) : IBundledModel
 {
-    public const string ModelFileName = "model_qint8_arm64.onnx";
+    /// <summary>The bundled engine's directory under <c>Models/</c>.</summary>
+    public const string DirectoryName = "granite-embedding-small-english-r2";
+
+    /// <summary>The settings value that names the bundled engine where a model path is expected.</summary>
+    public const string SettingValue = "bundled";
+
     private const string VocabFileName = "vocab.txt";
-
-    // Pinned after the first verified download — the script and the gate test share these so a
-    // tampered or drifted model fails loudly instead of degrading retrieval.
-    public const string ModelSha256 = "4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474";
     public const string VocabSha256 = "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3";
-
-    private const string ModelUrl =
-        "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model_qint8_arm64.onnx";
 
     private const string VocabUrl =
         "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/vocab.txt";
 
+    /// <summary>True when <paramref name="model" /> names the bundled engine: unset or <see cref="SettingValue" />.</summary>
+    public static bool IsBundled(string? model) =>
+        string.IsNullOrWhiteSpace(model) || string.Equals(model, SettingValue, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    ///     Verifies both bundled files (sha256) and, when missing, downloads the pinned copies
-    ///     into the repo's src/AiRaccoon/Models so the next build packs them. Download failures
-    ///     become error entries — a missing asset is a hard failure for the gate test, not a skip.
+    ///     Verifies every file the bundled manifest pins plus the legacy vocab and, when one is
+    ///     missing, downloads the pinned copy into the repo's src/AiRaccoon/Models so the next build
+    ///     packs it. Download failures become error entries — a missing asset fails the gate test.
     /// </summary>
     public async Task<BundledModelResult> EnsureAsync(CancellationToken cancellationToken = default)
     {
-        var model = LocateVerified(ModelFileName, ModelSha256);
-        var vocab = LocateVerified(VocabFileName, VocabSha256);
-        if (model is not null && vocab is not null)
+        var directory = ResolveDirectoryOrNull(AppContext.BaseDirectory);
+        if (directory is not null && ManifestFiles(directory).All(f => f.IsVerified()) && ResolveBundled(VocabFileName) is { } vocab
+            && BundledResource.Sha256Of(vocab).Equals(VocabSha256, StringComparison.OrdinalIgnoreCase))
         {
             Log.BundledModelAssetsVerified(logger);
             return new BundledModelResult(true, []);
@@ -49,43 +53,79 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
     }
 
     /// <summary>
-    ///     Downloads both bundled assets into targetDirectory when no verified copy sits there; download failures become
-    ///     error entries (see docs/work/features-native-memory/native-memory.feature).
+    ///     Downloads each file the manifest in <c>targetDirectory/DirectoryName</c> pins, plus the
+    ///     legacy vocab, when no verified copy sits there. The manifest itself is committed, never fetched.
     /// </summary>
     public async Task<BundledModelResult> EnsureDownloadsAsync(string targetDirectory, CancellationToken cancellationToken)
     {
         var errors = new List<string>();
         Directory.CreateDirectory(targetDirectory);
         var httpClient = httpClientFactory.CreateClient();
-        errors.AddRange(await DownloadResources(httpClient, new BundledResource(targetDirectory, ModelFileName, ModelUrl, ModelSha256), cancellationToken));
         errors.AddRange(await DownloadResources(httpClient, new BundledResource(targetDirectory, VocabFileName, VocabUrl, VocabSha256), cancellationToken));
+        var bundled = Path.Combine(targetDirectory, DirectoryName);
+        if (!File.Exists(Path.Combine(bundled, EmbeddingManifest.FileName)))
+        {
+            errors.Add($"{DirectoryName}/{EmbeddingManifest.FileName}: missing — it is committed with the source, never downloaded");
+            return new BundledModelResult(false, errors);
+        }
+
+        foreach (var file in ManifestFiles(bundled))
+        {
+            errors.AddRange(await DownloadResources(httpClient, file, cancellationToken));
+        }
+
         return new BundledModelResult(errors.Count == 0, errors);
     }
 
-    /// <summary>
-    ///     The ONNX model to embed with: the settings row embedding.model (written by
-    ///     'ai-raccoon model embedding set local &lt;path&gt;', null-or-whitespace = unset), else the bundled copy next
-    ///     to the running tool, else the repo source copy during tests.
-    /// </summary>
-    public static string ResolveModelPath() => ResolveModelPath(null, AppContext.BaseDirectory);
+    /// <summary>The bundled engine's directory next to the tool (or in the source tree during development).</summary>
+    public static string ResolveDirectory() => ResolveDirectory(AppContext.BaseDirectory);
 
-    internal static string ResolveModelPath(string? configuredPath, string baseDirectory)
+    internal static string ResolveDirectory(string baseDirectory) =>
+        ResolveDirectoryOrNull(baseDirectory)
+        ?? throw BundledAssetUnavailable("embedding model", DirectoryName, baseDirectory,
+            $"Bundled embedding model directory '{DirectoryName}' not found next to the tool. Reinstall the tool to restore it, " +
+            "or 'ai-raccoon model embedding set local <model-dir>' for a downloaded model.");
+
+    private static string? ResolveDirectoryOrNull(string baseDirectory)
     {
-        if (!string.IsNullOrWhiteSpace(configuredPath))
+        for (var dir = new DirectoryInfo(baseDirectory); dir is not null; dir = dir.Parent)
         {
-            return Path.GetFullPath(configuredPath);
+            var candidate = Path.Combine(dir.FullName, "Models", DirectoryName);
+            if (File.Exists(Path.Combine(candidate, EmbeddingManifest.FileName)))
+            {
+                return candidate;
+            }
         }
 
-        return ResolveBundled(ModelFileName, baseDirectory)
-               ?? throw BundledAssetUnavailable("embedding model", ModelFileName, baseDirectory, MissingBundledModelMessage(ModelFileName));
+        return null;
     }
 
-    /// <summary>
-    ///     Actionable message for a missing bundled asset; points at 'ai-raccoon model embedding set local' (see
-    ///     docs/work/features-native-memory/native-memory.feature).
-    /// </summary>
-    internal static string MissingBundledModelMessage(string fileName) =>
-        $"Bundled embedding model '{fileName}' not found next to the tool. Run 'ai-raccoon model embedding set local' to restore it, or 'ai-raccoon model embedding set local <path-to-onnx>' for a custom path.";
+    /// <summary>Every file the bundled manifest pins, with the upstream URL at the pinned revision.</summary>
+    private static IEnumerable<BundledResource> ManifestFiles(string directory)
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(directory, EmbeddingManifest.FileName)));
+        var root = doc.RootElement;
+        var source = root.GetProperty("source");
+        var baseUrl = $"https://huggingface.co/{source.GetProperty("repo").GetString()}/resolve/{source.GetProperty("revision").GetString()}/";
+        var files = new List<BundledResource>();
+        void Add(JsonElement list, string upstreamDir)
+        {
+            foreach (var file in list.EnumerateArray())
+            {
+                var path = file.GetProperty("path").GetString()!;
+                files.Add(new BundledResource(directory, path, baseUrl + upstreamDir + path, file.GetProperty("sha256").GetString()!));
+            }
+        }
+
+        Add(root.GetProperty("onnx").GetProperty("files"), "onnx/");
+        Add(root.GetProperty("tokenizer").GetProperty("files"), "");
+        if (root.TryGetProperty("provenanceFiles", out var provenance) && provenance.ValueKind == JsonValueKind.Array)
+        {
+            Add(provenance, "");
+        }
+
+        return files;
+    }
 
     public static string ResolveVocabPath() => ResolveVocabPath(AppContext.BaseDirectory);
 
@@ -93,16 +133,9 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
         ResolveBundled(VocabFileName, baseDirectory)
         ?? throw BundledAssetUnavailable("BERT vocab", VocabFileName, baseDirectory, MissingBundledVocabMessage(VocabFileName));
 
-    /// <summary>Actionable message for a missing bundled vocab; points at 'ai-raccoon model embedding set local'.</summary>
     internal static string MissingBundledVocabMessage(string fileName) =>
         $"Bundled BERT vocab '{fileName}' not found next to the tool. Run 'ai-raccoon model embedding set local' to restore it.";
 
-    /// <summary>
-    ///     Distinguishes a genuinely-missing bundled asset (baseDirectory exists, the file does not —
-    ///     'model embedding set local' fixes it) from an install replaced out from under this process
-    ///     (baseDirectory itself no longer exists, e.g. after 'dotnet tool update' — only a restart
-    ///     fixes it).
-    /// </summary>
     private static InvalidOperationException BundledAssetUnavailable(string assetLabel, string fileName, string baseDirectory, string missingAssetMessage) =>
         Directory.Exists(baseDirectory)
             ? new InvalidOperationException(missingAssetMessage)
@@ -127,14 +160,6 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
         return errors;
     }
 
-
-    private static string? LocateVerified(string fileName, string expectedSha)
-    {
-        var path = ResolveBundled(fileName);
-        return path is not null && BundledResource.Sha256Of(path).Equals(expectedSha, StringComparison.OrdinalIgnoreCase)
-            ? path
-            : null;
-    }
 
     private static string? ResolveBundled(string fileName) => ResolveBundled(fileName, AppContext.BaseDirectory);
 

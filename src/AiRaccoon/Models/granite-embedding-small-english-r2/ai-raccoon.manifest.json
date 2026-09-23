@@ -70,5 +70,7 @@
       "sha256": "ce06781b38bb393db68c9e0709bddd31ef5d88f2c6fbb3fd9f369778fb85e451"
     }
   ],
-  "documentInstruction": null
+  "documentInstruction": null,
+  "relevanceFloor": 0.79,
+  "chunkTokens": 254
 }

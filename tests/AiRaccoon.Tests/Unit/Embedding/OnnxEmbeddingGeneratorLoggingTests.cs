@@ -22,7 +22,7 @@ public sealed class OnnxEmbeddingGeneratorLoggingTests
     public async Task GenerateAsync_ChunkExceedingTheWindow_LogsTruncation()
     {
         var logger = new FakeLogger<OnnxEmbeddingGenerator>();
-        using var generator = new OnnxEmbeddingGenerator(BundledModel.ResolveModelPath(),
+        using var generator = new OnnxEmbeddingGenerator(TestData.MiniLmModelPath(),
             WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()),
             EmbeddingService.BundledDescriptor, logger);
         var overLong = string.Join(" ", Enumerable.Range(1, 400).Select(i => $"word{i}"));
@@ -38,7 +38,7 @@ public sealed class OnnxEmbeddingGeneratorLoggingTests
     public async Task GenerateAsync_ChunkWithinTheWindow_LogsNothing()
     {
         var logger = new FakeLogger<OnnxEmbeddingGenerator>();
-        using var generator = new OnnxEmbeddingGenerator(BundledModel.ResolveModelPath(),
+        using var generator = new OnnxEmbeddingGenerator(TestData.MiniLmModelPath(),
             WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()),
             EmbeddingService.BundledDescriptor, logger);
 
@@ -51,7 +51,7 @@ public sealed class OnnxEmbeddingGeneratorLoggingTests
     public async Task GenerateAsync_NewlineJoinedHashList_LogsPossibleUnknownTokenCollapse()
     {
         var logger = new FakeLogger<OnnxEmbeddingGenerator>();
-        using var generator = new OnnxEmbeddingGenerator(BundledModel.ResolveModelPath(),
+        using var generator = new OnnxEmbeddingGenerator(TestData.MiniLmModelPath(),
             WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()),
             EmbeddingService.BundledDescriptor, logger);
         var hashList = string.Join("\n", Enumerable.Range(0, 60)

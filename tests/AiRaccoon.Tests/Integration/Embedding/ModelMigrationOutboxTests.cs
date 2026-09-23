@@ -50,7 +50,7 @@ public sealed class ModelMigrationOutboxTests : IAsyncLifetime
     {
         var config = await _store.StartModelMigrationAsync("local", null, null, TestContext.Current.CancellationToken);
 
-        config.Engine.ShouldBe("local:bundled");
+        config.Engine.ShouldStartWith("local:bundled#");
         (await ReadMigrationAsync()).ShouldBeNull(); // no prior engine, nothing owed
     }
 
@@ -63,9 +63,9 @@ public sealed class ModelMigrationOutboxTests : IAsyncLifetime
         (await ReadRowStateAsync(entry.Hash)).ShouldBe("embedded"); // sync embed on write, same as ConfigureEmbeddingAsync's contract
 
         var otherPath = Path.Combine(Path.GetTempPath(), "ai-raccoon-custom-model", Guid.NewGuid().ToString("N"),
-            BundledModel.ModelFileName);
+            TestData.MiniLmModelFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(otherPath)!);
-        File.Copy(BundledModel.ResolveModelPath(), otherPath);
+        File.Copy(TestData.MiniLmModelPath(), otherPath);
         try
         {
             var config = await _store.StartModelMigrationAsync("local", otherPath, null,
@@ -130,9 +130,9 @@ public sealed class ModelMigrationOutboxTests : IAsyncLifetime
         await _store.WriteAsync(new MemoryWriteRequest("acme", "seed row"), TestContext.Current.CancellationToken);
 
         var otherPath = Path.Combine(Path.GetTempPath(), "ai-raccoon-custom-model", Guid.NewGuid().ToString("N"),
-            BundledModel.ModelFileName);
+            TestData.MiniLmModelFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(otherPath)!);
-        File.Copy(BundledModel.ResolveModelPath(), otherPath);
+        File.Copy(TestData.MiniLmModelPath(), otherPath);
         await _store.StartModelMigrationAsync("local", otherPath, null, TestContext.Current.CancellationToken);
     }
 

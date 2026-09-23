@@ -94,7 +94,7 @@ public sealed class PlatformNumericsProbe : IDisposable
         }
 
         _output.WriteLine("=== EMBEDDING FINGERPRINT ===");
-        var modelPath = BundledModel.ResolveModelPath();
+        var modelPath = TestData.MiniLmModelPath();
         var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
         foreach (var query in LoadQueries().Where(q => GateQueryIds.Contains(q.Id)))
         {

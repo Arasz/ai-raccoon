@@ -315,6 +315,8 @@ public sealed class EntryEmbedderMigrationDrainReportingTests : IDisposable
 
         public string DocumentText(EmbeddingSettings settings, string text) => text;
 
+        public double? RelevanceFloor(EmbeddingSettings settings) => null;
+
         public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
 
         public int ResolveDimensions(EmbeddingSettings settings) => 384;
@@ -341,6 +343,8 @@ public sealed class EntryEmbedderMigrationDrainReportingTests : IDisposable
         public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 
         public string DocumentText(EmbeddingSettings settings, string text) => text;
+
+        public double? RelevanceFloor(EmbeddingSettings settings) => null;
 
         public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
 

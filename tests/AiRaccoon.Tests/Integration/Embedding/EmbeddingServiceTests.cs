@@ -71,9 +71,9 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
         // A custom model path overrides the bundled copy — FR-NM-3 scenario 2
         // (docs/work/features-native-memory/native-memory.feature).
         var custom = Path.Combine(Path.GetTempPath(), "ai-raccoon-custom-model",
-            Guid.NewGuid().ToString("N"), BundledModel.ModelFileName);
+            Guid.NewGuid().ToString("N"), TestData.MiniLmModelFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(custom)!);
-        File.Copy(BundledModel.ResolveModelPath(), custom);
+        File.Copy(TestData.MiniLmModelPath(), custom);
 
         try
         {
@@ -119,7 +119,7 @@ public sealed class EmbeddingServiceTests : IAsyncLifetime
     }
 
     [RetryFact]
-    public void EngineFingerprint_LocalWithoutModel_IsBundled() => TestData.CreateEmbeddingService().EngineFingerprint("local", null, null).ShouldBe("local:bundled");
+    public void EngineFingerprint_LocalWithoutModel_IsBundled() => TestData.CreateEmbeddingService().EngineFingerprint("local", null, null).ShouldStartWith("local:bundled#");
 
     [RetryFact]
     public void EngineFingerprint_LocalWithModelPath_NamesThePath() => TestData.CreateEmbeddingService().EngineFingerprint("local", "/models/custom.onnx", null).ShouldBe("local:/models/custom.onnx");

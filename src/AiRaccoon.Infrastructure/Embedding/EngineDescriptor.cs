@@ -28,7 +28,9 @@ public sealed record EngineDescriptor(
     string OnnxModelFile,
     IReadOnlyList<ManifestFile> Files,
     string? QueryInstruction = null,
-    string? DocumentInstruction = null)
+    string? DocumentInstruction = null,
+    double? RelevanceFloor = null,
+    int? ChunkTokens = null)
 {
     /// <summary>Both supported families reserve exactly two special tokens at embed time (D6).</summary>
     public const int DefaultSpecialTokenReservation = 2;

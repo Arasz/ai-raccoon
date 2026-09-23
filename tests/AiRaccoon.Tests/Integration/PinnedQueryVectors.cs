@@ -121,6 +121,8 @@ internal sealed class PinnedQueryEmbeddingService(PinnedQueryVectorFile file) : 
 
     public string DocumentText(EmbeddingSettings settings, string text) => text;
 
+    public double? RelevanceFloor(EmbeddingSettings settings) => null;
+
     public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
 
     public int ResolveDimensions(EmbeddingSettings settings) => 384;

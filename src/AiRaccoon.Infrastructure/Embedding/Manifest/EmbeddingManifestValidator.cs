@@ -46,6 +46,16 @@ public sealed class EmbeddingManifestValidator : IEmbeddingManifestValidator
             errors.Add($"dimensions: must be a positive integer, got {manifest.Dimensions}");
         }
 
+        if (manifest.ChunkTokens is { } chunkTokens && (chunkTokens <= 0 || chunkTokens > manifest.ContextWindowTokens - EngineDescriptor.DefaultSpecialTokenReservation))
+        {
+            errors.Add($"chunkTokens: must be positive and fit the context window minus its special tokens, got {chunkTokens}");
+        }
+
+        if (manifest.RelevanceFloor is { } floor && (floor <= 0 || floor >= 1 || double.IsNaN(floor)))
+        {
+            errors.Add($"relevanceFloor: must be a cosine between 0 and 1 (exclusive), got {floor}");
+        }
+
         if (manifest.ContextWindowTokens <= 0)
         {
             errors.Add($"contextWindowTokens: must be a positive integer, got {manifest.ContextWindowTokens}");

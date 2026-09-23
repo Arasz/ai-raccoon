@@ -30,11 +30,11 @@ public sealed class CodeTokenizerTests
     }
 
     [Fact]
-    public void ResolveModelPath_WithNonexistentBaseDirectory_Throws()
+    public void CountTokens_CountsWithTheBundledEnginesTokenizer()
     {
-        var missingDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var bundled = TokenizerJsonEmbeddingTokenizer.Create(Path.Combine(BundledModel.ResolveDirectory(), "tokenizer.json"));
+        const string code = "public async Task<int> RunAsync(CancellationToken ct) => await _store.CountAsync(ct);";
 
-        Should.Throw<InvalidOperationException>(() => CodeTokenizer.ResolveModelPath(missingDir))
-            .Message.ShouldContain(CodeTokenizer.ModelFileName);
+        new CodeTokenizer().CountTokens(code).ShouldBe(bundled.CountTokens(code));
     }
 }

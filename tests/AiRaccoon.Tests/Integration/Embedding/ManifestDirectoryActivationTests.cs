@@ -83,7 +83,7 @@ public sealed class ManifestDirectoryActivationTests : IAsyncLifetime
         var vocabPath = Path.Combine(dir, "vocab.txt");
         var onnxPath = Path.Combine(dir, "model.onnx");
         File.Copy(BundledModel.ResolveVocabPath(), vocabPath);
-        File.Copy(BundledModel.ResolveModelPath(), onnxPath);
+        File.Copy(TestData.MiniLmModelPath(), onnxPath);
         File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName),
             Manifest(vocabSha: ShaOfFile(vocabPath), onnxSha: ShaOfFile(onnxPath)).ToJsonString());
 

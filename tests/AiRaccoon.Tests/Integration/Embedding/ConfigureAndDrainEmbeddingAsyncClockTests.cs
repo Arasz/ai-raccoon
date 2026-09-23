@@ -61,9 +61,9 @@ public sealed class ConfigureAndDrainEmbeddingAsyncClockTests : IAsyncLifetime
         // Second configure: a different local model directory changes the engine fingerprint,
         // opening and draining a real migration — the path that actually stamps started_at/finished_at.
         var otherPath = Path.Combine(Path.GetTempPath(), "ai-raccoon-clock-test-model",
-            Guid.NewGuid().ToString("N"), BundledModel.ModelFileName);
+            Guid.NewGuid().ToString("N"), TestData.MiniLmModelFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(otherPath)!);
-        File.Copy(BundledModel.ResolveModelPath(), otherPath);
+        File.Copy(TestData.MiniLmModelPath(), otherPath);
         try
         {
             await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),

@@ -17,6 +17,10 @@ public interface IEmbeddingService
     /// local model declares one, followed by <paramref name="text" />.</summary>
     string DocumentText(EmbeddingSettings settings, string text);
 
+    /// <summary>The configured engine's own relevance floor (its manifest's <c>relevanceFloor</c>), or
+    /// null when it declares none and search keeps the default floor.</summary>
+    double? RelevanceFloor(EmbeddingSettings settings);
+
     /// <summary>
     ///     The configured LOCAL engine's content-token chunk budget (D6/D9): 254 for bundled/legacy,
     ///     min(510, ctx − 2) for manifest models, 256 for non-local providers (unchanged).

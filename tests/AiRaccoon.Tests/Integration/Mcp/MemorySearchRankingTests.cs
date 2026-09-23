@@ -2,6 +2,7 @@ using AiRaccoon.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
@@ -73,8 +74,10 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
 
         var recall = await _tools.Search(ProjectId, "AIR-4471", Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
         var evidence = recall.Data!.EvidenceByHash.ShouldNotBeNull()[ticket.Hash];
-        evidence.Cosine.ShouldNotBeNull().ShouldBeLessThan(SearchRelevance.AbsoluteRelevanceFloor,
-            "premise: the identifier row's content cosine sits under the absolute floor");
+        var floor = TestData.CreateEmbeddingService().RelevanceFloor(new EmbeddingSettings("local", null, null, null))
+                    ?? SearchRelevance.AbsoluteRelevanceFloor;
+        evidence.Cosine.ShouldNotBeNull().ShouldBeLessThan(floor,
+            "premise: the identifier row's content cosine sits under the engine's absolute floor");
 
         var envelope = await _tools.Search(ProjectId, "AIR-4471", Session, kind: "memory", cancellationToken: ct);
 

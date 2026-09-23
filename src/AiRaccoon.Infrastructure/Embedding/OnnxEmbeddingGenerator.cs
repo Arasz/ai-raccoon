@@ -46,8 +46,14 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// <summary>ORT intra-op threads this session was built with (WP11-A/G16); 0 means ORT's own default.</summary>
     public int IntraOpThreads { get; }
 
+    /// <summary>The execution provider the session runs on: "WebGPU", "CPU", or "CPU (GPU refused: …)" after a fallback.</summary>
+    public string ExecutionProvider { get; private set; } = CpuProvider;
+
+    private const string CpuProvider = "CPU";
+    private const string WebGpuProvider = "WebGPU";
+
     internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
-        int intraOpThreads = 0)
+        int intraOpThreads = 0, bool preferGpu = false)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         _logger = logger;
@@ -57,15 +63,8 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         _normalization = descriptor.Normalization;
         _inputNames = descriptor.InputNames;
         IntraOpThreads = intraOpThreads;
-        if (intraOpThreads > 0)
-        {
-            using var sessionOptions = new SessionOptions { IntraOpNumThreads = intraOpThreads };
-            _session = new InferenceSession(modelPath, sessionOptions);
-        }
-        else
-        {
-            _session = new InferenceSession(modelPath);
-        }
+        _session = preferGpu && GpuAvailable() ? CreateGpuSessionOrNull(modelPath, intraOpThreads) ?? CreateCpuSession(modelPath, intraOpThreads)
+            : CreateCpuSession(modelPath, intraOpThreads);
 
         ValidateInputNames(descriptor);
         if (_pooling == "model-output" && string.IsNullOrWhiteSpace(descriptor.EmbeddingOutput))
@@ -122,6 +121,45 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     }
 
     public void Dispose() => _session.Dispose();
+
+    /// <summary>The standard ORT build implements a GPU provider only on macOS (WebGPU, ADR-0108).</summary>
+    private static bool GpuAvailable() =>
+        OperatingSystem.IsMacOS() && OrtEnv.Instance().GetAvailableProviders().Contains("WebGpuExecutionProvider", StringComparer.Ordinal);
+
+    private static InferenceSession CreateCpuSession(string modelPath, int intraOpThreads)
+    {
+        using var options = new SessionOptions();
+        if (intraOpThreads > 0)
+        {
+            options.IntraOpNumThreads = intraOpThreads;
+        }
+
+        return new InferenceSession(modelPath, options);
+    }
+
+    /// <summary>A session with the WebGPU provider appended (ORT keeps what the GPU cannot run on the
+    /// CPU), or null when ORT refuses it — the caller falls back to a CPU session.</summary>
+    private InferenceSession? CreateGpuSessionOrNull(string modelPath, int intraOpThreads)
+    {
+        try
+        {
+            using var options = new SessionOptions();
+            if (intraOpThreads > 0)
+            {
+                options.IntraOpNumThreads = intraOpThreads;
+            }
+
+            options.AppendExecutionProvider(WebGpuProvider, new Dictionary<string, string>());
+            var session = new InferenceSession(modelPath, options);
+            ExecutionProvider = WebGpuProvider;
+            return session;
+        }
+        catch (OnnxRuntimeException ex)
+        {
+            ExecutionProvider = $"{CpuProvider} (GPU refused: {ex.Message})";
+            return null;
+        }
+    }
 
     object? IEmbeddingGenerator.GetService(Type serviceType, object? serviceKey) => null;
 

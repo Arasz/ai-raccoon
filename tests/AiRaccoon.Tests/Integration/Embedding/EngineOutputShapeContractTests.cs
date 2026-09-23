@@ -38,7 +38,7 @@ public sealed class EngineOutputShapeContractTests : IAsyncLifetime
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     private static OnnxEmbeddingGenerator Build(string pooling, string normalization) => new(
-        BundledModel.ResolveModelPath(),
+        TestData.MiniLmModelPath(),
         WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()),
         EmbeddingService.BundledDescriptor with { Pooling = pooling, Normalization = normalization },
         NullLogger<OnnxEmbeddingGenerator>.Instance);

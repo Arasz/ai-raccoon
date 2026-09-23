@@ -30,7 +30,7 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
     private string CopyBundledModel()
     {
         var custom = Path.Combine(_root, "custom.onnx");
-        File.Copy(BundledModel.ResolveModelPath(), custom);
+        File.Copy(TestData.MiniLmModelPath(), custom);
         return custom;
     }
 

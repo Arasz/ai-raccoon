@@ -67,7 +67,7 @@ public sealed class BundledModelLoggingTests
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            var candidate = Path.Combine(dir.FullName, "Models", BundledModel.ModelFileName);
+            var candidate = Path.Combine(dir.FullName, "Models", TestData.MiniLmModelFileName);
             if (File.Exists(candidate))
             {
                 return true;

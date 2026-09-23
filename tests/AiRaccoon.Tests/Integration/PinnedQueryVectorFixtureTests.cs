@@ -42,7 +42,7 @@ public sealed class PinnedQueryVectorFixtureTests
     {
         var pinned = PinnedQueryVectors.Load();
 
-        pinned.ModelSha256.ShouldBe(BundledModel.ModelSha256,
+        pinned.ModelSha256.ShouldBe("4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474",
             $"the fixture was generated from a different model; regenerate with {GateQueryVectorRegenerationTool.RunEnvVar}=1");
         pinned.VocabSha256.ShouldBe(BundledModel.VocabSha256,
             $"the fixture was generated from a different vocab; regenerate with {GateQueryVectorRegenerationTool.RunEnvVar}=1");
