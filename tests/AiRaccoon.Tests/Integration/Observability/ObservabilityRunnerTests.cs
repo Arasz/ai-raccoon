@@ -259,6 +259,19 @@ public sealed class ObservabilityRunnerTests : IDisposable
 
     private ServerConfig Config(int port) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, TimeSpan.Zero);
 
+    /// <summary>Ctrl-C is not "nothing listening": it propagates, and the dispatcher exits 130.</summary>
+    [RetryFact]
+    public async Task CallerCancellation_Propagates_InsteadOfReportingNoServer()
+    {
+        using var lease = LoopbackPort.Reserve();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        CliArgs.TryParse(["serve", "observability", "pid", "--port", lease.Port.ToString()], out var parsed);
+
+        await Should.ThrowAsync<OperationCanceledException>(() => TestData.CreateObservabilityRunner()
+            .RunAsync(parsed!, new StandardStreams(TextReader.Null, TextWriter.Null, TextWriter.Null), cts.Token));
+    }
+
     private static async Task<ObservabilityRun> RunObservabilityAsync(string kind, int port)
     {
         CliArgs.TryParse(["serve", "observability", kind, "--port", port.ToString()], out var parsed);

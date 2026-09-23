@@ -43,6 +43,13 @@ public sealed class CliExitCodeMeaningTests : IDisposable
     [InlineData("--transport", "stdio")]
     [InlineData("--port", "abc")]
     [InlineData("--install-scope", "bogus")]
+    [InlineData("--transport", "https")]
+    [InlineData("--port", "0")]
+    [InlineData("--port", "70000")]
+    [InlineData("--port", "0", "settings", "sweep", "show")]
+    [InlineData("--port", "70000", "settings", "sweep", "show")]
+    [InlineData("serve", "--port", "70000")]
+    [InlineData("serve", "observability", "pid", "--port", "0")]
     public async Task ArgvWithAnInvalidOrMissingValue_IsInvalidArgument(params string[] args)
     {
         var exitCode = await new AppRunner().Run(["--data-root", _dataRoot, .. args]);

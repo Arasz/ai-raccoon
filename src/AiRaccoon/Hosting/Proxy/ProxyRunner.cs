@@ -15,7 +15,7 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
         if (serverConfig.Port is < 1 or > 65535)
         {
             await streams.WriteErrorLineAsync(Undialable(serverConfig.Port));
-            return ExitCode.ProxyBackendUnavailable;
+            return ExitCode.InvalidArgument;
         }
 
         // The verifier is bound to this launch's resolved root, exactly like the token reader below:

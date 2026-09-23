@@ -501,13 +501,13 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
     /// <summary>
     ///     serve semantics for a missing key source (P2/ADR-0020): the key probe runs before the
-    ///     bind, so a bws that cannot resolve ends the process with FailedToOpenEncryptedBank,
-    ///     silent streams and nothing listening — no in-process fallback, no partial bind.
+    ///     bind, so a bws that cannot resolve ends the process with FailedToResolveEncryptionKey —
+    ///     the code doctor gives the same failure — silent streams and nothing listening.
     ///     (The engine-version diagnostic the deleted test pinned died with DirectRunAsync in P2;
     ///     restoring it is outside this lane's one-hunk allowance — reported, not re-pinned.)
     /// </summary>
     [RetryFact]
-    public async Task Startup_BwsMissing_ServeExits2WithoutBinding()
+    public async Task Startup_BwsMissing_ServeExits1WithoutBinding()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the child launches a shell-based fake; the PATH override is unix-shaped");
 
@@ -520,7 +520,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
         var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir, port);
 
-        exit.ShouldBe(ExitCode.FailedToOpenEncryptedBank);
+        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
         // The pre-P2 in-process server logged the resolve failure and the SQLite engine identity;
         // serve reports key failures by exit code only — stdout and stderr stay empty.
         stdout.ShouldBeEmpty();
