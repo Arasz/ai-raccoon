@@ -32,15 +32,15 @@ public sealed class ConfigCommandsCancellationTests
     }
 
     /// <summary>Positive control for the filter: an OperationCanceledException whose caller token is
-    /// live is not a Ctrl-C and keeps the existing catch-all shape.</summary>
+    /// live is not a Ctrl-C (a timeout, say), so it is a failed command, not an interrupt.</summary>
     [Fact]
-    public async Task CancellationWithoutACancelledCallerToken_StillTakesTheCatchAll()
+    public async Task CancellationWithoutACancelledCallerToken_ExitsCommandFailed()
     {
         var commands = TestData.CreateConfigCommands(new CancelledStore(), settings: new SettingsCommands());
 
         var (exit, _, _) = await CliRun.RunAsync(["settings", "sweep", "show"], commands);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ExitCode.CommandFailed);
     }
 
     /// <summary>Stands in for the auto-start acquire: it observes the caller's token exactly where the

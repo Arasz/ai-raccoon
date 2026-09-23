@@ -145,6 +145,42 @@ public class ModelDownloadCommandTests : IDisposable
         @out.ShouldContain("onnx/model.onnx");
     }
 
+    /// <summary>Nothing answers the Hub at all: a fetch failure, the case 21 names.</summary>
+    [Fact]
+    public async Task NoNetwork_ExitsModelDownloadFailed()
+    {
+        using var lease = LoopbackPort.Reserve();
+        lease.ReleaseForBind();
+        var modelDownload = new ModelDownloadCommands(new SingletonHttpClientFactory(new HttpClient()),
+            smokeTester: new FakeSmokeTester(ok: true),
+            diskSpace: new FakeDiskSpace(long.MaxValue),
+            endpoint: $"http://127.0.0.1:{lease.Port}");
+        var commands = TestData.CreateConfigCommands(store: null!, modelDownload: modelDownload);
+
+        var (exit, _, err) = await CliRun.RunAsync(["model", "download", "org/model", "--dry-run"], commands);
+
+        exit.ShouldBe(ExitCode.ModelDownloadFailed);
+        err.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task CtrlCDuringAFileDownload_ExitsInterrupted()
+    {
+        var repo = FakeRepo.BgeM3(_server);
+        using var cts = new CancellationTokenSource();
+        var modelDownload = new ModelDownloadCommands(
+            new SingletonHttpClientFactory(new HttpClient(new CancelOnHandler("model.onnx_data", cts))),
+            smokeTester: new FakeSmokeTester(ok: true),
+            diskSpace: new FakeDiskSpace(long.MaxValue),
+            endpoint: _server.BaseUrl);
+        var commands = TestData.CreateConfigCommands(store: null!, modelDownload: modelDownload);
+
+        var (exit, _, _) = await CliRun.RunAsync(["model", "download", repo.RepoId, "--dir", Path.Combine(_dataRoot, "m")],
+            (parsed, streams, _) => commands.RunAsync(parsed, streams, cts.Token));
+
+        exit.ShouldBe(ExitCode.Interrupted);
+    }
+
     [Fact]
     public async Task DirFlag_OverridesTheDefaultSlugTarget()
     {
@@ -172,6 +208,23 @@ public class ModelDownloadCommandTests : IDisposable
     private sealed class SingletonHttpClientFactory(HttpClient client) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => client;
+    }
+
+    /// <summary>Stands in for Ctrl-C: cancels the caller's token when the named file is requested.</summary>
+    private sealed class CancelOnHandler(string pathSuffix, CancellationTokenSource caller)
+        : DelegatingHandler(new HttpClientHandler())
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith(pathSuffix, StringComparison.Ordinal))
+            {
+                await caller.CancelAsync();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            return await base.SendAsync(request, cancellationToken);
+        }
     }
 
     private sealed class FakeSmokeTester(bool ok) : IOnnxSmokeTester

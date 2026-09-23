@@ -97,7 +97,8 @@ internal sealed class ModelDownloadCommands(
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}").ConfigureAwait(false);
             return ExitCode.InvalidArgument;
         }
-        catch (Exception ex) when (ex is ModelDownloadException or HfApiException or OnnxProbeException)
+        catch (Exception ex) when (ex is ModelDownloadException or HfApiException or OnnxProbeException or HttpRequestException
+                                   || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}").ConfigureAwait(false);
             return ExitCode.ModelDownloadFailed;

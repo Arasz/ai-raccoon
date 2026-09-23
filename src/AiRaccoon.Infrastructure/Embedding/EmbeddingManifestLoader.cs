@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 
 namespace AiRaccoon.Infrastructure.Embedding;
@@ -32,7 +33,7 @@ public sealed class EmbeddingManifestLoader(
         var manifestPath = Path.Combine(modelDirectory, EmbeddingManifest.FileName);
         if (!File.Exists(manifestPath))
         {
-            throw new InvalidOperationException(
+            throw new EmbeddingModelRejectedException(
                 $"Configured embedding model directory '{modelDirectory}' has no {EmbeddingManifest.FileName}. " +
                 $"A local model directory must contain a {EmbeddingManifest.FileName} describing its files, tokenizer, " +
                 "pooling and dimensions — run 'ai-raccoon model download <repo-id>' to create one, or point " +
@@ -46,13 +47,13 @@ public sealed class EmbeddingManifestLoader(
         }
         catch (EmbeddingManifestFormatException ex)
         {
-            throw new InvalidOperationException($"Manifest '{manifestPath}' is not a valid v1 manifest: {ex.Message}", ex);
+            throw new EmbeddingModelRejectedException($"Manifest '{manifestPath}' is not a valid v1 manifest: {ex.Message}", ex);
         }
 
         var errors = validator.Validate(manifest);
         if (errors.Count > 0)
         {
-            throw new InvalidOperationException(
+            throw new EmbeddingModelRejectedException(
                 $"Manifest '{manifestPath}' fails the v1 contract:{Environment.NewLine}  - " +
                 string.Join($"{Environment.NewLine}  - ", errors));
         }
@@ -63,7 +64,7 @@ public sealed class EmbeddingManifestLoader(
             var path = ResolveFile(modelDirectory, file.Path, manifestPath);
             if (!File.Exists(path))
             {
-                throw new InvalidOperationException(
+                throw new EmbeddingModelRejectedException(
                     $"Manifest '{manifestPath}' declares file '{file.Path}' but it is missing from '{modelDirectory}'. " +
                     "Re-run 'ai-raccoon model download' to restore the model directory.");
             }
@@ -71,7 +72,7 @@ public sealed class EmbeddingManifestLoader(
             var actual = hasher.Sha256OfFile(path);
             if (!actual.Equals(file.Sha256, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException(
+                throw new EmbeddingModelRejectedException(
                     $"Manifest '{manifestPath}' pins '{file.Path}' to sha256 {file.Sha256}, but the file on disk hashes " +
                     $"to {actual}. The model directory may have been tampered with or partially replaced — re-run " +
                     "'ai-raccoon model download' to restore a clean copy.");
@@ -109,7 +110,7 @@ public sealed class EmbeddingManifestLoader(
     {
         if (Path.IsPathRooted(relativePath) || relativePath.Contains("..", StringComparison.Ordinal))
         {
-            throw new InvalidOperationException(
+            throw new EmbeddingModelRejectedException(
                 $"Manifest '{manifestPath}' declares file '{relativePath}'; file paths must be relative to the model directory.");
         }
 

@@ -62,13 +62,11 @@ public sealed class ModelResetGuardTests
     }
 
     /// <summary>
-    ///     R2 F3: the A2 catch-placement ruling — the catch lives inside
-    ///     <see cref="SettingsCommands.ModelResetAsync" />, so `model embedding set` while a
-    ///     migration is open keeps today's generic exit 15; a dispatcher-level catch would silently
-    ///     change it to 25 (out of scope).
+    ///     `model embedding set` while a migration is open is the same server refusal `reset` gets,
+    ///     so it exits the same 25 — not 15, which would tell a script it mistyped.
     /// </summary>
     [Fact]
-    public async Task ModelEmbeddingSet_WhileMigrationOpen_StillExitsInvalidArgument()
+    public async Task ModelEmbeddingSet_WhileMigrationOpen_ExitsModelResetRefused()
     {
         var reason =
             "ai-raccoon: a model migration is already in progress — every MCP tool call is refused until it finishes";
@@ -77,7 +75,7 @@ public sealed class ModelResetGuardTests
 
         var (exit, _, err) = await CliRun.RunAsync(["model", "embedding", "set", "local"], commands);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ExitCode.ModelResetRefused);
         err.ShouldContain(reason);
     }
 
