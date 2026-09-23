@@ -1,0 +1,233 @@
+[
+  {
+    "id": "reveal-js-001",
+    "category": "behaviour-nl",
+    "query": "the smallest possible reveal.js starter: two bare section placeholders wired up with markdown, notes and highlighting support but without the zoom or search plugin scripts that a full-featured deck would also load",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "small",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/index.html",
+    "expectedLines": [
+      19,
+      39
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "reveal-js-002",
+    "category": "identifier-fragment",
+    "query": "notes markdown highlight four scripts",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "small",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/index.html",
+    "expectedLines": [
+      27,
+      30
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "reveal-js-003",
+    "category": "behaviour-nl",
+    "query": "building a bare reveal instance in an isolated container just to confirm the mathjax4 plugin registers itself under its expected id",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "medium",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/test/test-mathjax4.html",
+    "expectedLines": [
+      77,
+      101
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "reveal-js-004",
+    "category": "identifier-fragment",
+    "query": "macro set custom mathjax",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "medium",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/test/test-mathjax4.html",
+    "expectedLines": [
+      164,
+      194
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "reveal-js-005",
+    "category": "path-context",
+    "query": "near the end of the mathjax4 test file, waiting three seconds after initialization before counting how many rendered math elements appeared for a slide with two expressions",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "medium",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/test/test-mathjax4.html",
+    "expectedLines": [
+      103,
+      147
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "reveal-js-006",
+    "category": "behaviour-nl",
+    "query": "letting attendees swap the active theme stylesheet on the fly by rewriting the link tag's href from an onclick handler instead of reloading the page",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "large",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/demo.html",
+    "expectedLines": [
+      342,
+      412
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "reveal-js-007",
+    "category": "identifier-fragment",
+    "query": "auto animate box easing cubic",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "large",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/demo.html",
+    "expectedLines": [
+      184,
+      207
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "reveal-js-008",
+    "category": "path-context",
+    "query": "near the very end of the demo deck, an interactive background iframe embedding an external page instead of an image or video",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "large",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/demo.html",
+    "expectedLines": [
+      487,
+      507
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "reveal-js-009",
+    "category": "behaviour-nl",
+    "query": "restoring a previously captured presentation state including paused and overview flags, then asserting the indices, pause state and overview flag all come back exactly as they were saved",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "large",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/test/test.html",
+    "expectedLines": [
+      307,
+      338
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "reveal-js-010",
+    "category": "identifier-fragment",
+    "query": "sync fragment slide temporary background",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "large",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/test/test.html",
+    "expectedLines": [
+      371,
+      395
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "reveal-js-011",
+    "category": "path-context",
+    "query": "far into the qunit suite's keyboard tests, holding shift while pressing the down arrow to jump straight to a stack's last vertical slide",
+    "kind": "code",
+    "language": "HTML",
+    "sizeBand": "large",
+    "family": "reveal-js",
+    "expectedSource": "reveal-js/test/test.html",
+    "expectedLines": [
+      576,
+      603
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  }
+]

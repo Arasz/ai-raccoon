@@ -50,6 +50,31 @@ public sealed class OnnxEmbeddingGeneratorPoolingTests
         embeddings[1].Vector.ToArray().ShouldBe([0f, 2f, 0f, 0f], "normalization=none leaves the graph's vector alone");
     }
 
+    [Fact]
+    public void Pool_LastToken_ReadsTheFinalRealTokensRow_NotThePadding()
+    {
+        // one row, three positions, the third is padding: rows [1,0,0,0], [0,3,0,4], [9,9,9,9].
+        float[] tokenEmbeddings = [1, 0, 0, 0, 0, 3, 0, 4, 9, 9, 9, 9];
+        var embeddings = new GeneratedEmbeddings<Embedding<float>>();
+
+        OnnxEmbeddingGenerator.Pool(tokenEmbeddings, [1, 3, Dimension], batch: 1, maxLen: 3, Dimension,
+            [1, 1, 0], pooling: "last-token", normalization: "l2", "last_hidden_state", embeddings);
+
+        embeddings.Single().Vector.ToArray().ShouldBe([0f, 0.6f, 0f, 0.8f], tolerance: 1e-6);
+    }
+
+    [Fact]
+    public void Pool_LastToken_WithoutNormalization_KeepsTheRawRow()
+    {
+        float[] tokenEmbeddings = [1, 0, 0, 0, 0, 3, 0, 4];
+        var embeddings = new GeneratedEmbeddings<Embedding<float>>();
+
+        OnnxEmbeddingGenerator.Pool(tokenEmbeddings, [1, 2, Dimension], batch: 1, maxLen: 2, Dimension,
+            [1, 1], pooling: "last-token", normalization: "none", "last_hidden_state", embeddings);
+
+        embeddings.Single().Vector.ToArray().ShouldBe([0f, 3f, 0f, 4f]);
+    }
+
     /// <summary>The bundled MiniLM shape: a real token-embeddings output still gets pooled here.</summary>
     [Fact]
     public void Pool_TokenLevelOutput_StillPoolsWithTheManifestsMode()

@@ -520,7 +520,7 @@ own idle timeout — stop it with ai-raccoon serve --restart --port <n>`.
 | `--quiet` | flag | off |
 
 `--attach` no longer exists — root and `serve` spellings alike; passing it is an
-unrecognized argument (exit 9, `FailedToParseCliArgs`). Attaching is no longer opt-in
+unrecognized argument (exit 11, `Usage.Unparseable`). Attaching is no longer opt-in
 because it is no longer unconditionally trusted: a listener earns it by proving
 possession of this root's `identity-key` first (ADR-0106 §D1/D2).
 
@@ -542,22 +542,22 @@ listener again immediately before the stop request; a shared backend (attached t
 started on the configured port) is never stopped by this process — it serves other
 clients too. No tool method is named in the proxy, so a new tool needs no proxy
 change. If neither an attach, a fresh start, nor the private fallback can produce a
-working backend within budget, the process exits `ExitCode.ProxyBackendUnavailable`
-(6) with one stderr line of this exact form (`BackendSessions.Unavailable()`):
+working backend within budget, the process exits `ErrorCode.Reach.BackendUnavailable`
+(63) with one stderr line of this exact form (`BackendSessions.Unavailable()`):
 `ai-raccoon: {reason}; no in-process fallback exists — start the backend first: ai-raccoon serve --port <port>`
 (`{reason}` names the failure: the URL, the serve exit code, and any captured
 backend stderr tail). A `--port` the proxy cannot dial (`0`, or outside 1-65535) is a bad
-value, not an unavailable backend: it exits 15 before anything is spawned, and so does a
+value, not an unavailable backend: it exits 13 (`Usage.UndialablePort`) before anything is spawned, and so does a
 settings verb given one. A separate, earlier refusal applies before any of this: **F39**
 — a `--data-root` that resolves to neither the default root nor an existing bank
-refuses before the proxy ever probes a port or spawns a process, with exit `22`
-(`ExitCode.NoBank`) and a line naming the typo-check remedy
+refuses before the proxy ever probes a port or spawns a process, with exit `31`
+(`ErrorCode.Bank.NoBank`) and a line naming the typo-check remedy
 (`ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon --data-root <path> serve', or check --data-root for a typo`; a project-scope launch adds `--install-scope project` before `serve`);
 the default root keeps its unconditional bootstrap. The stdio and https transports were removed outright
 ([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)): on a bare
-launch the removed `stdio` value is an invalid value (exit 15, `InvalidArgument`) with a
-hint naming the proxy and `serve`, and `https` exits 15 too; after `serve`, which takes
-no `--transport` at all, the option is unparseable (exit 9). A bare `--transport http`
+launch the removed `stdio` value exits 14 (`Usage.RemovedTransport`) with a
+hint naming the proxy and `serve`, and `https` exits 14 too; after `serve`, which takes
+no `--transport` at all, the option is unparseable (exit 11, `Usage.Unparseable`). A bare `--transport http`
 still parses but launches the proxy like any bare run. Full servers come
 only from `serve`.
 
@@ -584,8 +584,8 @@ silence it. A proxy that cannot get a backend says so on the console either way.
 Two floors bound the removal (see [ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)
 for the full contract). Going forward, a client must never pass the removed `stdio`
 or `https` values: the first release carrying the removal (after 1.41.2) rejects
-both at parse, so any launcher still passing them gets exit 9 with a hint on bare
-launches instead of a server. A bare spawn with no `--transport` at all speaks MCP
+both at parse, so any launcher still passing them gets exit 14 (`Usage.RemovedTransport`) on a bare
+launch, with a hint, instead of a server (exit 11, `Usage.Unparseable`, when it follows `serve`). A bare spawn with no `--transport` at all speaks MCP
 over stdio through the proxy and needs no extra args. Going back, that same bare
 spawn works against any server from 1.6.0 on, the release that made bare launches
 proxy ([ADR-0020](../adr/0020-always-on-http-stdio-proxy.md)). Older servers predate
@@ -613,7 +613,7 @@ tries the identity proof before anything else: a listener that proves it
 holds this root's `identity-key` is attached to, and `serve` exits `0`
 without ever opening the bank — the owning process keeps the watchdog. A
 listener that cannot prove — a foreign process, or an ai-raccoon serving
-another root — is refused with exit code `3` and a line naming the remedy
+another root — is refused with exit code `50` (`Server.Unproven`) and a line naming the remedy
 (stop the listener yourself, or pass `--port 0` for a private one); nothing
 is asked to stop and nothing is joined
 ([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md),
@@ -626,7 +626,7 @@ loaded, so every later client attaches to the stale one. `--restart` proves
 the listener, then asks it to stop over `POST /shutdown` (token-guarded,
 POST-only), waits for the port to free, then serves in its place; with
 nothing listening it is a plain `serve`. A listener that cannot prove is
-refused before the token file is even read, with exit 3 and a line naming
+refused before the token file is even read, with exit 50 (`Server.Unproven`) and a line naming
 the manual stop (`ai-raccoon serve observability pid --port <n>`, then serve
 again) — never the token it would have sent, and never a flag that no longer
 exists ([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md)
@@ -639,17 +639,17 @@ at-least-once retry re-issues it against the new backend. The port is then
 given 20s to free.
 
 `--restart` kills no process and never falls back to attaching. Every way the
-cycle can fail exits `10`-`14` or `16` with a line naming the port and the
+cycle can fail exits `52`, `55`, `51`, `44`, `42`, or `43` with a line naming the port and the
 manual escape:
-the server refuses our token (it serves another data root), it has no
-`/shutdown` (too old to be cycled — the first update *onto* this version still
+the server refuses our token (`Server.RestartTokenRefused`, 52 — it serves another data root), it has no
+`/shutdown` (`Server.TooOldToRestart`, 55 — too old to be cycled — the first update *onto* this version still
 needs the old process stopped by hand), our data root holds no token to
-present (nothing is asked to stop), the port is still held after the bound, or
-another start won the port while this one was binding. The restart proves the
+present (`Server.NoToken`, 51 — nothing is asked to stop), the port is still held after the bound (`Port.RestartTimedOut`, 44), or
+another start won the port while this one was binding (`Port.LostDuringRestart`, 42) — or the port gave the probe no answer at all (`Port.HeldUnanswered`, 43). The restart proves the
 listener before anything else ([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md)
 D5): one that cannot prove this root's identity key receives only the probe and
 the challenge — no `/observability` read, no token, no shutdown — and is refused
-with exit code 3 and a line naming the manual stop. A proven listener that does
+with exit code 50 (`Server.Unproven`) and a line naming the manual stop. A proven listener that does
 not identify as an ai-raccoon over `/observability` is refused the same way.
 
 `/mcp` and `/shutdown` require `X-AiRaccoon-Token` or `Authorization: Bearer
@@ -771,9 +771,11 @@ loads the embedding engine.
 | `otlp` | the OTLP endpoint the server exports to; the protocol goes to stderr |
 | `pid` | the bare process id, for composing with other tools |
 
-Exit codes: `0` success; `4` nothing listening on the port (or the server predates
-the endpoint); `3` the port is held by a foreign listener; `5` `otlp` was asked for
-but the server has no OTLP export configured. `--port 0` is a parse error — unlike
+Exit codes: `0` success; `61` (`Reach.NothingListening`) nothing listening on the port;
+`56` (`Server.TooOldForObservability`) the server predates the endpoint; `41`
+(`Port.ForeignListener`) the port is held by a foreign listener; `58`
+(`Server.OtlpNotEnabled`) `otlp` was asked for but the server has no OTLP export
+configured. `--port 0` is a parse error — unlike
 `serve --port 0`, there is no "any free port" to dial. Failures write nothing to
 stdout, so command substitution yields an empty string rather than an error message.
 
@@ -931,7 +933,7 @@ s3` writes `provider=s3`; `sync add azure` writes `provider=azure`. Each clears 
 other provider's rows, so at most one backend is configured at a time. Provider secrets
 are **prompted interactively** — the S3 access/secret keys on `sync add s3`, the Azure
 connection string on `sync add azure` (prompt on stderr, input read
-from stdin; an empty answer aborts with exit 15 and persists nothing) — never accepted on the
+from stdin; an empty answer aborts with exit 12, `Usage.MissingValue`, and persists nothing) — never accepted on the
 command line.
 
 **`--cli` credential modes** skip the prompts and use the machine's CLI login state:
@@ -944,7 +946,7 @@ Auth failures map to `sync-auth-failed:` with a "run `az login`" / "run `aws con
 
 **Sync authentication methods** — four ways to authenticate, two per backend. Secrets are
 never accepted on the command line; the prompt-based methods read from stdin (an empty
-answer aborts with exit 15 and persists nothing). Only one provider is active at a time
+answer aborts with exit 12, `Usage.MissingValue`, and persists nothing). Only one provider is active at a time
 (`sync add` clears the other provider's rows), and switching modes clears the other
 mode's rows — settings never leave the local machine (ADR 0014), but a stale secret row
 left behind on this one is still a needless liability once its mode is no longer in use.
@@ -1005,8 +1007,9 @@ prefer SSO/short-lived credentials over static keys in `~/.aws/credentials`.
 Secrets (OpenAI API key via `model embedding set openai --api-key`, S3 access/secret keys via
 `sync add s3`, or the Azure connection string via `sync add azure`) are persisted in the settings table and are never launch flags — the
 parser's unknown-option error is the defense. `--help`/`--version` and parse errors
-print to **stderr**; help and version exit 0, argv outside the grammar exits 9, and a
-missing or invalid value exits 15. Generic host flags (`--environment`,
+print to **stderr**; help and version exit 0, argv outside the grammar exits 11
+(`Usage.Unparseable`), a missing value exits 12 (`Usage.MissingValue`), and an invalid
+value exits 10 (`Usage.InvalidValue`). Generic host flags (`--environment`,
 `--contentRoot`, `--applicationName`) are accepted hidden and ignored. A zero-config
 `.mcp.json` entry is just `{"mcpServers": {"ai-raccoon": {"command": "ai-raccoon"}}}`;
 registry installs (`.mcp/server.json`) pass no args (`packageArguments: []`).

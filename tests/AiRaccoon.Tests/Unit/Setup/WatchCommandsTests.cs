@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
@@ -42,8 +43,8 @@ public class WatchCommandsTests
     public async Task Registered_ListsSorted_WithCtorWatchStore()
     {
         var store = new FakeWatchStore();
-        store.Watches[("acme", "/a/b.md")] = (CreatedAt: 1_700_000_000, LastChangeTs: 1_700_000_100);
-        store.Watches[("acme", "/a/c.md")] = (CreatedAt: 1_700_000_200, LastChangeTs: 0);
+        store.Watches[new WatchKey("acme", "/a/b.md")] = (CreatedAt: 1_700_000_000, LastChangeTs: 1_700_000_100);
+        store.Watches[new WatchKey("acme", "/a/c.md")] = (CreatedAt: 1_700_000_200, LastChangeTs: 0);
 
         var (exit, stdout, _) = await Run(["watch", "registered"], new FakeConfigStore(), store);
 
@@ -71,7 +72,7 @@ public class WatchCommandsTests
     public async Task Registered_FilterPassesThroughVerbatim()
     {
         var store = new FakeWatchStore();
-        store.Watches[("job-search-ai-assistant", "/a/b.md")] = (CreatedAt: 1_700_000_000, LastChangeTs: 0);
+        store.Watches[new WatchKey("job-search-ai-assistant", "/a/b.md")] = (CreatedAt: 1_700_000_000, LastChangeTs: 0);
 
         var (exit, stdout, _) = await Run(["watch", "registered", "job-search-ai-assistant"],
             new FakeConfigStore(), store);

@@ -54,15 +54,14 @@ public sealed partial class AppRunner
         cliInput.RenderTo(_streams);
         if (cliInput.ShowHelp || cliInput.ShowVersion)
         {
-            return ExitCode.Success;
+            return ErrorCode.Ok.Success;
         }
 
-        // Nothing launches or dispatches on a bad argv (docs/adr/0060), and the code says why
-        // (ADR-0106 D4): argv outside the grammar is unparseable (9); argv that fits it but
-        // carries a missing or invalid value is InvalidArgument (15). Same rule on every path.
+        // Nothing launches or dispatches on a bad argv (docs/adr/0060), and the code names the
+        // Usage case (ADR-0107). Same rule on every path.
         if (cliInput.Errors.Count > 0)
         {
-            return cliInput.IsUnparseable ? ExitCode.FailedToParseCliArgs : ExitCode.InvalidArgument;
+            return cliInput.FailureCode;
         }
 
         if (cliInput.IsCommandInput)

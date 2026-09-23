@@ -25,6 +25,8 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// </summary>
     public const int MaxContentTokens = 254;
 
+    private const string KeyValueCachePrefix = "past_key_values.";
+
     private readonly ILogger _logger;
     private readonly InferenceSession _session;
     private readonly IEmbeddingTokenizer _tokenizer;
@@ -126,7 +128,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     // One row per session run: ORT keeps each run's activation peak, and a 32 x 510 batch on a 400M
     // model holds 3-7 GB for no per-row speedup (docs/work/2026-09-23-server-memory-usage.md F5/F6).
     private GeneratedEmbeddings<Embedding<float>> RunEachRow(
-        IReadOnlyList<(int[] Ids, int[] Mask)> items, GeneratedEmbeddings<Embedding<float>> embeddings,
+        IReadOnlyList<EncodedText> items, GeneratedEmbeddings<Embedding<float>> embeddings,
         CancellationToken cancellationToken)
     {
         foreach (var item in items)
@@ -138,7 +140,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     }
 
     private GeneratedEmbeddings<Embedding<float>> RunBatch(
-        IReadOnlyList<(int[] Ids, int[] Mask)> items, GeneratedEmbeddings<Embedding<float>> embeddings,
+        IReadOnlyList<EncodedText> items, GeneratedEmbeddings<Embedding<float>> embeddings,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -171,6 +173,19 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
             feed.Add(NamedOnnxValue.CreateFromTensor("token_type_ids",
                 new DenseTensor<long>(new long[batch * maxLen], [batch, maxLen])));
         }
+
+        if (_inputNames.Contains("position_ids", StringComparer.Ordinal))
+        {
+            var positions = new long[batch * maxLen];
+            for (var i = 0; i < positions.Length; i++)
+            {
+                positions[i] = i % maxLen;
+            }
+
+            feed.Add(NamedOnnxValue.CreateFromTensor("position_ids", new DenseTensor<long>(positions, [batch, maxLen])));
+        }
+
+        feed.AddRange(EmptyKeyValueCache(batch));
 
         using var results = _session.Run(feed);
         var output = results.First(r => r.Name == _outputName).AsTensor<float>();
@@ -225,6 +240,9 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
             var row = output.Slice(i * maxLen * dimension, maxLen * dimension);
             var vector = pooling switch
             {
+                "last-token" => normalization == "l2"
+                    ? EmbeddingMath.L2Normalize(EmbeddingMath.LastTokenPool(row, maskRow, maxLen, dimension))
+                    : EmbeddingMath.LastTokenPool(row, maskRow, maxLen, dimension),
                 "cls" => normalization == "l2"
                     ? EmbeddingMath.ClsPoolAndNormalize(row, dimension)
                     : EmbeddingMath.ClsPool(row, dimension),
@@ -258,12 +276,28 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     {
         foreach (var name in descriptor.InputNames)
         {
-            if (name is not ("input_ids" or "attention_mask" or "token_type_ids"))
+            if (name is not ("input_ids" or "attention_mask" or "token_type_ids" or "position_ids") && !IsKeyValueCacheInput(name))
             {
                 throw new InvalidOperationException(
                     $"Manifest model '{descriptor.Model}' declares unsupported ONNX input '{name}'; " +
-                    "supported inputs: input_ids, attention_mask, token_type_ids.");
+                    "supported inputs: input_ids, attention_mask, token_type_ids, position_ids, past_key_values.*.");
             }
+        }
+    }
+
+    private static bool IsKeyValueCacheInput(string name) => name.StartsWith(KeyValueCachePrefix, StringComparison.Ordinal);
+
+    /// <summary>A decoder graph exported with a KV cache takes one past key and value per layer; a
+    /// single full-sequence run feeds each an empty [batch, heads, 0, headDim] tensor.</summary>
+    private IEnumerable<NamedOnnxValue> EmptyKeyValueCache(int batch)
+    {
+        foreach (var name in _inputNames.Where(IsKeyValueCacheInput))
+        {
+            var metadata = _session.InputMetadata[name];
+            var shape = metadata.Dimensions.Select((d, axis) => axis == 0 ? batch : d < 0 ? 0 : d).ToArray();
+            yield return metadata.ElementType == typeof(Float16)
+                ? NamedOnnxValue.CreateFromTensor(name, new DenseTensor<Float16>(shape))
+                : NamedOnnxValue.CreateFromTensor(name, new DenseTensor<float>(shape));
         }
     }
 
@@ -296,7 +330,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// </summary>
     private const int UnkCollapseMinChars = 100;
 
-    private (int[] Ids, int[] Mask) Encode(string text)
+    private EncodedText Encode(string text)
     {
         var ids = _tokenizer.EncodeToIds(text, true);
         if (ids.Count > _window)
@@ -311,8 +345,10 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
         var mask = new int[ids.Count];
         Array.Fill(mask, 1);
-        return ([.. ids], mask);
+        return new EncodedText([.. ids], mask);
     }
+
+    private readonly record struct EncodedText(int[] Ids, int[] Mask);
 
     public static partial class Log
     {

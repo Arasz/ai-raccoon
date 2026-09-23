@@ -94,7 +94,7 @@ public sealed class ProjectIdsRepairCommands
             {
                 await streams.WriteErrorLineAsync(
                     $"project-ids repair: cannot load --map '{mapPath}': {ex.Message}");
-                return ExitCode.InvalidArgument;
+                return ErrorCode.Usage.AliasMapInvalid;
             }
         }
         else
@@ -223,16 +223,15 @@ public sealed class ProjectIdsRepairCommands
                         $"project-ids repair: summary — repair in progress: {queued} change(s) queued for the server — " +
                         "the server applies it on its next maintenance poll (~15s).");
                 }
-                else
+                else if (await WriteSettledSummaryAsync(plan, report, streams))
                 {
-                    await WriteSettledSummaryAsync(plan, report, streams);
+                    return ErrorCode.Bank.RepairAttentionNeeded;
                 }
 
-                return 0;
+                return ErrorCode.Ok.Success;
             }
 
-            await RunRepairLoopAsync(map, mapJson, report, plan, streams, cancellationToken);
-            return 0;
+            return await RunRepairLoopAsync(map, mapJson, report, plan, streams, cancellationToken);
         }
 
         await WriteSettledSummaryAsync(plan, report, streams);
@@ -269,7 +268,7 @@ public sealed class ProjectIdsRepairCommands
     ///     those) | stuck (identical actionable set across 2 passes with zero rows moved and no
     ///     total growth) | writers-active (census totals grew — quiesce, loop to bound, then report).
     /// </summary>
-    private async Task RunRepairLoopAsync(ProjectIdAliasMap map, string? mapJson, ProjectIdCensusReport report, ProjectIdsFoldPlan plan, StandardStreams streams, CancellationToken cancellationToken)
+    private async Task<int> RunRepairLoopAsync(ProjectIdAliasMap map, string? mapJson, ProjectIdCensusReport report, ProjectIdsFoldPlan plan, StandardStreams streams, CancellationToken cancellationToken)
     {
         var started = _timeProvider.GetTimestamp();
         var firstTotal = CensusTotal(report);
@@ -283,8 +282,9 @@ public sealed class ProjectIdsRepairCommands
             var actionable = ActionableCount(plan);
             if (actionable == 0)
             {
-                await WriteSettledSummaryAsync(plan, report, streams);
-                return;
+                return await WriteSettledSummaryAsync(plan, report, streams)
+                    ? ErrorCode.Bank.RepairAttentionNeeded
+                    : ErrorCode.Ok.Success;
             }
 
             var signature = ActionableSignature(plan);
@@ -297,7 +297,7 @@ public sealed class ProjectIdsRepairCommands
                 await streams.WriteOutputLineAsync(
                     $"project-ids repair: summary — stuck: {CountsLine(plan)} — identical actionable set across " +
                     "2 passes with zero rows moved; quiesce writers under folded ids, then re-run.");
-                return;
+                return ErrorCode.Bank.RepairStuck;
             }
 
             if (pass >= _options.MaxPasses || _timeProvider.GetElapsedTime(started) >= _options.TotalBudget)
@@ -309,16 +309,14 @@ public sealed class ProjectIdsRepairCommands
                         $"project-ids repair: summary — writers-active: {CountsLine(plan)} — census totals grew " +
                         $"{firstTotal} → {latestTotal} entries across {pass} pass(es); quiesce writers under " +
                         $"folded ids ({stuckIds}), then re-run 'repair project-ids'.");
-                }
-                else
-                {
-                    await streams.WriteOutputLineAsync(
-                        $"project-ids repair: summary — stuck: {CountsLine(plan)} — still actionable after " +
-                        $"{pass} pass(es) with no census growth; quiesce writers under folded ids and check " +
-                        "the server log for the job receipt, then re-run.");
+                    return ErrorCode.Bank.RepairWritersActive;
                 }
 
-                return;
+                await streams.WriteOutputLineAsync(
+                    $"project-ids repair: summary — stuck: {CountsLine(plan)} — still actionable after " +
+                    $"{pass} pass(es) with no census growth; quiesce writers under folded ids and check " +
+                    "the server log for the job receipt, then re-run.");
+                return ErrorCode.Bank.RepairStuck;
             }
 
             var beforeTotal = CensusTotal(report);
@@ -359,8 +357,9 @@ public sealed class ProjectIdsRepairCommands
     ///     The closing verdict for a settled plan — dry runs, queue-only exits, and loop ends share
     ///     one D6-vocabulary grammar, always the last line: converged | pinned-only | repair needed |
     ///     attention needed, each with explicit zero-inclusive counts (F2 supersedes the 1.40.2 strings).
+    ///     Returns true for attention needed: settled, but ids remain that only a person can attribute.
     /// </summary>
-    private static async Task WriteSettledSummaryAsync(ProjectIdsFoldPlan plan, ProjectIdCensusReport report,
+    private static async Task<bool> WriteSettledSummaryAsync(ProjectIdsFoldPlan plan, ProjectIdCensusReport report,
         StandardStreams streams)
     {
         var actionable = ActionableCount(plan);
@@ -371,7 +370,7 @@ public sealed class ProjectIdsRepairCommands
                 (plan.Unresolved.Count > 0
                     ? $"the loop until it reports converged; {plan.Unresolved.Count} id(s) still need a human to attribute."
                     : "the loop until it reports converged."));
-            return;
+            return false;
         }
 
         if (plan.Unresolved.Count > 0)
@@ -379,18 +378,19 @@ public sealed class ProjectIdsRepairCommands
             await streams.WriteOutputLineAsync(
                 $"project-ids repair: summary — attention needed: {CountsLine(plan)} — " +
                 $"{plan.Unresolved.Count} id(s) still need a human to attribute.");
-            return;
+            return true;
         }
 
         if (plan.Pinned.Count > 0)
         {
             await streams.WriteOutputLineAsync(
                 $"project-ids repair: summary — pinned-only: {CountsLine(plan)}, {P3Note(report)}.");
-            return;
+            return false;
         }
 
         await streams.WriteOutputLineAsync(
             $"project-ids repair: summary — converged: {CountsLine(plan)}, {P3Note(report)}.");
+        return false;
     }
 
     /// <summary>D6 counts fragment shared by every closing line: explicit zeros, inline pin list.</summary>

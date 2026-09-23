@@ -29,7 +29,7 @@ public sealed class SyncCommands
             if (string.IsNullOrEmpty(accessKey))
             {
                 await streams.WriteErrorLineAsync("ai-raccoon: access key required — sync not configured");
-                return ExitCode.InvalidArgument;
+                return ErrorCode.Usage.MissingValue;
             }
 
             await streams.WriteErrorAsync("S3 secret key (empty aborts): ");
@@ -37,7 +37,7 @@ public sealed class SyncCommands
             if (string.IsNullOrEmpty(secretKey))
             {
                 await streams.WriteErrorLineAsync("ai-raccoon: secret key required — sync not configured");
-                return ExitCode.InvalidArgument;
+                return ErrorCode.Usage.MissingValue;
             }
         }
 
@@ -103,7 +103,7 @@ public sealed class SyncCommands
             if (account is null)
             {
                 await streams.WriteErrorLineAsync("ai-raccoon: --account is required with --cli");
-                return ExitCode.InvalidArgument;
+                return ErrorCode.Usage.MissingValue;
             }
         }
         else
@@ -116,7 +116,7 @@ public sealed class SyncCommands
             if (string.IsNullOrEmpty(connectionString))
             {
                 await streams.WriteErrorLineAsync("ai-raccoon: connection string required — sync not configured");
-                return ExitCode.InvalidArgument;
+                return ErrorCode.Usage.MissingValue;
             }
         }
 

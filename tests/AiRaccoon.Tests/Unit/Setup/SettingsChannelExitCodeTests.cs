@@ -12,7 +12,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
 ///     Delta review C2 (surface F3): a server-side 5xx on the settings channel must exit with a
-///     code distinct from <see cref="ExitCode.InvalidArgument" /> ("you mistyped") — the server
+///     code distinct from <see cref="ErrorCode.Usage.InvalidValue" /> ("you mistyped") — the server
 ///     broke, not the caller. Drives the real <see cref="ServerSettingsStore" /> (its
 ///     <c>Ensure</c>/<c>SendAsync</c> path) through <see cref="ConfigCommands" /> at argv level,
 ///     against a stubbed HTTP channel, the same shape <c>ServerProbeResilienceTests</c> uses.
@@ -34,7 +34,7 @@ public sealed class SettingsChannelExitCodeTests
 
         var (exit, _, err) = await CliRun.RunAsync(["settings", "sweep", "show"], commands);
 
-        exit.ShouldBe(ExitCode.SettingsServerError);
+        exit.ShouldBe(ErrorCode.Internal.ServerError);
         err.ShouldContain("500");
         err.ShouldNotContain("you mistyped");
     }
@@ -46,7 +46,7 @@ public sealed class SettingsChannelExitCodeTests
         var (exit, _, err) = await CliRun.RunAsync(["settings", "retrieval", "alpha", "set", "abc"],
             TestData.CreateConfigCommands(new FakeConfigStore(), settings: new SettingsCommands()));
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldNotBeEmpty();
     }
 
@@ -54,11 +54,11 @@ public sealed class SettingsChannelExitCodeTests
     ///     Found by the 1.32.0 post-publish check after #476: the chunk-budget refusal is the one
     ///     leg SettingsCommands does not pre-check itself, so ServerSettingsStore.ActivateCodeEngineAsync
     ///     is what has to surface the server's reason. This asserts the CLI-facing side of that fix —
-    ///     the exception lands in ConfigCommands' catch-all and exits 15 with the reason in stderr,
+    ///     the exception lands in ConfigCommands' catch-all and exits ManifestRejected with the reason in stderr,
     ///     not "Response status code does not indicate success: 400 (Bad Request)".
     /// </summary>
     [Fact]
-    public async Task ModelSetCodeLocal_OnACodeEngineActivationRefusal_ExitsInvalidArgument_WithTheReason()
+    public async Task ModelSetCodeLocal_OnACodeEngineActivationRefusal_ExitsManifestRejected_WithTheReason()
     {
         var dir = TestData.CreateTempRoot("ai-raccoon-model-set-code-local");
         try
@@ -75,7 +75,7 @@ public sealed class SettingsChannelExitCodeTests
 
             var (exit, _, err) = await CliRun.RunAsync(["model", "code", "set", "local", dir], commands);
 
-            exit.ShouldBe(ExitCode.InvalidArgument);
+            exit.ShouldBe(ErrorCode.Model.ManifestRejected);
             err.ShouldContain(CodeChunker.DefaultBudget.ToString());
             err.ShouldNotContain("does not indicate success");
         }

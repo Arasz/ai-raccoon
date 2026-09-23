@@ -71,7 +71,7 @@ public sealed class IdentityKeyFileTests : IDisposable
         new IdentityKeyFile(TestData.CreateProjectOptions(_dataRoot)).Read().ShouldNotBeNull();
 
         // The server stays up until asked to stop.
-        (await run.StopAsync()).ShouldBe(ExitCode.Success);
+        (await run.StopAsync()).ShouldBe(ErrorCode.Ok.Success);
     }
 
     /// <summary>F2/D1: a planted permissive state directory must refuse the mint, not trust it.</summary>

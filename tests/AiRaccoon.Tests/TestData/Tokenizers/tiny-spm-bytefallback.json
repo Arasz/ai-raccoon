@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": null,
+  "added_tokens": [
+    {"id": 1, "content": "<eos>", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true},
+    {"id": 2, "content": "<bos>", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true},
+    {"id": 3, "content": "<unk>", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true}
+  ],
+  "normalizer": {"type": "Replace", "pattern": {"String": " "}, "content": "▁"},
+  "pre_tokenizer": {"type": "Split", "pattern": {"String": " "}, "behavior": "MergedWithPrevious", "invert": false},
+  "post_processor": {
+    "type": "TemplateProcessing",
+    "single": [
+      {"SpecialToken": {"id": "<bos>", "type_id": 0}},
+      {"Sequence": {"id": "A", "type_id": 0}},
+      {"SpecialToken": {"id": "<eos>", "type_id": 0}}
+    ],
+    "pair": [
+      {"SpecialToken": {"id": "<bos>", "type_id": 0}},
+      {"Sequence": {"id": "A", "type_id": 0}},
+      {"SpecialToken": {"id": "<eos>", "type_id": 0}}
+    ],
+    "special_tokens": {
+      "<bos>": {"id": "<bos>", "ids": [2], "tokens": ["<bos>"]},
+      "<eos>": {"id": "<eos>", "ids": [1], "tokens": ["<eos>"]}
+    }
+  },
+  "decoder": {"type": "Sequence", "decoders": [
+    {"type": "Replace", "pattern": {"String": "▁"}, "content": " "},
+    {"type": "ByteFallback"},
+    {"type": "Fuse"}
+  ]},
+  "model": {
+    "type": "BPE",
+    "dropout": null,
+    "unk_token": "<unk>",
+    "continuing_subword_prefix": null,
+    "end_of_word_suffix": null,
+    "fuse_unk": true,
+    "byte_fallback": true,
+    "ignore_merges": false,
+    "vocab": {
+      "<pad>": 0, "<eos>": 1, "<bos>": 2, "<unk>": 3,
+      "H": 4, "i": 5, "▁": 6, "w": 7, "o": 8, "r": 9, "l": 10, "d": 11,
+      "<0xE2>": 12, "<0x82>": 13, "<0xAC>": 14, "Hi": 15
+    },
+    "merges": [["H", "i"]]
+  }
+}

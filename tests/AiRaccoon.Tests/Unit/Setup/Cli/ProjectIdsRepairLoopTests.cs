@@ -60,7 +60,7 @@ public sealed class ProjectIdsRepairLoopTests
     ///     reports writers-active with quiesce guidance, and never claims a false converged.
     /// </summary>
     [Fact]
-    public async Task Loop_LiveWriter_EndsWritersActiveWithQuiesceGuidance()
+    public async Task Loop_LiveWriter_EndsWritersActiveWithQuiesceGuidance_AndExitsRepairWritersActive()
     {
         using var scope = new TempScope();
         var store = new SequenceRepairStore(
@@ -72,7 +72,8 @@ public sealed class ProjectIdsRepairLoopTests
             Report(("a", 2), ("w", 8))
         ]);
 
-        var stdout = await RunLoopAsync(["repair", "project-ids", "--apply", "--map", scope.MapPath], store, scope.DataRoot);
+        var stdout = await RunLoopAsync(["repair", "project-ids", "--apply", "--map", scope.MapPath], store, scope.DataRoot,
+            ErrorCode.Bank.RepairWritersActive);
 
         store.RequestCalls.ShouldBe(
             ProjectIdsRepairCommands.RepairLoopOptions.Test.MaxPasses,
@@ -108,12 +109,13 @@ public sealed class ProjectIdsRepairLoopTests
     ///     with a diagnosis naming the stuck ids — and commits no second request onto the pile.
     /// </summary>
     [Fact]
-    public async Task Loop_IdenticalActionableZeroMoved_AbortsStuck_WithDiagnosis()
+    public async Task Loop_IdenticalActionableZeroMoved_AbortsStuck_WithDiagnosis_AndExitsRepairStuck()
     {
         using var scope = new TempScope();
         var store = new SequenceRepairStore([Report(("a", 2), ("w", 0))]);
 
-        var stdout = await RunLoopAsync(["repair", "project-ids", "--apply", "--map", scope.MapPath], store, scope.DataRoot);
+        var stdout = await RunLoopAsync(["repair", "project-ids", "--apply", "--map", scope.MapPath], store, scope.DataRoot,
+            ErrorCode.Bank.RepairStuck);
 
         store.RequestCalls.ShouldBe(1, "the stuck verdict fires before a second blind request piles on");
         stdout.ShouldContain("stuck");
@@ -145,6 +147,71 @@ public sealed class ProjectIdsRepairLoopTests
                 || parameter.ParameterType == typeof(TimeProvider)).ShouldBeTrue(
                 $"CLI commands stay read-and-request-only: unexpected constructor dependency {parameter.ParameterType.Name}");
         }
+    }
+
+    /// <summary>
+    ///     A run that hits the pass bound with no census growth is stuck, not writers-active: the
+    ///     other stop the bound produces.
+    /// </summary>
+    [Fact]
+    public async Task Loop_BoundReachedWithoutGrowth_ExitsRepairStuck()
+    {
+        using var scope = new TempScope();
+        var store = new SequenceRepairStore(
+        [
+            Report(("a", 4), ("w", 0)),
+            Report(("a", 3), ("w", 1)),
+            Report(("a", 2), ("w", 2)),
+            Report(("a", 1), ("w", 3)),
+            Report(("a", 1), ("w", 3))
+        ]);
+
+        var stdout = await RunLoopAsync(["repair", "project-ids", "--apply", "--map", scope.MapPath], store, scope.DataRoot,
+            ErrorCode.Bank.RepairStuck);
+
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary — stuck:");
+    }
+
+    /// <summary>
+    ///     Converged except for an id only a person can attribute: under --apply that is a failure
+    ///     the machine cannot clear, so it exits RepairAttentionNeeded.
+    /// </summary>
+    [Fact]
+    public async Task Loop_ConvergedButAnIdNeedsAHuman_ExitsRepairAttentionNeeded()
+    {
+        using var scope = new TempScope();
+        var store = new SequenceRepairStore([Report(("w", 2), ("stray", 3))]);
+
+        var stdout = await RunLoopAsync(["repair", "project-ids", "--apply", "--map", scope.MapPath], store, scope.DataRoot,
+            ErrorCode.Bank.RepairAttentionNeeded);
+
+        store.RequestCalls.ShouldBe(0, "nothing is actionable, so nothing is committed");
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary — attention needed:");
+    }
+
+    [Fact]
+    public async Task QueueOnly_ConvergedButAnIdNeedsAHuman_ExitsRepairAttentionNeeded()
+    {
+        using var scope = new TempScope();
+        var store = new SequenceRepairStore([Report(("w", 2), ("stray", 3))]);
+
+        var stdout = await RunLoopAsync(
+            ["repair", "project-ids", "--apply", "--queue-only", "--map", scope.MapPath], store, scope.DataRoot,
+            ErrorCode.Bank.RepairAttentionNeeded);
+
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary — attention needed:");
+    }
+
+    /// <summary>A dry run only reports: the same attention-needed outcome still exits 0.</summary>
+    [Fact]
+    public async Task DryRun_ConvergedButAnIdNeedsAHuman_StillExitsSuccess()
+    {
+        using var scope = new TempScope();
+        var store = new SequenceRepairStore([Report(("w", 2), ("stray", 3))]);
+
+        var stdout = await RunLoopAsync(["repair", "project-ids", "--map", scope.MapPath], store, scope.DataRoot);
+
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary — attention needed:");
     }
 
     /// <summary>
@@ -229,7 +296,8 @@ public sealed class ProjectIdsRepairLoopTests
     private static string LastNonEmptyLine(string stdout) =>
         stdout.Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0).Last();
 
-    private static async Task<string> RunLoopAsync(string[] argv, IRepairStore store, string dataRoot)
+    private static async Task<string> RunLoopAsync(string[] argv, IRepairStore store, string dataRoot,
+        int expectedExit = ErrorCode.Ok.Success)
     {
         CliArgs.TryParse(argv, out var parsed).ShouldBeTrue();
         var stdout = new StringWriter();
@@ -238,7 +306,7 @@ public sealed class ProjectIdsRepairLoopTests
                 store, ProjectIdsRepairCommands.RepairLoopOptions.Test, TimeProvider.System)
             .RunAsync(parsed!.ParsedCliArgs, dataRoot,
                 new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
-        exit.ShouldBe(0, $"stderr: {stderr}");
+        exit.ShouldBe(expectedExit, $"stdout: {stdout}\nstderr: {stderr}");
         return stdout.ToString();
     }
 

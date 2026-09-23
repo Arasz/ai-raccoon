@@ -321,7 +321,7 @@ public partial class SyncService(
         }
     }
 
-    private async Task<(int Received, int Reindexed)> MergeRemoteAsync(ICloudStore cloud, string objectKey,
+    private async Task<MergeCounts> MergeRemoteAsync(ICloudStore cloud, string objectKey,
         string projectId, byte[] remoteData, CancellationToken cancellationToken)
     {
         var remotePath = Path.GetTempFileName();
@@ -640,7 +640,7 @@ public partial class SyncService(
                     await recompute.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
 
-                return (received, reindexed);
+                return new MergeCounts(received, reindexed);
             }
             finally
             {
@@ -971,4 +971,6 @@ public partial class SyncService(
             Message = "Remote snapshot '{objectKey}' has no authenticity tag (legacy blob predating HMAC verification) — accepting with a warning")]
         public static partial void RemoteBlobMissingAuthenticityTag(ILogger logger, string objectKey);
     }
+
+    private readonly record struct MergeCounts(int Received, int Reindexed);
 }

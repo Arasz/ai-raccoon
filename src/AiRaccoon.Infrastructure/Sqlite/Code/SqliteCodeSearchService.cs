@@ -124,12 +124,12 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
         var payloads = new Dictionary<string, CodeSearchResult>(StringComparer.Ordinal);
 
         AddList(scores, payloads, ftsRows.Count,
-            i => (ftsRows[i].Hash, new CodeSearchResult(ftsRows[i].Hash, 0, ftsRows[i].Path, ftsRows[i].Snippet,
-                ftsRows[i].LineStart, ftsRows[i].LineEnd)),
+            i => new CodeSearchResult(ftsRows[i].Hash, 0, ftsRows[i].Path, ftsRows[i].Snippet,
+                ftsRows[i].LineStart, ftsRows[i].LineEnd),
             parameters.FtsWeight, parameters.RrfK);
         AddList(scores, payloads, vectorRows.Count,
-            i => (vectorRows[i].Hash, new CodeSearchResult(vectorRows[i].Hash, 0, vectorRows[i].Path,
-                FallbackSnippet(vectorRows[i].Value), vectorRows[i].LineStart, vectorRows[i].LineEnd)),
+            i => new CodeSearchResult(vectorRows[i].Hash, 0, vectorRows[i].Path,
+                FallbackSnippet(vectorRows[i].Value), vectorRows[i].LineStart, vectorRows[i].LineEnd),
             parameters.VectorWeight, parameters.RrfK);
 
         if (scores.Count == 0)
@@ -150,11 +150,12 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
     }
 
     private static void AddList(Dictionary<string, double> scores, Dictionary<string, CodeSearchResult> payloads,
-        int count, Func<int, (string Hash, CodeSearchResult Payload)> at, int weight, int k)
+        int count, Func<int, CodeSearchResult> at, int weight, int k)
     {
         for (var i = 0; i < count; i++)
         {
-            var (hash, payload) = at(i);
+            var payload = at(i);
+            var hash = payload.Hash;
             var rank = i + 1;
             scores[hash] = scores.GetValueOrDefault(hash) + (double)weight / (k + rank);
             payloads.TryAdd(hash, payload);

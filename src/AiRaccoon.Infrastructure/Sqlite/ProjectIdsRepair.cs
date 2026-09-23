@@ -153,7 +153,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         return total;
     }
 
-    private static async Task<(int Moved, int Deduped, int Tombstoned)> FoldEntriesAsync(SqliteConnection connection,
+    private static async Task<EntryFold> FoldEntriesAsync(SqliteConnection connection,
         ProjectIdsFoldPlan plan, long now, CancellationToken cancellationToken)
     {
         var moved = 0;
@@ -217,10 +217,10 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             deduped += step.Deleted;
         }
 
-        return (moved, deduped, tombstoned);
+        return new EntryFold(moved, deduped, tombstoned);
     }
 
-    private static async Task<(int Moved, int Deduped)> FoldCodeAsync(SqliteConnection connection,
+    private static async Task<CodeFold> FoldCodeAsync(SqliteConnection connection,
         ProjectIdsFoldPlan plan, CancellationToken cancellationToken)
     {
         var moved = 0;
@@ -261,7 +261,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return (moved, deduped);
+        return new CodeFold(moved, deduped);
     }
 
     /// <summary>
@@ -269,7 +269,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     ///     and the min created_at; every other column stays the winner's. Off-scorer territory —
     ///     this merges stored rows, never recomputes a score.
     /// </summary>
-    private static async Task<(int Merged, int Moved, int Removed)> FoldQueueAsync(SqliteConnection connection,
+    private static async Task<QueueFold> FoldQueueAsync(SqliteConnection connection,
         ProjectIdsFoldPlan plan, CancellationToken cancellationToken)
     {
         var merged = 0;
@@ -322,7 +322,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return (merged, moved, removed);
+        return new QueueFold(merged, moved, removed);
     }
 
     /// <summary>
@@ -395,7 +395,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     ///     a fold — the planner pins telemetry-only ids instead — and the dropped path never
     ///     deletes it, so this step handles folds only.
     /// </summary>
-    private static async Task<(int Metrics, int Noise)> FoldTelemetryAsync(SqliteConnection connection,
+    private static async Task<TelemetryFold> FoldTelemetryAsync(SqliteConnection connection,
         ProjectIdsFoldPlan plan, CancellationToken cancellationToken)
     {
         var metrics = 0;
@@ -418,7 +418,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             noise += step.Noise;
         }
 
-        return (metrics, noise);
+        return new TelemetryFold(metrics, noise);
     }
 
     /// <summary>
@@ -529,8 +529,8 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         return total;
     }
 
-    private static IEnumerable<(string Loser, string Winner)> SettingsKeyPairs(string loser, string winner) =>
-        SettingsKeysFor(loser).Zip(SettingsKeysFor(winner));
+    private static IEnumerable<SettingsKeyPair> SettingsKeyPairs(string loser, string winner) =>
+        SettingsKeysFor(loser).Zip(SettingsKeysFor(winner), (loserKey, winnerKey) => new SettingsKeyPair(loserKey, winnerKey));
 
     private static List<string> SettingsKeysFor(string projectId) =>
     [
@@ -549,7 +549,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     ///     winner row is ensured (first-write-wins name = the id itself, matching auto-register),
     ///     then loser, dropped and retired rows delete.
     /// </summary>
-    private static async Task<(int Ensured, int Removed)> FoldProjectsAsync(SqliteConnection connection,
+    private static async Task<ProjectFold> FoldProjectsAsync(SqliteConnection connection,
         ProjectIdsFoldPlan plan, long now, CancellationToken cancellationToken)
     {
         var ensured = 0;
@@ -585,7 +585,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return (ensured, removed);
+        return new ProjectFold(ensured, removed);
     }
 
     /// <summary>
@@ -659,4 +659,16 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             throw;
         }
     }
+
+    private readonly record struct EntryFold(int Moved, int Deduped, int Tombstoned);
+
+    private readonly record struct CodeFold(int Moved, int Deduped);
+
+    private readonly record struct QueueFold(int Merged, int Moved, int Removed);
+
+    private readonly record struct TelemetryFold(int Metrics, int Noise);
+
+    private readonly record struct SettingsKeyPair(string Loser, string Winner);
+
+    private readonly record struct ProjectFold(int Ensured, int Removed);
 }
