@@ -16,6 +16,8 @@ B0 current code: 0.501
 B1 +html/css/sql: 0.654
 P2-A identifier column: 0.689
 P3-A tests x0.8: 0.655
+P4-A path header: 0.663
+P4-A path+decl header: 0.653
 ```
 
 ## Findings
@@ -82,13 +84,21 @@ On B1 alone the figures are 17.6% and 38/101 (37.6%).
 
 **Evidence:** `p5_gate.py` over `bank-b1-p2` with `hits-p2a-hits.json`, and over `bank-b1` with `hits-b1-hits.json`.
 
-### F8 — P4 path header on the embedded text [UNVERIFIED]
+### F8 — P4 path header on the embedded text: DROP in both forms [MEASURED]
 
-The arms are running: `p4a-path` and `p4a-decl`, built from the spike branch `spike/p4-header`.
+The header is prefixed only when it fits under the window, and the stored value is untouched.
+
+| arm | held-out Δ nDCG@5, 95% CI | path-context Δ | worst language | verdict |
+|---|---|---|---|---|
+| path only | +0.015 [−0.010, 0.040] | +0.018 | TS −0.017 | DROP (CI includes 0) |
+| path + enclosing declaration | −0.004 [−0.034, …] | −0.015 | C# −0.056 | DROP (target down, C# floor) |
+
+The enclosing-declaration line hurts C#, the language with the most doc-commented, declaration-dense code. So neither the file path nor the declaration context gives this engine a signal it lacks.
+
+**Evidence:** spike branch `spike/p4-header` (`CodeEmbedder.SpikeText`, `AIR_SPIKE_HEADER=path|decl`, `AIR_SPIKE_ROOT=code-corpus/files`), fresh drains `p4a-path` (80 s) and `p4a-decl` (185 s); `compare_code_eval.py results-b1-run1.json results-p4a-*.json --target-category path-context` → `DROP`.
 
 ## Still open
 
-- **P4 verdict.** It needs the two drained arms.
-- **Whether the P5 trigger survives P4.** A header may fix wrong-chunk-from-right-file misses without AST chunking, so the gate is re-measured after P4 is decided.
+- **P5 value.** The trigger stands with P4 dropped. The AST and regex-boundary chunking spike is next.
 - **Whether these verdicts hold on linux-x64 CI.** They are scoped to this machine (ADR-0015).
 - **Whether they hold for other code engines.** A parallel session found `code-daemon-embed-v1` last of 15 models on a C#-only doc-comment eval. A code-engine swap could change every delta here.
