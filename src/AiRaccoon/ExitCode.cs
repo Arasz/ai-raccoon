@@ -11,7 +11,7 @@ public static class ExitCode
     /// <summary>The proxy could neither reach nor start a backend; there is no in-process fallback (ADR-0020).</summary>
     public const int ProxyBackendUnavailable = 6;
 
-    /// <summary>`serve` could not read, heal or mint the loopback token; it refuses to bind unguarded.</summary>
+    /// <summary>`serve` could not read, heal or mint a state-directory secret (the loopback token or the identity key); it refuses to bind unguarded.</summary>
     public const int McpTokenUnavailable = 7;
 
     // 8 was RestartFailed, one code for five different reasons. Split into 10-14 so a caller can
@@ -62,7 +62,9 @@ public static class ExitCode
     public const int ModelDownloadFailed = 21;
 
     /// <summary>`doctor` (delta review C3): no bank file exists at the resolved path — distinct
-    /// from HEALTHY (0), so a wrong `--data-root` cannot read as a healthy bank.</summary>
+    /// from HEALTHY (0), so a wrong `--data-root` cannot read as a healthy bank. Also returned by a
+    /// client auto-launch (F39: the proxy's private spawn, a settings verb's shared attach-or-start)
+    /// refusing to mint a bank at a non-default root that does not have one yet.</summary>
     public const int NoBank = 22;
 
     /// <summary>A settings command (delta review C2) reached a server that answered but failed

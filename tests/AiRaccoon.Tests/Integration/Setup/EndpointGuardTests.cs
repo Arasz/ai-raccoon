@@ -22,9 +22,11 @@ public sealed class EndpointGuardTests : IAsyncLifetime
 {
     /// <summary>
     ///     Routes that are open by design. /observability answers the liveness probe a client uses
-    ///     before it has a token (ADR-0020) and reveals no bank content.
+    ///     before it has a token (ADR-0020) and reveals no bank content. /identity/prove is the
+    ///     pre-token proof route (ADR-0106 D2): a listener signs a fresh nonce so a client can
+    ///     trust it before handing over the token.
     /// </summary>
-    private static readonly string[] OpenByDesign = ["/observability"];
+    private static readonly string[] OpenByDesign = ["/observability", IdentityProof.EndpointPath];
 
     private const string Token = "route-table-guard-token";
 

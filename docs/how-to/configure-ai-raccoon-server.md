@@ -58,13 +58,43 @@ sequenceDiagram
     autonumber
     participant Client as MCP Client / Proxy
     participant Server as ai-raccoon serve
-    participant TokenFile as <data-root>/mcp-token
+    participant TokenFile as Bank state directory
     
-    Server->>TokenFile: Mint random token (0600 permissions)
+    Server->>TokenFile: Mint random token + identity-key (0600 permissions)
+    Client->>Server: POST /identity/prove (nonce, rootFp, keyId)
+    Server-->>Client: Signature over identity-key
     Client->>TokenFile: Read token from disk
     Client->>Server: HTTP POST /mcp<br/>Header: X-AiRaccoon-Token or Authorization: Bearer
     Server-->>Client: 200 OK (RPC Stream)
 ```
+
+The token and the new identity-key both live in the bank state directory
+([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), F49): the data
+root itself for a user-scope install (`~/.ai-raccoon/mcp-token`), or
+`<data-root>/.ai-raccoon/mcp-token` for a project-scope one. A client attaches to a
+listener only after it proves it holds this root's identity key over the bounded
+`/identity/prove` challenge — the launch section below covers attach-or-start itself.
+
+### Backend launch: attach-or-start behind the identity proof
+
+`serve`, a bare `ai-raccoon` proxy launch, and every server-routed settings verb probe
+the configured `--port` first. A **proven** listener there is attached to and nothing
+new starts; nothing answering starts one on that port; a listener that answers but
+cannot prove it holds this root's identity key is treated as untrusted
+([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), reverting
+[ADR-0105](../adr/0105-private-spawn-is-the-launch-default.md)):
+
+- The proxy and settings verbs fall back to a private, proof-gated backend instead —
+  never a secret byte reaches the unproven listener.
+- `serve` itself refuses with exit code `3` after the proof attempt, naming the manual
+  remedy (stop the listener yourself, or pass `--port 0` for a private one) — never a
+  flag, since `--attach` no longer exists (passing it is an unrecognized argument, exit
+  9).
+
+A `--data-root` that resolves to neither the default root nor an existing bank refuses
+before any of this — a client auto-launch never mints a bank at a typo'd path (F39,
+`ExitCode.NoBank` = `22`), with a line naming the fix:
+`ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon --data-root <path> serve', or check --data-root for a typo` (a project-scope launch adds `--install-scope project` before `serve`).
 
 ### Idle watchdog
 
@@ -78,18 +108,31 @@ ai-raccoon serve --idle-timeout 30m
 ai-raccoon serve --idle-timeout 0
 ```
 
-A one-shot CLI settings command that finds no server on `--port` starts one there and
-leaves it running under this watchdog — deliberately shared and long-lived. The command
-discloses that on stderr (`ai-raccoon: the backend on port <n> keeps running after this
-command exits …`) and names the stop:
-`ai-raccoon serve --restart --attach --port <n>`. The proxy is different: its private
-backend is stopped when the proxy itself shuts down.
+A one-shot CLI settings command that attaches to a proven listener, or finds none and
+starts one, leaves that shared backend running under this watchdog — deliberately
+shared and long-lived. The command discloses that on stderr (`ai-raccoon: the backend
+on port <n> keeps running after this command exits, under its own idle timeout …`) and
+names the stop: `ai-raccoon serve --restart --port <n>`. A listener that could not
+prove got a private, 5-minute-bounded fallback instead, so there is nothing further to
+stop by hand. The proxy is different again: its own private fallback is stopped when
+the proxy itself shuts down.
 
 ---
 
 ## Zero-downtime server updates
 
-Updating the global tool replaces the binary on disk, but the running server keeps using the old version until restarted. Run `serve --restart` for a clean, zero-downtime handoff:
+> **Upgrading from 1.43 or earlier to 1.44.0 is not zero-downtime.** A pre-1.44 server
+> cannot answer the identity proof, so `serve --restart` from the new binary treats it as
+> an unproven listener and refuses with exit code `3`. Stop the old server yourself
+> (for example `kill $(lsof -t -i :7721 -sTCP:LISTEN)`, or wait for its idle timeout), then
+> start the new one. On its first run the new `serve` moves the old top-level `mcp-token`
+> into the bank state directory, and tightens a state directory that others can read
+> (0755) to 0700. A proxy launch that finds nothing running starts that `serve` itself,
+> so no manual step is needed beyond stopping the old server. Don't run an old and a new binary
+> against the same root: the old one writes a second top-level token.
+> See the [ADR-0106 upgrade note](../adr/0106-attach-or-start-with-backend-identity-proof.md#upgrade-note-mixed-version-operation-is-not-supported).
+
+Updating the global tool replaces the binary on disk, but the running server keeps using the old version until restarted. Between 1.44+ versions, run `serve --restart` for a clean, zero-downtime handoff:
 
 ```mermaid
 sequenceDiagram
@@ -389,7 +432,7 @@ model migration is open (schema shape is still healthy), so it composes into a s
 | `2` | the bank could not be opened read-only |
 | `19` | SHAPE MISMATCH — the bank's actual schema differs from this binary's DDL |
 | `20` | the bank's `user_version` is newer than this binary supports |
-| `22` | no bank file exists at the resolved path — distinct from HEALTHY, so a wrong `--data-root` is never mistaken for a healthy bank |
+| `22` | no bank file exists at the resolved path — distinct from HEALTHY, so a wrong `--data-root` is never mistaken for a healthy bank. A client auto-launch (the proxy, a settings verb) returns the same code when it refuses to mint one at a non-default root |
 | `24` | MODEL MIGRATION OPEN — an embedding-engine re-embed is in progress; every MCP tool call is refused until it finishes (ADR-0076). Only reported when the schema shape is healthy (`19`/`20` take precedence), so `exit == 24` is itself a positive statement that the shape is clean. Scripts that want the old semantics test `rc == 0 || rc == 24` |
 | `26` | the bank file exists but is not a SQLite database — corrupt, or not readable with the resolved encryption key; restore it from a backup or check `--data-root` |
 

@@ -56,6 +56,34 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     }
 
     /// <summary>
+    ///     ADR-0106 D1: quiet mode opens its log beside the bank before `serve` mints anything, so on a
+    ///     fresh project root the log is what creates the state directory. It must create it
+    ///     owner-only, or the token and key mint that follows refuses the directory as shared.
+    /// </summary>
+    [RetryFact]
+    public async Task Quiet_InAFreshProjectRoot_LeavesAStateDirectoryServeCanMintInto()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = TestData.CreateTempRoot("quiet-fresh-project");
+        _dataRoots.Add(root);
+        var options = TestData.CreateProjectOptions(root);
+
+        using (new QuietFileLoggerProvider(LogFilePath(options)))
+        {
+        }
+
+        File.Exists(LogFilePath(options)).ShouldBeTrue();
+        File.GetUnixFileMode(Path.GetDirectoryName(LogFilePath(options))!)
+            .ShouldBe(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        (await new McpTokenFile(options).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        (await new IdentityKeyFile(options).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+    }
+
+    /// <summary>
     ///     Renamed off the deleted stdio host (P2 red-first rename): quiet routing is a property
     ///     of the sole host now, not of a transport shape.
     /// </summary>
@@ -178,16 +206,20 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     public async Task QuietProxy_HttpClientRelayLogs_StayOutOfStderr()
     {
         var options = QuietOptions(InstallScope.User);
+        // F39: the proxy's auto-launch refuses an empty non-default root before it probes, so a
+        // fixture that means to relay must hold a real bank. The fake must hold this root's identity
+        // key (A11) or the acquire falls back to a private spawn and the relay under test never happens.
+        await TestData.SeedBankAsync(options, TestContext.Current.CancellationToken);
+        await new McpTokenFile(options.DataRoot).EnsureAsync(TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
-            TestContext.Current.CancellationToken);
+        await using var fake = await StartProvenFakeAsync(options, port);
 
         var (stdout, stderr) = await ConsoleCapture.RunAsync(async () =>
         {
             var exit = await new AppRunner(CliSettingsBackend.AcquireAsync, AppHost).Run(
-                ["--quiet", "--attach", "--data-root", options.DataRoot, "--port", port.ToString()]);
+                ["--quiet", "--data-root", options.DataRoot, "--port", port.ToString()]);
         });
 
         stdout.ShouldBeEmpty();
@@ -200,21 +232,32 @@ public sealed class QuietLoggingTests : IAsyncLifetime
     public async Task LoudProxy_HttpClientRelayLogs_ReachStderr()
     {
         var options = LoudOptions(InstallScope.User);
+        await TestData.SeedBankAsync(options, TestContext.Current.CancellationToken);
+        await new McpTokenFile(options.DataRoot).EnsureAsync(TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
-            TestContext.Current.CancellationToken);
-        // Mint the loopback token so the relay dials the backend: the probe no longer logs (log-leak fix).
-        await new McpTokenFile(options.DataRoot).EnsureAsync(TestContext.Current.CancellationToken);
+        await using var fake = await StartProvenFakeAsync(options, port);
 
         var (_, stderr) = await ConsoleCapture.RunAsync(async () =>
         {
             await new AppRunner(CliSettingsBackend.AcquireAsync, AppHost).Run(
-                ["--attach", "--data-root", options.DataRoot, "--port", port.ToString()]);
+                ["--data-root", options.DataRoot, "--port", port.ToString()]);
         });
 
         stderr.ShouldContain("System.Net.Http");
+    }
+
+    /// <summary>A FakeRaccoon that proves it serves <paramref name="options"/>'s root, so the
+    /// acquire attaches instead of falling back (A11).</summary>
+    private static async Task<FakeRaccoon> StartProvenFakeAsync(InfrastructureOptions options, int port)
+    {
+        var keyFile = new IdentityKeyFile(options);
+        var signer = await keyFile.EnsureAsync(TestContext.Current.CancellationToken)
+                     ?? throw new InvalidOperationException("the fixture could not mint its identity key");
+        return await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
+            TestContext.Current.CancellationToken,
+            proof: new FakeRaccoonProof { Signer = signer, RootFp = IdentityProof.RootFingerprint(keyFile.StateDirectory) });
     }
 
     private InfrastructureOptions QuietOptions(InstallScope scope) => Options(scope, quiet: true);

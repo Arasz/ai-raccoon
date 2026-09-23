@@ -1,17 +1,17 @@
 using System.Net;
 using System.Text.Json;
 using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Observability;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Hosting.Node;
 
 /// <summary>
-///     Cycles the ai-raccoon server on a loopback port for `serve --restart` (ADR-0022): identify
-///     it, ask it to stop over the token-guarded /shutdown, then wait for the port to free. Never
-///     signals or kills a process. The token is read and sent only behind the explicit `--attach`
-///     opt-in: the /observability name is self-asserted, so an identifying listener is not trusted
-///     with the token by default (F70/K1).
+///     Cycles the ai-raccoon server on a loopback port for `serve --restart` (ADR-0022): prove it
+///     holds this root's identity key (ADR-0106), identify it, ask it to stop over the token-guarded
+///     /shutdown, then wait for the port to free. Never signals or kills a process. Nothing but the
+///     probe and the challenge reaches a listener before it proves (D5).
 /// </summary>
 public sealed partial class ServerRestart : IServerRestart
 {
@@ -41,21 +41,23 @@ public sealed partial class ServerRestart : IServerRestart
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger _logger;
     private readonly TimeSpan _portFreeWithin;
+    private readonly IIdentityProver _prover;
     private readonly IServerProbe _probe;
     private readonly TimeProvider _timeProvider;
 
-    public ServerRestart(IServerProbe probe, IHttpClientFactory httpClientFactory, TimeSpan portFreeWithin, TimeProvider timeProvider, ILogger<ServerRestart> logger)
+    public ServerRestart(IServerProbe probe, IHttpClientFactory httpClientFactory, TimeSpan portFreeWithin, TimeProvider timeProvider, IIdentityProver prover, ILogger<ServerRestart> logger)
     {
         _probe = probe;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
         _portFreeWithin = portFreeWithin;
         _timeProvider = timeProvider;
+        _prover = prover;
         Guard.IsGreaterThan(_portFreeWithin, TimeSpan.Zero);
     }
 
     /// <summary>Stops whatever ai-raccoon server owns <paramref name="port" /> and waits for it to let go.</summary>
-    public async Task<RestartResult> CycleAsync(int port, McpTokenFile tokenFile, bool attaching, CancellationToken ctx)
+    public async Task<RestartResult> CycleAsync(int port, McpTokenFile tokenFile, CancellationToken ctx)
     {
         Guard.IsNotNull(tokenFile);
 
@@ -69,19 +71,18 @@ public sealed partial class ServerRestart : IServerRestart
             return new RestartResult(settled);
         }
 
+        // ADR-0106 D5: an unproven listener receives only the probe and the challenge. The proof
+        // comes first, so the identify read, the token read and the shutdown all wait for it.
+        if (await _prover.ProveAsync(ServerProbe.EndpointFor(port), ctx) is { } failure)
+        {
+            Log.Unproven(_logger, port, failure);
+            return new RestartResult(RestartOutcome.Unproven);
+        }
+
         if (await IdentifyAsync(port, ctx) is not { Name: ServerInfo.ServerName } info)
         {
             Log.Foreign(_logger, port);
             return new RestartResult(RestartOutcome.Foreign);
-        }
-
-        // F70/K1: a listener that answers /observability with the ai-raccoon name is still only
-        // claiming it. Reading the token is what authorises the shutdown, so the gate sits before
-        // the read: without --attach nothing is read, nothing is sent, and the operator decides.
-        if (!attaching)
-        {
-            Log.AttachRequired(_logger, port, tokenFile.Path);
-            return new RestartResult(RestartOutcome.AttachRequired, info.Pid, info.Version);
         }
 
         var found = new RestartResult(RestartOutcome.Stopped, info.Pid, info.Version);
@@ -216,7 +217,7 @@ public sealed partial class ServerRestart : IServerRestart
         public static partial void ProbeUnanswered(ILogger logger, int port);
 
         [LoggerMessage(EventId = 657, Level = LogLevel.Warning,
-            Message = "ai-raccoon: the listener on port {Port} identifies as ai-raccoon, but restarting it would send it the token in {TokenPath}; --attach was not given, so nothing is asked to stop")]
-        public static partial void AttachRequired(ILogger logger, int port, string tokenPath);
+            Message = "ai-raccoon: the listener on port {Port} did not prove it holds this data root's identity key ({Reason}); nothing is asked to stop")]
+        public static partial void Unproven(ILogger logger, int port, IdentityProofFailure? reason);
     }
 }

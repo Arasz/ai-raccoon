@@ -230,7 +230,40 @@ public static class TestData
     public static string CreateTempRoot(string prefix = "ai-raccoon-tests")
     {
         var root = Path.Combine(Path.GetTempPath(), prefix, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(root);
+        }
+        else
+        {
+            // F49 scratch roots hold secrets: owner-only is what the fail-closed checks (D1) expect.
+            Directory.CreateDirectory(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        return root;
+    }
+
+    /// <summary>A project-scope install: the bank state directory is &lt;dataRoot&gt;/.ai-raccoon (F49).</summary>
+    public static InfrastructureOptions CreateProjectOptions(string dataRoot, string rid = "osx-arm64") =>
+        new() { DataRoot = dataRoot, Rid = rid, Scope = InstallScope.Project };
+
+    /// <summary>
+    ///     Seeds a real bank at the resolved path through the production factory/schema path (F39
+    ///     fixtures): a guard that checks <see cref="File.Exists(string)" /> must see a genuine bank,
+    ///     not an empty temp root — this is the one place every auto-launch fixture creates one.
+    /// </summary>
+    public static async Task SeedBankAsync(InfrastructureOptions options, CancellationToken cancellationToken = default)
+    {
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>A fresh <see cref="CreateTempRoot" /> with a real bank already seeded at it (User
+    /// scope) — for an auto-launch fixture the F39 no-mint guard must let straight through.</summary>
+    public static async Task<string> CreateTempRootWithBankAsync(string prefix = "ai-raccoon-tests", CancellationToken cancellationToken = default)
+    {
+        var root = CreateTempRoot(prefix);
+        await SeedBankAsync(CreateInfrastructureOptions(root), cancellationToken).ConfigureAwait(false);
         return root;
     }
 

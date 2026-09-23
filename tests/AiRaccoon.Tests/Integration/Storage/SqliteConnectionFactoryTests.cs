@@ -1,4 +1,5 @@
 using System.Data;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -40,6 +41,31 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
         File.Exists(factory.BankPath).ShouldBeTrue();
         connection.State.ShouldBe(ConnectionState.Open);
+    }
+
+    /// <summary>
+    ///     ADR-0106 D1: the state directory is created owner-only, whoever creates it first. A bank
+    ///     opened before `serve` ever ran (the `encryption` bootstrap) must not leave a directory the
+    ///     token and key mint then refuses as shared.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_InAFreshProjectRoot_LeavesAStateDirectoryServeCanMintInto()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.Project };
+
+        await using (await Factory(InstallScope.Project).OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        File.GetUnixFileMode(BankPaths.DirectoryFor(options))
+            .ShouldBe(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        (await new McpTokenFile(options).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        (await new IdentityKeyFile(options).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
     }
 
     [RetryFact]

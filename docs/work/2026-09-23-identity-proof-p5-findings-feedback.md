@@ -108,4 +108,15 @@ _(none)_
 
 _(none — every item has a verdict)_
 
+## Reconciliation (agent, 2026-09-23)
+
+- F1, F7, F2, F3 fixed in PR #657; F5 recorded as ADR-0106 residual 13 and #660; F4 → #658;
+  F6 → #659; H2 → #661; F8 accepted; H1 left for the release-bump step.
+- F4's note ("MCP client? Explain") answered in session: the MCP client is the agent host on the
+  proxy's stdio; a `2025-11-25`-revision client reopens its session, which on a squatted port costs
+  a second private fallback backend. No secret exposure.
+- R1 (added after this form was saved: retry attributes on the security E2E gates) was not answered
+  within the prompt window; the recommended `Retry=Never` carve-out was applied (06120aa6) pending
+  owner confirmation.
+
 <!-- end refinement feedback -->

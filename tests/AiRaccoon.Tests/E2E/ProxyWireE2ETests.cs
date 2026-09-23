@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Net;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup.Identity;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -58,11 +60,19 @@ public sealed class ProxyWireE2ETests : IAsyncLifetime
             }
         });
         _backend.MapMcp("/mcp");
-        lease.ReleaseForBind();
-        await _backend.StartAsync(TestContext.Current.CancellationToken);
         // Ungated on purpose: this fixture records headers, it does not check them. The proxy still
         // reads a token, so mint one the way serve would.
+        // F39: the proxy's auto-launch also refuses an empty root, so seed the bank first.
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User };
+        await TestData.SeedBankAsync(options, TestContext.Current.CancellationToken);
         await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
+        // ADR-0106: a bare proxy only attaches after the proof, so this fixture must hold the root's
+        // identity key and answer the challenge — otherwise the proxy falls back and never dials the
+        // backend whose headers this class records.
+        (await new IdentityKeyFile(options).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        _backend.MapIdentityProof(new IdentityKeyFile(options));
+        lease.ReleaseForBind();
+        await _backend.StartAsync(TestContext.Current.CancellationToken);
     }
 
     public async ValueTask DisposeAsync()

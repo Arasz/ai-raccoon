@@ -30,7 +30,10 @@ flowchart LR
 
 ## What's new
 
-- **BREAKING: the proxy spawns its own private backend — attaching to a running server is now an explicit `--attach`, and settings commands attach-or-start.** (1.43.0) [ADR-0105](docs/adr/0105-private-spawn-is-the-launch-default.md)
+- **BREAKING: backends prove who they are — the proxy and settings verbs attach only to a server that proves it holds this data root's identity key, and `--attach` is gone.** (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md)
+- **BREAKING: an auto-launch at an empty, non-default `--data-root` exits 22 with a runnable remedy instead of creating a bank there.** (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md)
+- **The MCP token and identity key live in the bank state directory — `serve` migrates an old top-level token and tightens a readable state directory to owner-only.** (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md) · [SECURITY.md](SECURITY.md)
+- **BREAKING: the proxy spawns its own private backend — attaching to a running server is now an explicit `--attach`, and settings commands attach-or-start.** (1.43.0) [ADR-0105](docs/adr/0105-private-spawn-is-the-launch-default.md) — superseded by ADR-0106 in 1.44.0
 - **`memory_search` reports the content cosine as evidence, enforces an absolute relevance floor with an explicit unranked marker, and names the floor when it truncates.** (1.43.0)
 - **`memory_delete` removes the whole write (all N chunks), and sync tombstones are label-aware (bank schema v15) — a label-scoped delete no longer tombstones a peer's same-hash row under another label, and a re-created fact survives its tombstone.** (1.43.0)
 - **Corrupt bank exits 26, Ctrl-C exits 130, refusals name their remedy, and refused queries are redacted from logs and spans.** (1.43.0)

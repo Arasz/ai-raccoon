@@ -34,8 +34,9 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 
 | Surface                    | What it does                                                                                                                                                                            | Who controls the input                        |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|
-| proxy transport (default)  | Reads MCP JSON-RPC from the client's stdin and forwards every message to its own `ai-raccoon serve --port 0` backend over loopback HTTP, taking the bound URL from that child's stdout (ADR-0105). `--attach` opts into reusing a server on the configured port instead (ADR-0020). Opens no bank, holds no key, runs no tool. The only stdio shape left is this proxy wire: the `stdio` transport value was removed outright (ADR-0104) | The MCP client that launched the process      |
-| `serve` HTTP endpoint (autostarted) | Serves MCP over Streamable HTTP at `/mcp` on `localhost`. **Guarded by a loopback token** read from `<data-root>/mcp-token` (0600), presented as `X-AiRaccoon-Token` or `Authorization: Bearer`; on the default **proxy path** the proxy supplies it itself, so no client config carries a secret there — a client connected **directly** to this endpoint, bypassing the proxy, does carry one (e.g. in `~/.claude.json` or `~/.hermes/.env`) | Any local process that can read the token file |
+| proxy transport (default)  | Reads MCP JSON-RPC from the client's stdin and forwards every message to a running ai-raccoon server over loopback HTTP: a **proven** listener on the configured port is attached to (ADR-0106), nothing listening means the proxy starts one on that port, and an unproven listener makes the client fall back to a private ephemeral backend. Opens no bank, holds no key, runs no tool. The only stdio shape left is this proxy wire: the `stdio` transport value was removed outright (ADR-0104) | The MCP client that launched the process      |
+| `serve` HTTP endpoint (autostarted) | Serves MCP over Streamable HTTP at `/mcp` on `localhost`. **Guarded by a loopback token** read from the bank state directory (`<data-root>/mcp-token`, or `<data-root>/.ai-raccoon/mcp-token` for a project-scope install; 0600 — ADR-0106/F49), presented as `X-AiRaccoon-Token` or `Authorization: Bearer`; on the default **proxy path** the proxy supplies it itself, so no client config carries a secret there — a client connected **directly** to this endpoint, bypassing the proxy, does carry one (e.g. in `~/.claude.json` or `~/.hermes/.env`) | Any local process that can read the token file |
+| `/identity/prove` endpoint (HTTP mode) | Pre-token challenge-response on the same loopback port as `/mcp` (ADR-0106, wire v1). The caller sends a fresh 32-byte nonce, the root fingerprint it expects and the key id; the listener answers only if it holds this root's `identity-key` (ECDSA P-256, bank state directory, 0600), signing a bounded transcript that binds nonce, key id, root and the port the caller actually dialled. Allowlisted through the token gate by design — it discloses a signature, never a secret — and a root mismatch is refused without signing or echoing the fingerprint. Bounded and rate-limited (8 KB bodies, 4 in flight, 503 beyond) | Any process that can reach the listening port |
 | bare `--transport http` | Parses but launches the proxy like any bare run (ADR-0104). There is no ungated direct launch anymore | The MCP client that launched the process |
 | `/observability` endpoint (HTTP mode) | Returns the server's PID, binary version and OTLP export state on the same loopback port as `/mcp`                                                                          | Any process that can reach the listening port |
 | `/shutdown` endpoint (`serve` only) | Stops the server gracefully for `serve --restart` (ADR-0022). POST only, **guarded by the same loopback token as `/mcp`**, and mapped only on token-gated `serve` hosts | Any local process that can read the token file |
@@ -56,24 +57,46 @@ ADR-0020, this paragraph read "keep the HTTP endpoint opt-in and loopback-only" 
 unauthenticated `localhost` listener is reachable by any local process, and being opt-in
 was half the defence. The proxy starts a server whenever a client launches it and none is
 listening — connecting is enough, no tool call required — so that half is gone.
-In its place, `serve` mints a random token into `<data-root>/mcp-token` (0600) before it
-binds and requires it on `/mcp`. That is a bar, not a boundary: it raises the reach from
+In its place, `serve` mints a random token into the bank state directory
+(`<data-root>/mcp-token`, or `<data-root>/.ai-raccoon/mcp-token` for a project-scope
+install; 0600 — ADR-0106/F49) before it binds and requires it on `/mcp`. That is a bar,
+not a boundary: it raises the reach from
 "any local process" to "any process that can read that file", which on a single-user
 machine means anything running as you. `/observability` stays unauthenticated by design —
 it returns a PID and OTLP on/off, nothing that touches the bank, and discovery depends on
 it (ADR-0008).
 
-**The default launch no longer hands that token to whoever holds the port.** The proxy
-used to dial the configured port and treat any listener answering `/mcp` with a JSON-RPC
-body as the backend, so a local process that bound the port first received the token and
-every tool payload (F70). Since ADR-0105 the proxy starts its own `serve --port 0`
-backend and trusts only the URL that child prints on its stdout pipe, and it refuses to
-dial the URL that child printed after it has exited. The same rule governs the
-server-routed CLI commands (`settings …`, `model …`, `watch registered`, `noise entries`,
-`repair`, …): `CliSettingsBackend` starts its own private backend instead of attaching to
-whatever holds `--port`. `--attach` is the explicit opt-in to the shared server on both
-paths, and it keeps the old exposure by design: asking for the shared server is asking to
-trust whoever holds the port.
+**The default launch attaches or starts — and only ever to a listener that proves
+identity.** The proxy used to dial the configured port and treat any listener answering
+`/mcp` with a JSON-RPC body as the backend, so a local process that bound the port first
+received the token and every tool payload (F70). ADR-0105 answered that by never
+attaching; ADR-0106 restores attach-or-start and answers it by **proof**: `serve` mints a
+per-root ECDSA P-256 `identity-key` into the bank state directory, and a listener must
+demonstrate possession of it over `POST /identity/prove` — a fresh caller nonce signed
+together with the root fingerprint, the key id and the port the caller dialled — before
+any secret reaches it. A proven listener is attached to and nothing is spawned; nothing
+listening → one is started on the configured port; an unproven listener, a failed proof
+or an unanswered probe → the client falls back to a private ephemeral backend, while
+`serve` on an unproven port holder refuses with exit 3. The proof is required again
+immediately before every token-bearing request — the acquire, `serve --restart`'s
+shutdown POST, and the proxy's stop of its own child — so a listener that cannot prove is
+sent nothing at any of those moments. `--attach` no longer exists: passing it, in either
+the root or the `serve` spelling, is an unrecognized argument (exit 9). The same proof
+rule governs the server-routed CLI commands (`settings …`, `model …`, `watch registered`,
+`noise entries`, `repair`, …).
+
+**The invariant is *zero secret bytes*, not zero requests.** The acquire probe
+(`POST /mcp` with a bare body) and the bounded nonce challenge do reach an unproven
+listener; neither carries a secret. The proof bounds and shrinks the window between
+"the listener proved" and "the token was sent", and does not close it: the token rides
+its own later connections, so a listener that passes the proof and then changes hands in
+that window is a residual (ADR-0106 residual 2).
+
+**A mistyped `--data-root` no longer mints anything.** Client auto-launches (the proxy,
+and the server-routed settings verbs) refuse an empty, non-default root before they probe
+or spawn: exit 22, zero files, so a typo cannot bootstrap a bank, token and identity key
+under a stray directory (F39, ADR-0106). The default root keeps its bootstrap, and
+`serve`, `encryption` and `doctor` still create a bank where they are pointed.
 
 **The token now also authorises stopping the server (ADR-0022).** `serve --restart` cycles
 the running backend by asking it to stop over `POST /shutdown`, so a token holder can shut
@@ -87,17 +110,18 @@ the same `FixedTimeEquals` comparison as `/mcp`, answers every unauthorised call
 the header is absent, the wrong length or simply wrong, and is **not mapped at all** on a
 host with no token. `serve --restart` itself no longer reads or sends that token to a
 listener that merely answers `/observability` with the ai-raccoon name: the join review
-measured the handover, and cycling an existing server is now an attach-shaped trust
-decision that requires `--attach`, refusing with exit 3 and a line naming the flag
-otherwise. `--attach` here means the same as everywhere else — trust the listener on this
-port.
+measured the handover. Since ADR-0106 a bare cycle requires the listener to prove its
+per-root identity first — a different root's server is refused — and an unproven holder
+gets no token and earns exit 3 with a line naming the manual stop.
 
 **One known gap, stated rather than implied, and one retired.** The ungated
 direct `--transport http` launch this section used to warn about is gone: a bare
 `--transport http` now proxies, and every HTTP endpoint is a token-gated `serve`
 host, so that listener no longer exists to be left open. What remains is platform:
-`UnixFileMode` is POSIX-only: on Windows the token file
-inherits the data-root directory's ACL rather than being owner-only.
+`UnixFileMode` is POSIX-only: on Windows the token file **and the identity key** inherit
+the state directory's ACL rather than being owner-only, and the identity key is plaintext
+even when the bank is encrypted — a state-directory backup carries the trust anchor along
+with the data (ADR-0106 residual 7).
 
 **Access modes provide a defence-in-depth layer:** `ro` mode allows only reads *of entry
 content*; `rw` (default) adds writes; `full` enables destructive operations (delete, sweep,

@@ -37,15 +37,30 @@ public static class RaccoonProcess
         IEnumerable<string> arguments, TimeSpan hardCap, CancellationToken cancellationToken) =>
         RunAsync(Executable, arguments, hardCap, cancellationToken);
 
+    /// <summary>Runs the binary with stdin already at end of file, as a caller with nothing to say leaves it.</summary>
+    public static Task<ProcessRun> RunWithClosedInputAsync(
+        IEnumerable<string> arguments, TimeSpan hardCap, CancellationToken cancellationToken) =>
+        RunAsync(Executable, arguments, hardCap, cancellationToken, closeInput: true);
+
     /// <summary>Throws <see cref="TimeoutException" /> naming the captured stderr once the cap passes.</summary>
-    public static async Task<ProcessRun> RunAsync(
-        string executable, IEnumerable<string> arguments, TimeSpan hardCap, CancellationToken cancellationToken)
+    public static Task<ProcessRun> RunAsync(
+        string executable, IEnumerable<string> arguments, TimeSpan hardCap, CancellationToken cancellationToken) =>
+        RunAsync(executable, arguments, hardCap, cancellationToken, closeInput: false);
+
+    private static async Task<ProcessRun> RunAsync(
+        string executable, IEnumerable<string> arguments, TimeSpan hardCap, CancellationToken cancellationToken,
+        bool closeInput)
     {
         Guard.IsNotNullOrWhiteSpace(executable);
         Guard.IsNotNull(arguments);
         Guard.IsGreaterThan(hardCap, TimeSpan.Zero);
 
         using var process = Process.Start(StartInfoFor(executable, arguments))!;
+        if (closeInput)
+        {
+            process.StandardInput.Close();
+        }
+
         var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
         try

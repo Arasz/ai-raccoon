@@ -1,3 +1,5 @@
+using AiRaccoon.Infrastructure.Sqlite;
+
 namespace AiRaccoon.Setup.Logging;
 
 /// <summary>
@@ -27,7 +29,7 @@ internal sealed class QuietFileLoggerProvider : ILoggerProvider
             var directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(directory))
             {
-                Directory.CreateDirectory(directory);
+                BankPaths.CreateDirectory(directory);
             }
 
             var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);

@@ -20,11 +20,17 @@ internal sealed class Squatter : IDisposable
     private static readonly byte[] OtherResponse = Response("200 OK", "application/json", "{}");
 
     private readonly CancellationTokenSource _cts = new();
-    private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+    private readonly TcpListener _listener;
     private readonly List<string> _requests = [];
 
-    public Squatter()
+    public Squatter() : this(0)
     {
+    }
+
+    /// <summary>Binds <paramref name="port"/>; 0 keeps the original any-free-port shape.</summary>
+    public Squatter(int port)
+    {
+        _listener = new TcpListener(IPAddress.Loopback, port);
         _listener.Start();
         Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
         _ = AcceptAsync();

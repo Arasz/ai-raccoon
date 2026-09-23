@@ -11,12 +11,17 @@ internal sealed class BackendStartException(string message, Exception inner) : E
 
 /// <summary>
 ///     Acquires a live ai-raccoon HTTP backend for the proxy (ADR-0020). The default path is
-///     private spawn (F70/K1): start `ai-raccoon serve --port 0` and trust only the URL that child
-///     prints while it is still alive, so no pre-existing listener is ever contacted. The explicit
-///     attach path keeps the legacy behaviour: probe first, else start `serve` on the port and poll.
-///     Never kills, signals or terminates the backend itself: the proxy stops the private
-///     backends it starts over the token-guarded /shutdown when it shuts down (owner ruling
-///     2026-09-22), and a shared backend's lifetime belongs to IdleWatchdog alone.
+///     attach-or-start behind the identity proof (ADR-0106): the composition root probes the
+///     configured port, attaches to a proven listener, starts one there when nothing answers, and
+///     falls back to a private ephemeral child when the holder cannot prove — the policy lives in
+///     <see cref="BackendSessions.AcquireSharedAsync" />. This launcher owns the process mechanics:
+///     <see cref="AcquireAsync" /> probes, starts and polls the configured port, and
+///     <see cref="StartPrivateAsync" /> starts the fallback child and trusts only the URL that child
+///     prints while it is still alive, and hands back that child's process. The proxy stops the
+///     private fallbacks it starts over the token-guarded /shutdown when it shuts down (owner ruling
+///     2026-09-22), or through <see cref="StopChildAsync" /> when one fails its own proof; this
+///     launcher stops a private child itself only when it never hands it back. A shared backend's
+///     lifetime belongs to IdleWatchdog alone.
 /// </summary>
 internal sealed partial class BackendLauncher : IBackendLauncher
 {
@@ -31,6 +36,9 @@ internal sealed partial class BackendLauncher : IBackendLauncher
 
     /// <summary>Bounds the re-probe that follows an exited backend, which the spent budget cannot.</summary>
     private static readonly TimeSpan LastChanceBudget = TimeSpan.FromSeconds(5);
+
+    /// <summary>How long a killed private child is given to be reaped.</summary>
+    private static readonly TimeSpan ChildExitWait = TimeSpan.FromSeconds(5);
 
     private readonly TimeSpan _budget;
     private readonly ILogger _logger;
@@ -61,7 +69,46 @@ internal sealed partial class BackendLauncher : IBackendLauncher
 
         Log.StartingPrivateBackend(_logger);
         var (backend, stderr, urlLine) = Start(fileName, arguments);
+        var handedBack = false;
+        try
+        {
+            var result = await WaitForUrlAsync(backend, stderr, urlLine, ctx);
+            handedBack = result.Child is not null;
+            return result;
+        }
+        finally
+        {
+            // A child that is not handed back has nobody else to stop it: no URL reached the caller,
+            // so /shutdown is closed to it, and it would linger until its idle timeout.
+            if (!handedBack)
+            {
+                await StopChildAsync(backend);
+            }
+        }
+    }
 
+    /// <summary>Kills a private child's process tree and waits briefly for it to be reaped.</summary>
+    internal static async Task StopChildAsync(Process? child)
+    {
+        if (child is null)
+        {
+            return;
+        }
+
+        try
+        {
+            child.Kill(entireProcessTree: true);
+            await child.WaitForExitAsync().WaitAsync(ChildExitWait);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or TimeoutException)
+        {
+            // Already gone, or the OS would not say: nothing is left to send it either way.
+        }
+    }
+
+    private async Task<BackendResult> WaitForUrlAsync(Process backend, TailCapture stderr, Task<string?> urlLine,
+        CancellationToken ctx)
+    {
         using var budget = new CancellationTokenSource(_budget, _timeProvider);
         using var waiting = CancellationTokenSource.CreateLinkedTokenSource(ctx, budget.Token);
         using var timer = new PeriodicTimer(PollInterval, _timeProvider);
@@ -85,7 +132,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         if (urlLine.IsCompletedSuccessfully && urlLine.Result is { } reported && !backend.HasExited)
         {
             Log.BackendLive(_logger, reported);
-            return new BackendResult(reported, null);
+            return new BackendResult(reported, null, Child: backend);
         }
 
         var exitCode = backend.HasExited ? backend.ExitCode : (int?)null;

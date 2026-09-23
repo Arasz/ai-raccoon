@@ -100,7 +100,7 @@ public sealed class McpTokenFileTests : IDisposable
     public async Task Read_TreatsAnEmptyFileAsAbsent_AndNeverMints()
     {
         var tokenFile = new McpTokenFile(_dataRoot);
-        await File.WriteAllTextAsync(tokenFile.Path, "   ", TestContext.Current.CancellationToken);
+        await WriteOwnerOnlyAsync(tokenFile.Path, "   ");
 
         tokenFile.Read().ShouldBeNull();
         (await File.ReadAllTextAsync(tokenFile.Path, TestContext.Current.CancellationToken)).ShouldBe("   ");
@@ -111,7 +111,7 @@ public sealed class McpTokenFileTests : IDisposable
     {
         var tokenFile = new McpTokenFile(_dataRoot);
         var stored = await MintElsewhereAsync();
-        await File.WriteAllTextAsync(tokenFile.Path, $"{stored}{Environment.NewLine}", TestContext.Current.CancellationToken);
+        await WriteOwnerOnlyAsync(tokenFile.Path, $"{stored}{Environment.NewLine}");
 
         tokenFile.Read().ShouldBe(stored);
     }
@@ -123,7 +123,7 @@ public sealed class McpTokenFileTests : IDisposable
         // would be the same silent entropy loss whether the file is short by one character or forty.
         var tokenFile = new McpTokenFile(_dataRoot);
         var truncated = (await MintElsewhereAsync())[..10];
-        await File.WriteAllTextAsync(tokenFile.Path, truncated, TestContext.Current.CancellationToken);
+        await WriteOwnerOnlyAsync(tokenFile.Path, truncated);
 
         tokenFile.Read().ShouldBeNull();
         (await File.ReadAllTextAsync(tokenFile.Path, TestContext.Current.CancellationToken)).ShouldBe(truncated);
@@ -138,7 +138,7 @@ public sealed class McpTokenFileTests : IDisposable
 
         tokenFile.Read().ShouldBe(minted);
 
-        await File.WriteAllTextAsync(tokenFile.Path, minted[..^1], TestContext.Current.CancellationToken);
+        await WriteOwnerOnlyAsync(tokenFile.Path, minted[..^1]);
         tokenFile.Read().ShouldBeNull(); // one character short of a mint is not a token
     }
 
@@ -149,7 +149,8 @@ public sealed class McpTokenFileTests : IDisposable
         // start on it is worse than minting a new secret nobody is holding.
         var time = new FakeTimeProvider();
         var tokenFile = new McpTokenFile(_dataRoot, time);
-        await File.WriteAllTextAsync(tokenFile.Path, string.Empty, TestContext.Current.CancellationToken);
+        await WriteOwnerOnlyAsync(tokenFile.Path, string.Empty);
+        AgeTheDebris(tokenFile.Path, time);
 
         var healing = tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
         await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
@@ -162,6 +163,25 @@ public sealed class McpTokenFileTests : IDisposable
         tokenFile.Read().ShouldBe(healed);
     }
 
+    /// <summary>F7: the delete only fires once the debris is older than the heal window.</summary>
+    [RetryFact]
+    public async Task AnEmptyTokenFile_YoungerThanTheHealWindow_IsNotDeleted()
+    {
+        var time = new FakeTimeProvider();
+        var tokenFile = new McpTokenFile(_dataRoot, time);
+        await WriteOwnerOnlyAsync(tokenFile.Path, string.Empty);
+        File.SetLastWriteTimeUtc(tokenFile.Path, time.GetUtcNow().UtcDateTime + TimeSpan.FromMinutes(5));
+
+        var healing = tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
+        await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
+        time.Advance(McpTokenFile.HealAfter);
+
+        var healed = await healing.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        healed.ShouldBeNull();
+        File.Exists(tokenFile.Path).ShouldBeTrue("the debris is younger than the window, so it is left alone");
+    }
+
     [RetryFact]
     public async Task AMalformedTokenFile_IsHealed()
     {
@@ -171,7 +191,8 @@ public sealed class McpTokenFileTests : IDisposable
         var time = new FakeTimeProvider();
         var tokenFile = new McpTokenFile(_dataRoot, time);
         var truncated = (await MintElsewhereAsync())[..10];
-        await File.WriteAllTextAsync(tokenFile.Path, truncated, TestContext.Current.CancellationToken);
+        await WriteOwnerOnlyAsync(tokenFile.Path, truncated);
+        AgeTheDebris(tokenFile.Path, time);
 
         var healing = tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
         await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
@@ -192,11 +213,12 @@ public sealed class McpTokenFileTests : IDisposable
         var time = new FakeTimeProvider();
         var tokenFile = new McpTokenFile(_dataRoot, time);
         var writers = await MintElsewhereAsync();
-        await File.WriteAllTextAsync(tokenFile.Path, string.Empty, TestContext.Current.CancellationToken);
+        await WriteOwnerOnlyAsync(tokenFile.Path, string.Empty);
+        File.SetLastWriteTimeUtc(tokenFile.Path, time.GetUtcNow().UtcDateTime + TimeSpan.FromMinutes(5));
 
         var healing = tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
         await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
-        await File.WriteAllTextAsync(tokenFile.Path, writers, TestContext.Current.CancellationToken);
+        await WriteOwnerOnlyAsync(tokenFile.Path, writers);
         time.Advance(McpTokenFile.HealAfter);
 
         var acquired = await healing.WaitAsync(TestContext.Current.CancellationToken);
@@ -226,7 +248,8 @@ public sealed class McpTokenFileTests : IDisposable
         // healers converge exactly as racing minters do.
         const int healers = 16;
         var healAfter = TimeSpan.FromMilliseconds(200);
-        await File.WriteAllTextAsync(new McpTokenFile(_dataRoot).Path, string.Empty, TestContext.Current.CancellationToken);
+        await WriteOwnerOnlyAsync(new McpTokenFile(_dataRoot).Path, string.Empty);
+        File.SetLastWriteTimeUtc(new McpTokenFile(_dataRoot).Path, DateTime.UtcNow - healAfter - TimeSpan.FromSeconds(1));
         var healed = new string?[healers];
 
         RaceOnThreads(healers, index =>
@@ -256,6 +279,20 @@ public sealed class McpTokenFileTests : IDisposable
     {
         var elsewhere = Path.Combine(_dataRoot, Guid.NewGuid().ToString("N"));
         return (await new McpTokenFile(elsewhere).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+    }
+
+    /// <summary>Backdates debris to before the fake clock's heal window, where a real crash would leave it.</summary>
+    private static void AgeTheDebris(string path, FakeTimeProvider time) =>
+        File.SetLastWriteTimeUtc(path, time.GetUtcNow().UtcDateTime - McpTokenFile.HealAfter - TimeSpan.FromSeconds(1));
+
+    /// <summary>Seeds a hand-written token file: the reader refuses a shared file, so tests set 0600 first.</summary>
+    private static async Task WriteOwnerOnlyAsync(string path, string content)
+    {
+        await File.WriteAllTextAsync(path, content, TestContext.Current.CancellationToken);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
     }
 
     /// <summary>Runs the action on dedicated threads released together by a barrier.</summary>

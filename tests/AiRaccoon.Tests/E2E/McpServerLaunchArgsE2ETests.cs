@@ -91,7 +91,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
                 .ShouldBeFalse();
 
             File.Exists(Path.Combine(dataRoot, "memory.db")).ShouldBeFalse();
-            File.Exists(Path.Combine(dataRoot, McpTokenFile.FileName)).ShouldBeFalse();
+            File.Exists(new McpTokenFile(dataRoot).Path).ShouldBeFalse();
         }
         finally
         {
@@ -109,7 +109,8 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
     [RetryFact]
     public async Task BareLaunch_ServesTheFullToolSurfaceOverARealPipe()
     {
-        var dataRoot = TestData.CreateTempRoot("proxy-full-surface");
+        // F39: the auto-launch refuses a non-default root with no bank, so the bank the backend serves exists first.
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("proxy-full-surface", TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
@@ -130,14 +131,13 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
             // The auto-started backend opened its own bank under the same root and minted the
             // gate token strictly before it bound — a proxy that never started one serves nothing.
             File.Exists(Path.Combine(dataRoot, "memory.db")).ShouldBeTrue();
-            File.Exists(Path.Combine(dataRoot, McpTokenFile.FileName)).ShouldBeTrue();
+            File.Exists(new McpTokenFile(dataRoot).Path).ShouldBeTrue();
         }
         finally
         {
-            // The proxy stops the private backend it spawned when it shuts down
-            // (ProxyPrivateBackendLifetimeTests owns that contract — this is the bare launch, no
-            // --attach); this stop is belt-and-braces, so a proxy that died early cannot hold the
-            // bank past teardown.
+            // The instance the proxy started on the configured port is shared, so the proxy does
+            // not stop it on shutdown; this stop is belt-and-braces, so a proxy that died early
+            // cannot hold the bank past teardown.
             await StopSpawnedBackendAsync(port, dataRoot);
             TestData.DeleteTempRoot(dataRoot);
         }

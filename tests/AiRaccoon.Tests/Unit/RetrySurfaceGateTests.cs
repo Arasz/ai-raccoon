@@ -36,7 +36,7 @@ public sealed class RetrySurfaceGateTests
         SurfaceFiles().Count.ShouldBeGreaterThanOrEqualTo(200,
             "the rule scans this set; if it empties, it stops being able to fail");
 
-    /// <summary>Same derivation as the WP4 swap: E2E/ + Integration/ folders ∪ Slow/Nightly trait files, minus the benchmark carve-out.</summary>
+    /// <summary>Same derivation as the WP4 swap: E2E/ + Integration/ folders ∪ Slow/Nightly trait files, minus the benchmark and Retry=Never carve-outs.</summary>
     private static List<string> SurfaceFiles() =>
     [
         .. Directory.EnumerateFiles(TestsRoot, "*.cs", SearchOption.AllDirectories)
@@ -55,6 +55,12 @@ public sealed class RetrySurfaceGateTests
             return false;
         }
 
+        var text = File.ReadAllText(file);
+        if (text.Contains("Retry, TestCategories.Never", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         var relative = Path.GetRelativePath(TestsRoot, file);
         if (relative.StartsWith($"E2E{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
             || relative.StartsWith($"Integration{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
@@ -62,7 +68,6 @@ public sealed class RetrySurfaceGateTests
             return true;
         }
 
-        var text = File.ReadAllText(file);
         // Same patterns as the WP4 swap's own grep — the [Trait] form of the Speed trait,
         // which this file's own predicate text (and comments) cannot contain literally.
         return text.Contains("Speed, TestCategories.Slow", StringComparison.Ordinal)

@@ -116,7 +116,7 @@ public sealed class NodeRunnerTests : IDisposable
     }
 
     [RetryFact]
-    public async Task BusyPortWithAiRaccoonServer_Attaches_AndFirstKeepsOwnership()
+    public async Task Serve_OnAProvenListener_ReportsAttachAndExitsZero()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
@@ -125,43 +125,32 @@ public sealed class NodeRunnerTests : IDisposable
         await using var first = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         var firstUrl = await first.WaitForUrlAsync(TestContext.Current.CancellationToken);
 
-        var secondRoot = TestData.CreateTempRoot("ai-raccoon-serve-attach");
-        try
-        {
-            // Attach + --mcp-entry: the entry for the OWNER's bound port is printed (F7).
-            // --attach is the explicit opt-in (F70/K1): without it the second serve refuses the port.
-            await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString(), "--attach", "--mcp-entry", "--format", "hermes"]);
-            var secondExit = await second.Exit;
+        // The same root: the running server minted the identity key the second `serve` proves with.
+        // Attach + --mcp-entry: the entry for the OWNER's bound port is printed (F7).
+        await using var second = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--mcp-entry", "--format", "hermes"]);
+        var secondExit = await second.Exit;
 
-            secondExit.ShouldBe(ExitCode.Success);
-            second.Stdout.ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
-            second.Stderr.ShouldContain("attached");
-            second.Stderr.ShouldNotContain("   at ");
-            // UX-F10: attaching silently to another server's bank must not go unremarked --
-            // name the bank this invocation asked for so a --data-root mismatch is visible.
-            second.Stderr.ShouldContain(Path.Combine(secondRoot, "memory.db"));
+        secondExit.ShouldBe(ExitCode.Success);
+        second.Stdout.ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
+        second.Stderr.ShouldContain("attached");
+        second.Stderr.ShouldContain("proved");
+        second.Stderr.ShouldNotContain("   at ");
 
-
-            // The OWNER's token: /mcp is gated, so an unauthorized GET would 401 before routing.
-            var response = await GetMcpAsync(firstUrl, _dataRoot, TestContext.Current.CancellationToken);
-            response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed); // GET unmapped; any real response proves ownership
-        }
-        finally
-        {
-            TestData.DeleteTempRoot(secondRoot);
-        }
+        // The OWNER's token: /mcp is gated, so an unauthorized GET would 401 before routing.
+        var response = await GetMcpAsync(firstUrl, _dataRoot, TestContext.Current.CancellationToken);
+        response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed); // GET unmapped; any real response proves ownership
 
         var firstExit = await first.StopAsync();
         firstExit.ShouldBe(ExitCode.Success);
     }
 
     /// <summary>
-    ///     F70/K1: a plain `serve` on a port an ai-raccoon server already owns must not attach --
-    ///     the private-spawn default refuses it, and the owner keeps serving. --attach is the
-    ///     explicit way back to the shared server.
+    ///     Cross-root attach (ADR-0106): a listener that serves another data root cannot prove it
+    ///     holds this root's identity key, so a plain `serve` refuses it with exit 3 and the owner
+    ///     keeps serving. The refusal names the remedy, never a token.
     /// </summary>
     [RetryFact]
-    public async Task BusyPortWithAiRaccoonServer_WithoutAttach_ReturnsPortInUse_AndLeavesTheOwnerServing()
+    public async Task Serve_OnAnotherRootsServer_RefusesExit3_WithTheRemedy()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
@@ -170,16 +159,24 @@ public sealed class NodeRunnerTests : IDisposable
         await using var first = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         await first.WaitForUrlAsync(TestContext.Current.CancellationToken);
 
-        await using var second = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
-        var secondExit = await second.Exit;
+        var secondRoot = TestData.CreateTempRoot("ai-raccoon-serve-cross-root");
+        try
+        {
+            await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString()]);
+            var secondExit = await second.Exit;
 
-        secondExit.ShouldBe(ExitCode.PortInUse);
-        second.Stdout.ShouldBeEmpty();
-        second.Stderr.ShouldContain("in use");
-        second.Stderr.ShouldContain("--attach");
-        second.Stderr.ShouldNotContain("attached");
-        second.Stderr.ShouldNotContain("   at ");
-        first.Exit.IsCompleted.ShouldBeFalse("the owner must keep serving");
+            secondExit.ShouldBe(ExitCode.PortInUse);
+            second.Stdout.ShouldBeEmpty();
+            second.Stderr.ShouldContain("did not prove");
+            second.Stderr.ShouldContain("stop the listener");
+            second.Stderr.ShouldNotContain("--attach");
+            second.Stderr.ShouldNotContain("   at ");
+            first.Exit.IsCompleted.ShouldBeFalse("the owner must keep serving");
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(secondRoot);
+        }
 
         var firstExit = await first.StopAsync();
         firstExit.ShouldBe(ExitCode.Success);

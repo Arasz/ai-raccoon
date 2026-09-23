@@ -1,5 +1,6 @@
 using System.Net.Sockets;
 using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -20,6 +21,7 @@ namespace AiRaccoon.Hosting.Node;
 internal partial class NodeRunner(
     IServerRestart serverRestart,
     IServerProbe serverProbe,
+    IIdentityProver identityProver,
     ISqliteConnectionFactory connectionFactory,
     IEncryptionKeyResolver encryptionKeyResolver,
     IEmbeddingAvailability
@@ -38,8 +40,7 @@ internal partial class NodeRunner(
             Port = options.Port,
             IdleTimeout = IdleTimeoutParser.TryParse(options.IdleTimeout, out var idleTimeout) ? idleTimeout : DefaultOptions.IdleTimeout,
             Restarting = options.Restart,
-            Attaching = options.Attach,
-            TokenFile = new McpTokenFile(cliInput.ServerConfig.Options.DataRoot)
+            TokenFile = new McpTokenFile(cliInput.ServerConfig.Options)
         };
         WarnOnNonHttpTransport(cliInput.ServerConfig, cliInput.Options.IsTransportExplicit, streams);
 
@@ -53,8 +54,22 @@ internal partial class NodeRunner(
         if (await tokenFile.EnsureAsync(ctx) is not { } mcpToken)
         {
             Log.McpTokenUnavailable(logger, tokenFile.Path);
-            await streams.WriteErrorLineAsync($"ai-raccoon: cannot read or create the MCP token at {tokenFile.Path} — check its permissions, or remove it and start serve again");
+            await streams.WriteErrorLineAsync($"ai-raccoon: {tokenFile.RefusalReason ?? $"cannot read or create the MCP token at {tokenFile.Path} — check its permissions, or remove it and start serve again"}");
             return ExitCode.McpTokenUnavailable;
+        }
+
+        // The identity key is the trust anchor a client verifies before it hands over the token; only
+        // serve mints it, in the same state directory, before the listener binds (ADR-0106 D1).
+        var identityKeyFile = new IdentityKeyFile(cliInput.ServerConfig.Options);
+        if (await identityKeyFile.EnsureAsync(ctx) is null)
+        {
+            await streams.WriteErrorLineAsync($"ai-raccoon: {identityKeyFile.RefusalReason ?? $"cannot read or create the identity key at {identityKeyFile.Path} — check its permissions, or remove it and start serve again"}");
+            return ExitCode.McpTokenUnavailable;
+        }
+
+        if (tokenFile.TightenedStateDirectory || identityKeyFile.TightenedStateDirectory)
+        {
+            OwnerOnlyFile.Log.StateDirectoryTightened(logger, tokenFile.StateDirectory);
         }
 
         Log.McpTokenReady(logger, tokenFile.Path);
@@ -81,14 +96,12 @@ internal partial class NodeRunner(
 
         if (!descriptor.Restarting)
         {
-            // F70/K1: the pre-check proved an ai-raccoon server owns the port. Attaching to it is
-            // the explicit opt-in; the default serves on its own port instead.
-            return PreBind.ExitWith(descriptor.Attaching
-                ? await ReportAttachedAsync(descriptor, streams)
-                : await RefuseExistingServerAsync(descriptor, streams));
+            // ADR-0106: an ai-raccoon server owns the port. A plain `serve` attaches to it only
+            // after the proof; one that cannot prove is refused with the manual-stop remedy.
+            return PreBind.ExitWith(await AttachOrRefuseAsync(descriptor, streams, ctx));
         }
 
-        var restartResult = await serverRestart.CycleAsync(descriptor.Port, descriptor.TokenFile, descriptor.Attaching, ctx);
+        var restartResult = await serverRestart.CycleAsync(descriptor.Port, descriptor.TokenFile, ctx);
         if (RestartTransition.MayBind(restartResult.Outcome))
         {
             return PreBind.Bind(restartResult.Outcome);
@@ -135,7 +148,7 @@ internal partial class NodeRunner(
         }
         catch (Exception ex) when (IsAddressInUse(ex))
         {
-            return await ReportBindRefusedAsync(descriptor, believed, await serverProbe.ProbeAsync(descriptor.Port, ctx), streams);
+            return await ReportBindRefusedAsync(descriptor, believed, await serverProbe.ProbeAsync(descriptor.Port, ctx), streams, ctx);
         }
         finally
         {
@@ -198,15 +211,13 @@ internal partial class NodeRunner(
     ///     What a refused bind is reported as. The bind failure is proof the port is held, so a
     ///     pre-check that believed otherwise is refuted here rather than repeated (ADR-0043).
     /// </summary>
-    private async Task<int> ReportBindRefusedAsync(NodeLaunchDescriptor descriptor, RestartOutcome believed, ProbeVerdict afterBind, StandardStreams streams)
+    private async Task<int> ReportBindRefusedAsync(NodeLaunchDescriptor descriptor, RestartOutcome believed, ProbeVerdict afterBind, StandardStreams streams, CancellationToken ctx)
     {
         var port = descriptor.Port;
         switch (RestartTransition.AfterBindRefused(believed, afterBind, descriptor.Restarting))
         {
             case BindRefusal.Attach:
-                return descriptor.Attaching
-                    ? await ReportAttachedAsync(descriptor, streams)
-                    : await RefuseExistingServerAsync(descriptor, streams);
+                return await AttachOrRefuseAsync(descriptor, streams, ctx);
             case BindRefusal.LostThePort:
                 Log.RestartLostThePort(logger, port);
                 await streams.WriteErrorLineAsync(
@@ -225,14 +236,26 @@ internal partial class NodeRunner(
     }
 
     /// <summary>
-    ///     F70/K1: an ai-raccoon server already owns the port and --attach was not given. The
-    ///     operator is told which flag reuses it rather than the launch silently joining it.
+    ///     Proves the listener before a plain `serve` attaches to it (ADR-0106). A listener that
+    ///     cannot prove it holds this root's identity key is refused: attaching would hand it the
+    ///     token and tool traffic.
+    /// </summary>
+    private async Task<int> AttachOrRefuseAsync(NodeLaunchDescriptor descriptor, StandardStreams streams,
+        CancellationToken ctx) =>
+        await identityProver.ProveAsync(ServerProbe.EndpointFor(descriptor.Port), ctx) is null
+            ? await ReportAttachedAsync(descriptor, streams)
+            : await RefuseExistingServerAsync(descriptor, streams);
+
+    /// <summary>
+    ///     ADR-0106: an ai-raccoon server already owns the port but could not prove it serves this
+    ///     data root. The operator is told to stop the listener (or pick another port) rather than
+    ///     being handed a flag that no longer exists.
     /// </summary>
     private async Task<int> RefuseExistingServerAsync(NodeLaunchDescriptor descriptor, StandardStreams streams)
     {
         Log.PortInUse(logger, descriptor.Port);
         await streams.WriteErrorLineAsync(
-            $"ai-raccoon: port {descriptor.Port} is in use by an ai-raccoon server — pass --attach to use it, or --port 0 to start a private one");
+            $"ai-raccoon: port {descriptor.Port} is in use by a listener that did not prove it serves this data root — stop the listener yourself, or serve on another port (--port 0)");
         return ExitCode.PortInUse;
     }
 
@@ -246,9 +269,8 @@ internal partial class NodeRunner(
             RestartOutcome.Foreign => (
                 $"ai-raccoon: port {descriptor.Port} is held by a listener that does not identify as an ai-raccoon server — stop it yourself, or serve on another port",
                 ExitCode.PortInUse),
-            RestartOutcome.AttachRequired => (
-                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it identifies as an ai-raccoon server, and cycling it would send it the token in {descriptor.TokenFile.Path}. " +
-                $"Pass --attach to trust the listener on this port, or stop it yourself first (ai-raccoon serve observability pid --port {descriptor.Port}), then run serve again",
+            RestartOutcome.Unproven => (
+                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the listener did not prove it serves this data root — stop the listener yourself, then run serve again, or serve on another port (--port 0)",
                 ExitCode.PortInUse),
             RestartOutcome.NoToken => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: {descriptor.TokenFile.Path} holds no token, so it cannot be asked to stop — it may serve another data root; stop it " +
@@ -271,13 +293,13 @@ internal partial class NodeRunner(
 
     private async Task<int> ReportAttachedAsync(NodeLaunchDescriptor descriptor, StandardStreams streams)
     {
-        // UX-F10: this process never opens the owning server's bank, so it cannot confirm the
-        // two match -- naming the bank *this* invocation asked for at least makes a
-        // --data-root mismatch visible instead of a silent takeover.
+        // UX-F10/ADR-0106: the proof binds the listener to this root's identity key, so the bank
+        // is the one this invocation asked for. The line still names the root's bank path, and is
+        // explicit that this process never opened it.
         var requestedBankPath = SqliteConnectionFactory.BankPathFor(descriptor.LaunchConfig.Options);
         Log.AttachedToExistingServer(logger, descriptor.Url, requestedBankPath);
         await streams.WriteErrorLineAsync(
-            $"ai-raccoon: attached to the server already listening on {descriptor.Url} — it may not be serving {requestedBankPath}; this process never opened that bank to check. To serve it here, stop the other server first or free the port (--port 0)");
+            $"ai-raccoon: attached to the server already listening on {descriptor.Url} — it proved it holds the identity key for {requestedBankPath}'s state directory; this process never opened that bank. Stop that server to serve here, or use --port 0 for a private one");
         await streams.RenderUrlForInput(descriptor.Url, descriptor.Port, descriptor.Source.McpEntry, descriptor.Source.Format);
         return ExitCode.Success;
     }
@@ -300,7 +322,6 @@ internal partial class NodeRunner(
         public required int Port { get; init; }
         public required TimeSpan IdleTimeout { get; set; }
         public required bool Restarting { get; init; }
-        public required bool Attaching { get; init; }
         public required McpTokenFile TokenFile { get; init; }
         public string Token { get; init; } = "";
 
@@ -331,7 +352,7 @@ internal partial class NodeRunner(
             Message = "ai-raccoon: port {Port} is in use but gave the probe no answer; nothing was asked to stop")]
         public static partial void RestartProbeUnanswered(ILogger logger, int port);
 
-        [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "ai-raccoon: attached to the server already listening on {Url} — this process asked for {RequestedBankPath}")]
+        [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "ai-raccoon: attached to the server already listening on {Url} — it proved this root's identity key for {RequestedBankPath}")]
         public static partial void AttachedToExistingServer(ILogger logger, string url, string requestedBankPath);
 
         [LoggerMessage(EventId = 606, Level = LogLevel.Debug, Message = "ai-raccoon: /mcp is guarded by the token in {TokenPath}")]
