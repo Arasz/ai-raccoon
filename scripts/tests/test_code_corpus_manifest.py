@@ -66,7 +66,7 @@ def _external_family_rows(root: Path, family: str, language: str) -> list[dict]:
 
 def build_valid_corpus(tmp_path: Path) -> tuple[dict, Path]:
     """3 external families (Widget/Gadget/Gizmo), one src file in Gizmo's
-    9 swapped for a `self` row (no vendoredPath, read straight off `root`),
+    9 swapped for a `self` row (snapshotted under files/self/ like any family),
     plus one external and one self src/test pair. All 3 families held out.
     """
     root = tmp_path
@@ -81,13 +81,14 @@ def build_valid_corpus(tmp_path: Path) -> tuple[dict, Path]:
     swapped = gizmo_rows.pop()
     assert swapped["sizeBand"] == "large"
     self_rel = "src/Widgets/BigGizmo.cs"
-    self_data = _write(root / self_rel, BAND_LINES["large"])
+    self_vendored = f"{CODE_CORPUS_DIR}/files/self/{self_rel}"
+    self_data = _write(root / self_vendored, BAND_LINES["large"])
     gizmo_rows.append({
         "family": "self",
         "repo": "self",
         "sha": None,
         "path": self_rel,
-        "vendoredPath": None,
+        "vendoredPath": self_vendored,
         "language": "Gizmo",
         "sizeBand": "large",
         "role": "src",
@@ -119,13 +120,14 @@ def build_valid_corpus(tmp_path: Path) -> tuple[dict, Path]:
 
     # A self src/test pair (the swapped-in Gizmo self file).
     self_test_rel = "tests/Widgets/BigGizmoTests.cs"
-    self_test_data = _write(root / self_test_rel, 10)
+    self_test_vendored = f"{CODE_CORPUS_DIR}/files/self/{self_test_rel}"
+    self_test_data = _write(root / self_test_vendored, 10)
     rows.append({
         "family": "self",
         "repo": "self",
         "sha": None,
         "path": self_test_rel,
-        "vendoredPath": None,
+        "vendoredPath": self_test_vendored,
         "language": "Gizmo",
         "sizeBand": None,
         "role": "test",
@@ -197,7 +199,7 @@ class TestSha256MatchesBytes:
     def test_self_file_sha_is_also_checked(self, tmp_path):
         manifest, root = build_valid_corpus(tmp_path)
         target = next(row for row in manifest["files"] if row["family"] == "self" and row["role"] == "src")
-        path = root / target["path"]
+        path = root / target["vendoredPath"]
         data = bytearray(path.read_bytes())
         data[0] ^= 0xFF
         path.write_bytes(bytes(data))
@@ -251,3 +253,17 @@ class TestHeldOutFamilyCount:
 
 def test_size_bands_constant_matches_the_plan():
     assert SIZE_BANDS == {"small": (20, 80), "medium": (150, 400), "large": (600, 1500)}
+
+
+def test_a_row_without_a_snapshot_under_files_is_rejected(tmp_path):
+    """A live repo path drifts the moment someone edits it; every row must be a frozen copy."""
+    manifest, root = build_valid_corpus(tmp_path)
+    row = next(r for r in manifest["files"] if r["family"] == "self")
+    live = root / row["path"]
+    live.parent.mkdir(parents=True, exist_ok=True)
+    live.write_bytes((root / row["vendoredPath"]).read_bytes())
+    row["vendoredPath"] = None
+
+    problems = validate_manifest(manifest, root)
+
+    assert any("vendoredPath" in p and row["path"] in p for p in problems), problems
