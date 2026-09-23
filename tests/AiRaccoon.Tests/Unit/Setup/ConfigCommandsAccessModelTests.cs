@@ -50,7 +50,7 @@ public class ConfigCommandsAccessModelTests
 
         var (exit, _, err) = await Run(["settings", "access", "default", "set", "bogus"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("bogus");
         store.Settings.ShouldNotContainKey("access.mode.global");
     }
@@ -426,8 +426,8 @@ public class ConfigCommandsAccessModelTests
     {
         // A CommandPath the switch doesn't recognize but with no parse errors: only reachable
         // today via a CliCommandTree entry missing its ConfigCommands switch arm, not via real
-        // user input (System.CommandLine would report a parse error first, and ConfigCommands
-        // trusts that CliRendering already rendered it -- see ParseErrorPath_ReturnsInvalidArgumentWithoutPrinting).
+        // user input (System.CommandLine would report a parse error first, and AppRunner returns on it
+        // before dispatch -- see AParseError_NeverReachesTheDispatcher).
         var store = new FakeConfigStore();
         CliArgs.TryParse(["settings", "access", "default", "show"], out var validParse);
         var parsed = validParse! with { CommandPath = ["totally", "bogus"], Errors = [] };
@@ -437,26 +437,28 @@ public class ConfigCommandsAccessModelTests
         var exit = await TestData.CreateConfigCommands(store)
             .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.CommandFailed, "a missing switch arm is a bug, not a bad argument");
+        exit.ShouldBe(ErrorCode.Internal.UnhandledCommand, "a missing switch arm is a bug, not a bad argument");
         stderr.ToString().ShouldContain("unhandled command");
     }
 
-    /// <summary>UX-F4: ConfigCommands must not re-print a parse-level error -- CliRendering
-    /// already rendered cliInput.Errors before dispatch (AppRunner.GetCliInput); dispatching
-    /// anyway would throw reading an argument System.CommandLine never bound.</summary>
+    /// <summary>UX-F4: a parse error is rendered once by AppRunner and never dispatched, so
+    /// ConfigCommands needs no parse-error guard of its own.</summary>
     [Fact]
-    public async Task ParseErrorPath_ReturnsInvalidArgumentWithoutPrinting()
+    public async Task AParseError_NeverReachesTheDispatcher()
     {
-        var store = new FakeConfigStore();
-        CliArgs.TryParse(["settings", "access"], out var parsed); // "access" alone: SCL reports "Required command was not provided."
-        parsed!.Errors.ShouldNotBeEmpty();
+        var dataRoot = TestData.CreateTempRoot("ai-raccoon-parse-error");
+        try
+        {
+            var runner = new AppRunner((_, _, _) => throw new InvalidOperationException("a parse error must not acquire a settings server"), "dotnet");
 
-        var stdout = new StringWriter();
-        var stderr = new StringWriter();
-        var exit = await TestData.CreateConfigCommands(store)
-            .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
+            var exit = await runner.Run(["--data-root", dataRoot, "settings", "access"]);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
-        stderr.ToString().ShouldBeEmpty();
+            exit.ShouldBe(ErrorCode.Usage.Unparseable);
+            runner.ShutdownCancellationRegistrations.ShouldBe(0, "a dispatched command wires shutdown cancellation; a parse error must not");
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
     }
 }

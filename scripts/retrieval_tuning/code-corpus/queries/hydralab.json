@@ -1,0 +1,191 @@
+[
+  {
+    "id": "hydralab-001",
+    "category": "behaviour-nl",
+    "query": "converting android memory samples from kilobytes to megabytes while zeroing out any metric reported as a sentinel value of negative one",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "large",
+    "family": "hydralab",
+    "expectedSource": "hydralab/react/src/component/PerfTestDashboard.jsx",
+    "expectedLines": [
+      199,
+      216
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "hydralab-002",
+    "category": "identifier-fragment",
+    "query": "csv export metrics performance",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "large",
+    "family": "hydralab",
+    "expectedSource": "hydralab/react/src/component/PerfTestDashboard.jsx",
+    "expectedLines": [
+      473,
+      492
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "easy"
+  },
+  {
+    "id": "hydralab-003",
+    "category": "path-context",
+    "query": "deep in the performance dashboard's history renderer, picking the right unit conversion for a metric based on which parser produced the historical record",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "large",
+    "family": "hydralab",
+    "expectedSource": "hydralab/react/src/component/PerfTestDashboard.jsx",
+    "expectedLines": [
+      402,
+      435
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "hydralab-004",
+    "category": "behaviour-nl",
+    "query": "grouping device test runs into chunks of four failed devices per row versus six successful devices per row for the results grid layout",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "large",
+    "family": "hydralab",
+    "expectedSource": "hydralab/react/src/component/TestReportView.jsx",
+    "expectedLines": [
+      170,
+      187
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "hydralab-005",
+    "category": "identifier-fragment",
+    "query": "pie label percent angle radius",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "large",
+    "family": "hydralab",
+    "expectedSource": "hydralab/react/src/component/TestReportView.jsx",
+    "expectedLines": [
+      53,
+      64
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "hydralab-006",
+    "category": "path-context",
+    "query": "far down the failed-devices grid, marking a device's test name red when it matches one of the three most common failure titles across the run",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "large",
+    "family": "hydralab",
+    "expectedSource": "hydralab/react/src/component/TestReportView.jsx",
+    "expectedLines": [
+      343,
+      352
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  },
+  {
+    "id": "hydralab-007",
+    "category": "behaviour-nl",
+    "query": "picking which physical devices are selectable for a run by filtering the device list to Apple hardware for ipa or zip-with-xctest packages, and to Windows otherwise",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "large",
+    "family": "hydralab",
+    "expectedSource": "hydralab/react/src/component/RunnerView.jsx",
+    "expectedLines": [
+      854,
+      868
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "hydralab-008",
+    "category": "identifier-fragment",
+    "query": "select agent devices runnable",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "large",
+    "family": "hydralab",
+    "expectedSource": "hydralab/react/src/component/RunnerView.jsx",
+    "expectedLines": [
+      870,
+      943
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "hydralab-009",
+    "category": "path-context",
+    "query": "well past the run-test dialog's device picker, toggling one entry in or out of a multi-device selection set by removing it if already present else appending it",
+    "kind": "code",
+    "language": "JSX",
+    "sizeBand": "large",
+    "family": "hydralab",
+    "expectedSource": "hydralab/react/src/component/RunnerView.jsx",
+    "expectedLines": [
+      945,
+      960
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  }
+]

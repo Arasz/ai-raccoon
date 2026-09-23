@@ -19,15 +19,17 @@ public sealed record BuildStamp(string Version, string Commit, DateTimeOffset? C
         return new BuildStamp(version, commit, ParseCommitTimestamp(commitTimestampText));
     }
 
-    private static (string Version, string Commit) SplitInformationalVersion(string? informationalVersion)
+    private static VersionParts SplitInformationalVersion(string? informationalVersion)
     {
         if (string.IsNullOrEmpty(informationalVersion))
         {
-            return (string.Empty, UnknownCommit);
+            return new VersionParts(string.Empty, UnknownCommit);
         }
 
         var parts = informationalVersion.Split('+', 2);
-        return parts.Length == 2 && parts[1].Length > 0 ? (parts[0], parts[1]) : (parts[0], UnknownCommit);
+        return parts.Length == 2 && parts[1].Length > 0
+            ? new VersionParts(parts[0], parts[1])
+            : new VersionParts(parts[0], UnknownCommit);
     }
 
     private static DateTimeOffset? ParseCommitTimestamp(string? text) =>
@@ -35,4 +37,6 @@ public sealed record BuildStamp(string Version, string Commit, DateTimeOffset? C
         DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
             ? parsed
             : null;
+
+    private readonly record struct VersionParts(string Version, string Commit);
 }

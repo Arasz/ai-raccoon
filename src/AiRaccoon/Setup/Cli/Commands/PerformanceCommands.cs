@@ -18,14 +18,14 @@ public sealed class PerformanceCommands
         if (!int.TryParse(raw, out var parsed) || parsed <= 0)
         {
             await streams.WriteErrorLineAsync("ai-raccoon: buffer capacity must be a positive number of measurements");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         if (parsed > MetricsConfigKeys.MaxBufferCapacity)
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: buffer capacity must be at most {MetricsConfigKeys.MaxBufferCapacity} measurements");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(MetricsConfigKeys.BufferCapacityGlobal, parsed.ToString(), cancellationToken);
@@ -41,7 +41,7 @@ public sealed class PerformanceCommands
         if (!int.TryParse(raw, out var parsed) || parsed <= 0)
         {
             await streams.WriteErrorLineAsync("ai-raccoon: flush interval must be a positive number of seconds");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(MetricsConfigKeys.FlushIntervalSecondsGlobal, parsed.ToString(), cancellationToken);
@@ -56,14 +56,14 @@ public sealed class PerformanceCommands
         if (!int.TryParse(raw, out var parsed) || parsed <= 0)
         {
             await streams.WriteErrorLineAsync("ai-raccoon: retention must be a positive number of days");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         if (parsed > MetricsConfigKeys.MaxRetentionDays)
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: retention must be at most {MetricsConfigKeys.MaxRetentionDays} days");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(MetricsConfigKeys.RetentionDaysGlobal, parsed.ToString(), cancellationToken);

@@ -103,7 +103,7 @@ public sealed class LazyServerSettingsStoreTests
     public async Task AFailingAcquire_PropagatesToTheCaller()
     {
         var store = new LazyServerSettingsStore(_ =>
-            Task.FromException<ISettingsStore>(new SettingsServerUnavailableException("no server")));
+            Task.FromException<ISettingsStore>(new SettingsServerUnavailableException(ErrorCode.Reach.Unavailable, "no server")));
 
         await Should.ThrowAsync<SettingsServerUnavailableException>(() => store.GetSettingAsync("k", TestContext.Current.CancellationToken));
     }

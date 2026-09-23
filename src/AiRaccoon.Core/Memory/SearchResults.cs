@@ -64,19 +64,19 @@ public sealed record SearchTimings(
     public static IReadOnlyList<string> SeriesNames { get; } = [.. PhaseNames, TotalName];
 
     /// <summary>This instance's phases as name/value pairs, in the same order as <see cref="PhaseNames" />.</summary>
-    public IReadOnlyList<(string Name, TimeSpan Value)> Phases() =>
+    public IReadOnlyList<PhaseTiming> Phases() =>
     [
-        (PhaseNames[0], Open),
-        (PhaseNames[1], Embed),
-        (PhaseNames[2], Fts),
-        (PhaseNames[3], Vector),
-        (PhaseNames[4], Fusion),
-        (PhaseNames[5], Merge),
-        (PhaseNames[6], Adjustment),
-        (PhaseNames[7], Snippets),
-        (PhaseNames[8], Bump)
+        new(PhaseNames[0], Open),
+        new(PhaseNames[1], Embed),
+        new(PhaseNames[2], Fts),
+        new(PhaseNames[3], Vector),
+        new(PhaseNames[4], Fusion),
+        new(PhaseNames[5], Merge),
+        new(PhaseNames[6], Adjustment),
+        new(PhaseNames[7], Snippets),
+        new(PhaseNames[8], Bump)
     ];
 
     /// <summary>This instance's series as name/value pairs — <see cref="Phases" /> plus <see cref="Total" /> under <see cref="TotalName" /> — mirroring <see cref="FusionDiff.Measurements" />.</summary>
-    public IReadOnlyList<(string Name, TimeSpan Value)> Measurements() => [.. Phases(), (TotalName, Total)];
+    public IReadOnlyList<PhaseTiming> Measurements() => [.. Phases(), new(TotalName, Total)];
 }

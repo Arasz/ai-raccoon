@@ -3,6 +3,14 @@
 # review from claude[bot]: APPROVE when nothing blocks the merge, otherwise
 # REQUEST_CHANGES, which also withdraws an approval an earlier push earned.
 #
+# The reviewer loads the plugins the team uses locally (review agents, the
+# ai-badger checklists, .NET skills).
+#
+# .github/scripts/claude-review-gate.sh decides whether a push is reviewed: a PR
+# Claude approved is not reviewed again, an open change request always is, and
+# otherwise a diff of 50 changed lines or fewer is skipped. Claude never fails
+# the job: a failed run or a missing verdict is a warning.
+#
 # Needs the Claude GitHub App installed on the repo and one secret:
 # CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`) or ANTHROPIC_API_KEY.
 # Without either, the job skips with a notice instead of failing.
@@ -23,7 +31,7 @@ jobs:
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       pull-requests: write
@@ -51,11 +59,41 @@ jobs:
         with:
           fetch-depth: 1
 
-      - uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
+      - name: Decide whether this push needs a review
+        id: gate
         if: steps.auth.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json additions,deletions,reviews \
+            | .github/scripts/claude-review-gate.sh | tee -a "$GITHUB_OUTPUT"
+
+      - name: Note a skipped review
+        if: steps.gate.outputs.review == 'false'
+        env:
+          REASON: ${{ steps.gate.outputs.reason }}
+        run: |
+          echo "::notice::Claude review skipped: $REASON."
+
+      - uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
+        id: review
+        if: steps.gate.outputs.review == 'true'
+        # A failed Claude run is reported by the next step, never as a failed job.
+        continue-on-error: true
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          plugin_marketplaces: |
+            https://github.com/anthropics/claude-plugins-official.git
+            https://github.com/Arasz/ai-badger.git
+            https://github.com/codewithmukesh/dotnet-claude-kit.git
+            https://github.com/dotnet/skills.git
+          plugins: |
+            pr-review-toolkit@claude-plugins-official
+            ai-badger@ai-badger
+            dotnet-claude-kit@dotnet-claude-kit
+            dotnet-test@dotnet-agent-skills
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -81,5 +119,22 @@ jobs:
                  `gh pr review ${{ github.event.pull_request.number }} --request-changes --body "<blocking findings>"`
                Start the body with "Reviewed <HEAD SHA>".
           claude_args: |
-            --max-turns 60
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Read,Grep,Glob"
+            --max-turns 150
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Read,Grep,Glob,Skill,Agent"
+
+      - name: Report the verdict for the head commit
+        if: steps.gate.outputs.review == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          posted=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json reviews \
+            --jq '[.reviews[] | select(.body | startswith("Reviewed " + env.SHA))] | length')
+          if [ "$posted" -gt 0 ]; then
+            if [ "${{ steps.review.outcome }}" = "failure" ]; then
+              echo "::notice::The review run stopped early, after posting its verdict for $SHA."
+            fi
+          else
+            echo "::warning::No review verdict was posted for $SHA (review step: ${{ steps.review.outcome }}); the review was skipped."
+          fi

@@ -141,6 +141,8 @@ public sealed partial class EmbeddingService(
             return query;
         }
 
+        query = ManifestDescriptorFor(settings.Model)?.QueryInstruction + query;
+
         var manifestBudget = ManifestContentBudget(settings.Model);
         if (manifestBudget is not null)
         {
@@ -271,6 +273,16 @@ public sealed partial class EmbeddingService(
     ///     re-download with new weights changes the file hashes, so the fingerprint changes and the
     ///     re-embed fires. Bundled and legacy-file identities are unchanged.
     /// </summary>
+    /// <inheritdoc />
+    public string DocumentText(EmbeddingSettings settings, string text)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(text);
+        return string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase)
+            ? ManifestDescriptorFor(settings.Model)?.DocumentInstruction + text
+            : text;
+    }
+
     public string EngineFingerprint(string provider, string? model, string? baseUrl)
     {
         var lower = provider.ToLowerInvariant();
@@ -327,8 +339,8 @@ public sealed partial class EmbeddingService(
     internal static string ThreadCountDisplay(int threads) => threads == 0 ? "ORT default" : threads.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>WP4/G4: the resolved count and its source for `embedding.threads`, in one place — doctor and settings both derived this ternary independently before.</summary>
-    internal static (int Threads, string Source) ResolveThreadCountForDisplay(string? rawSetting) =>
-        (TryParseThreadsSetting(rawSetting, out var explicitThreads)
+    internal static ResolvedThreadCount ResolveThreadCountForDisplay(string? rawSetting) =>
+        new(TryParseThreadsSetting(rawSetting, out var explicitThreads)
             ? explicitThreads
             : HalvedCoreThreadDefault(Environment.ProcessorCount), ThreadCountSource(rawSetting));
 

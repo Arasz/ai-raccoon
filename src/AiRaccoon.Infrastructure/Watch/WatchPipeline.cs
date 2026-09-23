@@ -55,8 +55,8 @@ public sealed partial class WatchPipeline(
 {
     private readonly Channel<WatchEvent> _events = Channel.CreateUnbounded<WatchEvent>();
     private readonly Lock _gate = new();
-    private readonly Dictionary<(string ProjectId, string Path), WatchEvent> _pending = new(WatchKeyComparer.Instance);
-    private readonly Dictionary<(string ProjectId, string Path), WatchRuntimeState> _runtime = new(WatchKeyComparer.Instance);
+    private readonly Dictionary<WatchKey, WatchEvent> _pending = new();
+    private readonly Dictionary<WatchKey, WatchRuntimeState> _runtime = new();
     private readonly Dictionary<string, List<string>> _watchPathsByProject = new(StringComparer.Ordinal);
     public static TimeSpan TickInterval { get; } = TimeSpan.FromSeconds(1);
 
@@ -84,7 +84,7 @@ public sealed partial class WatchPipeline(
         var normalized = IngestPath.Normalize(path);
         lock (_gate)
         {
-            if (_runtime.TryAdd((projectId, normalized), new WatchRuntimeState(WatchState.Scanning, null, null)))
+            if (_runtime.TryAdd(new WatchKey(projectId, normalized), new WatchRuntimeState(WatchState.Scanning, null, null)))
             {
                 if (!_watchPathsByProject.TryGetValue(projectId, out var watches))
                 {
@@ -106,7 +106,7 @@ public sealed partial class WatchPipeline(
         var normalized = IngestPath.Normalize(path);
         lock (_gate)
         {
-            _runtime.Remove((projectId, normalized));
+            _runtime.Remove(new WatchKey(projectId, normalized));
             if (_watchPathsByProject.TryGetValue(projectId, out var watches))
             {
                 watches.Remove(normalized);
@@ -131,9 +131,9 @@ public sealed partial class WatchPipeline(
         var normalized = IngestPath.Normalize(path);
         lock (_gate)
         {
-            if (_runtime.TryGetValue((projectId, normalized), out var current))
+            if (_runtime.TryGetValue(new WatchKey(projectId, normalized), out var current))
             {
-                _runtime[(projectId, normalized)] = current with { State = WatchState.Scanning, LastError = null };
+                _runtime[new WatchKey(projectId, normalized)] = current with { State = WatchState.Scanning, LastError = null };
             }
         }
     }
@@ -180,7 +180,7 @@ public sealed partial class WatchPipeline(
         {
             lock (_gate)
             {
-                _pending[(evt.ProjectId, evt.Path)] = evt;
+                _pending[new WatchKey(evt.ProjectId, evt.Path)] = evt;
             }
         }
 
@@ -234,9 +234,9 @@ public sealed partial class WatchPipeline(
             {
                 // A job dispatched before UnregisterWatch removed the entry must not resurrect it
                 // (D21): only update state for a watch that is still registered.
-                if (_runtime.ContainsKey((evt.ProjectId, job.WatchPath)))
+                if (_runtime.ContainsKey(new WatchKey(evt.ProjectId, job.WatchPath)))
                 {
-                    _runtime[(evt.ProjectId, job.WatchPath)] =
+                    _runtime[new WatchKey(evt.ProjectId, job.WatchPath)] =
                         new WatchRuntimeState(WatchState.Healthy, null, timeProvider.GetUtcNow());
                 }
             }
@@ -251,9 +251,9 @@ public sealed partial class WatchPipeline(
             lock (_gate)
             {
                 // Same rule on the failure path: a removed watch stays removed.
-                if (_runtime.TryGetValue((evt.ProjectId, job.WatchPath), out var current))
+                if (_runtime.TryGetValue(new WatchKey(evt.ProjectId, job.WatchPath), out var current))
                 {
-                    _runtime[(evt.ProjectId, job.WatchPath)] = current with { State = state, LastError = ex.Message };
+                    _runtime[new WatchKey(evt.ProjectId, job.WatchPath)] = current with { State = state, LastError = ex.Message };
                 }
             }
         }

@@ -1,5 +1,6 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.CommandLine;
+using System.Net;
 using AiRaccoon.Infrastructure.Assets;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Embedding.Download;
@@ -78,32 +79,45 @@ internal sealed class ModelDownloadCommands(
             if (dryRun)
             {
                 await PrintPlanAsync(result.Plan, streams).ConfigureAwait(false);
-                return ExitCode.Success;
+                return ErrorCode.Ok.Success;
             }
 
             await streams.WriteOutputLineAsync(
                 $"downloaded {repoId}@{revision} to {targetDir} ({result.DownloadedFiles.Count} file(s)); {EmbeddingManifest.FileName} written. " +
                 (activationHint ? $"Activate with 'ai-raccoon model embedding set local {targetDir}' (or 'ai-raccoon model code set local {targetDir}'). " : string.Empty) +
                 "Trust note: the SHA-256 pins were captured from Hugging Face's LFS oids before download — the first pin trusts the channel once; registry pins are the reviewed tier (plan D8).");
-            return ExitCode.Success;
+            return ErrorCode.Ok.Success;
         }
-        catch (ModelDownloadRejectedException ex)
-        {
-            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}").ConfigureAwait(false);
-            return ExitCode.InvalidArgument;
-        }
-        catch (ModelDownloadPlanException ex)
-        {
-            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}").ConfigureAwait(false);
-            return ExitCode.InvalidArgument;
-        }
-        catch (Exception ex) when (ex is ModelDownloadException or HfApiException or OnnxProbeException or HttpRequestException
+        catch (Exception ex) when (ex is ModelDownloadRejectedException or ModelDownloadPlanException or ModelDownloadException
+                                       or HfApiException or OnnxProbeException or HttpRequestException
                                    || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}").ConfigureAwait(false);
-            return ExitCode.ModelDownloadFailed;
+            return FailureCode(ex);
         }
     }
+
+    /// <summary>The Model case a failed download names; anything before a plan exists is the hub being unreachable.</summary>
+    private static int FailureCode(Exception ex) =>
+        ex switch
+        {
+            ModelDownloadRejectedException { Rejection: ModelDownloadRejection.DiskFull } => ErrorCode.Environment.DiskFull,
+            ModelDownloadRejectedException => ErrorCode.Usage.ConfirmationDeclined,
+            ModelDownloadPlanException => ErrorCode.Model.RepoUnsupported,
+            ModelDownloadException download => download.Failure switch
+            {
+                ModelDownloadFailure.ChecksumMismatch => ErrorCode.Model.ChecksumMismatch,
+                ModelDownloadFailure.RuntimeRejected => ErrorCode.Model.RuntimeRejected,
+                ModelDownloadFailure.Unplannable => ErrorCode.Model.RepoUnsupported,
+                ModelDownloadFailure.ManifestBug => ErrorCode.Internal.ManifestBug,
+                _ => ErrorCode.Model.DownloadFailed
+            },
+            HfApiException { StatusCode: null } => ErrorCode.Model.RepoUnsupported,
+            HfApiException { StatusCode: >= HttpStatusCode.InternalServerError or HttpStatusCode.TooManyRequests } => ErrorCode.Model.HubUnreachable,
+            HfApiException => ErrorCode.Model.RepoNotFound,
+            OnnxProbeException => ErrorCode.Model.RuntimeRejected,
+            _ => ErrorCode.Model.HubUnreachable
+        };
 
     /// <summary>Prompts on stderr (stdout stays parseable) and reads the answer from stdin;
     /// EOF or anything but y/yes refuses the download.</summary>

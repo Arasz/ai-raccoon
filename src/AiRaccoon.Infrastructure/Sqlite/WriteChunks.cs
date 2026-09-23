@@ -14,7 +14,7 @@ internal static class WriteChunks
 {
     public static async Task InsertAsync(SqliteConnection connection, string hash, string path, string chunk,
         MemorySource source, MemoryWriteRequest request,
-        (string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId) bucket, long now,
+        BucketColumns bucket, long now,
         CancellationToken cancellationToken)
     {
         var exists = await connection.ExecuteScalarAsync<long?>(

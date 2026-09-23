@@ -34,7 +34,7 @@ public sealed class SqliteNoiseEntryStore(ISqliteConnectionFactory factory) : IN
     public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await connection.QueryAsync<(string Policy, int Count)>(
+        var rows = await connection.QueryAsync<PolicyCount>(
                 new CommandDefinition(NoiseEntrySql.CountByPolicy, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
 
@@ -57,5 +57,14 @@ public sealed class SqliteNoiseEntryStore(ISqliteConnectionFactory factory) : IN
         return await connection.ExecuteAsync(
                 new CommandDefinition(NoiseEntrySql.DeleteExpired, new { Now = nowUnixSeconds }, cancellationToken: cancellationToken))
             .ConfigureAwait(false);
+    }
+
+    // A plain class, not a record: SQLite's count(*) comes back Int64, and Dapper's constructor
+    // matching requires an exact-type match against an `int` — property-set materialization tolerates it.
+    private sealed class PolicyCount
+    {
+        public string Policy { get; set; } = "";
+
+        public int Count { get; set; }
     }
 }

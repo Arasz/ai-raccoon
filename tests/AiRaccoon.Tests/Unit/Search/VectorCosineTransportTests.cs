@@ -49,9 +49,9 @@ public sealed class VectorCosineTransportTests
     {
         var built = SqliteMemoryStore.BuildDualVectorResults(
         [
-            (Row: Row("h1"), Score: 0.95, ContentCosine: 0.8),
-            (Row: Row("h2"), Score: 0.0, ContentCosine: 0.0),
-            (Row: Row("h3"), Score: -0.4, ContentCosine: -0.6),
+            new SqliteMemoryStore.RankedVectorRow(Row("h1"), 0.95, 0.8),
+            new SqliteMemoryStore.RankedVectorRow(Row("h2"), 0.0, 0.0),
+            new SqliteMemoryStore.RankedVectorRow(Row("h3"), -0.4, -0.6),
         ]);
 
         built.Select(candidate => candidate.Hash).ShouldBe(["h1", "h2", "h3"]);
@@ -107,7 +107,7 @@ public sealed class VectorCosineTransportTests
             ["h3"] = Row("h3"),
         };
         var built = SqliteMemoryStore.BuildDualVectorResults(
-            [.. fused.Select(rank => (Row: rowsByHash[rank.Hash], rank.Score, ContentCosine: (double?)contentCosineByHash[rank.Hash]))]);
+            [.. fused.Select(rank => new SqliteMemoryStore.RankedVectorRow(rowsByHash[rank.Hash], rank.Score, contentCosineByHash[rank.Hash]))]);
         foreach (var candidate in built)
         {
             candidate.Ranking.ShouldBe(scoreByHash[candidate.Hash], "the fused score still orders candidates, unchanged by this fix");
@@ -169,9 +169,12 @@ public sealed class VectorCosineTransportTests
         fusedScore.ShouldBe(contentCosine / 2, Tolerance);
 
         var built = SqliteMemoryStore.BuildDualVectorResults(
-        [(Row: new SqliteMemoryStore.VectorRow { Hash = "near", Path = "near.md", Value = "value near", Distance = distance },
-              Score: fusedScore,
-              ContentCosine: StructureFusion.SimFromDistance(distance))]);
+        [
+            new SqliteMemoryStore.RankedVectorRow(
+                new SqliteMemoryStore.VectorRow { Hash = "near", Path = "near.md", Value = "value near", Distance = distance },
+                fusedScore,
+                StructureFusion.SimFromDistance(distance))
+        ]);
 
         var searchResults = new SearchResults();
         searchResults.AddResults(

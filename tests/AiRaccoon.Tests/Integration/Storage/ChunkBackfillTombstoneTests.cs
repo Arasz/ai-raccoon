@@ -46,8 +46,8 @@ public sealed class ChunkBackfillTombstoneTests : IDisposable
         var hash = ContentHash.Of(Path, value);
         await using var connection = await OpenSeededAsync(Path, hash, value);
 
-        await new ChunkBackfill(TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
-                TestData.CreateEmbeddingService())
+        await new ChunkBackfill(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+                TestData.RealPlainTextChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService())
             .RunAsync(connection, dryRun: false, TestContext.Current.CancellationToken);
 
         (await TombstoneCountAsync(connection, hash)).ShouldBe(1,
@@ -71,8 +71,8 @@ public sealed class ChunkBackfillTombstoneTests : IDisposable
         var hash = ContentHash.Of(Path, value);
         await using var connection = await OpenSeededAsync(Path, hash, value);
 
-        await new ChunkBackfill(new ReprintingChunker(value), new FakeTimeProvider(FixedNow),
-                TestData.CreateEmbeddingService())
+        await new ChunkBackfill(TestData.RealFileTypeMatcher(new ReprintingChunker(value)), TestData.RealMarkdownChunker(),
+                TestData.RealPlainTextChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService())
             .RunAsync(connection, dryRun: false, TestContext.Current.CancellationToken);
 
         (await connection.ExecuteScalarAsync<long>(

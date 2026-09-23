@@ -11,7 +11,7 @@ public sealed class WatchScheduler : IWatchScheduler
     private const int MaxConcurrency = 16;
     private readonly Lock _gate = new();
 
-    private readonly Dictionary<string, (SemaphoreSlim Gate, int Limit)> _projectGates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ProjectGate> _projectGates = new(StringComparer.Ordinal);
 
     public async Task RunBatchAsync(
         IReadOnlyList<WatchJob> jobs,
@@ -101,8 +101,10 @@ public sealed class WatchScheduler : IWatchScheduler
             // A changed limit (watch concurrency set between batches) replaces the gate —
             // the next batch runs at the new concurrency, not the first batch's limit.
             var gate = new SemaphoreSlim(limit, limit);
-            _projectGates[projectId] = (gate, limit);
+            _projectGates[projectId] = new ProjectGate(gate, limit);
             return gate;
         }
     }
+
+    private readonly record struct ProjectGate(SemaphoreSlim Gate, int Limit);
 }

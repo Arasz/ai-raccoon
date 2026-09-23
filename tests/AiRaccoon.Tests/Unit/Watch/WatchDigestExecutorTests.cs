@@ -41,7 +41,7 @@ public sealed class WatchDigestExecutorTests
         queued.Corpus.ShouldBe(EmbedCorpus.Memory);
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBe(
             WatchDigestExecutor.ComputeHash(file, "hello"));
-        stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBe(
+        stack.Store.Watches[new WatchKey(Project, dir.Path)].LastChangeTs.ShouldBe(
             WatchTestStack.FixedNow.ToUnixTimeSeconds());
     }
 
@@ -334,7 +334,7 @@ public sealed class WatchDigestExecutorTests
 
         stack.Memory.Ingested.ShouldBeEmpty();
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
-        stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBe(WatchTestStack.FixedNow.ToUnixTimeSeconds());
+        stack.Store.Watches[new WatchKey(Project, dir.Path)].LastChangeTs.ShouldBe(WatchTestStack.FixedNow.ToUnixTimeSeconds());
     }
 
     [Fact]
@@ -455,7 +455,7 @@ public sealed class WatchDigestExecutorTests
         stack.Memory.Ingested.ShouldBeEmpty();
         stack.Memory.DeletedPaths.ShouldContain((Project, file));
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
-        stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBe(WatchTestStack.FixedNow.ToUnixTimeSeconds());
+        stack.Store.Watches[new WatchKey(Project, dir.Path)].LastChangeTs.ShouldBe(WatchTestStack.FixedNow.ToUnixTimeSeconds());
     }
 
     /// <summary>Negative control for the exclusion gate: an ordinary sibling still ingests.</summary>

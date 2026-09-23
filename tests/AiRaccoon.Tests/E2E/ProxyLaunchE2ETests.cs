@@ -129,11 +129,11 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
                 ["--data-root", root, "--port", port.ToString(CultureInfo.InvariantCulture)],
                 HardCap, TestContext.Current.CancellationToken);
 
-            run.ExitCode.ShouldBe(ExitCode.ProxyBackendUnavailable);
+            run.ExitCode.ShouldBe(ErrorCode.Reach.BackendUnavailable);
             // Attach-or-start: nothing listened, so the launch tried the configured port and the
             // spawned `serve` could not open the bank there.
             run.Stderr.ShouldContain("no MCP backend at");
-            run.Stderr.ShouldContain($"serve exit {ExitCode.FailedToOpenEncryptedBank}");
+            run.Stderr.ShouldContain($"serve exit {ErrorCode.Bank.Corrupted}");
             run.Stderr.ShouldContain("no in-process fallback exists");
             run.Stderr.ShouldContain("ai-raccoon serve --port");
         }

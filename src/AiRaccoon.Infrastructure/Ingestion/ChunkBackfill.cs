@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
@@ -18,10 +19,17 @@ public sealed record ChunkBackfillReport(
 
 /// <summary>
 ///     WP3 step 4: splits rows holding more text than the embedding window into in-budget pieces.
-///     Operates on each row's own stored value — it never reads the source file (docs/adr/0069).
-///     Budget AND counter resolve through <see cref="IEmbeddingService" /> (D9/ADR-0036).
+///     Chunker follows the row's own source_file: a file row's own handler, plain text when no
+///     handler owns its extension, markdown for a memory_write note. Never reads the source file
+///     itself (docs/adr/0069); budget AND counter resolve through <see cref="IEmbeddingService" />
+///     (D9/ADR-0036).
 /// </summary>
-public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timeProvider, IEmbeddingService embeddingService)
+public sealed class ChunkBackfill(
+    IFileTypeMatcher fileTypeMatcher,
+    IMarkdownChunker noteChunker,
+    IPlainTextChunker fallbackChunker,
+    TimeProvider timeProvider,
+    IEmbeddingService embeddingService)
 {
     public async Task<ChunkBackfillReport> RunAsync(SqliteConnection connection, bool dryRun,
         CancellationToken cancellationToken = default)
@@ -49,7 +57,7 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         foreach (var row in rows.Where(r => countTokens(r.Value) > budget))
         {
-            var split = chunker.Chunk(row.Value, budget, overlay, countTokens);
+            var split = ResolveChunker(row).Chunk(row.Value, budget, overlay, countTokens);
             // A single piece means the chunker could not split it — replacing one over-window row
             // with one identical over-window row is churn, not a fix, so leave it and let the
             // report's own count show it was not fixed.
@@ -176,6 +184,19 @@ public sealed class ChunkBackfill(IMarkdownChunker chunker, TimeProvider timePro
             ? new TokenCount(embeddingService.ResolveTokenizer(settings)!.CountTokens)
             : new TokenCount(new O200kTokenizer().CountTokens);
         return new ChunkBudget(budget, overlay, countTokens);
+    }
+
+    /// <summary>A memory_write note — no source_file, or a citation that does not name this row's
+    /// own path — chunks as markdown; a file row chunks with its extension's own handler, or the
+    /// plain-text fallback when no handler owns it.</summary>
+    private IChunker ResolveChunker(Row row)
+    {
+        if (string.IsNullOrWhiteSpace(row.SourceFile) || !string.Equals(row.Path, row.SourceFile, StringComparison.Ordinal))
+        {
+            return noteChunker;
+        }
+
+        return fileTypeMatcher.TryGetHandler(row.SourceFile, out var handler) ? handler.Chunker : fallbackChunker;
     }
 
     private sealed record Row(

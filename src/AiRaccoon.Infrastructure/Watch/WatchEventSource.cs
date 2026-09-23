@@ -16,15 +16,13 @@ public sealed partial class WatchEventSource(
     Action<WatchEventError> onError,
     ILogger<WatchEventSource> logger) : IDisposable
 {
-    // File-mode registrations: (projectId, registeredPath) → the watched file. FileSystemWatcher
+    // File-mode registrations: WatchKey(projectId, registeredPath) → the watched file. FileSystemWatcher
     // requires a directory, so the watcher sits on the parent; Translate filters to this file.
-    private readonly Dictionary<(string ProjectId, string Path), string> _fileTargets =
-        new(WatchKeyComparer.Instance);
+    private readonly Dictionary<WatchKey, string> _fileTargets = new();
 
     private readonly object _gate = new();
 
-    private readonly Dictionary<(string ProjectId, string Path), FileSystemWatcher> _watchers =
-        new(WatchKeyComparer.Instance);
+    private readonly Dictionary<WatchKey, FileSystemWatcher> _watchers = new();
 
     public void Dispose() => StopAll();
 
@@ -39,7 +37,7 @@ public sealed partial class WatchEventSource(
 
         lock (_gate)
         {
-            if (_watchers.ContainsKey((projectId, normalized)))
+            if (_watchers.ContainsKey(new WatchKey(projectId, normalized)))
             {
                 return;
             }
@@ -85,10 +83,10 @@ public sealed partial class WatchEventSource(
                 watcher.Renamed += (_, e) => HandleRenamed(projectId, normalized, e);
                 watcher.Error += (_, e) => HandleError(projectId, normalized, e);
                 watcher.EnableRaisingEvents = true;
-                _watchers[(projectId, normalized)] = watcher;
+                _watchers[new WatchKey(projectId, normalized)] = watcher;
                 if (fileTarget is not null)
                 {
-                    _fileTargets[(projectId, normalized)] = fileTarget;
+                    _fileTargets[new WatchKey(projectId, normalized)] = fileTarget;
                 }
             }
             catch (Exception ex)
@@ -108,8 +106,8 @@ public sealed partial class WatchEventSource(
 
         lock (_gate)
         {
-            _fileTargets.Remove((projectId, normalized));
-            if (_watchers.Remove((projectId, normalized), out var watcher))
+            _fileTargets.Remove(new WatchKey(projectId, normalized));
+            if (_watchers.Remove(new WatchKey(projectId, normalized), out var watcher))
             {
                 watcher.Dispose();
             }
@@ -139,7 +137,7 @@ public sealed partial class WatchEventSource(
 
         lock (_gate)
         {
-            return _watchers.ContainsKey((projectId, normalized));
+            return _watchers.ContainsKey(new WatchKey(projectId, normalized));
         }
     }
 
@@ -162,7 +160,7 @@ public sealed partial class WatchEventSource(
             string? fileTarget;
             lock (_gate)
             {
-                fileTarget = _fileTargets.GetValueOrDefault((projectId, watchPath));
+                fileTarget = _fileTargets.GetValueOrDefault(new WatchKey(projectId, watchPath));
             }
 
             if (fileTarget is not null)

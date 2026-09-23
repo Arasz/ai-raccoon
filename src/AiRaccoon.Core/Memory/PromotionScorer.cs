@@ -49,7 +49,7 @@ internal static class PromotionScorer
         ProvenanceArchetype.DocIndex
     ];
 
-    internal static (double Score, IReadOnlyList<string> Reasons) Score(
+    internal static PromotionScore Score(
         ExtractionCandidateRow row, string projectId, IReadOnlyList<string> allProjectIds)
     {
         var archetype = ProvenanceArchetypeClassifier.Classify(row.Path, row.SourceFile, row.Value);
@@ -63,7 +63,7 @@ internal static class PromotionScorer
         if (features.NWords < MinWordsFloor)
         {
             reasons.Add("too-short");
-            return (Math.Clamp(Math.Min(prior, MinWordsCap), MinScore, MaxScore), reasons);
+            return new PromotionScore(Math.Clamp(Math.Min(prior, MinWordsCap), MinScore, MaxScore), reasons);
         }
 
         if (HardNoiseChannels.Contains(archetype))
@@ -83,21 +83,21 @@ internal static class PromotionScorer
                 reasons.Add("doc-index-lift");
             }
 
-            return (Math.Clamp(prior + lift, MinScore, MaxScore), reasons);
+            return new PromotionScore(Math.Clamp(prior + lift, MinScore, MaxScore), reasons);
         }
 
         if (archetype == ProvenanceArchetype.OrganicNote)
         {
             var refined = OrganicRefinement.Apply(features, prior);
             reasons.AddRange(refined.Reasons);
-            return (refined.Score, reasons);
+            return new PromotionScore(refined.Score, reasons);
         }
 
         if (archetype == ProvenanceArchetype.AutoMemoryNote)
         {
             var noteEvidence = PromotionContentEvidence.EvaluateAutoMemoryNote(features);
             reasons.AddRange(noteEvidence.Reasons);
-            return (Math.Clamp(prior + noteEvidence.Adjustment, MinScore, MaxScore), reasons);
+            return new PromotionScore(Math.Clamp(prior + noteEvidence.Adjustment, MinScore, MaxScore), reasons);
         }
 
         var evidence = PromotionContentEvidence.Evaluate(features, archetype);
@@ -109,6 +109,6 @@ internal static class PromotionScorer
             reasons.Add("thin-cap");
         }
 
-        return (score, reasons);
+        return new PromotionScore(score, reasons);
     }
 }

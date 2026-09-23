@@ -73,6 +73,8 @@ public sealed class NonDefaultDimensionMigrationTests
 
         public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 
+        public string DocumentText(EmbeddingSettings settings, string text) => text;
+
         public int ResolveChunkBudgetFor(EmbeddingSettings settings) => 254;
 
         public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) => null;

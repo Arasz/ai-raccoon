@@ -1,3 +1,5 @@
+using AiRaccoon.Tests.TestHelpers;
+using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
@@ -34,13 +36,32 @@ public sealed class ProxyRunnerTests : IDisposable
 
         var exit = await TestData.CreateProxyRunner().RunAsync(config, new StandardStreams(TextReader.Null, TextWriter.Null, stderr), AppHost, TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.InvalidArgument, "the port is a value the proxy cannot use, not a backend that failed");
+        exit.ShouldBe(ErrorCode.Usage.UndialablePort, "the port is a value the proxy cannot use, not a backend that failed");
         var message = stderr.ToString();
         message.ShouldContain("--port 0");
         // Names the supported way to get a random port instead.
         message.ShouldContain("serve --port 0");
         // Nothing was started: "serve exit" only ever appears once a backend has been spawned.
         message.ShouldNotContain("serve exit");
+    }
+
+    [Fact]
+    public async Task Run_WhenTheBackendExecutableCannotBeStarted_ExitsStartFailed()
+    {
+        var stderr = new StringWriter();
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User };
+        var bankPath = SqliteConnectionFactory.BankPathFor(options);
+        Directory.CreateDirectory(Path.GetDirectoryName(bankPath)!);
+        await File.WriteAllBytesAsync(bankPath, [], TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        lease.ReleaseForBind();
+        var config = new ServerConfig(lease.Port, McpTransport.Proxy, options);
+
+        var exit = await TestData.CreateProxyRunner().RunAsync(config, new StandardStreams(TextReader.Null, TextWriter.Null, stderr),
+            Path.Combine(_dataRoot, "no-such-ai-raccoon"), TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(ErrorCode.Reach.StartFailed, stderr.ToString());
+        stderr.ToString().ShouldContain("could not start");
     }
 
     [Fact]
@@ -52,7 +73,7 @@ public sealed class ProxyRunnerTests : IDisposable
 
         var exit = await TestData.CreateProxyRunner().RunAsync(config, new StandardStreams(TextReader.Null, TextWriter.Null, stderr), DotnetHost, TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
+        exit.ShouldBe(ErrorCode.Reach.AutoStartUnsupported);
         var message = stderr.ToString();
         message.ShouldContain("dotnet host");
         message.ShouldContain("serve --port 54240");
