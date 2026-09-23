@@ -545,7 +545,7 @@ public sealed partial class SqliteMemoryStore(
             };
         }
 
-        var outcome = SearchResultMerger.MergeCounting(NoFusionRegression.Reorder(merged, legs), query, parameters, queryPlan);
+        var outcome = SearchResultMerger.MergeCounting(NoFusionRegression.Reorder(merged, legs), query, parameters, queryPlan, fusedSearchResult.Leader);
         return new AdjustedSearchResult(outcome.Results, timeProvider.GetElapsedTime(adjustmentStart))
         {
             FusionDiff = FusionDiff.Between(merged, outcome.Results),
@@ -558,7 +558,7 @@ public sealed partial class SqliteMemoryStore(
     private MergedSearchResult SearchResultMerge(SearchQuery query, SearchParameters parameters, FtsQueryPlan queryPlan, FusedSearchResult fusedResult)
     {
         var mergeStart = timeProvider.GetTimestamp();
-        var outcome = SearchResultMerger.MergeCounting(fusedResult.Results, query, parameters, queryPlan);
+        var outcome = SearchResultMerger.MergeCounting(fusedResult.Results, query, parameters, queryPlan, fusedResult.Leader);
         return new MergedSearchResult(outcome.Results, timeProvider.GetElapsedTime(mergeStart)) { DroppedByFloor = outcome.DroppedByFloor };
     }
 
@@ -581,6 +581,10 @@ public sealed partial class SqliteMemoryStore(
         {
             VectorCandidates = vectorCandidates,
             FtsCandidates = ftsCandidates,
+            Leader = ftsCandidates is [var ftsTop, ..] && vectorCandidates is [var vectorTop, ..]
+                     && string.Equals(ftsTop.Hash, vectorTop.Hash, StringComparison.Ordinal)
+                ? ftsTop.Hash
+                : null,
             EvidenceByHash = fused.EvidenceByHash,
             Stats = fused.Stats
         };

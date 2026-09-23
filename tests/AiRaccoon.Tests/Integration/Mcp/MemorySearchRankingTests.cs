@@ -17,20 +17,19 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Integration.Mcp;
 
 /// <summary>
-///     memory_search end to end over a real bank and the bundled embedding model: a row the keyword
-///     leg matched on every query term is an answer even when its content cosine sits below the
-///     absolute relevance floor, while a query that shares no content term with the bank still
-///     comes back empty.
+///     memory_search ranking end to end over a real bank and the bundled embedding model: which rows
+///     survive the absolute relevance floor, which row a file#section anchor puts first, and what
+///     the same-source boost may not overtake.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
-public sealed class KeywordMatchRelevanceFloorTests : IAsyncLifetime
+public sealed class MemorySearchRankingTests : IAsyncLifetime
 {
     private const string ProjectId = "acme";
     private const string Session = "sess-test";
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
-    private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-keyword-floor-tests");
+    private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-search-ranking-tests");
     private SqliteConnectionFactory _factory = null!;
     private SqliteMemoryStore _store = null!;
     private MemoryTools _tools = null!;
@@ -159,6 +158,30 @@ public sealed class KeywordMatchRelevanceFloorTests : IAsyncLifetime
 
         envelope.Data!.Results.ShouldNotBeEmpty();
         (await SectionOfAsync(envelope.Data!.Results[0].Hash, ct)).ShouldBe("Rollback", StringCompareShould.IgnoreCase);
+    }
+
+    /// <summary>
+    ///     Both legs rank one note first; a runbook's weak adjacent chunks trail it. The adjacent-chunk
+    ///     boost must not lift those neighbours above the row both legs agree on, even with every
+    ///     score cutoff off.
+    /// </summary>
+    [RetryFact]
+    public async Task Search_RowBothLegsRankFirst_StaysFirstAboveBoostedNeighbours()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId,
+            "Rotate the staging certificate before it expires: certificate rotation runs from the vault."), ct);
+        await AllowIngestAsync(ct);
+        await IngestAsync("deploy-runbook.md", RunbookText(), ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+
+        var envelope = await _tools.Search(ProjectId, "staging certificate rotation", Session, kind: "memory",
+            minRelativeScore: 0.0, cancellationToken: ct);
+
+        var legs = envelope.Data!.EvidenceByHash.ShouldNotBeNull()[note.Hash].Legs;
+        legs.ShouldContain(leg => leg.LegName == "fts" && leg.Rank == 1, "premise: the keyword leg ranks the note first");
+        legs.ShouldContain(leg => leg.LegName == "vector" && leg.Rank == 1, "premise: the vector leg ranks the note first");
+        envelope.Data!.Results[0].Hash.ShouldBe(note.Hash, "a same-source boost must not lift weaker neighbours above it");
     }
 
     private static string RunbookText()
