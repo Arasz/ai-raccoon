@@ -68,7 +68,9 @@ the ceiling, and fp16 (97 MB) does not.
    accepted: one engine, one re-embed.
 4. **Sessions try the GPU first.** Where the platform's ONNX Runtime build implements a GPU
    execution provider, the session appends it and ONNX Runtime keeps what the GPU cannot run on
-   the CPU. The 1.30.0 osx-arm64 build implements WebGPU. Where appending fails, or the build has
+   the CPU. The 1.30.0 osx-arm64 build implements WebGPU. WebGPU sessions share one process-wide
+   GPU context that concurrent runs corrupt (a segfault inside the provider), so GPU runs are
+   serialized process-wide; the GPU executes one graph at a time anyway. Where appending fails, or the build has
    none, the session runs on the CPU and logs which provider it got. A setting forces the CPU for
    machines where the GPU misbehaves.
 5. **The bundled manifest carries three per-engine values.** `chunkTokens: 254` keeps memory

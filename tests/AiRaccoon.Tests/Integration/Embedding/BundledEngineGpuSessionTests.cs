@@ -35,6 +35,26 @@ public sealed class BundledEngineGpuSessionTests
     }
 
     [RetryFact]
+    public async Task TwoGpuSessions_EmbeddingAtOnce_BothSucceed()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            Assert.Skip("the standard ORT build implements WebGPU only on macOS");
+        }
+
+        // Memory and code each hold a session; WebGPU sessions share one process-wide GPU context.
+        using var first = Generator(preferGpu: true);
+        using var second = Generator(preferGpu: true);
+        var texts = Enumerable.Range(0, 24).Select(i => string.Join(' ', Enumerable.Repeat($"row {i} token", 4 + i * 5))).ToArray();
+
+        var runs = Enumerable.Range(0, 8).Select(i => (i % 2 == 0 ? first : second)
+            .GenerateAsync(texts, cancellationToken: TestContext.Current.CancellationToken));
+        var results = await Task.WhenAll(runs);
+
+        results.ShouldAllBe(r => r.Count == texts.Length);
+    }
+
+    [RetryFact]
     public void PreferGpuFalse_RunsOnTheCpu()
     {
         using var cpu = Generator(preferGpu: false);

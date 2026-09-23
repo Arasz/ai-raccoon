@@ -52,6 +52,9 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     private const string CpuProvider = "CPU";
     private const string WebGpuProvider = "WebGPU";
 
+    /// <summary>WebGPU sessions share one process-wide GPU context, which concurrent runs corrupt.</summary>
+    private static readonly Lock GpuGate = new();
+
     internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
         int intraOpThreads = 0, bool preferGpu = false)
     {
@@ -122,6 +125,19 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
     public void Dispose() => _session.Dispose();
 
+    private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Run(List<NamedOnnxValue> feed)
+    {
+        if (ExecutionProvider != WebGpuProvider)
+        {
+            return _session.Run(feed);
+        }
+
+        lock (GpuGate)
+        {
+            return _session.Run(feed);
+        }
+    }
+
     /// <summary>The standard ORT build implements a GPU provider only on macOS (WebGPU, ADR-0108).</summary>
     private static bool GpuAvailable() =>
         OperatingSystem.IsMacOS() && OrtEnv.Instance().GetAvailableProviders().Contains("WebGpuExecutionProvider", StringComparer.Ordinal);
@@ -150,7 +166,12 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
             }
 
             options.AppendExecutionProvider(WebGpuProvider, new Dictionary<string, string>());
-            var session = new InferenceSession(modelPath, options);
+            InferenceSession session;
+            lock (GpuGate)
+            {
+                session = new InferenceSession(modelPath, options);
+            }
+
             ExecutionProvider = WebGpuProvider;
             return session;
         }
@@ -225,7 +246,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
         feed.AddRange(EmptyKeyValueCache(batch));
 
-        using var results = _session.Run(feed);
+        using var results = Run(feed);
         var output = results.First(r => r.Name == _outputName).AsTensor<float>();
         var dense = output as DenseTensor<float>
                     ?? throw new InvalidOperationException($"ONNX {_outputName} is not a dense tensor.");
