@@ -219,12 +219,17 @@ public sealed class FileIngestor(
         string projectId, string path, string content, IFileTypeHandler handler, string? context,
         CancellationToken cancellationToken)
     {
+        var hashes = new List<string>();
+        if (BinaryContent.IsBinary(content))
+        {
+            return new InsertedChunks(0, hashes);
+        }
+
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
         var bucket = EntryBucket.For(resolvedContext, projectId);
         var (chunkMaxTokens, chunkOverlayTokens, chunkCountTokens) = await ChunkSizeForAsync(connection, cancellationToken)
             .ConfigureAwait(false);
         var chunks = handler.Chunker.ChunkWithHeadings(content, chunkMaxTokens, chunkOverlayTokens, chunkCountTokens);
-        var hashes = new List<string>(chunks.Count);
         if (chunks.Count == 0)
         {
             return new InsertedChunks(0, hashes);

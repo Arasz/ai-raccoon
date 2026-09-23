@@ -47,6 +47,17 @@ public class FileIngestorJsonIntegrationTests : IDisposable
     }
 
     [RetryFact]
+    public async Task IngestFileAsync_BinaryContent_WritesNoRows()
+    {
+        var path = Path.Combine(_testDir, "snapshot.json");
+        await File.WriteAllTextAsync(path, "{\"a\": \"\0\u0001\0\"}", TestContext.Current.CancellationToken);
+
+        var result = await _ingestor.IngestFileAsync(_conn, "test_project", path, null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.RowsInserted);
+    }
+
+    [RetryFact]
     public async Task IngestFileAsync_IngestsJsonFile_AndCreatesChunksInDb()
     {
         var jsonPath = Path.Combine(_testDir, "config.json");
