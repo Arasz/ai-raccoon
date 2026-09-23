@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Setup;
@@ -25,6 +26,17 @@ public class IngestionCompositionTests
         // markdown/text splitter. (RED today: the second IChunker registration wins for both.)
         Assert.IsNotType<JsonFileTypeChunker>(markdown.Chunker);
         Assert.NotSame(markdown.Chunker, json.Chunker);
+    }
+
+    [Fact]
+    public void TxtFiles_GoToThePlainTextHandler_AndMarkdownFilesDoNot()
+    {
+        var handlers = ResolveFileTypeHandlers();
+
+        var txt = handlers.Single(h => h.Extensions.Contains(".txt"));
+        Assert.Equal("PlainText", txt.Name);
+        Assert.IsType<PlainTextChunker>(txt.Chunker);
+        Assert.Equal("Markdown", handlers.Single(h => h.Extensions.Contains(".md")).Name);
     }
 
     private static IReadOnlyList<IFileTypeHandler> ResolveFileTypeHandlers()

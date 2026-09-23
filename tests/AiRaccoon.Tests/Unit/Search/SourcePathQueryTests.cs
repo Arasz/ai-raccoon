@@ -18,6 +18,15 @@ public sealed class SourcePathQueryTests
             "{source_file} : \"docs adr 0011 frontend chassis stack md\" AND {source_file section} : \"decision\"");
     }
 
+    /// <summary>Plain text carries no sections, but the file itself is still an anchor.</summary>
+    [Fact]
+    public void TryBuild_TxtFileOnly_IsAnAnchor()
+    {
+        SourcePathQuery.TryBuild("engine/requirements.txt", out var expression).ShouldBeTrue();
+
+        expression.ShouldBe("{source_file} : \"engine requirements txt\"");
+    }
+
     [Fact]
     public void TryBuild_FileOnly_MatchesSourceColumnWithAnd()
     {
@@ -31,6 +40,7 @@ public sealed class SourcePathQueryTests
     [InlineData("What does ADR-0011 decide?")]
     [InlineData("ADR-0070")]
     [InlineData("docs/adr/0011.md#")]
+    [InlineData("requirements.txt#install")]
     [InlineData("")]
     public void TryBuild_NonPathShapes_ReturnFalse(string query)
     {
