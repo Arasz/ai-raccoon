@@ -629,10 +629,12 @@ the server refuses our token (it serves another data root), it has no
 `/shutdown` (too old to be cycled — the first update *onto* this version still
 needs the old process stopped by hand), our data root holds no token to
 present (nothing is asked to stop), the port is still held after the bound, or
-another start won the port while this one was binding. A listener that does
-not identify as an ai-raccoon over `/observability` is never sent a shutdown:
-it is refused before the bind is attempted, with the unchanged exit code 3 and
-a line saying the port is held by something that is not an ai-raccoon.
+another start won the port while this one was binding. The restart proves the
+listener before anything else ([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md)
+D5): one that cannot prove this root's identity key receives only the probe and
+the challenge — no `/observability` read, no token, no shutdown — and is refused
+with exit code 3 and a line naming the manual stop. A proven listener that does
+not identify as an ai-raccoon over `/observability` is refused the same way.
 
 `/mcp` and `/shutdown` require `X-AiRaccoon-Token` or `Authorization: Bearer
 <token>` (the Bearer envelope added 2026-08-09, see

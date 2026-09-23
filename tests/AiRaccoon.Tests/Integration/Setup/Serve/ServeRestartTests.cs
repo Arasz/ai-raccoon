@@ -70,9 +70,9 @@ public sealed class ServeRestartTests : IDisposable
     }
 
     /// <summary>
-    ///     The join-review gap, now proof-shaped: a listener that identifies as ai-raccoon but cannot
-    ///     prove it holds this root's identity key receives nothing — not even a shutdown request —
-    ///     and the refusal names the remedy.
+    ///     The join-review gap, now proof-shaped: a listener that claims the ai-raccoon name but cannot
+    ///     prove it holds this root's identity key receives nothing but the probe and the challenge —
+    ///     no identify read, no shutdown request — and the refusal names the remedy.
     /// </summary>
     [RetryFact]
     public async Task Restart_Bare_AgainstAnUnprovenHolder_RefusesExit3_SendsNoToken()
@@ -93,6 +93,8 @@ public sealed class ServeRestartTests : IDisposable
         fake.ShutdownTokenHeaders.ShouldBeEmpty(
             "restart handed the data root's token to a listener that could not prove identity");
         fake.ShutdownRequests.ShouldBe(0);
+        fake.ObservabilityRequests.ShouldBe(0,
+            "an unproven listener may receive only the probe and the challenge (ADR-0106 D5), not the identify read");
         exit.ShouldBe(ExitCode.PortInUse);
         run.Stderr.ShouldContain("did not prove");
         run.Stderr.ShouldContain("stop the listener");
@@ -194,10 +196,10 @@ public sealed class ServeRestartTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
-        // Speaks JSON-RPC on /mcp, so the probe recognizes it, but /observability names someone else.
+        // Proves this root's key, but /observability names someone else: the identify read runs only
+        // after the proof, and a name mismatch there still stops the restart before the token.
         lease.ReleaseForBind();
-        await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
-            TestContext.Current.CancellationToken, name: "not-a-raccoon");
+        await using var fake = await StartProvenFakeAsync(port, HttpStatusCode.Accepted, name: "not-a-raccoon");
         await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);

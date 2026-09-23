@@ -8,11 +8,10 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Hosting.Node;
 
 /// <summary>
-///     Cycles the ai-raccoon server on a loopback port for `serve --restart` (ADR-0022): identify
-///     it, prove it holds this root's identity key (ADR-0106), ask it to stop over the token-guarded
-///     /shutdown, then wait for the port to free. Never signals or kills a process. The token is
-///     read and sent only after the proof: the /observability name is self-asserted, so an
-///     identifying listener is not trusted with the token until it proves.
+///     Cycles the ai-raccoon server on a loopback port for `serve --restart` (ADR-0022): prove it
+///     holds this root's identity key (ADR-0106), identify it, ask it to stop over the token-guarded
+///     /shutdown, then wait for the port to free. Never signals or kills a process. Nothing but the
+///     probe and the challenge reaches a listener before it proves (D5).
 /// </summary>
 public sealed partial class ServerRestart : IServerRestart
 {
@@ -72,19 +71,18 @@ public sealed partial class ServerRestart : IServerRestart
             return new RestartResult(settled);
         }
 
+        // ADR-0106 D5: an unproven listener receives only the probe and the challenge. The proof
+        // comes first, so the identify read, the token read and the shutdown all wait for it.
+        if (await _prover.ProveAsync(ServerProbe.EndpointFor(port), ctx) is { } failure)
+        {
+            Log.Unproven(_logger, port, failure);
+            return new RestartResult(RestartOutcome.Unproven);
+        }
+
         if (await IdentifyAsync(port, ctx) is not { Name: ServerInfo.ServerName } info)
         {
             Log.Foreign(_logger, port);
             return new RestartResult(RestartOutcome.Foreign);
-        }
-
-        // ADR-0106: a listener that answers /observability with the ai-raccoon name is still only
-        // claiming it. The proof is what authorises the shutdown, so the gate sits before the read:
-        // an unproven listener gets no token read, no request, no shutdown.
-        if (await _prover.ProveAsync(ServerProbe.EndpointFor(port), ctx) is { } failure)
-        {
-            Log.Unproven(_logger, port, failure);
-            return new RestartResult(RestartOutcome.Unproven, info.Pid, info.Version);
         }
 
         var found = new RestartResult(RestartOutcome.Stopped, info.Pid, info.Version);
@@ -219,7 +217,7 @@ public sealed partial class ServerRestart : IServerRestart
         public static partial void ProbeUnanswered(ILogger logger, int port);
 
         [LoggerMessage(EventId = 657, Level = LogLevel.Warning,
-            Message = "ai-raccoon: the listener on port {Port} identifies as ai-raccoon, but it did not prove it holds this data root's identity key ({Reason}); nothing is asked to stop")]
+            Message = "ai-raccoon: the listener on port {Port} did not prove it holds this data root's identity key ({Reason}); nothing is asked to stop")]
         public static partial void Unproven(ILogger logger, int port, IdentityProofFailure? reason);
     }
 }

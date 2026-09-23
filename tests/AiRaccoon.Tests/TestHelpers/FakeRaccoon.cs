@@ -39,6 +39,12 @@ internal sealed class FakeRaccoon : IAsyncDisposable
 
     public int ShutdownRequests { get; private set; }
 
+    /// <summary>GET /observability requests from anyone but the fake's own warm-up — the D5 measurement:
+    /// an unproven listener may receive only the probe and the challenge.</summary>
+    public int ObservabilityRequests => Volatile.Read(ref _observabilityRequests);
+
+    private int _observabilityRequests;
+
     /// <summary>When true, every challenge is answered with the last proof this fake produced —
     /// a captured response replayed against a fresh challenge.</summary>
     public bool ReplayLastProof { get; set; }
@@ -90,9 +96,13 @@ internal sealed class FakeRaccoon : IAsyncDisposable
 
         var otlp = new { enabled = false, endpoint = (string?)null, protocol = (string?)null };
         app.MapPost("/mcp", () => Results.Text(JsonRpcRefusal, "application/json", null, StatusCodes.Status401Unauthorized));
-        app.MapGet("/observability", () => version is null
-            ? Results.Json(new { name, pid = Environment.ProcessId, otlp })
-            : Results.Json(new { name, version, pid = Environment.ProcessId, otlp }));
+        app.MapGet("/observability", () =>
+        {
+            Interlocked.Increment(ref fake._observabilityRequests);
+            return version is null
+                ? Results.Json(new { name, pid = Environment.ProcessId, otlp })
+                : Results.Json(new { name, version, pid = Environment.ProcessId, otlp });
+        });
         app.MapPost("/shutdown", (HttpContext context) =>
         {
             var token = context.Request.Headers[McpTokenGate.HeaderName].ToString();
@@ -120,6 +130,7 @@ internal sealed class FakeRaccoon : IAsyncDisposable
         // and the test under it saw the unanswered path instead of the one it was written for.
         // Answering our own /observability once removes that race for every caller.
         await WaitUntilAnsweringAsync(port, cancellationToken);
+        Interlocked.Exchange(ref fake._observabilityRequests, 0);
         return fake;
     }
 

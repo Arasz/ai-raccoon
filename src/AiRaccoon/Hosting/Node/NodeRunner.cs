@@ -270,7 +270,7 @@ internal partial class NodeRunner(
                 $"ai-raccoon: port {descriptor.Port} is held by a listener that does not identify as an ai-raccoon server — stop it yourself, or serve on another port",
                 ExitCode.PortInUse),
             RestartOutcome.Unproven => (
-                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it identifies as an ai-raccoon server but did not prove it serves this data root — stop the listener yourself, then run serve again, or serve on another port (--port 0)",
+                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the listener did not prove it serves this data root — stop the listener yourself, then run serve again, or serve on another port (--port 0)",
                 ExitCode.PortInUse),
             RestartOutcome.NoToken => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: {descriptor.TokenFile.Path} holds no token, so it cannot be asked to stop — it may serve another data root; stop it " +
