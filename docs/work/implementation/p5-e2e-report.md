@@ -190,3 +190,56 @@ trusted:
   failed 0, 5 m 23 s. No process from this worktree was left running.
 
 No `[LoggerMessage]` ids added. VERSION, `~/.ai-raccoon` and port 7721 untouched.
+
+## P5 fixes
+
+Branch `task/air-identity-proof-p5-fixes`. The owner approved F1, F2, F3, F5 and F7. Each fix below
+had a failing behaviour test first. The red was captured at the unfixed code, then the fix was
+applied and the same classes run green. Every command was
+`dotnet test --project tests/AiRaccoon.Tests --filter-class '*X'`.
+
+| fix | commit | red (unfixed code) | green |
+|---|---|---|---|
+| F1 — tighten an owned 0755 state directory, refuse writable or foreign-owned ones | `ce62f460` | `McpTokenFileStateDirTests`, `IdentityKeyFileTests`, `TokenPathMigrationE2ETests`: 4 failed / 17 passed. `token (null) should not be null or white space`; `key should not be null`; both E2E runs: `serve … never answered (exited: True)`, with stderr `NodeRunner[607] cannot read or create the MCP token` | those three classes plus `LoggerMessageEventIdTests`, `TokenFileLegacyMigrationTests` and `McpTokenFileTests`: 50/50 |
+| F7 — the exit-22 remedy is runnable and keeps the scope | `46415c28` | `BankPresenceGuardTests`: 2 failed (User, Project). `Errors should be empty but had 2 items: "Unrecognized command or argument '--data-root'."`: the old remedy put `--data-root` after the verb, which the parser rejects | `BankPresenceGuardTests`, `NoMintGuardCompositionTests`, `HowToExitTableTests`: 12/12 |
+| F2 — `serve --restart` proves before it identifies | `6d03caad` | `ServeRestartTests` + `BackendLaunchIdentityProofE2ETests`: 5 failed / 26 passed. Unit gate: `fake.ObservabilityRequests should be 0 but was 1`. Matrix restart cells for squatter, relay, replay and planted key: `an unproven listener received GET /observability (0 body bytes)` | those classes plus `ServeRestartE2ETests`: 33/33 |
+| F3 — stop a fallback child that fails its own proof | `305a4c75` | `ProxyPrivateBackendLifetimeTests.AFallbackThatFailsItsOwnProof_IsStoppedAtOnce`: `the fallback child (pid 25992) failed its proof but is still running` | that class plus `BackendSessionsTests`, `BackendLauncherTests` and `CliSettingsBackendTests`: 42/42 |
+| F5 — SDK stdio client residual | `7f14c265` | docs only (ADR-0106 residual 13) | — |
+
+After the last fix, the consuming E2E classes ran once more at the tip: `BackendLaunchIdentityProofE2ETests`,
+`TokenPathMigrationE2ETests`, `SecretPlacementE2ETests` and `ProxySpawnedBackendE2ETests` → 27/27,
+1 m 38 s. No process from this worktree was left running.
+
+What changed, per fix:
+
+- **F1.** `OwnerOnlyFile.EnsureDirectory` handles an existing state directory in three ways:
+  - Owner-only: nothing changes.
+  - Group/world-*writable*: refused, as before.
+  - Readable or executable by others but not writable: it runs `chmod` back to owner-only and returns
+    true. A `chmod` that fails because another user owns the directory becomes a refusal naming the
+    owner as the remedy. That is how the foreign-owner case is enforced; the test uses root-owned
+    `/usr/share` and skips when run as root.
+
+  `serve` logs the tightening once, as the new EventId **692** (`OwnerOnlyFile.Log.StateDirectoryTightened`).
+  The registry now counts 192. Key and token *files* that others can read are still refused.
+  The verifier's read-only `Read()` checks are unchanged: a shared directory is not provable until a
+  `serve` on that root has tightened it. The ADR-0106 D1 bullet and the upgrade note state the rule.
+  - Mutation check: with the writable refusal removed and the foreign-owner `chmod` failure swallowed,
+    `McpTokenFileStateDirTests` went 3 red. Restoring the code turned them green again.
+  - Side effect on M10 from the table above: reverting owner-only creation no longer turns
+    `ProjectScopeRun_…` red, because `serve` now tightens that directory. The creation mode is still
+    gated directly by `SqliteConnectionFactoryTests` and `QuietLoggingTests`.
+- **F7.** The remedy now reads `ai-raccoon --data-root <root> [--install-scope project] serve`, and the
+  test parses it with `CliArgs.TryParse`. Beyond the missing scope in the report above, the old
+  spelling `ai-raccoon serve --data-root <root>` did not parse at all: `--data-root` must precede the
+  verb, and the live binary exited 15 with `Unrecognized command or argument '--data-root'`. The how-to
+  and reference docs quote the new line.
+- **F2.** `ServerRestart.CycleAsync` now proves first, then identifies, then reads the token. An
+  unproven listener gets `RestartOutcome.Unproven`, and the refusal and log 657 no longer say it
+  "identifies as ai-raccoon". `Foreign` remains only for a proven listener whose `/observability` names
+  something else; `AListenerThatWillNotIdentify_…` was re-fixtured onto a proven fake. The threat
+  matrix's restart exception for `GET /observability` is gone, and `FakeRaccoon` now counts
+  `/observability` hits after its own warm-up.
+- **F3.** `BackendResult` gained `Child`, the private child's `Process`, which only `StartPrivateAsync`
+  sets. When the child's proof fails, `FallbackAsync` kills its process tree and waits up to 5 s for
+  it to exit. The settings verbs' fallback shares this path.
