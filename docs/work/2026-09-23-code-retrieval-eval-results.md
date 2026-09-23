@@ -21,6 +21,7 @@ P4-A path+decl header: 0.653
 P5-A AST chunks (+P2): 0.701
 P5-A regex chunks (+P2): 0.690
 Final B1+P2 (shipped): 0.689
+Granite + P1 + P2: 0.824
 ```
 
 ## Findings
@@ -136,8 +137,20 @@ Both runs are without this PR's HTML/CSS/SQL indexing, so those languages score 
 
 **Evidence:** bus message from the #687 session to this session, 2026-09-23 20:44 UTC, citing `run_code_eval.py` on the #686 corpus.
 
+### F12 — On granite, the identifier column still clears the keep rule, and the three changes together reach nDCG@5 0.824 [MEASURED]
+
+After #687 made granite-embedding-small-r2 the bundled engine for memory and code, this branch was re-run with main merged in.
+- **Everything together** (granite + HTML/CSS/SQL + identifier column): nDCG@5 0.824, hit@1 0.768, hit@5 0.892.
+- **Ablation:** the same bank with `identifiers` blanked and `code_fts` rebuilt scores 0.801.
+- **P2 against that ablation:** KEEP, held-out +0.037, 95% CI [0.008, 0.073], identifier-fragment +0.073.
+- **Floors:** the worst language delta is Python at −0.013, and test-intent is −0.027.
+
+The keyword-leg gain shrinks on a stronger vector engine (from +0.052 on code-daemon) but survives it.
+
+**Evidence:** binary `1.48.0+9bf5d6f2` (merge of origin/main after #687). Arm `granite-p2` is a fresh ingest and drain (32 s). Arm `granite-noid` reuses that bank with `UPDATE code_entries SET identifiers=''` and an FTS `'rebuild'`. `compare_code_eval.py results-granite-noid.json results-granite-p2.json --target-category identifier-fragment` → `KEEP`.
+
 ## Still open
 
 - **Whether a larger held-out set would settle AST chunking.** Its +0.018 point estimate needs about three times the held-out queries to resolve.
 - **Whether these verdicts hold on linux-x64 CI.** They are scoped to this machine (ADR-0015).
-- **Whether they hold on granite-embedding-small-r2.** #687 makes it the default code engine. P2 works on the keyword leg, so it should carry over, but that is unmeasured. Re-run this eval once #687 lands.
+- **Whether P3–P5 would flip on granite.** Only P2 was re-measured on the new engine.
