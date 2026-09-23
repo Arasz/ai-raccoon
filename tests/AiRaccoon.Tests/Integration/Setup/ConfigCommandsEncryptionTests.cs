@@ -256,7 +256,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(ErrorCode.Key.Unresolved);
+        exit.ShouldBe(ErrorCode.Key.BwsFailed);
         err.ShouldContain("bws failed (exit 1)");
         err.ShouldContain("secret not found (code: 404)");
         err.ShouldNotContain("PRAGMA rekey");
@@ -269,6 +269,20 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
     [RetryFact]
+    public async Task Bitwarden_BwsTimesOut_ExitsBwsTimedOutAndChangesNothing()
+    {
+        var store = new FakeConfigStore();
+        var runner = new FakeBwsRunner(new BwsInvocationException(BwsFailure.TimedOut, "bws timed out after 5s"));
+
+        var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
+
+        exit.ShouldBe(ErrorCode.Key.BwsTimedOut);
+        err.ShouldContain("timed out");
+        store.Settings.ShouldBeEmpty();
+        File.Exists(SidecarPath()).ShouldBeFalse();
+    }
+
+    [RetryFact]
     public async Task Bitwarden_MalformedSecretValue_ReturnsMalformedErrorAndNoChange()
     {
         var store = new FakeConfigStore();
@@ -276,7 +290,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(ErrorCode.Key.Unresolved);
+        exit.ShouldBe(ErrorCode.Key.SecretNotAKey);
         err.ShouldContain("malformed OpenSSH private key");
         store.Settings.ShouldBeEmpty();
         File.Exists(SidecarPath()).ShouldBeFalse();
@@ -341,7 +355,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
     [RetryFact]
-    public async Task Bitwarden_StaleSidecarAndEnvKeyedBank_ReportsEnvKeyedAndDeletesSidecar()
+    public async Task Bitwarden_StaleSidecarAndEnvKeyedBank_FailsBankKeyedToEnv_AndStillDeletesSidecar()
     {
         // Unset crash-window fix (docs/plans/encryption-bitwarden-implementation.md, review
         // amendments): bank rekeyed back to env; sidecar is deleted to stay consistent.
@@ -358,7 +372,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner,
             new StringReader("\n\n"), "env-pass");
 
-        exit.ShouldBe(0);
+        exit.ShouldBe(ErrorCode.Key.BankKeyedToEnv);
         err.ShouldContain("bank is env-keyed");
         err.ShouldContain("source was not switched");
         File.Exists(SidecarPath()).ShouldBeFalse();
@@ -384,7 +398,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var (exit, _, err, _) = await WithEnvPassphrase(null, () =>
             Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n")));
 
-        exit.ShouldBe(ErrorCode.Key.Unresolved);
+        exit.ShouldBe(ErrorCode.Key.WrongKey);
         err.ShouldContain("encryption mismatch");
         File.Exists(SidecarPath()).ShouldBeTrue();
         store.Settings.ShouldBeEmpty();
@@ -530,7 +544,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "unset"], store, runner);
 
-        exit.ShouldBe(ErrorCode.Key.Unresolved);
+        exit.ShouldBe(ErrorCode.Key.NoEnvPassphrase);
         err.ShouldContain("stays keyed to the bitwarden secret");
         err.ShouldContain("set AIRACCOON_DB_PASSPHRASE and re-run");
         var logRecord = _lastLogger!.Collector.LatestRecord;
@@ -717,7 +731,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
         var (exit, _, err, _) = await Run(["encryption", "migrate"], store, runner);
 
-        exit.ShouldBe(ErrorCode.Key.Unresolved);
+        exit.ShouldBe(ErrorCode.Key.WrongKey);
         err.ShouldContain("opens under neither");
         (await File.ReadAllBytesAsync(BankPath(), TestContext.Current.CancellationToken)).ShouldBe(before);
     }

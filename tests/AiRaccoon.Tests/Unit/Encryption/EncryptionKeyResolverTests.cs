@@ -89,15 +89,16 @@ public sealed class EncryptionKeyResolverTests : IDisposable
         ex.Message.ShouldContain("corrupt");
     }
 
+    /// <summary>A sidecar naming bitwarden with no secret id is an unusable key source, not a bad argument.</summary>
     [Fact]
-    public async Task ResolveAsync_SidecarBitwardenWithoutSecretId_ThrowsArgumentException()
+    public async Task ResolveAsync_SidecarBitwardenWithoutSecretId_ThrowsEncryptionSourceException()
     {
         WriteSidecar("""{"source":"bitwarden"}""");
         var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
 
-        var ex = await Should.ThrowAsync<ArgumentException>(() => resolver.ResolveAsync(TestContext.Current.CancellationToken));
+        var ex = await Should.ThrowAsync<EncryptionSourceException>(() => resolver.ResolveAsync(TestContext.Current.CancellationToken));
 
-        ex.ParamName.ShouldBe("encryptionData.SecretId");
+        ex.Message.ShouldContain("no secret id");
     }
 
     [Fact]
