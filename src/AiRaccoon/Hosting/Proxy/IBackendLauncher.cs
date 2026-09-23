@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace AiRaccoon.Hosting.Proxy;
 
 public interface IBackendLauncher
@@ -19,5 +21,6 @@ public interface IBackendLauncher
 }
 
 /// <summary>The live backend URL, or null with the `serve` exit code and its captured stderr (bounded,
-/// tail-only; null on the happy path) when it never answered.</summary>
-public readonly record struct BackendResult(string? Url, int? ServeExitCode, string? ServeStderr = null);
+/// tail-only; null on the happy path) when it never answered. <paramref name="Child" /> is the private
+/// fallback process this launcher started, so the caller can stop one that fails its proof.</summary>
+public readonly record struct BackendResult(string? Url, int? ServeExitCode, string? ServeStderr = null, Process? Child = null);

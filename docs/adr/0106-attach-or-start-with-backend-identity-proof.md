@@ -38,7 +38,9 @@ spellings — and passing it is an unrecognized argument, exit 9.
 Every token-bearing request proves the listener immediately before it, not once per process: the
 initial acquire, `serve --restart`'s shutdown request, and the proxy's dispose-time stop of the
 private backends it started. A listener that cannot prove at any of those moments is sent nothing and
-reported as not stopped.
+reported as not stopped. A private fallback child that fails its own proof at acquire is sent nothing either;
+the launch that spawned it holds its process and stops it at once, rather than leaving it to its idle
+timeout.
 
 ### D1 — Trust anchor: a per-root ECDSA P-256 key
 

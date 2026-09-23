@@ -17,10 +17,10 @@ internal sealed class BackendStartException(string message, Exception inner) : E
 ///     <see cref="BackendSessions.AcquireSharedAsync" />. This launcher owns the process mechanics:
 ///     <see cref="AcquireAsync" /> probes, starts and polls the configured port, and
 ///     <see cref="StartPrivateAsync" /> starts the fallback child and trusts only the URL that child
-///     prints while it is still alive. Never kills, signals or terminates the backend itself: the
-///     proxy stops the private fallbacks it starts over the token-guarded /shutdown when it shuts
-///     down (owner ruling 2026-09-22), and a shared backend's lifetime belongs to IdleWatchdog
-///     alone.
+///     prints while it is still alive, and hands back that child's process. Never kills, signals or
+///     terminates a backend itself: the proxy stops the private fallbacks it starts over the
+///     token-guarded /shutdown when it shuts down (owner ruling 2026-09-22), or through the process
+///     when one fails its own proof, and a shared backend's lifetime belongs to IdleWatchdog alone.
 /// </summary>
 internal sealed partial class BackendLauncher : IBackendLauncher
 {
@@ -89,7 +89,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         if (urlLine.IsCompletedSuccessfully && urlLine.Result is { } reported && !backend.HasExited)
         {
             Log.BackendLive(_logger, reported);
-            return new BackendResult(reported, null);
+            return new BackendResult(reported, null, Child: backend);
         }
 
         var exitCode = backend.HasExited ? backend.ExitCode : (int?)null;
