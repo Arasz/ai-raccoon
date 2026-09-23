@@ -249,6 +249,7 @@ delivered never reports success:
 | `59` | `Server.MigrationRefused` — the settings server refused a model verb (`settings model reset`, `model embedding set`) because a model migration outbox row is open (ADR-0076); every MCP tool call is refused until it finishes, and nothing changed |
 | `60` | `Reach.Unavailable` — no settings server answered at the port within the acquire budget, and none could be started there |
 | `62` | `Reach.StoppedAnswering` — a settings server was acquired but a request failed at the transport; the write certainly did not land |
+| `64` | `Reach.PrivateFallbackFailed` — the listener on the port did not prove it serves this data root, and the private fallback server could not be started either |
 | `65` | `Reach.StartFailed` — the backend executable could not be started as a process |
 | `66` | `Reach.AutoStartUnsupported` — this process cannot auto-start a backend (launched through the dotnet host, or its executable path is unknown) |
 | `91` | `Internal.ServerError` — the server answered but failed with a 5xx — a server-side fault, distinct from `10` (`Usage.InvalidValue`, "you mistyped") |
