@@ -130,10 +130,11 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
         }
 
         var referenceSubsetNdcg = degenerate.Average(q => perQueryReference[q.Id].Ndcg10);
-        var delta = Math.Abs(subsetNdcg.Average() - referenceSubsetNdcg);
-        output.WriteLine($"degenerate subset ({degenerate.Count} queries): new-side nDCG@10 {subsetNdcg.Average():F4} vs reference {referenceSubsetNdcg:F4} (delta {delta:F4})");
-        delta.ShouldBeLessThanOrEqualTo(NdcgParityDelta,
-            $"degenerate subset nDCG@10 {subsetNdcg.Average():F4} vs reference {referenceSubsetNdcg:F4} (delta {delta:F4} > {NdcgParityDelta:F2})");
+        // One-sided, like the sweep gate above: a new side that ranks the subset better is not a regression.
+        var regression = referenceSubsetNdcg - subsetNdcg.Average();
+        output.WriteLine($"degenerate subset ({degenerate.Count} queries): new-side nDCG@10 {subsetNdcg.Average():F4} vs reference {referenceSubsetNdcg:F4} (regression {regression:F4})");
+        regression.ShouldBeLessThanOrEqualTo(NdcgParityDelta,
+            $"degenerate subset nDCG@10 {subsetNdcg.Average():F4} is {regression:F4} below reference {referenceSubsetNdcg:F4} (> {NdcgParityDelta:F2})");
     }
 
     private static AggregateMetrics AggregateFromGolden(GoldenFile golden)
