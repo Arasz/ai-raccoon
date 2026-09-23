@@ -133,7 +133,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
             // Attach-or-start: nothing listened, so the launch tried the configured port and the
             // spawned `serve` could not open the bank there.
             run.Stderr.ShouldContain("no MCP backend at");
-            run.Stderr.ShouldContain($"serve exit {ErrorCode.Bank.OpenFailed}");
+            run.Stderr.ShouldContain($"serve exit {ErrorCode.Bank.Corrupted}");
             run.Stderr.ShouldContain("no in-process fallback exists");
             run.Stderr.ShouldContain("ai-raccoon serve --port");
         }

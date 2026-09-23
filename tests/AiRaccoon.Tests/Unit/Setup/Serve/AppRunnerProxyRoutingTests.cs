@@ -32,7 +32,7 @@ public sealed class AppRunnerProxyRoutingTests : IDisposable
 
         var exit = await runner.Run(["--data-root", _dataRoot, "--port", "7721", .. transportFlag]);
 
-        exit.ShouldBe(ErrorCode.Reach.BackendUnavailable);
+        exit.ShouldBe(ErrorCode.Reach.AutoStartUnsupported);
         // Secondary observable: the proxy path wires shutdown-signal cancellation; a launch that
         // returned early (parse failure, help, a verb) would leave this at zero.
         runner.ShutdownCancellationRegistrations.ShouldBe(1);

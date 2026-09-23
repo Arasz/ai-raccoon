@@ -102,7 +102,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
     }
 
     [RetryFact]
-    public async Task NoServerListening_ReturnsNoServerRunning_WithAStartHint()
+    public async Task NoServerListening_ReturnsNothingListening_WithAStartHint()
     {
         await using var env = await AcquireCleanEnvAsync();
         using var lease = LoopbackPort.Reserve();
@@ -119,7 +119,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
     }
 
     [RetryFact]
-    public async Task ForeignListener_ReturnsPortInUse_WithNoStackTrace()
+    public async Task ForeignListener_ReturnsForeignListener_WithNoStackTrace()
     {
         await using var env = await AcquireCleanEnvAsync();
         using var holder = LoopbackPort.Occupy();
@@ -127,7 +127,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
 
         var run = await RunObservabilityAsync("pid", port);
 
-        run.Exit.ShouldBe(ErrorCode.Port.InUse);
+        run.Exit.ShouldBe(ErrorCode.Port.ForeignListener);
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain($"port {port} is in use by another process");
         run.Stderr.ShouldContain("it is not an ai-raccoon server");
@@ -248,7 +248,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
         {
             var oldServerRun = await RunObservabilityAsync("pid", oldServerPort);
             oldServerRun.Stdout.ShouldBeEmpty();
-            oldServerRun.Exit.ShouldBe(ErrorCode.Reach.NothingListening);
+            oldServerRun.Exit.ShouldBe(ErrorCode.Server.TooOldForObservability);
             oldServerRun.Stderr.ShouldContain("does not expose /observability");
         }
         finally

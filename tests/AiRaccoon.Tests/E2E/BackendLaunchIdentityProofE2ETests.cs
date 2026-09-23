@@ -302,7 +302,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         {
             // The fallback `serve` refuses the shared key too, so there is no backend at all — and still no secret.
             failure.ShouldNotBeNull();
-            exit.ShouldBe(ErrorCode.Reach.BackendUnavailable, proxy.Stderr);
+            exit.ShouldBe(ErrorCode.Reach.PrivateFallbackFailed, proxy.Stderr);
             proxy.Stderr.ShouldContain("no private backend could be started");
         }
         else

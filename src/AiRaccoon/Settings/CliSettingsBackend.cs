@@ -69,7 +69,7 @@ internal static partial class CliSettingsBackend
 
         if (acquired.Result.Url is null)
         {
-            throw new SettingsServerUnavailableException(ErrorCode.Reach.Unavailable,
+            throw new SettingsServerUnavailableException(acquired.Fallback ? ErrorCode.Reach.PrivateFallbackFailed : ErrorCode.Reach.Unavailable,
                 $"ai-raccoon: no settings server at {ServerProbe.EndpointFor(config.Port)} " +
                 $"(serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})" +
                 (acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty));

@@ -42,7 +42,7 @@ public partial class ObservabilityRunner(IHttpClientFactory httpClientFactory) :
             {
                 Log.EndpointMissing(logger, port);
                 await streams.WriteErrorLineAsync($"ai-raccoon: the server on port {port} does not expose /observability — upgrade it to read its PID");
-                return ErrorCode.Reach.NothingListening;
+                return ErrorCode.Server.TooOldForObservability;
             }
 
             if (!response.IsSuccessStatusCode)
@@ -117,7 +117,7 @@ public partial class ObservabilityRunner(IHttpClientFactory httpClientFactory) :
     {
         Log.ForeignListener(logger, port);
         await streams.WriteErrorLineAsync($"ai-raccoon: port {port} is in use by another process — it is not an ai-raccoon server");
-        return ErrorCode.Port.InUse;
+        return ErrorCode.Port.ForeignListener;
     }
 
     /// <summary>
