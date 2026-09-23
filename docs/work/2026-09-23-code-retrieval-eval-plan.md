@@ -93,7 +93,9 @@ the per-language and per-band grouping, and the family split.
 
 ## Keep/drop rule (fixed before any measurement)
 
-Verdicts are scoped to the measuring machine (osx-arm64, ADR-0015). The noise band is the largest
+Verdicts are scoped to the measuring machine (osx-arm64, ADR-0015). They are not asserted in CI; a CI gate would need its own portable band.
+C# has no external family, so its held-out rows come only from the pinned `self` third. Rule 3 is proven
+able to go red for C# by a test fixture with a C#-only drop. The noise band is the largest
 mean-nDCG@5 spread across **3** B0 runs, and B1 is also run twice. An improvement is kept against B1 only
 when all of these hold:
 1. **Paired bootstrap** over held-out per-query nDCG@5 differences (≥2000 resamples of queries): the
@@ -125,10 +127,14 @@ blank-line blocks and the budget.
   identifiers)` → `'rebuild'`. Arm 1b also splits query terms in the harness. Serving the modified bank
   works because the schema digest is unchanged and `MATCH` is unqualified.
 - **B.** New pure static `src/AiRaccoon.Core/Ingestion/IdentifierSplitter.cs`, acronym- and digit-aware,
-  emitting only tokens with 2 or more parts. `code_entries.identifiers` is filled in `CodeIngestor`. A new
-  `EnsureCodeFtsIdentifiersAsync` in `MemorySchema.cs` follows the entries_fts `section` precedent: add the
-  column, backfill, drop and recreate `code_fts` and its 3 triggers, then `'rebuild'`, all in one
-  idempotent, race-tolerant transaction. The column weight goes through `bm25(code_fts,1,1,w)`, with `w`
+  emitting only tokens with 2 or more parts. `code_entries.identifiers` is filled in `CodeIngestor`. `code_entries`
+  is additive and digest-gated, with no ladder step and no `CurrentVersion` bump (MemorySchema.cs:498-503),
+  so the migration runs on the digest-mismatch branch in two steps:
+  1. `ALTER TABLE ADD COLUMN identifiers`, with a probe first and a catch on "duplicate column", following
+     `EnsureCodeEmbedAttemptsColumnAsync` (1764-1803). An ALTER is not idempotent under a race, so it stays
+     outside any transaction.
+  2. `EnsureCodeFtsIdentifiersAsync`, in one `BEGIN IMMEDIATE`: skip if `table_xinfo(code_fts)` already has
+     `identifiers`; otherwise backfill, drop and recreate `code_fts` and its 3 triggers, then `'rebuild'`. The column weight goes through `bm25(code_fts,1,1,w)`, with `w`
   a constant taken from the spike. Query splitting is added only if 1b won, and only on the code path,
   never in the shared `FtsQueryNormalizer`.
 - AC and gates: `IdentifierSplitterTests`; `Search_SubwordQuery_MatchesCamelCaseIdentifier` (red on
@@ -169,7 +175,17 @@ blank-line blocks and the budget.
   fingerprint is `engineFp + "|text:v2"`, applied in both `SqliteCodeEngineStore.ActivateCodeEngineAsync`
   and `CodeEmbedder.ReconcileFingerprintAsync`. The `code_entries.enclosing` column is added only if that
   arm wins.
-- AC and gates: `CodeEmbedText_ChunkAtBudget_DropsHeaderNeverValue`; `CodeEmbedText_Result_NeverExceedsWindow`;
+- Where the code lives: `CodeEmbedText` is a pure static class in
+  `src/AiRaccoon.Core/Memory/Code/CodeEmbedText.cs`. Its header is `SourceFile`, the plain file path, not
+  `EmbedRow.Path`.
+- Fingerprint consumers:
+  - `SqliteCodeEngineStore.ActivateCodeEngineAsync` must return the *suffixed* fingerprint in its
+    `EmbeddingConfig`; the local at :51 is reassigned.
+  - `CodeEngineActivationTests.cs:148-150` is updated to expect the suffix.
+  - `model code status`/`get` (`SettingsCommands.cs:357,402`) print the engine without the `|text:vN`
+    suffix and add a separate `codeTextFormat: vN` line.
+- AC and gates: `CodeEmbedText_ChunkAtBudget_DropsHeaderNeverValue`; `Activate_ReturnsSuffixedFingerprint`;
+  `ModelCodeStatus_ShowsEngineWithoutFormatSuffix`; `CodeEmbedText_Result_NeverExceedsWindow`;
   `CodeEmbedder_EmbedsHeaderedText_StoresOriginalValue`; `CodeGet_ReturnsSourceWithoutHeader`;
   `ReconcileFingerprint_PreHeaderFingerprint_InvalidatesEmbeddedRows`;
   `Activate_And_Reconcile_ComputeSameFingerprint`; the held-out delta and drain cost. New ADR, amending
