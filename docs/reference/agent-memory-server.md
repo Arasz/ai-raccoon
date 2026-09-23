@@ -254,9 +254,16 @@ config channel (see [Command-line options](#command-line-options)).
   quoted adjacent-token bigram phrases — whenever the AND under-matches (zero rows,
   fewer rows than terms, or fewer than the requested limit); longer queries keep the
   plain OR join of all tokens. Punctuation never reaches the FTS5 grammar. A
-  `file#section` query ANDs the anchor against the `source_file`/`section` columns, and the
-  rows it matched lead the response ahead of anything the vector leg found for the path
-  string. A row that both legs rank first stays first: the `sourceLambda` sibling boost
+  `file#section` query matches the file name as an ordered phrase in `source_file` and the
+  section as a phrase, then keeps only rows whose path is that file (the typed name, or a
+  path ending in it after a `/`). So `ferry-notes.md` never picks up `ferry/notes.md` or
+  `notes-ferry.md`. The section may be written as a slug (`#coastal-duties`) or the way the
+  heading reads (`#Coastal duties`). When no row in the bank carries that file and section,
+  the query is searched as ordinary text instead, so a question that happens to follow
+  `file#` still gets keyword matches. A `.txt` file is chunked as plain text (a `#` or
+  ```` ``` ```` line is just text), so it never has sections: `notes.txt` anchors the file,
+  and `notes.txt#install` is searched as ordinary text. The rows an anchor matched lead the response ahead of
+  anything the vector leg found for the path string. A row that both legs rank first stays first: the `sourceLambda` sibling boost
   reorders the rows below it and never lifts a neighbour above it.
 - **`memory_workspace_consolidate`:** `keep` is an array of hashes to promote, or
   `["all"]` to promote every entry in the workspace. It then deletes the workspace

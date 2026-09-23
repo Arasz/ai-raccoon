@@ -95,29 +95,74 @@ and needs re-running.
 
 **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/Memory/SourcePathQuery.cs:63` — `^(?<file>[\w./-]+\.(?:md|markdown|txt))(?:#(?<section>[\w-]+))?$`.
 
-### F8 — The current chunker still writes NULL sections, and section and heading_path disagree [MEASURED]
+### F8 — The heading-only NULL chunk is ratified behaviour, not a defect [READ]
 
-A fresh watch ingest of `harbor-guide.md` produced chunk 1 with `section = NULL` and
-`heading_path = 'Harbor guide > Tides'`. Its text is chunk 0's text again, plus the `## Tides` heading.
-Chunks 2–6 are the reverse: `section = 'Tides'` and `heading_path = ''`. So new data also produces NULL
-sections, and the heading row itself, the one most likely to be the target, is the row the anchor
-cannot match. The 1.44.0 ADR-0106 rows in the live bank show the same split (for example chunk 2:
-`section 'Decision'`, `heading_path ''`).
+Correction to this record's first version, which called it a chunker defect. When the unit after a
+heading is too large to fit beside it, the chunk's only new unit is the bare heading, and its text is
+the overlay (a copy of the previous chunk) plus that heading. `SectionsFor` and `HeadingPathFor` count
+only contentful new units, so the chunk claims no section, and `SectionLabel` stores NULL. #549 pinned
+this on purpose: "a chunk that only opens a section claims none". The section's body chunks still
+carry the label, so the anchor still resolves the section (F1 matched all five Tides rows). The
+remaining cost is one near-duplicate chunk per oversized section opener. The measured split between
+`section` and `heading_path` (chunk 1 NULL / `Harbor guide > Tides`, chunks 2–6 `Tides` / empty) is
+a separate oddity; its cause was not traced.
 
-**Evidence:** Read-only `SELECT chunk_index, section, heading_path, value FROM entries` on `<scratch>/dr2/memory.db` after `memory_watch_add` of `<scratch>/probe2` (1,086-word file). Live: the same query filtered on `source_file LIKE '%0106-attach-or-start%'`.
+**Evidence:** `src/AiRaccoon.Core/Chunking/MarkdownChunker.cs:114-150` (HeadingPathFor, SectionsFor: contentful new units only); `src/AiRaccoon.Core/Chunking/TextChunkExtensions.cs:7` (empty Sections → NULL); pinned by `tests/AiRaccoon.Tests/Unit/Chunking/MarkdownChunkerHeadingPathTests.cs` `ChunkWithHeadings_AChunkThatOnlyOpensASection_CarriesNoHeadingPath`.
 
-### F9 — Live chunk_index −1 NULL-section rows are legacy memory_write output [INFERRED]
+### F9 — The live NULL sections are mostly pre-#543 file chunks that were never re-chunked [MEASURED]
 
-Two facts point this way. A `memory_write` with a `sourceFile` and no `section` on 1.44.2 stored
-`chunk_index 1`, not −1 (scratch row 5e6c3f23). And F5's month split puts almost all NULL sections
-in August. From these, the −1 rows come from before memory_write chunking (ADR-0064), and new
-writes produce NULL sections only through F8's chunker path or a `memory_write` without a
-section. The write path's code was not read to confirm this.
+Before 877a8ea4 (#543, 2026-08-23), `FileIngestor.HeadingSection` parsed each chunk's own text, so
+any continuation chunk without a heading of its own got NULL. Among live `.md` rows, 18,116 of the
+29,651 pre-2026-08-23 rows with unknown position have NULL sections. Since the fix, 287 of 9,542
+positioned rows do (3%, which includes F8's heading-only chunks). `memory_write` stores the caller's
+`section` verbatim, so a write that omits it is NULL by design. `.txt` rows are almost all NULL
+(4,764 of 4,766): the text chunker produces no sections, yet `PathRegex` accepts `file.txt#section`,
+so a `.txt` anchor can never match.
+
+**Evidence:** `git show 877a8ea4^:src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs` lines 445-457 (HeadingSection over chunk text); `src/AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs:364-399` (memory_write inserts the caller's section, chunk_index −1); read-only live query grouped by extension and created_at < 1787443200: `('md', old, unk, 29651, 18116)`, `('md', new, pos, 9542, 287)`, `('txt', new, pos, 4766, 4764)`.
+
+### F10 — The existing repairs can re-label the legacy rows; 98% are in reach [INFERRED]
+
+`repair chunk-index` writes the current chunker's section onto every row it can reproduce by hash
+(`ChunkIndexRepair.cs:86`, pinned by `ChunkIndexRepairTests.RunAsync_RepositionedRows_TakeTheSectionTheCurrentChunkerReports`).
+`repair reingest` replaces every mirror row of an existing file that the current chunker can't
+reproduce (`ReingestRepair.cs:57-100`). 19,721 of the 20,023 NULL `.md` rows (98%) are mirror rows
+whose file still exists, so running the two repairs in that order should re-label them. This is
+reasoned from the code and the pinning test; it was not run against a bank copy.
+
+**Evidence:** Eligibility, measured read-only: `mirror=True file_exists=True: 19721 (98%)`.
+
+### F11 — heading_path would not fix either problem [MEASURED]
+
+The wrong-file match (F6) comes from the file tokens, which heading_path does not touch. For the NULL
+sections, 32,607 of the 32,691 live NULL-section rows also have an empty heading_path, so a
+heading_path fallback would rescue 84 rows.
+
+**Evidence:** Read-only live query: `heading_path empty among section IS NULL rows: (1, 32607), (0, 84)`.
+
+### F12 — Both anchor defects are replicated by minimal unit tests [MEASURED]
+
+`SourcePathQueryFtsBehaviourTests.Anchor_NamingOneFile_DoesNotMatchAnotherFileHoldingTheSameWords`
+runs TryBuild's expression against a real FTS5 table. `ferry-notes.md#fares` matched
+`/notes/ferry-control.md` (directory supplies `notes`) and `/docs/notes-ferry.md` (words reordered).
+`SourcePathQueryTests.TryBuild_SectionWithSpaces_IsAnAnchor` returned false for
+`observatory.md#Coastal duties`. All three cases were red, and the 9 existing tests stayed green. They are
+committed with `Skip` naming the defect, so the fix drops `Skip` and must turn them green.
+
+**Evidence:** `dotnet test tests/AiRaccoon.Tests --no-build -- --filter-class "AiRaccoon.Tests.Unit.Search.SourcePathQuery*"` → `failed: 3, succeeded: 9`, with `but was actually ["/docs/ferry-notes.md", "/notes/ferry-control.md"]` and `["/docs/ferry-notes.md", "/docs/notes-ferry.md"]`; then with Skip: `succeeded: 9, skipped: 2`.
+
+### F13 — On 1.44.0 a slug anchor serves only the wrong section [MEASURED]
+
+Re-running the checklist item with `observatory.md#coastal-duties` on the installed 1.44.0: the one
+result is `Brass instruments` (vector rank 1), and the anchored `Coastal duties` row is dropped by the
+absolute floor. #666 (1.44.2) fixes this route.
+
+**Evidence:** Scratch `<scratch>/dr3` on 1.44.0, `memory_search {'observatory.md#coastal-duties'}` → `bca97d00 section=Brass instruments legs=[('vector', 1)]`, truncation `absoluteRelevance dropped 1`.
 
 ## Still open
 
-- Which chunker code emits the NULL-section heading chunk, and why it duplicates the previous chunk's text (F8). Reading the markdown chunker's section and heading-path assignment would settle it.
-- Whether `repair reingest` heals the live NULL sections. Test it on a bank copy with the watches table deleted, and drain embeddings afterwards.
-- Whether an anchor should fall back to `heading_path`, which is not an FTS column, or whether ingest should fill `section` from it. That is a design ruling, not a measurement.
-- F6's fix shape (match file tokens against the basename only, or require them to be adjacent) and whether the 27.3% collision rate hurts real queries. It needs the query log, which this investigation did not sample.
+- The fix shape for F6: match the file tokens as an ordered phrase against the basename, not a bag against the whole path. A phrase alone still matches `ferry/notes.md` for `ferry-notes.md`. Whether the 27.3% collision rate hurts real queries needs the query log.
+- Whether the section group should accept spaces (F12), and whether `.txt` should stay in PathRegex when it can never carry a section (F9).
+- F10 is reasoned, not run: repair a bank copy (watches table deleted, embeddings drained afterwards) and recount the NULL sections.
+- Why section and heading_path disagree across a section's chunks (F8's last point).
 - F2's single-anchor-row case was not isolated in a run.

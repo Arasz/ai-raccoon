@@ -16,14 +16,21 @@ namespace AiRaccoon.Core.Chunking;
 public sealed class MarkdownChunker : IMarkdownChunker
 {
     private readonly TokenCount _countTokens;
+    private readonly bool _markdown;
 
-    public MarkdownChunker(TokenCount countTokens)
+    public MarkdownChunker(TokenCount countTokens) : this(countTokens, markdown: true)
+    {
+    }
+
+    /// <summary>With <paramref name="markdown" /> false, headings and fences are plain lines (see <see cref="PlainTextChunker" />).</summary>
+    internal MarkdownChunker(TokenCount countTokens, bool markdown)
     {
         Guard.IsNotNull(countTokens);
         _countTokens = countTokens;
+        _markdown = markdown;
     }
 
-    public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => Split(text, maxTokens, overlayTokens, countTokens ?? _countTokens);
+    public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => Split(text, maxTokens, overlayTokens, countTokens ?? _countTokens, _markdown);
 
     /// <summary>
     ///     Same units, boundaries and budgets as <see cref="Chunk" /> (docs/adr/0036 untouched) —
@@ -33,16 +40,16 @@ public sealed class MarkdownChunker : IMarkdownChunker
     ///     (Rule D, #550-3) — only whitespace is ever dropped.
     /// </summary>
     public IReadOnlyList<TextChunk> ChunkWithHeadings(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) =>
-        SplitWithHeadings(text, maxTokens, overlayTokens, countTokens ?? _countTokens);
+        SplitWithHeadings(text, maxTokens, overlayTokens, countTokens ?? _countTokens, _markdown);
 
-    private static IReadOnlyList<string> Split(string text, int maxTokens, int overlayTokens, TokenCount countTokens)
+    private static IReadOnlyList<string> Split(string text, int maxTokens, int overlayTokens, TokenCount countTokens, bool markdown)
     {
         Guard.IsNotNull(text);
         Guard.IsGreaterThan(maxTokens, 0);
         Guard.IsGreaterThanOrEqualTo(overlayTokens, 0);
         Guard.IsLessThan(overlayTokens, maxTokens);
 
-        var units = BuildUnits(SplitLines(NormalizeLineEndings(text)), countTokens, maxTokens);
+        var units = BuildUnits(SplitLines(NormalizeLineEndings(text)), countTokens, maxTokens, markdown);
         List<string> chunks = [];
         List<Unit>? previousUnits = null;
         var cursor = 0;
@@ -58,14 +65,14 @@ public sealed class MarkdownChunker : IMarkdownChunker
         return chunks;
     }
 
-    private static IReadOnlyList<TextChunk> SplitWithHeadings(string text, int maxTokens, int overlayTokens, TokenCount countTokens)
+    private static IReadOnlyList<TextChunk> SplitWithHeadings(string text, int maxTokens, int overlayTokens, TokenCount countTokens, bool markdown)
     {
         Guard.IsNotNull(text);
         Guard.IsGreaterThan(maxTokens, 0);
         Guard.IsGreaterThanOrEqualTo(overlayTokens, 0);
         Guard.IsLessThan(overlayTokens, maxTokens);
 
-        var units = BuildUnits(SplitLines(NormalizeLineEndings(text)), countTokens, maxTokens);
+        var units = BuildUnits(SplitLines(NormalizeLineEndings(text)), countTokens, maxTokens, markdown);
         var contexts = BuildContexts(units);
         List<TextChunk> chunks = [];
         List<Unit>? previousUnits = null;
@@ -311,7 +318,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
     ///     lines, and a never-closed one is closed first, so every unit is a well-formed fence
     ///     (docs/adr/0048) and still bounded by maxTokens (docs/adr/0036).
     /// </summary>
-    private static List<Unit> BuildUnits(List<string> lines, TokenCount countTokens, int maxTokens)
+    private static List<Unit> BuildUnits(List<string> lines, TokenCount countTokens, int maxTokens, bool markdown)
     {
         List<Unit> units = [];
         List<string>? fenceLines = null;
@@ -320,7 +327,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         {
             if (fenceLines is null)
             {
-                if (IsFenceDelimiter(line))
+                if (markdown && IsFenceDelimiter(line))
                 {
                     fenceLines = [line];
                     fenceTokens = countTokens(line);
@@ -354,7 +361,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
             FlushFence(units, fenceLines, fenceTokens + countTokens(closer), maxTokens, countTokens);
         }
 
-        return units;
+        return markdown ? [.. units.Select(unit => unit with { IsHeading = unit.Lines.Count == 1 && IsHeadingLine(unit.Lines[0]) })] : units;
     }
 
     private static void FlushFence(List<Unit> units, List<string> fenceLines, int fenceTokens, int maxTokens,
@@ -553,7 +560,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
                || trimmed.StartsWith("~~~", StringComparison.Ordinal);
     }
 
-    private static bool IsHeadingUnit(Unit unit) => unit.Lines.Count == 1 && IsHeadingLine(unit.Lines[0]);
+    private static bool IsHeadingUnit(Unit unit) => unit.IsHeading;
 
     /// <summary>The headings DeferOpenSection may cut a section on, and BuildContexts pushes onto
     /// the heading stack: levels 1-2, never the ingest "## Source:" provenance header — the same
@@ -625,5 +632,9 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
     private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
-    private sealed record Unit(List<string> Lines, int TokenCount);
+    private sealed record Unit(List<string> Lines, int TokenCount)
+    {
+        /// <summary>An ATX heading line; stamped once by BuildUnits, never for plain text.</summary>
+        public bool IsHeading { get; init; }
+    }
 }

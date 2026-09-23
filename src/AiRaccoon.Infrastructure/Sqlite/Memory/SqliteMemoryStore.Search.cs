@@ -90,6 +90,25 @@ public sealed partial class SqliteMemoryStore
     }
 
     /// <summary>
+    ///     The anchor plan when some row in the bank is in the file the query names and matches its
+    ///     section; otherwise the ordinary plan, so text that merely looks like file#section is searched as text.
+    /// </summary>
+    private static async Task<FtsQueryPlan> PlanAsync(SqliteConnection connection, string query, CancellationToken cancellationToken)
+    {
+        var ordinary = FtsQueryNormalizer.BuildPlan(query);
+        var anchor = ordinary.AsPathQuery(query);
+        if (anchor.AnchorFile is not { } anchorFile)
+        {
+            return ordinary;
+        }
+
+        var sourceFiles = await connection.QueryAsync<string?>(
+            new CommandDefinition(MemorySql.SelectAnchorSourceFiles, new { query = anchor.Expression }, cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+        return sourceFiles.Any(sourceFile => SourcePathQuery.NamesFile(anchorFile, sourceFile)) ? anchor : ordinary;
+    }
+
+    /// <summary>
     ///     A file#section query names rows exactly, so the rows its anchor matched lead the fused
     ///     list (fused order kept within each group); the vector leg's view of a path string only
     ///     orders what follows.

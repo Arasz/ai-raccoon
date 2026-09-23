@@ -26,6 +26,13 @@
       "what-is-actually-true": "That shape proves the vector leg but cannot see a floor that drops keyword-only hits; the 1.43.0 floor shipped and passed a checklist that could not have caught it.",
       "evidence": "absolute-relevance-floor-keeps-exact-matches: 'AIR-4471' -> [] with dropped 4.",
       "so-what": "The hybrid step needs the mirror image: a bare identifier query that only BM25 can carry."
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-09-23-1.44.0-release.json (this run, first pass)",
+      "prior-claim": "source-path-anchor-resolves-its-chunk failed on '/notes/observatory.md#Coastal duties'; same root cause as the absolute floor.",
+      "what-is-actually-true": "That spelling is not an anchor query (the section regex allows no spaces), so it never exercised the anchor path. Re-run with the slug '#coastal-duties': the anchor path runs, and the floor drops the anchored row while the wrong section is served alone.",
+      "evidence": "docs/work/2026-09-23-anchor-open-hypotheses.md F7; this item's re-run evidence.",
+      "so-what": "The verdict (fail) stood, but its mechanism was wrong. Anchor probes must use slug spellings until the spaced-section gap is fixed."
     }
   ],
   "items": [
@@ -142,12 +149,12 @@
     {
       "item": "source-path-anchor-resolves-its-chunk",
       "expected-result": "a `file#section` query returns that exact chunk within the production result window",
-      "command": "two sections of /notes/observatory.md written ('Brass instruments' chunk 0, 'Coastal duties' chunk 1) ; memory_search {'/notes/observatory.md#Coastal duties'} and the 'notes/…' and 'observatory.md#…' spellings ; again with minRelativeScore 0",
-      "evidence": "All three default spellings -> results [] truncation [{'floor':'absoluteRelevance','threshold':0.35,'dropped':3}]. minRelativeScore 0 -> [('bca97d00', chunk 0 'The brass astrolabe'), ('6130a183', chunk 1 'The lighthouse keeper'), …]; the anchored chunk is fts rank 1 but ranked 2nd, cosine 0.26.",
-      "observed-result": "The anchor does not resolve by default (the floor drops it), and with full recall the wrong section of the file ranks first.",
+      "command": "Re-run: scratch <scratch>/dr3 on the installed 1.44.0 ; memory_write the two /notes/observatory.md sections ('Brass instruments', 'Coastal duties') ; model embedding set local ; memory_search {'/notes/observatory.md#coastal-duties'}, {'observatory.md#coastal-duties'}, {'observatory.md#Coastal duties'}",
+      "evidence": "Slug spellings (anchor path taken): 1 result only, bca97d00 'Brass instruments' [vector rank 1], truncation absoluteRelevance dropped 1 (the Coastal duties row). Spaced spelling: [] dropped 2. It is not an anchor query, because PathRegex's section group is [\\w-]+ (SourcePathQuery.cs:63).",
+      "observed-result": "On 1.44.0 a file#section anchor serves only the wrong section: the floor drops the anchored row, and the vector leg's pick of a sibling section survives. The spaced spelling never reaches the anchor path.",
       "status": "fail",
       "accepted": null,
-      "acceptance-reason": "Same root cause as absolute-relevance-floor-keeps-exact-matches for the empty result. Not tracked."
+      "acceptance-reason": "Fixed on main by #666 (1.44.2: anchor rows exempt from the floor and served first). The spaced-section gap and the wrong-file match are pinned by skipped repro tests in the anchor-defect PR."
     },
     {
       "item": "full-recall-ranking-order",

@@ -110,6 +110,16 @@ internal static class MemorySql
     // not a per-query window function (docs/plans/2026-08-08-search-knn-perf.md §3.2/§3.3).
     // snippet() is deferred to ranking survivors (docs/plans/2026-08-08-search-knn-perf.md §WP7) —
     // FtsSnippetsForSurvivors resolves it there instead.
+    // Whether a file#section anchor names anything at all, bank-wide: the caller decides between the
+    // anchor plan and the ordinary one before any scoped search runs.
+    public const string SelectAnchorSourceFiles = """
+                                                  SELECT DISTINCT e.source_file
+                                                  FROM entries_fts
+                                                  JOIN entries e ON e.id = entries_fts.rowid
+                                                  WHERE entries_fts MATCH @query
+                                                  LIMIT 200
+                                                  """;
+
     public const string SearchByFilter = """
                                          SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 4.0) AS Ranking,
                                                 e.path AS Path, e.value AS Value, e.source_file AS SourceFile,

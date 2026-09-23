@@ -4,15 +4,15 @@ using AiRaccoon.Core.Ingestion;
 namespace AiRaccoon.Infrastructure.Ingestion;
 
 /// <summary>
-///     File type handler for Markdown files (.md, .markdown).
+///     File type handler for plain text files (.txt).
 /// </summary>
-public sealed class MarkdownFileTypeHandler(IMarkdownChunker chunker) : IFileTypeHandler
+public sealed class PlainTextFileTypeHandler(IPlainTextChunker chunker) : IFileTypeHandler
 {
-    public string Name => "Markdown";
+    public string Name => "PlainText";
 
     public IReadOnlySet<string> Extensions { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        ".md", ".markdown"
+        ".txt"
     };
 
     public IChunker Chunker { get; } = chunker;
