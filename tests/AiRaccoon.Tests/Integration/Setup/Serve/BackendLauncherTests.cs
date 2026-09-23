@@ -138,7 +138,7 @@ public sealed class BackendLauncherTests : IDisposable
         // asserts exactly that null on the other path. This used to also assert
         // `stopwatch.Elapsed < 20s`, which added no discrimination and could only ever go red
         // because the host was busy (owner ruling 2026-08-22: no test asserts wall clock).
-        result.ServeExitCode.ShouldBe(ExitCode.PortInUse);
+        result.ServeExitCode.ShouldBe(ErrorCode.Port.InUse);
     }
 
     [RetryFact]

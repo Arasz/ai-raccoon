@@ -25,7 +25,7 @@ public sealed class CommandFailureExitCodeTests
     {
         var (exit, _, err) = await RunWithStoreThrowing(new InvalidOperationException("boom"));
 
-        exit.ShouldBe(ExitCode.CommandFailed);
+        exit.ShouldBe(ErrorCode.Internal.Unexpected);
         err.ShouldContain("boom");
     }
 
@@ -35,7 +35,7 @@ public sealed class CommandFailureExitCodeTests
     {
         var (exit, _, _) = await RunWithStoreThrowing(new TaskCanceledException("timed out"));
 
-        exit.ShouldBe(ExitCode.CommandFailed);
+        exit.ShouldBe(ErrorCode.Internal.Unexpected);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class CommandFailureExitCodeTests
     {
         var (exit, _, err) = await RunWithStoreThrowing(new SqliteException("database is locked", 5));
 
-        exit.ShouldBe(ExitCode.FailedToOpenEncryptedBank);
+        exit.ShouldBe(ErrorCode.Bank.OpenFailed);
         err.ShouldContain("database is locked");
     }
 
@@ -52,7 +52,7 @@ public sealed class CommandFailureExitCodeTests
     {
         var (exit, _, _) = await RunWithStoreThrowing(new BankKeyMismatchException("the key does not open the bank"));
 
-        exit.ShouldBe(ExitCode.FailedToOpenEncryptedBank);
+        exit.ShouldBe(ErrorCode.Bank.OpenFailed);
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class CommandFailureExitCodeTests
     {
         var (exit, _, _) = await RunWithStoreThrowing(new ArgumentException("bad key"));
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
     }
 
     /// <summary>The settings server answers 400 only when it rejects what the command sent.</summary>
@@ -77,7 +77,7 @@ public sealed class CommandFailureExitCodeTests
         var (exit, _, _) = await CliRun.RunAsync(["settings", "sweep", "show"],
             TestData.CreateConfigCommands(new SettingsRoutedStore(serverStore), settings: new SettingsCommands()));
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed class CommandFailureExitCodeTests
         var (exit, _, _) = await CliRun.RunAsync(["settings", "sweep", "show"],
             TestData.CreateConfigCommands(new SettingsRoutedStore(serverStore), settings: new SettingsCommands()));
 
-        exit.ShouldBe(ExitCode.CommandFailed);
+        exit.ShouldBe(ErrorCode.Internal.Unexpected);
     }
 
     /// <summary>Ctrl-C while the settings request is in flight: the caller's own token fires.</summary>
@@ -117,7 +117,7 @@ public sealed class CommandFailureExitCodeTests
         var (exit, _, err) = await CliRun.RunAsync(["settings", "sweep", "show"],
             (parsed, streams, _) => commands.RunAsync(parsed, streams, cts.Token));
 
-        exit.ShouldBe(ExitCode.Interrupted);
+        exit.ShouldBe(ErrorCode.Ok.SIGC);
         err.ShouldContain("changed nothing");
     }
 
@@ -132,7 +132,7 @@ public sealed class CommandFailureExitCodeTests
 
             var (exit, _, err) = await CliRun.RunAsync(["model", "code", "set", "local", dir], commands);
 
-            exit.ShouldBe(ExitCode.InvalidArgument);
+            exit.ShouldBe(ErrorCode.Usage.InvalidValue);
             err.ShouldContain("manifest.json");
         }
         finally
@@ -151,7 +151,7 @@ public sealed class CommandFailureExitCodeTests
         var (exit, _, err) = await CliRun.RunAsync(
             ["model", "embedding", "set", "openai", "some-model", "--api-key", "k", "--dims", "768"], commands);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("--dims 1024");
     }
 
@@ -165,7 +165,7 @@ public sealed class CommandFailureExitCodeTests
         var (exit, _, _) = await CliRun.RunAsync(
             ["model", "embedding", "set", "openai", "some-model", "--api-key", "k"], commands);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
     }
 
     private static Task<(int Exit, string Out, string Err)> RunWithStoreThrowing(Exception toThrow) =>

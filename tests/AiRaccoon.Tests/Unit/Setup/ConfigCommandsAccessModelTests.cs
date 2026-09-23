@@ -50,7 +50,7 @@ public class ConfigCommandsAccessModelTests
 
         var (exit, _, err) = await Run(["settings", "access", "default", "set", "bogus"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("bogus");
         store.Settings.ShouldNotContainKey("access.mode.global");
     }
@@ -437,7 +437,7 @@ public class ConfigCommandsAccessModelTests
         var exit = await TestData.CreateConfigCommands(store)
             .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.CommandFailed, "a missing switch arm is a bug, not a bad argument");
+        exit.ShouldBe(ErrorCode.Internal.Unexpected, "a missing switch arm is a bug, not a bad argument");
         stderr.ToString().ShouldContain("unhandled command");
     }
 
@@ -456,7 +456,7 @@ public class ConfigCommandsAccessModelTests
         var exit = await TestData.CreateConfigCommands(store)
             .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         stderr.ToString().ShouldBeEmpty();
     }
 }

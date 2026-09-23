@@ -23,7 +23,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         if (!File.Exists(bankPath))
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: doctor: no bank at {bankPath}");
-            return ExitCode.NoBank;
+            return ErrorCode.Bank.NoBank;
         }
 
         ResolvedKey resolvedKey;
@@ -35,7 +35,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         {
             Log.FailedToResolveEncryptionKey(logger, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: doctor: could not resolve the encryption key: {ex.Message}");
-            return ExitCode.FailedToResolveEncryptionKey;
+            return ErrorCode.Key.Unresolved;
         }
 
         SqliteConnection connection;
@@ -47,7 +47,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         {
             Log.FailedToOpenBank(logger, bankPath, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: doctor: could not open the bank read-only: {ex.Message}");
-            return ExitCode.FailedToOpenEncryptedBank;
+            return ErrorCode.Bank.OpenFailed;
         }
 
         await using (connection)
@@ -66,7 +66,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
                 Log.BankIsNotADatabase(logger, bankPath, ex);
                 await streams.WriteErrorLineAsync(
                     $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); restore it from a backup or check --data-root");
-                return ExitCode.BankCorrupted;
+                return ErrorCode.Bank.Corrupted;
             }
 
             var engines = new Dictionary<CorpusEngineProbe, CorpusEngineState>();
@@ -109,7 +109,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             case SchemaDoctorStatus.VersionAheadOfBinary:
                 await streams.WriteOutputLineAsync(
                     $"status: SCHEMA NEWER THAN THIS BINARY (bank is v{report.StoredVersion}, this binary supports up to v{report.CurrentVersion}) — update ai-raccoon");
-                return ExitCode.SchemaNewerThanBinary;
+                return ErrorCode.Bank.SchemaNewerThanBinary;
 
             case SchemaDoctorStatus.Healthy:
                 // P1 §3 Decisions C/D/E: 24 is emitted only on a positively-read open row — a
@@ -118,11 +118,11 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
                 {
                     await streams.WriteOutputLineAsync(
                         "status: MIGRATION IN PROGRESS (schema shape is healthy; MCP tool calls are refused until the re-embed finishes)");
-                    return ExitCode.ModelMigrationOpen;
+                    return ErrorCode.Bank.MigrationOpen;
                 }
 
                 await streams.WriteOutputLineAsync("status: HEALTHY");
-                return ExitCode.Success;
+                return ErrorCode.Ok.Success;
 
             default:
                 await streams.WriteOutputLineAsync($"status: SHAPE MISMATCH ({report.Findings.Count} finding(s))");
@@ -133,7 +133,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
 
                 await streams.WriteOutputLineAsync(
                     "remedy: start the server (ai-raccoon serve) — it repairs the schema on every open");
-                return ExitCode.SchemaVerificationFailed;
+                return ErrorCode.Bank.SchemaMismatch;
         }
     }
 

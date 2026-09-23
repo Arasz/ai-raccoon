@@ -63,8 +63,8 @@ public sealed class CliCommandRunnerTests : IDisposable
     {
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "settings", "access", "default", "set", "bogus"]);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
-        exit.ShouldNotBe(ExitCode.FailedToResolveEncryptionKey);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        exit.ShouldNotBe(ErrorCode.Key.Unresolved);
         stderr.ShouldContain("invalid access mode");
     }
 
@@ -102,7 +102,7 @@ public sealed class CliCommandRunnerTests : IDisposable
     {
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "settings", "access", "set"], expectParseErrors: true);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         CountOccurrences(stderr, "Required argument missing for command: 'set'.").ShouldBe(1);
     }
 
@@ -162,7 +162,7 @@ public sealed class CliCommandRunnerTests : IDisposable
 
         var (exit, _, stderr, _) = await Run(["--data-root", _dataRoot, "encryption", "unset"]);
 
-        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
+        exit.ShouldBe(ErrorCode.Key.Unresolved);
         stderr.ShouldContain("no AIRACCOON_DB_PASSPHRASE set");
         stderr.ShouldNotContain("must not be null");
     }

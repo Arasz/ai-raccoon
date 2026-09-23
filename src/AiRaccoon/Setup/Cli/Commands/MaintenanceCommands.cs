@@ -25,7 +25,7 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
         if (!int.TryParse(minutes, out var parsed) || parsed <= 0)
         {
             await streams.WriteErrorLineAsync("ai-raccoon: checkpoint interval must be a positive number of minutes");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal, parsed.ToString(),
@@ -41,14 +41,14 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
         if (!int.TryParse(days, out var parsed) || parsed <= 0)
         {
             await streams.WriteErrorLineAsync("ai-raccoon: vacuum interval must be a positive number of days");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         if (parsed > BankMaintenanceConfigKeys.MaxVacuumIntervalDays)
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: vacuum interval must be at most {BankMaintenanceConfigKeys.MaxVacuumIntervalDays} days");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal, parsed.ToString(),
@@ -70,7 +70,7 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: embed rows per run must be a positive integer, at most {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal, parsed.ToString(),

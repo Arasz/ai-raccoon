@@ -96,7 +96,7 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
         // The server's own file: naming it is what makes the refusal diagnosable.
         run.Stderr.ShouldContain(new McpTokenFile(_root).Path);
         run.Stderr.ShouldContain(McpTokenGate.HeaderName);
-        run.ExitCode.ShouldBe(ExitCode.ProxyBackendUnavailable);
+        run.ExitCode.ShouldBe(ErrorCode.Reach.BackendUnavailable);
         // "At once, not at the SDK's handshake timeout" is pinned by the exit code and the stderr
         // above, not by a clock (PR #464); the harness HardCap alone guards a hang.
     }

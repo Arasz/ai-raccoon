@@ -396,7 +396,7 @@ public sealed class RepairCommandsTests
     }
 
     [Fact]
-    public async Task ProjectIds_WithMissingMap_ReturnsInvalidArgument_AndNeverRequests()
+    public async Task ProjectIds_WithMissingMap_ReturnsAliasMapInvalid_AndNeverRequests()
     {
         using var scope = new TempScope();
         var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
@@ -404,12 +404,12 @@ public sealed class RepairCommandsTests
 
         var stdout = await RunProjectIdsWithExitAsync(apply: false, inner, scope.DataRoot, missing);
 
-        stdout.Exit.ShouldBe(AiRaccoon.ExitCode.InvalidArgument);
+        stdout.Exit.ShouldBe(ErrorCode.Usage.AliasMapInvalid);
         inner.LastRepairRequest.ShouldBeNull();
     }
 
     [Fact]
-    public async Task ProjectIds_WithMalformedMap_ReturnsInvalidArgument_AndNeverRequests()
+    public async Task ProjectIds_WithMalformedMap_ReturnsAliasMapInvalid_AndNeverRequests()
     {
         using var scope = new TempScope();
         var bad = Path.Combine(scope.DataRoot, "bad-map.json");
@@ -419,7 +419,7 @@ public sealed class RepairCommandsTests
 
         var stdout = await RunProjectIdsWithExitAsync(apply: false, inner, scope.DataRoot, bad);
 
-        stdout.Exit.ShouldBe(AiRaccoon.ExitCode.InvalidArgument);
+        stdout.Exit.ShouldBe(ErrorCode.Usage.AliasMapInvalid);
         inner.LastRepairRequest.ShouldBeNull();
     }
 

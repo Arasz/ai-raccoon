@@ -22,14 +22,14 @@ public sealed class HowToExitTableTests
     private static readonly Dictionary<int, (string ConstName, string Phrase, bool DocCommentCrossCheck)> ExpectedRows =
         new()
         {
-            [ExitCode.Success] = ("Success", "HEALTHY", false),
-            [ExitCode.FailedToResolveEncryptionKey] = ("FailedToResolveEncryptionKey", "the encryption key could not be resolved", false),
-            [ExitCode.FailedToOpenEncryptedBank] = ("FailedToOpenEncryptedBank", "the bank could not be opened read-only", false),
-            [ExitCode.SchemaVerificationFailed] = ("SchemaVerificationFailed", "the bank's actual schema", true),
-            [ExitCode.SchemaNewerThanBinary] = ("SchemaNewerThanBinary", "user_version", true),
-            [ExitCode.NoBank] = ("NoBank", "no bank file exists at the resolved path", true),
-            [ExitCode.ModelMigrationOpen] = ("ModelMigrationOpen", "every MCP tool call is refused until", true),
-            [ExitCode.BankCorrupted] = ("BankCorrupted", "the bank file exists but is not a SQLite database", true)
+            [ErrorCode.Ok.Success] = ("Success", "HEALTHY", false),
+            [ErrorCode.Key.Unresolved] = ("FailedToResolveEncryptionKey", "the encryption key could not be resolved", false),
+            [ErrorCode.Bank.OpenFailed] = ("FailedToOpenEncryptedBank", "the bank could not be opened read-only", false),
+            [ErrorCode.Bank.SchemaMismatch] = ("SchemaVerificationFailed", "the bank's actual schema", true),
+            [ErrorCode.Bank.SchemaNewerThanBinary] = ("SchemaNewerThanBinary", "user_version", true),
+            [ErrorCode.Bank.NoBank] = ("NoBank", "no bank file exists at the resolved path", true),
+            [ErrorCode.Bank.MigrationOpen] = ("ModelMigrationOpen", "every MCP tool call is refused until", true),
+            [ErrorCode.Bank.Corrupted] = ("BankCorrupted", "the bank file exists but is not a SQLite database", true)
         };
 
     [Fact]

@@ -167,7 +167,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
                 var written = await first.CallToolAsync("memory_write",
                     new JsonObject { ["projectId"] = "flow", ["content"] = "identity proof full flow marker" }, Ct);
                 hash = JsonDocument.Parse(written).RootElement.GetProperty("data").GetProperty("hash").GetString()!;
-                (await first.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, first.Stderr);
+                (await first.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, first.Stderr);
                 (first.Stderr + ReadQuietLog()).ShouldNotContain("did not prove");
             }
 
@@ -176,9 +176,9 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             ChildPorts().ShouldAllBe(child => child == port, "the only backend the proxy may start is the shared one on the configured port");
 
             var set = await RunCliAsync(port, "settings", "sweep", "interval-hours", "12");
-            set.ExitCode.ShouldBe(ExitCode.Success, set.Stderr);
+            set.ExitCode.ShouldBe(ErrorCode.Ok.Success, set.Stderr);
             var show = await RunCliAsync(port, "settings", "sweep", "show");
-            show.ExitCode.ShouldBe(ExitCode.Success, show.Stderr);
+            show.ExitCode.ShouldBe(ErrorCode.Ok.Success, show.Stderr);
             show.Stdout.ShouldContain("12");
             (set.Stderr + show.Stderr).ShouldNotContain("did not prove");
             (await RealServe.PidOnAsync(port, Ct)).ShouldBe(owner, "the settings verbs must attach to the proven instance");
@@ -194,7 +194,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
                 var read = await second.CallToolAsync("memory_get",
                     new JsonObject { ["projectId"] = "flow", ["hash"] = hash }, Ct);
                 read.ShouldContain("identity proof full flow marker");
-                (await second.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, second.Stderr);
+                (await second.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, second.Stderr);
                 (second.Stderr + ReadQuietLog()).ShouldNotContain("did not prove");
             }
 
@@ -251,7 +251,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
 
             proxy.Stderr.ShouldNotContain("no longer proves", Case.Sensitive, "under --quiet the proxy's warnings go to the quiet log only");
 
-            exit.ShouldBe(ExitCode.Success, proxy.Stderr);
+            exit.ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
 
             AssertNothingSecret(squatter);
         }
@@ -285,7 +285,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         if (attacker is Attacker.Honest)
         {
             failure.ShouldBeNull(failure?.ToString());
-            exit.ShouldBe(ExitCode.Success, proxy.Stderr);
+            exit.ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
             (proxy.Stderr + ReadQuietLog()).ShouldNotContain("did not prove it serves this data root");
             ChildPorts().ShouldBeEmpty("a proven listener is attached to; nothing may be spawned");
             (await RealServe.PidOnAsync(port, Ct)).ShouldBe(attack.Server!.Process.Id);
@@ -302,13 +302,13 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         {
             // The fallback `serve` refuses the shared key too, so there is no backend at all — and still no secret.
             failure.ShouldNotBeNull();
-            exit.ShouldBe(ExitCode.ProxyBackendUnavailable, proxy.Stderr);
+            exit.ShouldBe(ErrorCode.Reach.BackendUnavailable, proxy.Stderr);
             proxy.Stderr.ShouldContain("no private backend could be started");
         }
         else
         {
             failure.ShouldBeNull(failure?.ToString());
-            exit.ShouldBe(ExitCode.Success, proxy.Stderr);
+            exit.ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
         }
     }
 
@@ -324,7 +324,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             var old = attack.Server!.Process;
             await using var cycled = await RealServe.StartAsync(_options, restart, port, Ct);
             await old.WaitForExitAsync(Ct).WaitAsync(HardCap, Ct);
-            old.ExitCode.ShouldBe(ExitCode.Success);
+            old.ExitCode.ShouldBe(ErrorCode.Ok.Success);
             (await RealServe.PidOnAsync(port, Ct)).ShouldBe(cycled.Process.Id);
             return;
         }
@@ -333,7 +333,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             ["--data-root", _options.DataRoot, "--install-scope", "project", .. restart], HardCap, Ct);
 
         AssertTheAttackGotNothing(attack, attacker, LaunchPath.Restart);
-        run.ExitCode.ShouldBe(ExitCode.PortInUse, run.Stderr);
+        run.ExitCode.ShouldBe(ErrorCode.Port.InUse, run.Stderr);
         run.Stderr.ShouldContain($"did not prove it holds this data root's identity key ({ExpectedReason(attacker, LaunchPath.Restart)}); nothing is asked to stop");
         run.Stderr.ShouldContain("stop the listener yourself");
     }
@@ -355,7 +355,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
 
             if (attacker is Attacker.Honest)
             {
-                (await proxy.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, proxy.Stderr);
+                (await proxy.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
                 (await WaitUntilGoneAsync(childPid)).ShouldBeTrue("the proven child must be stopped with the proxy");
                 ReadQuietLog().ShouldContain($"shutdown requested over /shutdown; stopping pid {childPid}");
                 (proxy.Stderr + ReadQuietLog()).ShouldNotContain("no longer proves");
@@ -374,7 +374,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
 
             AssertTheAttackGotNothing(attack, attacker, LaunchPath.Dispose);
             AssertNothingSecret(squatter);
-            exit.ShouldBe(ExitCode.Success, proxy.Stderr);
+            exit.ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
             ReadQuietLog().ShouldContain(
                 $"the private backend at http://127.0.0.1:{childPort}/mcp no longer proves it serves this data root ({ExpectedReason(attacker, LaunchPath.Dispose)})");
             proxy.Stderr.ShouldNotContain("no longer proves", Case.Sensitive, "under --quiet the proxy's warnings go to the quiet log only");

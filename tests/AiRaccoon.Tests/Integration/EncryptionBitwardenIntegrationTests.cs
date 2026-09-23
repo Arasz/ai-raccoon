@@ -520,7 +520,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
         var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir, port);
 
-        exit.ShouldBe(ExitCode.FailedToResolveEncryptionKey);
+        exit.ShouldBe(ErrorCode.Key.Unresolved);
         // The pre-P2 in-process server logged the resolve failure and the SQLite engine identity;
         // serve reports key failures by exit code only — stdout and stderr stay empty.
         stdout.ShouldBeEmpty();
@@ -555,7 +555,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         lease.ReleaseForBind();
         var (exit, stderr, stdout) = await RunServerProcessAsync(Path.GetDirectoryName(_fakeBws)!, port);
 
-        exit.ShouldBe(ExitCode.FailedToOpenEncryptedBank);
+        exit.ShouldBe(ErrorCode.Bank.OpenFailed);
         stdout.ShouldBeEmpty();
         stderr.ShouldBeEmpty();
         (await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken))

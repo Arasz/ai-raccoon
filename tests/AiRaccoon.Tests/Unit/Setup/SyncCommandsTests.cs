@@ -55,7 +55,7 @@ public class SyncCommandsTests
         var (exit, _, stderr) = await Run(["settings", "sync", "add", "s3", "https://s3.example.com", "--bucket", "b"],
             store, new StringReader("\n"));
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         stderr.ShouldContain("access key required");
         store.Settings.ShouldBeEmpty();
     }

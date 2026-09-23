@@ -55,7 +55,7 @@ internal partial class NodeRunner(
         {
             Log.McpTokenUnavailable(logger, tokenFile.Path);
             await streams.WriteErrorLineAsync($"ai-raccoon: {tokenFile.RefusalReason ?? $"cannot read or create the MCP token at {tokenFile.Path} — check its permissions, or remove it and start serve again"}");
-            return ExitCode.McpTokenUnavailable;
+            return ErrorCode.Environment.TokenUnavailable;
         }
 
         // The identity key is the trust anchor a client verifies before it hands over the token; only
@@ -64,7 +64,7 @@ internal partial class NodeRunner(
         if (await identityKeyFile.EnsureAsync(ctx) is null)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {identityKeyFile.RefusalReason ?? $"cannot read or create the identity key at {identityKeyFile.Path} — check its permissions, or remove it and start serve again"}");
-            return ExitCode.McpTokenUnavailable;
+            return ErrorCode.Environment.TokenUnavailable;
         }
 
         if (tokenFile.TightenedStateDirectory || identityKeyFile.TightenedStateDirectory)
@@ -121,13 +121,13 @@ internal partial class NodeRunner(
             var probeResolvingEncryptionKey = await encryptionKeyResolver.ProbeResolvingEncryptionKeyAsync(ctx);
             if (!probeResolvingEncryptionKey.IsSuccess)
             {
-                return ExitCode.FailedToResolveEncryptionKey;
+                return ErrorCode.Key.Unresolved;
             }
 
             var probeUsingEncryptionKey = await connectionFactory.ProbeUsingEncryptionKey(probeResolvingEncryptionKey.Key.Passphrase, ctx);
             if (!probeUsingEncryptionKey.IsCorrectKey)
             {
-                return ExitCode.FailedToOpenEncryptedBank;
+                return ErrorCode.Bank.OpenFailed;
             }
 
             await embeddingAvailability.EnsureEmbeddingAvailabilityAsync(ctx);
@@ -158,7 +158,7 @@ internal partial class NodeRunner(
             }
         }
 
-        return ExitCode.Success;
+        return ErrorCode.Ok.Success;
     }
 
     private async Task EmitBoundUrl(NodeLaunchDescriptor descriptor, StandardStreams streams, WebApplication serverHost)
@@ -222,16 +222,16 @@ internal partial class NodeRunner(
                 Log.RestartLostThePort(logger, port);
                 await streams.WriteErrorLineAsync(
                     $"ai-raccoon: restart on port {port} did not take — another server took the port while this one was starting; check it with 'ai-raccoon serve observability pid --port {port}'");
-                return ExitCode.RestartLostThePort;
+                return ErrorCode.Port.LostDuringRestart;
             case BindRefusal.HeldUnidentified:
                 Log.RestartProbeUnanswered(logger, port);
                 await streams.WriteErrorLineAsync(
                     $"ai-raccoon: cannot restart the server on port {port}: it is in use but gave the probe no answer, so nothing was asked to stop — try again, stop the listener yourself, or serve on another port");
-                return ExitCode.RestartProbeUnanswered;
+                return ErrorCode.Port.HeldUnanswered;
             default:
                 Log.PortInUse(logger, port);
                 await streams.WriteErrorLineAsync($"ai-raccoon: port {port} is in use — pass --port 0 for a random port, or free the port");
-                return ExitCode.PortInUse;
+                return ErrorCode.Port.InUse;
         }
     }
 
@@ -256,7 +256,7 @@ internal partial class NodeRunner(
         Log.PortInUse(logger, descriptor.Port);
         await streams.WriteErrorLineAsync(
             $"ai-raccoon: port {descriptor.Port} is in use by a listener that did not prove it serves this data root — stop the listener yourself, or serve on another port (--port 0)");
-        return ExitCode.PortInUse;
+        return ErrorCode.Port.InUse;
     }
 
     /// <summary>
@@ -268,25 +268,25 @@ internal partial class NodeRunner(
         {
             RestartOutcome.Foreign => (
                 $"ai-raccoon: port {descriptor.Port} is held by a listener that does not identify as an ai-raccoon server — stop it yourself, or serve on another port",
-                ExitCode.PortInUse),
+                ErrorCode.Port.InUse),
             RestartOutcome.Unproven => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the listener did not prove it serves this data root — stop the listener yourself, then run serve again, or serve on another port (--port 0)",
-                ExitCode.PortInUse),
+                ErrorCode.Port.InUse),
             RestartOutcome.NoToken => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: {descriptor.TokenFile.Path} holds no token, so it cannot be asked to stop — it may serve another data root; stop it " +
                 $"yourself, or" +
                 $" serve on" +
                 $" another port",
-                ExitCode.RestartNoToken),
+                ErrorCode.Server.NoToken),
             RestartOutcome.Refused => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it refused the token in {descriptor.TokenFile.Path} — it serves another data root; stop it yourself, or serve on another port",
-                ExitCode.RestartTokenRefused),
+                ErrorCode.Server.RestartTokenRefused),
             RestartOutcome.Unsupported => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the ai-raccoon {result.Version ?? ServerRestart.UnknownVersion} serving it (pid {result.Pid}) is too old to be asked to stop — stop it yourself, then run serve again",
-                ExitCode.RestartUnsupportedServer),
+                ErrorCode.Server.TooOldToRestart),
             RestartOutcome.TimedOut => (
                 $"ai-raccoon: restart on port {descriptor.Port} timed out: the server (pid {result.Pid}) accepted the shutdown but still held the port {ServerRestart.PortFreeWithin.TotalSeconds:0}s later — stop it yourself, then run serve again",
-                ExitCode.RestartTimedOut),
+                ErrorCode.Port.RestartTimedOut),
             _ => ThrowHelper.ThrowArgumentOutOfRangeException<(string, int)>(nameof(result),
                 $"{result.Outcome} lets serve bind, so it has no refusal line")
         };
@@ -301,7 +301,7 @@ internal partial class NodeRunner(
         await streams.WriteErrorLineAsync(
             $"ai-raccoon: attached to the server already listening on {descriptor.Url} — it proved it holds the identity key for {requestedBankPath}'s state directory; this process never opened that bank. Stop that server to serve here, or use --port 0 for a private one");
         await streams.RenderUrlForInput(descriptor.Url, descriptor.Port, descriptor.Source.McpEntry, descriptor.Source.Format);
-        return ExitCode.Success;
+        return ErrorCode.Ok.Success;
     }
 
     /// <summary>

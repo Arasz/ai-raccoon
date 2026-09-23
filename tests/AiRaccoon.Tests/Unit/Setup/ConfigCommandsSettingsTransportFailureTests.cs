@@ -8,7 +8,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 
 /// <summary>
 ///     WP7-T7: a settings command whose transport fails must exit with a code distinct from both
-///     success and the generic <see cref="ExitCode.InvalidArgument" /> catch-all, naming why in
+///     success and the generic <see cref="ErrorCode.Usage.InvalidValue" /> catch-all, naming why in
 ///     stderr without a doubled "ai-raccoon:" prefix (the exception messages already carry it).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
@@ -23,7 +23,7 @@ public sealed class ConfigCommandsSettingsTransportFailureTests
 
         var (exit, _, err) = await CliRun.RunAsync(["settings", "sweep", "show"], commands);
 
-        exit.ShouldBe(ExitCode.SettingsServerRefused);
+        exit.ShouldBe(ErrorCode.Server.RequestTokenRefused);
         err.Trim().ShouldBe("ai-raccoon: the settings server at http://127.0.0.1:1/ refused this credential");
     }
 
@@ -35,7 +35,7 @@ public sealed class ConfigCommandsSettingsTransportFailureTests
 
         var (exit, _, err) = await CliRun.RunAsync(["settings", "sweep", "show"], commands);
 
-        exit.ShouldBe(ExitCode.SettingsServerUnavailable);
+        exit.ShouldBe(ErrorCode.Reach.Unavailable);
         err.Trim().ShouldBe("ai-raccoon: no settings server answered at http://127.0.0.1:1/");
     }
 

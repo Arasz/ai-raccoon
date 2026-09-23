@@ -94,7 +94,7 @@ public sealed class ProjectIdsRepairCommands
             {
                 await streams.WriteErrorLineAsync(
                     $"project-ids repair: cannot load --map '{mapPath}': {ex.Message}");
-                return ExitCode.InvalidArgument;
+                return ErrorCode.Usage.InvalidValue;
             }
         }
         else

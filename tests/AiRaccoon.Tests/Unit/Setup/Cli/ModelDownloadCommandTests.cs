@@ -40,7 +40,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, @out, err) = await Run(repo, ["model", "download", repo.RepoId]);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         @out.ShouldContain($"downloaded {repo.RepoId}");
         @out.ShouldContain(EmbeddingManifest.FileName);
         @out.ShouldContain("model embedding set local");
@@ -57,7 +57,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, @out, err) = await Run(repo, ["model", "download", repo.RepoId, "--dry-run"]);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         @out.ShouldContain("onnx/model.onnx");
         @out.ShouldContain("onnx/model.onnx_data");
         @out.ShouldContain(repo.OnnxSha[..16]);
@@ -74,7 +74,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, @out, err) = await Run(repo, ["model", "download", repo.RepoId]);
 
-        exit.ShouldBe(ExitCode.ModelDownloadFailed);
+        exit.ShouldBe(ErrorCode.Model.DownloadFailed);
         @out.ShouldBeEmpty();
         err.ShouldContain("sha256 mismatch");
         err.ShouldContain(repo.OnnxSha);
@@ -87,7 +87,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, _, err) = await Run(repo, ["model", "download", "nope/missing"]);
 
-        exit.ShouldBe(ExitCode.ModelDownloadFailed);
+        exit.ShouldBe(ErrorCode.Model.DownloadFailed);
         err.ShouldContain("nope/missing");
     }
 
@@ -98,7 +98,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, @out, err) = await Run(repo, ["model", "download", repo.RepoId], stdin: "n\n");
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         @out.ShouldBeEmpty();
         err.ShouldContain("--yes");
         Directory.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId))).ShouldBeFalse();
@@ -111,7 +111,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, _, err) = await Run(repo, ["model", "download", repo.RepoId], stdin: "y\n");
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         err.ShouldContain("[y/N]");
         File.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId), EmbeddingManifest.FileName)).ShouldBeTrue();
     }
@@ -123,7 +123,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, _, err) = await Run(repo, ["model", "download", repo.RepoId, "--yes"]);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         err.ShouldNotContain("[y/N]");
         File.Exists(Path.Combine(_dataRoot, "models", ModelSlug.Sanitize(repo.RepoId), EmbeddingManifest.FileName)).ShouldBeTrue();
     }
@@ -141,7 +141,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, @out, _) = await CliRun.RunAsync(["model", "download", repo.RepoId, "--dry-run"], commands);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         @out.ShouldContain("onnx/model.onnx");
     }
 
@@ -159,7 +159,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, _, err) = await CliRun.RunAsync(["model", "download", "org/model", "--dry-run"], commands);
 
-        exit.ShouldBe(ExitCode.ModelDownloadFailed);
+        exit.ShouldBe(ErrorCode.Model.DownloadFailed);
         err.ShouldNotBeEmpty();
     }
 
@@ -178,7 +178,7 @@ public class ModelDownloadCommandTests : IDisposable
         var (exit, _, _) = await CliRun.RunAsync(["model", "download", repo.RepoId, "--dir", Path.Combine(_dataRoot, "m")],
             (parsed, streams, _) => commands.RunAsync(parsed, streams, cts.Token));
 
-        exit.ShouldBe(ExitCode.Interrupted);
+        exit.ShouldBe(ErrorCode.Ok.SIGC);
     }
 
     [Fact]
@@ -189,7 +189,7 @@ public class ModelDownloadCommandTests : IDisposable
 
         var (exit, @out, _) = await Run(repo, ["model", "download", repo.RepoId, "--dir", customDir]);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         @out.ShouldContain(customDir);
         File.Exists(Path.Combine(customDir, EmbeddingManifest.FileName)).ShouldBeTrue();
     }

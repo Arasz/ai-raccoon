@@ -30,7 +30,7 @@ public sealed class CliExitCodeMeaningTests : IDisposable
     {
         var exitCode = await new AppRunner().Run(["--data-root", _dataRoot, .. args]);
 
-        exitCode.ShouldBe(ExitCode.FailedToParseCliArgs);
+        exitCode.ShouldBe(ErrorCode.Usage.Unparseable);
         File.Exists(Path.Combine(_dataRoot, "memory.db")).ShouldBeFalse("nothing may launch on a bad argv");
     }
 
@@ -54,7 +54,7 @@ public sealed class CliExitCodeMeaningTests : IDisposable
     {
         var exitCode = await new AppRunner().Run(["--data-root", _dataRoot, .. args]);
 
-        exitCode.ShouldBe(ExitCode.InvalidArgument);
+        exitCode.ShouldBe(ErrorCode.Usage.InvalidValue);
         File.Exists(Path.Combine(_dataRoot, "memory.db")).ShouldBeFalse("nothing may launch on a bad argv");
     }
 }

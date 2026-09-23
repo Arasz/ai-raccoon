@@ -29,7 +29,7 @@ public static partial class HostExtensions
                 await asyncDisposable.DisposeAsync();
             }
 
-            return ExitCode.Success;
+            return ErrorCode.Ok.Success;
         }
     }
 

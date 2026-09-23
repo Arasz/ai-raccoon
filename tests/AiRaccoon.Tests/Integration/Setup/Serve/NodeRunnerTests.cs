@@ -40,7 +40,7 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stdout.ShouldBe($"http://127.0.0.1:{port}/mcp{Environment.NewLine}");
     }
 
@@ -75,7 +75,7 @@ public sealed class NodeRunnerTests : IDisposable
 
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stdout.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
     }
 
@@ -88,7 +88,7 @@ public sealed class NodeRunnerTests : IDisposable
 
         var exit = await run.Exit;
 
-        exit.ShouldBe(ExitCode.PortInUse);
+        exit.ShouldBe(ErrorCode.Port.InUse);
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain("in use");
         run.Stderr.ShouldContain("--port 0");
@@ -109,7 +109,7 @@ public sealed class NodeRunnerTests : IDisposable
         await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         var exit = await run.Exit;
 
-        exit.ShouldBe(ExitCode.McpTokenUnavailable);
+        exit.ShouldBe(ErrorCode.Environment.TokenUnavailable);
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain(tokenPath);
         run.Stderr.ShouldNotContain("   at ");
@@ -130,7 +130,7 @@ public sealed class NodeRunnerTests : IDisposable
         await using var second = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--mcp-entry", "--format", "hermes"]);
         var secondExit = await second.Exit;
 
-        secondExit.ShouldBe(ExitCode.Success);
+        secondExit.ShouldBe(ErrorCode.Ok.Success);
         second.Stdout.ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
         second.Stderr.ShouldContain("attached");
         second.Stderr.ShouldContain("proved");
@@ -141,7 +141,7 @@ public sealed class NodeRunnerTests : IDisposable
         response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed); // GET unmapped; any real response proves ownership
 
         var firstExit = await first.StopAsync();
-        firstExit.ShouldBe(ExitCode.Success);
+        firstExit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     /// <summary>
@@ -165,7 +165,7 @@ public sealed class NodeRunnerTests : IDisposable
             await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString()]);
             var secondExit = await second.Exit;
 
-            secondExit.ShouldBe(ExitCode.PortInUse);
+            secondExit.ShouldBe(ErrorCode.Port.InUse);
             second.Stdout.ShouldBeEmpty();
             second.Stderr.ShouldContain("did not prove");
             second.Stderr.ShouldContain("stop the listener");
@@ -179,7 +179,7 @@ public sealed class NodeRunnerTests : IDisposable
         }
 
         var firstExit = await first.StopAsync();
-        firstExit.ShouldBe(ExitCode.Success);
+        firstExit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -213,7 +213,7 @@ public sealed class NodeRunnerTests : IDisposable
                 // The loser (PortInUse) completes first; the winner keeps serving until stopped.
                 await Task.WhenAny(first.Exit, second.Exit);
                 exits = [await first.StopAsync(), await second.StopAsync()];
-                if (exits.Count(exit => exit == ExitCode.Success) >= 1)
+                if (exits.Count(exit => exit == ErrorCode.Ok.Success) >= 1)
                 {
                     break;
                 }
@@ -222,9 +222,9 @@ public sealed class NodeRunnerTests : IDisposable
                 await second.DisposeAsync();
             }
 
-            exits.ShouldAllBe(exit => exit == ExitCode.Success || exit == ExitCode.PortInUse);
-            exits.Count(exit => exit == ExitCode.Success).ShouldBeGreaterThanOrEqualTo(1);
-            if (exits[0] == ExitCode.Success)
+            exits.ShouldAllBe(exit => exit == ErrorCode.Ok.Success || exit == ErrorCode.Port.InUse);
+            exits.Count(exit => exit == ErrorCode.Ok.Success).ShouldBeGreaterThanOrEqualTo(1);
+            if (exits[0] == ErrorCode.Ok.Success)
             {
                 first.Stdout.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
             }
@@ -234,7 +234,7 @@ public sealed class NodeRunnerTests : IDisposable
                 first.Stderr.ShouldContain("in use");
             }
 
-            if (exits[1] == ExitCode.Success)
+            if (exits[1] == ErrorCode.Ok.Success)
             {
                 second.Stdout.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
             }
@@ -272,7 +272,7 @@ public sealed class NodeRunnerTests : IDisposable
         line.ShouldBe(McpEntryRenderer.RenderHermes(port));
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stdout.ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
     }
 
@@ -291,7 +291,7 @@ public sealed class NodeRunnerTests : IDisposable
         line.ShouldBe(McpEntryRenderer.RenderClaude(port));
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -307,7 +307,7 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -326,7 +326,7 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{servePort}/mcp");
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -344,7 +344,7 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stderr.ShouldContain("serve always uses http");
         run.Stderr.ShouldContain("proxy");
     }
@@ -363,7 +363,7 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stderr.ShouldNotContain("ignoring --transport");
         run.Stderr.ShouldNotContain("serve always uses http");
     }
@@ -385,7 +385,7 @@ public sealed class NodeRunnerTests : IDisposable
 
         // The self-exit is the fact; its duration is not a verdict (PR #464). A fully broken idle
         // timeout hangs the await above and is caught by the harness cap / job timeout.
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -407,7 +407,7 @@ public sealed class NodeRunnerTests : IDisposable
         response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
 
         var exit = await run.StopAsync();
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     /// <summary>A /mcp request carrying the token minted under the given data root.</summary>

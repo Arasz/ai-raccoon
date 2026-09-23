@@ -34,7 +34,7 @@ public sealed class ProxyRunnerTests : IDisposable
 
         var exit = await TestData.CreateProxyRunner().RunAsync(config, new StandardStreams(TextReader.Null, TextWriter.Null, stderr), AppHost, TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.InvalidArgument, "the port is a value the proxy cannot use, not a backend that failed");
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue, "the port is a value the proxy cannot use, not a backend that failed");
         var message = stderr.ToString();
         message.ShouldContain("--port 0");
         // Names the supported way to get a random port instead.
@@ -52,7 +52,7 @@ public sealed class ProxyRunnerTests : IDisposable
 
         var exit = await TestData.CreateProxyRunner().RunAsync(config, new StandardStreams(TextReader.Null, TextWriter.Null, stderr), DotnetHost, TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
+        exit.ShouldBe(ErrorCode.Reach.BackendUnavailable);
         var message = stderr.ToString();
         message.ShouldContain("dotnet host");
         message.ShouldContain("serve --port 54240");

@@ -219,7 +219,7 @@ public sealed class AppRunnerSettingsRoutingTests : IDisposable
                 new SettingsServerUnavailableException("ai-raccoon: no settings server answered")),
             ["--data-root", _dataRoot, "settings", "sweep", "show"]);
 
-        exit.ShouldBe(ExitCode.SettingsServerUnavailable);
+        exit.ShouldBe(ErrorCode.Reach.Unavailable);
     }
 
     private static async Task<(int Exit, string Stdout)> Run(

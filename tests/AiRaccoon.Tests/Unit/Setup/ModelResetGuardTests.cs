@@ -34,7 +34,7 @@ public sealed class ModelResetGuardTests
 
         var (exit, @out, err) = await CliRun.RunAsync(["settings", "model", "reset"], commands);
 
-        // Literal 25 at RED time; ExitCode.ModelResetRefused lands in the same commit (R2 F1).
+        // Literal 25 at RED time; ErrorCode.Server.MigrationRefused lands in the same commit (R2 F1).
         exit.ShouldBe(25);
         err.ShouldBe(FrozenResetRefusalMessage + Environment.NewLine);
         @out.ShouldNotContain("embedding engine reset to default: no engine");
@@ -75,7 +75,7 @@ public sealed class ModelResetGuardTests
 
         var (exit, _, err) = await CliRun.RunAsync(["model", "embedding", "set", "local"], commands);
 
-        exit.ShouldBe(ExitCode.ModelResetRefused);
+        exit.ShouldBe(ErrorCode.Server.MigrationRefused);
         err.ShouldContain(reason);
     }
 

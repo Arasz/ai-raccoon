@@ -25,7 +25,7 @@ public sealed class ConfigCommandsCancellationTests
         var (exit, outp, err) = await CliRun.RunAsync(["settings", "sweep", "show"],
             (parsed, streams, _) => commands.RunAsync(parsed, streams, cts.Token));
 
-        exit.ShouldBe(ExitCode.Interrupted);
+        exit.ShouldBe(ErrorCode.Ok.SIGC);
         exit.ShouldBe(130);
         outp.ShouldBeEmpty();
         err.ShouldContain("changed nothing");
@@ -40,7 +40,7 @@ public sealed class ConfigCommandsCancellationTests
 
         var (exit, _, _) = await CliRun.RunAsync(["settings", "sweep", "show"], commands);
 
-        exit.ShouldBe(ExitCode.CommandFailed);
+        exit.ShouldBe(ErrorCode.Internal.Unexpected);
     }
 
     /// <summary>Stands in for the auto-start acquire: it observes the caller's token exactly where the

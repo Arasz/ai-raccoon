@@ -78,30 +78,30 @@ internal sealed class ModelDownloadCommands(
             if (dryRun)
             {
                 await PrintPlanAsync(result.Plan, streams).ConfigureAwait(false);
-                return ExitCode.Success;
+                return ErrorCode.Ok.Success;
             }
 
             await streams.WriteOutputLineAsync(
                 $"downloaded {repoId}@{revision} to {targetDir} ({result.DownloadedFiles.Count} file(s)); {EmbeddingManifest.FileName} written. " +
                 (activationHint ? $"Activate with 'ai-raccoon model embedding set local {targetDir}' (or 'ai-raccoon model code set local {targetDir}'). " : string.Empty) +
                 "Trust note: the SHA-256 pins were captured from Hugging Face's LFS oids before download — the first pin trusts the channel once; registry pins are the reviewed tier (plan D8).");
-            return ExitCode.Success;
+            return ErrorCode.Ok.Success;
         }
         catch (ModelDownloadRejectedException ex)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}").ConfigureAwait(false);
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
         catch (ModelDownloadPlanException ex)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}").ConfigureAwait(false);
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
         catch (Exception ex) when (ex is ModelDownloadException or HfApiException or OnnxProbeException or HttpRequestException
                                    || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}").ConfigureAwait(false);
-            return ExitCode.ModelDownloadFailed;
+            return ErrorCode.Model.DownloadFailed;
         }
     }
 

@@ -71,7 +71,7 @@ public sealed class TokenPathMigrationE2ETests : IAsyncLifetime
                 "--port", port.ToString(CultureInfo.InvariantCulture)
             ], ProxyProcess.Stateless);
             (await proxy.ListToolsAsync(Ct)).ShouldNotBeEmpty();
-            (await proxy.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, proxy.Stderr);
+            (await proxy.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
             proxy.Stderr.ShouldNotContain("did not prove", Case.Sensitive, "the migrated root must prove and attach, not fall back");
         }
 
@@ -110,7 +110,7 @@ public sealed class TokenPathMigrationE2ETests : IAsyncLifetime
                 "--port", port.ToString(CultureInfo.InvariantCulture)
             ], ProxyProcess.Stateless);
             (await proxy.ListToolsAsync(Ct)).ShouldNotBeEmpty();
-            (await proxy.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, proxy.Stderr);
+            (await proxy.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
             proxy.Stderr.ShouldNotContain("did not prove", Case.Sensitive);
         }
     }

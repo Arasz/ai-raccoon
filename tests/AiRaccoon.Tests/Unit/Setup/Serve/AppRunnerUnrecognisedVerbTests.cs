@@ -31,7 +31,7 @@ public sealed class AppRunnerUnrecognisedVerbTests : IDisposable
 
         var exitCode = await runner.Run(["--data-root", _dataRoot, "notaverb"]);
 
-        exitCode.ShouldBe(ExitCode.FailedToParseCliArgs);
+        exitCode.ShouldBe(ErrorCode.Usage.Unparseable);
     }
 
     /// <summary>An unknown option is the same mistake in the other shape.</summary>
@@ -42,7 +42,7 @@ public sealed class AppRunnerUnrecognisedVerbTests : IDisposable
 
         var exitCode = await runner.Run(["--data-root", _dataRoot, "--not-an-option", "x"]);
 
-        exitCode.ShouldBe(ExitCode.FailedToParseCliArgs);
+        exitCode.ShouldBe(ErrorCode.Usage.Unparseable);
     }
 
     /// <summary>
@@ -59,7 +59,7 @@ public sealed class AppRunnerUnrecognisedVerbTests : IDisposable
 
         var exitCode = await runner.Run(["--data-root", _dataRoot, .. args]);
 
-        exitCode.ShouldBe(ExitCode.FailedToParseCliArgs);
+        exitCode.ShouldBe(ErrorCode.Usage.Unparseable);
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public sealed class AppRunnerUnrecognisedVerbTests : IDisposable
 
         var exitCode = await runner.Run(["--data-root", _dataRoot, "settings", "access", "set"]);
 
-        exitCode.ShouldBe(ExitCode.InvalidArgument);
+        exitCode.ShouldBe(ErrorCode.Usage.InvalidValue);
     }
 
     /// <summary>

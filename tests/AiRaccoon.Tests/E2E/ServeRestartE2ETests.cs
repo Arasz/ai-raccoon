@@ -70,7 +70,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         // The old process is gone, not merely bypassed.
         await _old.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(
             TestContext.Current.CancellationToken);
-        _old.ExitCode.ShouldBe(ExitCode.Success);
+        _old.ExitCode.ShouldBe(ErrorCode.Ok.Success);
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
 
         // What answers now is a different process reporting this binary's version. Same build here,
@@ -81,7 +81,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         after.RootElement.GetProperty("version").GetString().ShouldBe(typeof(ServerInfo).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion);
 
-        (await run.StopAsync()).ShouldBe(ExitCode.Success);
+        (await run.StopAsync()).ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -107,7 +107,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         // product budget, not a test verdict (PR #464) — the harness cap alone guards a hang.
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartTimedOut);
+        exit.ShouldBe(ErrorCode.Port.RestartTimedOut);
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain(port.ToString());
         run.Stderr.ShouldNotContain("   at ");

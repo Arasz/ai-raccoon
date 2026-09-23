@@ -28,7 +28,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         if (AccessModePolicy.Parse(mode) is not { } parsed)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid access mode '{mode}' (expected ro, rw or full)");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, AccessModePolicy.Serialize(parsed), cancellationToken);
@@ -52,7 +52,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         if (AccessModePolicy.Parse(mode) is not { } parsed)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid access mode '{mode}' (expected ro, rw or full)");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         // The global row IS the wildcard for access (findings): `access set *` is spelled
@@ -237,7 +237,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         else
         {
             var exit = await modelDownload.DownloadDefaultCodeModelAsync(targetDir, streams, cancellationToken);
-            if (exit != ExitCode.Success)
+            if (exit != ErrorCode.Ok.Success)
             {
                 return exit;
             }
@@ -278,7 +278,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
             // The endpoint's 409 body already carries the "ai-raccoon: " prefix, so the message
             // goes to stderr unreformatted — CliFailureFormatting would double it (#592).
             await streams.WriteErrorLineAsync(ex.Message);
-            return ExitCode.ModelResetRefused;
+            return ErrorCode.Server.MigrationRefused;
         }
 
         await streams.WriteOutputLineAsync("embedding engine reset to default: no engine (FTS5-only search)");
@@ -294,7 +294,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: invalid threads '{raw}' (expected a non-negative integer; 0 = ORT default)");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(EmbeddingSettingsKeys.Threads, threads.ToString(CultureInfo.InvariantCulture), cancellationToken);
@@ -413,7 +413,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
             alpha is < 0.0 or > 1.0)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid alpha '{raw}' (expected a number in 0..1)");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(SearchParameterSettingsKeys.StructureAlpha,
@@ -567,7 +567,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: invalid {displayName} '{raw}' (expected an integer >= {min})");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(key, value.ToString(CultureInfo.InvariantCulture), cancellationToken);
@@ -585,7 +585,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: invalid {displayName} '{raw}' (expected a number in {min}..{max})");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(key, value.ToString(CultureInfo.InvariantCulture), cancellationToken);
@@ -602,7 +602,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: invalid {displayName} '{raw}' (expected one of: {string.Join(", ", allowed)})");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(key, normalized, cancellationToken);
@@ -626,7 +626,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
             !SweepThreshold.IsValid(threshold))
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid threshold '{raw}' (expected a number in 0..1)");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(SweepThreshold.SettingKey, SweepThreshold.Format(threshold), cancellationToken);
@@ -652,7 +652,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: invalid interval '{raw}' (expected a whole number of hours in {SweepConfigKeys.MinIntervalHours}..{SweepConfigKeys.MaxIntervalHours})");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(SweepConfigKeys.IntervalHoursGlobal,
@@ -731,7 +731,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
             threshold is < 0.0 or > 1.0)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid threshold '{raw}' (expected a number in 0..1)");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         await store.SetSettingAsync(QueryGuardConfigKeys.StructuralThresholdGlobal,

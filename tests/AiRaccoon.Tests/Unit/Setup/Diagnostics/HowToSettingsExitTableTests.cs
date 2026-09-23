@@ -22,11 +22,11 @@ public sealed class HowToSettingsExitTableTests
     private static readonly Dictionary<int, (string ConstName, string Phrase)> ExpectedRows =
         new()
         {
-            [ExitCode.SettingsServerRefused] = ("SettingsServerRefused", "refused the loopback token"),
-            [ExitCode.SettingsServerUnavailable] = ("SettingsServerUnavailable", "within the acquire budget"),
-            [ExitCode.SettingsServerError] = ("SettingsServerError", "answered but failed"),
-            [ExitCode.ModelResetRefused] = ("ModelResetRefused", "outbox row is open"),
-            [ExitCode.Interrupted] = ("Interrupted", "cancelled before it finished")
+            [ErrorCode.Server.RequestTokenRefused] = ("SettingsServerRefused", "refused the loopback token"),
+            [ErrorCode.Reach.Unavailable] = ("SettingsServerUnavailable", "within the acquire budget"),
+            [ErrorCode.Internal.ServerError] = ("SettingsServerError", "answered but failed"),
+            [ErrorCode.Server.MigrationRefused] = ("ModelResetRefused", "outbox row is open"),
+            [ErrorCode.Ok.SIGC] = ("Interrupted", "cancelled before it finished")
         };
 
     [Fact]

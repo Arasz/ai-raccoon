@@ -36,7 +36,7 @@ public sealed class ServeRestartTests : IDisposable
 
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
         run.Stderr.ShouldNotContain("   at ");
-        (await run.StopAsync()).ShouldBe(ExitCode.Success);
+        (await run.StopAsync()).ShouldBe(ErrorCode.Ok.Success);
     }
 
     /// <summary>
@@ -60,12 +60,12 @@ public sealed class ServeRestartTests : IDisposable
 
             // The old server really exited — its own run completed, it was not merely bypassed.
             var oldExit = await old.Exit.WaitAsync(TestContext.Current.CancellationToken);
-            oldExit.ShouldBe(ExitCode.Success);
+            oldExit.ShouldBe(ErrorCode.Ok.Success);
             url.ShouldBe($"http://127.0.0.1:{port}/mcp");
             restarted.Stderr.ShouldNotContain("attached");
             // And the port answers for the restarted process, not a survivor.
             (await ProbeAsync(port)).ShouldBeTrue();
-            (await restarted.StopAsync()).ShouldBe(ExitCode.Success);
+            (await restarted.StopAsync()).ShouldBe(ErrorCode.Ok.Success);
         });
     }
 
@@ -95,7 +95,7 @@ public sealed class ServeRestartTests : IDisposable
         fake.ShutdownRequests.ShouldBe(0);
         fake.ObservabilityRequests.ShouldBe(0,
             "an unproven listener may receive only the probe and the challenge (ADR-0106 D5), not the identify read");
-        exit.ShouldBe(ExitCode.PortInUse);
+        exit.ShouldBe(ErrorCode.Port.InUse);
         run.Stderr.ShouldContain("did not prove");
         run.Stderr.ShouldContain("stop the listener");
         run.Stderr.ShouldNotContain("--attach");
@@ -115,7 +115,7 @@ public sealed class ServeRestartTests : IDisposable
                 await body(port);
                 return;
             }
-            catch (ServeExitedException lost) when (lost.ExitCode == ExitCode.RestartLostThePort)
+            catch (ServeExitedException lost) when (lost.ExitCode == ErrorCode.Port.LostDuringRestart)
             {
                 if (attempt >= attempts)
                 {
@@ -141,7 +141,7 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartTokenRefused);
+        exit.ShouldBe(ErrorCode.Server.RestartTokenRefused);
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain("restart");
         run.Stderr.ShouldNotContain("   at ");
@@ -163,7 +163,7 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartUnsupportedServer);
+        exit.ShouldBe(ErrorCode.Server.TooOldToRestart);
         run.Stderr.ShouldContain("restart");
         run.Stdout.ShouldBeEmpty();
     }
@@ -182,7 +182,7 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartNoToken);
+        exit.ShouldBe(ErrorCode.Server.NoToken);
         // No token to present, so nothing was asked to stop: an unauthenticated shutdown is not attempted.
         fake.ShutdownRequests.ShouldBe(0);
         run.Stderr.ShouldContain(new McpTokenFile(_dataRoot).Path);
@@ -207,7 +207,7 @@ public sealed class ServeRestartTests : IDisposable
         // Nothing took the port: the same listener held it throughout.
         run.Stderr.ShouldContain("does not identify as an ai-raccoon");
         run.Stderr.ShouldNotContain("took the port");
-        exit.ShouldBe(ExitCode.PortInUse);
+        exit.ShouldBe(ErrorCode.Port.InUse);
         fake.ShutdownRequests.ShouldBe(0);
         run.Stdout.ShouldBeEmpty();
     }
@@ -227,7 +227,7 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartUnsupportedServer);
+        exit.ShouldBe(ErrorCode.Server.TooOldToRestart);
         run.Stderr.ShouldContain("(version not reported)");
         run.Stderr.ShouldNotContain("the ai-raccoon  ");
     }
@@ -249,7 +249,7 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartProbeUnanswered);
+        exit.ShouldBe(ErrorCode.Port.HeldUnanswered);
         run.Stderr.ShouldContain("in use");
         run.Stderr.ShouldContain("no answer");
         run.Stderr.ShouldContain("nothing was asked to stop");
@@ -262,7 +262,7 @@ public sealed class ServeRestartTests : IDisposable
     /// <summary>
     ///     A raw listener that accepts the connection and hangs up answers no probe, so `serve`
     ///     cannot say what holds the port — only that the bind proved something does. Before
-    ///     ADR-0043 that was the plain in-use line and <see cref="ExitCode.PortInUse" />, which
+    ///     ADR-0043 that was the plain in-use line and <see cref="ErrorCode.Port.InUse" />, which
     ///     hid that the restart never happened; now the code says so and stays retryable.
     /// </summary>
     [RetryFact]
@@ -275,7 +275,7 @@ public sealed class ServeRestartTests : IDisposable
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.RestartProbeUnanswered);
+        exit.ShouldBe(ErrorCode.Port.HeldUnanswered);
         run.Stderr.ShouldContain("in use");
         run.Stderr.ShouldContain("nothing was asked to stop");
     }
@@ -298,11 +298,11 @@ public sealed class ServeRestartTests : IDisposable
         await using var second = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         var exit = await second.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         second.Stderr.ShouldContain("attached");
         second.Stderr.ShouldContain("proved");
         old.Exit.IsCompleted.ShouldBeFalse();
-        (await old.StopAsync()).ShouldBe(ExitCode.Success);
+        (await old.StopAsync()).ShouldBe(ErrorCode.Ok.Success);
     }
 
     /// <summary>A FakeRaccoon that proves it serves <see cref="_dataRoot"/>'s root, so the restart
