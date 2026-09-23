@@ -47,6 +47,15 @@ public sealed class SourcePathQueryTests
         expression.ShouldBe("{source_file section} : (notes AND md AND \"getting-started\")");
     }
 
+    /// <summary>A section named the way its heading reads, spaces and all, is still an anchor.</summary>
+    [Fact(Skip = "Defect: PathRegex's section group is [\\w-]+, so a section typed with spaces is not an anchor query at all.")]
+    public void TryBuild_SectionWithSpaces_IsAnAnchor()
+    {
+        SourcePathQuery.TryBuild("observatory.md#Coastal duties", out var expression).ShouldBeTrue();
+
+        expression.ShouldBe("{source_file section} : (observatory AND md AND \"coastal duties\")");
+    }
+
     [Fact]
     public void TryBuild_ReservedWordToken_IsQuoted()
     {
