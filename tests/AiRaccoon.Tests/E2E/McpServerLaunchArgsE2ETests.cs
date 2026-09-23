@@ -81,7 +81,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
                 ["--transport", "stdio", "--data-root", dataRoot, "--port", port.ToString(CultureInfo.InvariantCulture)],
                 HardCap, TestContext.Current.CancellationToken);
 
-            run.ExitCode.ShouldBe(ExitCode.FailedToParseCliArgs);
+            run.ExitCode.ShouldBe(ExitCode.InvalidArgument, "a removed value is a bad value, not unparseable argv");
             run.Stderr.ShouldContain("--transport");
             run.Stderr.ShouldContain("stdio");
             run.Stderr.ShouldContain("proxy");

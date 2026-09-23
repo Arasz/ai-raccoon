@@ -49,21 +49,20 @@ public sealed partial class AppRunner
 
     public async Task<int> Run(string[] args)
     {
-        if (GetCliInput(args) is not { } cliInput)
-        {
-            return ExitCode.FailedToParseCliArgs;
-        }
-
+        CliArgs.TryParse(args, out var parsed);
+        var cliInput = parsed!;
+        cliInput.RenderTo(_streams);
         if (cliInput.ShowHelp || cliInput.ShowVersion)
         {
             return ExitCode.Success;
         }
 
-        // An unknown option is unparseable wherever it sits, root or after a verb (ADR-0106 D4);
-        // a verb's own bad argument still reaches ConfigCommands and exits InvalidArgument (15).
-        if (cliInput.HasUnknownOption)
+        // Nothing launches or dispatches on a bad argv (docs/adr/0060), and the code says why
+        // (ADR-0106 D4): argv outside the grammar is unparseable (9); argv that fits it but
+        // carries a missing or invalid value is InvalidArgument (15). Same rule on every path.
+        if (cliInput.Errors.Count > 0)
         {
-            return ExitCode.FailedToParseCliArgs;
+            return cliInput.IsUnparseable ? ExitCode.FailedToParseCliArgs : ExitCode.InvalidArgument;
         }
 
         if (cliInput.IsCommandInput)
@@ -71,32 +70,9 @@ public sealed partial class AppRunner
             return await RunCliCommand(cliInput);
         }
 
-        // A parse error on a path that would otherwise LAUNCH is fatal (docs/adr/0060).
-        // CliArgs.TryParse reports success whenever the *option* read succeeded, so without this an
-        // unrecognised verb printed "Unrecognized command or argument" and then launched the proxy
-        // anyway — against the DEFAULT port and token file, not the --data-root the caller passed.
-        // Deliberately after the verb branch: a known verb whose own argument is wrong keeps
-        // ExitCode.InvalidArgument (15), which is how a script tells "you mistyped" from
-        // "unparseable". GetCliInput has already rendered the message.
-        if (cliInput.Errors.Count > 0)
-        {
-            return ExitCode.FailedToParseCliArgs;
-        }
-
         // Bare launches proxy to the HTTP backend (ADR-0020, D2b): there is no in-process
         // server path anymore — the stdio plain host and the bare-http full server are deleted.
         return await RunProxy(cliInput);
-    }
-
-    private CliInput? GetCliInput(string[] args)
-    {
-        if (!CliArgs.TryParse(args, out var cliInput))
-        {
-            return null;
-        }
-
-        cliInput?.RenderTo(_streams);
-        return cliInput;
     }
 
     /// <summary>

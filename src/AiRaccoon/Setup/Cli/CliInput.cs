@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using AiRaccoon.Hosting.Common;
 
 namespace AiRaccoon.Setup.Cli;
@@ -19,13 +20,10 @@ public sealed record CliInput(
     public bool IsCommandInput => CommandPath.Length > 0;
 
     /// <summary>
-    ///     An unbound option token no command defines (a stray <c>--attach</c>): unparseable, exit 9
-    ///     (ADR-0106 D4). A known option in the wrong place is a verb mistake and stays 15.
+    ///     The argv does not fit the command grammar — an unknown or misplaced token, a missing
+    ///     subcommand — as opposed to a missing or invalid value for a slot it does fit.
     /// </summary>
-    public bool HasUnknownOption => ParsedCliArgs.UnmatchedTokens.Any(IsUnknownOption);
-
-    private static bool IsUnknownOption(string token) =>
-        token.StartsWith('-') && !CliCommandTree.KnownOptionNames.Contains(token.Split('=', ':')[0]);
+    public bool IsUnparseable => ParsedCliArgs.Errors.Any(error => error.SymbolResult is CommandResult);
 
     public ServerConfig ServerConfig { get; } = Options.ToServerConfig();
 }

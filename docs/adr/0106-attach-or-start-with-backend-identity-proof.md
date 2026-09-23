@@ -132,7 +132,9 @@ When no bank file exists at the resolved path, the acquire refuses before starti
 identity**, not by which flag was typed: a resolved data root equal to the default root keeps today's
 bootstrap. `serve`, `serve --restart`, `encryption` and `doctor` are exempt unconditionally.
 Unparseable arguments (including a stray `--attach`) exit 9 (`FailedToParseCliArgs`);
-`InvalidArgument` (15) stays reserved for semantic validation.
+`InvalidArgument` (15) stays reserved for semantic validation. The split is by parse-error kind:
+an error on a command (unrecognized token, missing subcommand) is 9; an error on an option or
+argument value, or a value this CLI rejects after parsing, is 15 — on every path (ADR-0060 amendment).
 
 ### D7 — Secret layout (F49)
 

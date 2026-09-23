@@ -76,13 +76,13 @@ public sealed class TransportRemovalTests : IDisposable
     }
 
     [Fact]
-    public async Task AppRunner_Stdio_ReturnsNineWithoutLaunching()
+    public async Task AppRunner_Stdio_ReturnsFifteenWithoutLaunching()
     {
         var runner = new AppRunner();
 
         var exitCode = await runner.Run(["--transport", "stdio", "--data-root", _dataRoot]);
 
-        exitCode.ShouldBe(ExitCode.FailedToParseCliArgs);
+        exitCode.ShouldBe(ExitCode.InvalidArgument);
         // Dead on parse: nothing launched, so no bank and no token file exist.
         File.Exists(Path.Combine(_dataRoot, "memory.db")).ShouldBeFalse();
         File.Exists(Path.Combine(_dataRoot, McpTokenFile.FileName)).ShouldBeFalse();
@@ -154,13 +154,14 @@ public sealed class TransportRemovalTests : IDisposable
     }
 
     [Fact]
-    public async Task Serve_RemovedStdio_PostVerb_ReturnsFifteen()
+    public async Task Serve_RemovedStdio_PostVerb_IsUnparseable()
     {
         var runner = new AppRunner();
 
+        // --transport is a root option: after the verb it is a misplaced token, not a bad value.
         var exit = await runner.Run(["serve", "--transport", "stdio", "--data-root", _dataRoot]);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ExitCode.FailedToParseCliArgs);
     }
 
     [Fact]
