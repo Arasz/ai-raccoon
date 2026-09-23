@@ -367,7 +367,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await using var conn = await _ctx.OpenBankAsync(CancellationToken.None);
         var engine = await conn.QueryFirstOrDefaultAsync<string>(
             "SELECT value FROM settings WHERE key = 'embedding.engine'");
-        engine.ShouldBe("local:bundled");
+        engine.ShouldNotBeNull().ShouldStartWith("local:bundled#");
     }
 
     [Then("the custom model is used")]
