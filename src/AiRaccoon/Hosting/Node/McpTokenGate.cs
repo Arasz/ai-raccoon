@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Observability;
 using CommunityToolkit.Diagnostics;
 using Microsoft.Net.Http.Headers;
@@ -27,8 +28,10 @@ internal sealed class McpTokenGate
     /// <summary>
     ///     The gate is default-closed: every mapped path needs the token unless it is named here.
     ///     Forgetting an entry now costs a 401 on a new endpoint, not an unauthenticated one.
+    ///     The proof route is open by necessity — it is what lets a client trust the listener
+    ///     before it has, or sends, a token (ADR-0106 D2).
     /// </summary>
-    private static readonly string[] OpenPaths = [ObservabilityEndpoint.Path];
+    private static readonly string[] OpenPaths = [ObservabilityEndpoint.Path, IdentityProof.EndpointPath];
 
     private readonly string _absentBody;
     private readonly byte[] _expected;
