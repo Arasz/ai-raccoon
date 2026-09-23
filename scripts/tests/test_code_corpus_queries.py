@@ -526,12 +526,35 @@ class TestCircularityGuard:
         assert not any("circular" in p.lower() for p in problems)
 
     def test_property_intersection_leaky_and_circular_at_once(self, tmp_path):
-        """A single bad query can trip both gates; both must be reported."""
-        entries, manifest, root = build_valid_fixture(tmp_path)
-        # "Finds where two watch windows overlap." is WatchOverlapResolver's own
-        # docstring; "watch overlap resolver" is also its identifier's full split.
-        entries[1]["query"] = "watch overlap resolver finds where two watch windows overlap"
-        problems = validate_queries(entries, manifest, root)
+        """A single bad query can trip both gates at once; both must be reported.
+
+        A standalone fixture (not build_valid_fixture): its docstring names the
+        identifier fragment directly, so the exact ordered split of
+        `OverlapResolver` ("overlap resolver") is both circular (equals the
+        identifier's full split) AND leaky (>0.4 jaccard with the docstring).
+        """
+        root = tmp_path
+        text = (
+            '"""The overlap resolver."""\n'
+            "\n"
+            "class OverlapResolver:\n"
+            "    def resolve(self, a, b):\n"
+            "        return min(a, b)\n"
+        )
+        _write(root, f"{CODE_CORPUS_DIR}/files/zeta/src/thing.py", text)
+        manifest = {
+            "languages": ["Python"],
+            "heldOutFamilies": [],
+            "files": [_row("zeta", "src/thing.py", "Python", size_band="small")],
+        }
+        entry = _entry(
+            "zeta-001", "identifier-fragment", "overlap resolver",
+            family="zeta", source="zeta/src/thing.py", lines=[3, 5],
+            language="Python", size_band="small",
+        )
+
+        problems = validate_queries([entry], manifest, root)
+
         assert any("leak" in p.lower() for p in problems)
         assert any("circular" in p.lower() or "full split" in p.lower() for p in problems)
 
