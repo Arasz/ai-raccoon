@@ -18,6 +18,9 @@ P2-A identifier column: 0.689
 P3-A tests x0.8: 0.655
 P4-A path header: 0.663
 P4-A path+decl header: 0.653
+P5-A AST chunks (+P2): 0.701
+P5-A regex chunks (+P2): 0.690
+Final B1+P2 (shipped): 0.689
 ```
 
 ## Findings
@@ -97,8 +100,29 @@ The enclosing-declaration line hurts C#, the language with the most doc-commente
 
 **Evidence:** spike branch `spike/p4-header` (`CodeEmbedder.SpikeText`, `AIR_SPIKE_HEADER=path|decl`, `AIR_SPIKE_ROOT=code-corpus/files`), fresh drains `p4a-path` (80 s) and `p4a-decl` (185 s); `compare_code_eval.py results-b1-run1.json results-p4a-*.json --target-category path-context` → `DROP`.
 
+### F9 — P5 AST chunking: DROP; it reduces span splitting but does not lift held-out retrieval significantly [MEASURED]
+
+Both arms re-chunked every file offline under the same 510-token budget and wrote pending rows into a copy of the B1+P2 bank. The server then re-embedded them. Baseline: B1+P2.
+
+| arm | chunks | span-split | held-out Δ nDCG@5, 95% CI | worst floor | verdict |
+|---|---|---|---|---|---|
+| tree-sitter AST | 1,474 | 14.1% | +0.018 [−0.006, 0.044] | C# −0.049 | DROP (CI includes 0) |
+| regex declaration boundaries | 1,436 | 19.9% | −0.003 [−0.036, …] | C# −0.053, test-intent −0.065 | DROP |
+
+The AST arm is the closest miss of the task. Its point estimate is positive in five of six held-out languages, but not at this sample size. Four Bootstrap SCSS files fell back to regex chunks because the grammar returned an ERROR root.
+
+The spike also exposed an existing behaviour. Two byte-identical chunks of one file share a content hash, so ingest keeps only one of them. The spike hit this in nlohmann-json (a copied Doxygen block) and in a C# test file (closing-brace boilerplate). It is low impact but real.
+
+**Evidence:** `spike_p5_chunk.py --mode ast|regex` (py-tree-sitter + tree-sitter-language-pack), arms `p5a-ast` and `p5a-regex` (`--reuse-bank … --drain`); `compare_code_eval.py results-p2a.json results-p5a-*.json --target-category behaviour-nl` → `DROP`.
+
+### F10 — The shipped P2 implementation reproduces the spike exactly [MEASURED]
+
+A fresh ingest and drain with the product binary built from the PR branch (`1.46.2+5c9d0b5b`) scored nDCG@5 0.6890, the same as the P2 spike to four decimals on every metric. Against B1 the keep rule gives the same verdict and CI (KEEP, +0.052 [0.021, 0.088]). Across the whole task, from B0 to shipped, overall nDCG@5 goes from 0.501 to 0.689.
+
+**Evidence:** arm `final`, `compare_code_eval.py results-b1-run1.json results-final.json --target-category identifier-fragment` → `KEEP`.
+
 ## Still open
 
-- **P5 value.** The trigger stands with P4 dropped. The AST and regex-boundary chunking spike is next.
+- **Whether a larger held-out set would settle AST chunking.** Its +0.018 point estimate needs about three times the held-out queries to resolve.
 - **Whether these verdicts hold on linux-x64 CI.** They are scoped to this machine (ADR-0015).
-- **Whether they hold for other code engines.** A parallel session found `code-daemon-embed-v1` last of 15 models on a C#-only doc-comment eval. A code-engine swap could change every delta here.
+- **Whether they hold on granite-embedding-small-r2.** #687 makes it the default code engine. P2 works on the keyword leg, so it should carry over, but that is unmeasured. Re-run this eval once #687 lands.
