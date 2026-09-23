@@ -121,7 +121,7 @@ internal partial class NodeRunner(
             var probeResolvingEncryptionKey = await encryptionKeyResolver.ProbeResolvingEncryptionKeyAsync(ctx);
             if (!probeResolvingEncryptionKey.IsSuccess)
             {
-                return ExitCode.FailedToOpenEncryptedBank;
+                return ExitCode.FailedToResolveEncryptionKey;
             }
 
             var probeUsingEncryptionKey = await connectionFactory.ProbeUsingEncryptionKey(probeResolvingEncryptionKey.Key.Passphrase, ctx);

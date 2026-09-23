@@ -330,7 +330,7 @@ public sealed class ModelDownloadService(
             cleanup.Add(targetPath);
             downloaded.Add(targetRel);
         }
-        catch (Exception ex) when (ex is not ModelDownloadException)
+        catch (Exception ex) when (ex is not ModelDownloadException && !cancellationToken.IsCancellationRequested)
         {
             throw new ModelDownloadException($"failed to download '{file.Path}' from '{request.RepoId}' at '{request.Revision}': {ex.Message}", ex);
         }

@@ -3,6 +3,7 @@ using System.CommandLine;
 using System.Globalization;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
+using AiRaccoon.Core.Embedding;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
@@ -187,14 +188,14 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
 
         if (declared is not null && declared.Value != probed)
         {
-            throw new InvalidOperationException(
+            throw new EmbeddingModelRejectedException(
                 $"Declared --dims {declared.Value} but '{model}' returns {probed}-dimension embeddings. " +
                 $"Re-run with --dims {probed}, or point at a model that matches; nothing has been changed.");
         }
 
         if (declared is null && probed != DefaultRemoteDimensions)
         {
-            throw new InvalidOperationException(
+            throw new EmbeddingModelRejectedException(
                 $"'{model}' returns {probed}-dimension embeddings, not the assumed {DefaultRemoteDimensions}. " +
                 $"Re-run with --dims {probed} so the bank's vector index can be rebuilt to match.");
         }

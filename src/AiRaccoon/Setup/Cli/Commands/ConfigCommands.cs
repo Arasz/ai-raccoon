@@ -177,7 +177,7 @@ internal sealed class ConfigCommands(
         {
             // F37 / ruling K4: Ctrl-C is a cancellation, not a bad argument. The filtered shape
             // matches the 14 sibling catches; only the caller's own token earns 130, so an
-            // OperationCanceledException raised with a live token keeps the catch-all below.
+            // OperationCanceledException raised with a live token (a timeout) takes the catch-all below.
             await streams.WriteErrorLineAsync(
                 "ai-raccoon: cancelled before it finished; the command changed nothing");
             return ExitCode.Interrupted;
@@ -185,7 +185,7 @@ internal sealed class ConfigCommands(
         catch (Exception ex)
         {
             await streams.WriteErrorLineAsync(CliFailureFormatting.Format(ex, cliInput.ServerConfig.Options.DataRoot));
-            return ExitCode.InvalidArgument;
+            return CliFailureExitCode.For(ex);
         }
     }
 

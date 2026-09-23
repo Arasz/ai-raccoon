@@ -12,8 +12,8 @@ namespace AiRaccoon.Settings;
 ///     with a bounded idle timeout — never a secret byte to the unproven listener. The acquired
 ///     backend is shared and outlives this command under its own idle timeout (ruling N1); the
 ///     disclosure line (<see cref="Log.BackendOutlivesCommand" />) fires once the acquire has a
-///     live, token-checked store to hand back. Every failure mode — an undialable port, no answer
-///     within the acquire budget, a data root with no minted token — is reported as
+///     live, token-checked store to hand back. An undialable --port is an <see cref="ArgumentException" />;
+///     every other failure mode — no answer within the acquire budget, a data root with no minted token — is reported as
 ///     <see cref="SettingsServerUnavailableException" />; a wrong-but-present token is reported
 ///     later, by <see cref="ServerSettingsStore" /> itself, as <see cref="SettingsServerRefusedException" />.
 /// </summary>
@@ -46,8 +46,8 @@ internal static partial class CliSettingsBackend
     {
         if (config.Port is < 1 or > 65535)
         {
-            throw new SettingsServerUnavailableException(
-                $"ai-raccoon: cannot dial --port {config.Port}: expected 1-65535, and 0 means \"any free port\"; pass a fixed --port");
+            throw new ArgumentException(
+                $"cannot dial --port {config.Port}: expected 1-65535, and 0 means \"any free port\"; pass a fixed --port");
         }
 
         var executable = BackendLaunchArguments.Executable(processPath) ??

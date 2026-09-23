@@ -52,7 +52,7 @@ public partial class ObservabilityRunner(IHttpClientFactory httpClientFactory) :
 
             info = await response.Content.ReadFromJsonAsync<ServerInfo>(JsonOptions, ctx);
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ctx.IsCancellationRequested))
         {
             if (!IsNothingListening(ex))
             {

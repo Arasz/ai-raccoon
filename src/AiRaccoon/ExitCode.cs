@@ -2,7 +2,12 @@ namespace AiRaccoon;
 
 public static class ExitCode
 {
+    /// <summary>No encryption key could be resolved: the key source (env, Bitwarden) is missing,
+    /// unreachable or returned nothing usable.</summary>
     public const int FailedToResolveEncryptionKey = 1;
+
+    /// <summary>The bank exists but could not be opened or read: the resolved key does not decrypt
+    /// it, or SQLite refused (locked, busy, an I/O error).</summary>
     public const int FailedToOpenEncryptedBank = 2;
     public const int PortInUse = 3;
     public const int NoServerRunning = 4;
@@ -83,16 +88,19 @@ public static class ExitCode
     /// (review R1 Ruling 4).</summary>
     public const int ModelMigrationOpen = 24;
 
-    /// <summary>`settings model reset` / `settings model embedding reset` (#592): refused by the
-    /// settings server because a model_migration outbox row is open (ADR-0076) — deleting
-    /// embedding.provider would strand the outbox and ToolGate would refuse every tool forever.
-    /// Same species as <see cref="ModelMigrationOpen" /> (24), but a settings-verb refusal.</summary>
+    /// <summary>A model verb (`settings model reset`, `model embedding set`) refused by the settings
+    /// server because a model_migration outbox row is open (ADR-0076); nothing changed. Same species
+    /// as <see cref="ModelMigrationOpen" /> (24), but a settings-verb refusal.</summary>
     public const int ModelResetRefused = 25;
 
     /// <summary>`doctor` (F7, ruling K7): the bank file exists but is not a SQLite database — corrupt,
     /// or not readable with the resolved encryption key. Distinct from <see cref="NoBank" /> (no file
     /// at all) and <see cref="FailedToOpenEncryptedBank" /> (a real database whose open failed).</summary>
     public const int BankCorrupted = 26;
+
+    /// <summary>The command failed for a reason no other code names — an I/O fault, a server
+    /// response it could not use, or an unexpected error; stderr says which. Never a bad argument.</summary>
+    public const int CommandFailed = 27;
 
     /// <summary>The command was cancelled before it finished (Ctrl-C / SIGTERM — 130 is 128 +
     /// SIGINT(2), the shell's conventional interrupt code); the command changed nothing.</summary>

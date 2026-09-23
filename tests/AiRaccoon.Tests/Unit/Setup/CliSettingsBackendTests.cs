@@ -146,11 +146,11 @@ public sealed class CliSettingsBackendTests
     }
 
     [Fact]
-    public async Task AcquireAsync_WhenThePortIsOutOfRange_ThrowsUnavailable_WithoutCallingTheLauncher()
+    public async Task AcquireAsync_WhenThePortIsOutOfRange_RejectsTheArgument_WithoutCallingTheLauncher()
     {
         var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:0/mcp", null));
 
-        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+        var error = await Should.ThrowAsync<ArgumentException>(() =>
             CliSettingsBackend.AcquireAsync(launcher, new FakeIdentityProver(), new FakeServerProbe(ProbeVerdict.Answered),
                 AppHost, Config(0, "/tmp/unused"), new FakeLogger(), TestContext.Current.CancellationToken));
 
