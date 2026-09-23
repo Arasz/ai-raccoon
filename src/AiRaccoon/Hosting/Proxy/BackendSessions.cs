@@ -329,7 +329,7 @@ public sealed partial class BackendSessions(
         public static partial void FallbackOnUnprovenListener(ILogger logger, int port, IdentityProofFailure? reason);
 
         [LoggerMessage(EventId = 691, Level = LogLevel.Warning,
-            Message = "ai-raccoon: the private backend at {Url} no longer proves it serves this data root ({Reason}); sending it nothing and leaving it to its idle timeout")]
+            Message = "ai-raccoon: the private backend at {Url} no longer proves it serves this data root ({Reason}); sending it nothing and leaving it to its idle timeout — stop it yourself if it must go now")]
         public static partial void PrivateBackendNotProved(ILogger logger, Uri url, IdentityProofFailure? reason);
 
         [LoggerMessage(EventId = 688, Level = LogLevel.Information,

@@ -10,19 +10,25 @@ namespace AiRaccoon.Tests.TestHelpers;
 /// </summary>
 internal sealed class FakeIdentityProver : IIdentityProver
 {
-    private readonly Queue<IdentityProofFailure?> _answers = new();
+    private readonly Queue<IdentityProofFailure?> _pending = new();
+    private IdentityProofFailure? _last;
 
-    /// <summary>Every answer is <paramref name="failure" /> (null = proven).</summary>
-    public FakeIdentityProver(IdentityProofFailure? failure = null) => _answers.Enqueue(failure);
+    /// <summary>The first call answers <paramref name="failure" /> (null = proven).</summary>
+    public FakeIdentityProver(IdentityProofFailure? failure = null) => _pending.Enqueue(failure);
 
     public List<Uri> Calls { get; } = [];
 
-    /// <summary>Answer the next call with <paramref name="failure" />; the last answer repeats.</summary>
-    public void AnswerNext(IdentityProofFailure? failure) => _answers.Enqueue(failure);
+    /// <summary>Queue the answer for the next call; once the queue empties, the last answer repeats.</summary>
+    public void AnswerNext(IdentityProofFailure? failure) => _pending.Enqueue(failure);
 
     public Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx)
     {
         Calls.Add(endpoint);
-        return Task.FromResult(_answers.Count > 1 ? _answers.Dequeue() : _answers.Peek());
+        if (_pending.Count > 0)
+        {
+            _last = _pending.Dequeue();
+        }
+
+        return Task.FromResult(_last);
     }
 }

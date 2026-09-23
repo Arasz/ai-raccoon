@@ -7,6 +7,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
+using System.Net;
+using System.Net.Sockets;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Hosting;
@@ -96,7 +98,7 @@ public sealed class BackendSessionsTests
     }
 
     [Fact]
-    public async Task AcquireShared_WithAnUnansweredProbe_ChallengesThenFallsBack()
+    public async Task HangingProbe_ChallengesThenFallsBack()
     {
         var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54243/mcp", null));
         var prover = new FakeIdentityProver(IdentityProofFailure.Timeout);
@@ -106,7 +108,7 @@ public sealed class BackendSessionsTests
         var outcome = await AcquireAsync(new FakeServerProbe(ProbeVerdict.Unanswered), prover, launcher, config);
 
         prover.Calls[0].ShouldBe(new Uri("http://127.0.0.1:54243/mcp"),
-            "an answered probe is not the only path that challenges before deciding");
+            "an unanswered probe is challenged before the fallback decision, never treated as 'nothing there'");
         outcome.Fallback.ShouldBeTrue();
         launcher.PrivateCalls.ShouldBe(1);
     }
@@ -279,9 +281,140 @@ public sealed class BackendSessionsTests
         }
     }
 
+    // ── Proof before every token-bearing request ──
+
+    /// <summary>
+    ///     F3 ordering: the acquire proves before the MCP session (the first token-bearing
+    ///     request), and the dispose stop proves before /shutdown. The shared event log holds the
+    ///     prover's calls and the HTTP requests in one sequence, so the order is a fact, not an
+    ///     inference from the code.
+    /// </summary>
+    [Fact]
+    public async Task ProveIsRequired_BeforeEveryTokenBearingRequest()
+    {
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-ordering", TestContext.Current.CancellationToken);
+        try
+        {
+            await new McpTokenFile(dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
+            var log = new List<string>();
+            var prover = new RecordingProver(log, IdentityProofFailure.BadSignature);
+            prover.AnswerNext(null); // the fallback child proves
+            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54260/mcp", null));
+            var config = Config(54260, dataRoot);
+            await using var sessions = new BackendSessions(launcher, prover,
+                new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
+                NullLoggerFactory.Instance, AppHost, config);
+
+            // The session cannot open against the unreachable fake URL; the acquire has already run.
+            await Should.ThrowAsync<BackendUnavailableException>(() =>
+                sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+
+            var fallbackProof = log.IndexOf("prove http://127.0.0.1:54260/mcp");
+            var firstMcp = log.FindIndex(entry => entry.StartsWith("http POST /mcp", StringComparison.Ordinal));
+            fallbackProof.ShouldBeGreaterThanOrEqualTo(0, $"no proof was attempted; log: {string.Join(", ", log)}");
+            firstMcp.ShouldBeGreaterThan(fallbackProof,
+                $"an MCP request rode before the fallback child proved; log: {string.Join(", ", log)}");
+
+            // Hostile half: a listener that no longer proves gets no shutdown request at all.
+            prover.AnswerNext(IdentityProofFailure.BadSignature);
+            await sessions.DisposeAsync();
+            log.ShouldNotContain(entry => entry.Contains("/shutdown", StringComparison.Ordinal));
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    /// <summary>
+    ///     The positive control for the ordering gate: with a listener that still proves, the
+    ///     dispose stop does send /shutdown — and only after its proof.
+    /// </summary>
+    [Fact]
+    public async Task DisposeStop_WithAProvenBackend_SendsTheShutdownAfterTheProof()
+    {
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-ordering-control", TestContext.Current.CancellationToken);
+        try
+        {
+            await new McpTokenFile(dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
+            var log = new List<string>();
+            var prover = new RecordingProver(log, IdentityProofFailure.BadSignature);
+            prover.AnswerNext(null); // the fallback child proves at acquire
+            prover.AnswerNext(null); // and again at stop
+            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54261/mcp", null));
+            await using var sessions = new BackendSessions(launcher, prover,
+                new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
+                NullLoggerFactory.Instance, AppHost, Config(54261, dataRoot));
+
+            try
+            {
+                await sessions.OpenAsync(null, TestContext.Current.CancellationToken);
+            }
+            catch (BackendUnavailableException)
+            {
+                // The fake URL refuses the session; the acquire and the private-backend record stand.
+            }
+
+            await sessions.DisposeAsync();
+
+            var stopProof = log.LastIndexOf("prove http://127.0.0.1:54261/mcp");
+            var shutdown = log.FindIndex(entry => entry.Contains("/shutdown", StringComparison.Ordinal));
+            shutdown.ShouldBeGreaterThanOrEqualTo(0, $"no shutdown request was sent; log: {string.Join(", ", log)}");
+            stopProof.ShouldBeGreaterThanOrEqualTo(0);
+            stopProof.ShouldBeLessThan(shutdown, $"the token rode before the stop proof; log: {string.Join(", ", log)}");
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
     private sealed class PlainHttpClientFactory : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new();
+    }
+
+    /// <summary>One shared log for the prover's calls and the HTTP requests, so ordering is observable.</summary>
+    private sealed class RecordingProver(List<string> log, IdentityProofFailure? failure) : IIdentityProver
+    {
+        private readonly Queue<IdentityProofFailure?> _pending = new([failure]);
+        private IdentityProofFailure? _last;
+
+        public void AnswerNext(IdentityProofFailure? next) => _pending.Enqueue(next);
+
+        public Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx)
+        {
+            log.Add($"prove {endpoint}");
+            if (_pending.Count > 0)
+            {
+                _last = _pending.Dequeue();
+            }
+
+            return Task.FromResult(_last);
+        }
+    }
+
+    private sealed class RecordingHttpClientFactory(List<string> log) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(new RecordingHandler(log));
+    }
+
+    /// <summary>Records every request; a /shutdown is accepted, everything else is refused so the
+    /// session attempt and the post-shutdown port poll both settle immediately.</summary>
+    private sealed class RecordingHandler(List<string> log) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            log.Add($"http {request.Method} {path}");
+            if (path.EndsWith("/shutdown", StringComparison.Ordinal))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Accepted));
+            }
+
+            throw new HttpRequestException("refused", new SocketException((int)SocketError.ConnectionRefused));
+        }
     }
 
     private sealed class FakeBackendLauncher : IBackendLauncher
