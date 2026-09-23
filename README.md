@@ -41,6 +41,7 @@ What to do when you upgrade past each version. A version not listed here needs n
 
 ## What's new
 
+- Code search matches words inside identifiers (`overlap` finds `WatchOverlapResolver`) and indexes HTML, CSS/SCSS and SQL files. (1.47.0) [ADR-0108](docs/adr/0108-code-fts-carries-a-derived-identifiers-column.md) · [results](docs/work/2026-09-23-code-retrieval-eval-results.md)
 - `model download` accepts any model that ships a `tokenizer.json` (granite-embedding r2, gte-modernbert, jina-code, Qwen3-Embedding, EmbeddingGemma), and embeds with the model's query and document prompts. (1.46.0) [survey](docs/work/2026-09-23-embedding-model-survey.md)
 - Every failure has its own two-digit exit code, grouped by category (`ErrorCode.Bank.NoBank` = `31`). (1.45.0) [ADR-0107](docs/adr/0107-categorized-two-digit-exit-codes.md)
 - The proxy and settings commands attach only to a server that proves it holds this data root's identity key. (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md)
