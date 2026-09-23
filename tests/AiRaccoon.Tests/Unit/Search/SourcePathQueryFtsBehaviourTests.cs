@@ -14,7 +14,7 @@ namespace AiRaccoon.Tests.Unit.Search;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class SourcePathQueryFtsBehaviourTests
 {
-    [Theory(Skip = "Defect: TryBuild ANDs the file name's tokens against the whole source_file column, unordered, so a directory name or a reordered name satisfies the anchor.")]
+    [Theory]
     [InlineData("/notes/ferry-control.md")]
     [InlineData("/docs/notes-ferry.md")]
     public void Anchor_NamingOneFile_DoesNotMatchAnotherFileHoldingTheSameWords(string otherFile)

@@ -161,6 +161,65 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
     }
 
     /// <summary>
+    ///     A file#section anchor names a file, not a bag of words: "ferry/notes.md" holds every word of
+    ///     "ferry-notes.md", and its section is embedded so it would lead any tie, yet the named file wins.
+    /// </summary>
+    [RetryFact]
+    public async Task Search_FileSectionAnchor_DoesNotServeAnotherFileWhosePathHoldsTheSameWords()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await AllowIngestAsync(ct);
+        await IngestAsync("ferry/notes.md",
+            "# Ferry\n\n## Fares\n\nFerry fares: adult return tickets cost nine pounds and children travel half price.\n", ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+        var named = await IngestAsync("ferry-notes.md",
+            "# Ferry notes\n\n## Fares\n\nKittens nap on warm windowsills while gardeners water tomatoes.\n", ct);
+
+        var envelope = await _tools.Search(ProjectId, "ferry-notes.md#fares", Session, kind: "memory",
+            minRelativeScore: 0.0, cancellationToken: ct);
+
+        envelope.Data!.Results.ShouldNotBeEmpty();
+        envelope.Data!.Results[0].SourceFile.ShouldBe(named);
+    }
+
+    /// <summary>A section typed the way its heading reads, spaces and all, anchors like its slug.</summary>
+    [RetryFact]
+    public async Task Search_FileSectionAnchor_TypedWithSpaces_RanksTheNamedSectionFirst()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await AllowIngestAsync(ct);
+        var roster = string.Join(" ", Enumerable.Repeat("The roster lists coastal duties, and coastal duties rotate every week.", 12));
+        var duties = string.Join(" ", Enumerable.Repeat("Kittens nap on warm windowsills while gardeners water tomatoes.", 12));
+        await IngestAsync("harbour-guide.md", $"# Harbour guide\n\n## Roster\n\n{roster}\n\n## Coastal duties\n\n{duties}\n", ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+
+        var envelope = await _tools.Search(ProjectId, "harbour-guide.md#Coastal duties", Session, kind: "memory",
+            minRelativeScore: 0.0, cancellationToken: ct);
+
+        envelope.Data!.Results.ShouldNotBeEmpty();
+        (await SectionOfAsync(envelope.Data!.Results[0].Hash, ct)).ShouldBe("Coastal duties");
+    }
+
+    /// <summary>
+    ///     A question that happens to follow file# is not an anchor when no row carries that section:
+    ///     it is searched as ordinary text, keyword leg included.
+    /// </summary>
+    [RetryFact]
+    public async Task Search_SpacedSectionNoRowCarries_IsSearchedAsOrdinaryText()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await AllowIngestAsync(ct);
+        await IngestAsync("deploy-runbook.md", RunbookText(), ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+
+        var envelope = await _tools.Search(ProjectId, "deploy-runbook.md#how does the team check the change calendar", Session,
+            kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+
+        envelope.Data!.EvidenceByHash.ShouldNotBeNull().Values
+            .ShouldContain(evidence => evidence.Legs.Any(leg => leg.LegName == "fts"), "the keyword leg must still search the words");
+    }
+
+    /// <summary>
     ///     Both legs rank one note first; a runbook's weak adjacent chunks trail it. The adjacent-chunk
     ///     boost must not lift those neighbours above the row both legs agree on, even with every
     ///     score cutoff off.
@@ -203,6 +262,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
     private async Task<string> IngestAsync(string name, string content, CancellationToken ct)
     {
         var file = Path.Combine(_dataRoot, name);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         await File.WriteAllTextAsync(file, content, ct);
         (await _store.IngestFileAsync(ProjectId, file, null, ct)).ShouldBe(1);
         return file;

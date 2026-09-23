@@ -1,66 +1,73 @@
-using System.Buffers;
 using System.Text.RegularExpressions;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
-///     Source-path-shaped queries (file[#section]) match the source_file/section FTS columns
-///     with AND semantics (see docs/plans/retrieval-improvement-c.md §3 2c), ranking the exact chunk first.
+///     Source-path-shaped queries (file[#section]) match the file name as an ordered phrase in
+///     source_file and the section in the section column (see docs/plans/retrieval-improvement-c.md
+///     §3 2c); <see cref="NamesFile" /> then keeps only rows of the file the query names.
 /// </summary>
 internal static partial class SourcePathQuery
 {
-    // Ordinal is safe (and measurably faster than OrdinalIgnoreCase — see
-    // SearchValuesVsHashSetBenchmark) because tokens are lowercased before the check
-    // below; the set itself is all-lowercase ASCII.
-    private static readonly SearchValues<string> Reserved =
-        SearchValues.Create(["and", "or", "not", "near"], StringComparison.Ordinal);
-
     extension(FtsQueryPlan queryPlan)
     {
         public FtsQueryPlan AsPathQuery(string query)
         {
-            var isPathQuery = TryBuild(query, out var pathExpression);
-            if (isPathQuery)
+            if (!TryParse(query, out var file, out var expression))
             {
-                queryPlan = queryPlan with { Expression = pathExpression, Fallback = null, IsPathQuery = isPathQuery, MatchesAllTerms = true };
+                return queryPlan;
             }
 
-            return queryPlan;
+            return queryPlan with { Expression = expression, Fallback = null, IsPathQuery = true, MatchesAllTerms = true, AnchorFile = file };
         }
     }
 
-    public static bool TryBuild(string query, out string ftsExpression)
+    public static bool TryBuild(string query, out string ftsExpression) => TryParse(query, out _, out ftsExpression);
+
+    /// <summary>
+    ///     True when <paramref name="sourceFile" /> is the file <paramref name="anchorFile" /> names: the same
+    ///     path, or a path ending in it at a '/' boundary. A leading '/' makes the anchor absolute. Case-insensitive.
+    /// </summary>
+    public static bool NamesFile(string anchorFile, string? sourceFile)
     {
+        if (sourceFile is null)
+        {
+            return false;
+        }
+
+        return anchorFile.StartsWith('/')
+            ? sourceFile.Equals(anchorFile, StringComparison.OrdinalIgnoreCase)
+            : sourceFile.Equals(anchorFile, StringComparison.OrdinalIgnoreCase)
+              || sourceFile.EndsWith("/" + anchorFile, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParse(string query, out string file, out string ftsExpression)
+    {
+        file = "";
+        ftsExpression = "";
         var match = PathRegex().Match(query.Trim());
         if (!match.Success)
         {
-            ftsExpression = "";
             return false;
         }
 
-        var tokens = TokenRegex().Matches(match.Groups["file"].Value)
-            .Select(t => t.Value.ToLowerInvariant())
-            .Select(t => Reserved.Contains(t) ? $"\"{t}\"" : t)
-            .ToList();
-
-        if (match.Groups["section"].Success)
-        {
-            tokens.Add($"\"{match.Groups["section"].Value.ToLowerInvariant()}\"");
-        }
-
+        var tokens = TokenRegex().Matches(match.Groups["file"].Value).Select(token => token.Value.ToLowerInvariant()).ToList();
         if (tokens.Count == 0)
         {
-            ftsExpression = "";
             return false;
         }
 
-        var columns = match.Groups["section"].Success ? "{source_file section}" : "{source_file}";
-        var terms = string.Join(" AND ", tokens);
-        ftsExpression = $"{columns} : ({terms})";
+        file = match.Groups["file"].Value;
+        ftsExpression = $"{{source_file}} : \"{string.Join(' ', tokens)}\"";
+        if (match.Groups["section"].Success)
+        {
+            ftsExpression += $" AND {{source_file section}} : \"{match.Groups["section"].Value.ToLowerInvariant()}\"";
+        }
+
         return true;
     }
 
-    [GeneratedRegex(@"^(?<file>[\w./-]+\.(?:md|markdown|txt))(?:#(?<section>[\w-]+))?$",
+    [GeneratedRegex(@"^(?<file>[\w./-]+\.(?:md|markdown|txt))(?:#(?<section>[\w-]+(?: [\w-]+)*))?$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PathRegex();
 
