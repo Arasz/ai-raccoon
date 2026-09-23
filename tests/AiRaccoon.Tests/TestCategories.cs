@@ -34,6 +34,14 @@ public static class TestCategories
     public const string Performance = "Performance";
 
     public const string Benchmark = "Benchmark";
+
+    /// <summary>
+    ///     <c>Retry=Never</c> marks a security gate that must run exactly once: a retry would turn an
+    ///     intermittent secret leak into a green run. Exempts the file from the retry-surface gate.
+    /// </summary>
+    public const string Retry = "Retry";
+
+    public const string Never = "Never";
 }
 
 /// <summary>Never resolves a passphrase — no encryption. Use for existing unencrypted-DB tests.</summary>

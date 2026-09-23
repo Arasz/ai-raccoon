@@ -18,6 +18,7 @@ namespace AiRaccoon.Tests.E2E;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
+[Trait(TestCategories.Retry, TestCategories.Never)]
 [Collection(E2ETestCollection.Name)]
 public sealed class NoBankE2ETests : IAsyncLifetime
 {
