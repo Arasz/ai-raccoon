@@ -63,6 +63,15 @@ into 10-14 for the same reason (ADR-0022). The guard moved rather than the test.
   of a session against an unexpected bank. That is a behaviour change and the reason this ships as
   **1.14.1** rather than riding along in a later feature release.
 
+## Amendment (1.44.2): one meaning per code
+
+ADR-0106 D4 supersedes the "a known verb whose own argument is wrong keeps 15" split above. The code
+now says *why* the argv failed, on every path: argv outside the grammar — an unknown or misplaced
+token, a missing subcommand — exits **9**; argv that fits the grammar but carries a missing or
+invalid value exits **15**, bare launch included. `settings sweep bogus` is therefore 9 and a bare
+`--transport stdio` is 15. `access set` (missing required argument) stays 15. Nothing launches or
+dispatches in either case. Pinned by `CliExitCodeMeaningTests`.
+
 ## Evidence
 
 `tests/AiRaccoon.Tests/Unit/Setup/Serve/AppRunnerUnrecognisedVerbTests.cs`. Both failing cases were

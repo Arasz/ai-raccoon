@@ -18,6 +18,7 @@ public static class ExitCode
     // tell "retry me" from "fix your config"; 8 is retired rather than narrowed, so a script that
     // tested for it fails to match rather than matching the wrong case (ADR-0022).
 
+    /// <summary>The argv does not fit the command grammar: an unknown or misplaced token, or a missing subcommand.</summary>
     public const int FailedToParseCliArgs = 9;
 
     /// <summary>`serve --restart`: another server took the port while this one was starting — retryable.</summary>
@@ -41,7 +42,10 @@ public static class ExitCode
     /// </summary>
     public const int RestartProbeUnanswered = 16;
 
-    /// <summary>A CLI verb's own argument failed validation (bad enum value, out-of-range number, missing prompt input, etc.) — distinct from the specific failure codes above so a script can tell "you mistyped" from "the bank/server is broken". Was 10 until #286 claimed 10-14 for restart reasons.</summary>
+    /// <summary>
+    ///     The argv fits the grammar but a value is missing or invalid (bad enum, out-of-range number,
+    ///     missing required argument, removed option value), on a verb or a bare launch alike.
+    /// </summary>
     public const int InvalidArgument = 15;
 
     /// <summary>A settings command (ADR-0075 §5.3) reached a server that refused the loopback token — it serves another data root.</summary>

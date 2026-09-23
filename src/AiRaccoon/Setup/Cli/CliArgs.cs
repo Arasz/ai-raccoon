@@ -56,8 +56,8 @@ internal static class CliArgs
 
     /// <summary>
     ///     P1 CLI-surface removal: --transport is proxy|http only. When the raw args name a
-    ///     removed value, append one stderr line (still exit 9 for bare launches via the launch
-    ///     Errors check, 15 for verb paths via ConfigCommands). Raw-args scan, so the hint does
+    ///     removed value, append one stderr line (the run exits InvalidArgument, 15: a bad value,
+    ///     not unparseable argv). Raw-args scan, so the hint does
     ///     not depend on how System.CommandLine bound the value — and keep-enum (ADR-0104) means
     ///     the members stay as parse-rejected values, so this scan is the mechanism, not a bridge
     ///     to a deletion.
@@ -131,7 +131,7 @@ internal static class CliArgs
     ///     that was just parsed, so neither has to be kept in step with the tree by hand. A
     ///     value-taking option consumes the next token; a flag option (bool) never does — otherwise
     ///     `--quiet settings …` would hide the verb behind the flag and hand the launch-root
-    ///     fallback a command path it already resolved (exit 9 instead of the verb's own 15).
+    ///     fallback a command path it already resolved (an unparseable exit instead of the verb's own).
     /// </summary>
     private static bool ContainsVerb(string[] args, Command root)
     {

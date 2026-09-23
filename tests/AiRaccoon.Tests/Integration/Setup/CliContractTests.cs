@@ -71,7 +71,7 @@ public sealed class CliContractTests : IAsyncLifetime
         // A recognised-but-incomplete command shows help for the command it got as far as
         // (docs/adr/0060 keeps this distinct from the bogusverb row above: that one never
         // resolves a command path, so it gets no help — only its error).
-        new(["settings", "sweep", "bogus"], ExitCode.InvalidArgument, "",
+        new(["settings", "sweep", "bogus"], ExitCode.FailedToParseCliArgs, "",
             "Required command was not provided.\nUnrecognized command or argument 'bogus'.\n\n" +
             "Description:\n" +
             "  Background reaper configuration: the kill switch, the cadence and the rating threshold it deletes below. The reaper is ON by default — 'sweep disable' is how you disarm it. Per-entry TTLs are data, set by the memory_set_ttl tool, not configured here.\n\n" +
