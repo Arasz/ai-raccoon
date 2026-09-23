@@ -1,6 +1,7 @@
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
+using AiRaccoon.Setup.Cli;
 using Shouldly;
 using Xunit;
 
@@ -50,7 +51,7 @@ public sealed class BankPresenceGuardTests
             var error = Should.Throw<BankMissingException>(() => BankPresenceGuard.EnsureExists(options));
 
             error.Message.ShouldContain(dataRoot);
-            error.Message.ShouldContain("ai-raccoon serve --data-root");
+            error.Message.ShouldContain($"ai-raccoon --data-root {dataRoot} serve");
             new DirectoryInfo(dataRoot).EnumerateFileSystemInfos().ShouldBeEmpty(
                 "the guard must refuse before minting anything — it only ever reads");
         }
@@ -58,6 +59,47 @@ public sealed class BankPresenceGuardTests
         {
             TestData.DeleteTempRoot(dataRoot);
         }
+    }
+
+    /// <summary>
+    ///     The remedy is a command to run as written: parsed by the real CLI parser, it must name the
+    ///     same data root and scope, so it creates the bank the guard looked for — not a user-scope
+    ///     bank at the top of a project root.
+    /// </summary>
+    [Theory]
+    [InlineData(InstallScope.User)]
+    [InlineData(InstallScope.Project)]
+    public void EnsureExists_TheRemedy_ParsesToServeOnTheSameRootAndScope(InstallScope scope)
+    {
+        var dataRoot = TestData.CreateTempRoot("bank-presence-guard-remedy");
+        try
+        {
+            var options = new InfrastructureOptions { DataRoot = dataRoot, Scope = scope };
+
+            var error = Should.Throw<BankMissingException>(() => BankPresenceGuard.EnsureExists(options));
+
+            var remedy = RemedyArguments(error.Message);
+            CliArgs.TryParse(remedy, out var parsed).ShouldBeTrue(error.Message);
+            parsed.ShouldNotBeNull().Errors.ShouldBeEmpty(error.Message);
+            parsed.CommandPath.ShouldBe(["serve"], error.Message);
+            parsed.Options.DataRoot.ShouldBe(dataRoot, error.Message);
+            parsed.Options.InstallScope.ShouldBe(scope, error.Message);
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    /// <summary>The arguments of the quoted "'ai-raccoon …'" remedy; the temp roots here hold no spaces.</summary>
+    private static string[] RemedyArguments(string message)
+    {
+        const string prefix = "'ai-raccoon ";
+        var start = message.IndexOf(prefix, StringComparison.Ordinal);
+        start.ShouldBeGreaterThanOrEqualTo(0, message);
+        start += prefix.Length;
+        var end = message.IndexOf('\'', start);
+        return message[start..end].Split(' ', StringSplitOptions.RemoveEmptyEntries);
     }
 
     /// <summary>The positive control: an already-bootstrapped non-default root passes straight through.</summary>

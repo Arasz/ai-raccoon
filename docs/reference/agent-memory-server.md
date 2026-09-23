@@ -535,7 +535,7 @@ backend stderr tail). A separate, earlier refusal applies before any of this: **
 — a `--data-root` that resolves to neither the default root nor an existing bank
 refuses before the proxy ever probes a port or spawns a process, with exit `22`
 (`ExitCode.NoBank`) and a line naming the typo-check remedy
-(`ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon serve --data-root <path>', or check --data-root for a typo`);
+(`ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon --data-root <path> serve', or check --data-root for a typo`; a project-scope launch adds `--install-scope project` before `serve`);
 the default root keeps its unconditional bootstrap. The stdio and https transports were removed outright
 ([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)): passing
 the removed `stdio` value fails at parse with exit 9 and a hint naming the proxy
