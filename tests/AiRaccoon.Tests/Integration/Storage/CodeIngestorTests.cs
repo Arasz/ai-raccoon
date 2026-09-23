@@ -131,6 +131,20 @@ public sealed class CodeIngestorTests : IDisposable
     }
 
     [RetryFact]
+    public async Task IngestFileAsync_BinaryContent_ReturnsZero_NoRows_PrunesLikeEmpty()
+    {
+        await AllowScopeAsync(_dataRoot);
+        var file = await WriteFileAsync(_dataRoot, "Packed.js", "MZ\u0090\0\u0003\0\0\0class X { }");
+
+        var result = await _ingestor.IngestFileAsync(_conn, "acme", file, TestContext.Current.CancellationToken);
+
+        result.Rows.ShouldBe(0);
+        result.ContentWhitespaceOnly.ShouldBeTrue();
+        result.ChunkHashes.ShouldBeEmpty();
+        (await CountCodeEntriesAsync(file)).ShouldBe(0);
+    }
+
+    [RetryFact]
     public async Task IngestFileAsync_HiddenFile_ReturnsZero_NoRows()
     {
         await AllowScopeAsync(_dataRoot);

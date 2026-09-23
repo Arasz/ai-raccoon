@@ -34,11 +34,13 @@ public sealed class ChunkIndexCorpusGuaranteeTests : IDisposable
         var repoRoot = FindRepoRoot();
         var docsRoot = Path.Combine(repoRoot, "docs");
 
-        var bert = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
-        var chunker = new MarkdownChunker(text => bert.CountTokens(text));
         // Mirrors FileIngestor.ChunkSizeForAsync for an unconfigured bank (docs/adr/0063: an unset
-        // provider resolves to the bundled local engine, whose real tokenizer counts every chunk).
-        var maxTokens = Math.Min(256, EmbeddingService.SafeChunkBudgetFor("local", null));
+        // provider resolves to the bundled engine, whose own tokenizer and budget size every chunk).
+        var bundled = new EmbeddingSettings("local", null, null, null);
+        var embedding = TestData.CreateEmbeddingService();
+        var bert = embedding.ResolveTokenizer(bundled)!;
+        var chunker = new MarkdownChunker(text => bert.CountTokens(text));
+        var maxTokens = embedding.ResolveChunkBudgetFor(bundled);
         var overlayTokens = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, maxTokens - 1));
 
         var options = TestData.CreateInfrastructureOptions(_dataRoot);

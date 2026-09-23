@@ -39,6 +39,11 @@ public sealed class CodeIngestor(
         }
 
         var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        if (BinaryContent.IsBinary(content))
+        {
+            return new CodeIngestResult(0, true, []);
+        }
+
         var chunks = codeChunker.Chunk(content);
         if (chunks.Count == 0)
         {

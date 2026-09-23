@@ -22,10 +22,15 @@ normally, code results are keyword-only, and the response carries the warning.
 ## What gets indexed
 
 Any file watched via `memory_watch_add` whose extension is in the code registry is
-automatically ingested into the code corpus. The 30 supported extensions:
+automatically ingested into the code corpus. The 37 supported extensions:
 
-`.cs` `.fs` `.fsx` `.py` `.ts` `.tsx` `.js` `.jsx` `.go` `.rs` `.java` `.kt` `.kts`
+`.cs` `.fs` `.fsx` `.py` `.ts` `.tsx` `.js` `.jsx` `.mjs` `.cjs` `.go` `.rs` `.java` `.kt` `.kts`
 `.swift` `.rb` `.php` `.c` `.h` `.cc` `.cpp` `.hpp` `.m` `.mm` `.scala` `.lua` `.html` `.htm` `.css` `.scss` `.sql`
+`.vue` `.sh` `.tf` `.hcl` `.feature`
+
+A file whose first 8,000 characters contain a NUL byte is treated as binary and skipped, whatever
+its extension. The check applies to memory files too. A file that turns binary loses the chunks it
+had.
 
 Memory-owned extensions (`.md`, `.txt`, `.json`, etc.) are never ingested into the
 code corpus. The two corpora are disjoint by design.
