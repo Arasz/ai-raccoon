@@ -61,15 +61,7 @@ public sealed class StructureFusionGateTests : IDisposable
         _output = output;
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-structure-fusion-gate");
         var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
-        File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
-        // The committed bank's vectors are MiniLM's (ADR-0049/0050); embed the query in the same space
-        // rather than with the bundled engine, which is granite since ADR-0108.
-        using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(_dataRoot, "memory.db")}"))
-        {
-            connection.Open();
-            connection.Execute("INSERT INTO settings (key, value) VALUES (@key, @value) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                new { key = EmbeddingSettingsKeys.Model, value = TestData.MiniLmModelPath() });
-        }
+        TestData.CopyMiniLmCorpusBank(bundledDb, Path.Combine(_dataRoot, "memory.db"));
 
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },

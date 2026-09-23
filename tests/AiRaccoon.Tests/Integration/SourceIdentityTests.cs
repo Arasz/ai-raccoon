@@ -59,7 +59,7 @@ public sealed class SourceIdentityTests : IDisposable
 
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-source-identity");
         var dbPath = Path.Combine(_dataRoot, "memory.db");
-        File.Copy(ResolveBundledDbPath(), dbPath);
+        TestData.CopyMiniLmCorpusBank(ResolveBundledDbPath(), dbPath);
 
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },

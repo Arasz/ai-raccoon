@@ -321,6 +321,23 @@ public static class TestData
     /// <summary>The int8 all-MiniLM-L6-v2 the product bundled before ADR-0108, kept as a test asset for engine-mechanics tests.</summary>
     public static string MiniLmModelPath() => RepoFile("tests/AiRaccoon.Tests/TestData/Models/model_qint8_arm64.onnx");
 
+    /// <summary>
+    ///     Copies a committed corpus bank to <paramref name="destination" /> and pins its engine to the
+    ///     MiniLM asset its stored vectors came from (ADR-0049/0050), so live query embeddings land in
+    ///     the same space rather than the bundled engine's (granite since ADR-0108).
+    /// </summary>
+    public static void CopyMiniLmCorpusBank(string source, string destination)
+    {
+        File.Copy(source, destination);
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={destination};Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO settings (key, value) VALUES ($key, $value) ON CONFLICT(key) DO UPDATE SET value = excluded.value";
+        command.Parameters.AddWithValue("$key", EmbeddingSettingsKeys.Model);
+        command.Parameters.AddWithValue("$value", MiniLmModelPath());
+        command.ExecuteNonQuery();
+    }
+
     /// <summary>File name of <see cref="MiniLmModelPath" />.</summary>
     public const string MiniLmModelFileName = "model_qint8_arm64.onnx";
 

@@ -68,7 +68,7 @@ public sealed class SectionTargetedRetrievalTests : IDisposable
 
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-section-targeted");
         var bundledDb = ResolveBundledDbPath();
-        File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
+        TestData.CopyMiniLmCorpusBank(bundledDb, Path.Combine(_dataRoot, "memory.db"));
 
         _factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },

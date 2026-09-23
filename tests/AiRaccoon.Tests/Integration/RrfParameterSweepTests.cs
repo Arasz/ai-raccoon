@@ -72,7 +72,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         _output = output;
         _dataRoot = TestData.CreateTempRoot("ai-raccoon-rrf-sweep");
         var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
-        File.Copy(bundledDb, Path.Combine(_dataRoot, "memory.db"));
+        TestData.CopyMiniLmCorpusBank(bundledDb, Path.Combine(_dataRoot, "memory.db"));
 
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },

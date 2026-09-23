@@ -48,7 +48,7 @@ public sealed class QueryConstructionTests : IDisposable
 
         var bundledDb = ResolveBundledDbPath();
         var dbPath = Path.Combine(_dataRoot, "memory.db");
-        File.Copy(bundledDb, dbPath);
+        TestData.CopyMiniLmCorpusBank(bundledDb, dbPath);
 
         var factory = new SqliteConnectionFactory(
             new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
