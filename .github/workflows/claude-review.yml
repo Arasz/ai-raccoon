@@ -1,0 +1,85 @@
+# Claude code review on every non-draft PR (anthropics/claude-code-action).
+# Runs when a PR leaves draft and on every push to it; each run ends in one
+# review from claude[bot]: APPROVE when nothing blocks the merge, otherwise
+# REQUEST_CHANGES, which also withdraws an approval an earlier push earned.
+#
+# Needs the Claude GitHub App installed on the repo and one secret:
+# CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`) or ANTHROPIC_API_KEY.
+# Without either, the job skips with a notice instead of failing.
+name: Claude review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Fork PRs get no secrets, so only same-repo branches are reviewed.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+      # OIDC exchange for the Claude GitHub App token.
+      id-token: write
+
+    steps:
+      - name: Check for a Claude credential
+        id: auth
+        env:
+          OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$OAUTH_TOKEN" ] || [ -n "$API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Claude review skipped: set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: steps.auth.outputs.present == 'true'
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
+        if: steps.auth.outputs.present == 'true'
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            HEAD SHA: ${{ github.event.pull_request.head.sha }}
+
+            Review this pull request against the project rules in CLAUDE.md and the
+            invariants it links under .ai-badger/invariants/.
+
+            1. Read the PR with `gh pr view` and the full diff with `gh pr diff`.
+               Read earlier reviews and comments (`gh pr view --comments`); when you
+               reviewed a previous push, check whether your earlier findings are
+               resolved and do not repeat comments that still stand unchanged.
+            2. Look for correctness bugs, security problems, data loss, missing or
+               non-behavioral tests for changed behavior, and invariant violations.
+               Read surrounding code before claiming a defect; report only findings
+               you can point to in the source.
+            3. Post each finding as an inline comment on the line it concerns, marked
+               BLOCKING or NIT. Style preferences are NITs.
+            4. Finish with exactly one review on the PR:
+               - no BLOCKING findings remain:
+                 `gh pr review ${{ github.event.pull_request.number }} --approve --body "<summary>"`
+               - otherwise:
+                 `gh pr review ${{ github.event.pull_request.number }} --request-changes --body "<blocking findings>"`
+               Start the body with "Reviewed <HEAD SHA>".
+          claude_args: |
+            --max-turns 60
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr review:*),Read,Grep,Glob"
