@@ -69,7 +69,7 @@ internal static partial class CliSettingsBackend
                 (acquired.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty));
         }
 
-        var tokenFile = new McpTokenFile(config.Options.DataRoot);
+        var tokenFile = new McpTokenFile(config.Options);
         var token = tokenFile.Read() ?? throw new SettingsServerUnavailableException(
             $"ai-raccoon: the backend at {acquired.Url} is listening but {tokenFile.Path} holds no token " +
             $"— a serve on another data root may own port {config.Port}");

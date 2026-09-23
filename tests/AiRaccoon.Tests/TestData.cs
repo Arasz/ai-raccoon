@@ -230,9 +230,22 @@ public static class TestData
     public static string CreateTempRoot(string prefix = "ai-raccoon-tests")
     {
         var root = Path.Combine(Path.GetTempPath(), prefix, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(root);
+        }
+        else
+        {
+            // F49 scratch roots hold secrets: owner-only is what the fail-closed checks (D1) expect.
+            Directory.CreateDirectory(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
         return root;
     }
+
+    /// <summary>A project-scope install: the bank state directory is &lt;dataRoot&gt;/.ai-raccoon (F49).</summary>
+    public static InfrastructureOptions CreateProjectOptions(string dataRoot, string rid = "osx-arm64") =>
+        new() { DataRoot = dataRoot, Rid = rid, Scope = InstallScope.Project };
 
     /// <summary>Idempotent, retry-tolerant teardown for a <see cref="CreateTempRoot"/> directory: a
     /// directory already gone is success (not a spurious Dispose failure), a transient lock — a

@@ -39,7 +39,7 @@ internal partial class NodeRunner(
             IdleTimeout = IdleTimeoutParser.TryParse(options.IdleTimeout, out var idleTimeout) ? idleTimeout : DefaultOptions.IdleTimeout,
             Restarting = options.Restart,
             Attaching = options.Attach,
-            TokenFile = new McpTokenFile(cliInput.ServerConfig.Options.DataRoot)
+            TokenFile = new McpTokenFile(cliInput.ServerConfig.Options)
         };
         WarnOnNonHttpTransport(cliInput.ServerConfig, cliInput.Options.IsTransportExplicit, streams);
 
@@ -53,7 +53,7 @@ internal partial class NodeRunner(
         if (await tokenFile.EnsureAsync(ctx) is not { } mcpToken)
         {
             Log.McpTokenUnavailable(logger, tokenFile.Path);
-            await streams.WriteErrorLineAsync($"ai-raccoon: cannot read or create the MCP token at {tokenFile.Path} — check its permissions, or remove it and start serve again");
+            await streams.WriteErrorLineAsync($"ai-raccoon: {tokenFile.RefusalReason ?? $"cannot read or create the MCP token at {tokenFile.Path} — check its permissions, or remove it and start serve again"}");
             return ExitCode.McpTokenUnavailable;
         }
 

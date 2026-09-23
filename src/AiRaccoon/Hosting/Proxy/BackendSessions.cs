@@ -42,7 +42,7 @@ public sealed partial class BackendSessions(IBackendLauncher backendLauncher, IH
 
     /// <summary>Makes disposal idempotent: a second dispose must not re-stop (or re-fail) anything.</summary>
     private bool _disposed;
-    private readonly McpTokenFile _tokenFile = new(config.Options.DataRoot);
+    private readonly McpTokenFile _tokenFile = new(config.Options);
 
     /// <summary>The endpoint the last successful acquire returned; empty until one succeeds.</summary>
     public string Url { get; private set; } = string.Empty;

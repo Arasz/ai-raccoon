@@ -80,7 +80,7 @@ internal static partial class McpServerSetup
             var gated = config.McpToken;
             if (gated != null)
             {
-                webApplication.UseMiddleware<McpTokenGate>(gated, new McpTokenFile(config.Options.DataRoot).Path);
+                webApplication.UseMiddleware<McpTokenGate>(gated, new McpTokenFile(config.Options).Path);
             }
 
             if (config.IdleTimeout > TimeSpan.Zero)
