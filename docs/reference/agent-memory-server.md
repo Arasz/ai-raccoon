@@ -484,43 +484,59 @@ The server parses its own arguments (System.CommandLine 2.0.10) before the host
 builds. Launch-identity flags are CLI-only; a verb runs a one-shot config command
 against the bank (results to stdout), bare `ai-raccoon` (with optional launch flags)
 runs the server. A server-routed verb (`settings …`, `model …`, `watch registered`,
-`noise entries`, `repair`, …) reaches its backend the way the CLI always did: it
-attaches to the server already on `--port` and starts one there when nothing answers
-(owner ruling 2026-09-22, [ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)).
-That backend is shared and outlives the command under the 4h idle watchdog, so the
-command says so on stderr and names how to stop it:
-`ai-raccoon serve --restart --attach --port <n>`.
+`noise entries`, `repair`, …) reaches its backend the same way the proxy does:
+attach-or-start behind a cryptographic proof of backend identity
+([ADR 0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), reverting
+[ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). A **proven** listener
+already on `--port` is attached to; nothing answering starts one there; a listener that
+cannot prove it holds this root's identity key gets a bounded, idle-timed private
+fallback instead of the shared backend. A shared backend (whether attached to or just
+started) is shared and outlives the command under the 4h idle watchdog, so the command
+says so on stderr and names how to stop it:
+`ai-raccoon: the backend on port <n> keeps running after this command exits, under its
+own idle timeout — stop it with ai-raccoon serve --restart --port <n>`.
 
 | Option | Values | Default |
 |---|---|---|
 | `--transport` | `proxy`, `http` (`stdio` and `https` are rejected at parse) | `proxy` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
-| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only, and the default proxy picks its own ephemeral port | `7721` |
-| `--attach` | flag (the proxy's shared-server opt-in — a settings verb attaches-or-starts regardless; `serve --restart` also needs it to stop an existing server) | off |
+| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only, and the default proxy picks its own ephemeral port for a private fallback | `7721` |
 | `--quiet` | flag | off |
+
+`--attach` no longer exists — root and `serve` spellings alike; passing it is an
+unrecognized argument (exit 9, `FailedToParseCliArgs`). Attaching is no longer opt-in
+because it is no longer unconditionally trusted: a listener earns it by proving
+possession of this root's `identity-key` first (ADR-0106 §D1/D2).
 
 `proxy` is the default and the zero-config path
 ([ADR 0020](../adr/0020-always-on-http-stdio-proxy.md)): bare `ai-raccoon`
-opens no bank, resolves no encryption key, and loads no embedding model. It
-starts its own `ai-raccoon serve --port 0` backend, takes the bound URL from
-that child's stdout alone, and forwards every JSON-RPC message to it,
-restoring the client's own request id on the response. It never dials
-`http://127.0.0.1:<port>/mcp` on this path, so a process that merely holds the
-configured port cannot receive the loopback token or a tool payload
-([ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). `--attach`
-opts into the shared-server path instead: probe the configured port, attach
-when an ai-raccoon server answers, and start one there when nothing does. The
-private backend is the proxy's alone and stops with it over the token-guarded
-`POST /shutdown` when the proxy shuts down; an attached shared server is never
-stopped — it serves other clients too. No
-tool method is named in the proxy, so a new tool needs no proxy change. If the backend can neither be reached nor
-started within its budget, the process exits `ExitCode.ProxyBackendUnavailable`
-(6) with one stderr line of this exact form (`BackendSessions.Unavailable()`,
-quoted verbatim from the P5 pass):
+opens no bank, resolves no encryption key, and loads no embedding model. It probes the
+configured port and, when a listener there proves it holds this root's identity key
+over a bounded `POST /identity/prove` challenge, attaches to it and starts nothing —
+this process never dials `/mcp` on an unproven listener, so a process that merely
+holds the configured port cannot receive the loopback token or a tool payload
+([ADR 0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), F70). Nothing
+answering the probe starts `ai-raccoon serve --port <configured>` there instead, taking
+the bound URL from that child's stdout alone. A listener that answers but cannot prove
+(wrong root, no key, or the probe times out) makes the proxy fall back to its own
+private `ai-raccoon serve --port 0` backend — proof-gated too, so a racer on the
+fallback child's ephemeral port still gets nothing. That private backend is the
+proxy's alone and stops with it over the token-guarded `POST /shutdown`, proving the
+listener again immediately before the stop request; a shared backend (attached to, or
+started on the configured port) is never stopped by this process — it serves other
+clients too. No tool method is named in the proxy, so a new tool needs no proxy
+change. If neither an attach, a fresh start, nor the private fallback can produce a
+working backend within budget, the process exits `ExitCode.ProxyBackendUnavailable`
+(6) with one stderr line of this exact form (`BackendSessions.Unavailable()`):
 `ai-raccoon: {reason}; no in-process fallback exists — start the backend first: ai-raccoon serve --port <port>`
 (`{reason}` names the failure: the URL, the serve exit code, and any captured
-backend stderr tail). There is no in-process fallback. The stdio and https transports were removed outright
+backend stderr tail). A separate, earlier refusal applies before any of this: **F39**
+— a `--data-root` that resolves to neither the default root nor an existing bank
+refuses before the proxy ever probes a port or spawns a process, with exit `22`
+(`ExitCode.NoBank`) and a line naming the typo-check remedy
+(`ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon serve --data-root <path>', or check --data-root for a typo`);
+the default root keeps its unconditional bootstrap. The stdio and https transports were removed outright
 ([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)): passing
 the removed `stdio` value fails at parse with exit 9 and a hint naming the proxy
 and `serve` on bare launches (exit 15, `InvalidArgument`, on verb paths, since
@@ -564,36 +580,42 @@ removal release.
 ### Serve mode
 
 Since ADR-0020, `serve` is not only a manual verb. The default `proxy`
-transport starts its own `serve --port 0` backend at proxy startup and stops
-that backend again when the proxy shuts down; while the proxy lives, a client
-that connects and never calls a tool still leaves that backend running.
-This section describes `serve` itself, whether started by the proxy or run by
+transport attaches to a proven backend already on its configured port, or
+starts one there when nothing answers, and stops that backend again when the
+proxy shuts down only if the proxy itself started it as a private fallback
+([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md)); a
+shared backend outlives the proxy. While the proxy lives, a client that
+connects and never calls a tool still leaves the backend running. This
+section describes `serve` itself, whether started by the proxy or run by
 hand.
 
 `ai-raccoon serve` is the HTTP mode as a first-class verb: it forces the http
 transport, applies a 4h idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0`
 disables), prints the bound URL to stdout, and stays in the foreground —
 background it with `ai-raccoon serve > serve.log 2>&1 &` (POSIX). A busy port
-held by a foreign listener fails fast with exit code 3 and a `--port 0` hint.
-A port already held by an ai-raccoon server is refused the same way unless
-`--attach` is given: `serve --attach` attaches to that server and exits 0, the
-owning process keeps the watchdog, and the attached run never touches the bank
-([ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). Without the
-flag, nothing is asked to stop and nothing is joined.
+tries the identity proof before anything else: a listener that proves it
+holds this root's `identity-key` is attached to, and `serve` exits `0`
+without ever opening the bank — the owning process keeps the watchdog. A
+listener that cannot prove — a foreign process, or an ai-raccoon serving
+another root — is refused with exit code `3` and a line naming the remedy
+(stop the listener yourself, or pass `--port 0` for a private one); nothing
+is asked to stop and nothing is joined
+([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md),
+reverting [ADR-0105](../adr/0105-private-spawn-is-the-launch-default.md)).
 
-`serve --restart --attach` cycles that server instead of attaching to it
-(ADR-0022). Attaching is wrong on exactly one path — an update: `dotnet tool
+`serve --restart` cycles a proven server instead of attaching to it
+(ADR-0022). Cycling is needed on exactly one path — an update: `dotnet tool
 update` replaces the binary while the always-on backend keeps the old assembly
-loaded, so every later client attaches to the stale one. `--restart` asks the
-running server to stop over `POST /shutdown` (token-guarded, POST-only), waits
-for the port to free, then serves in its place; with nothing listening it is a
-plain `serve`. Cycling sends the listener the data root's token, so it is an
-attach-shaped trust decision: without `--attach`, a listener that identifies as
-an ai-raccoon server is refused before the token file is read, with exit 3 and
-a line naming `--attach`, the token it would send, and the manual stop
-(`ai-raccoon serve observability pid --port <n>`, then serve again) — a
-self-asserted `/observability` name no longer earns the token (F70/K1,
-[ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). The stop gets
+loaded, so every later client attaches to the stale one. `--restart` proves
+the listener, then asks it to stop over `POST /shutdown` (token-guarded,
+POST-only), waits for the port to free, then serves in its place; with
+nothing listening it is a plain `serve`. A listener that cannot prove is
+refused before the token file is even read, with exit 3 and a line naming
+the manual stop (`ai-raccoon serve observability pid --port <n>`, then serve
+again) — never the token it would have sent, and never a flag that no longer
+exists ([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md)
+D1/D2, reverting F70/K1's `--attach`-shaped trust decision from
+[ADR-0105](../adr/0105-private-spawn-is-the-launch-default.md)). The stop gets
 10s in total — the host's stated `ShutdownTimeout`,
 shared by in-flight calls and every background service, not a per-call
 guarantee — after which what is left is aborted and the proxy's documented
@@ -615,10 +637,18 @@ a line saying the port is held by something that is not an ai-raccoon.
 `/mcp` and `/shutdown` require `X-AiRaccoon-Token` or `Authorization: Bearer
 <token>` (the Bearer envelope added 2026-08-09, see
 [ADR 0020](../adr/0020-always-on-http-stdio-proxy.md) §"Amendment
-2026-08-09"): before binding, `serve` mints a random token into
-`<data-root>/mcp-token` (0600, exclusive create, reused across restarts), and
-every request to either must present one of the two — the proxy reads the file
-after a successful probe and sends `X-AiRaccoon-Token` automatically. An
+2026-08-09"): before binding, `serve` mints a random token — and, since
+[ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), the
+per-root `identity-key` a listener signs the proof with — into the **bank
+state directory**: the data root itself for a user-scope install, or
+`<dataRoot>/.ai-raccoon` for a project-scope one (0600, exclusive create,
+reused across restarts). A project-scope install's legacy top-level
+`<dataRoot>/mcp-token` is migrated into the state directory once, on the
+first current binary to open that root, and only when it is owned by the
+current user and not group/world readable or writable; user-scope paths are
+unchanged (F49). Every request to `/mcp` or `/shutdown` must present the
+token — the proxy reads it from the state directory after a successful
+attach or start and sends `X-AiRaccoon-Token` automatically. An
 unauthorised call gets one of two 401 bodies: one naming the headers when no
 credential was sent at all, one saying the presented value does not match when
 it was — the difference matters because an unexpanded `${AIRACCOON_MCP_TOKEN}`
