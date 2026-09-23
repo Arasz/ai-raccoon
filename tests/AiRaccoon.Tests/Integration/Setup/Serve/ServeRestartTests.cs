@@ -9,11 +9,10 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
 /// <summary>
-///     `serve --restart` acceptance (ADR-0022): plain-serve behaviour when nothing is listening,
-///     a real cycle when a server is and the operator opts in with `--attach`, and a loud
-///     non-zero exit for every way the cycle can fail — never a silent attach to the server it
-///     was asked to replace, and never the token to a listener that merely claims the name
-///     (F70/K1).
+///     `serve --restart` acceptance (ADR-0022, ADR-0106): plain-serve behaviour when nothing is
+///     listening, a real cycle when a <em>proven</em> server is, and a loud non-zero exit for every
+///     way the cycle can fail — never a silent attach to the server it was asked to replace, and
+///     never the token to a listener that merely claims the name but cannot prove identity.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -40,8 +39,11 @@ public sealed class ServeRestartTests : IDisposable
         (await run.StopAsync()).ShouldBe(ExitCode.Success);
     }
 
+    /// <summary>
+    ///     The revert gate: a bare `serve --restart` cycles a proven server with no flag at all.
+    /// </summary>
     [RetryFact]
-    public async Task AnExistingServer_IsCycled_AndTheRestartOwnsThePort()
+    public async Task Restart_Bare_AgainstAProvenServer_CyclesIt()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -53,9 +55,7 @@ public sealed class ServeRestartTests : IDisposable
             await using var old = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
             await WaitForUrlAsync(old);
 
-            // --attach is the explicit opt-in (F70/K1): restarting a listener sends it the data
-            // root's token, so a bare --restart refuses it. This is the opted-in cycle control.
-            await using var restarted = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"]);
+            await using var restarted = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
             var url = await WaitForUrlAsync(restarted);
 
             // The old server really exited — its own run completed, it was not merely bypassed.
@@ -70,19 +70,18 @@ public sealed class ServeRestartTests : IDisposable
     }
 
     /// <summary>
-    ///     The join-review gap: restart identified the listener by the self-asserted
-    ///     /observability name and sent it the real token on /shutdown. Without --attach it must
-    ///     refuse before the token file is even read, so a squatter that self-identifies receives
-    ///     nothing — not even a shutdown request.
+    ///     The join-review gap, now proof-shaped: a listener that identifies as ai-raccoon but cannot
+    ///     prove it holds this root's identity key receives nothing — not even a shutdown request —
+    ///     and the refusal names the remedy.
     /// </summary>
     [RetryFact]
-    public async Task RestartWithoutAttach_AgainstAnAiRaccoonListener_RefusesAndSendsNoToken()
+    public async Task Restart_Bare_AgainstAnUnprovenHolder_RefusesExit3_SendsNoToken()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
-        // The squatter holds a real token's path: before the fix it received the value byte-for-byte.
+        // The holder sits where a real token would be: before the proof gate it received the value.
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
@@ -92,11 +91,12 @@ public sealed class ServeRestartTests : IDisposable
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         fake.ShutdownTokenHeaders.ShouldBeEmpty(
-            "restart handed the data root's token to a listener that merely claimed the /observability name");
+            "restart handed the data root's token to a listener that could not prove identity");
         fake.ShutdownRequests.ShouldBe(0);
         exit.ShouldBe(ExitCode.PortInUse);
-        run.Stderr.ShouldContain("--attach");
-        run.Stderr.ShouldContain("stop it yourself");
+        run.Stderr.ShouldContain("did not prove");
+        run.Stderr.ShouldContain("stop the listener");
+        run.Stderr.ShouldNotContain("--attach");
         run.Stdout.ShouldBeEmpty();
     }
 
@@ -134,9 +134,8 @@ public sealed class ServeRestartTests : IDisposable
         // Our data root has a token; the listener rejects it, i.e. it serves a different root.
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         lease.ReleaseForBind();
-        await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
-            TestContext.Current.CancellationToken);
-        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"]);
+        await using var fake = await StartProvenFakeAsync(port, HttpStatusCode.Unauthorized);
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
@@ -145,6 +144,7 @@ public sealed class ServeRestartTests : IDisposable
         run.Stderr.ShouldContain("restart");
         run.Stderr.ShouldNotContain("   at ");
         fake.ShutdownRequests.ShouldBe(1);
+        fake.ShutdownTokenHeaders.ShouldNotBeEmpty("the proven listener is the one that may be sent the token");
     }
 
     [RetryFact]
@@ -156,9 +156,8 @@ public sealed class ServeRestartTests : IDisposable
         var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         lease.ReleaseForBind();
-        await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.NotFound,
-            TestContext.Current.CancellationToken);
-        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"]);
+        await using var fake = await StartProvenFakeAsync(port, HttpStatusCode.NotFound);
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
@@ -175,9 +174,9 @@ public sealed class ServeRestartTests : IDisposable
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
-        await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
-            TestContext.Current.CancellationToken);
-        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"]);
+        // The fake mints the identity key (so it can prove) but no token exists in this root.
+        await using var fake = await StartProvenFakeAsync(port, HttpStatusCode.Accepted);
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
@@ -221,9 +220,8 @@ public sealed class ServeRestartTests : IDisposable
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         // A pre-ADR-0022 server: identifies as an ai-raccoon, reports no version, has no /shutdown.
         lease.ReleaseForBind();
-        await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.NotFound,
-            TestContext.Current.CancellationToken, version: null);
-        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"]);
+        await using var fake = await StartProvenFakeAsync(port, HttpStatusCode.NotFound, version: null);
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
 
         var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
@@ -280,8 +278,12 @@ public sealed class ServeRestartTests : IDisposable
         run.Stderr.ShouldContain("nothing was asked to stop");
     }
 
+    /// <summary>
+    ///     A plain `serve` (no restart) against a proven server attaches and exits 0, leaving the
+    ///     owner serving — the pre-#643 shape, back behind the proof.
+    /// </summary>
     [RetryFact]
-    public async Task WithoutRestart_WithAttach_AnExistingServerIsStillAttachedTo()
+    public async Task WithoutRestart_OnAProvenListener_AttachesAndExitsZero()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -291,14 +293,26 @@ public sealed class ServeRestartTests : IDisposable
         await using var old = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         await WaitForUrlAsync(old);
 
-        // --attach is the explicit opt-in (F70/K1): without it a plain serve now refuses the port.
-        await using var second = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--attach"]);
+        await using var second = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         var exit = await second.Exit.WaitAsync(TestContext.Current.CancellationToken);
 
         exit.ShouldBe(ExitCode.Success);
         second.Stderr.ShouldContain("attached");
+        second.Stderr.ShouldContain("proved");
         old.Exit.IsCompleted.ShouldBeFalse();
         (await old.StopAsync()).ShouldBe(ExitCode.Success);
+    }
+
+    /// <summary>A FakeRaccoon that proves it serves <see cref="_dataRoot"/>'s root, so the restart
+    /// reaches the token-read stage instead of refusing it as unproven.</summary>
+    private async Task<FakeRaccoon> StartProvenFakeAsync(int port, HttpStatusCode shutdownStatus,
+        string name = "ai-raccoon", string? version = "0.0.0-fake")
+    {
+        var keyFile = new IdentityKeyFile(TestData.CreateInfrastructureOptions(_dataRoot));
+        var signer = await keyFile.EnsureAsync(TestContext.Current.CancellationToken)
+                     ?? throw new InvalidOperationException("the fixture could not mint its identity key");
+        return await FakeRaccoon.StartAsync(port, shutdownStatus, TestContext.Current.CancellationToken, name, version,
+            new FakeRaccoonProof { Signer = signer, RootFp = IdentityProof.RootFingerprint(keyFile.StateDirectory) });
     }
 
     private static Task<bool> ProbeAsync(int port) => TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken);
@@ -307,7 +321,4 @@ public sealed class ServeRestartTests : IDisposable
 
     private static Task<string> WaitForUrlAsync(ServeHarness run) =>
         run.WaitForUrlAsync(TestContext.Current.CancellationToken);
-
-
-
 }

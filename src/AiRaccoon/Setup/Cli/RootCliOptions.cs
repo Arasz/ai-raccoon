@@ -22,8 +22,4 @@ public sealed record RootCliOptions
     public required bool IsPortExplicit { get; init; }
     public required bool IsTransportExplicit { get; init; }
     public bool Quiet { get; init; }
-
-    /// <summary>Explicit opt-in to the shared server already on <see cref="Port" /> (F70/K1); false
-    /// is the private-spawn default.</summary>
-    public bool Attach { get; init; }
 }

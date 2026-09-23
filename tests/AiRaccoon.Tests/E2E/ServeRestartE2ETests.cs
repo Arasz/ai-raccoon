@@ -128,7 +128,7 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
     }
 
     private ServeHarness StartRestartInProcess(int port) =>
-        ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart", "--attach"],
+        ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"],
             TimeSpan.FromSeconds(180));
 
     private static async Task<JsonDocument> WaitForServerAsync(int port)

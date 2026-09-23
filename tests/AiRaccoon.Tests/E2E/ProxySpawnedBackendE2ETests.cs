@@ -12,14 +12,11 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     The composition users actually get (ADR-0020): the proxy starts `serve` itself, and that
-///     `serve` mints the loopback token and gates /mcp. A pre-started ungated backend cannot show
-///     this — it is the one path where the gate is really in the way.
-///     <para />
-///     These launches pass <c>--attach</c> (F70/K1): the shared-spawn path is the one that puts the
-///     backend on the configured port, which is what lets this class discover it on /observability
-///     and stop it. The default private spawn starts the backend on an ephemeral port and is gated
-///     by <c>BackendSessionsTokenExposureTests</c>.
+///     The composition users actually get (ADR-0020, ADR-0106): the proxy starts `serve` on the
+///     configured port when nothing is listening, and that `serve` mints the loopback token and
+///     gates /mcp. A pre-started ungated backend cannot show this — it is the one path where the
+///     gate is really in the way. The proxy attaches to the instance by proof; the instance is
+///     shared, so the teardown stops it through the PID /observability reports.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
@@ -51,9 +48,9 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     The proxy never kills a daemon it merely *attached* to — its own private spawns are
-    ///     stopped at shutdown (ProxyPrivateBackendLifetimeTests owns that contract) — so this
-    ///     --attach test does it instead — via the PID
+    ///     The proxy never kills a shared daemon it merely attached to — its own private fallbacks
+    ///     are stopped at shutdown (ProxyPrivateBackendLifetimeTests owns that contract) — so this
+    ///     test does it instead — via the PID
     ///     /observability reports, which stays open by design. A daemon that survives this holds the
     ///     port and the bank for the rest of the run, so teardown fails rather than going quiet.
     /// </summary>
@@ -74,7 +71,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
     {
         _lease.ReleaseForBind();
         await using var client = await AiRaccoonProcess.ConnectAsync(
-            ["--data-root", _dataRoot, "--port", _port.ToString(), "--attach"],
+            ["--data-root", _dataRoot, "--port", _port.ToString()],
             new McpClientOptions { ProtocolVersion = "2025-11-25" }, TestContext.Current.CancellationToken);
 
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -96,7 +93,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
         var budget = TimeSpan.FromSeconds(60);
         _lease.ReleaseForBind();
         await using var client = await AiRaccoonProcess.ConnectAsync(
-            ["--data-root", _dataRoot, "--port", _port.ToString(System.Globalization.CultureInfo.InvariantCulture), "--attach"],
+            ["--data-root", _dataRoot, "--port", _port.ToString(System.Globalization.CultureInfo.InvariantCulture)],
             TestContext.Current.CancellationToken);
 
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -123,7 +120,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
         // the SDK down the legacy handshake, which LegacyProtocolClient_IsRelayed proves is carried.
         _lease.ReleaseForBind();
         await using var client = await AiRaccoonProcess.ConnectAsync(
-            ["--data-root", _dataRoot, "--port", _port.ToString(), "--attach"], TestContext.Current.CancellationToken);
+            ["--data-root", _dataRoot, "--port", _port.ToString()], TestContext.Current.CancellationToken);
 
         var result = await client.CallToolAsync("memory_stats",
             new Dictionary<string, object?> { ["projectId"] = "acme" },

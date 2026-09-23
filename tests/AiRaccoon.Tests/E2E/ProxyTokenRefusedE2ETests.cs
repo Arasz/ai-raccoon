@@ -1,5 +1,7 @@
+using System.Buffers.Text;
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using Shouldly;
@@ -10,26 +12,23 @@ using AiRaccoon.Tests.TestHelpers;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     The proxy presenting a token a real gated `serve` rejects — the data-root mismatch row of
-///     docs/plans/2026-08-09-mcp-loopback-token-flow.md. Every other proxy test either uses an
-///     ungated backend or presents the right token, so this is the only one where the gate refuses.
+///     The proxy presenting a token a real gated `serve` rejects: the server minted one token at
+///     start, the file was rotated afterwards, so the proof succeeds (same root, same identity key)
+///     and the token gate is what refuses. Every other proxy test either uses an ungated backend or
+///     presents the right token, so this is the only one where the gate refuses.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 [Collection(E2ETestCollection.Name)]
 public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
 {
-    /// <summary>Comfortably above the real cost (probe plus one refused handshake) and comfortably
-    /// below the SDK's 60 s initialize timeout, which is what a dropped refusal costs instead.</summary>
-
-    /// <summary>Only stops a hang from wedging the run; the assertion is the stopwatch.</summary>
+    /// <summary>Only stops a hang from wedging the run; the assertion is the exit code and stderr.</summary>
     private static readonly TimeSpan HardCap = TimeSpan.FromSeconds(150);
 
     /// <summary>How long the gated backend gets to die once killed, before teardown calls it stuck.</summary>
     private static readonly TimeSpan ExitWait = TimeSpan.FromSeconds(30);
 
-    private readonly string _backendRoot = TestData.CreateTempRoot("token-refused-backend");
-    private readonly string _proxyRoot = TestData.CreateTempRoot("token-refused-proxy");
+    private readonly string _root = TestData.CreateTempRoot("token-refused");
     private Process? _backend;
     private int _port;
 
@@ -40,13 +39,12 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
         lease.ReleaseForBind();
         _backend = StartGatedServe();
         await WaitForBackendAsync();
-        // F39: the proxy's auto-launch refuses an empty non-default root before it dials, so seed
-        // the bank — the refusal under test is the gate's token verdict, not a missing bank.
-        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_proxyRoot), TestContext.Current.CancellationToken);
-        // A well-formed token that is deliberately not the backend's: the proxy reads this root,
-        // the gate compares the other. Minted rather than written, so the refusal is the gate's
-        // verdict on a real token and not the reader rejecting the file's shape.
-        await new McpTokenFile(_proxyRoot).EnsureAsync(TestContext.Current.CancellationToken);
+        // The proxy and the backend share this root, so the proof passes; rotate the token the
+        // file holds to a well-formed value the running server never saw, and the gate refuses it.
+        var tokenFile = new McpTokenFile(_root);
+        tokenFile.Read().ShouldNotBeNull("the gated backend must have minted a token before it bound");
+        await File.WriteAllTextAsync(tokenFile.Path,
+            Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32)), TestContext.Current.CancellationToken);
     }
 
     /// <summary>A gated `serve` that outlives the test holds the port and the bank, so say so loudly.</summary>
@@ -58,8 +56,7 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
         }
         finally
         {
-            Delete(_backendRoot);
-            Delete(_proxyRoot);
+            Delete(_root);
         }
     }
 
@@ -76,7 +73,7 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
             if (!stopped)
             {
                 throw new InvalidOperationException(
-                    $"the gated backend on port {_port} survived kill, so it still holds {_backendRoot}");
+                    $"the gated backend on port {_port} survived kill, so it still holds {_root}");
             }
         }
         finally
@@ -89,18 +86,16 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
     ///     The gate's verdict has to reach the operator intact. Rewriting the 401 to a 200 costs
     ///     exactly that: the body correlates with no request, the SDK reports only that the POST
     ///     completed without a reply, and both the header it wanted and the file holding the token
-    ///     the server actually expects are gone — so a data-root mismatch reads as a mute backend.
+    ///     the server actually expects are gone — so a rotated token reads as a mute backend.
     /// </summary>
     [RetryFact]
     public async Task WrongToken_SurfacesTheGatesVerdict()
     {
         var run = await RunProxyAsync();
 
-        // The server's own file, not the proxy's: naming it is what makes the mismatch diagnosable.
-        run.Stderr.ShouldContain(Path.Combine(_backendRoot, McpTokenFile.FileName));
+        // The server's own file: naming it is what makes the refusal diagnosable.
+        run.Stderr.ShouldContain(Path.Combine(_root, McpTokenFile.FileName));
         run.Stderr.ShouldContain(McpTokenGate.HeaderName);
-        // And the proxy's own, which is the file the operator has to change.
-        run.Stderr.ShouldContain(Path.Combine(_proxyRoot, McpTokenFile.FileName));
         run.ExitCode.ShouldBe(ExitCode.ProxyBackendUnavailable);
         // "At once, not at the SDK's handshake timeout" is pinned by the exit code and the stderr
         // above, not by a clock (PR #464); the harness HardCap alone guards a hang.
@@ -116,7 +111,7 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
         };
         foreach (var argument in new[]
                  {
-                     "--data-root", _backendRoot, "--quiet", "serve", "--port",
+                     "--data-root", _root, "--quiet", "serve", "--port",
                      _port.ToString(CultureInfo.InvariantCulture)
                  })
         {
@@ -133,7 +128,7 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
     /// <summary>Waits on the token file, which `serve` mints strictly before it binds.</summary>
     private async Task WaitForBackendAsync()
     {
-        var tokenFile = Path.Combine(_backendRoot, McpTokenFile.FileName);
+        var tokenFile = Path.Combine(_root, McpTokenFile.FileName);
         using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(1) };
         for (var attempt = 0; attempt < 120; attempt++)
         {
@@ -158,7 +153,7 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
     }
 
     private Task<ProcessRun> RunProxyAsync() =>
-        RaccoonProcess.RunAsync(["--data-root", _proxyRoot, "--port", _port.ToString(CultureInfo.InvariantCulture)],
+        RaccoonProcess.RunAsync(["--data-root", _root, "--port", _port.ToString(CultureInfo.InvariantCulture)],
             HardCap, TestContext.Current.CancellationToken);
 
     private static void Delete(string root)

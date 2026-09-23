@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Tests.TestHelpers;
@@ -40,7 +41,7 @@ public sealed class CliContractTests : IAsyncLifetime
     /// timeout. Present in every scenario that reaches the server, absent from the ones rejected
     /// before the acquire (argument and parse errors).</summary>
     private const string BackendOutlivesCommand =
-        "info: AiRaccoon.Settings.CliSettingsBackend[687]\n      ai-raccoon: the backend on port {PORT} keeps running after this command exits, under its own idle timeout — stop it with ai-raccoon serve --restart --attach --port {PORT}";
+        "info: AiRaccoon.Settings.CliSettingsBackend[687]\n      ai-raccoon: the backend on port {PORT} keeps running after this command exits, under its own idle timeout — stop it with ai-raccoon serve --restart --port {PORT}";
 
     private static readonly Scenario[] Recorded =
     [
@@ -99,12 +100,14 @@ public sealed class CliContractTests : IAsyncLifetime
             "  -?, -h, --help   Show help and usage information")
     ];
 
-    public ValueTask InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         _portLease = LoopbackPort.Reserve();
         _port = _portLease.Port;
         _portLease.ReleaseForBind();
-        return ValueTask.CompletedTask;
+        // F39: the settings acquire refuses an empty non-default root before it probes or spawns, and
+        // the cold scenario below is exactly that acquire — so the fixture root holds a real bank.
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -132,25 +135,41 @@ public sealed class CliContractTests : IAsyncLifetime
         }
     }
 
-    /// <summary>WP7-T7's server-unreachable row: nothing can bind the port, so the acquire budget is spent and gives up.</summary>
+    /// <summary>
+    ///     The hanging-holder row, re-shaped for attach-or-start (ADR-0106): a listener that takes
+    ///     the connection and says nothing cannot be proven, so the command completes on a bounded
+    ///     private fallback and says so — the held port and the remedy. Before the revert this was
+    ///     exit 18 (no server reachable); the fallback is now the contract.
+    /// </summary>
     [RetryFact]
-    public async Task SettingsCommand_WithNoServerReachable_ExitsDistinctly()
+    public async Task SettingsCommand_WithAHangingHolder_FallsBackPrivately_AndWarns()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
-        var dataRoot = TestData.CreateTempRoot("ai-raccoon-cli-contract-unreachable");
+        var dataRoot = TestData.CreateTempRoot("ai-raccoon-cli-contract-hanging");
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(dataRoot), TestContext.Current.CancellationToken);
         using var foreign = LoopbackPort.Occupy();
 
+        var fallbackPort = 0;
         try
         {
             var run = await RunAsync(dataRoot, foreign.Port, ["settings", "sweep", "show"]);
 
-            run.ExitCode.ShouldBe(ExitCode.SettingsServerUnavailable);
-            run.Stdout.ShouldBeEmpty();
-            run.Stderr.ShouldContain("no settings server");
+            run.ExitCode.ShouldBe(0, $"the private fallback must serve the command; stderr: {run.Stderr}");
+            run.Stderr.ShouldContain($"listener on port {foreign.Port} did not prove");
+            run.Stderr.ShouldContain("stop the listener");
+            // The N1 disclosure names the fallback's own port; parse it so this test stops the child.
+            var match = Regex.Match(run.Stderr, @"backend on port (\d+) keeps running");
+            match.Success.ShouldBeTrue($"the disclosure must name the fallback port; stderr: {run.Stderr}");
+            fallbackPort = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
         }
         finally
         {
+            if (fallbackPort != 0)
+            {
+                await RaccoonBackendCleanup.ShutdownIfRunningAsync(dataRoot, fallbackPort, CancellationToken.None);
+            }
+
             TestData.DeleteTempRoot(dataRoot);
         }
     }
@@ -166,6 +185,8 @@ public sealed class CliContractTests : IAsyncLifetime
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
         var dataRoot = TestData.CreateTempRoot("ai-raccoon-cli-contract-refused");
+        // F39: the seed's auto-launch refuses an empty non-default root, so it starts from a bank.
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(dataRoot), TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();
@@ -198,13 +219,12 @@ public sealed class CliContractTests : IAsyncLifetime
         }
     }
 
-    /// <summary>Root args shared by every process this fixture runs. `--attach` is the F70/K1
-    /// opt-in: the recorded contract is the shared-server shape (one auto-started server reused by
-    /// every scenario), which the default private spawn would replace with one backend per
-    /// invocation — a different contract, and a different stderr line on the cold scenario.</summary>
+    /// <summary>Root args shared by every process this fixture runs. The attach-or-start default
+    /// (ADR-0106) is the shared-server shape the recorded contract pins: one server is started on
+    /// the configured port and every scenario after it attaches by proof — no flag needed.</summary>
     private static Task<ProcessRun> RunAsync(string dataRoot, int port, string[] argv) =>
         RaccoonProcess.RunAsync(
-            ["--data-root", dataRoot, "--port", port.ToString(CultureInfo.InvariantCulture), "--attach", .. argv],
+            ["--data-root", dataRoot, "--port", port.ToString(CultureInfo.InvariantCulture), .. argv],
             HardCap, TestContext.Current.CancellationToken);
 
     private static string Normalize(string stream) => stream.ReplaceLineEndings("\n").Trim('\n');

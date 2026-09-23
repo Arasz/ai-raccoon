@@ -26,7 +26,6 @@ public static class ServeCommandOptionsReader
                 Node = new NodeCliOptions
                 {
                     Port = ResolvePort(parseResult, collectedErrors),
-                    Attach = ResolveAttach(parseResult, collectedErrors),
                     Format = parseResult.ReadOption(CliCommandTree.ServeFormatOption, "", collectedErrors),
                     IdleTimeout = parseResult.ReadOption(CliCommandTree.ServeIdleTimeoutOption, "", collectedErrors),
                     McpEntry = parseResult.ReadOption(CliCommandTree.ServeMcpEntryOption, false, collectedErrors, false),
@@ -54,35 +53,12 @@ public static class ServeCommandOptionsReader
 
         return DefaultOptions.Port;
     }
-
-    /// <summary>
-    ///     Serve's own --attach wins; else the root --attach; else false — the private-spawn default
-    ///     (F70/K1). A bool flag carries no tokens, and System.CommandLine materialises an implicit
-    ///     OptionResult for every absent option, so presence is <c>Implicit == false</c> — a null
-    ///     check would let serve's implicit default shadow an explicit root --attach.
-    /// </summary>
-    private static bool ResolveAttach(ParseResult parseResult, List<string> collectedErrors)
-    {
-        if (parseResult.GetResult(CliCommandTree.ServeAttachOption) is OptionResult { Implicit: false })
-        {
-            return parseResult.ReadOption(CliCommandTree.ServeAttachOption, false, collectedErrors, false);
-        }
-
-        if (parseResult.GetResult(CliCommandTree.AttachOption) is OptionResult { Implicit: false })
-        {
-            return parseResult.ReadOption(CliCommandTree.AttachOption, false, collectedErrors, false);
-        }
-
-        return false;
-    }
 }
 
 public sealed record NodeCliOptions
 {
     public required int Port { get; init; }
 
-    /// <summary>Explicit opt-in to the shared server on <see cref="Port" /> (F70/K1); false is private spawn.</summary>
-    public required bool Attach { get; init; }
     public required string Format { get; set; }
     public required string IdleTimeout { get; set; }
     public required bool McpEntry { get; set; }

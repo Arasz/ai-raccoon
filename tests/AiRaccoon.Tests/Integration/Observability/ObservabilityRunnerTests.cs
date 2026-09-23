@@ -194,22 +194,15 @@ public sealed class ObservabilityRunnerTests : IDisposable
         await using var first = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         await first.WaitForUrlAsync(TestContext.Current.CancellationToken);
 
-        var secondRoot = TestData.CreateTempRoot("ai-raccoon-observability-attach");
-        try
-        {
-            await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString(), "--attach"]);
-            var secondExit = await second.Exit;
-            secondExit.ShouldBe(ExitCode.Success);
+        // Same root: the second serve proves the owner holds this root's identity key and exits 0.
+        await using var second = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var secondExit = await second.Exit;
+        secondExit.ShouldBe(ExitCode.Success);
 
-            var run = await RunObservabilityAsync("pid", port);
+        var run = await RunObservabilityAsync("pid", port);
 
-            run.Exit.ShouldBe(ExitCode.Success);
-            run.Stdout.ShouldBe($"{Environment.ProcessId}{Environment.NewLine}");
-        }
-        finally
-        {
-            TestData.DeleteTempRoot(secondRoot);
-        }
+        run.Exit.ShouldBe(ExitCode.Success);
+        run.Stdout.ShouldBe($"{Environment.ProcessId}{Environment.NewLine}");
 
         var firstExit = await first.StopAsync();
         firstExit.ShouldBe(ExitCode.Success);
