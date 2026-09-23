@@ -55,7 +55,7 @@ internal sealed class ConfigCommands(
                 ["model", "embedding", "set", "local"] => await settings.ModelSetLocalAsync(parsedCliArgs, store, modelMigrations, streams, ctx),
                 ["model", "embedding", "set", "openai"] => await settings.ModelSetOpenAiAsync(parsedCliArgs, store, modelMigrations, streams, ctx),
                 ["model", "code", "set", "local"] => await settings.ModelSetCodeLocalAsync(parsedCliArgs, codeEngine, streams, ctx),
-                ["model", "code", "set", "default"] => await settings.ModelSetCodeDefaultAsync(modelDownload, codeEngine, cliInput.Options.DataRoot, streams, ctx),
+                ["model", "code", "set", "default"] => await ModelSetCodeDefaultAsync(cliInput, streams, ctx),
                 ["model", "download"] => await modelDownload.RunAsync(parsedCliArgs, cliInput.Options.DataRoot, streams, ctx),
                 ["settings", "model", "embedding", "reset"] => await settings.ModelResetAsync(store, streams, ctx),
                 ["settings", "model", "embedding", "show"] => await settings.ModelEmbeddingShowAsync(store, streams, ctx),
@@ -187,5 +187,15 @@ internal sealed class ConfigCommands(
             await streams.WriteErrorLineAsync(CliFailureFormatting.Format(ex, cliInput.ServerConfig.Options.DataRoot));
             return ExitCode.InvalidArgument;
         }
+    }
+
+    /// <summary>
+    ///     This verb downloads before it touches the settings store, so the F39 guard the store's
+    ///     acquire would run is run first: a mistyped root gets exit 22, not a model.
+    /// </summary>
+    private async Task<int> ModelSetCodeDefaultAsync(CliInput cliInput, StandardStreams streams, CancellationToken ctx)
+    {
+        BankPresenceGuard.EnsureExists(cliInput.ServerConfig.Options);
+        return await settings.ModelSetCodeDefaultAsync(modelDownload, codeEngine, cliInput.Options.DataRoot, streams, ctx);
     }
 }

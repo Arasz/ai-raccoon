@@ -2,6 +2,7 @@ using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
+using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
@@ -68,6 +69,33 @@ public sealed class NoMintGuardCompositionTests
         }
     }
 
+    /// <summary>
+    ///     `model code set default` downloads the default code model before it touches the settings
+    ///     store, so the store's guard used to run only after the model had landed under the mistyped
+    ///     root. The guard runs before the download: exit 22, nothing fetched, nothing created.
+    /// </summary>
+    [Fact]
+    public async Task ModelCodeSetDefault_AgainstAnEmptyExplicitRoot_Exits22_BeforeDownloadingAnything()
+    {
+        var dataRoot = TestData.CreateTempRoot("no-mint-guard-code-default");
+        try
+        {
+            var commands = TestData.CreateConfigCommands(new FakeMemoryStore(), settings: new SettingsCommands(),
+                modelDownload: new ModelDownloadCommands(new NoDownloadHttpClientFactory()));
+
+            var (exit, _, stderr) = await CliRun.RunAsync(["--data-root", dataRoot, "model", "code", "set", "default"], commands);
+
+            exit.ShouldBe(ExitCode.NoBank, stderr);
+            stderr.ShouldContain(dataRoot);
+            new DirectoryInfo(dataRoot).EnumerateFileSystemInfos().ShouldBeEmpty(
+                "a refused auto-launch verb must fetch and create nothing under the resolved root");
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
     [Fact]
     public async Task NoBank_MapsTo22_InBothCompositionRoots()
     {
@@ -127,5 +155,12 @@ public sealed class NoMintGuardCompositionTests
         {
             TestData.EnvVarGate.Release();
         }
+    }
+
+    /// <summary>A refused verb must never reach the network; handing out a client would hide that it tried.</summary>
+    private sealed class NoDownloadHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) =>
+            throw new InvalidOperationException("a verb refused for a missing bank must not start a download");
     }
 }
