@@ -26,6 +26,11 @@ memory corpus, and a title → document eval built from a copy of a live bank (1
 
 ¹ fp16 and fp32 vectors agree at cosine 1.00000 on CPU; the fp32 export scored 0.636.
 
+Through the product itself (#673's harness, 332 queries over 12 languages, `run_code_eval.py`), the
+code corpus scored nDCG@5 0.501, hit@1 0.446 and hit@5 0.581 on code-daemon-embed-v1, and 0.603,
+0.554 and 0.660 on the bundled fp16 granite. Its drain took 44 s against 120 s. Both score 0 on
+CSS, HTML and SQL, which have no chunker yet.
+
 granite-small beats both defaults on every eval, and it is Apache-2.0. One engine can serve both
 corpora, and one ONNX session serves both because the engine cache is keyed by fingerprint.
 
