@@ -38,7 +38,9 @@ public sealed record ModelDownloadPlan(
     IReadOnlyDictionary<string, int> SpecialTokens,
     string PoolingProvenance,
     int VocabOffset = 0,
-    bool SpecialTokensPending = false);
+    bool SpecialTokensPending = false,
+    string? QueryInstruction = null,
+    string? DocumentInstruction = null);
 
 /// <summary>A repo cannot be turned into a download plan: missing model file, unsupported
 /// tokenizer family, unpinnable special tokens, etc. Messages are actionable.</summary>
@@ -75,8 +77,15 @@ public interface IModelDownloadPlanner
 /// </summary>
 public sealed class ModelDownloadPlanner : IModelDownloadPlanner
 {
+    private const string TokenizerJsonFileName = "tokenizer.json";
+
+    /// <summary>The sentence-transformers file declaring a model's query/document prompts.</summary>
+    public const string SentenceTransformersConfigFileName = "config_sentence_transformers.json";
+
     private static readonly string[] SupportedModelTypes =
-        ["bert*", "new", "gte*", "xlm-roberta", "roberta", "t5", "gpt2", "llama", "qwen2"];
+        ["bert*", "new", "gte*", "xlm-roberta", "roberta", "t5", "any model type whose repo ships tokenizer.json"];
+
+    private static readonly string[] DecoderModelTypes = ["gpt2", "gpt_neo", "gpt_neox", "llama", "qwen2", "qwen3", "mistral"];
 
     public ModelDownloadPlan BuildPlan(
         string repoId,
@@ -97,9 +106,9 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         var configJson = RequireRaw(rawFiles, configPath);
         var tokenizerConfigJson = RequireRaw(rawFiles, tokenizerConfigPath);
 
-        var (family, tokenizerFileName) = PairTokenizer(configJson);
-        var tokenizerFilePath = TokenizerFilePath(tree, modelDir, tokenizerFileName, family);
         var hasAddedTokensDecoder = HasAddedTokensDecoder(tokenizerConfigJson);
+        var (family, tokenizerFileName) = PairTokenizer(configJson, tree, modelDir, hasAddedTokensDecoder);
+        var tokenizerFilePath = TokenizerFilePath(tree, modelDir, tokenizerFileName, family);
         var vocabOffset = ResolveVocabOffset(configJson, tokenizerConfigJson, family, hasAddedTokensDecoder, sentencePieceVocabulary);
         var (specialTokens, specialTokensPending) = ResolveSpecialTokens(tokenizerConfigJson, family, sentencePieceVocabulary);
         // HF puts the wrapper behaviour in the tokenizer CLASS, not the config: xlm-roberta's
@@ -117,7 +126,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
                 $"config.json max_position_embeddings must be > 2 to derive a positive contextWindowTokens, got {contextWindowTokens + 2}");
         }
 
-        var (poolingMode, normalization, poolingProvenance) = PoolingDecision(rawFiles, probe);
+        var (poolingMode, normalization, poolingProvenance) = PoolingDecision(rawFiles, probe, IsDecoderModelType(ModelType(configJson)));
 
         var tokenizerEntry = TreeEntry(tree, tokenizerFilePath)
                              ?? throw new ModelDownloadPlanException(
@@ -160,7 +169,26 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             specialTokens,
             poolingProvenance,
             vocabOffset,
-            specialTokensPending);
+            specialTokensPending,
+            Prompt(rawFiles, "query"),
+            Prompt(rawFiles, "document"));
+    }
+
+    /// <summary>A non-empty sentence-transformers prompt the model was trained with, else null.</summary>
+    private static string? Prompt(IReadOnlyDictionary<string, string> rawFiles, string name)
+    {
+        if (!rawFiles.TryGetValue(SentenceTransformersConfigFileName, out var json))
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.TryGetProperty("prompts", out var prompts) && prompts.ValueKind == JsonValueKind.Object
+                                                                          && prompts.TryGetProperty(name, out var prompt)
+                                                                          && prompt.ValueKind == JsonValueKind.String
+                                                                          && prompt.GetString() is { Length: > 0 } text
+            ? text
+            : null;
     }
 
     public string SelectModelFilePath(IReadOnlyList<HfTreeEntry> tree, IReadOnlyList<string>? explicitFiles = null)
@@ -217,8 +245,11 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         }
         else
         {
+            // Only this model's own data: variants (model_fp16.onnx_data, ...) share the directory.
+            var modelFileName = Path.GetFileName(modelFilePath);
             foreach (var entry in tree.Where(e => e.Type == "file" && DirectoryOf(e.Path) == modelDir
                                                                    && e.Path != modelFilePath
+                                                                   && Path.GetFileName(e.Path).StartsWith(modelFileName, StringComparison.OrdinalIgnoreCase)
                                                                    && Path.GetFileName(e.Path).Contains(".onnx_data", StringComparison.OrdinalIgnoreCase)))
             {
                 paths.Add(entry.Path);
@@ -228,14 +259,23 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         return paths.Distinct(StringComparer.Ordinal).Select(p => Pinned(tree, p)).ToList();
     }
 
-    private static TokenizerPair PairTokenizer(string configJson)
+    /// <summary>
+    ///     vocab.txt WordPiece for the BERT family, the sentencepiece model for XLM-R/RoBERTa/T5,
+    ///     else the repo's own tokenizer.json. A WordPiece repo that cannot pin its special-token ids
+    ///     from tokenizer_config.json uses its tokenizer.json too, which carries them itself.
+    /// </summary>
+    private static TokenizerPair PairTokenizer(string configJson, IReadOnlyList<HfTreeEntry> tree, string modelDir, bool hasAddedTokensDecoder)
     {
         var modelType = ModelType(configJson);
+        var hasTokenizerJson = HasFile(tree, modelDir, TokenizerJsonFileName);
         if (modelType.StartsWith("bert", StringComparison.OrdinalIgnoreCase)
             || modelType.Equals("new", StringComparison.OrdinalIgnoreCase)
             || modelType.StartsWith("gte", StringComparison.OrdinalIgnoreCase))
         {
-            return new TokenizerPair(TokenizerFamily.BertWordpiece, "vocab.txt");
+            var wordPieceUsable = HasFile(tree, modelDir, "vocab.txt") && hasAddedTokensDecoder;
+            return hasTokenizerJson && !wordPieceUsable
+                ? new TokenizerPair(TokenizerFamily.TokenizerJson, TokenizerJsonFileName)
+                : new TokenizerPair(TokenizerFamily.BertWordpiece, "vocab.txt");
         }
 
         if (modelType is "xlm-roberta" or "roberta" or "t5" || modelType.StartsWith("roberta-", StringComparison.OrdinalIgnoreCase))
@@ -243,18 +283,22 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             return new TokenizerPair(TokenizerFamily.SentencePiece, modelType == "t5" ? "spiece.model" : "sentencepiece.bpe.model");
         }
 
-        if (modelType is "gpt2" or "gpt_neo" or "gpt_neox" or "llama" or "qwen2"
-            || modelType.StartsWith("llama-", StringComparison.OrdinalIgnoreCase)
-            || modelType.StartsWith("qwen2-", StringComparison.OrdinalIgnoreCase))
+        if (hasTokenizerJson)
         {
-            throw new ModelDownloadPlanException(
-                $"model_type '{modelType}' pairs with the tokenizer-json family (HF tokenizer.json), which is not yet supported (D5 capability gate — deferred until ML.Tokenizers can consume HF tokenizer.json)");
+            return new TokenizerPair(TokenizerFamily.TokenizerJson, TokenizerJsonFileName);
         }
 
         throw new ModelDownloadPlanException(
             $"unsupported model_type '{modelType}' in config.json; supported model types: {string.Join(", ", SupportedModelTypes)}. " +
             "Download a model with one of these types, or hand-place the model and write its manifest yourself.");
     }
+
+    private static bool IsDecoderModelType(string modelType) =>
+        DecoderModelTypes.Any(t => modelType.Equals(t, StringComparison.OrdinalIgnoreCase)
+                                   || modelType.StartsWith(t + "-", StringComparison.OrdinalIgnoreCase));
+
+    private static bool HasFile(IReadOnlyList<HfTreeEntry> tree, string modelDir, string fileName) =>
+        TreeEntry(tree, JoinPath(modelDir, fileName)) is not null || TreeEntry(tree, fileName) is not null;
 
     private static string TokenizerFilePath(IReadOnlyList<HfTreeEntry> tree, string modelDir, string fileName, TokenizerFamily family)
     {
@@ -309,6 +353,12 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
                 "is not in tokenizer_config.json's added_tokens_decoder; its id is never guessed — fix the tokenizer_config.json or hand-write the manifest"), false);
         }
 
+        if (family == TokenizerFamily.TokenizerJson)
+        {
+            // tokenizer.json declares its own added tokens and post-processor; nothing to pin here.
+            return new SpecialTokenSet(new Dictionary<string, int>(StringComparer.Ordinal), false);
+        }
+
         if (family != TokenizerFamily.SentencePiece)
         {
             throw new ModelDownloadPlanException(
@@ -350,7 +400,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     }
 
     private static PoolingChoice PoolingDecision(
-        IReadOnlyDictionary<string, string> rawFiles, OnnxGraphProbe? probe)
+        IReadOnlyDictionary<string, string> rawFiles, OnnxGraphProbe? probe, bool isDecoder)
     {
         var hasPooledOutput = probe is not null && SelectOutputs(probe).EmbeddingOutput is not null;
 
@@ -380,7 +430,8 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
 
         // D11 placeholder: no machine-readable pooling provenance — WP5's parity measurement
         // rewrites pooling (and normalization) before the model is trusted.
-        var placeholder = hasPooledOutput ? PoolingMode.ModelOutput : PoolingMode.Cls;
+        // A decoder embedder's summary is its final token; cls would read the prompt's first token.
+        var placeholder = hasPooledOutput ? PoolingMode.ModelOutput : isDecoder ? PoolingMode.LastToken : PoolingMode.Cls;
         return new PoolingChoice(placeholder, NormalizationMode.L2, "placeholder(wp5)");
     }
 
@@ -529,7 +580,8 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     /// </summary>
     private static GraphOutputs SelectOutputs(OnnxGraphProbe probe)
     {
-        var outputs = probe.OutputNames;
+        // A decoder's present.N.key/value outputs are its KV cache, never an embedding.
+        var outputs = probe.OutputNames.Where(n => !n.StartsWith("present.", StringComparison.Ordinal)).ToList();
         if (outputs.Count <= 1)
         {
             return new GraphOutputs(outputs.Count == 0 ? string.Empty : outputs[0], null);

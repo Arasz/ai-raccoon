@@ -242,9 +242,11 @@ public sealed class EntryEmbedder(
         var headingPath = HeadingPathParser.Parse(value);
 
         var result = headingPath.Length > 0
-            ? await generator.GenerateAsync([value, headingPath], cancellationToken: cancellationToken)
+            ? await generator.GenerateAsync([embeddings.DocumentText(settings, value), embeddings.DocumentText(settings, headingPath)],
+                    cancellationToken: cancellationToken)
                 .ConfigureAwait(false)
-            : await generator.GenerateAsync([value], cancellationToken: cancellationToken).ConfigureAwait(false);
+            : await generator.GenerateAsync([embeddings.DocumentText(settings, value)], cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
         var structureEmbedding = headingPath.Length > 0 ? EmbeddingBlob.ToBytes(result[1].Vector) : null;
 
         await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
@@ -355,11 +357,12 @@ public sealed class EntryEmbedder(
         for (var offset = 0; offset < rows.Count; offset += BatchSize)
         {
             var batch = rows.Skip(offset).Take(BatchSize).ToList();
-            var result = await generator.GenerateAsync(batch.Select(r => r.Value),
+            var result = await generator.GenerateAsync(batch.Select(r => embeddings.DocumentText(settings, r.Value)),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var headingPaths = batch.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
-            var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken).ConfigureAwait(false);
+            var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, path => embeddings.DocumentText(settings, path),
+                cancellationToken).ConfigureAwait(false);
             var embeddingBlobs = result.Select(r => EmbeddingBlob.ToBytes(r.Vector)).ToList();
 
             await connection.ExecuteAsync(
@@ -422,7 +425,8 @@ public sealed class EntryEmbedder(
             var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
             var generator = embeddings.CreateGenerator(settings);
             var headingPaths = candidates.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
-            var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, cancellationToken)
+            var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, path => embeddings.DocumentText(settings, path),
+                    cancellationToken)
                 .ConfigureAwait(false);
 
             for (var i = 0; i < candidates.Count; i++)
@@ -441,7 +445,7 @@ public sealed class EntryEmbedder(
     /// <summary>Embeds each distinct non-empty heading path once; empty paths are omitted from the result.</summary>
     private static async Task<Dictionary<string, byte[]>> EmbedDistinctHeadingsAsync(
         IEmbeddingGenerator<string, Embedding<float>> generator, IReadOnlyList<string> headingPaths,
-        CancellationToken cancellationToken)
+        Func<string, string> documentText, CancellationToken cancellationToken)
     {
         var distinct = headingPaths.Where(path => path.Length > 0).Distinct(StringComparer.Ordinal).ToList();
         if (distinct.Count == 0)
@@ -449,7 +453,7 @@ public sealed class EntryEmbedder(
             return [];
         }
 
-        var result = await generator.GenerateAsync(distinct, cancellationToken: cancellationToken)
+        var result = await generator.GenerateAsync(distinct.Select(documentText), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         var vectors = new Dictionary<string, byte[]>(distinct.Count, StringComparer.Ordinal);
         for (var i = 0; i < distinct.Count; i++)
