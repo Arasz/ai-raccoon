@@ -35,7 +35,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         {
             Log.FailedToResolveEncryptionKey(logger, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: doctor: could not resolve the encryption key: {ex.Message}");
-            return ErrorCode.Key.Unresolved;
+            return CliFailureErrorCode.For(ex, ErrorCode.Key.Unresolved);
         }
 
         SqliteConnection connection;
@@ -47,7 +47,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         {
             Log.FailedToOpenBank(logger, bankPath, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: doctor: could not open the bank read-only: {ex.Message}");
-            return ErrorCode.Bank.OpenFailed;
+            return CliFailureErrorCode.For(ex);
         }
 
         await using (connection)
@@ -61,8 +61,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             {
                 // Microsoft.Data.Sqlite defers the "file is not a database" verdict to the first
                 // statement, which is inside DiagnoseAsync — OpenBankReadOnlyAsync above cannot see
-                // it. Mapped here so the operator gets the documented corrupt-bank code instead of
-                // the catch-all's "you mistyped" (15).
+                // it. Mapped here so the operator gets the corrupt-bank line, not the catch-all's raw message.
                 Log.BankIsNotADatabase(logger, bankPath, ex);
                 await streams.WriteErrorLineAsync(
                     $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); restore it from a backup or check --data-root");
