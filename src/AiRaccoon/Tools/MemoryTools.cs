@@ -127,9 +127,11 @@ public sealed partial class MemoryTools(
         + "signature — a thin response, not a verdict. "
         + "These signals claim no relevance (no relevance value is computed); margins are computed over the PRE-floor "
         + "candidate population, not the served set. A response with unranked: true ranks rows that carry "
-        + "no absolute relevance backing (flat margin, one leg, no row clearing the absolute relevance floor) "
-        + "— candidates to verify, not answers. An absolute relevance floor drops rows whose fused content "
-        + "cosine is below 0.35 outright, so a zero-overlap query comes back empty. A response short of "
+        + "no absolute relevance backing (flat margin, one leg, no row clearing the absolute relevance floor or "
+        + "containing every query term) — candidates to verify, not answers. An absolute relevance floor drops "
+        + "rows whose fused content cosine is below 0.35 unless the row's text contains every query term (a "
+        + "keyword match on an identifier such as a ticket key is kept whatever its cosine), so a zero-overlap "
+        + "query comes back empty. A response short of "
         + "its requested limit reports the cuts as truncation:[{floor, threshold, dropped}].")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
         [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
@@ -349,7 +351,8 @@ public sealed partial class MemoryTools(
         }
 
         var sidecar = dispatch.MemorySearchResults;
-        var judgement = SearchRelevance.Judge(dispatch.Results, sidecar?.EvidenceByHash, sidecar?.Stats, query.MinRelativeScore);
+        var judgement = SearchRelevance.Judge(dispatch.Results, sidecar?.EvidenceByHash, sidecar?.Stats, query.MinRelativeScore,
+            sidecar?.AllTermsMatched);
         var truncation = TruncationFor(judgement.Results.Count, dispatch.Results.Count, query, sidecar?.DroppedByFloor ?? 0);
         if (judgement.Results.Count == 0)
         {

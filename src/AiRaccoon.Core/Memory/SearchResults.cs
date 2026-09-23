@@ -8,7 +8,9 @@ namespace AiRaccoon.Core.Memory;
 ///     without a side channel back into the store. <see cref="Fusion" /> is null on every default
 ///     search — it is set only when the no-fusion-regression flag is on (docs/adr/0078).
 ///     <see cref="DroppedByFloor" /> counts the candidates minRelativeScore dropped before the
-///     limit cut, so a response short of its limit can say why.
+///     limit cut, so a response short of its limit can say why. <see cref="AllTermsMatched" />
+///     holds the hashes whose text contains every query content term (the keyword leg's
+///     conjunctive match), which the absolute relevance floor keeps whatever their cosine.
 /// </summary>
 public sealed record SearchResults(
     IReadOnlyList<MemorySearchResult> Results,
@@ -16,7 +18,8 @@ public sealed record SearchResults(
     FusionDiff? Fusion = null,
     IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash = null,
     FusionStats? Stats = null,
-    int DroppedByFloor = 0);
+    int DroppedByFloor = 0,
+    IReadOnlySet<string>? AllTermsMatched = null);
 
 /// <summary>Per-phase durations for one <see cref="IMemoryStore.SearchAsync" /> call, plus the measured total (docs/adr/0079).</summary>
 public sealed record SearchTimings(

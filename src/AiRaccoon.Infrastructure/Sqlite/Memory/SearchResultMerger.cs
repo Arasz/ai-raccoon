@@ -24,9 +24,10 @@ internal static class SearchResultMerger
         IReadOnlyList<MemorySearchResult> searchResults,
         SearchQuery searchQuery,
         SearchParameters parameters,
-        FtsQueryPlan queryPlan) =>
+        FtsQueryPlan queryPlan,
+        string? leader = null) =>
         MergeCounting(searchResults, searchQuery.Limit, searchQuery.MinRelativeScore, parameters.RrfK, parameters.SourceLambdaFor(queryPlan), parameters.ConsolidationThreshold,
-            parameters.DocScoreFormula);
+            parameters.DocScoreFormula, leader);
 
     public static IReadOnlyList<MemorySearchResult> Merge(
         IReadOnlyList<MemorySearchResult> searchResults,
@@ -45,11 +46,12 @@ internal static class SearchResultMerger
         int rrfK = SearchQuery.DefaultRrfK,
         double sourceLambda = 0.0,
         double consolidationThreshold = double.PositiveInfinity,
-        DocScoreFormula formula = DocScoreFormula.Max)
+        DocScoreFormula formula = DocScoreFormula.Max,
+        string? leader = null)
     {
         var unitWeightResults = new WeightedResults(searchResults, 1.0);
         var fused = ReciprocalRankFusion.Fuse([unitWeightResults], rrfK, 0.0, int.MaxValue);
-        var ranked = SourceAffinityRanker.Rank(fused, sourceLambda, consolidationThreshold, formula);
+        var ranked = SourceAffinityRanker.Rank(fused, sourceLambda, consolidationThreshold, formula, leader);
         var passing = ranked.Where(result => result.Ranking >= minRelativeScore).ToList();
         return new MergeOutcome([.. passing.Take(limit)], ranked.Count - passing.Count);
     }

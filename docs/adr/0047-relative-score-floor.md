@@ -138,3 +138,12 @@ An absolute "is anything here actually relevant?" signal remains unbuilt. Until 
 exists, an agent cannot distinguish a decisive hit from a top-ranked irrelevance, and the
 `memory_search` result set alone should not be read as evidence that the bank has an
 answer. The measurement above is the case for building it.
+
+Amended 2026-09-23. The follow-up shipped in 1.43.0 as an absolute floor of 0.35 on the
+content cosine, which a zero-overlap query cannot reach. It also dropped exact keyword
+answers: `memory_search "AIR-4471"` returned nothing although an entry holds that text,
+because an identifier embeds far from prose. A row the keyword leg matched on every content
+term (its conjunctive expression, or a `file#section` anchor) now skips the cosine floor and
+counts as absolute backing for the `unranked` marker. Any other FTS hit gets no exemption.
+The OR fallback keeps stop words, so "how to braise a wombat in aspic" hits prose on "to" and
+"in"; exempting those rows served them, which the end-to-end suite watched fail.

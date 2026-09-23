@@ -3,6 +3,12 @@
 Date: 2026-08-04
 
 Status: Accepted.
+Amended 2026-09-23 — **a row both legs ranked first stays first.** With every score cutoff
+off, two weak adjacent chunks of one file each gained λ and overtook the note both the keyword
+and the vector leg ranked first (the flattened re-fusion puts ranks 2 and 3 at 0.984 and 0.968,
+so +0.1 clears 1.0). The ranker now takes that row as a leader: it keeps rank 1 and the boost
+orders only what follows. This is narrower than the rejected "boost capped at the top raw
+score": nothing is capped when the legs disagree, so S2's siblings reorder as before.
 Amended 2026-08-15 — **every number in this ADR is in-sample.** The λ / threshold / formula
 grid was scored over the same 11 queries that gate it. The out-of-sample figure is 0.285
 against 0.673 on the same path; see

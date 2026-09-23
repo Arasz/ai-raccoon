@@ -503,7 +503,7 @@ public sealed partial class SqliteMemoryStore(
         searchTimingsCollector.Fts = searchResults.FtsTotalTiming;
         searchTimingsCollector.Vector = searchResults.VectorTotalTiming;
 
-        var fusedResults = SearchResultFusion(query, parameters, searchResults);
+        var fusedResults = SearchResultFusion(parameters, plan, searchResults);
         searchTimingsCollector.Fusion = fusedResults.SearchTiming;
 
         var mergedResults = SearchResultMerge(query, parameters, plan, fusedResults);
@@ -520,7 +520,7 @@ public sealed partial class SqliteMemoryStore(
         searchTimingsCollector.Bump = timeProvider.GetElapsedTime(bumpStart);
 
         return new Core.Memory.SearchResults(deferredResults.Results, searchTimingsCollector.ToCollected(timeProvider), deferredResults.FusionDiff,
-            deferredResults.EvidenceByHash, deferredResults.Stats, deferredResults.DroppedByFloor);
+            deferredResults.EvidenceByHash, deferredResults.Stats, deferredResults.DroppedByFloor, searchResults.AllTermsMatched);
     }
 
     private async Task<AdjustedSearchResult> AdjustMergedResults(SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan queryPlan, QueryVector queryVector,
@@ -545,7 +545,7 @@ public sealed partial class SqliteMemoryStore(
             };
         }
 
-        var outcome = SearchResultMerger.MergeCounting(NoFusionRegression.Reorder(merged, legs), query, parameters, queryPlan);
+        var outcome = SearchResultMerger.MergeCounting(NoFusionRegression.Reorder(merged, legs), query, parameters, queryPlan, fusedSearchResult.Leader);
         return new AdjustedSearchResult(outcome.Results, timeProvider.GetElapsedTime(adjustmentStart))
         {
             FusionDiff = FusionDiff.Between(merged, outcome.Results),
@@ -558,11 +558,11 @@ public sealed partial class SqliteMemoryStore(
     private MergedSearchResult SearchResultMerge(SearchQuery query, SearchParameters parameters, FtsQueryPlan queryPlan, FusedSearchResult fusedResult)
     {
         var mergeStart = timeProvider.GetTimestamp();
-        var outcome = SearchResultMerger.MergeCounting(fusedResult.Results, query, parameters, queryPlan);
+        var outcome = SearchResultMerger.MergeCounting(fusedResult.Results, query, parameters, queryPlan, fusedResult.Leader);
         return new MergedSearchResult(outcome.Results, timeProvider.GetElapsedTime(mergeStart)) { DroppedByFloor = outcome.DroppedByFloor };
     }
 
-    private FusedSearchResult SearchResultFusion(SearchQuery query, SearchParameters parameters, SearchResults searchResults)
+    private FusedSearchResult SearchResultFusion(SearchParameters parameters, FtsQueryPlan plan, SearchResults searchResults)
     {
         var fusionStart = timeProvider.GetTimestamp();
         var ftsCandidates = ModalityCandidates.ByBm25(searchResults);
@@ -576,10 +576,15 @@ public sealed partial class SqliteMemoryStore(
             [new NamedWeightedCandidates(ftsCandidates, parameters.FtsWeight, "fts"),
              new NamedWeightedCandidates(vectorCandidates, parameters.VectorWeight, "vector")],
             parameters.RrfK, 0, int.MaxValue);
-        return new FusedSearchResult(fused.Results, timeProvider.GetElapsedTime(fusionStart))
+        var results = plan.IsPathQuery ? AnchorMatchesFirst(fused.Results, searchResults.AllTermsMatched) : fused.Results;
+        return new FusedSearchResult(results, timeProvider.GetElapsedTime(fusionStart))
         {
             VectorCandidates = vectorCandidates,
             FtsCandidates = ftsCandidates,
+            Leader = ftsCandidates is [var ftsTop, ..] && vectorCandidates is [var vectorTop, ..]
+                     && string.Equals(ftsTop.Hash, vectorTop.Hash, StringComparison.Ordinal)
+                ? ftsTop.Hash
+                : null,
             EvidenceByHash = fused.EvidenceByHash,
             Stats = fused.Stats
         };
@@ -629,16 +634,17 @@ public sealed partial class SqliteMemoryStore(
 
         var ftsStart = timeProvider.GetTimestamp();
         var ftsResults = await QueryFtsBatchAsync(connection, query, parameters, plan, queryVector, contextFilter, byHashIndex, cancellationToken);
+        IReadOnlyList<string> allTermsMatched = plan.MatchesAllTerms ? [.. ftsResults.Select(result => result.Hash)] : [];
 
         if (plan.Fallback is null || ftsResults.Count > Math.Max(plan.TokenCount, query.Limit))
         {
-            return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart));
+            return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart)) { AllTermsMatched = allTermsMatched };
         }
 
 
         ftsResults = await QueryFallbackFtsBatchAsync(connection, query, parameters, plan, queryVector, contextFilter, byHashIndex, cancellationToken);
 
-        return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart));
+        return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart)) { AllTermsMatched = allTermsMatched };
     }
 
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
