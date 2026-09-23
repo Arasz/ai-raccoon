@@ -190,6 +190,11 @@ the old server manually before running the new binary against the same root.
 10. **A missing or corrupt key file means "cannot attach"**, only "spawn private" — never "mint here".
 11. **The invariant's precise form** is the one above — not "zero requests".
 12. **The overruled precedent** — ADR-0105's oracle objection is answered above, not dropped.
+13. **The dispose-time prove-then-stop needs a client that closes stdin.** The MCP SDK's stdio client
+    (`StdioClientSessionTransport`, SDK 2.2.0) waits out its `ShutdownTimeout` for the proxy to exit
+    before it closes stdin, then kills the process tree. Under that client the proxy's dispose path
+    never runs: its private children die in the tree kill instead of being proven and stopped over
+    `/shutdown`. No secret is sent to anyone on that path; it only means the proven stop is skipped.
 
 ## Alternatives rejected
 
