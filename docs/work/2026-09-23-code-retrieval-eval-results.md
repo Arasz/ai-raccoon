@@ -52,6 +52,8 @@ The spike was an extra FTS5 column on a copy of the B1 bank, holding every multi
 - Worst language: Python at −0.010.
 - Overall nDCG@5: 0.654 → 0.689.
 
+The plan's variant 1b (splitting query terms and weighting the column in bm25) was not run. The unweighted, document-side column alone cleared every rule, and a query-side split would have to live outside the `FtsQueryNormalizer` that memory search shares.
+
 **Evidence:** `spike_p2_identifiers.py` on `bank-b1` → arm `p2a`; `compare_code_eval.py results-b1-run1.json results-p2a.json --target-category identifier-fragment` → `KEEP`, bootstrap 2000 resamples, seed 20260923.
 
 ### F5 — P3 test-file down-weighting: DROP; it trades "where is this tested" queries away for a small gain [MEASURED]

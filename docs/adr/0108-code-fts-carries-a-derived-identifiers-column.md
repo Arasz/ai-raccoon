@@ -54,9 +54,9 @@ branch, in order:
 2. **`EnsureCodeFtsIdentifiersAsync`** — skips entirely once `code_fts` already carries
    `identifiers` (a fresh bank, or an already-migrated one); a no-op here must never re-run the
    backfill, which would recompute every row's identifiers from its current `value` and silently
-   discard whatever a caller wrote there directly. Otherwise, in one `BEGIN IMMEDIATE`: backfill
-   every row's `identifiers` from its `value` in C# (`IdentifierSplitter`, batched at 500 rows
-   per `UPDATE`), drop and recreate `code_fts` and its 3 triggers in the 3-column shape
+   discard whatever a caller wrote there directly. Otherwise, in one `BEGIN IMMEDIATE` (re-checking the column under the write lock, so a
+   racing connection's finished rebuild is not repeated): backfill every row's `identifiers` from
+   its `value` in C# (`IdentifierSplitter`), drop and recreate `code_fts` and its 3 triggers in the 3-column shape
    (`code_fts_au` now fires `AFTER UPDATE OF value, source_file, identifiers`), then run
    `INSERT INTO code_fts(code_fts) VALUES('rebuild')` — the same crash-safe shape as the
    `entries_fts` rebuild in `MigrateToV9Async`.

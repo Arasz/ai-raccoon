@@ -70,8 +70,6 @@ internal static class MemorySchema
 
     private const int DefaultEmbeddingDimension = 384;
 
-    /// <summary>Row count per UPDATE batch in <see cref="EnsureCodeFtsIdentifiersAsync" />'s one-time identifiers backfill.</summary>
-    private const int CodeIdentifiersBackfillBatchSize = 500;
 
     /// <summary>
     ///     Backfill cutoff for the v12 <c>search_quality.kind</c> column (ADR-0097):
@@ -1865,17 +1863,20 @@ internal static class MemorySchema
     ///     bank, or an already-migrated one) — a no-op must never re-run the backfill, which would
     ///     recompute every row's identifiers from its current <c>value</c> and silently discard
     ///     whatever a caller wrote there directly. Otherwise: backfill every row's identifiers from
-    ///     its value (<see cref="IdentifierSplitter" />, batched), then drop and recreate
+    ///     its value (<see cref="IdentifierSplitter" />), then drop and recreate
     ///     <c>code_fts</c> and its 3 triggers in the new shape and run <c>'rebuild'</c> — all inside
     ///     one <c>BEGIN IMMEDIATE</c>, so a crash mid-rebuild cannot leave a bank without a working
     ///     FTS index (same shape as the <c>entries_fts</c> rebuild in <see cref="MigrateToV9Async" />).
     /// </summary>
-    private static async Task EnsureCodeFtsIdentifiersAsync(SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
+    private static async Task<bool> CodeFtsHasIdentifiersAsync(SqliteConnection connection,
+        CancellationToken cancellationToken) =>
+        (await connection.QueryAsync<string>(new CommandDefinition(
                 "SELECT name FROM pragma_table_info('code_fts')", cancellationToken: cancellationToken))
             .ConfigureAwait(false)).Contains("identifiers", StringComparer.Ordinal);
-        if (hasColumn)
+
+    private static async Task EnsureCodeFtsIdentifiersAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        if (await CodeFtsHasIdentifiersAsync(connection, cancellationToken).ConfigureAwait(false))
         {
             return;
         }
@@ -1885,17 +1886,24 @@ internal static class MemorySchema
             .ConfigureAwait(false);
         try
         {
+            // Re-checked under the write lock: a connection that raced the same digest mismatch may
+            // have finished the rebuild while this one waited on BEGIN IMMEDIATE.
+            if (await CodeFtsHasIdentifiersAsync(connection, cancellationToken).ConfigureAwait(false))
+            {
+                await connection.ExecuteAsync(
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
+                    .ConfigureAwait(false);
+                return;
+            }
+
             var rows = (await connection.QueryAsync<(long Id, string Value)>(new CommandDefinition(
                     "SELECT id, value FROM code_entries", cancellationToken: cancellationToken))
                 .ConfigureAwait(false)).ToList();
-            foreach (var batch in rows.Chunk(CodeIdentifiersBackfillBatchSize))
-            {
-                await connection.ExecuteAsync(new CommandDefinition(
-                        "UPDATE code_entries SET identifiers = @identifiers WHERE id = @id",
-                        batch.Select(row => new { id = row.Id, identifiers = IdentifierSplitter.Identifiers(row.Value) }),
-                        cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
-            }
+            await connection.ExecuteAsync(new CommandDefinition(
+                    "UPDATE code_entries SET identifiers = @identifiers WHERE id = @id",
+                    rows.Select(row => new { id = row.Id, identifiers = IdentifierSplitter.Identifiers(row.Value) }),
+                    cancellationToken: cancellationToken))
+                .ConfigureAwait(false);
 
             await connection.ExecuteAsync(
                     new CommandDefinition(
