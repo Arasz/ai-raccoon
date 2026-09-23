@@ -416,6 +416,9 @@ def run(args) -> dict:
             add_ingest_scope(args.binary, server.data_root, server.port, args.corpus_root)
             server.client.ingest_directory(DEFAULT_PROJECT_ID, str(args.corpus_root))
             drain_seconds = drain_code_embeddings(data_root / "memory.db")
+        elif args.drain:
+            # The copied bank keeps its code engine setting; the server's reindex job drains it.
+            drain_seconds = drain_code_embeddings(data_root / "memory.db")
 
         query_scores = []
         hits: list[dict] = []
@@ -468,6 +471,8 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--allow-busy", action="store_true")
     parser.add_argument("--fetch-limit", type=int, default=10, dest="fetch_limit",
                         help="hits requested per query; scoring always uses the top 10")
+    parser.add_argument("--drain", action="store_true",
+                        help="with --reuse-bank: wait for pending code rows to embed (a bank re-chunked offline)")
     parser.add_argument("--save-hits", action="store_true", dest="save_hits",
                         help="also write hits-<arm>.json with every query's raw ranked hits")
     return parser.parse_args(argv)

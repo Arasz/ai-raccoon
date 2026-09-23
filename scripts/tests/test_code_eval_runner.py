@@ -287,3 +287,12 @@ class TestHitRecord:
                 {"hash": "h2", "ranking": 0.7, "path": "/c/gin/tree_test.go", "lineStart": 1, "lineEnd": 9},
             ],
         }
+
+
+class TestDrainFlag:
+    def test_drain_defaults_off_and_can_be_requested_for_a_reused_bank(self):
+        runner = _load_runner()
+        base = ["--binary", "b", "--corpus-root", "c", "--queries", "q", "--arm", "a", "--reuse-bank", "r"]
+
+        assert runner.parse_args(base).drain is False
+        assert runner.parse_args(base + ["--drain"]).drain is True
