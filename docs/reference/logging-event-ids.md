@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **191** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **192** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -47,6 +47,11 @@ above — the branch measured 182 against its own pre-P1.3 base.)
 ADR-0106's attach-or-start: 690 the configured port could not be proven and a private fallback is
 started, naming the held port and the remedy; 691 the private backend could not prove at stop time,
 so nothing was sent and it is left to its idle timeout.)
+
+(Remeasured 2026-09-23, task/air-identity-proof-p5-fixes: **192** — `OwnerOnlyFile` 692, ADR-0106
+D1's upgrade rule: an existing state directory the current user owns whose only leak is group/world
+read or execute is tightened to 0700, logged once by `serve`. A new owner's single-id block directly
+above `BackendSessions`' 688-691.)
 
 (Remeasured 2026-09-23, air-review-f34-scope-check: **189** — `SqliteConnectionFactory`
 904, the v17 schema migration's scope-less-row count, grown in place inside its own
@@ -107,6 +112,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 686 | `src/AiRaccoon/Settings/WatchRegisteredEndpoint.cs` (ADR-0075 amendment: the control-plane watch-registered resource — read-only, no outbox; closes `watch registered`'s latent bank-open) |
 | 687 | `src/AiRaccoon/Settings/CliSettingsBackend.cs` (added 2026-09-22, owner ruling N1: the F38 residual disclosure — a settings command's acquired backend keeps running after the command exits, and the line names how to stop it; the 4h idle watchdog stays intended, so this is disclosure only) |
 | 688-691 | `src/AiRaccoon/Hosting/Proxy/BackendSessions.cs` (688-689 added 2026-09-22, owner ruling 2026-09-22: the private backend's lifetime belongs to the proxy that started it — 688 it stopped with the proxy over the token-guarded /shutdown, 689 it did not stop within the bound and is left to its idle timeout; an attached shared server is never stopped. 690-691 added 2026-09-23, ADR-0106: 690 the configured port could not be proven and the private fallback is started, naming the held port and the remedy; 691 the private backend could not prove at stop time, so nothing was sent and it is left to its idle timeout) |
+| 692 | `src/AiRaccoon/Hosting/Common/OwnerOnlyFile.cs` (added 2026-09-23, ADR-0106 D1: an owned state directory whose only leak is group/world read or execute was tightened to owner-only, 0700 — logged once by `serve` through `NodeRunner`; a group/world-writable or foreign-owned directory is still refused) |
 | 700, 702-704, 707-709 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` (701/705/706 removed 2026-08-11: per-element eviction/failure logs de-noised; 708 = prune summary; 709 added 2026-08-14 = stale promotion claims reclaimed, ADR-0037) |
 | 710-711 | `src/AiRaccoon.Infrastructure/Maintenance/ProjectIdsRepairJob.cs` (ADR-0099: a stored `repair_requests.map_json` that bypassed endpoint validation — the poll refuses to fold and leaves the request open for a corrected `--apply`; 711 added 2026-09-05, Package F of docs/work/air-run-once-repair-fully-converges-plan.md: the per-pass result receipt — one Information line per requested run stamping folds/drops/retires applied, rows moved, and chunk rows repositioned) |
 | 713 | `src/AiRaccoon.Infrastructure/Maintenance/ProjectIdAliasCacheHostedService.cs` (Package E1: the startup warm of the choke-point alias cache failed — P3 enforcement stays disarmed until the next reload; fail-open, never blocks startup) |

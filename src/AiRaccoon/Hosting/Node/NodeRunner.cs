@@ -67,6 +67,11 @@ internal partial class NodeRunner(
             return ExitCode.McpTokenUnavailable;
         }
 
+        if (tokenFile.TightenedStateDirectory || identityKeyFile.TightenedStateDirectory)
+        {
+            OwnerOnlyFile.Log.StateDirectoryTightened(logger, tokenFile.StateDirectory);
+        }
+
         Log.McpTokenReady(logger, tokenFile.Path);
 
         return await StartHttpMcpServer(descriptor with { Token = mcpToken }, preBind.Believed, streams, ctx);

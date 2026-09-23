@@ -5,9 +5,10 @@ namespace AiRaccoon.Hosting.Common;
 /// <summary>
 ///     Owner-only enforcement and the cross-process lock shared by the state-directory secrets. POSIX
 ///     modes only: on Windows the file inherits the data-root ACL (ADR-0020 non-goals). A pre-existing
-///     directory or file another principal can read or write is treated as planted and refuses.
+///     file another principal can read or write, or a directory another principal can write or owns,
+///     is treated as planted and refuses; an owned directory others can only read is tightened.
 /// </summary>
-internal static class OwnerOnlyFile
+internal static partial class OwnerOnlyFile
 {
     internal const UnixFileMode OwnerDirectoryMode =
         UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
@@ -19,16 +20,20 @@ internal static class OwnerOnlyFile
         UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute |
         UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute;
 
+    /// <summary>The shared bits that let another principal plant or replace a file; never tightened away, always refused.</summary>
+    private const UnixFileMode SharedWriteBits = UnixFileMode.GroupWrite | UnixFileMode.OtherWrite;
+
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
     /// <summary>The advisory lock beside a secret; held with <see cref="FileShare.None" /> for mint and heal.</summary>
     internal static string LockPathFor(string secretPath) => secretPath + ".lock";
 
     /// <summary>
-    ///     Creates the state directory owner-only, then refuses a pre-existing one that is shared —
-    ///     another principal could replace the trust anchor in it (F2/D1).
+    ///     Creates the state directory owner-only. An existing one this user owns whose only leak is
+    ///     group/world read or execute (an earlier binary's umask) is tightened to owner-only and true
+    ///     returned; one others can write, or another user owns, is refused (ADR-0106 D1).
     /// </summary>
-    internal static void EnsureDirectory(string directory)
+    internal static bool EnsureDirectory(string directory)
     {
         if (!Directory.Exists(directory))
         {
@@ -41,14 +46,37 @@ internal static class OwnerOnlyFile
                 Directory.CreateDirectory(directory, OwnerDirectoryMode);
             }
 
-            return;
+            return false;
         }
 
-        if (!OperatingSystem.IsWindows() && (File.GetUnixFileMode(directory) & SharedBits) != 0)
+        if (OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        var mode = File.GetUnixFileMode(directory);
+        if ((mode & SharedBits) == 0)
+        {
+            return false;
+        }
+
+        if ((mode & SharedWriteBits) != 0)
         {
             throw new OwnerOnlyViolation(
                 $"the state directory '{directory}' is not owner-only — run 'chmod 700 \"{directory}\"' and start again");
         }
+
+        try
+        {
+            File.SetUnixFileMode(directory, mode & ~SharedBits);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw new OwnerOnlyViolation(
+                $"the state directory '{directory}' is not owner-only and another user owns it — have its owner run 'chmod 700 \"{directory}\"', or pass a --data-root you own");
+        }
+
+        return true;
     }
 
     /// <summary>Refuses an existing secret file that a group or other principal can read or write.</summary>
@@ -143,6 +171,13 @@ internal static class OwnerOnlyFile
                 await Task.Delay(PollInterval, timeProvider, cancellationToken).ConfigureAwait(false);
             }
         }
+    }
+
+    internal static partial class Log
+    {
+        [LoggerMessage(EventId = 692, Level = LogLevel.Information,
+            Message = "ai-raccoon: the state directory {Directory} was readable by other users and was tightened to owner-only (0700)")]
+        public static partial void StateDirectoryTightened(ILogger logger, string directory);
     }
 }
 

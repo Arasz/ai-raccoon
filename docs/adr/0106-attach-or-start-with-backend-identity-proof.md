@@ -55,9 +55,18 @@ carries only the post-quantum composite `MLDsa*WithEd25519` names), so the key i
   (`FileShare.None`, `OwnerOnlyFile.AcquireLockAsync`). An unparseable file is deleted only once it is
   older than the heal window (`IdentityKeyFile.HealAfter`, 5 s), since younger debris may be a
   concurrent writer mid-mint.
-- **Fail closed on the trust anchor**: the state directory is created 0700; an existing state
-  directory, key or token file that is not owned by the current user or is group/world accessible is
-  refused rather than adopted (`OwnerOnlyFile.EnsureDirectory`, `EnsureFileIsPrivate`).
+- **Fail closed on the trust anchor**: the state directory is created 0700. An existing key or
+  token file that is group/world accessible is refused rather than adopted (`EnsureFileIsPrivate`).
+  An existing state directory is judged by what the extra bits allow (`OwnerOnlyFile.EnsureDirectory`,
+  called by `serve`'s token and key mint):
+  - **tightened** when the current user owns it and its only leak is group/world read or execute —
+    the umask's 0755 every earlier binary left. `serve` sets it to 0700 and logs that once (EventId
+    692), so an upgraded install and the D3 legacy-token migration start without a manual step;
+  - **refused** when a group or other principal can write it (it may already hold a planted file),
+    or when another user owns it (the tightening `chmod` fails). The refusal names its remedy.
+
+  A verifier's read-only check (`IdentityKeyFile.Read`, `McpTokenFile.Read`) changes nothing: it
+  still treats a shared directory as not provable until a `serve` on that root has tightened it.
 - **Rotation** is manual: stop the server, replace `identity-key`, start again. "Delete the key, then
   `serve --restart`" was rejected — the restart cannot prove once the key is gone. A rotate verb is
   future work.
@@ -149,6 +158,10 @@ answers the objection instead of dropping it:
   (residual 3).
 
 ## Upgrade note: mixed-version operation is not supported
+
+A state directory an earlier binary created is 0755 (the umask). The first current `serve` on that
+root tightens it to 0700 and logs the change once (D1); it does not refuse it. A directory others
+can write, or one another user owns, is still refused with the remedy.
 
 The first current binary to open a root migrates a legacy top-level token (D3). An older binary still
 expects the top-level path and re-mints a token there on its next run, leaving two live tokens. Stop

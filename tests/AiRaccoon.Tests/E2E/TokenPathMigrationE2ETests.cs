@@ -77,6 +77,82 @@ public sealed class TokenPathMigrationE2ETests : IAsyncLifetime
         Directory.EnumerateFileSystemEntries(_root).Select(Path.GetFileName).ShouldBe([".ai-raccoon"]);
     }
 
+    /// <summary>
+    ///     ADR-0106 D1 upgrade: a project root exactly as an earlier binary leaves it — the state
+    ///     directory at the umask's 0755 beside a 0600 top-level token. `serve` tightens the directory it
+    ///     owns to 0700, logs that once, and then the D3 migration runs and the proxy attaches.
+    /// </summary>
+    [Fact]
+    public async Task Serve_OnARealisticLegacyProjectRoot_TightensTheStateDirectory_ThenMigratesAndServes()
+    {
+        var options = TestData.CreateProjectOptions(_root);
+        var stateDirectory = BankPaths.DirectoryFor(options);
+        await TestData.SeedBankAsync(options, Ct);
+        File.SetUnixFileMode(stateDirectory, UmaskDirectoryMode);
+        var legacyPath = Path.Combine(_root, McpTokenFile.FileName);
+        var legacyToken = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
+        await File.WriteAllTextAsync(legacyPath, legacyToken, Ct);
+        File.SetUnixFileMode(legacyPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        var port = FreePort();
+
+        await using (var serve = await RealServe.StartAsync(options, port, Ct))
+        {
+            File.GetUnixFileMode(stateDirectory).ShouldBe(OwnerOnlyDirectoryMode);
+            CountOf(serve.Stderr + serve.Stdout, TightenedLine).ShouldBe(1, serve.Stderr);
+            File.Exists(legacyPath).ShouldBeFalse("the legacy token is migrated once the directory is tightened");
+            (await File.ReadAllTextAsync(Path.Combine(stateDirectory, McpTokenFile.FileName), Ct)).Trim()
+                .ShouldBe(legacyToken);
+
+            await using var proxy = ProxyProcess.Start(
+            [
+                "--data-root", _root, "--install-scope", "project",
+                "--port", port.ToString(CultureInfo.InvariantCulture)
+            ], ProxyProcess.Stateless);
+            (await proxy.ListToolsAsync(Ct)).ShouldNotBeEmpty();
+            (await proxy.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, proxy.Stderr);
+            proxy.Stderr.ShouldNotContain("did not prove", Case.Sensitive);
+        }
+    }
+
+    /// <summary>
+    ///     ADR-0106 D1 upgrade: a user-scope root an earlier binary created at 0755 is its own state
+    ///     directory. `serve` tightens it to 0700 and serves, instead of refusing with exit 7.
+    /// </summary>
+    [Fact]
+    public async Task Serve_OnAUserScopeRootLeftAt0755_TightensItTo0700_AndServes()
+    {
+        var options = TestData.CreateInfrastructureOptions(_root);
+        await TestData.SeedBankAsync(options, Ct);
+        File.SetUnixFileMode(_root, UmaskDirectoryMode);
+
+        await using var serve = await RealServe.StartAsync(options, FreePort(), Ct);
+
+        File.GetUnixFileMode(_root).ShouldBe(OwnerOnlyDirectoryMode);
+        CountOf(serve.Stderr + serve.Stdout, TightenedLine).ShouldBe(1, serve.Stderr);
+        new IdentityKeyFile(options).ReadKeyId().ShouldNotBeNull();
+    }
+
+    private const string TightenedLine = "tightened to owner-only";
+
+    private const UnixFileMode OwnerOnlyDirectoryMode =
+        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+    private const UnixFileMode UmaskDirectoryMode = OwnerOnlyDirectoryMode |
+                                                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                                                    UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
+
+    private static int CountOf(string text, string needle)
+    {
+        var count = 0;
+        for (var at = text.IndexOf(needle, StringComparison.Ordinal); at >= 0;
+             at = text.IndexOf(needle, at + needle.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
     private static int FreePort()
     {
         using var lease = LoopbackPort.Reserve();

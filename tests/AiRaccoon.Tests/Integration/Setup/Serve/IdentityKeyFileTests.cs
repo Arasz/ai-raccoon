@@ -99,6 +99,29 @@ public sealed class IdentityKeyFileTests : IDisposable
         Directory.GetFileSystemEntries(StateDirectory).ShouldBeEmpty();
     }
 
+    /// <summary>D1 upgrade rule, key side: an owned 0755 state directory is tightened to 0700 and the key minted in it.</summary>
+    [RetryFact]
+    public async Task Ensure_OnAnOwnedStateDirectoryOthersCanOnlyRead_TightensItTo0700_AndMints()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("POSIX modes only; Windows ACL inheritance is the documented residual");
+            return;
+        }
+
+        const UnixFileMode ownerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+        Directory.CreateDirectory(StateDirectory);
+        File.SetUnixFileMode(StateDirectory, ownerOnly | UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                                             UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        var keyFile = new IdentityKeyFile(TestData.CreateProjectOptions(_dataRoot));
+
+        var key = await keyFile.EnsureAsync(TestContext.Current.CancellationToken);
+
+        key.ShouldNotBeNull(keyFile.RefusalReason);
+        File.GetUnixFileMode(StateDirectory).ShouldBe(ownerOnly);
+        keyFile.TightenedStateDirectory.ShouldBeTrue();
+    }
+
     /// <summary>F2/D1: an existing key file others can read is replaced by nothing — fail closed.</summary>
     [RetryFact]
     public async Task Ensure_OnAPlantedPermissiveKeyFile_Refuses_AndLeavesItUntouched()
