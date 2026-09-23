@@ -536,17 +536,17 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         var rows = await store.GetSettingsByPrefixAsync("retrieval.", cancellationToken);
         var fusionRaw = await store.GetSettingAsync(FusionConfigKeys.NoRegressionEnabledGlobal, cancellationToken);
 
-        (string Key, string Name, string Default)[] options =
+        RetrievalOption[] options =
         [
-            (SearchParameterSettingsKeys.RrfK, "rrfK", SearchParameterSettingsKeys.DefaultRrfK.ToString(CultureInfo.InvariantCulture)),
-            (SearchParameterSettingsKeys.FtsWeight, "ftsWeight", SearchParameterSettingsKeys.DefaultFtsWeight.ToString(CultureInfo.InvariantCulture)),
-            (SearchParameterSettingsKeys.VectorWeight, "vectorWeight", SearchParameterSettingsKeys.DefaultVectorWeight.ToString(CultureInfo.InvariantCulture)),
-            (SearchParameterSettingsKeys.SourceLambda, "sourceLambda", SearchParameterSettingsKeys.DefaultSourceLambda.ToString(CultureInfo.InvariantCulture)),
-            (SearchParameterSettingsKeys.ConsolidationThreshold, "consolidationThreshold", SearchParameterSettingsKeys.DefaultConsolidationThreshold.ToString(CultureInfo.InvariantCulture)),
-            (SearchParameterSettingsKeys.DocScoreFormula, "docScoreFormula", SearchParameterSettingsKeys.DefaultDocScoreFormula.ToString().ToLowerInvariant()),
-            (SearchParameterSettingsKeys.CandidateWindow, "candidateWindow", SearchParameterSettingsKeys.DefaultCandidateWindow.ToString().ToLowerInvariant()),
-            (SearchParameterSettingsKeys.StructureAlpha, "structureAlpha", SearchParameterSettingsKeys.DefaultStructureAlpha.ToString(CultureInfo.InvariantCulture)),
-            (FusionConfigKeys.NoRegressionEnabledGlobal, "fusionNoRegressionEnabled", FusionConfigKeys.DefaultNoRegressionEnabled.ToString().ToLowerInvariant())
+            new(SearchParameterSettingsKeys.RrfK, "rrfK", SearchParameterSettingsKeys.DefaultRrfK.ToString(CultureInfo.InvariantCulture)),
+            new(SearchParameterSettingsKeys.FtsWeight, "ftsWeight", SearchParameterSettingsKeys.DefaultFtsWeight.ToString(CultureInfo.InvariantCulture)),
+            new(SearchParameterSettingsKeys.VectorWeight, "vectorWeight", SearchParameterSettingsKeys.DefaultVectorWeight.ToString(CultureInfo.InvariantCulture)),
+            new(SearchParameterSettingsKeys.SourceLambda, "sourceLambda", SearchParameterSettingsKeys.DefaultSourceLambda.ToString(CultureInfo.InvariantCulture)),
+            new(SearchParameterSettingsKeys.ConsolidationThreshold, "consolidationThreshold", SearchParameterSettingsKeys.DefaultConsolidationThreshold.ToString(CultureInfo.InvariantCulture)),
+            new(SearchParameterSettingsKeys.DocScoreFormula, "docScoreFormula", SearchParameterSettingsKeys.DefaultDocScoreFormula.ToString().ToLowerInvariant()),
+            new(SearchParameterSettingsKeys.CandidateWindow, "candidateWindow", SearchParameterSettingsKeys.DefaultCandidateWindow.ToString().ToLowerInvariant()),
+            new(SearchParameterSettingsKeys.StructureAlpha, "structureAlpha", SearchParameterSettingsKeys.DefaultStructureAlpha.ToString(CultureInfo.InvariantCulture)),
+            new(FusionConfigKeys.NoRegressionEnabledGlobal, "fusionNoRegressionEnabled", FusionConfigKeys.DefaultNoRegressionEnabled.ToString().ToLowerInvariant())
         ];
 
         foreach (var (key, name, fallback) in options)
@@ -766,4 +766,6 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return path == "~" ? home : path.StartsWith("~/", StringComparison.Ordinal) ? Path.Combine(home, path[2..]) : path;
     }
+
+    private readonly record struct RetrievalOption(string Key, string Name, string Default);
 }
