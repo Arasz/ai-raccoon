@@ -580,7 +580,8 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     /// </summary>
     private static GraphOutputs SelectOutputs(OnnxGraphProbe probe)
     {
-        var outputs = probe.OutputNames;
+        // A decoder's present.N.key/value outputs are its KV cache, never an embedding.
+        var outputs = probe.OutputNames.Where(n => !n.StartsWith("present.", StringComparison.Ordinal)).ToList();
         if (outputs.Count <= 1)
         {
             return new GraphOutputs(outputs.Count == 0 ? string.Empty : outputs[0], null);

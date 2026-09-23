@@ -283,6 +283,24 @@ public class ModelDownloadPlannerTests
     }
 
     [Fact]
+    public void DecoderKeyValueCacheOutputs_AreNeverTakenForThePooledEmbedding()
+    {
+        // onnx-community/Qwen3-Embedding-0.6B-ONNX: last_hidden_state plus present.N.key/value per layer.
+        var tree = new List<HfTreeEntry> { Onnx, Config, TokenizerConfig, new("tokenizer.json", "file", 100, null) };
+        var probe = NoExternalProbe() with
+        {
+            InputNames = ["input_ids", "attention_mask", "position_ids", "past_key_values.0.key", "past_key_values.0.value"],
+            OutputNames = ["last_hidden_state", "present.0.key", "present.0.value"]
+        };
+
+        var plan = Planner().BuildPlan("onnx-community/Qwen3-Embedding-0.6B-ONNX", "main", tree, BgeM3Raw("qwen3"), probe);
+
+        plan.EmbeddingOutput.ShouldBeNull();
+        plan.TokenEmbeddingsOutput.ShouldBe("last_hidden_state");
+        plan.PoolingMode.ShouldBe(PoolingMode.LastToken);
+    }
+
+    [Fact]
     public void UnknownModelType_Fails_WithActionableMessage()
     {
         var tree = new List<HfTreeEntry> { Onnx, Config, TokenizerConfig };
