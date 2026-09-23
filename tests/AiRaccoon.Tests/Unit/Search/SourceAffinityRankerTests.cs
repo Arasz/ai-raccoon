@@ -216,5 +216,28 @@ public sealed class SourceAffinityRankerTests
         merged.Select(r => r.Hash).ShouldBe(["h0", "h1", "h2"]);
     }
 
+    /// <summary>
+    ///     Two adjacent weak chunks of one file each gain λ and overtake a lone top row; when that top
+    ///     row is the leader (every leg ranked it first) it keeps rank 1 and the boost only orders
+    ///     the rows below it.
+    /// </summary>
+    [Fact]
+    public void Rank_Leader_StaysFirstAboveBoostedNeighbours()
+    {
+        var candidates = new[]
+        {
+            Hit("top", 1.0, "note.md", 0),
+            Hit("n1", 0.984, "runbook.md", 3),
+            Hit("n2", 0.968, "runbook.md", 4)
+        };
+
+        var unpinned = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max);
+        var pinned = SourceAffinityRanker.Rank(candidates, lambda: 0.1, 0.1, DocScoreFormula.Max, leader: "top");
+
+        unpinned[0].Hash.ShouldBe("n1", "premise: the boost lifts the neighbours when nothing is pinned");
+        pinned.Select(r => r.Hash).ShouldBe(["top", "n1", "n2"]);
+        pinned[0].Ranking.ShouldBe(1.0);
+    }
+
     private static MemorySearchResult Hit(string hash, double ranking, string sourceFile, int chunkIndex) => new(hash, ranking, $"{sourceFile}#{chunkIndex}", "s", sourceFile, chunkIndex, 5);
 }

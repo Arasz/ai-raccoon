@@ -59,6 +59,13 @@ public sealed partial class AppRunner
             return ExitCode.Success;
         }
 
+        // An unknown option is unparseable wherever it sits, root or after a verb (ADR-0106 D4);
+        // a verb's own bad argument still reaches ConfigCommands and exits InvalidArgument (15).
+        if (cliInput.HasUnknownOption)
+        {
+            return ExitCode.FailedToParseCliArgs;
+        }
+
         if (cliInput.IsCommandInput)
         {
             return await RunCliCommand(cliInput);

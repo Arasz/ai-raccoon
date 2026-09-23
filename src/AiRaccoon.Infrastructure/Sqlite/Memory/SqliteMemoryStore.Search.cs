@@ -89,6 +89,15 @@ public sealed partial class SqliteMemoryStore
         }
     }
 
+    /// <summary>
+    ///     A file#section query names rows exactly, so the rows its anchor matched lead the fused
+    ///     list (fused order kept within each group); the vector leg's view of a path string only
+    ///     orders what follows.
+    /// </summary>
+    internal static IReadOnlyList<MemorySearchResult> AnchorMatchesFirst(
+        IReadOnlyList<MemorySearchResult> fused, IReadOnlySet<string> anchorMatches) =>
+        [.. fused.Where(result => anchorMatches.Contains(result.Hash)), .. fused.Where(result => !anchorMatches.Contains(result.Hash))];
+
     /// <summary>Maps FTS candidate rows to results with <see cref="MemorySearchResult.Snippet" /> left unresolved.</summary>
     internal static IReadOnlyList<MemorySearchResult> BuildFtsResults(IReadOnlyList<SearchRow> rows) =>
     [

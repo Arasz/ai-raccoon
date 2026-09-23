@@ -31,6 +31,8 @@ An absent or malformed setting falls back — it can never fail a search.
 
 ## Notes
 
+- The sibling boost never lifts a row above one that both legs ranked first (ADR-0005 as
+  amended), and it is off for `file#section` queries.
 - A zero weight disables that leg entirely (`vectorWeight=0` ⇒ FTS-only search;
   `ftsWeight=0` ⇒ vector-only).
 - The enums travel as wire strings over MCP; a typo is rejected with `invalid-params`

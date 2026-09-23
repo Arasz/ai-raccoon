@@ -80,9 +80,13 @@ config channel (see [Command-line options](#command-line-options)).
 - **`memory_search` relevance floors:** `minRelativeScore` is relative to the response's own
   top hit (rank 1 always scores 1.0), so an absolute relevance floor sits on top of it: rows
   whose fused content cosine is below 0.35 are dropped, and a query nothing answers comes back
-  empty instead of a confident top hit. `minRelativeScore=0` is full recall and turns off every
-  score floor. Rows that survive with no absolute backing at all (a flat top margin, one
-  participating leg) carry `unranked: true`: their ranking is rank-derived only, so read them
+  empty instead of a confident top hit. A row whose text contains every query term (the keyword
+  leg's conjunctive match: all content terms for a query of up to four, or every part of a
+  `file#section` anchor) is kept whatever its cosine, so `memory_search "AIR-4471"` finds the
+  entry that says AIR-4471; a long query's OR match and a stop-word-only match get no such
+  exemption. `minRelativeScore=0` is full recall and turns off every score floor. Rows that
+  survive with no absolute backing at all (a flat top margin, one participating leg, no row over
+  the cosine floor or matching every term) carry `unranked: true`: their ranking is rank-derived only, so read them
   as candidates to verify, not as answers. A response short of its requested `limit` reports
   each cut as `truncation:[{floor, threshold, dropped}]`, one entry per floor that dropped
   candidates (`minRelativeScore` and/or `absoluteRelevance`). A response that fills `limit`
@@ -249,7 +253,11 @@ config channel (see [Command-line options](#command-line-options)).
   with AND when there are ≤4 (precision), with an OR fallback — all query tokens plus
   quoted adjacent-token bigram phrases — whenever the AND under-matches (zero rows,
   fewer rows than terms, or fewer than the requested limit); longer queries keep the
-  plain OR join of all tokens. Punctuation never reaches the FTS5 grammar.
+  plain OR join of all tokens. Punctuation never reaches the FTS5 grammar. A
+  `file#section` query ANDs the anchor against the `source_file`/`section` columns, and the
+  rows it matched lead the response ahead of anything the vector leg found for the path
+  string. A row that both legs rank first stays first: the `sourceLambda` sibling boost
+  reorders the rows below it and never lifts a neighbour above it.
 - **`memory_workspace_consolidate`:** `keep` is an array of hashes to promote, or
   `["all"]` to promote every entry in the workspace. It then deletes the workspace
   context entirely — entries not kept are gone.
