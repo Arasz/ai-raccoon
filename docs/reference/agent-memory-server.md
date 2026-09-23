@@ -260,7 +260,9 @@ config channel (see [Command-line options](#command-line-options)).
   `notes-ferry.md`. The section may be written as a slug (`#coastal-duties`) or the way the
   heading reads (`#Coastal duties`). When no row in the bank carries that file and section,
   the query is searched as ordinary text instead, so a question that happens to follow
-  `file#` still gets keyword matches. The rows an anchor matched lead the response ahead of
+  `file#` still gets keyword matches. A `.txt` file is chunked as plain text (a `#` or
+  ```` ``` ```` line is just text), so it never has sections: `notes.txt` anchors the file,
+  and `notes.txt#install` is searched as ordinary text. The rows an anchor matched lead the response ahead of
   anything the vector leg found for the path string. A row that both legs rank first stays first: the `sourceLambda` sibling boost
   reorders the rows below it and never lifts a neighbour above it.
 - **`memory_workspace_consolidate`:** `keep` is an array of hashes to promote, or

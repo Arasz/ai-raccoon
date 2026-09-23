@@ -67,7 +67,8 @@ internal static partial class SourcePathQuery
         return true;
     }
 
-    [GeneratedRegex(@"^(?<file>[\w./-]+\.(?:md|markdown|txt))(?:#(?<section>[\w-]+(?: [\w-]+)*))?$",
+    // A .txt file is an anchor on its own, never with a #section: plain text has no headings.
+    [GeneratedRegex(@"^(?:(?<file>[\w./-]+\.(?:md|markdown))(?:#(?<section>[\w-]+(?: [\w-]+)*))?|(?<file>[\w./-]+\.txt))$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PathRegex();
 
