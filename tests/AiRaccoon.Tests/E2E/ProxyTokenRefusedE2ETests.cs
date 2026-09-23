@@ -94,7 +94,7 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
         var run = await RunProxyAsync();
 
         // The server's own file: naming it is what makes the refusal diagnosable.
-        run.Stderr.ShouldContain(Path.Combine(_root, McpTokenFile.FileName));
+        run.Stderr.ShouldContain(new McpTokenFile(_root).Path);
         run.Stderr.ShouldContain(McpTokenGate.HeaderName);
         run.ExitCode.ShouldBe(ExitCode.ProxyBackendUnavailable);
         // "At once, not at the SDK's handshake timeout" is pinned by the exit code and the stderr
@@ -128,7 +128,7 @@ public sealed class ProxyTokenRefusedE2ETests : IAsyncLifetime
     /// <summary>Waits on the token file, which `serve` mints strictly before it binds.</summary>
     private async Task WaitForBackendAsync()
     {
-        var tokenFile = Path.Combine(_root, McpTokenFile.FileName);
+        var tokenFile = new McpTokenFile(_root).Path;
         using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(1) };
         for (var attempt = 0; attempt < 120; attempt++)
         {

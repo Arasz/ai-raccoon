@@ -227,7 +227,7 @@ public sealed partial class SqliteConnectionFactory(
     /// </summary>
     private async Task<SqliteConnection> OpenConnectionAsync(string? key, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(BankDirectoryFor(options));
+        BankPaths.CreateDirectory(BankDirectoryFor(options));
 
         var connection = new SqliteConnection(BuildConnectionString(key));
         await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
@@ -306,7 +306,7 @@ public sealed partial class SqliteConnectionFactory(
 
     private async Task<SqliteConnection> OpenRekeyConnectionAsync(string? key, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(BankDirectoryFor(options));
+        BankPaths.CreateDirectory(BankDirectoryFor(options));
 
         var csb = new SqliteConnectionStringBuilder
         {
