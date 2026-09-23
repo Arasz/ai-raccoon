@@ -1,0 +1,1026 @@
+{
+  "seed": 20260923,
+  "sizeBands": {
+    "small": [
+      20,
+      80
+    ],
+    "medium": [
+      150,
+      400
+    ],
+    "large": [
+      600,
+      1500
+    ]
+  },
+  "languages": [
+    "Rust",
+    "Python",
+    "C",
+    "C++",
+    "C#",
+    "JS",
+    "TS",
+    "JSX",
+    "HTML",
+    "CSS",
+    "SQL",
+    "Go"
+  ],
+  "allowedLicenses": [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause"
+  ],
+  "heldOutFamilies": [
+    "nlohmann-json",
+    "zod",
+    "gin",
+    "html5-boilerplate"
+  ],
+  "repos": [
+    {
+      "family": "serde",
+      "repo": "serde-rs/serde",
+      "sha": "7fc3b4c30c94f73a96ebd1553f2b090d928fc3a8",
+      "license": "MIT",
+      "licensePath": "LICENSE-MIT",
+      "language": "Rust"
+    },
+    {
+      "family": "libuv",
+      "repo": "libuv/libuv",
+      "sha": "e1095c7a4373ce00cd8874d8e820de5afb25776e",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "C"
+    },
+    {
+      "family": "nlohmann-json",
+      "repo": "nlohmann/json",
+      "sha": "9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03",
+      "license": "MIT",
+      "licensePath": "LICENSE.MIT",
+      "language": "C++",
+      "heldOut": true
+    },
+    {
+      "family": "axios",
+      "repo": "axios/axios",
+      "sha": "84a9f3b9a4f3244b8c8e818f557d64c7b964fb25",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "JS"
+    },
+    {
+      "family": "express",
+      "repo": "expressjs/express",
+      "sha": "dbac741a49a5a64336b70c06e85c2e2706e36336",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "JS"
+    },
+    {
+      "family": "zod",
+      "repo": "colinhacks/zod",
+      "sha": "59bbc03e10c636b9eb3c393dfeb552819774ec21",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "TS",
+      "heldOut": true
+    },
+    {
+      "family": "gin",
+      "repo": "gin-gonic/gin",
+      "sha": "75ccf94d605a05fe24817fc2f166f6f2959d5cea",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "Go",
+      "heldOut": true
+    },
+    {
+      "family": "orleans-dashboard",
+      "repo": "OrleansContrib/OrleansDashboard",
+      "sha": "2bb4ce7636b05049670bd55735ddcd2d9052ac1e",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "JSX"
+    },
+    {
+      "family": "hydralab",
+      "repo": "microsoft/HydraLab",
+      "sha": "f580862f26e2a343e86745799dc87122c2354450",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "JSX"
+    },
+    {
+      "family": "bootstrap",
+      "repo": "twbs/bootstrap",
+      "sha": "6e1f75f420f68e1d52733b8e407fc7c3766c9dba",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "CSS"
+    },
+    {
+      "family": "material-components-web",
+      "repo": "material-components/material-components-web",
+      "sha": "432c815e58d61a257742836f816cf95e271e6ea1",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "CSS"
+    },
+    {
+      "family": "duckdb",
+      "repo": "duckdb/duckdb",
+      "sha": "3a3967aa8190d0a2d1931d4ca4f5d920760030b4",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "SQL"
+    },
+    {
+      "family": "hasura",
+      "repo": "hasura/graphql-engine",
+      "sha": "3bd9ea4e727b53bcf5d7756d6590bccf09c97127",
+      "license": "Apache-2.0",
+      "licensePath": "LICENSE",
+      "language": "SQL"
+    },
+    {
+      "family": "sql-server-samples",
+      "repo": "microsoft/sql-server-samples",
+      "sha": "beaab06ef72831089ca80e5355d65e661fd19b26",
+      "license": "MIT",
+      "licensePath": "license.txt",
+      "language": "SQL"
+    },
+    {
+      "family": "html5-boilerplate",
+      "repo": "h5bp/html5-boilerplate",
+      "sha": "90066899f33e83c0866f8e078e97f9b82999db58",
+      "license": "MIT",
+      "licensePath": "LICENSE.txt",
+      "language": "HTML",
+      "heldOut": true
+    },
+    {
+      "family": "reveal-js",
+      "repo": "hakimel/reveal.js",
+      "sha": "75dff6f515d2d08df0c32cf2b7328b89425c6f25",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "HTML"
+    },
+    {
+      "family": "bootstrap-docs-examples",
+      "repo": "twbs/bootstrap",
+      "sha": "68b0d231a13201eb14acd3dc84e51543d16e5f7e",
+      "license": "MIT",
+      "licensePath": "LICENSE",
+      "language": "HTML"
+    },
+    {
+      "family": "self",
+      "repo": "self",
+      "sha": null,
+      "license": "MIT",
+      "licensePath": null,
+      "language": [
+        "C#",
+        "Python"
+      ]
+    }
+  ],
+  "selfHeldOut": [
+    "src/AiRaccoon.Infrastructure/Sqlite/NoiseShadowObserver.cs",
+    "src/AiRaccoon.Infrastructure/Embedding/Download/OnnxGraphProbe.cs",
+    "src/AiRaccoon.Infrastructure/Sqlite/MemorySql.cs",
+    "scripts/src/retrieval_tuning/repo_data.py",
+    "scripts/src/retrieval_tuning/scoring.py",
+    "scripts/retrieval_tuning/committee_grade.py"
+  ],
+  "files": [
+    {
+      "family": "serde",
+      "language": "Rust",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "serde_derive/src/internals/symbol.rs"
+    },
+    {
+      "family": "serde",
+      "language": "Rust",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "serde_derive/src/internals/ctxt.rs"
+    },
+    {
+      "family": "serde",
+      "language": "Rust",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "serde_derive/src/de/unit.rs"
+    },
+    {
+      "family": "serde",
+      "language": "Rust",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "serde_derive/src/bound.rs"
+    },
+    {
+      "family": "serde",
+      "language": "Rust",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "serde_derive/src/de/tuple.rs"
+    },
+    {
+      "family": "serde",
+      "language": "Rust",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "serde_derive/src/internals/ast.rs"
+    },
+    {
+      "family": "serde",
+      "language": "Rust",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "serde_derive/src/de/struct_.rs"
+    },
+    {
+      "family": "serde",
+      "language": "Rust",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "serde_derive/src/de.rs"
+    },
+    {
+      "family": "serde",
+      "language": "Rust",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "serde/src/private/ser.rs"
+    },
+    {
+      "family": "libuv",
+      "language": "C",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "src/strscpy.c"
+    },
+    {
+      "family": "libuv",
+      "language": "C",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "src/unix/procfs-exepath.c"
+    },
+    {
+      "family": "libuv",
+      "language": "C",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "src/strtok.c"
+    },
+    {
+      "family": "libuv",
+      "language": "C",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "src/threadpool.c"
+    },
+    {
+      "family": "libuv",
+      "language": "C",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "src/unix/posix-poll.c"
+    },
+    {
+      "family": "libuv",
+      "language": "C",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "src/inet.c"
+    },
+    {
+      "family": "libuv",
+      "language": "C",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "src/unix/thread.c"
+    },
+    {
+      "family": "libuv",
+      "language": "C",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "src/uv-common.c"
+    },
+    {
+      "family": "libuv",
+      "language": "C",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "src/unix/udp.c"
+    },
+    {
+      "family": "nlohmann-json",
+      "language": "C++",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "include/nlohmann/detail/input/position_t.hpp"
+    },
+    {
+      "family": "nlohmann-json",
+      "language": "C++",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "include/nlohmann/adl_serializer.hpp"
+    },
+    {
+      "family": "nlohmann-json",
+      "language": "C++",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "include/nlohmann/json_fwd.hpp"
+    },
+    {
+      "family": "nlohmann-json",
+      "language": "C++",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "include/nlohmann/detail/exceptions.hpp"
+    },
+    {
+      "family": "nlohmann-json",
+      "language": "C++",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "include/nlohmann/ordered_map.hpp"
+    },
+    {
+      "family": "nlohmann-json",
+      "language": "C++",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "include/nlohmann/detail/conversions/to_json.hpp"
+    },
+    {
+      "family": "nlohmann-json",
+      "language": "C++",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "include/nlohmann/detail/meta/type_traits.hpp"
+    },
+    {
+      "family": "nlohmann-json",
+      "language": "C++",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "include/nlohmann/detail/iterators/iter_impl.hpp"
+    },
+    {
+      "family": "nlohmann-json",
+      "language": "C++",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "include/nlohmann/detail/json_pointer.hpp"
+    },
+    {
+      "family": "axios",
+      "language": "JS",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "lib/helpers/spread.js"
+    },
+    {
+      "family": "axios",
+      "language": "JS",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "lib/core/settle.js"
+    },
+    {
+      "family": "axios",
+      "language": "JS",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "lib/core/buildFullPath.js"
+    },
+    {
+      "family": "axios",
+      "language": "JS",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "lib/core/mergeConfig.js"
+    },
+    {
+      "family": "axios",
+      "language": "JS",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "lib/core/AxiosError.js"
+    },
+    {
+      "family": "axios",
+      "language": "JS",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "lib/core/Axios.js"
+    },
+    {
+      "family": "axios",
+      "language": "JS",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "lib/utils.js"
+    },
+    {
+      "family": "axios",
+      "language": "JS",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "lib/adapters/http.js"
+    },
+    {
+      "family": "express",
+      "language": "JS",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "lib/response.js"
+    },
+    {
+      "family": "zod",
+      "language": "TS",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "packages/zod/src/compile.ts"
+    },
+    {
+      "family": "zod",
+      "language": "TS",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "packages/zod/src/v4/mini/checks.ts"
+    },
+    {
+      "family": "zod",
+      "language": "TS",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "packages/zod/src/v3/helpers/partialUtil.ts"
+    },
+    {
+      "family": "zod",
+      "language": "TS",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "packages/zod/src/v4/core/memoizer.ts"
+    },
+    {
+      "family": "zod",
+      "language": "TS",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "packages/zod/src/v3/ZodError.ts"
+    },
+    {
+      "family": "zod",
+      "language": "TS",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "packages/zod/src/v4/core/parse.ts"
+    },
+    {
+      "family": "zod",
+      "language": "TS",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "packages/zod/src/v4/core/util.ts"
+    },
+    {
+      "family": "zod",
+      "language": "TS",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "packages/zod/src/v4/core/checks.ts"
+    },
+    {
+      "family": "zod",
+      "language": "TS",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "packages/zod/src/v4/core/to-json-schema.ts"
+    },
+    {
+      "family": "orleans-dashboard",
+      "language": "JSX",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "App/components/theme-buttons.jsx"
+    },
+    {
+      "family": "orleans-dashboard",
+      "language": "JSX",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "App/components/checkbox-filter.jsx"
+    },
+    {
+      "family": "orleans-dashboard",
+      "language": "JSX",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "App/reminders/reminders.jsx"
+    },
+    {
+      "family": "orleans-dashboard",
+      "language": "JSX",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "App/overview/overview.jsx"
+    },
+    {
+      "family": "orleans-dashboard",
+      "language": "JSX",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "App/silos/silo.jsx"
+    },
+    {
+      "family": "orleans-dashboard",
+      "language": "JSX",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "App/components/grain-table.jsx"
+    },
+    {
+      "family": "hydralab",
+      "language": "JSX",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "react/src/component/PerfTestDashboard.jsx"
+    },
+    {
+      "family": "hydralab",
+      "language": "JSX",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "react/src/component/TestReportView.jsx"
+    },
+    {
+      "family": "hydralab",
+      "language": "JSX",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "react/src/component/RunnerView.jsx"
+    },
+    {
+      "family": "html5-boilerplate",
+      "language": "HTML",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "src/index.html"
+    },
+    {
+      "family": "html5-boilerplate",
+      "language": "HTML",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "src/404.html"
+    },
+    {
+      "family": "reveal-js",
+      "language": "HTML",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "index.html"
+    },
+    {
+      "family": "reveal-js",
+      "language": "HTML",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "test/test-mathjax4.html"
+    },
+    {
+      "family": "reveal-js",
+      "language": "HTML",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "demo.html"
+    },
+    {
+      "family": "reveal-js",
+      "language": "HTML",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "test/test.html"
+    },
+    {
+      "family": "bootstrap-docs-examples",
+      "language": "HTML",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "docs/examples/blog/index.html"
+    },
+    {
+      "family": "bootstrap-docs-examples",
+      "language": "HTML",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "docs/examples/carousel/index.html"
+    },
+    {
+      "family": "bootstrap-docs-examples",
+      "language": "HTML",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "docs/examples/theme/index.html"
+    },
+    {
+      "family": "bootstrap",
+      "language": "CSS",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "scss/helpers/_ratio.scss"
+    },
+    {
+      "family": "bootstrap",
+      "language": "CSS",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "scss/mixins/_color-mode.scss"
+    },
+    {
+      "family": "bootstrap",
+      "language": "CSS",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "scss/mixins/_transition.scss"
+    },
+    {
+      "family": "bootstrap",
+      "language": "CSS",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "scss/_dropdown.scss"
+    },
+    {
+      "family": "bootstrap",
+      "language": "CSS",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "scss/_navbar.scss"
+    },
+    {
+      "family": "bootstrap",
+      "language": "CSS",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "scss/_functions.scss"
+    },
+    {
+      "family": "bootstrap",
+      "language": "CSS",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "scss/_utilities.scss"
+    },
+    {
+      "family": "bootstrap",
+      "language": "CSS",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "scss/_variables.scss"
+    },
+    {
+      "family": "material-components-web",
+      "language": "CSS",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "packages/mdc-dialog/_mixins.scss"
+    },
+    {
+      "family": "duckdb",
+      "language": "SQL",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "extension/tpch/dbgen/queries/q21.sql"
+    },
+    {
+      "family": "duckdb",
+      "language": "SQL",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "extension/tpcds/dsdgen/schema/call_center.sql"
+    },
+    {
+      "family": "duckdb",
+      "language": "SQL",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "extension/tpch/dbgen/queries/q02.sql"
+    },
+    {
+      "family": "duckdb",
+      "language": "SQL",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "extension/tpcds/dsdgen/queries/66.sql"
+    },
+    {
+      "family": "duckdb",
+      "language": "SQL",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "test/sql/storage_version/generate_storage_version.sql"
+    },
+    {
+      "family": "duckdb",
+      "language": "SQL",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "benchmark/imdb_plan_cost/init/schema.sql"
+    },
+    {
+      "family": "hasura",
+      "language": "SQL",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "server/src-rsr/migrations/43_to_42.sql"
+    },
+    {
+      "family": "sql-server-samples",
+      "language": "SQL",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "samples/databases/futon-manufacturing/03-manufacturing-reports.sql"
+    },
+    {
+      "family": "sql-server-samples",
+      "language": "SQL",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "samples/databases/futon-manufacturing/07-sales-reports.sql"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "render/redirect.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "render/text.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "fs.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "binding/form_mapping.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "logger.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "routergroup.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "context.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "tree.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "gin.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": null,
+      "role": "test",
+      "path": "routergroup_test.go",
+      "pairOf": "routergroup.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": null,
+      "role": "test",
+      "path": "tree_test.go",
+      "pairOf": "tree.go"
+    },
+    {
+      "family": "gin",
+      "language": "Go",
+      "sizeBand": null,
+      "role": "test",
+      "path": "gin_test.go",
+      "pairOf": "gin.go"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "src/AiRaccoon.Infrastructure/Sqlite/NoiseShadowObserver.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "src/AiRaccoon/Setup/Cli/Commands/PerformanceCommands.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "src/AiRaccoon/Hosting/Watchdog/IdleWatchdog.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "src/AiRaccoon.Infrastructure/Embedding/Download/OnnxGraphProbe.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "src/AiRaccoon.Infrastructure/Sync/SyncService.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "src/AiRaccoon.Infrastructure/Sqlite/MemorySql.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "src/AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": null,
+      "role": "test",
+      "path": "tests/AiRaccoon.Tests/Integration/Sync/SyncServiceTests.cs",
+      "pairOf": "src/AiRaccoon.Infrastructure/Sync/SyncService.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": null,
+      "role": "test",
+      "path": "tests/AiRaccoon.Tests/Unit/Storage/NoiseShadowObserverTests.cs",
+      "pairOf": "src/AiRaccoon.Infrastructure/Sqlite/NoiseShadowObserver.cs"
+    },
+    {
+      "family": "self",
+      "language": "C#",
+      "sizeBand": null,
+      "role": "test",
+      "path": "tests/AiRaccoon.Tests/Unit/Setup/Serve/IdleWatchdogTests.cs",
+      "pairOf": "src/AiRaccoon/Hosting/Watchdog/IdleWatchdog.cs"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "scripts/src/retrieval_tuning/repo_data.py"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "scripts/src/retrieval_tuning/evaluate.py"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": "small",
+      "role": "src",
+      "path": "scripts/src/retrieval_tuning/scratch.py"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "scripts/src/retrieval_tuning/settings.py"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "scripts/src/retrieval_tuning/scoring.py"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": "medium",
+      "role": "src",
+      "path": "scripts/src/retrieval_tuning/tune.py"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "scripts/retrieval_tuning/committee_grade.py"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "scripts/retrieval_tuning/llamaindex_harness/evaluate.py"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": "large",
+      "role": "src",
+      "path": "scripts/retrieval_tuning/llamaindex_harness/ingest.py"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": null,
+      "role": "test",
+      "path": "scripts/tests/test_retrieval_tuning_settings.py",
+      "pairOf": "scripts/src/retrieval_tuning/settings.py"
+    },
+    {
+      "family": "self",
+      "language": "Python",
+      "sizeBand": null,
+      "role": "test",
+      "path": "scripts/tests/test_retrieval_tuning_scoring.py",
+      "pairOf": "scripts/src/retrieval_tuning/scoring.py"
+    }
+  ]
+}
