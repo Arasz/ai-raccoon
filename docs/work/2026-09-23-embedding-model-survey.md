@@ -167,10 +167,47 @@ Every model worth adopting sits in group B or C. The tokenizer work is the price
 
 This reasons from F9–F11: zero-shot edge models scored 0.31–0.35 on a four-way content-type task where a probe on stored vectors scored 0.685. The existing noise guard beats embeddings, and promotion is not recoverable by either approach. If a future feature needs labels (auto-typing writes, routing a query to memory or code), the measured path is a small supervised head on the vectors the bank already computes. That costs about one dot product per class, with no second model in memory.
 
+### F15 — The two NuGet wrappers of HF `tokenizers` cannot cover AiRaccoon's runtimes, so the adapter is managed code on Microsoft.ML.Tokenizers [READ]
+
+`Tokenizers.HuggingFace` 3.23.1 (Apache-2.0, one maintainer) ships native binaries for linux-arm64, linux-x64, osx-arm64, osx-x64, win-arm64 and win-x64. `Tokenizers.DotNet` 1.4.1 (MIT, one maintainer) publishes runtime packages for win-x64, win-arm64, linux-x64, linux-arm64, osx-arm64, osx-x64 and win. Neither has linux-musl-x64, which AiRaccoon publishes. The adapter (PR #680) is therefore written against Microsoft.ML.Tokenizers, already a dependency.
+
+**Evidence:** `unzip -l tokenizers.huggingface.3.23.1.nupkg` (runtimes/ list); NuGet search `Tokenizers.DotNet.runtime`; NuGet registration metadata (authors, licence, publish dates); `src/AiRaccoon/AiRaccoon.csproj:5` (`RuntimeIdentifiers` includes `linux-musl-x64`).
+
+### F16 — EmbeddingGemma: gated at Google, ungated mirror, embeddings unencumbered, weight redistribution carries pass-through duties [READ]
+
+- **Gating.** `google/embeddinggemma-300m` is `gated: manual`: anonymous `resolve/` downloads return HTTP 401. `onnx-community/embeddinggemma-300m-ONNX` downloads anonymously but still declares `license: gemma`.
+- **Outputs.** The Gemma Terms of Use (last modified 2026-04-01) state "For clarity, Outputs are not deemed Model Derivatives" (§1.1(e)) and "Google claims no rights in Outputs you generate using Gemma" (§3.3), so stored vectors carry no licence obligation.
+- **Distribution.** "Distribution" includes making Gemma available "as a hosted service via API" (§1.1). A distributor must pass the use restrictions through, give recipients the Agreement, and ship a Notice file reading "Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms" (§3.1).
+- **Commercial use and termination.** Commercial use is allowed. On breach, Google may terminate, and the licensee must then cease use (§4.5).
+
+**Evidence:** `https://ai.google.dev/gemma/terms` fetched 2026-09-23, "For clarity" clause checked verbatim in the page text. HF API `gated` field and anonymous `curl` HTTP codes (research-agent notes).
+
+### F17 — Two more ≤600 MB candidates from the HF survey do not beat granite-english-r2 [MEASURED]
+
+| model | size | code MRR | memory nDCG@10 | bank nDCG@10 | licence |
+|---|---|---|---|---|---|
+| harrier-oss-v1-270m (int8, gemma3_text, last-token, query instruct) | 328 MB | 0.668 | 0.612 | 0.385 | MIT |
+| granite-embedding-311m-multilingual-r2 (int8 quint8_avx2, cls) | 299 MB | 0.689 | 0.620 | 0.359 | Apache-2.0 |
+
+These use the same scripts and conditions as F1–F3. The code corpus was 477 pairs for these two runs, against 476 earlier, because the main checkout moved in between.
+
+**Evidence:** `eval2.py` and `memeval.py` on the onnx-community and IBM int8 exports; `picks.jsonl` in the scratch dir.
+
+### F18 — Five picks for the ≤600 MB range [INFERRED]
+
+This reasons from F1–F3, F5, F16 and F17:
+1. **embeddinggemma-300m int8 (295 MB):** best on all three evals. Acceptable if users download it themselves, since the vectors are unencumbered; distributing the weights carries the pass-through duties in F16.
+2. **granite-embedding-english-r2 (577 MB):** best Apache-2.0 model on bank content (0.428), and beats SFR on code.
+3. **gte-modernbert-base (569 MB):** granite-r2's peer. Strongest permissive model on code among the encoders (0.728), with the same tokenizer family.
+4. **granite-embedding-small-english-r2 (186 MB):** the light engine. It ties SFR on code at about a tenth of the RAM.
+5. **Qwen3-Embedding-0.6B int8 (585 MB):** code MRR 0.738, Apache-2.0. It needs the decoder-input support in PR #680.
+
+Dropped: harrier-270m and granite-311m-multilingual (F17); jina-v2-base-code, which is strong on code but weakest on the memory corpus (0.566).
+
 ## Still open
 
 - Code eval uses one repo (this one) and summary-style queries. Agent queries are shorter and keyword-heavier, and a second repo would show whether jina/gte's lead transfers.
-- Tokenizer parity: blocked models were scored through HF `tokenizers`, not ML.Tokenizers. A group-B adapter must be token-for-token validated against `tokenizer.json` before its numbers are trusted in production.
+- Tokenizer parity: the adapter in PR #680 reports exact id parity for 7 models × 10 strings against HF `tokenizers` 0.22.2. The production-path re-run of the picks, including Gemma with and without prefixes, is pending that PR.
 - Latency on an idle machine for granite-small, jina-v2-code and gte-modernbert was not measured, because every run shared the CPU.
 - int8 exports of granite-small (52 MB) and gte-modernbert (150 MB) were not scored. They would shrink the footprint further, and the quality loss is unknown.
 - Qwen3 was run from an int8 export with no explicit EOS append for last-token pooling. Its numbers may be understated.
