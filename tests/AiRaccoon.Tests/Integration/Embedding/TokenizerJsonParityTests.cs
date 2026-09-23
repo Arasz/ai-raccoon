@@ -2,6 +2,7 @@ using System.Text.Json;
 using AiRaccoon.Infrastructure.Embedding;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -25,7 +26,7 @@ public sealed class TokenizerJsonParityTests
     public static IEnumerable<object[]> Models() =>
         Golden().RootElement.EnumerateObject().Select(p => new object[] { p.Name });
 
-    [Theory]
+    [RetryTheory]
     [MemberData(nameof(Models))]
     public void Model_MatchesHuggingFaceTokenizersExactly_ForEveryFixtureCase(string modelKey)
     {

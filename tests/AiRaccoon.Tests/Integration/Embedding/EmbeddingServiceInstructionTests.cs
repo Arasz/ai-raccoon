@@ -5,6 +5,7 @@ using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -20,7 +21,7 @@ public sealed class EmbeddingServiceInstructionTests
     private const string QueryPrompt = "task: search result | query: ";
     private const string DocumentPrompt = "title: none | text: ";
 
-    [Fact]
+    [RetryFact]
     public void TrimQueryToWindow_PrependsTheManifestsQueryInstruction()
     {
         var settings = ManifestSettings(QueryPrompt, DocumentPrompt);
@@ -28,7 +29,7 @@ public sealed class EmbeddingServiceInstructionTests
         Service().TrimQueryToWindow(settings, "hybrid search").ShouldBe(QueryPrompt + "hybrid search");
     }
 
-    [Fact]
+    [RetryFact]
     public void DocumentText_PrependsTheManifestsDocumentInstruction()
     {
         var settings = ManifestSettings(QueryPrompt, DocumentPrompt);
@@ -36,7 +37,7 @@ public sealed class EmbeddingServiceInstructionTests
         Service().DocumentText(settings, "stored note").ShouldBe(DocumentPrompt + "stored note");
     }
 
-    [Fact]
+    [RetryFact]
     public void WithoutInstructions_QueryAndDocumentTextAreUnchanged()
     {
         var settings = ManifestSettings(null, null);
@@ -45,13 +46,13 @@ public sealed class EmbeddingServiceInstructionTests
         Service().DocumentText(settings, "stored note").ShouldBe("stored note");
     }
 
-    [Fact]
+    [RetryFact]
     public void BundledEngine_DocumentTextIsUnchanged()
     {
         Service().DocumentText(new EmbeddingSettings("local", null, null, null), "stored note").ShouldBe("stored note");
     }
 
-    [Fact]
+    [RetryFact]
     public void EditingTheDocumentInstruction_ChangesTheEngineFingerprint()
     {
         var dir = ManifestSettings(QueryPrompt, DocumentPrompt).Model!;

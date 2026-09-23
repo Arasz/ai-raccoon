@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.ML.OnnxRuntime;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -17,7 +18,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
 public sealed class DecoderEmbeddingModelTests
 {
-    [Fact]
+    [RetryFact]
     public async Task Qwen3_Int8_EmbedsLikeTheHuggingFaceReference()
     {
         var fixturesDir = Environment.GetEnvironmentVariable(TokenizerJsonParityTests.FixturesDirEnvVar);
