@@ -9,7 +9,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <summary>
 ///     IEmbeddingGenerator over an ONNX embedding model (FR-NM-3; see
-///     docs/work/features-native-memory/native-memory.feature): one batched session run, then the
+///     docs/work/features-native-memory/native-memory.feature): one session run per text, then the
 ///     manifest-selected pooling (mean | cls | model-output) and normalization (l2 | none). The
 ///     bundled all-MiniLM-L6-v2 path — wordpiece tokenizer, mean-pool + L2, 256 window — is the
 ///     default descriptor and is behavior-preserved (G3 golden vectors).
@@ -116,12 +116,26 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
             return Task.FromResult(embeddings);
         }
 
-        return Task.Run(() => RunBatch(items, embeddings, cancellationToken), cancellationToken);
+        return Task.Run(() => RunEachRow(items, embeddings, cancellationToken), cancellationToken);
     }
 
     public void Dispose() => _session.Dispose();
 
     object? IEmbeddingGenerator.GetService(Type serviceType, object? serviceKey) => null;
+
+    // One row per session run: ORT keeps each run's activation peak, and a 32 x 510 batch on a 400M
+    // model holds 3-7 GB for no per-row speedup (docs/work/2026-09-23-server-memory-usage.md F5/F6).
+    private GeneratedEmbeddings<Embedding<float>> RunEachRow(
+        IReadOnlyList<(int[] Ids, int[] Mask)> items, GeneratedEmbeddings<Embedding<float>> embeddings,
+        CancellationToken cancellationToken)
+    {
+        foreach (var item in items)
+        {
+            RunBatch([item], embeddings, cancellationToken);
+        }
+
+        return embeddings;
+    }
 
     private GeneratedEmbeddings<Embedding<float>> RunBatch(
         IReadOnlyList<(int[] Ids, int[] Mask)> items, GeneratedEmbeddings<Embedding<float>> embeddings,
