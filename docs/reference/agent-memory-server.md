@@ -539,17 +539,18 @@ working backend within budget, the process exits `ExitCode.ProxyBackendUnavailab
 (6) with one stderr line of this exact form (`BackendSessions.Unavailable()`):
 `ai-raccoon: {reason}; no in-process fallback exists — start the backend first: ai-raccoon serve --port <port>`
 (`{reason}` names the failure: the URL, the serve exit code, and any captured
-backend stderr tail). A separate, earlier refusal applies before any of this: **F39**
+backend stderr tail). A `--port` the proxy cannot dial (`0`, or outside 1-65535) is a bad
+value, not an unavailable backend: it exits 15 before anything is spawned, and so does a
+settings verb given one. A separate, earlier refusal applies before any of this: **F39**
 — a `--data-root` that resolves to neither the default root nor an existing bank
 refuses before the proxy ever probes a port or spawns a process, with exit `22`
 (`ExitCode.NoBank`) and a line naming the typo-check remedy
 (`ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon --data-root <path> serve', or check --data-root for a typo`; a project-scope launch adds `--install-scope project` before `serve`);
 the default root keeps its unconditional bootstrap. The stdio and https transports were removed outright
-([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)): passing
-the removed `stdio` value fails at parse with exit 9 and a hint naming the proxy
-and `serve` on bare launches (exit 15, `InvalidArgument`, on verb paths, since
-`serve` takes no `--transport` at all); passing `https` fails at parse with
-exit 9. A bare `--transport http`
+([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)): on a bare
+launch the removed `stdio` value is an invalid value (exit 15, `InvalidArgument`) with a
+hint naming the proxy and `serve`, and `https` exits 15 too; after `serve`, which takes
+no `--transport` at all, the option is unparseable (exit 9). A bare `--transport http`
 still parses but launches the proxy like any bare run. Full servers come
 only from `serve`.
 
@@ -923,7 +924,7 @@ s3` writes `provider=s3`; `sync add azure` writes `provider=azure`. Each clears 
 other provider's rows, so at most one backend is configured at a time. Provider secrets
 are **prompted interactively** — the S3 access/secret keys on `sync add s3`, the Azure
 connection string on `sync add azure` (prompt on stderr, input read
-from stdin; an empty answer aborts with exit 1 and persists nothing) — never accepted on the
+from stdin; an empty answer aborts with exit 15 and persists nothing) — never accepted on the
 command line.
 
 **`--cli` credential modes** skip the prompts and use the machine's CLI login state:
@@ -936,7 +937,7 @@ Auth failures map to `sync-auth-failed:` with a "run `az login`" / "run `aws con
 
 **Sync authentication methods** — four ways to authenticate, two per backend. Secrets are
 never accepted on the command line; the prompt-based methods read from stdin (an empty
-answer aborts with exit 1 and persists nothing). Only one provider is active at a time
+answer aborts with exit 15 and persists nothing). Only one provider is active at a time
 (`sync add` clears the other provider's rows), and switching modes clears the other
 mode's rows — settings never leave the local machine (ADR 0014), but a stale secret row
 left behind on this one is still a needless liability once its mode is no longer in use.
@@ -997,7 +998,8 @@ prefer SSO/short-lived credentials over static keys in `~/.aws/credentials`.
 Secrets (OpenAI API key via `model embedding set openai --api-key`, S3 access/secret keys via
 `sync add s3`, or the Azure connection string via `sync add azure`) are persisted in the settings table and are never launch flags — the
 parser's unknown-option error is the defense. `--help`/`--version` and parse errors
-print to **stderr** (exit 0 / exit 1). Generic host flags (`--environment`,
+print to **stderr**; help and version exit 0, argv outside the grammar exits 9, and a
+missing or invalid value exits 15. Generic host flags (`--environment`,
 `--contentRoot`, `--applicationName`) are accepted hidden and ignored. A zero-config
 `.mcp.json` entry is just `{"mcpServers": {"ai-raccoon": {"command": "ai-raccoon"}}}`;
 registry installs (`.mcp/server.json`) pass no args (`packageArguments: []`).
