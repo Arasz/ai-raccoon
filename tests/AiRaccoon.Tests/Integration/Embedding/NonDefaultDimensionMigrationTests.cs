@@ -75,6 +75,8 @@ public sealed class NonDefaultDimensionMigrationTests
 
         public string DocumentText(EmbeddingSettings settings, string text) => text;
 
+        public double? RelevanceFloor(EmbeddingSettings settings) => null;
+
         public int ResolveChunkBudgetFor(EmbeddingSettings settings) => 254;
 
         public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) => null;

@@ -23,10 +23,13 @@ public sealed class ModelMigrationJob(IEntryEmbedder embedder) : IMaintenanceJob
     /// <summary>Never due by the clock; <see cref="HasWorkAsync" /> is the only gate.</summary>
     public TimeSpan? Interval => null;
 
-    public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-        await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+    public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await embedder.ReconcileFingerprintAsync(connection, cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken))
             .ConfigureAwait(false) > 0;
+    }
 
     /// <summary>
     ///     Drains the open migration under the migration lease. False whenever there was nothing

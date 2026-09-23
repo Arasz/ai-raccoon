@@ -23,19 +23,23 @@ public sealed class SqliteCodeEngineStore(
     public async Task<EmbeddingConfig> ActivateCodeEngineAsync(string directory, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(directory);
-        var fullPath = Path.GetFullPath(directory);
+        // The bundled engine is stored by name: its directory moves with every tool version (ADR-0108).
+        var bundled = BundledModel.IsBundled(directory);
+        var fullPath = bundled ? BundledModel.SettingValue : Path.GetFullPath(directory);
+        var manifestDirectory = bundled ? BundledModel.ResolveDirectory() : fullPath;
 
         EngineDescriptor descriptor;
         try
         {
-            descriptor = manifestLoader.Load(fullPath);
+            descriptor = manifestLoader.Load(manifestDirectory);
         }
         catch (InvalidOperationException ex)
         {
             throw new CodeEngineActivationRefusedException(ex.Message, ex);
         }
 
-        var chunkBudget = embeddings.ResolveChunkBudgetFor(new EmbeddingSettings("local", fullPath, null, null));
+        // The code corpus chunks at its own budget, so what matters is the engine's window, not its memory chunk budget.
+        var chunkBudget = Math.Min(EmbeddingService.MaxManifestChunkTokens, descriptor.ContextWindowTokens - descriptor.SpecialTokenReservation);
         if (chunkBudget < CodeChunker.DefaultBudget)
         {
             throw new CodeEngineActivationRefusedException(
@@ -46,7 +50,10 @@ public sealed class SqliteCodeEngineStore(
                 "content tokens.");
         }
 
-        poolingRepair.Repair(fullPath);
+        if (!bundled)
+        {
+            poolingRepair.Repair(fullPath);
+        }
 
         var fingerprint = embeddings.EngineFingerprint("local", fullPath, null);
 

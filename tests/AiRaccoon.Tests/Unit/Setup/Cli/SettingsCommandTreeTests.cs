@@ -42,6 +42,7 @@ public class SettingsCommandTreeTests
         ("settings model reset", ["settings", "model", "reset"]),
         ("settings model show", ["settings", "model", "show"]),
         ("settings model threads", ["settings", "model", "threads", "5"]),
+        ("settings model device", ["settings", "model", "device", "gpu"]),
         ("settings retrieval alpha set", ["settings", "retrieval", "alpha", "set", "0.5"]),
         ("settings retrieval alpha show", ["settings", "retrieval", "alpha", "show"]),
         ("settings retrieval fusion enable", ["settings", "retrieval", "fusion", "enable"]),

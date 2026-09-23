@@ -171,15 +171,10 @@ internal static class CliCommandTree
             {
                 new Command("set", "Activates a model for the code corpus")
                 {
-                    // `default` deliberately downloads AND activates, and it sits under
-                    // `model code set` — the activating family — so `model download`'s "never activates"
-                    // contract is untouched. A hint that needs a second command with a path the
-                    // reader has to construct is a hint nobody follows, and this string is quoted
-                    // to users from the search warning, doctor, the MCP instructions and the docs.
+                    // Quoted to users from the search warning, doctor, the MCP instructions and the docs.
                     new Command("default",
-                        $"Downloads the code corpus's default embedding model ({CodeEngineSetup.DefaultModelRepoId}) into " +
-                        "<data-root>/models/ if it is not already there, then ACTIVATES it — unlike 'model download', " +
-                        "which never activates. Re-running it against an already-downloaded directory only re-activates."),
+                        "Activates the bundled embedding model (granite-embedding-small-english-r2, the same one memory uses) " +
+                        "for the code corpus and invalidates its embedded rows to 'pending'. Nothing is downloaded."),
                     new Command("local",
                         "Activates a manifest directory for the code corpus and invalidates its embedded rows to 'pending'. " +
                         "Any manifest dimension is accepted — vec_code is reconciled to it.")
@@ -239,6 +234,13 @@ internal static class CliCommandTree
             "Takes effect on the next server restart — sessions are cached per engine fingerprint.")
         {
             new Argument<string>("n") { HelpName = "n" }
+        });
+
+        model.Add(new Command("device",
+            "Where local embedding sessions run: auto (default: the bundled model on the GPU, other models on the CPU), " +
+            "gpu (every local model on the GPU where the platform has one), or cpu. Takes effect on the next server restart.")
+        {
+            new Argument<string>("device") { HelpName = "auto|gpu|cpu" }
         });
 
         return model;

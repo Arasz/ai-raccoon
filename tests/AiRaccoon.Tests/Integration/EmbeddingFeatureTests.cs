@@ -53,7 +53,7 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
         var config = await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
             "local", null, null, TestContext.Current.CancellationToken, _clock);
 
-        config.Engine.ShouldBe("local:bundled");
+        config.Engine.ShouldStartWith("local:bundled#");
 
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "locally embedded project fact"),
@@ -71,9 +71,9 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
     public async Task Embedding_ConfigureLocal_CustomModelPath_OverridesTheBundledModel()
     {
         var custom = Path.Combine(Path.GetTempPath(), "ai-raccoon-custom-model",
-            Guid.NewGuid().ToString("N"), BundledModel.ModelFileName);
+            Guid.NewGuid().ToString("N"), TestData.MiniLmModelFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(custom)!);
-        File.Copy(BundledModel.ResolveModelPath(), custom);
+        File.Copy(TestData.MiniLmModelPath(), custom);
         try
         {
             var config = await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),

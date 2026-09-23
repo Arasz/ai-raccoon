@@ -22,7 +22,7 @@ public sealed class OnnxEmbeddingGeneratorSpecTests : IAsyncLifetime
 
     private static OnnxEmbeddingGenerator Build(string pooling = "mean", string normalization = "l2") =>
         new(
-            BundledModel.ResolveModelPath(),
+            TestData.MiniLmModelPath(),
             WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()),
             EmbeddingService.BundledDescriptor with { Pooling = pooling, Normalization = normalization },
             NullLogger<OnnxEmbeddingGenerator>.Instance);
@@ -67,7 +67,7 @@ public sealed class OnnxEmbeddingGeneratorSpecTests : IAsyncLifetime
     {
         var ex = Should.Throw<InvalidOperationException>(() =>
             new OnnxEmbeddingGenerator(
-                BundledModel.ResolveModelPath(),
+                TestData.MiniLmModelPath(),
                 WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()),
                 EmbeddingService.BundledDescriptor with { Pooling = "model-output", EmbeddingOutput = null },
                 NullLogger<OnnxEmbeddingGenerator>.Instance));

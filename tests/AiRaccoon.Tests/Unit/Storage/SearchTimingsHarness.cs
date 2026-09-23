@@ -55,6 +55,8 @@ internal static class SearchTimingsHarness
 
         public Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException("Not exercised by SearchAsync.");
 
+        public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) => Task.FromResult(false);
+
         public Task ReconcileVecDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException("Not exercised by SearchAsync.");
 

@@ -272,6 +272,31 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         JsonSerializer.Serialize(envelope.Data, McpJsonUtilities.DefaultOptions).ShouldNotContain("unranked");
     }
 
+    /// <summary>ADR-0108: the floor belongs to the engine that produced the cosines — granite scores
+    /// off-topic text up to 0.787, so 0.35 would keep everything.</summary>
+    [Theory]
+    [InlineData(0.75, 0)]
+    [InlineData(0.85, 2)]
+    public async Task Search_AppliesTheEnginesOwnRelevanceFloor_NotTheMiniLmConstant(double cosine, int served)
+    {
+        _store.StubResults = [new MemorySearchResult("h1", 1.0, "a.md", "first"), new MemorySearchResult("h2", 0.9, "b.md", "second")];
+        _store.StubEvidence = new Dictionary<string, RetrievalEvidence>(StringComparer.Ordinal)
+        {
+            ["h1"] = new RetrievalEvidence("h1", 1.0, [new LegRank("vector", 1)], cosine),
+            ["h2"] = new RetrievalEvidence("h2", 0.9, [new LegRank("vector", 2)], cosine)
+        };
+        _store.StubRelevanceFloor = 0.79;
+
+        var envelope = await _tools.Search("acme", "lighthouse lamp room", kind: "memory",
+            sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+
+        envelope.Data!.Results.Count.ShouldBe(served);
+        if (served == 0)
+        {
+            envelope.Data.Truncation.ShouldNotBeNull().ShouldContain(t => t.Floor == "absoluteRelevance" && Math.Abs(t.Threshold - 0.79) < 1e-9);
+        }
+    }
+
     private sealed class FakeStore : FakeMemoryStore
     {
         public IReadOnlyList<MemorySearchResult> StubResults { get; set; } = [];
@@ -282,9 +307,11 @@ public sealed class MemorySearchAbsoluteRelevanceTests
 
         public IReadOnlySet<string>? StubAllTermsMatched { get; set; }
 
+        public double? StubRelevanceFloor { get; set; }
+
         public override Task<SearchResults> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default) =>
             Task.FromResult(new SearchResults(StubResults, SearchTimings.Empty, null, StubEvidence, StubStats,
-                AllTermsMatched: StubAllTermsMatched));
+                AllTermsMatched: StubAllTermsMatched, RelevanceFloor: StubRelevanceFloor));
     }
 
     private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate

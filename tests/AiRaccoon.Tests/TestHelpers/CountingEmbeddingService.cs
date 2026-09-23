@@ -29,6 +29,8 @@ public sealed class CountingEmbeddingService : IEmbeddingService
 
     public string DocumentText(EmbeddingSettings settings, string text) => text;
 
+    public double? RelevanceFloor(EmbeddingSettings settings) => null;
+
     /// <summary>Drives a test through a manifest-sized budget without a real manifest on disk.</summary>
     public int? ChunkBudgetOverride { get; set; }
 

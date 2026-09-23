@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Reflection;
 using AiRaccoon.Core.Memory.Code;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
@@ -56,26 +57,17 @@ public sealed class DefaultCodeModelCommandTests
     ///     `default` activates is that a two-step hint is one people do not finish.
     /// </summary>
     [Fact]
-    public async Task ModelSetCodeDefault_WhenTheModelIsAlreadyDownloaded_ActivatesWithoutASecondCommand()
+    public async Task ModelSetCodeDefault_ActivatesTheBundledEngine_WithoutDownloadingAnything()
     {
-        var dataRoot = Path.Combine(Path.GetTempPath(), "ai-raccoon-code-default", Guid.NewGuid().ToString("N"));
-        var modelDir = Path.Combine(dataRoot, "models", "faxenoff__code-daemon-embed-v1");
-        Directory.CreateDirectory(modelDir);
-        File.WriteAllText(Path.Combine(modelDir, "sentencepiece.bpe.model"), "tokenizer");
-        File.WriteAllText(Path.Combine(modelDir, "model.onnx"), "model");
-        File.Copy(
-            Path.Combine(AppContext.BaseDirectory, "Resources", "ManifestFixtures", "code-daemon-embed-v1.json"),
-            Path.Combine(modelDir, EmbeddingManifest.FileName));
         var store = new FakeConfigStore();
 
         var (exit, outp, _) = await CliRun.RunAsync(
             ["model", "code", "set", "default"],
-            (parsed, streams, ct) => new SettingsCommands().ModelSetCodeDefaultAsync(
-                new ModelDownloadCommands(new UnusedHttpClientFactory()), store, dataRoot, streams, ct));
+            (parsed, streams, ct) => new SettingsCommands().ModelSetCodeDefaultAsync(store, streams, ct));
 
         exit.ShouldBe(0);
-        store.CodeActivated!.Value.Directory.ShouldBe(modelDir);
-        outp.ShouldContain("already downloaded");
+        store.CodeActivated!.Value.Directory.ShouldBe(BundledModel.SettingValue,
+            "the bundled engine is stored by name: its directory moves with every tool version");
         outp.ShouldNotContain("model set local",
             customMessage: "that hint points at the MEMORY engine and there is no second step to take here");
     }

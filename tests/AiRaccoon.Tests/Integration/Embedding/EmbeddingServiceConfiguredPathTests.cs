@@ -21,7 +21,7 @@ public sealed class EmbeddingServiceConfiguredPathTests : IDisposable
     public void CreateGenerator_UsesSettingsModelPath()
     {
         var custom = Path.Combine(_root, "custom.onnx");
-        File.Copy(BundledModel.ResolveModelPath(), custom);
+        File.Copy(TestData.MiniLmModelPath(), custom);
 
         var service = TestData.CreateEmbeddingService();
 

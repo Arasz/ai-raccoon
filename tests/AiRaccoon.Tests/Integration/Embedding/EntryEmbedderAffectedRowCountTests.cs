@@ -82,6 +82,8 @@ public sealed class EntryEmbedderAffectedRowCountTests : IDisposable
 
         public string DocumentText(EmbeddingSettings settings, string text) => text;
 
+        public double? RelevanceFloor(EmbeddingSettings settings) => null;
+
         public int ResolveChunkBudgetFor(EmbeddingSettings settings) => 512;
 
         public int ResolveDimensions(EmbeddingSettings settings) => 384;

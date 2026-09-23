@@ -325,6 +325,8 @@ public sealed class EmbedDrainServiceTests : IDisposable
         public Task<bool> DrainMigrationAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
+        public Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken) => Task.FromResult(false);
+
         public Task ReconcileVecDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 

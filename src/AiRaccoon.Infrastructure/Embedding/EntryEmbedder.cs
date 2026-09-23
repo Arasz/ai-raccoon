@@ -36,6 +36,29 @@ public sealed class EntryEmbedder(
     private long? _warnedNoProviderMigration;
 
     /// <inheritdoc />
+    public async Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var stored = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken).ConfigureAwait(false);
+        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        if (stored is null || string.IsNullOrWhiteSpace(settings.Provider)
+                           || string.Equals(stored, embeddings.EngineFingerprint(settings.Provider, settings.Model, settings.BaseUrl), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var open = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        if (open > 0)
+        {
+            return false;
+        }
+
+        await StartMigrationAsync(connection, settings.Provider, settings.Model, settings.BaseUrl, timeProvider.GetUtcNow(), cancellationToken)
+            .ConfigureAwait(false);
+        return true;
+    }
+
+    /// <inheritdoc />
     public async Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider,
         string? model, string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -319,7 +342,7 @@ public sealed class EntryEmbedder(
         var generator = embeddings.CreateGenerator(settings);
         var embedded = embeddings.TrimQueryToWindow(settings, query);
         var embedding = await generator.GenerateAsync([embedded], cancellationToken: cancellationToken).ConfigureAwait(false);
-        return new QueryVector(EmbeddingBlob.ToBytes(embedding[0].Vector));
+        return new QueryVector(EmbeddingBlob.ToBytes(embedding[0].Vector)) { RelevanceFloor = embeddings.RelevanceFloor(settings) };
     }
 
     public async Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,

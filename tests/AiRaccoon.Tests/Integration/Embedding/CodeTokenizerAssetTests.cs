@@ -19,10 +19,10 @@ public sealed class CodeTokenizerAssetTests
     [RetryFact]
     public void BundledAsset_MatchesThePinnedSha256()
     {
-        var path = CodeTokenizer.ResolveModelPath();
+        var path = TestData.CodeDaemonSentencePiecePath();
 
         Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant()
-            .ShouldBe(CodeTokenizer.ModelSha256);
+            .ShouldBe("3236c10b708765fdfd0720ea6ea932e1472450cd927b331107f05bfacdba7549");
     }
 
     [RetryFact]

@@ -23,9 +23,9 @@ public sealed class BundledModelGateTests
             "bundled embedding model missing or mismatched; run scripts/download-embedding-model.py " +
             "with network access or place a verified copy in src/AiRaccoon/Models/");
 
-        var modelPath = BundledModel.ResolveModelPath();
+        var modelPath = TestData.MiniLmModelPath();
         File.Exists(modelPath).ShouldBeTrue(modelPath);
-        BundledResource.Sha256Of(modelPath).ShouldBe(BundledModel.ModelSha256, StringCompareShould.IgnoreCase);
+        BundledResource.Sha256Of(modelPath).ShouldBe("4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474", StringCompareShould.IgnoreCase);
 
         var vocabPath = BundledModel.ResolveVocabPath();
         File.Exists(vocabPath).ShouldBeTrue(vocabPath);

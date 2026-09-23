@@ -158,4 +158,28 @@ public sealed class StructureFusionTests
 
     [Fact]
     public void DefaultAlpha_IsTheDocumentedBlend() => SearchParameterSettingsKeys.DefaultStructureAlpha.ShouldBe(0.5);
+
+    /// <summary>ADR-0108: granite scores unrelated text around 0.75, so ADR-0004's "no heading = 0"
+    /// would sink a heading-less note under any headed chunk. Rescaling so the engine's relevance
+    /// floor maps to 0 restores the scale that rule was measured on.</summary>
+    [Fact]
+    public void Rank_WithTheEnginesFloor_KeepsAHeadinglessNoteAboveUnrelatedHeadedChunks()
+    {
+        var ranked = StructureFusion.Rank(
+            [new VectorHit("note", 0.959), new VectorHit("rollback", 0.757)],
+            [new VectorHit("rollback", 0.80)],
+            alpha: 0.5, limit: 10, similarityFloor: 0.79);
+
+        ranked[0].Hash.ShouldBe("note");
+    }
+
+    [Fact]
+    public void Rank_WithoutAFloor_IsUnchanged()
+    {
+        var withDefault = StructureFusion.Rank([new VectorHit("a", 0.6)], [new VectorHit("a", 0.4)], 0.5, 10);
+        var withZero = StructureFusion.Rank([new VectorHit("a", 0.6)], [new VectorHit("a", 0.4)], 0.5, 10, similarityFloor: 0.0);
+
+        withDefault.Single().Score.ShouldBe(0.5, tolerance: 1e-12);
+        withZero.Single().Score.ShouldBe(0.5, tolerance: 1e-12);
+    }
 }

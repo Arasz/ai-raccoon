@@ -89,7 +89,7 @@ public sealed partial class EmbeddingService(
         ["input_ids", "attention_mask", "token_type_ids"],
         "last_hidden_state",
         null,
-        BundledModel.ModelFileName,
+        "model.onnx",
         []);
 
     public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings)
@@ -228,13 +228,14 @@ public sealed partial class EmbeddingService(
         return ManifestDescriptorFor(settings.Model)?.Dimensions ?? BundledDescriptor.Dimensions;
     }
 
-    /// <summary>The manifest descriptor for a local model directory, or null for bundled/legacy paths.</summary>
+    /// <summary>A local model setting as a path: the bundled engine's directory when it names the bundled engine.</summary>
+    private static string LocalModelPath(string? model) =>
+        BundledModel.IsBundled(model) ? BundledModel.ResolveDirectory() : Path.GetFullPath(model!);
+
+    /// <summary>The manifest descriptor for a local model directory (the bundled engine included), or null for a legacy .onnx file.</summary>
     private EngineDescriptor? ManifestDescriptorFor(string? model)
     {
-        if (string.IsNullOrWhiteSpace(model))
-        {
-            return null;
-        }
+        model = LocalModelPath(model);
 
         var full = Path.GetFullPath(model);
         return Directory.Exists(full) ? LoadManifestDescriptorCached(model, full) : null;
@@ -283,9 +284,26 @@ public sealed partial class EmbeddingService(
             : text;
     }
 
+    /// <inheritdoc />
+    public double? RelevanceFloor(EmbeddingSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return string.Equals(settings.Provider, "local", StringComparison.OrdinalIgnoreCase)
+            ? ManifestDescriptorFor(settings.Model)?.RelevanceFloor
+            : null;
+    }
+
     public string EngineFingerprint(string provider, string? model, string? baseUrl)
     {
         var lower = provider.ToLowerInvariant();
+        if (lower == "local" && BundledModel.IsBundled(model))
+        {
+            // ADR-0108: stable across installs (the tool store path carries the version), and
+            // changes exactly when the bundled model does — the manifest pins every file.
+            var bundledManifest = Path.Combine(BundledModel.ResolveDirectory(), EmbeddingManifest.FileName);
+            return $"local:bundled#{Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(bundledManifest))).ToLowerInvariant()}";
+        }
+
         if (lower == "local" && !string.IsNullOrWhiteSpace(model) && Directory.Exists(model))
         {
             var manifestPath = Path.Combine(Path.GetFullPath(model), EmbeddingManifest.FileName);
@@ -351,10 +369,11 @@ public sealed partial class EmbeddingService(
         var rawThreads = settingsStore?.GetSettingAsync(EmbeddingSettingsKeys.Threads, CancellationToken.None)
             .GetAwaiter().GetResult();
         var threads = ResolveThreadCount(rawThreads, Environment.ProcessorCount);
+        var device = EmbeddingDeviceSetting.Parse(settingsStore?.GetSettingAsync(EmbeddingSettingsKeys.Device, CancellationToken.None)
+            .GetAwaiter().GetResult());
+        var preferGpu = EmbeddingDeviceSetting.PrefersGpu(device, BundledModel.IsBundled(settings.Model));
 
-        var modelPath = string.IsNullOrWhiteSpace(settings.Model)
-            ? BundledModel.ResolveModelPath()
-            : Path.GetFullPath(settings.Model);
+        var modelPath = LocalModelPath(settings.Model);
 
         OnnxEmbeddingGenerator generator;
         if (Directory.Exists(modelPath))
@@ -364,7 +383,7 @@ public sealed partial class EmbeddingService(
             // drain reconciles vec0 to the engine's dimension before writing (WP4/D3).
             var descriptor = manifestDescriptor.Load(modelPath);
             var tokenizer = ResolveManifestTokenizer(modelPath)!;
-            generator = new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads);
+            generator = new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads, preferGpu);
         }
         else
         {
@@ -378,18 +397,19 @@ public sealed partial class EmbeddingService(
 
             var bundledTokenizer = _tokenizers.GetOrAdd("bundled",
                 _ => WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()));
-            generator = new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger, threads);
+            generator = new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger, threads, preferGpu);
         }
 
         // #522: the live confirmation the resolved thread count took effect.
         Log.EmbeddingSessionCreated(_logger, generator.IntraOpThreads, ThreadCountDisplay(generator.IntraOpThreads),
-            ThreadCountSource(rawThreads));
+            ThreadCountSource(rawThreads), generator.ExecutionProvider);
         return generator;
     }
 
     private IEmbeddingTokenizer? ResolveManifestTokenizer(string? model)
     {
-        if (string.IsNullOrWhiteSpace(model) || !Directory.Exists(model))
+        model = LocalModelPath(model);
+        if (!Directory.Exists(model))
         {
             return null;
         }
@@ -411,19 +431,15 @@ public sealed partial class EmbeddingService(
     /// <summary>The D6 content budget for a manifest model, or null when the model is not manifest-based.</summary>
     private int? ManifestContentBudget(string? model)
     {
-        if (string.IsNullOrWhiteSpace(model))
-        {
-            return null;
-        }
-
-        var full = Path.GetFullPath(model);
+        var full = LocalModelPath(model);
+        model = full;
         if (!Directory.Exists(full) || !File.Exists(Path.Combine(full, EmbeddingManifest.FileName)))
         {
             return null;
         }
 
         var descriptor = LoadManifestDescriptorCached(model, full);
-        return Math.Min(MaxManifestChunkTokens,
+        return descriptor.ChunkTokens ?? Math.Min(MaxManifestChunkTokens,
             descriptor.ContextWindowTokens - descriptor.SpecialTokenReservation);
     }
 
@@ -470,7 +486,7 @@ public sealed partial class EmbeddingService(
         ///     WP4/#524: <paramref name="Threads" /> is the raw int for aggregation; <paramref name="threadsDisplay" /> is the human phrase (docs/reference/logging-event-ids.md, 428).
         /// </summary>
         [LoggerMessage(EventId = 428, Level = LogLevel.Information,
-            Message = "Embedding session created: intra-op threads {ThreadsDisplay} ({Source})")]
-        public static partial void EmbeddingSessionCreated(ILogger logger, int Threads, string threadsDisplay, string source);
+            Message = "Embedding session created: intra-op threads {ThreadsDisplay} ({Source}), execution provider {ExecutionProvider}")]
+        public static partial void EmbeddingSessionCreated(ILogger logger, int Threads, string threadsDisplay, string source, string executionProvider);
     }
 }

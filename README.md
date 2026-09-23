@@ -32,6 +32,7 @@ flowchart LR
 
 What to do when you upgrade past each version. A version not listed here needs no action.
 
+- 1.47.0: the bundled embedding model is now granite-embedding-small-english-r2, for memory and code alike. On first start after upgrading, every bank re-embeds once on its own (the bank refuses tool calls until that finishes, minutes on a large bank), and a code corpus on the old default switches with `ai-raccoon model code set default`. [ADR-0108](docs/adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)
 - 1.45.0: every failure exit code is renumbered into two-digit categories, for example a missing bank is now `31` (was `22`), and `repair project-ids --apply` now exits non-zero when it does not converge. If a script or CI job checks `ai-raccoon` exit codes, update it from the [old → new table](docs/adr/0107-categorized-two-digit-exit-codes.md#old--new-mapping).
 - 1.44.0: `--attach` is removed. Delete it from your MCP client config, and **stop any server an older version started** before running the new one, because mixed versions are not supported. [How-to](docs/how-to/configure-ai-raccoon-server.md#backend-launch-attach-or-start-behind-the-identity-proof)
 - 1.44.0: a launch against a `--data-root` that has no bank no longer creates one. For a new data root, create the bank once with `ai-raccoon --data-root <path> serve`. [How-to](docs/how-to/configure-ai-raccoon-server.md#backend-launch-attach-or-start-behind-the-identity-proof)
@@ -41,6 +42,7 @@ What to do when you upgrade past each version. A version not listed here needs n
 
 ## What's new
 
+- One bundled embedding model for memory and code, granite-embedding-small-english-r2, which beats the old defaults on every retrieval eval, and runs on the GPU where available (macOS). (1.47.0) [ADR-0108](docs/adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)
 - `model download` accepts any model that ships a `tokenizer.json` (granite-embedding r2, gte-modernbert, jina-code, Qwen3-Embedding, EmbeddingGemma), and embeds with the model's query and document prompts. (1.46.0) [survey](docs/work/2026-09-23-embedding-model-survey.md)
 - Every failure has its own two-digit exit code, grouped by category (`ErrorCode.Bank.NoBank` = `31`). (1.45.0) [ADR-0107](docs/adr/0107-categorized-two-digit-exit-codes.md)
 - The proxy and settings commands attach only to a server that proves it holds this data root's identity key. (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md)

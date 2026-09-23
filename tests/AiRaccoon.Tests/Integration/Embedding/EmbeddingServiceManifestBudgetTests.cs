@@ -70,10 +70,11 @@ public sealed class EmbeddingServiceManifestBudgetTests
             NoOpMeasurementRecorder.Instance, TimeProvider.System);
 
     [RetryFact]
-    public void ResolveChunkBudgetFor_BundledLocal_Stays254()
+    public void ResolveChunkBudgetFor_BundledLocal_IsItsManifestsChunkTokens()
     {
-        Service().ResolveChunkBudgetFor(new EmbeddingSettings("local", null, null, null))
-            .ShouldBe(OnnxEmbeddingGenerator.MaxContentTokens);
+        // ADR-0108: the bundled manifest pins chunkTokens 254 — the size its retrieval was measured at —
+        // over the min(510, ctx − 2) its 8,190-token window would otherwise give.
+        Service().ResolveChunkBudgetFor(new EmbeddingSettings("local", null, null, null)).ShouldBe(254);
     }
 
     [RetryFact]
@@ -212,9 +213,14 @@ public sealed class EmbeddingServiceManifestBudgetTests
     }
 
     [RetryFact]
-    public void EngineFingerprint_LegacyAndBundled_AreUnchanged()
+    public void EngineFingerprint_Bundled_IsStableAndHashesTheBundledManifest_LegacyFileUnchanged()
     {
-        Service().EngineFingerprint("local", null, null).ShouldBe("local:bundled");
+        var manifest = File.ReadAllBytes(Path.Combine(BundledModel.ResolveDirectory(), EmbeddingManifest.FileName));
+        var expected = "local:bundled#" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(manifest)).ToLowerInvariant();
+
+        Service().EngineFingerprint("local", null, null).ShouldBe(expected);
+        Service().EngineFingerprint("local", BundledModel.SettingValue, null).ShouldBe(expected,
+            "memory's unset model and code's 'bundled' setting are the same engine");
         Service().EngineFingerprint("local", "/models/custom.onnx", null).ShouldBe("local:/models/custom.onnx");
     }
 
@@ -249,10 +255,10 @@ public sealed class EmbeddingServiceManifestBudgetTests
     }
 
     [RetryFact]
-    public void ResolveTokenizer_Bundled_IsTheWordPieceTokenizer()
+    public void ResolveTokenizer_Bundled_IsTheBundledTokenizerJson()
     {
         Service().ResolveTokenizer(new EmbeddingSettings("local", null, null, null))
-            .ShouldBeOfType<WordPieceEmbeddingTokenizer>();
+            .ShouldBeOfType<TokenizerJsonEmbeddingTokenizer>();
     }
 
     [RetryFact]

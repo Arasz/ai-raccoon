@@ -66,7 +66,12 @@ public sealed record EmbeddingManifest(
     // and onnx files. Optional so manifests written before D2 still parse.
     IReadOnlyList<ManifestFile>? ProvenanceFiles = null,
     // Prepended to stored text before embedding; the query-side twin is QueryInstruction.
-    string? DocumentInstruction = null)
+    string? DocumentInstruction = null,
+    // Cosine below which search treats a row as not relevant, calibrated for this model (ADR-0108);
+    // unset keeps SearchRelevance.AbsoluteRelevanceFloor, which was calibrated for MiniLM.
+    double? RelevanceFloor = null,
+    // Content-token chunk budget for memory text, overriding min(510, window − reservation) (ADR-0108).
+    int? ChunkTokens = null)
 {
     /// <summary>
     ///     The sidecar file name, pinned by amended D1: <c>ai-raccoon.manifest.json</c> — NOT

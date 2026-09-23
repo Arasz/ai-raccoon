@@ -1,7 +1,7 @@
 namespace AiRaccoon.Infrastructure.Embedding;
 
-/// <summary>Counts tokens the way the bundled code-daemon-embed-v1 counting tokenizer will
-/// (docs/work/2026-08-21-code-search-implementation-plan.md §3.3 unconfigured-engine default).</summary>
+/// <summary>Counts tokens the way the bundled engine embeds code (ADR-0108) — the
+/// chunk budget unit when no other code engine is configured.</summary>
 public interface ICodeTokenizer
 {
     int CountTokens(string text);
