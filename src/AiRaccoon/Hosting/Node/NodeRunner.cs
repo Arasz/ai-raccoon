@@ -55,7 +55,7 @@ internal partial class NodeRunner(
         {
             Log.McpTokenUnavailable(logger, tokenFile.Path);
             await streams.WriteErrorLineAsync($"ai-raccoon: {tokenFile.RefusalReason ?? $"cannot read or create the MCP token at {tokenFile.Path} — check its permissions, or remove it and start serve again"}");
-            return ErrorCode.Environment.TokenUnavailable;
+            return tokenFile.NotOwnerOnly ? ErrorCode.Environment.SecretNotPrivate : ErrorCode.Environment.TokenUnavailable;
         }
 
         // The identity key is the trust anchor a client verifies before it hands over the token; only
@@ -64,7 +64,7 @@ internal partial class NodeRunner(
         if (await identityKeyFile.EnsureAsync(ctx) is null)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {identityKeyFile.RefusalReason ?? $"cannot read or create the identity key at {identityKeyFile.Path} — check its permissions, or remove it and start serve again"}");
-            return ErrorCode.Environment.TokenUnavailable;
+            return identityKeyFile.NotOwnerOnly ? ErrorCode.Environment.SecretNotPrivate : ErrorCode.Environment.IdentityKeyUnavailable;
         }
 
         if (tokenFile.TightenedStateDirectory || identityKeyFile.TightenedStateDirectory)
@@ -121,13 +121,17 @@ internal partial class NodeRunner(
             var probeResolvingEncryptionKey = await encryptionKeyResolver.ProbeResolvingEncryptionKeyAsync(ctx);
             if (!probeResolvingEncryptionKey.IsSuccess)
             {
-                return ErrorCode.Key.Unresolved;
+                await streams.WriteErrorLineAsync(
+                    $"ai-raccoon: could not resolve the encryption key: {probeResolvingEncryptionKey.Exception?.Message ?? "no key source answered"}");
+                return CliFailureErrorCode.For(probeResolvingEncryptionKey.Exception, ErrorCode.Key.Unresolved);
             }
 
             var probeUsingEncryptionKey = await connectionFactory.ProbeUsingEncryptionKey(probeResolvingEncryptionKey.Key.Passphrase, ctx);
             if (!probeUsingEncryptionKey.IsCorrectKey)
             {
-                return ErrorCode.Bank.OpenFailed;
+                await streams.WriteErrorLineAsync(
+                    $"ai-raccoon: could not open the bank at {SqliteConnectionFactory.BankPathFor(descriptor.LaunchConfig.Options)}: {probeUsingEncryptionKey.Exception?.Message ?? "the key does not open it"}");
+                return CliFailureErrorCode.For(probeUsingEncryptionKey.Exception, ErrorCode.Bank.OpenFailed);
             }
 
             await embeddingAvailability.EnsureEmbeddingAvailabilityAsync(ctx);
@@ -256,7 +260,7 @@ internal partial class NodeRunner(
         Log.PortInUse(logger, descriptor.Port);
         await streams.WriteErrorLineAsync(
             $"ai-raccoon: port {descriptor.Port} is in use by a listener that did not prove it serves this data root — stop the listener yourself, or serve on another port (--port 0)");
-        return ErrorCode.Port.InUse;
+        return ErrorCode.Server.Unproven;
     }
 
     /// <summary>
@@ -268,10 +272,10 @@ internal partial class NodeRunner(
         {
             RestartOutcome.Foreign => (
                 $"ai-raccoon: port {descriptor.Port} is held by a listener that does not identify as an ai-raccoon server — stop it yourself, or serve on another port",
-                ErrorCode.Port.InUse),
+                ErrorCode.Port.ForeignListener),
             RestartOutcome.Unproven => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the listener did not prove it serves this data root — stop the listener yourself, then run serve again, or serve on another port (--port 0)",
-                ErrorCode.Port.InUse),
+                ErrorCode.Server.Unproven),
             RestartOutcome.NoToken => (
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: {descriptor.TokenFile.Path} holds no token, so it cannot be asked to stop — it may serve another data root; stop it " +
                 $"yourself, or" +

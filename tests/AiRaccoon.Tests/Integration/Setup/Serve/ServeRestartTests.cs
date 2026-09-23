@@ -75,7 +75,7 @@ public sealed class ServeRestartTests : IDisposable
     ///     no identify read, no shutdown request — and the refusal names the remedy.
     /// </summary>
     [RetryFact]
-    public async Task Restart_Bare_AgainstAnUnprovenHolder_RefusesExit3_SendsNoToken()
+    public async Task Restart_Bare_AgainstAnUnprovenHolder_RefusesUnproven_SendsNoToken()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -95,7 +95,7 @@ public sealed class ServeRestartTests : IDisposable
         fake.ShutdownRequests.ShouldBe(0);
         fake.ObservabilityRequests.ShouldBe(0,
             "an unproven listener may receive only the probe and the challenge (ADR-0106 D5), not the identify read");
-        exit.ShouldBe(ErrorCode.Port.InUse);
+        exit.ShouldBe(ErrorCode.Server.Unproven);
         run.Stderr.ShouldContain("did not prove");
         run.Stderr.ShouldContain("stop the listener");
         run.Stderr.ShouldNotContain("--attach");
@@ -189,7 +189,7 @@ public sealed class ServeRestartTests : IDisposable
     }
 
     [RetryFact]
-    public async Task AListenerThatWillNotIdentify_ReportsPortInUse_WithoutAskingItToStop()
+    public async Task AListenerThatWillNotIdentify_ReportsForeignListener_WithoutAskingItToStop()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -207,7 +207,7 @@ public sealed class ServeRestartTests : IDisposable
         // Nothing took the port: the same listener held it throughout.
         run.Stderr.ShouldContain("does not identify as an ai-raccoon");
         run.Stderr.ShouldNotContain("took the port");
-        exit.ShouldBe(ErrorCode.Port.InUse);
+        exit.ShouldBe(ErrorCode.Port.ForeignListener);
         fake.ShutdownRequests.ShouldBe(0);
         run.Stdout.ShouldBeEmpty();
     }

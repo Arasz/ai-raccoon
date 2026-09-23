@@ -333,7 +333,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             ["--data-root", _options.DataRoot, "--install-scope", "project", .. restart], HardCap, Ct);
 
         AssertTheAttackGotNothing(attack, attacker, LaunchPath.Restart);
-        run.ExitCode.ShouldBe(ErrorCode.Port.InUse, run.Stderr);
+        run.ExitCode.ShouldBe(ErrorCode.Server.Unproven, run.Stderr);
         run.Stderr.ShouldContain($"did not prove it holds this data root's identity key ({ExpectedReason(attacker, LaunchPath.Restart)}); nothing is asked to stop");
         run.Stderr.ShouldContain("stop the listener yourself");
     }

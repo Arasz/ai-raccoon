@@ -1,3 +1,6 @@
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Options;
 using System.Net;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
@@ -96,6 +99,87 @@ public sealed class NodeRunnerTests : IDisposable
     }
 
     [RetryFact]
+    public async Task UnusableIdentityKeyPath_ReportsIdentityKeyUnavailable_WithThePath()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        var keyPath = Path.Combine(_dataRoot, IdentityKeyFile.FileName);
+        Directory.CreateDirectory(keyPath);
+
+        lease.ReleaseForBind();
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var exit = await run.Exit;
+
+        exit.ShouldBe(ErrorCode.Environment.IdentityKeyUnavailable);
+        run.Stderr.ShouldContain(keyPath);
+        run.Stderr.ShouldNotContain("   at ");
+    }
+
+    [RetryFact]
+    public async Task AStateDirectoryOthersCanWrite_ReportsSecretNotPrivate()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("owner-only modes are POSIX");
+            return;
+        }
+
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        File.SetUnixFileMode(_dataRoot, (UnixFileMode)0b111_111_111);
+
+        lease.ReleaseForBind();
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var exit = await run.Exit;
+
+        exit.ShouldBe(ErrorCode.Environment.SecretNotPrivate);
+        run.Stderr.ShouldContain("not owner-only");
+    }
+
+    /// <summary>A key source that cannot be read says so on stderr and exits the Key case, instead of a silent exit.</summary>
+    [RetryFact]
+    public async Task ACorruptEncryptionSourceSidecar_ReportsItAndExitsSourceSidecarInvalid()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        var bankPath = SqliteConnectionFactory.BankPathFor(new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
+        Directory.CreateDirectory(Path.GetDirectoryName(bankPath)!);
+        File.WriteAllText(EncryptionSourceSidecar.PathFor(bankPath), "{not json");
+
+        lease.ReleaseForBind();
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var exit = await run.Exit;
+
+        exit.ShouldBe(ErrorCode.Key.SourceSidecarInvalid);
+        run.Stderr.ShouldContain("corrupt");
+        run.Stderr.ShouldNotContain("   at ");
+    }
+
+    /// <summary>A bank that will not open says so on stderr and exits the Bank case, instead of a silent exit.</summary>
+    [RetryFact]
+    public async Task ABankThatIsNotADatabase_ReportsItAndExitsCorrupted()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        var bankPath = SqliteConnectionFactory.BankPathFor(new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
+        Directory.CreateDirectory(Path.GetDirectoryName(bankPath)!);
+        await File.WriteAllBytesAsync(bankPath, [.. Enumerable.Range(0, 8192).Select(i => (byte)(i * 31 % 251))],
+            TestContext.Current.CancellationToken);
+
+        lease.ReleaseForBind();
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var exit = await run.Exit;
+
+        exit.ShouldBe(ErrorCode.Bank.Corrupted);
+        run.Stderr.ShouldContain(bankPath);
+        run.Stderr.ShouldNotContain("   at ");
+    }
+
+    [RetryFact]
     public async Task UnusableTokenPath_ReportsMcpTokenUnavailable_WithThePathAndNoStackTrace()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
@@ -150,7 +234,7 @@ public sealed class NodeRunnerTests : IDisposable
     ///     keeps serving. The refusal names the remedy, never a token.
     /// </summary>
     [RetryFact]
-    public async Task Serve_OnAnotherRootsServer_RefusesExit3_WithTheRemedy()
+    public async Task Serve_OnAnotherRootsServer_RefusesUnproven_WithTheRemedy()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
@@ -165,7 +249,7 @@ public sealed class NodeRunnerTests : IDisposable
             await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString()]);
             var secondExit = await second.Exit;
 
-            secondExit.ShouldBe(ErrorCode.Port.InUse);
+            secondExit.ShouldBe(ErrorCode.Server.Unproven);
             second.Stdout.ShouldBeEmpty();
             second.Stderr.ShouldContain("did not prove");
             second.Stderr.ShouldContain("stop the listener");
@@ -183,7 +267,7 @@ public sealed class NodeRunnerTests : IDisposable
     }
 
     [RetryFact]
-    public async Task ConcurrentStartsOnSamePort_ExactlyOneOwns_TheOtherAttachesOrReturnsPortInUse()
+    public async Task ConcurrentStartsOnSamePort_ExactlyOneOwns_TheOtherAttachesOrIsRefused()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         var secondRoot = TestData.CreateTempRoot("ai-raccoon-serve-race");
@@ -222,7 +306,9 @@ public sealed class NodeRunnerTests : IDisposable
                 await second.DisposeAsync();
             }
 
-            exits.ShouldAllBe(exit => exit == ErrorCode.Ok.Success || exit == ErrorCode.Port.InUse);
+            // A loser that probes before the winner can answer the identity challenge is refused as
+            // unproven; one that loses the bind itself is refused as in use. Both are "the other".
+            exits.ShouldAllBe(exit => exit == ErrorCode.Ok.Success || exit == ErrorCode.Port.InUse || exit == ErrorCode.Server.Unproven);
             exits.Count(exit => exit == ErrorCode.Ok.Success).ShouldBeGreaterThanOrEqualTo(1);
             if (exits[0] == ErrorCode.Ok.Success)
             {
