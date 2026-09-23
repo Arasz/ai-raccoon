@@ -5,26 +5,25 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// <summary>Maps a context string to the entries-table bucket columns (scope/project/label/workspace).</summary>
 internal static class EntryBucket
 {
-    public static (string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId) For(
-        string context, string projectId)
+    public static BucketColumns For(string context, string projectId)
     {
         if (context == ContextNaming.SharedContext)
         {
             // Deliberately not routed through ContextScope: a direct write to the shared tier is an
             // open owner decision (2026-08-14 project-scope review, WP2), unlike the delete path,
             // which refuses it.
-            return ("shared", projectId, null, null);
+            return new BucketColumns("shared", projectId, null, null);
         }
 
         if (context.StartsWith("project:", StringComparison.Ordinal))
         {
             ContextScope.RequireWithinProject(context, projectId);
-            return ("project", projectId, null, null);
+            return new BucketColumns("project", projectId, null, null);
         }
 
         if (context.StartsWith("workspace:", StringComparison.Ordinal))
         {
-            return (null, projectId, null, context["workspace:".Length..]);
+            return new BucketColumns(null, projectId, null, context["workspace:".Length..]);
         }
 
         // Mirrors MemorySql.ContextKeyFor: the label's project segment is stripped, so the text
@@ -36,10 +35,10 @@ internal static class EntryBucket
             if (colon > 0)
             {
                 ContextScope.RequireWithinProject(context, projectId);
-                return ("custom", projectId, rest[(colon + 1)..], null);
+                return new BucketColumns("custom", projectId, rest[(colon + 1)..], null);
             }
         }
 
-        return ("custom", projectId, context, null);
+        return new BucketColumns("custom", projectId, context, null);
     }
 }

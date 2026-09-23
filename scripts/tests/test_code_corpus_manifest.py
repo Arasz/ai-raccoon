@@ -251,8 +251,34 @@ class TestHeldOutFamilyCount:
         assert validate_manifest(manifest, root) == []
 
 
-def test_size_bands_constant_matches_the_plan():
-    assert SIZE_BANDS == {"small": (20, 80), "medium": (150, 400), "large": (600, 1500)}
+def test_size_bands_and_licenses_come_from_the_seed():
+    from retrieval_tuning import repo_data
+
+    seed = repo_data.CORPORA["code-eval-corpus"]
+    assert SIZE_BANDS == {band: tuple(bounds) for band, bounds in seed["sizeBands"].items()}
+    assert ALLOWED_LICENSES == set(seed["allowedLicenses"])
+
+
+class TestSelfHeldOut:
+    def test_a_pinned_path_that_is_not_a_self_row_fails(self, tmp_path):
+        manifest, root = build_valid_corpus(tmp_path)
+        manifest["selfHeldOut"] = ["src/Widgets/Gone.cs"]
+        problems = validate_manifest(manifest, root)
+        assert any("selfHeldOut" in p and "src/Widgets/Gone.cs" in p for p in problems), problems
+
+    def test_a_pinned_self_row_passes(self, tmp_path):
+        manifest, root = build_valid_corpus(tmp_path)
+        manifest["selfHeldOut"] = ["src/Widgets/BigGizmo.cs"]
+        assert validate_manifest(manifest, root) == []
+
+    def test_the_committed_manifest_pins_the_seed_held_out_paths(self):
+        import json
+
+        from retrieval_tuning import repo_data
+
+        repo = Path(__file__).resolve().parents[2]
+        manifest = json.loads((repo / CODE_CORPUS_DIR / "MANIFEST.json").read_text())
+        assert manifest.get("selfHeldOut") == repo_data.CORPORA["code-eval-corpus"]["selfHeldOut"]
 
 
 def test_a_row_without_a_snapshot_under_files_is_rejected(tmp_path):

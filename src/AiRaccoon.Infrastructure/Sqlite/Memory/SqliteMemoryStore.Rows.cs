@@ -76,6 +76,9 @@ public sealed partial class SqliteMemoryStore
         public int TotalChunks { get; init; }
     }
 
+    /// <summary>A vector row carrying its alpha-fused rank score and, when available, its own raw content cosine.</summary>
+    internal readonly record struct RankedVectorRow(VectorRow Row, double Score, double? ContentCosine);
+
     private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section, string? SourceType, string? HeadingPath);
 
     private sealed record DeleteRecomputeRow(string? Scope, string? ContextLabel, string? WorkspaceId, string? SourceFile, long ChunkIndex);
@@ -104,4 +107,7 @@ public sealed partial class SqliteMemoryStore
 
         public int? TtlDays { get; init; }
     }
+
+    /// <summary>A source_file classified into its SourceType and normalized locator.</summary>
+    private readonly record struct SourceClassification(SourceType Type, string Locator);
 }

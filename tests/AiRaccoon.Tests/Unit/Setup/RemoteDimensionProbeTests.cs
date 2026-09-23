@@ -26,7 +26,7 @@ public sealed class RemoteDimensionProbeTests
     {
         var store = new FakeConfigStore();
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
+        var ex = await Should.ThrowAsync<EmbeddingDimensionMismatchException>(() =>
             Run(["model", "embedding", "set", "openai", "some-model", "--api-key", "k", "--dims", "1024"], store, Probe(384)));
 
         ex.Message.ShouldContain("1024");
@@ -58,7 +58,7 @@ public sealed class RemoteDimensionProbeTests
     {
         var store = new FakeConfigStore();
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
+        var ex = await Should.ThrowAsync<EmbeddingDimensionMismatchException>(() =>
             Run(["model", "embedding", "set", "openai", "some-model", "--api-key", "k"], store, Probe(3072)));
 
         ex.Message.ShouldContain("3072");
@@ -83,7 +83,7 @@ public sealed class RemoteDimensionProbeTests
     {
         var store = new FakeConfigStore();
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(() =>
+        var ex = await Should.ThrowAsync<EmbeddingEndpointUnreachableException>(() =>
             Run(["model", "embedding", "set", "openai", "some-model", "--api-key", "k", "--dims", "1024"], store,
                 new ThrowingProbe()));
 

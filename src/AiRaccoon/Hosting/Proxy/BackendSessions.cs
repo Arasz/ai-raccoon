@@ -152,8 +152,9 @@ public sealed partial class BackendSessions(
             var reason = acquired.Fallback
                 ? $"the listener on port {config.Port} did not prove it serves this data root ({acquired.ProofFailure?.ToString() ?? "no key"}) and no private backend could be started (serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})"
                 : $"no MCP backend at {ServerProbe.EndpointFor(config.Port)} (serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})";
-            throw new BackendUnavailableException(Unavailable(
-                reason + (acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty)));
+            throw new BackendUnavailableException(
+                acquired.Fallback ? ErrorCode.Reach.PrivateFallbackFailed : ErrorCode.Reach.BackendUnavailable,
+                Unavailable(reason + (acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty)));
         }
 
         if (acquired.Fallback)
@@ -169,7 +170,7 @@ public sealed partial class BackendSessions(
             }
         }
 
-        var token = _tokenFile.Read() ?? throw new BackendUnavailableException(Unavailable(
+        var token = _tokenFile.Read() ?? throw new BackendUnavailableException(ErrorCode.Server.NoToken, Unavailable(
             acquired.Fallback
                 ? $"the private backend at {acquired.Result.Url} is listening but {_tokenFile.Path} holds no token"
                 : $"the backend at {acquired.Result.Url} is listening but {_tokenFile.Path} holds no token — a serve on another data root may own port {config.Port}"));
@@ -284,7 +285,7 @@ public sealed partial class BackendSessions(
     private async Task<AcquireOutcome> AcquireBackend(CancellationToken ctx)
     {
         var executable = BackendLaunchArguments.Executable(processPath) ?? throw new BackendUnavailableException(
-            Unavailable(BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)));
+            ErrorCode.Reach.AutoStartUnsupported, Unavailable(BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)));
 
         BankPresenceGuard.EnsureExists(config.Options);
 
@@ -300,7 +301,7 @@ public sealed partial class BackendSessions(
         }
         catch (BackendStartException ex)
         {
-            throw new BackendUnavailableException(Unavailable(ex.Message));
+            throw new BackendUnavailableException(ErrorCode.Reach.StartFailed, Unavailable(ex.Message));
         }
     }
 
@@ -315,7 +316,7 @@ public sealed partial class BackendSessions(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            throw new BackendUnavailableException(Unavailable(
+            throw new BackendUnavailableException(ErrorCode.Server.SessionRefused, Unavailable(
                 $"the backend at {endpoint} would not open a session ({ex.Message}) — check that {_tokenFile.Path} holds the token it minted"));
         }
     }

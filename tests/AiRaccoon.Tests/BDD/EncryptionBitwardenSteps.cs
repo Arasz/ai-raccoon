@@ -172,7 +172,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     [Then("^the command errors with a message to install bws and configure a token$")]
     public void ThenCommandErrorsWithInstallGuidance()
     {
-        _lastCli.Exit.ShouldBe(1);
+        _lastCli.Exit.ShouldBe(ErrorCode.Key.BwsNotInstalled);
         _lastCli.Err.ShouldContain("bws not found");
         _lastCli.Err.ShouldContain("install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN");
     }
@@ -180,7 +180,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     [Then("^no encryption source is changed$")]
     public async Task ThenNoEncryptionSourceChanged()
     {
-        _lastCli.Exit.ShouldBe(1);
+        _lastCli.Exit.ShouldNotBe(ErrorCode.Ok.Success);
         File.Exists(Ctx.SidecarPath).ShouldBeFalse();
         (await Ctx.ConfigStore.GetSettingAsync(EncryptionSettingsKeys.Source)).ShouldBeNull();
     }
@@ -235,7 +235,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
     [Then("^the command errors with the bws failure message$")]
     public void ThenCommandErrorsWithBwsFailure()
     {
-        _lastCli.Exit.ShouldBe(1);
+        _lastCli.Exit.ShouldBe(ErrorCode.Key.BwsFailed);
         _lastCli.Err.ShouldContain("bws failed (exit 1)");
         _lastCli.Err.ShouldContain("connection refused");
     }

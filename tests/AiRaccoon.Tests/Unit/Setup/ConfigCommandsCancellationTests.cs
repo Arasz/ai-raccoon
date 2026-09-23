@@ -25,7 +25,7 @@ public sealed class ConfigCommandsCancellationTests
         var (exit, outp, err) = await CliRun.RunAsync(["settings", "sweep", "show"],
             (parsed, streams, _) => commands.RunAsync(parsed, streams, cts.Token));
 
-        exit.ShouldBe(ExitCode.Interrupted);
+        exit.ShouldBe(ErrorCode.Ok.SIGC);
         exit.ShouldBe(130);
         outp.ShouldBeEmpty();
         err.ShouldContain("changed nothing");
@@ -34,13 +34,13 @@ public sealed class ConfigCommandsCancellationTests
     /// <summary>Positive control for the filter: an OperationCanceledException whose caller token is
     /// live is not a Ctrl-C (a timeout, say), so it is a failed command, not an interrupt.</summary>
     [Fact]
-    public async Task CancellationWithoutACancelledCallerToken_ExitsCommandFailed()
+    public async Task CancellationWithoutACancelledCallerToken_ExitsTimeout()
     {
         var commands = TestData.CreateConfigCommands(new CancelledStore(), settings: new SettingsCommands());
 
         var (exit, _, _) = await CliRun.RunAsync(["settings", "sweep", "show"], commands);
 
-        exit.ShouldBe(ExitCode.CommandFailed);
+        exit.ShouldBe(ErrorCode.Internal.Timeout);
     }
 
     /// <summary>Stands in for the auto-start acquire: it observes the caller's token exactly where the

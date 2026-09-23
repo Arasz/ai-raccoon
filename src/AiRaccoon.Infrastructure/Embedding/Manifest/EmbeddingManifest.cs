@@ -2,8 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace AiRaccoon.Infrastructure.Embedding.Manifest;
 
-/// <summary>Tokenizer families the manifest contract knows (D5: bert-wordpiece + sentencepiece
-/// required; tokenizer-json gated on an ML.Tokenizers capability check and deferred).</summary>
+/// <summary>Tokenizer families the manifest contract knows: bert-wordpiece (vocab.txt),
+/// sentencepiece (.model) and tokenizer-json (a Hugging Face tokenizer.json).</summary>
 public enum TokenizerFamily
 {
     BertWordpiece,
@@ -14,8 +14,8 @@ public enum TokenizerFamily
 /// <summary>
 ///     Pooling strategies the engine can apply (D1): <see cref="ModelOutput" /> consumes a
 ///     graph-computed pooled output (e.g. bge-m3's <c>sentence_embedding</c>); the others pool
-///     the token-level output client-side. <see cref="LastToken" /> is pass-through only — no
-///     consumer in scope.
+///     the token-level output client-side; <see cref="LastToken" /> reads the final real token
+///     (decoder embedders such as Qwen3-Embedding).
 /// </summary>
 public enum PoolingMode
 {
@@ -64,7 +64,9 @@ public sealed record EmbeddingManifest(
     MRLInfo? MRL = null,
     // D2: config.json + tokenizer_config.json, trust-on-first-download pinned like the tokenizer
     // and onnx files. Optional so manifests written before D2 still parse.
-    IReadOnlyList<ManifestFile>? ProvenanceFiles = null)
+    IReadOnlyList<ManifestFile>? ProvenanceFiles = null,
+    // Prepended to stored text before embedding; the query-side twin is QueryInstruction.
+    string? DocumentInstruction = null)
 {
     /// <summary>
     ///     The sidecar file name, pinned by amended D1: <c>ai-raccoon.manifest.json</c> — NOT

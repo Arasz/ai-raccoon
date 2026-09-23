@@ -26,8 +26,8 @@ AiRaccoon stores settings directly in the SQLite `memory.db` settings table. Env
 
 Two `--transport` values were removed outright
 ([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)). On a bare launch,
-`stdio` and `https` are invalid values and exit 15 (`stdio` with a hint); after
-`serve`, which takes no `--transport` at all, the option is unparseable and exits 9. A bare `--transport http` still parses but launches the
+`stdio` and `https` exit `14` (`Usage.RemovedTransport`, `stdio` with a hint); after
+`serve`, which takes no `--transport` at all, the option is unparseable and exits `11` (`Usage.Unparseable`). A bare `--transport http` still parses but launches the
 proxy like any bare run. Full servers come only from `serve`.
 
 ---
@@ -86,14 +86,14 @@ cannot prove it holds this root's identity key is treated as untrusted
 
 - The proxy and settings verbs fall back to a private, proof-gated backend instead —
   never a secret byte reaches the unproven listener.
-- `serve` itself refuses with exit code `3` after the proof attempt, naming the manual
-  remedy (stop the listener yourself, or pass `--port 0` for a private one) — never a
-  flag, since `--attach` no longer exists (passing it is an unrecognized argument, exit
-  9).
+- `serve` itself refuses with exit code `50` (`Server.Unproven`) after the proof attempt,
+  naming the manual remedy (stop the listener yourself, or pass `--port 0` for a private
+  one) — never a flag, since `--attach` no longer exists (passing it is an unrecognized
+  argument, exit `11`, `Usage.Unparseable`).
 
 A `--data-root` that resolves to neither the default root nor an existing bank refuses
 before any of this — a client auto-launch never mints a bank at a typo'd path (F39,
-`ExitCode.NoBank` = `22`), with a line naming the fix:
+`ErrorCode.Bank.NoBank` = `31`), with a line naming the fix:
 `ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon --data-root <path> serve', or check --data-root for a typo` (a project-scope launch adds `--install-scope project` before `serve`).
 
 ### Idle watchdog
@@ -123,7 +123,7 @@ the proxy itself shuts down.
 
 > **Upgrading from 1.43 or earlier to 1.44.0 is not zero-downtime.** A pre-1.44 server
 > cannot answer the identity proof, so `serve --restart` from the new binary treats it as
-> an unproven listener and refuses with exit code `3`. Stop the old server yourself
+> an unproven listener and refuses with exit code `50` (`Server.Unproven`). Stop the old server yourself
 > (for example `kill $(lsof -t -i :7721 -sTCP:LISTEN)`, or wait for its idle timeout), then
 > start the new one. On its first run the new `serve` moves the old top-level `mcp-token`
 > into the bank state directory, and tightens a state directory that others can read
@@ -240,17 +240,28 @@ delivered never reports success:
 
 | Exit code | Meaning |
 |---|---|
-| `17` | the server refused the loopback token — it may serve another data root |
-| `18` | the server could not be reached or auto-started within the acquire budget |
-| `23` | the server answered but failed with a 5xx — a server-side fault, distinct from `15` (`InvalidArgument`, "you mistyped") |
-| `25` | the settings server refused a model verb (`settings model reset`, `model embedding set`) because a model migration outbox row is open (ADR-0076); every MCP tool call is refused until it finishes, and nothing changed |
-| `130` | the command was cancelled before it finished (Ctrl-C / SIGTERM); the command changed nothing |
+| `13` | `Usage.UndialablePort` — `--port` is 0 or outside 1-65535 on a path that must dial a fixed port |
+| `17` | `Usage.RequestRejected` — the server rejected the request as malformed (HTTP 400) for a reason the CLI pre-flight did not catch |
+| `31` | `Bank.NoBank` — no bank file exists at the resolved path; a client auto-launch refuses rather than minting one at a non-default root (F39) |
+| `51` | `Server.NoToken` — this data root holds no token, so the server on the port cannot be asked anything |
+| `53` | `Server.RequestTokenRefused` — the server refused the loopback token — it may serve another data root |
+| `57` | `Server.EndpointMissing` — the server predates this verb (404 on its endpoint) |
+| `59` | `Server.MigrationRefused` — the settings server refused a model verb (`settings model reset`, `model embedding set`) because a model migration outbox row is open (ADR-0076); every MCP tool call is refused until it finishes, and nothing changed |
+| `60` | `Reach.Unavailable` — no settings server answered at the port within the acquire budget, and none could be started there |
+| `62` | `Reach.StoppedAnswering` — a settings server was acquired but a request failed at the transport; the write certainly did not land |
+| `64` | `Reach.PrivateFallbackFailed` — the listener on the port did not prove it serves this data root, and the private fallback server could not be started either |
+| `65` | `Reach.StartFailed` — the backend executable could not be started as a process |
+| `66` | `Reach.AutoStartUnsupported` — this process cannot auto-start a backend (launched through the dotnet host, or its executable path is unknown) |
+| `91` | `Internal.ServerError` — the server answered but failed with a 5xx — a server-side fault, distinct from `10` (`Usage.InvalidValue`, "you mistyped") |
+| `92` | `Internal.UnusableResponse` — the server answered with a status or body the CLI cannot use |
+| `130` | `Ok.SIGC` — the command was cancelled before it finished (Ctrl-C / SIGTERM); the command changed nothing |
 
-Two codes apply to every command, not just this channel. `15` (`InvalidArgument`) means a value
-you passed was rejected, including a `--port` the command cannot dial and a 400 from the server.
-`27` (`CommandFailed`) means the command failed for a reason no other code names: an I/O fault, a
-server answer it could not use, or a bug. It is never a bad argument, so a script can tell "fix
-the call" from "look at stderr".
+Two categories apply to every command, not just this channel ([ADR-0107](../adr/0107-categorized-two-digit-exit-codes.md)).
+Any `Usage.*` code (10-17) means a value you passed was rejected — a bad enum, an undialable
+`--port`, or a 400 the CLI's own checks did not catch. Any `Internal.*` code (90-95) means the
+command failed for a reason no other code names: an I/O fault, a server answer it could not use,
+or a bug. `Internal` is never a bad argument, so a script can tell "fix the call" from "look at
+stderr" by checking the tens digit.
 
 **Why it works this way.** Two processes writing one SQLite file is a lock-contention problem nobody
 chose; it accumulated one command family at a time. Routing every settings write through the server
@@ -428,19 +439,25 @@ represent, so recreating it is a data-loss decision, not a schema decision — o
 with the bank in front of you.
 
 It opens the bank **read-only** and does not modify it, so it is safe to run against a live bank or
-a backup. Exit code is `0` when healthy, non-zero on a mismatch (`19`/`20`/`22`), and `24` while a
+a backup. Exit code is `0` when healthy, non-zero on a mismatch (`34`/`35`/`31`), and `36` while a
 model migration is open (schema shape is still healthy), so it composes into a script:
 
 | Exit code | Meaning |
 |---|---|
-| `0` | HEALTHY — including `model migration: none open` |
-| `1` | the encryption key could not be resolved |
-| `2` | the bank could not be opened read-only |
-| `19` | SHAPE MISMATCH — the bank's actual schema differs from this binary's DDL |
-| `20` | the bank's `user_version` is newer than this binary supports |
-| `22` | no bank file exists at the resolved path — distinct from HEALTHY, so a wrong `--data-root` is never mistaken for a healthy bank. A client auto-launch (the proxy, a settings verb) returns the same code when it refuses to mint one at a non-default root |
-| `24` | MODEL MIGRATION OPEN — an embedding-engine re-embed is in progress; every MCP tool call is refused until it finishes (ADR-0076). Only reported when the schema shape is healthy (`19`/`20` take precedence), so `exit == 24` is itself a positive statement that the shape is clean. Scripts that want the old semantics test `rc == 0 || rc == 24` |
-| `26` | the bank file exists but is not a SQLite database — corrupt, or not readable with the resolved encryption key; restore it from a backup or check `--data-root` |
+| `0` | `Ok.Success` — HEALTHY, including `model migration: none open` |
+| `20` | `Key.Unresolved` — the encryption key could not be resolved |
+| `23` | `Key.BwsNotInstalled` — the Bitwarden CLI (`bws`) is not on `PATH` or cannot be started |
+| `24` | `Key.BwsTimedOut` — `bws` did not answer within its bound (5 s presence, 15 s fetch) |
+| `25` | `Key.BwsFailed` — `bws` ran but gave nothing usable (non-zero exit or empty output) |
+| `26` | `Key.SecretNotAKey` — the Bitwarden secret is not a parseable OpenSSH ed25519 private key |
+| `27` | `Key.SourceSidecarInvalid` — the `memory.db.source` sidecar is corrupt, names an unknown source, or is `bitwarden` without a secret id |
+| `30` | `Bank.OpenFailed` — the bank could not be opened read-only |
+| `31` | `Bank.NoBank` — no bank file exists at the resolved path — distinct from HEALTHY, so a wrong `--data-root` is never mistaken for a healthy bank. A client auto-launch (the proxy, a settings verb) returns the same code when it refuses to mint one at a non-default root |
+| `32` | `Bank.Corrupted` — the bank file exists but is not a SQLite database — corrupt, or not readable with the resolved encryption key; restore it from a backup or check `--data-root` |
+| `33` | `Bank.Busy` — the bank is locked or busy (another process holds it); retry |
+| `34` | `Bank.SchemaMismatch` — SHAPE MISMATCH: the bank's actual schema differs from this binary's DDL |
+| `35` | `Bank.SchemaNewerThanBinary` — the bank's `user_version` is newer than this binary supports |
+| `36` | `Bank.MigrationOpen` — MODEL MIGRATION OPEN: an embedding-engine re-embed is in progress; every MCP tool call is refused until it finishes (ADR-0076). Only reported when the schema shape is healthy (`34`/`35` take precedence), so `exit == 36` is itself a positive statement that the shape is clean. Scripts that want the old semantics test `rc == 0 || rc == 36` |
 
 If the bank is encrypted and the passphrase cannot be resolved, that is reported as a *read* failure
 and is distinguishable from a shape problem — a locked bank is not a broken one.

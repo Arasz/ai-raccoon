@@ -63,7 +63,7 @@ public sealed class WatchServiceTests
 
         await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
 
-        stack.Store.Watches.ShouldContainKey((Project, dir.Path));
+        stack.Store.Watches.ShouldContainKey(new WatchKey(Project, dir.Path));
         var status = (await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken)).Single();
         status.Path.ShouldBe(dir.Path);
         status.State.ShouldBe(WatchState.Scanning);
@@ -82,7 +82,7 @@ public sealed class WatchServiceTests
 
         await stack.Service.AddAsync(Loser, dir.Path, TestContext.Current.CancellationToken);
 
-        stack.Store.Watches.ShouldContainKey((Loser, dir.Path));
+        stack.Store.Watches.ShouldContainKey(new WatchKey(Loser, dir.Path));
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public sealed class WatchServiceTests
 
         await stack.Service.AddAsync(Loser, dir.Path, TestContext.Current.CancellationToken);
 
-        stack.Store.Watches.ShouldContainKey((Loser, dir.Path));
+        stack.Store.Watches.ShouldContainKey(new WatchKey(Loser, dir.Path));
     }
 
     [Fact]
@@ -135,8 +135,8 @@ public sealed class WatchServiceTests
         outcome.Pruned.ShouldBe([inner]);
         outcome.AbsorbedBy.ShouldBeNull();
         stack.Store.Watches.Count.ShouldBe(1);
-        stack.Store.Watches.ShouldContainKey((Project, root.Path));
-        stack.Store.Watches.ShouldNotContainKey((Project, inner));
+        stack.Store.Watches.ShouldContainKey(new WatchKey(Project, root.Path));
+        stack.Store.Watches.ShouldNotContainKey(new WatchKey(Project, inner));
         // Runtime state for the pruned watch is gone; only the broader watch reports status.
         var statuses = await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken);
         statuses.ShouldHaveSingleItem();
@@ -159,8 +159,8 @@ public sealed class WatchServiceTests
 
         ex.CoveringPath.ShouldBe(root.Path);
         stack.Store.Watches.Count.ShouldBe(1);
-        stack.Store.Watches.ShouldContainKey((Project, root.Path));
-        stack.Store.Watches.ShouldNotContainKey((Project, inner));
+        stack.Store.Watches.ShouldContainKey(new WatchKey(Project, root.Path));
+        stack.Store.Watches.ShouldNotContainKey(new WatchKey(Project, inner));
     }
 
     [Fact]
@@ -178,8 +178,8 @@ public sealed class WatchServiceTests
 
         outcome.Pruned.ShouldBeEmpty();
         stack.Store.Watches.Count.ShouldBe(2);
-        stack.Store.Watches.ShouldContainKey((Project, repoA.Path));
-        stack.Store.Watches.ShouldContainKey((Project, repoB.Path));
+        stack.Store.Watches.ShouldContainKey(new WatchKey(Project, repoA.Path));
+        stack.Store.Watches.ShouldContainKey(new WatchKey(Project, repoB.Path));
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public sealed class WatchServiceTests
             TestContext.Current.CancellationToken);
 
         stack.Store.Watches.Count.ShouldBe(1);
-        stack.Store.Watches.ShouldContainKey((Project, dir.Path));
+        stack.Store.Watches.ShouldContainKey(new WatchKey(Project, dir.Path));
     }
 
     [Fact]

@@ -1,0 +1,65 @@
+[
+  {
+    "id": "material-components-web-001",
+    "category": "behaviour-nl",
+    "query": "hiding the fullscreen dialog's header bar and restoring normal top padding to the body once the viewport is wide enough that the dialog is no longer actually fullscreen",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "large",
+    "family": "material-components-web",
+    "expectedSource": "material-components-web/packages/mdc-dialog/_mixins.scss",
+    "expectedLines": [
+      830,
+      851
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "material-components-web-002",
+    "category": "identifier-fragment",
+    "query": "scrim surface hidden opacity",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "large",
+    "family": "material-components-web",
+    "expectedSource": "material-components-web/packages/mdc-dialog/_mixins.scss",
+    "expectedLines": [
+      85,
+      103
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "medium"
+  },
+  {
+    "id": "material-components-web-003",
+    "category": "path-context",
+    "query": "deep in the fullscreen dialog sizing mixin, at the narrowest horizontal breakpoint the surface expands to fill the viewport and switches to the fullscreen header layout",
+    "kind": "code",
+    "language": "CSS",
+    "sizeBand": "large",
+    "family": "material-components-web",
+    "expectedSource": "material-components-web/packages/mdc-dialog/_mixins.scss",
+    "expectedLines": [
+      892,
+      907
+    ],
+    "negativeTest": false,
+    "searchLimit": 10,
+    "targetProjectId": "code-eval",
+    "targetScope": "project",
+    "relevanceGrade": 3,
+    "expectedHash": null,
+    "difficulty": "hard"
+  }
+]

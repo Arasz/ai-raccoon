@@ -390,13 +390,13 @@ public sealed class RepairCommandsTests
 
         var stdout = await RunProjectIdsWithExitAsync(apply: true, inner, scope.DataRoot);
 
-        stdout.Exit.ShouldBe(0);
+        stdout.Exit.ShouldBe(ErrorCode.Bank.RepairStuck, "this fake never applies the request, so the loop ends stuck");
         inner.LastRepairRequest.ShouldBe(RepairKind.ProjectIds);
         inner.LastRepairMapJson.ShouldBeNull();
     }
 
     [Fact]
-    public async Task ProjectIds_WithMissingMap_ReturnsInvalidArgument_AndNeverRequests()
+    public async Task ProjectIds_WithMissingMap_ReturnsAliasMapInvalid_AndNeverRequests()
     {
         using var scope = new TempScope();
         var inner = new InMemorySettings { ProjectIdsReport = ClusterReport() };
@@ -404,12 +404,12 @@ public sealed class RepairCommandsTests
 
         var stdout = await RunProjectIdsWithExitAsync(apply: false, inner, scope.DataRoot, missing);
 
-        stdout.Exit.ShouldBe(AiRaccoon.ExitCode.InvalidArgument);
+        stdout.Exit.ShouldBe(ErrorCode.Usage.AliasMapInvalid);
         inner.LastRepairRequest.ShouldBeNull();
     }
 
     [Fact]
-    public async Task ProjectIds_WithMalformedMap_ReturnsInvalidArgument_AndNeverRequests()
+    public async Task ProjectIds_WithMalformedMap_ReturnsAliasMapInvalid_AndNeverRequests()
     {
         using var scope = new TempScope();
         var bad = Path.Combine(scope.DataRoot, "bad-map.json");
@@ -419,7 +419,7 @@ public sealed class RepairCommandsTests
 
         var stdout = await RunProjectIdsWithExitAsync(apply: false, inner, scope.DataRoot, bad);
 
-        stdout.Exit.ShouldBe(AiRaccoon.ExitCode.InvalidArgument);
+        stdout.Exit.ShouldBe(ErrorCode.Usage.AliasMapInvalid);
         inner.LastRepairRequest.ShouldBeNull();
     }
 
@@ -709,7 +709,13 @@ public sealed class RepairCommandsTests
     private static async Task<string> RunProjectIdsAsync(bool apply, bool diagnose, InMemorySettings store, string dataRoot, string? mapPath = null)
     {
         var outcome = await RunProjectIdsWithExitAsync(apply, diagnose, store, dataRoot, mapPath);
-        outcome.Exit.ShouldBe(0);
+        // A dry run only reports, so it succeeds. This fake never applies a request, so an --apply
+        // run ends stuck or needing attention; ProjectIdsRepairLoopTests pins those codes.
+        if (!apply)
+        {
+            outcome.Exit.ShouldBe(ErrorCode.Ok.Success);
+        }
+
         return outcome.Stdout;
     }
 

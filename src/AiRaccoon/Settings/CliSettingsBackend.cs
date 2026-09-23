@@ -12,7 +12,7 @@ namespace AiRaccoon.Settings;
 ///     with a bounded idle timeout — never a secret byte to the unproven listener. The acquired
 ///     backend is shared and outlives this command under its own idle timeout (ruling N1); the
 ///     disclosure line (<see cref="Log.BackendOutlivesCommand" />) fires once the acquire has a
-///     live, token-checked store to hand back. An undialable --port is an <see cref="ArgumentException" />;
+///     live, token-checked store to hand back. An undialable --port is an <see cref="UndialablePortException" />;
 ///     every other failure mode — no answer within the acquire budget, a data root with no minted token — is reported as
 ///     <see cref="SettingsServerUnavailableException" />; a wrong-but-present token is reported
 ///     later, by <see cref="ServerSettingsStore" /> itself, as <see cref="SettingsServerRefusedException" />.
@@ -46,12 +46,13 @@ internal static partial class CliSettingsBackend
     {
         if (config.Port is < 1 or > 65535)
         {
-            throw new ArgumentException(
+            throw new UndialablePortException(
                 $"cannot dial --port {config.Port}: expected 1-65535, and 0 means \"any free port\"; pass a fixed --port");
         }
 
         var executable = BackendLaunchArguments.Executable(processPath) ??
-                         throw new SettingsServerUnavailableException($"ai-raccoon: {BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)}");
+                         throw new SettingsServerUnavailableException(ErrorCode.Reach.AutoStartUnsupported,
+                             $"ai-raccoon: {BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)}");
 
         BankPresenceGuard.EnsureExists(config.Options);
 
@@ -63,19 +64,19 @@ internal static partial class CliSettingsBackend
         }
         catch (BackendStartException ex)
         {
-            throw new SettingsServerUnavailableException($"ai-raccoon: {ex.Message}", ex);
+            throw new SettingsServerUnavailableException(ErrorCode.Reach.StartFailed, $"ai-raccoon: {ex.Message}", ex);
         }
 
         if (acquired.Result.Url is null)
         {
-            throw new SettingsServerUnavailableException(
+            throw new SettingsServerUnavailableException(acquired.Fallback ? ErrorCode.Reach.PrivateFallbackFailed : ErrorCode.Reach.Unavailable,
                 $"ai-raccoon: no settings server at {ServerProbe.EndpointFor(config.Port)} " +
                 $"(serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})" +
                 (acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty));
         }
 
         var tokenFile = new McpTokenFile(config.Options);
-        var token = tokenFile.Read() ?? throw new SettingsServerUnavailableException(
+        var token = tokenFile.Read() ?? throw new SettingsServerUnavailableException(ErrorCode.Server.NoToken,
             $"ai-raccoon: the backend at {acquired.Result.Url} is listening but {tokenFile.Path} holds no token " +
             $"— a serve on another data root may own port {config.Port}");
 

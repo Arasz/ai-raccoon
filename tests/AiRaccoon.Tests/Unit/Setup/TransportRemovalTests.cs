@@ -76,13 +76,13 @@ public sealed class TransportRemovalTests : IDisposable
     }
 
     [Fact]
-    public async Task AppRunner_Stdio_ReturnsFifteenWithoutLaunching()
+    public async Task AppRunner_Stdio_ReturnsRemovedTransportWithoutLaunching()
     {
         var runner = new AppRunner();
 
         var exitCode = await runner.Run(["--transport", "stdio", "--data-root", _dataRoot]);
 
-        exitCode.ShouldBe(ExitCode.InvalidArgument);
+        exitCode.ShouldBe(ErrorCode.Usage.RemovedTransport);
         // Dead on parse: nothing launched, so no bank and no token file exist.
         File.Exists(Path.Combine(_dataRoot, "memory.db")).ShouldBeFalse();
         File.Exists(Path.Combine(_dataRoot, McpTokenFile.FileName)).ShouldBeFalse();
@@ -144,13 +144,13 @@ public sealed class TransportRemovalTests : IDisposable
     [InlineData("--transport", "stdio")]
     [InlineData("--transport=stdio")]
     [InlineData("--transport:stdio")]
-    public async Task Serve_RemovedStdioSpellings_ReturnFifteen(params string[] transportFlag)
+    public async Task Serve_RemovedStdioSpellings_ReturnRemovedTransport(params string[] transportFlag)
     {
         var runner = new AppRunner();
 
         var exit = await runner.Run([.. transportFlag, "--data-root", _dataRoot, "serve"]);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.RemovedTransport);
     }
 
     [Fact]
@@ -161,17 +161,17 @@ public sealed class TransportRemovalTests : IDisposable
         // --transport is a root option: after the verb it is a misplaced token, not a bad value.
         var exit = await runner.Run(["serve", "--transport", "stdio", "--data-root", _dataRoot]);
 
-        exit.ShouldBe(ExitCode.FailedToParseCliArgs);
+        exit.ShouldBe(ErrorCode.Usage.Unparseable);
     }
 
     [Fact]
-    public async Task Bare_PortZero_IsAnInvalidValue_WithoutDialling()
+    public async Task Bare_PortZero_IsUndialable_WithoutDialling()
     {
         var runner = new AppRunner();
 
         var exit = await runner.Run(["--data-root", _dataRoot, "--port", "0"]);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.UndialablePort);
     }
 
     [Theory]

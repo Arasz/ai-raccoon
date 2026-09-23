@@ -143,15 +143,21 @@ public sealed class EmbeddingManifestLoaderTests
     }
 
     [RetryFact]
-    public void Load_TokenizerJsonFamily_IsRecognizedButRejectedAsUnsupported()
+    public void Load_TokenizerJsonFamily_Succeeds()
     {
         var manifest = BertManifest();
-        manifest["tokenizer"]!["family"] = "tokenizer-json";
+        manifest["tokenizer"] = new JsonObject
+        {
+            ["family"] = "tokenizer-json",
+            ["files"] = new JsonArray(new JsonObject { ["path"] = "tokenizer.json", ["sha256"] = ShaOf("tok") })
+        };
 
-        var ex = Should.Throw<InvalidOperationException>(() =>
-            new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()).Load(WriteModelDir(manifest.ToJsonString(), ("vocab.txt", "vocab"), ("model.onnx", "model"))));
+        var descriptor = new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())
+            .Load(WriteModelDir(manifest.ToJsonString(), ("tokenizer.json", "tok"), ("model.onnx", "model")));
 
-        ex.Message.ShouldContain("tokenizer-json");
+        descriptor.TokenizerFamily.ShouldBe("tokenizer-json");
+        descriptor.TokenizerFile.ShouldBe("tokenizer.json");
+        descriptor.SentencePieceOptions.ShouldBeNull();
     }
 
     [RetryFact]

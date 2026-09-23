@@ -136,6 +136,13 @@ Unparseable arguments (including a stray `--attach`) exit 9 (`FailedToParseCliAr
 an error on a command (unrecognized token, missing subcommand) is 9; an error on an option or
 argument value, or a value this CLI rejects after parsing, is 15 — on every path (ADR-0060 amendment).
 
+**Amendment (2026-09-23): renumbered by ADR-0107.** [ADR-0107](0107-categorized-two-digit-exit-codes.md)
+replaces every number in this decision with a categorized two-digit code; the acquire-refusal
+and parse-error split themselves are unchanged. `ExitCode.NoBank` (22) is now
+`ErrorCode.Bank.NoBank` (31); unparseable argv (9) is now `ErrorCode.Usage.Unparseable` (11);
+`InvalidArgument` (15) is now whichever `Usage.*` case names the specific value problem —
+`Usage.InvalidValue` (10) for a bad value in general.
+
 ### D7 — Secret layout (F49)
 
 Identity key, token, bank and log live under one directory — the bank state directory resolved by

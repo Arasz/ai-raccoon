@@ -27,6 +27,8 @@ public sealed class CountingEmbeddingService : IEmbeddingService
 
     public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 
+    public string DocumentText(EmbeddingSettings settings, string text) => text;
+
     /// <summary>Drives a test through a manifest-sized budget without a real manifest on disk.</summary>
     public int? ChunkBudgetOverride { get; set; }
 

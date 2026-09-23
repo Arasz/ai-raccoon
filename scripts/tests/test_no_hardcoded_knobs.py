@@ -35,7 +35,8 @@ _SCAN_EXEMPT = {REPO / "scripts" / "retrieval_tuning" / "collect_ac_evidence.py"
 def _logic_files() -> list[Path]:
     roots = [REPO / "scripts" / "retrieval_tuning",
              REPO / "scripts" / "src" / "retrieval_tuning"]
-    files = [p for root in roots for p in root.rglob("*.py")]
+    corpus = REPO / "scripts" / "retrieval_tuning" / "code-corpus"
+    files = [p for root in roots for p in root.rglob("*.py") if corpus not in p.parents]
     files.append(REPO / "scripts" / "refresh-retrieval-corpora.py")
     return sorted(p for p in files if p.exists() and p not in _SCAN_EXEMPT)
 
@@ -173,6 +174,12 @@ def test_no_json_constant_is_hardcoded_in_a_logic_file():
     problems = hardcoded_problems(logic, payloads)
     assert problems == [], "behavior constants must come from data/**/*.json:\n" + \
         "\n".join(problems)
+
+
+def test_the_vendored_code_corpus_is_not_scanned_as_logic():
+    # files/ holds frozen third-party and self snapshots: corpus data, not logic.
+    corpus = REPO / "scripts" / "retrieval_tuning" / "code-corpus"
+    assert [p for p in _logic_files() if corpus in p.parents] == []
 
 
 def test_every_json_top_level_key_is_referenced_by_a_logic_file():

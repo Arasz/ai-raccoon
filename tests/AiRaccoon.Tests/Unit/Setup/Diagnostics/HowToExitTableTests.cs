@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
@@ -6,100 +8,89 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup.Diagnostics;
 
 /// <summary>
-///     Derive gate for the doctor exit-code table (docs/how-to/configure-ai-raccoon-server.md,
-///     "composes into a script" section): the backticked code set must equal the doctor-reachable
-///     <see cref="ExitCode" /> consts enumerated by name (R1 F6), and each Meaning cell must carry
-///     the pinned phrase — table-own for 0/1/2 (no doc comments), cross-checked against the const's
-///     doc comment in ExitCode.cs for 19/20/22/24 (R1 F1/F6, R2 F4/F8).
+///     Derive gate for the exit tables in docs/how-to/configure-ai-raccoon-server.md: every row is
+///     '| `NN` | `Category.Name` — meaning |', the named <see cref="ErrorCode" /> constant must hold
+///     exactly NN (read by reflection, so a renumbering cannot leave the docs behind), and each table
+///     lists exactly the codes its command family can exit with.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class HowToExitTableTests
+public sealed partial class HowToExitTableTests
 {
     private const string HowToPath = "docs/how-to/configure-ai-raccoon-server.md";
-    private const string ExitCodePath = "src/AiRaccoon/ExitCode.cs";
 
-    private static readonly Dictionary<int, (string ConstName, string Phrase, bool DocCommentCrossCheck)> ExpectedRows =
-        new()
-        {
-            [ExitCode.Success] = ("Success", "HEALTHY", false),
-            [ExitCode.FailedToResolveEncryptionKey] = ("FailedToResolveEncryptionKey", "the encryption key could not be resolved", false),
-            [ExitCode.FailedToOpenEncryptedBank] = ("FailedToOpenEncryptedBank", "the bank could not be opened read-only", false),
-            [ExitCode.SchemaVerificationFailed] = ("SchemaVerificationFailed", "the bank's actual schema", true),
-            [ExitCode.SchemaNewerThanBinary] = ("SchemaNewerThanBinary", "user_version", true),
-            [ExitCode.NoBank] = ("NoBank", "no bank file exists at the resolved path", true),
-            [ExitCode.ModelMigrationOpen] = ("ModelMigrationOpen", "every MCP tool call is refused until", true),
-            [ExitCode.BankCorrupted] = ("BankCorrupted", "the bank file exists but is not a SQLite database", true)
-        };
+    /// <summary>What `doctor` can exit with.</summary>
+    private static readonly int[] DoctorCodes =
+    [
+        ErrorCode.Ok.Success,
+        ErrorCode.Key.Unresolved, ErrorCode.Key.BwsNotInstalled, ErrorCode.Key.BwsTimedOut, ErrorCode.Key.BwsFailed,
+        ErrorCode.Key.SecretNotAKey, ErrorCode.Key.SourceSidecarInvalid,
+        ErrorCode.Bank.OpenFailed, ErrorCode.Bank.NoBank, ErrorCode.Bank.Corrupted, ErrorCode.Bank.Busy,
+        ErrorCode.Bank.SchemaMismatch, ErrorCode.Bank.SchemaNewerThanBinary, ErrorCode.Bank.MigrationOpen
+    ];
 
-    [Fact]
-    public void DoctorTable_ListsExactlyTheDoctorReachableExitCodes()
+    /// <summary>What a settings verb can exit with once its value parsed: the settings-server channel's own failures.</summary>
+    private static readonly int[] SettingsCodes =
+    [
+        ErrorCode.Usage.UndialablePort, ErrorCode.Usage.RequestRejected, ErrorCode.Bank.NoBank,
+        ErrorCode.Server.NoToken, ErrorCode.Server.RequestTokenRefused, ErrorCode.Server.EndpointMissing, ErrorCode.Server.MigrationRefused,
+        ErrorCode.Reach.Unavailable, ErrorCode.Reach.StoppedAnswering, ErrorCode.Reach.PrivateFallbackFailed,
+        ErrorCode.Reach.StartFailed, ErrorCode.Reach.AutoStartUnsupported,
+        ErrorCode.Internal.ServerError, ErrorCode.Internal.UnusableResponse, ErrorCode.Ok.SIGC
+    ];
+
+    [Theory]
+    [InlineData("composes into a script:")]
+    [InlineData("never reports success:")]
+    public void EveryRow_NamesTheConstantThatHoldsItsCode(string anchor)
     {
-        DoctorTable().Keys.OrderBy(k => k).ShouldBe(ExpectedRows.Keys.OrderBy(k => k));
-    }
-
-    [Fact]
-    public void DoctorTable_EachMeaning_CarriesThePinnedPhrase()
-    {
-        var table = DoctorTable();
-        var exitCodeSource = File.ReadAllText(TestData.RepoFile(ExitCodePath));
-        foreach (var (code, (constName, phrase, crossCheck)) in ExpectedRows)
+        var constants = Constants();
+        foreach (var (code, name) in Table(anchor))
         {
-            table[code].ShouldContain(phrase, Case.Sensitive,
-                $"row {code} ({constName}) must keep its pinned phrase in the Meaning cell");
-            if (crossCheck)
-            {
-                DocCommentFor(exitCodeSource, constName).ShouldContain(phrase, Case.Sensitive,
-                    $"the {constName} doc comment must keep the same phrase the table pins");
-            }
+            constants.ShouldContainKey(name, $"row {code} names '{name}', which is not an ErrorCode constant");
+            constants[name].ShouldBe(code, $"row {code} names {name}, which is {constants[name]}");
         }
     }
 
-    private static Dictionary<int, string> DoctorTable()
+    [Fact]
+    public void DoctorTable_ListsExactlyTheCodesDoctorExitsWith()
+    {
+        Table("composes into a script:").Keys.ShouldBe(DoctorCodes, ignoreOrder: true);
+    }
+
+    [Fact]
+    public void SettingsTable_ListsExactlyTheSettingsChannelCodes()
+    {
+        Table("never reports success:").Keys.ShouldBe(SettingsCodes, ignoreOrder: true);
+    }
+
+    private static Dictionary<string, int> Constants() =>
+        typeof(ErrorCode).GetNestedTypes(BindingFlags.Public)
+            .SelectMany(category => category.GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Where(field => field.IsLiteral)
+                .Select(field => (Name: $"{category.Name}.{field.Name}", Value: (int)field.GetRawConstantValue()!)))
+            .ToDictionary(pair => pair.Name, pair => pair.Value, StringComparer.Ordinal);
+
+    private static Dictionary<int, string> Table(string anchor)
     {
         var howTo = File.ReadAllText(TestData.RepoFile(HowToPath));
-        var anchor = howTo.IndexOf("composes into a script:", StringComparison.Ordinal);
-        anchor.ShouldBeGreaterThan(0, "the doctor exit table must follow the 'composes into a script' sentence");
-        return ParseTable(howTo, anchor);
-    }
-
-    private static Dictionary<int, string> ParseTable(string text, int startIndex)
-    {
-        var header = text.IndexOf("| Exit code | Meaning |", startIndex, StringComparison.Ordinal);
+        var start = howTo.IndexOf(anchor, StringComparison.Ordinal);
+        start.ShouldBeGreaterThan(0, $"the exit table must follow the '{anchor}' sentence");
+        var header = howTo.IndexOf("| Exit code | Meaning |", start, StringComparison.Ordinal);
         header.ShouldBeGreaterThan(0, "an '| Exit code | Meaning |' table must exist after the anchor");
-        var rowsStart = text.IndexOf('\n', header) + 1;
-        rowsStart = text.IndexOf('\n', rowsStart) + 1; // skip the |---|---| separator line
-        var end = text.IndexOf("\n\n", rowsStart, StringComparison.Ordinal);
-        if (end < 0)
-        {
-            end = text.Length;
-        }
-
+        var rowsStart = howTo.IndexOf('\n', howTo.IndexOf('\n', header) + 1) + 1;
+        var end = howTo.IndexOf("\n\n", rowsStart, StringComparison.Ordinal);
         var rows = new Dictionary<int, string>();
-        foreach (var line in text[rowsStart..end].Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var line in howTo[rowsStart..(end < 0 ? howTo.Length : end)].Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
-            var match = Regex.Match(line, @"^\|\s*`(\d+)`\s*\|(.*)\|$");
-            match.Success.ShouldBeTrue($"every exit-table row must be '| `N` | meaning |' (line: {line})");
-            rows[int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)] =
-                match.Groups[2].Value.Trim();
+            var match = Row().Match(line);
+            match.Success.ShouldBeTrue($"every exit-table row must be '| `NN` | `Category.Name` — meaning |' (line: {line})");
+            rows.Add(int.Parse(match.Groups["code"].Value, CultureInfo.InvariantCulture), match.Groups["name"].Value);
         }
 
         return rows;
     }
 
-    private static string DocCommentFor(string exitCodeSource, string constName)
-    {
-        var declaration = $"public const int {constName} = ";
-        var index = exitCodeSource.IndexOf(declaration, StringComparison.Ordinal);
-        index.ShouldBeGreaterThan(0, $"{constName} must be declared in ExitCode.cs");
-        var commentStart = exitCodeSource.LastIndexOf("/// <summary>", index, StringComparison.Ordinal);
-        commentStart.ShouldBeGreaterThan(0, $"{constName} must carry a doc comment");
-        var commentEnd = exitCodeSource.IndexOf("</summary>", commentStart, StringComparison.Ordinal);
-        if (commentEnd < 0 || commentEnd > index)
-        {
-            commentEnd = index;
-        }
-
-        return exitCodeSource[commentStart..commentEnd];
-    }
+    [GeneratedRegex(@"^\|\s*`(?<code>\d+)`\s*\|\s*`(?<name>\w+\.\w+)`\s+—.*\|$")]
+    private static partial Regex Row();
 }

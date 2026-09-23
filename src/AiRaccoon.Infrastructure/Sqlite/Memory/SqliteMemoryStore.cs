@@ -711,10 +711,10 @@ public sealed partial class SqliteMemoryStore(
             .GroupBy(row => row.Hash, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => StructureFusion.SimFromDistance(group.First().Distance), StringComparer.Ordinal);
 
-        var ranked = fused.Select(rank => (
-                Row: byHash[rank.Hash],
+        var ranked = fused.Select(rank => new RankedVectorRow(
+                byHash[rank.Hash],
                 rank.Score,
-                ContentCosine: contentSimByHash.TryGetValue(rank.Hash, out var contentCosine) ? contentCosine : (double?)null))
+                contentSimByHash.TryGetValue(rank.Hash, out var contentCosine) ? contentCosine : null))
             .ToList();
         foreach (var (row, _, _) in ranked)
         {
@@ -732,7 +732,7 @@ public sealed partial class SqliteMemoryStore(
     ///     stays unresolved.
     /// </summary>
     internal static IReadOnlyList<MemorySearchResult> BuildDualVectorResults(
-        IReadOnlyList<(VectorRow Row, double Score, double? ContentCosine)> ranked) =>
+        IReadOnlyList<RankedVectorRow> ranked) =>
     [
         .. ranked.Select(item => new MemorySearchResult(
             item.Row.Hash, item.Score, item.Row.Path, string.Empty,
@@ -888,20 +888,20 @@ public sealed partial class SqliteMemoryStore(
     }
 
     /// <summary>Classifies source_file into a SourceType and normalized locator.</summary>
-    private static (SourceType Type, string Locator) ClassifySource(string? sourceFile)
+    private static SourceClassification ClassifySource(string? sourceFile)
     {
         if (string.IsNullOrEmpty(sourceFile))
         {
-            return (SourceType.Manual, "");
+            return new SourceClassification(SourceType.Manual, "");
         }
 
         if (sourceFile.StartsWith("hermes/", StringComparison.Ordinal) ||
             sourceFile.Contains("/hermes/", StringComparison.Ordinal))
         {
-            return (SourceType.Transcript, sourceFile);
+            return new SourceClassification(SourceType.Transcript, sourceFile);
         }
 
-        return (SourceType.File, sourceFile);
+        return new SourceClassification(SourceType.File, sourceFile);
     }
 
     private static CommandDefinition Def(string sql, object? parameters = null,

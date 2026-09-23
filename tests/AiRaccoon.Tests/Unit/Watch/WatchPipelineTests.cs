@@ -303,6 +303,50 @@ public sealed class WatchPipelineTests
         healed.LastError.ShouldBeNull();
     }
 
+    /// <summary>
+    ///     Digests run on parallel jobs against one retry policy. Many watches failing in the same
+    ///     tick must each end Retrying with their error, and the tick itself must complete.
+    /// </summary>
+    [Fact]
+    public async Task Tick_ManyWatchesFailingTogether_EachEndsRetrying_AndTheTickCompletes()
+    {
+        const int projects = 16;
+        const int watchesPerProject = 4;
+        for (var round = 0; round < 20; round++)
+        {
+            var stack = new WatchTestStack();
+            stack.Memory.IngestError = new IOException("disk boom");
+            var dirs = new List<TempDir>();
+            try
+            {
+                for (var p = 0; p < projects; p++)
+                {
+                    for (var w = 0; w < watchesPerProject; w++)
+                    {
+                        var dir = TempDir.New($"pipeline-parallel-fail-{round}-{p}-{w}");
+                        dirs.Add(dir);
+                        var file = dir.File("a.md");
+                        await File.WriteAllTextAsync(file, "v1", TestContext.Current.CancellationToken);
+                        stack.Pipeline.RegisterWatch($"proj-{p}", dir.Path);
+                        stack.Pipeline.Enqueue(new WatchEvent($"proj-{p}", file, WatchEventKind.Created));
+                    }
+                }
+
+                await Should.NotThrowAsync(() => stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken),
+                    $"round {round}: the tick aborted");
+
+                var statuses = Enumerable.Range(0, projects).SelectMany(p => stack.Pipeline.GetStatuses($"proj-{p}")).ToList();
+                statuses.Count.ShouldBe(projects * watchesPerProject);
+                statuses.ShouldAllBe(status => status.State == WatchState.Retrying && status.LastError != null,
+                    $"round {round}: a failed watch's state was not recorded");
+            }
+            finally
+            {
+                dirs.ForEach(dir => dir.Dispose());
+            }
+        }
+    }
+
     [Fact]
     public async Task Status_FiveConsecutiveFailures_StopsChecking_RegistrationAndStatusKept()
     {

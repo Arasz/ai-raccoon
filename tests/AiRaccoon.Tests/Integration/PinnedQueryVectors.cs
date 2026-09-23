@@ -119,6 +119,8 @@ internal sealed class PinnedQueryEmbeddingService(PinnedQueryVectorFile file) : 
     /// <summary>Pinned vectors are keyed by the exact query text, so trimming here would miss every pin.</summary>
     public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 
+    public string DocumentText(EmbeddingSettings settings, string text) => text;
+
     public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
 
     public int ResolveDimensions(EmbeddingSettings settings) => 384;

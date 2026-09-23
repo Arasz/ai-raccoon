@@ -67,13 +67,13 @@ public sealed class ModelResetGuardEndpointTests : IAsyncLifetime
     [RetryTheory]
     [InlineData("settings model reset")]
     [InlineData("settings model embedding reset")]
-    public async Task ModelReset_WithAnOpenMigration_IsRefused_Exit25_DeletesNothing(string verb)
+    public async Task ModelReset_WithAnOpenMigration_IsRefused_MigrationRefused_DeletesNothing(string verb)
     {
         await SeedAsync(openMigration: true);
 
         var (exit, @out, err) = await RunCliAsync(verb.Split(' '));
 
-        exit.ShouldBe(25, $"reset must be refused while a migration is open (verb: {verb})");
+        exit.ShouldBe(ErrorCode.Server.MigrationRefused, $"reset must be refused while a migration is open (verb: {verb})");
         err.ShouldBe(ModelResetGuardTests.FrozenResetRefusalMessage + Environment.NewLine);
         @out.ShouldNotContain("embedding engine reset to default: no engine");
 

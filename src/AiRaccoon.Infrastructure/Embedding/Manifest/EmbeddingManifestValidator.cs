@@ -148,11 +148,6 @@ public sealed class EmbeddingManifestValidator : IEmbeddingManifestValidator
             return;
         }
 
-        if (tokenizer.Family == TokenizerFamily.TokenizerJson)
-        {
-            errors.Add("tokenizer.family: 'tokenizer-json' is not yet supported (D5 capability gate — deferred until ML.Tokenizers can consume HF tokenizer.json)");
-        }
-
         ValidateFileList("tokenizer.files", tokenizer.Files, isLocal, errors);
 
         // SentencePiece needs the numeric special-token map; the other families do not use options.

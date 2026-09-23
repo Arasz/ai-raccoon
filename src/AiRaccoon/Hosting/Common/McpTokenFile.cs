@@ -68,6 +68,9 @@ public sealed class McpTokenFile
     /// <summary>Why the last ensure or read refused, with the remedy; null when it did not.</summary>
     public string? RefusalReason { get; private set; }
 
+    /// <summary>True when the last ensure refused because the state directory or a secret file is not owner-only.</summary>
+    public bool NotOwnerOnly { get; private set; }
+
     /// <summary>True when the last ensure tightened an owned state directory others could only read to 0700.</summary>
     public bool TightenedStateDirectory { get; private set; }
 
@@ -79,6 +82,7 @@ public sealed class McpTokenFile
     public async Task<string?> EnsureAsync(CancellationToken cancellationToken)
     {
         RefusalReason = null;
+        NotOwnerOnly = false;
         TightenedStateDirectory = false;
         try
         {
@@ -103,6 +107,7 @@ public sealed class McpTokenFile
         }
         catch (OwnerOnlyViolation ex)
         {
+            NotOwnerOnly = true;
             RefusalReason = ex.Message;
             return null;
         }
@@ -196,6 +201,7 @@ public sealed class McpTokenFile
         {
             if (!OwnerOnlyFile.IsFilePrivate(_legacyPath))
             {
+                NotOwnerOnly = true;
                 RefusalReason =
                     $"'{_legacyPath}' is not owner-only and may hold a secret — remove it, or run 'chmod 600 \"{_legacyPath}\"' and start again";
                 return null;
@@ -342,6 +348,7 @@ public sealed class McpTokenFile
         }
         catch (OwnerOnlyViolation ex)
         {
+            NotOwnerOnly = true;
             RefusalReason = ex.Message;
             return null;
         }

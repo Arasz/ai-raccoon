@@ -110,8 +110,8 @@ public class SettingsCommandsTests
         var (exit, _, err) = await Run(["settings", "retrieval", "alpha", "set", "bogus"], new FakeConfigStore());
 
         // WP11: validation failures return a named code, so a script can tell a typo from a
-        // broken bank key (which is ExitCode.FailedToResolveEncryptionKey = 1).
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        // broken bank key (which is ErrorCode.Key.Unresolved = 1).
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("invalid alpha");
     }
 
@@ -155,7 +155,7 @@ public class SettingsCommandsTests
         var store = new FakeConfigStore();
         var (exit, _, err) = await Run(["settings", "retrieval", option, "set", value], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain(expectedError);
         store.Settings.ShouldBeEmpty();
     }
@@ -225,7 +225,7 @@ public class SettingsCommandsTests
 
         var (exit, _, err) = await Run(["settings", "model", "threads", value], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("invalid threads");
         store.Settings.ShouldNotContainKey("embedding.threads");
     }
@@ -462,7 +462,7 @@ public class SettingsCommandsTests
     {
         var (exit, _, err) = await Run(["settings", "queryguard", "structural", "threshold", "set", "1.5"], new FakeConfigStore());
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("invalid threshold");
     }
 

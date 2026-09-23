@@ -97,7 +97,7 @@ public sealed class WatchCommands
         if (value is < 1 or > 16)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: invalid-value: concurrency {value} (expected 1..16)");
-            return ExitCode.InvalidArgument;
+            return ErrorCode.Usage.InvalidValue;
         }
 
         var key = target == "*" ? WatchConfigKeys.ConcurrencyGlobal : WatchConfigKeys.ConcurrencyProject(target);
