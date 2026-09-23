@@ -163,14 +163,7 @@ public sealed partial class SqliteConnectionFactory(
     }
 
     /// <summary>Directory holding the bank: the data root for user scope, &lt;dataRoot&gt;/.ai-raccoon for project scope.</summary>
-    private static string BankDirectoryFor(InfrastructureOptions options) =>
-        options.Scope switch
-        {
-            InstallScope.User => options.DataRoot,
-            InstallScope.Project => Path.Combine(options.DataRoot, ".ai-raccoon"),
-            _ => throw new ArgumentOutOfRangeException(nameof(options.Scope), options.Scope,
-                "Unknown install scope.")
-        };
+    private static string BankDirectoryFor(InfrastructureOptions options) => BankPaths.DirectoryFor(options);
 
     /// <summary>The bank path for the given options; shared by the factory and the source resolver.</summary>
     public static string BankPathFor(InfrastructureOptions options) => Path.Combine(BankDirectoryFor(options), "memory.db");
