@@ -649,74 +649,31 @@ public class CliArgsTests
     }
 
     /// <summary>
-    ///     F70/K1: --attach is the explicit opt-in to the shared server, on the launch root (the
-    ///     proxy) and after the serve verb. Unknown before the ruling, so both spellings must parse.
+    ///     ADR-0106 D5: --attach is gone from the launch root and from serve. Both spellings are
+    ///     unrecognized arguments now — exit 9 — and neither the launch identity nor the serve
+    ///     options expose an attach member at all.
     /// </summary>
-    [Fact]
-    public void Parse_AttachFlag_BeforeVerb_Parses()
+    [Theory]
+    [InlineData("--attach")]
+    [InlineData("serve", "--attach")]
+    public void AttachOption_IsAbsentFromBothRoots(params string[] args)
     {
-        CliArgs.TryParse(["--attach"], out var parsed);
+        CliArgs.TryParse(args, out var parsed);
 
-        parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBeEmpty();
+        parsed!.Errors.ShouldContain(error => error.Contains("--attach", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Parse_ServeAttach_Parses()
+    public void ServeAttach_IsAnUnrecognizedArgument_Exit9()
     {
-        CliArgs.TryParse(["serve", "--attach"], out var parsed);
+        var accepted = CliArgs.TryParse(["serve", "--attach"], out var parsed);
 
-        parsed!.Errors.ShouldBeEmpty();
-        parsed.CommandPath.ShouldBe(["serve"]);
-    }
-
-    [Fact]
-    public void Parse_AttachFlag_BeforeVerb_SetsTheLaunchIdentity()
-    {
-        CliArgs.TryParse(["--attach"], out var parsed);
-
-        parsed!.Errors.ShouldBeEmpty();
-        parsed.Options.Attach.ShouldBeTrue();
-    }
-
-    [Fact]
-    public void Parse_ServeAttach_ReachesTheServeOptions()
-    {
-        CliArgs.TryParse(["serve", "--attach"], out var parsed);
-
-        parsed!.Errors.ShouldBeEmpty();
-        parsed.ParsedCliArgs.GetServeOptions().Options!.Node.Attach.ShouldBeTrue();
-    }
-
-    [Fact]
-    public void Parse_RootAttachBeforeVerb_ReachesTheServeOptions()
-    {
-        CliArgs.TryParse(["--attach", "serve"], out var parsed);
-
-        parsed!.Errors.ShouldBeEmpty();
-        parsed.ParsedCliArgs.GetServeOptions().Options!.Node.Attach.ShouldBeTrue();
-    }
-
-    /// <summary>
-    ///     The launch identity reads the root option instance, not the name: with a verb present,
-    ///     two options spell --attach and the by-name lookup resolves to serve's implicit default.
-    /// </summary>
-    [Fact]
-    public void Parse_RootAttachBeforeVerb_SetsTheLaunchIdentity()
-    {
-        CliArgs.TryParse(["--attach", "serve"], out var parsed);
-
-        parsed!.Errors.ShouldBeEmpty();
-        parsed.Options.Attach.ShouldBeTrue();
-    }
-
-    [Fact]
-    public void Parse_NoAttach_ReachesTheServeOptionsAsFalse()
-    {
-        CliArgs.TryParse(["serve"], out var parsed);
-
-        parsed!.Errors.ShouldBeEmpty();
-        parsed.ParsedCliArgs.GetServeOptions().Options!.Node.Attach.ShouldBeFalse();
+        // The parse result carries the unrecognized-argument error; AppRunner maps parse errors to 9.
+        accepted.ShouldBeTrue();
+        parsed!.Errors.ShouldNotBeEmpty();
+        parsed.Errors.ShouldContain(error => error.Contains("--attach", StringComparison.Ordinal));
+        typeof(RootCliOptions).GetProperty("Attach").ShouldBeNull("the launch identity must not carry the removed flag");
+        typeof(NodeCliOptions).GetProperty("Attach").ShouldBeNull("serve's options must not carry the removed flag");
     }
 
     [Fact]
@@ -748,7 +705,7 @@ public class CliArgsTests
         help.ShouldContain("--idle-timeout");
         help.ShouldContain("--mcp-entry");
         help.ShouldContain("--format");
-        help.ShouldContain("--attach");
+        help.ShouldNotContain("--attach");
         help.ShouldContain("ai-raccoon serve > serve.log 2>&1 &");
         help.ShouldContain("always HTTP");
     }
@@ -788,12 +745,14 @@ public class CliArgsTests
     ///     A root flag before a verb must not be read as consuming the verb name. `ContainsVerb`
     ///     used to skip the token after every value-less `--flag`, so with a parse error inside the
     ///     verb the launch-root fallback won and the operator got "Unrecognized command or argument
-    ///     'settings'" and exit 9 instead of the verb's own 15 and its help.
+    ///     'settings'" and exit 9 instead of the verb's own 15 and its help. Re-fixtured onto
+    ///     `--quiet` when `--attach` was removed (D8): the arity fix is about flag-vs-value, not
+    ///     about which flag carries it.
     /// </summary>
     [Fact]
-    public void Parse_RootAttachBeforeABrokenVerb_KeepsTheVerbPath()
+    public void Parse_RootQuietBeforeABrokenVerb_KeepsTheVerbPath()
     {
-        CliArgs.TryParse(["--attach", "settings", "sweep", "bogus"], out var parsed);
+        CliArgs.TryParse(["--quiet", "settings", "sweep", "bogus"], out var parsed);
 
         parsed!.CommandPath.ShouldBe(["settings", "sweep"]);
         parsed.Errors.ShouldNotContain(error => error.Contains("Unrecognized command or argument 'settings'", StringComparison.Ordinal));

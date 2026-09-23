@@ -32,6 +32,7 @@ using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Workspace;
+using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Observability;
 using AiRaccoon.Projects;
 using AiRaccoon.Setup.Models;
@@ -52,6 +53,14 @@ public static partial class AppRegistrations
             services.AddHttpClient();
             services.AddSingleton(TimeProvider.System);
             services.RegisterEncryptionServices(options);
+            // The proof channel's client half (ADR-0106 D2): read-only, never mints. Registered here
+            // because both the proxy graph and the CLI-command graph call RegisterCoreMemoryServices,
+            // and either one may need to prove a listener before a token-bearing request. Factory-only
+            // on purpose: IdentityProver exposes two public constructors, so registering the concrete
+            // type for activation would be ambiguous.
+            services.AddSingleton<IIdentityProver>(sp => new IdentityProver(
+                sp.GetRequiredService<InfrastructureOptions>(),
+                sp.GetRequiredService<IHttpClientFactory>()));
             // WP11: EmbeddingService and SqliteMemoryStore (both wired below) take
             // IMeasurementRecorder — the narrower CLI graph that calls only this method (never
             // RegisterMemoryServices/RegisterMetricsServices) still needs it resolvable, so the

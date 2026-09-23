@@ -1,4 +1,5 @@
 using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Setup;
 
 namespace AiRaccoon.Hosting.Node;
@@ -26,6 +27,7 @@ public static class NodeRegistration
                 sp.GetRequiredService<IHttpClientFactory>(),
                 ServerRestart.PortFreeWithin,
                 sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<IIdentityProver>(),
                 sp.GetRequiredService<ILogger<ServerRestart>>()));
             serviceCollection.AddRequiredSingleton<INodeRunner, NodeRunner>();
         }

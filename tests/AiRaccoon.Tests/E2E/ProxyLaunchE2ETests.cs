@@ -27,8 +27,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
     /// <summary>Only stops a hang from wedging the run; the assertions are the exit code and stderr.</summary>
     private static readonly TimeSpan HardCap = TimeSpan.FromSeconds(60);
 
-    private readonly string _backendRoot = TestData.CreateTempRoot("proxy-backend");
-    private readonly string _proxyRoot = TestData.CreateTempRoot("proxy-broken-bank");
+    private readonly string _root = TestData.CreateTempRoot("proxy-launch");
     private IHost _backend = null!;
     private int _port;
 
@@ -40,17 +39,15 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
         _envGate = await TestData.HoldEnvGateAsync(TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
         _port = lease.Port;
-        _backend = McpServerSetup.CreateServerHost(new ServerConfig(_port, McpTransport.Http,
-            new InfrastructureOptions { DataRoot = _backendRoot, Scope = InstallScope.User }));
+        // A11: the backend must serve the same root the proxy launches against and hold its
+        // identity key, or the acquire cannot prove it and falls back for the wrong reason.
+        var options = TestData.CreateInfrastructureOptions(_root);
+        await TestData.SeedBankAsync(options, TestContext.Current.CancellationToken);
+        await new McpTokenFile(_root).EnsureAsync(TestContext.Current.CancellationToken);
+        (await new IdentityKeyFile(options).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        _backend = McpServerSetup.CreateServerHost(new ServerConfig(_port, McpTransport.Http, options));
         lease.ReleaseForBind();
         await _backend.StartAsync(TestContext.Current.CancellationToken);
-        // This fixture's backend is deliberately ungated — the backend is incidental to what these
-        // tests measure. The proxy still reads a token, so mint one the way serve would.
-        // ProxySpawnedBackendE2ETests is the path that goes through a real gate.
-        // F39: the proxy's auto-launch also checks the resolved root holds a bank before it probes,
-        // so seed one — the token alone would no longer let a plain launch through.
-        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_proxyRoot), TestContext.Current.CancellationToken);
-        await new McpTokenFile(_proxyRoot).EnsureAsync(TestContext.Current.CancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -67,8 +64,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
             await disposable.DisposeAsync();
         }
 
-        Delete(_backendRoot);
-        Delete(_proxyRoot);
+        Delete(_root);
     }
 
     /// <summary>
@@ -79,13 +75,13 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
     public async Task BareLaunch_DoesNotOpenTheBank()
     {
         var bank = SqliteConnectionFactory.BankPathFor(
-            new InfrastructureOptions { DataRoot = _proxyRoot, Scope = InstallScope.User });
+            new InfrastructureOptions { DataRoot = _root, Scope = InstallScope.User });
         Directory.CreateDirectory(Path.GetDirectoryName(bank)!);
         var garbage = RandomNumberGenerator.GetBytes(4096);
         await File.WriteAllBytesAsync(bank, garbage, TestContext.Current.CancellationToken);
 
         await using var client = await AiRaccoonProcess.ConnectAsync(
-            ["--data-root", _proxyRoot, "--port", _port.ToString(), "--attach"], TestContext.Current.CancellationToken);
+            ["--data-root", _root, "--port", _port.ToString()], TestContext.Current.CancellationToken);
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         tools.ShouldNotBeEmpty();
@@ -99,7 +95,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
         await using var direct = await ConnectDirectlyAsync();
 
         await using var client = await AiRaccoonProcess.ConnectAsync(
-            ["--data-root", _proxyRoot, "--port", _port.ToString(), "--attach"], TestContext.Current.CancellationToken);
+            ["--data-root", _root, "--port", _port.ToString()], TestContext.Current.CancellationToken);
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
         var expected = await direct.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
 
@@ -134,9 +130,9 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
                 HardCap, TestContext.Current.CancellationToken);
 
             run.ExitCode.ShouldBe(ExitCode.ProxyBackendUnavailable);
-            // F70/K1: the default is private spawn, so the failure names the private port rather
-            // than an endpoint on the configured one.
-            run.Stderr.ShouldContain("no MCP backend could be started on a private port");
+            // Attach-or-start: nothing listened, so the launch tried the configured port and the
+            // spawned `serve` could not open the bank there.
+            run.Stderr.ShouldContain("no MCP backend at");
             run.Stderr.ShouldContain($"serve exit {ExitCode.FailedToOpenEncryptedBank}");
             run.Stderr.ShouldContain("no in-process fallback exists");
             run.Stderr.ShouldContain("ai-raccoon serve --port");
