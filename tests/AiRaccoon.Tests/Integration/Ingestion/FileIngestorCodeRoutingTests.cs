@@ -99,6 +99,23 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         (await CountAsync("entries")).ShouldBe(0);
     }
 
+    [RetryTheory]
+    [InlineData("schema.sql", "CREATE TABLE orders (\n    id INTEGER PRIMARY KEY\n);\n")]
+    [InlineData("index.html", "<html>\n<body><nav class=\"menu\"></nav></body>\n</html>\n")]
+    [InlineData("site.css", ".menu {\n    display: flex;\n}\n")]
+    public async Task IngestFileAsync_WebAndSqlSource_RoutesToCodeCorpus(string name, string content)
+    {
+        var ingestor = CreateIngestor();
+        var file = await WriteAsync(name, content);
+
+        var result = await ingestor.IngestFileAsync(_conn, "test_project", file, null,
+            TestContext.Current.CancellationToken);
+
+        result.RowsInserted.ShouldBe(1);
+        (await CountCodeAsync(file)).ShouldBeGreaterThan(0);
+        (await CountAsync("entries")).ShouldBe(0);
+    }
+
     /// <summary>
     ///     S3: an empty/whitespace-only code file legitimately chunks to zero rows FOREVER (unlike
     ///     the B1 stand-in-chunker case, where zero rows is a temporary tooling gap) — it must still

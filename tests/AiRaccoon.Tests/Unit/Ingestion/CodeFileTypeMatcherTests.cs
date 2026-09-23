@@ -20,6 +20,11 @@ public sealed class CodeFileTypeMatcherTests
     [InlineData("app.ts")]
     [InlineData("server.go")]
     [InlineData("lib.rs")]
+    [InlineData("index.html")]
+    [InlineData("page.htm")]
+    [InlineData("site.css")]
+    [InlineData("theme.scss")]
+    [InlineData("schema.sql")]
     public void IsCodeFile_CodeExtensions_ReturnsTrue(string path) => _matcher.IsCodeFile(path).ShouldBeTrue();
 
     [Theory]

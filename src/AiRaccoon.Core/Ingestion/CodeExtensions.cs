@@ -1,9 +1,8 @@
 namespace AiRaccoon.Core.Ingestion;
 
 /// <summary>
-///     The v1 code-corpus extension registry (docs/work/2026-08-21-code-search-implementation-plan.md
-///     §3.4, engineer lane §4.1) — owner-approved languages, case-insensitive. Disjoint from the
-///     memory-owned extensions (.md/.markdown/.txt/.json) by test.
+///     The code-corpus extension registry: owner-approved languages plus HTML, CSS/SCSS and SQL,
+///     case-insensitive. Disjoint from the memory-owned extensions (.md/.markdown/.txt/.json) by test.
 /// </summary>
 public static class CodeExtensions
 {
@@ -11,6 +10,6 @@ public static class CodeExtensions
     {
         ".cs", ".fs", ".fsx", ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs",
         ".java", ".kt", ".kts", ".swift", ".rb", ".php", ".c", ".h", ".cc", ".cpp",
-        ".hpp", ".m", ".mm", ".scala", ".lua"
+        ".hpp", ".m", ".mm", ".scala", ".lua", ".html", ".htm", ".css", ".scss", ".sql"
     };
 }

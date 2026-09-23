@@ -25,7 +25,7 @@ Any file watched via `memory_watch_add` whose extension is in the code registry 
 automatically ingested into the code corpus. The 24 supported extensions:
 
 `.cs` `.fs` `.fsx` `.py` `.ts` `.tsx` `.js` `.jsx` `.go` `.rs` `.java` `.kt` `.kts`
-`.swift` `.rb` `.php` `.c` `.h` `.cc` `.cpp` `.hpp` `.m` `.mm` `.scala` `.lua`
+`.swift` `.rb` `.php` `.c` `.h` `.cc` `.cpp` `.hpp` `.m` `.mm` `.scala` `.lua` `.html` `.htm` `.css` `.scss` `.sql`
 
 Memory-owned extensions (`.md`, `.txt`, `.json`, etc.) are never ingested into the
 code corpus. The two corpora are disjoint by design.
