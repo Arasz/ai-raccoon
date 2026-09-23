@@ -1,4 +1,4 @@
-# 0108. code_fts carries a derived identifiers column
+# 0109. code_fts carries a derived identifiers column
 
 Date: 2026-09-23
 
