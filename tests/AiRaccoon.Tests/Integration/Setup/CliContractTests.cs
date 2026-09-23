@@ -35,29 +35,37 @@ public sealed class CliContractTests : IAsyncLifetime
     /// may contain the literal <c>{PORT}</c>, substituted with the instance's own port before comparing.</summary>
     private sealed record Scenario(string[] Argv, int Exit, string Stdout, string Stderr);
 
+    /// <summary>The N1 shared-backend disclosure (EventId 687) every settings-routed acquire emits —
+    /// on the cold start and on reuse alike: the backend outlives this command under its own idle
+    /// timeout. Present in every scenario that reaches the server, absent from the ones rejected
+    /// before the acquire (argument and parse errors).</summary>
+    private const string BackendOutlivesCommand =
+        "info: AiRaccoon.Settings.CliSettingsBackend[687]\n      ai-raccoon: the backend on port {PORT} keeps running after this command exits, under its own idle timeout — stop it with ai-raccoon serve --restart --attach --port {PORT}";
+
     private static readonly Scenario[] Recorded =
     [
         // The cold scenario: no server exists yet for this data root, so this one command pays the
-        // auto-start (ADR-0075 §5.1) and is the only one that logs starting it — every scenario
-        // after this reuses the same live server and logs nothing.
+        // auto-start (ADR-0075 §5.1) and is the only one that logs the 633 starting line — every
+        // scenario after this reuses the same live server and carries only the 687 disclosure.
         new(["settings", "sweep", "threshold", "set", "0.5"], 0, "sweep threshold set to 0.5",
-            "info: AiRaccoon.Hosting.Proxy.BackendLauncher[633]\n      ai-raccoon: starting the backend on port {PORT}"),
+            "info: AiRaccoon.Hosting.Proxy.BackendLauncher[633]\n      ai-raccoon: starting the backend on port {PORT}\n" +
+            BackendOutlivesCommand),
         new(["settings", "sweep", "threshold", "set", "5"], ExitCode.InvalidArgument, "",
             "ai-raccoon: invalid threshold '5' (expected a number in 0..1)"),
-        new(["settings", "sweep", "show"], 0, "enabled: True  interval: 24 h  threshold: 0.5", ""),
-        new(["settings", "access", "default", "set", "ro"], 0, "access default set to ro", ""),
+        new(["settings", "sweep", "show"], 0, "enabled: True  interval: 24 h  threshold: 0.5", BackendOutlivesCommand),
+        new(["settings", "access", "default", "set", "ro"], 0, "access default set to ro", BackendOutlivesCommand),
         new(["settings", "access", "default", "set", "bogus"], ExitCode.InvalidArgument, "",
             "ai-raccoon: invalid access mode 'bogus' (expected ro, rw or full)"),
-        new(["settings", "access", "list"], 0, "default: ro", ""),
-        new(["settings", "queryguard", "enable"], 0, "query guard enabled", ""),
+        new(["settings", "access", "list"], 0, "default: ro", BackendOutlivesCommand),
+        new(["settings", "queryguard", "enable"], 0, "query guard enabled", BackendOutlivesCommand),
         new(["settings", "performance", "buffer-capacity", "99999999"], ExitCode.InvalidArgument, "",
             "ai-raccoon: buffer capacity must be at most 1000000 measurements"),
         new(["settings", "extract", "mode", "bogus"], ExitCode.InvalidArgument, "",
             "ai-raccoon: mode must be 'propose' or 'promote'"),
-        new(["settings", "extract", "list"], 0, "enabled: False  mode: propose  interval: 30 min  queue-capacity: 1000  auto-promote-threshold: off", ""),
-        new(["settings", "ingest", "scope", "list", "*"], 0, "", ""),
-        new(["watch", "registered"], 0, "no registered watches", ""),
-        new(["extract", "prune"], 0, "promotion queue: no orphaned candidates found", ""),
+        new(["settings", "extract", "list"], 0, "enabled: False  mode: propose  interval: 30 min  queue-capacity: 1000  auto-promote-threshold: off", BackendOutlivesCommand),
+        new(["settings", "ingest", "scope", "list", "*"], 0, "", BackendOutlivesCommand),
+        new(["watch", "registered"], 0, "no registered watches", BackendOutlivesCommand),
+        new(["extract", "prune"], 0, "promotion queue: no orphaned candidates found", BackendOutlivesCommand),
         new(["bogusverb"], ExitCode.FailedToParseCliArgs, "", "Unrecognized command or argument 'bogusverb'."),
         // A recognised-but-incomplete command shows help for the command it got as far as
         // (docs/adr/0060 keeps this distinct from the bogusverb row above: that one never
