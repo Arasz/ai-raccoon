@@ -121,7 +121,18 @@ the proxy itself shuts down.
 
 ## Zero-downtime server updates
 
-Updating the global tool replaces the binary on disk, but the running server keeps using the old version until restarted. Run `serve --restart` for a clean, zero-downtime handoff:
+> **Upgrading from 1.43 or earlier to 1.44.0 is not zero-downtime.** A pre-1.44 server
+> cannot answer the identity proof, so `serve --restart` from the new binary treats it as
+> an unproven listener and refuses with exit code `3`. Stop the old server yourself
+> (for example `kill $(lsof -t -i :7721 -sTCP:LISTEN)`, or wait for its idle timeout), then
+> start the new one. On its first run the new `serve` moves the old top-level `mcp-token`
+> into the bank state directory, and tightens a state directory that others can read
+> (0755) to 0700. A proxy launch that finds nothing running starts that `serve` itself,
+> so no manual step is needed beyond stopping the old server. Don't run an old and a new binary
+> against the same root: the old one writes a second top-level token.
+> See the [ADR-0106 upgrade note](../adr/0106-attach-or-start-with-backend-identity-proof.md#upgrade-note-mixed-version-operation-is-not-supported).
+
+Updating the global tool replaces the binary on disk, but the running server keeps using the old version until restarted. Between 1.44+ versions, run `serve --restart` for a clean, zero-downtime handoff:
 
 ```mermaid
 sequenceDiagram
