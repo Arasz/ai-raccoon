@@ -53,6 +53,8 @@ public sealed class FakeCodeEmbeddingService : IEmbeddingService
 
     public string TrimQueryToWindow(EmbeddingSettings settings, string query) => TrimOverride?.Invoke(query) ?? query;
 
+    public string DocumentText(EmbeddingSettings settings, string text) => text;
+
     /// <summary>
     ///     Derived from the chunker, not restated (#422: this fake held its own copy of the old 126
     ///     and quietly failed every activation scenario when the real budget moved).

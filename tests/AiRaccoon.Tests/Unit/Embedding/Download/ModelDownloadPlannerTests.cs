@@ -255,6 +255,34 @@ public class ModelDownloadPlannerTests
     }
 
     [Fact]
+    public void SentenceTransformersPrompts_BecomeTheQueryAndDocumentInstructions()
+    {
+        var raw = BgeM3Raw();
+        raw["config_sentence_transformers.json"] =
+            """{"prompts": {"query": "task: search result | query: ", "document": "title: none | text: ", "Clustering": "task: clustering | query: "}}""";
+
+        var plan = Planner().BuildPlan("google/embeddinggemma-300m", "main", BgeM3Tree(), raw, BgeM3Probe());
+
+        plan.QueryInstruction.ShouldBe("task: search result | query: ");
+        plan.DocumentInstruction.ShouldBe("title: none | text: ");
+    }
+
+    [Fact]
+    public void EmptyOrMissingPrompts_LeaveBothInstructionsNull()
+    {
+        var raw = BgeM3Raw();
+        raw["config_sentence_transformers.json"] = """{"prompts": {"query": "", "document": ""}}""";
+
+        var withEmpty = Planner().BuildPlan("test/model", "main", BgeM3Tree(), raw, BgeM3Probe());
+        var without = Planner().BuildPlan("test/model", "main", BgeM3Tree(), BgeM3Raw(), BgeM3Probe());
+
+        withEmpty.QueryInstruction.ShouldBeNull();
+        withEmpty.DocumentInstruction.ShouldBeNull();
+        without.QueryInstruction.ShouldBeNull();
+        without.DocumentInstruction.ShouldBeNull();
+    }
+
+    [Fact]
     public void UnknownModelType_Fails_WithActionableMessage()
     {
         var tree = new List<HfTreeEntry> { Onnx, Config, TokenizerConfig };

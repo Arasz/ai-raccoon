@@ -64,7 +64,9 @@ public sealed record EmbeddingManifest(
     MRLInfo? MRL = null,
     // D2: config.json + tokenizer_config.json, trust-on-first-download pinned like the tokenizer
     // and onnx files. Optional so manifests written before D2 still parse.
-    IReadOnlyList<ManifestFile>? ProvenanceFiles = null)
+    IReadOnlyList<ManifestFile>? ProvenanceFiles = null,
+    // Prepended to stored text before embedding; the query-side twin is QueryInstruction.
+    string? DocumentInstruction = null)
 {
     /// <summary>
     ///     The sidecar file name, pinned by amended D1: <c>ai-raccoon.manifest.json</c> — NOT

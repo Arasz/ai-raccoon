@@ -38,7 +38,9 @@ public sealed record ModelDownloadPlan(
     IReadOnlyDictionary<string, int> SpecialTokens,
     string PoolingProvenance,
     int VocabOffset = 0,
-    bool SpecialTokensPending = false);
+    bool SpecialTokensPending = false,
+    string? QueryInstruction = null,
+    string? DocumentInstruction = null);
 
 /// <summary>A repo cannot be turned into a download plan: missing model file, unsupported
 /// tokenizer family, unpinnable special tokens, etc. Messages are actionable.</summary>
@@ -76,6 +78,9 @@ public interface IModelDownloadPlanner
 public sealed class ModelDownloadPlanner : IModelDownloadPlanner
 {
     private const string TokenizerJsonFileName = "tokenizer.json";
+
+    /// <summary>The sentence-transformers file declaring a model's query/document prompts.</summary>
+    public const string SentenceTransformersConfigFileName = "config_sentence_transformers.json";
 
     private static readonly string[] SupportedModelTypes =
         ["bert*", "new", "gte*", "xlm-roberta", "roberta", "t5", "any model type whose repo ships tokenizer.json"];
@@ -164,7 +169,26 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             specialTokens,
             poolingProvenance,
             vocabOffset,
-            specialTokensPending);
+            specialTokensPending,
+            Prompt(rawFiles, "query"),
+            Prompt(rawFiles, "document"));
+    }
+
+    /// <summary>A non-empty sentence-transformers prompt the model was trained with, else null.</summary>
+    private static string? Prompt(IReadOnlyDictionary<string, string> rawFiles, string name)
+    {
+        if (!rawFiles.TryGetValue(SentenceTransformersConfigFileName, out var json))
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.TryGetProperty("prompts", out var prompts) && prompts.ValueKind == JsonValueKind.Object
+                                                                          && prompts.TryGetProperty(name, out var prompt)
+                                                                          && prompt.ValueKind == JsonValueKind.String
+                                                                          && prompt.GetString() is { Length: > 0 } text
+            ? text
+            : null;
     }
 
     public string SelectModelFilePath(IReadOnlyList<HfTreeEntry> tree, IReadOnlyList<string>? explicitFiles = null)

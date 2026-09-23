@@ -231,6 +231,8 @@ public sealed class ModelMigrationJobTests : IAsyncLifetime
 
         public string TrimQueryToWindow(EmbeddingSettings settings, string query) => query;
 
+        public string DocumentText(EmbeddingSettings settings, string text) => text;
+
         public int ResolveChunkBudgetFor(EmbeddingSettings settings) => OnnxEmbeddingGenerator.MaxContentTokens;
 
         public int ResolveDimensions(EmbeddingSettings settings) => 384;
