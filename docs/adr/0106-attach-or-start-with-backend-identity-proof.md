@@ -43,6 +43,12 @@ the launch that spawned it holds its process and stops it at once, rather than l
 timeout. A private child that never reports its URL within the startup budget, or whose
 start the caller cancels, is stopped the same way before the failure is returned.
 
+Once a proxy has fallen back, the fallback is sticky for that proxy's lifetime. A reopen (a client
+naming another protocol revision, or a lost session) proves the private child again and reuses it,
+so one proxy never loads the model twice. Only a child that fails that proof sends the reopen back
+through the full attach-or-start. The shared server, once it proves again, is picked up on the next
+proxy launch.
+
 ### D1 — Trust anchor: a per-root ECDSA P-256 key
 
 `identity-key` (PKCS#8 PEM, 0600) lives beside `mcp-token` in the bank state directory

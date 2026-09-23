@@ -105,6 +105,22 @@ public sealed partial class BackendSessions(
         return await FallbackAsync(prover, launcher, executable, config, fallbackIdleTimeout, verdict, proofFailure, ctx);
     }
 
+    /// <summary>
+    ///     Reuses this proxy's private fallback when it still proves, so a reopen never starts a
+    ///     second child; otherwise (or with none) runs the normal <see cref="AcquireSharedAsync" />.
+    /// </summary>
+    internal static async Task<AcquireOutcome> ReuseOrAcquireAsync(
+        Uri? privateBackend, IServerProbe probe, IIdentityProver prover, IBackendLauncher launcher, string executable,
+        ServerConfig config, TimeSpan? fallbackIdleTimeout, ILogger logger, CancellationToken ctx)
+    {
+        if (privateBackend is not null && await prover.ProveAsync(privateBackend, ctx) is null)
+        {
+            return new AcquireOutcome(new BackendResult(privateBackend.ToString(), null), true, ProbeVerdict.Answered, null);
+        }
+
+        return await AcquireSharedAsync(probe, prover, launcher, executable, config, fallbackIdleTimeout, logger, ctx);
+    }
+
     private static async Task<AcquireOutcome> FallbackAsync(
         IIdentityProver prover, IBackendLauncher launcher, string executable, ServerConfig config,
         TimeSpan? fallbackIdleTimeout, ProbeVerdict verdict, IdentityProofFailure? proofFailure, CancellationToken ctx)
@@ -146,7 +162,11 @@ public sealed partial class BackendSessions(
             // can skip the rest of this method — so shutdown stops it even when the open fails.
             // A proven listener, and the shared instance started on the configured port, are never
             // recorded: they serve other clients too.
-            _privateBackends.Add(new Uri(acquired.Result.Url));
+            var endpoint = new Uri(acquired.Result.Url);
+            if (!_privateBackends.Contains(endpoint))
+            {
+                _privateBackends.Add(endpoint);
+            }
         }
 
         var token = _tokenFile.Read() ?? throw new BackendUnavailableException(Unavailable(
@@ -273,8 +293,10 @@ public sealed partial class BackendSessions(
             // ADR-0106: a proven listener on the configured port is attached to; nothing listening
             // starts one there; anything else (unproven, unanswered) gets a private fallback — but
             // only after the challenge, so no token byte rides before a proof.
-            return await AcquireSharedAsync(_probe, _prover, backendLauncher, executable, config,
-                fallbackIdleTimeout: null, _logger, ctx);
+            // No lock: reopens are serialised by the forwarder's gate, and the startup open runs
+            // before the forwarder exists.
+            return await ReuseOrAcquireAsync(_privateBackends.LastOrDefault(), _probe, _prover, backendLauncher,
+                executable, config, fallbackIdleTimeout: null, _logger, ctx);
         }
         catch (BackendStartException ex)
         {
