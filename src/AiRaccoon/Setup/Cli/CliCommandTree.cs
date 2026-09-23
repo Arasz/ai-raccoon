@@ -61,6 +61,30 @@ internal static class CliCommandTree
     /// </summary>
     internal static readonly Option<int> ObservabilityPortOption = CreateObservabilityPortOption();
 
+    /// <summary>Every option name and alias any command in the full tree defines, help and version included.</summary>
+    internal static readonly IReadOnlySet<string> KnownOptionNames = CollectOptionNames(BuildFullRootCommand());
+
+    private static HashSet<string> CollectOptionNames(Command root)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<Command>([root]);
+        while (pending.TryPop(out var command))
+        {
+            foreach (var option in command.Options)
+            {
+                names.Add(option.Name);
+                names.UnionWith(option.Aliases);
+            }
+
+            foreach (var subcommand in command.Subcommands)
+            {
+                pending.Push(subcommand);
+            }
+        }
+
+        return names;
+    }
+
     /// <summary>The full tree: launch flags + verb commands (help rendered from this root shows the verbs).</summary>
     internal static RootCommand BuildFullRootCommand()
     {

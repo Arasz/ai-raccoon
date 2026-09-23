@@ -664,11 +664,11 @@ public class CliArgsTests
     }
 
     [Fact]
-    public void ServeAttach_IsAnUnrecognizedArgument_Exit9()
+    public void ServeAttach_IsAnUnrecognizedArgument()
     {
         var accepted = CliArgs.TryParse(["serve", "--attach"], out var parsed);
 
-        // The parse result carries the unrecognized-argument error; AppRunner maps parse errors to 9.
+        // The exit code (9) is pinned by AppRunnerUnrecognisedVerbTests.StrayAttach_FailsToParse_InEitherSpelling.
         accepted.ShouldBeTrue();
         parsed!.Errors.ShouldNotBeEmpty();
         parsed.Errors.ShouldContain(error => error.Contains("--attach", StringComparison.Ordinal));
