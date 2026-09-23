@@ -1,5 +1,6 @@
 using System.Net;
 using AiRaccoon.Hosting.Common;
+using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
@@ -246,6 +247,79 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         });
 
         stderr.ShouldContain("System.Net.Http");
+    }
+
+    /// <summary>The proxy logs through its DI graph, so that graph carries the MCP chatter floor:
+    /// the relay's MCP client and stdio server INFO lines stay out, their warnings and the app's own lines do not.</summary>
+    [RetryFact]
+    public void ProxyServices_QuietModelContextProtocolCategory_ButKeepAppInfo()
+    {
+        var services = new ServiceCollection();
+        var recorder = new RecorderProvider();
+        services.AddLogging(builder => builder.AddProvider(recorder));
+        services.RegisterProxyServices();
+        using var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<ILoggerFactory>();
+
+        factory.CreateLogger("ModelContextProtocol.Client.McpClient").LogInformation("proxy-mcp-info-marker");
+        factory.CreateLogger("ModelContextProtocol.Client.McpClient").LogWarning("proxy-mcp-warn-marker");
+        factory.CreateLogger("AiRaccoon.Hosting.Proxy.BackendSessions").LogInformation("proxy-app-info-marker");
+
+        recorder.Entries.ShouldNotContain(e => e.Contains("proxy-mcp-info-marker", StringComparison.Ordinal));
+        recorder.Entries.ShouldContain(e => e.Contains("proxy-mcp-warn-marker", StringComparison.Ordinal));
+        recorder.Entries.ShouldContain(e => e.Contains("proxy-app-info-marker", StringComparison.Ordinal));
+    }
+
+    /// <summary>The 690 fallback warning's own wording; the refusal line never carries it.</summary>
+    private const string FallbackWarning = "starting a private backend on an ephemeral port instead";
+
+    /// <summary>
+    ///     The proxy's own logger follows quiet mode: the 690 fallback warning lands in the quiet log,
+    ///     not on stderr, while the refusal that follows (no private backend could start) stays on
+    ///     stderr because it is written there directly.
+    /// </summary>
+    [RetryFact]
+    public async Task QuietProxy_FallbackWarning_GoesToTheQuietLog_AndTheRefusalStaysOnStderr()
+    {
+        var options = QuietOptions(InstallScope.User);
+        var (stdout, stderr) = await RunProxyAgainstAnUnprovenSquatterAsync(options, "--quiet");
+
+        stdout.ShouldBeEmpty();
+        stderr.ShouldNotContain(FallbackWarning);
+        stderr.ShouldContain("no in-process fallback exists", Case.Sensitive, "the refusal is written straight to stderr");
+        File.ReadAllText(LogFilePath(options)).ShouldContain(FallbackWarning);
+    }
+
+    /// <summary>Positive control: without --quiet the same fallback warning reaches stderr.</summary>
+    [RetryFact]
+    public async Task LoudProxy_FallbackWarning_ReachesStderr()
+    {
+        var options = LoudOptions(InstallScope.User);
+        var (_, stderr) = await RunProxyAgainstAnUnprovenSquatterAsync(options);
+
+        stderr.ShouldContain(FallbackWarning);
+        File.Exists(LogFilePath(options)).ShouldBeFalse();
+    }
+
+    /// <summary>A listener with no identity route squats the port, so the proxy logs 690 and tries a
+    /// private child; the apphost path does not exist, so that start fails and the proxy refuses.</summary>
+    private static async Task<(string Out, string Err)> RunProxyAgainstAnUnprovenSquatterAsync(
+        InfrastructureOptions options, params string[] flags)
+    {
+        await TestData.SeedBankAsync(options, TestContext.Current.CancellationToken);
+        await new McpTokenFile(options.DataRoot).EnsureAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
+        await using var squatter = await FakeRaccoon.StartAsync(port, HttpStatusCode.Unauthorized,
+            TestContext.Current.CancellationToken);
+
+        return await ConsoleCapture.RunAsync(async () =>
+        {
+            var exit = await new AppRunner(CliSettingsBackend.AcquireAsync, AppHost).Run(
+                [.. flags, "--data-root", options.DataRoot, "--port", port.ToString()]);
+            exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
+        });
     }
 
     /// <summary>A FakeRaccoon that proves it serves <paramref name="options"/>'s root, so the

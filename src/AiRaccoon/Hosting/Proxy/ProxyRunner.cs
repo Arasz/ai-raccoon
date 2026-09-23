@@ -8,7 +8,7 @@ namespace AiRaccoon.Hosting.Proxy;
 ///     The bare-launch composition root (docs/adr/0020-always-on-http-stdio-proxy.md): acquire one
 ///     HTTP backend and relay every stdio message to it. Resolves no key, opens no bank, loads no model.
 /// </summary>
-public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLauncher backendLauncher, IServerProbe serverProbe, IHttpClientFactory httpClientFactory, ILogger<ProxyRunner> logger) : IProxyRunner
+public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLauncher backendLauncher, IServerProbe serverProbe, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, ILogger<ProxyRunner> logger) : IProxyRunner
 {
     public async Task<int> RunAsync(ServerConfig serverConfig, StandardStreams streams, string? processPath, CancellationToken ctx)
     {
@@ -18,7 +18,6 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
             return ExitCode.ProxyBackendUnavailable;
         }
 
-        var loggerFactory = CreateMcpLoggerFactory(serverConfig);
         // The verifier is bound to this launch's resolved root, exactly like the token reader below:
         // reading it from a DI singleton would tie the proof to whichever root registered first.
         var prover = new IdentityProver(serverConfig.Options, httpClientFactory);
@@ -50,18 +49,6 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
         return ExitCode.Success;
     }
 
-
-    /// <summary>Every log line goes to stderr: stdout is the JSON-RPC channel.</summary>
-    private static ILoggerFactory CreateMcpLoggerFactory(ServerConfig config) =>
-        LoggerFactory.Create(builder =>
-        {
-            builder.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
-            builder.AddFilter("ModelContextProtocol", LogLevel.Warning);
-            if (config.Options.Quiet)
-            {
-                builder.SetMinimumLevel(LogLevel.Warning);
-            }
-        });
 
     /// <summary>The line a port the proxy cannot dial ends on; names the supported random-port path.</summary>
     private static string Undialable(int port) =>

@@ -71,9 +71,10 @@ live against the worktree build:
 Quiet mode keeps two pins and no more: the serve/HTTP host still file-sinks
 every level (`HostLogging` routes `Quiet` to `quiet.log` beside the bank), and
 the proxy forwards `--quiet` to the backend it starts (`BackendLaunchArguments`
-passes `--data-root`, `--install-scope` and `--quiet` through). The proxy
-itself stays exempt by design (stderr, `Warning` and above), so the
-backend-unavailable line is always visible.
+passes `--data-root`, `--install-scope` and `--quiet` through). The proxy's
+own logger follows quiet mode too (file only, the same `quiet.log`). Its
+refusal lines (backend unavailable, no bank, a port it cannot dial) are written
+straight to stderr and never go through the logger, so they stay visible.
 
 Hermes (plugin and docs) moves to the D6 recipe: a temp `--data-root` plus a
 leased `--port` in `binary_args`, proven against a busy default 7721 (Evidence
