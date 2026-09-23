@@ -6,6 +6,7 @@ using AiRaccoon.Hosting.Watchdog;
 using AiRaccoon.Observability;
 using AiRaccoon.Prompts;
 using AiRaccoon.Settings;
+using AiRaccoon.Setup.Identity;
 using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tools;
 using CommunityToolkit.Diagnostics;
@@ -90,6 +91,10 @@ internal static partial class McpServerSetup
 
             webApplication.MapMcp("/mcp");
             webApplication.MapObservability();
+            // ADR-0106 D2: the one pre-token route. A listener proves it holds this root's
+            // identity key before a client hands over the token; the signer is read (never
+            // minted) and cached here for the host's lifetime.
+            webApplication.MapIdentityProof(new IdentityKeyFile(config.Options));
             if (gated is not null)
             {
                 webApplication.MapShutdown();

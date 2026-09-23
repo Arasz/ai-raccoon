@@ -37,6 +37,9 @@ public static class IdentityProof
 {
     public const string DomainLabel = "ai-raccoon/identity/v1";
 
+    /// <summary>The one pre-token route, on the existing loopback listener (ADR-0106 D2).</summary>
+    public const string EndpointPath = "/identity/prove";
+
     public const int NonceBytes = 32;
 
     /// <summary>P-256's r‖s is always 32 + 32 bytes.</summary>
