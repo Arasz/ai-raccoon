@@ -41,13 +41,17 @@ def fresh_scratch_copy(base_db: Path, data_root: Path) -> Path:
 
 @contextmanager
 def scratch_server(base_db: Path, data_root: Path, *, binary: str = "ai-raccoon",
-                   before_start=None):
+                   before_start=None, idle_timeout=None):
     """Fresh copy -> `before_start(db)` -> started scratch server, in that order.
 
     `before_start` runs after the copy and before any server exists, so a
     refused or already-mutated scratch never serves; raise `ScratchRefused`
     from it to stop the run. The server import is lazy so this module stays
     stdlib-only for the CI harness lane (the SDK comes from server.py/mcp.py).
+    `idle_timeout`, when given, passes through to `start_server` as a keyword
+    arg; omitted (the default, None) it is never passed at all, so an existing
+    caller's `start_server`/fake with the old two-arg signature (no
+    `idle_timeout` parameter, no **kwargs) is called exactly as before.
     """
     fresh_scratch_copy(base_db, data_root)
     db = Path(data_root) / "memory.db"
@@ -55,5 +59,8 @@ def scratch_server(base_db: Path, data_root: Path, *, binary: str = "ai-raccoon"
         before_start(db)
     from .server import start_server  # noqa: PLC0415 — lazy: keeps this module stdlib-only
 
-    with start_server(data_root, binary=binary) as server:
+    kwargs = {"binary": binary}
+    if idle_timeout is not None:
+        kwargs["idle_timeout"] = idle_timeout
+    with start_server(data_root, **kwargs) as server:
         yield server

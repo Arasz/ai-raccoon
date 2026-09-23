@@ -163,6 +163,15 @@ class MCPClient:
             arguments["kind"] = kind
         return self._extract_results(self._call_tool("memory_search", arguments), kind=kind)
 
+    def ingest_directory(self, project_id: str, path: str, context: Optional[str] = None) -> dict:
+        """memory_ingest_directory: recursively indexes `path` (must be inside the
+        project's configured ingest scope — settings ingest scope add) into memory
+        and the code corpus. Returns the raw tool payload (ScannedResult)."""
+        arguments = {"projectId": project_id, "path": path}
+        if context is not None:
+            arguments["context"] = context
+        return self._call_tool("memory_ingest_directory", arguments)
+
     def memory_search_with_knobs(
         self,
         project_id: str,

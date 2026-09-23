@@ -1,0 +1,30 @@
+[
+  {
+    "family": "fixture",
+    "vendoredPath": "corpus/greeter.py",
+    "language": "python",
+    "sizeBand": "small",
+    "lines": 24
+  },
+  {
+    "family": "fixture",
+    "vendoredPath": "corpus/test_greeter.py",
+    "language": "python",
+    "sizeBand": "small",
+    "lines": 21
+  },
+  {
+    "family": "fixture",
+    "vendoredPath": "corpus/IntervalOverlap.cs",
+    "language": "csharp",
+    "sizeBand": "small",
+    "lines": 22
+  },
+  {
+    "family": "fixture",
+    "vendoredPath": "corpus/retry.js",
+    "language": "javascript",
+    "sizeBand": "small",
+    "lines": 21
+  }
+]
