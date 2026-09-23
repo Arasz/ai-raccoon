@@ -165,13 +165,13 @@ public sealed class TransportRemovalTests : IDisposable
     }
 
     [Fact]
-    public async Task Bare_PortZero_ReturnsSixWithoutDialling()
+    public async Task Bare_PortZero_IsAnInvalidValue_WithoutDialling()
     {
         var runner = new AppRunner();
 
         var exit = await runner.Run(["--data-root", _dataRoot, "--port", "0"]);
 
-        exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
+        exit.ShouldBe(ExitCode.InvalidArgument);
     }
 
     [Theory]
