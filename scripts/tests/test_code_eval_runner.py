@@ -266,3 +266,24 @@ class TestFixtureCorpus:
         counts = runner.chunk_counts_by_language_band(db_path, manifest_rows)
         assert counts["python:small"] == 2
         assert counts["csharp:small"] == 1
+
+
+class TestHitRecord:
+    """--save-hits keeps each query's raw ranked hits so an offline re-rank can re-score them."""
+
+    def test_keeps_rank_order_and_the_fields_scoring_reads(self):
+        runner = _load_runner()
+        results = [
+            {"hash": "h1", "ranking": 1.0, "path": "/c/gin/tree.go", "lineStart": 3, "lineEnd": 40, "snippet": "x"},
+            {"hash": "h2", "ranking": 0.7, "path": "/c/gin/tree_test.go", "lineStart": 1, "lineEnd": 9, "snippet": "y"},
+        ]
+
+        record = runner.hit_record({"id": "gin-001"}, results)
+
+        assert record == {
+            "id": "gin-001",
+            "hits": [
+                {"hash": "h1", "ranking": 1.0, "path": "/c/gin/tree.go", "lineStart": 3, "lineEnd": 40},
+                {"hash": "h2", "ranking": 0.7, "path": "/c/gin/tree_test.go", "lineStart": 1, "lineEnd": 9},
+            ],
+        }
