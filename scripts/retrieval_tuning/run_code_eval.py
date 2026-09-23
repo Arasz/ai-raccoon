@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import sqlite3
@@ -83,34 +84,39 @@ def is_busy_command(cmdline: str) -> Optional[str]:
     return None
 
 
+BUSY_CPU_PERCENT = 20.0
+
+
 def find_busy_processes(ps_output: str, exclude_pids: frozenset = frozenset()) -> list[dict]:
-    """Parse `ps -Ao pid,command` text; return busy rows, excluding given pids."""
+    """Parse `ps -Ao pid,%cpu,command`; return competing rows that are actually burning CPU.
+
+    An idle match (the live MCP server, another session's parked serve) does not compete
+    with a drain, so only rows at or above BUSY_CPU_PERCENT count.
+    """
     lines = ps_output.strip("\n").splitlines()
     if len(lines) <= 1:
         return []
     found = []
     for line in lines[1:]:
-        line = line.strip()
-        if not line:
+        parts = line.strip().split(None, 2)
+        if len(parts) < 3:
             continue
-        parts = line.split(None, 1)
-        if len(parts) < 2:
-            continue
-        pid_str, command = parts
+        pid_str, cpu_str, command = parts
         try:
             pid = int(pid_str)
+            cpu = float(cpu_str)
         except ValueError:
             continue
-        if pid in exclude_pids:
+        if pid in exclude_pids or cpu < BUSY_CPU_PERCENT:
             continue
         label = is_busy_command(command)
         if label:
-            found.append({"pid": pid, "command": command, "label": label})
+            found.append({"pid": pid, "cpu": cpu, "command": command, "label": label})
     return found
 
 
 def _run_ps() -> str:
-    proc = subprocess.run(["ps", "-Ao", "pid,command"], capture_output=True, text=True, timeout=10)
+    proc = subprocess.run(["ps", "-Ao", "pid,%cpu,command"], capture_output=True, text=True, timeout=10)
     return proc.stdout
 
 
@@ -124,7 +130,7 @@ def check_not_busy(*, allow_busy: bool = False, own_pid: Optional[int] = None, p
     ps_fn = ps_fn or _run_ps
     busy = find_busy_processes(ps_fn(), exclude_pids=frozenset({own_pid}))
     if busy:
-        described = ", ".join(f"pid {p['pid']} ({p['label']}): {p['command']}" for p in busy)
+        described = ", ".join(f"pid {p['pid']} ({p['label']}, {p['cpu']:.0f}% cpu): {p['command']}" for p in busy)
         raise BusyProcessError(
             f"refusing to start: competing embedding-heavy process(es) running: {described} "
             "— pass --allow-busy to override"
@@ -375,6 +381,7 @@ def render_markdown(arm: str, report: dict) -> str:
 
 def run(args) -> dict:
     check_not_busy(allow_busy=args.allow_busy)
+    load_at_start = os.getloadavg()
 
     binary_sha = sha256_file(args.binary)
     settings_dict = parse_settings_kv(args.settings)
@@ -423,6 +430,7 @@ def run(args) -> dict:
         "binary": str(args.binary),
         "binarySha256": binary_sha,
         "corpusRoot": str(args.corpus_root),
+        "loadAverageAtStart": list(load_at_start),
         "queriesPath": str(args.queries),
         "settings": settings_dict,
         "reusedBank": str(args.reuse_bank) if reused else None,

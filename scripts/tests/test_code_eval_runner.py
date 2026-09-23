@@ -122,16 +122,27 @@ class TestReuseBankDeletesWatches:
 
 
 class TestBusyProcessRefusal:
-    PS_HEADER = "  PID COMMAND"
-    PS_CLEAN = PS_HEADER + "\n" + "  100 /usr/bin/python3 some_script.py\n" + "  200 -zsh\n"
+    PS_HEADER = "  PID  %CPU COMMAND"
+    PS_CLEAN = PS_HEADER + "\n" + "  100   1.0 /usr/bin/python3 some_script.py\n" + "  200   0.0 -zsh\n"
     PS_BUSY_SERVE = (
         PS_HEADER
         + "\n"
-        + "  100 /usr/bin/python3 run_code_eval.py\n"
-        + "  555 /usr/local/bin/ai-raccoon --data-root /home/me/.ai-raccoon serve --port 7721\n"
+        + "  100   2.0 /usr/bin/python3 run_code_eval.py\n"
+        + "  555  95.0 /usr/local/bin/ai-raccoon --data-root /home/me/.ai-raccoon serve --port 7721\n"
     )
-    PS_BUSY_ASPIRE = PS_HEADER + "\n" + "  777 dotnet exec AppHost.Aspire.dll\n"
-    PS_BUSY_DOTNET_TEST = PS_HEADER + "\n" + "  888 dotnet test src/AiRaccoon.sln\n"
+    PS_BUSY_ASPIRE = PS_HEADER + "\n" + "  777  60.0 dotnet exec AppHost.Aspire.dll\n"
+    PS_BUSY_DOTNET_TEST = PS_HEADER + "\n" + "  888 140.0 dotnet test src/AiRaccoon.sln\n"
+    PS_IDLE_SERVE = (
+        PS_HEADER
+        + "\n"
+        + "  556   0.3 /usr/local/bin/ai-raccoon --data-root /home/me/.ai-raccoon serve --port 7721\n"
+    )
+
+    def test_an_idle_competitor_is_not_busy(self):
+        # The live MCP server and other sessions' idle processes are always present;
+        # only one actually burning CPU competes with a drain.
+        runner = _load_runner()
+        assert runner.find_busy_processes(self.PS_IDLE_SERVE) == []
 
     def test_clean_ps_output_finds_nothing(self):
         runner = _load_runner()
@@ -145,7 +156,7 @@ class TestBusyProcessRefusal:
         ps_output = (
             self.PS_HEADER
             + "\n"
-            + "  321 chatter observe --filter=ROLLOUT --repo=/Users/me/ai-raccoon --analytics=true\n"
+            + "  321  90.0 chatter observe --filter=ROLLOUT --repo=/Users/me/ai-raccoon --analytics=true\n"
         )
         assert runner.find_busy_processes(ps_output) == []
 
@@ -154,8 +165,8 @@ class TestBusyProcessRefusal:
         ps_output = (
             self.PS_HEADER
             + "\n"
-            + "  322 some-tool --preserve-state --path ai-raccoon\n"
-            + "  323 another-tool --well-deserved ai-raccoon\n"
+            + "  322  90.0 some-tool --preserve-state --path ai-raccoon\n"
+            + "  323  90.0 another-tool --well-deserved ai-raccoon\n"
         )
         assert runner.find_busy_processes(ps_output) == []
 
