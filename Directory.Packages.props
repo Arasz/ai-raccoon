@@ -19,7 +19,7 @@
         <PackageVersion Include="NSubstitute" Version="6.2.0"/>
         <PackageVersion Include="SQLite3MC.PCLRaw.bundle" Version="2.4.0"/>
         <PackageVersion Include="SQLitePCLRaw.core" Version="3.0.5"/>
-        <PackageVersion Include="Dapper" Version="2.1.86"/>
+        <PackageVersion Include="Dapper" Version="2.1.89"/>
         <!-- sqlite-vec pre-v1 (vec0 virtual table); pinned — re-run the retrieval harness on upgrade (plan §6). -->
         <PackageVersion Include="HiraokaHyperTools.sqlite-vec" Version="0.1.9"/>
         <PackageVersion Include="CommunityToolkit.Diagnostics" Version="8.4.2"/>
