@@ -1,0 +1,74 @@
+{
+  "manifestVersion": 1,
+  "model": "onnx-community/granite-embedding-small-english-r2-ONNX",
+  "source": {
+    "repo": "onnx-community/granite-embedding-small-english-r2-ONNX",
+    "revision": "1dc7835ba0cb9c76a3618d0bf0c427c97671b3c8"
+  },
+  "provider": "local",
+  "dimensions": 384,
+  "contextWindowTokens": 8190,
+  "normalization": "l2",
+  "queryInstruction": null,
+  "pooling": {
+    "mode": "model-output",
+    "outputNames": {
+      "embedding": "sentence_embedding",
+      "tokenEmbeddings": "last_hidden_state"
+    }
+  },
+  "tokenizer": {
+    "family": "tokenizer-json",
+    "files": [
+      {
+        "path": "tokenizer.json",
+        "sha256": "feeb83348dcb033bc6b9d2e1f7906ca9eb2d122845000c9416d894d7c2927149"
+      }
+    ],
+    "options": {
+      "addBeginOfSentence": false,
+      "addEndOfSentence": false,
+      "specialTokens": {
+        "[UNK]": 50280,
+        "[PAD]": 50283,
+        "[CLS]": 50281,
+        "[SEP]": 50282
+      },
+      "vocabOffset": 0
+    }
+  },
+  "onnx": {
+    "inputs": [
+      "input_ids",
+      "attention_mask"
+    ],
+    "embeddingOutput": "sentence_embedding",
+    "tokenEmbeddingsOutput": "last_hidden_state",
+    "files": [
+      {
+        "path": "model_fp16.onnx",
+        "sha256": "ee200de55cb2f94e858aabca54be7697a9c0805a14c858ee26ad0922b05f57d7"
+      },
+      {
+        "path": "model_fp16.onnx_data",
+        "sha256": "28d16e29cd623f25cc6fa0968700c5bc31036466091a5fa06d1353c1777f050e"
+      }
+    ]
+  },
+  "requiresTokenTypeIds": false,
+  "mrl": {
+    "supported": false,
+    "minDimensions": null
+  },
+  "provenanceFiles": [
+    {
+      "path": "config.json",
+      "sha256": "1a1710c20911da8c96179716bf44058e54cca6fa7952cce77be83ef05edae3ee"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "sha256": "ce06781b38bb393db68c9e0709bddd31ef5d88f2c6fbb3fd9f369778fb85e451"
+    }
+  ],
+  "documentInstruction": null
+}

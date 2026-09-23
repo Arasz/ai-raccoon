@@ -1,0 +1,106 @@
+# 0108 — One bundled engine for memory and code: granite-embedding-small-english-r2 (fp16), GPU first
+
+Date: 2026-09-23
+
+Status: Accepted
+
+## Context
+
+AiRaccoon shipped two engines. Memory used the bundled int8 all-MiniLM-L6-v2 (23 MB, inside the
+tool package). Code had no bundled engine at all: `ai-raccoon model code set default` downloaded
+`faxenoff/code-daemon-embed-v1` (179 MB) from Hugging Face.
+
+The embedding survey (`docs/work/2026-09-23-embedding-model-survey.md`) and the follow-up
+measurements in this ADR's session scored both against the candidates the tokenizer.json work
+(1.46.0) made loadable. Four evals were used: code (summary → method, 482 pairs from this
+repository), code across 12 languages (#673's corpus, 72 queries, 1,775 chunks), the 174-doc
+memory corpus, and a title → document eval built from a copy of a live bank (150 documents,
+1,037 chunks).
+
+| engine | size | code (this repo) MRR | code (12 languages) MRR@10 | memory nDCG@10 | bank nDCG@10 |
+|---|---|---|---|---|---|
+| all-MiniLM-L6-v2 int8 (memory default) | 23 MB | 0.484 | 0.643 | 0.605 | 0.347 |
+| code-daemon-embed-v1 (code default) | 179 MB | 0.324 | 0.391 | 0.573 | – |
+| granite-embedding-small-english-r2 fp16 | 97 MB | – | 0.788 | 0.632¹ | 0.377 |
+| granite-embedding-small-english-r2 int8 | 50 MB | 0.630 | 0.791 | 0.632 | 0.374 |
+
+¹ fp16 and fp32 vectors agree at cosine 1.00000 on CPU; the fp32 export scored 0.636.
+
+granite-small beats both defaults on every eval, and it is Apache-2.0. One engine can serve both
+corpora, and one ONNX session serves both because the engine cache is keyed by fingerprint.
+
+Three constraints decided which of its files ships.
+
+**The CPU is shared; the GPU mostly is not.** An embed drain competes with everything else on
+the machine. Measured on an Apple M4 (ORT 1.30.0, granite-small, one row per run), the WebGPU
+execution provider costs 5-10× less process CPU per embed than the CPU provider at the same or
+better latency. At 128 tokens, fp32 took 61-64 ms of CPU on the CPU provider against 4.6-6.9 ms
+on WebGPU. At 512 tokens it took 253-261 ms against 52-58 ms. fp16 on WebGPU ran at 9 ms and
+29 ms latency, against 12 ms and 50 ms for fp32 on CPU.
+
+**An int8 graph cannot move to the GPU without changing its vectors.** The int8 export on WebGPU
+or CoreML reproduced its own CPU vectors at cosine 0.944-0.966 only. ADR-0049 is the same
+phenomenon across CPUs: u8s8 integer matmuls take different arithmetic paths on NEON, AVX2 and
+VNNI and give different answers. fp16 on WebGPU reproduced fp16 on CPU at cosine 0.9998, and
+fp32 at 1.000000.
+
+**The package has a ceiling.** nuget.org rejects packages over about 250 MB. The osx-arm64 RID
+package was 65 MB compressed with MiniLM inside it. The fp32 export (186 MB) would put it close to
+the ceiling, and fp16 (97 MB) does not.
+
+## Decision
+
+1. **The bundled engine is granite-embedding-small-english-r2, fp16 export**
+   (`onnx-community/granite-embedding-small-english-r2-ONNX`, `onnx/model_fp16.onnx` plus its
+   `model_fp16.onnx_data`, and `tokenizer.json`), pinned by SHA-256. It replaces all-MiniLM-L6-v2
+   int8 for memory. 384 dimensions, the same as before, so vec0 tables keep their shape. It pools
+   through the graph's own `sentence_embedding` output, uses the tokenizer-json family and has no
+   prompts.
+2. **It is also the code corpus's default engine.** `model code set default` activates the
+   bundled engine instead of downloading code-daemon-embed-v1. The code engine stays separately
+   configurable, and `model code set local <dir>` still takes any manifest model.
+3. **The bundled engine's fingerprint changes.** Every existing bank re-embeds on upgrade through
+   the model-migration drain (ADR-0076), memory and code alike. That is accepted: one engine, one
+   re-embed, never two diverging vector spaces.
+4. **Sessions try the GPU first.** Where the platform's ONNX Runtime build implements a GPU
+   execution provider, the session appends it and ONNX Runtime keeps what the GPU cannot run on
+   the CPU. The 1.30.0 osx-arm64 build implements WebGPU. Where appending fails, or the build has
+   none, the session runs on the CPU and logs which provider it got. A setting forces the CPU for
+   machines where the GPU misbehaves.
+5. **The weights are fetched at build time, not committed.** `scripts/src/bundle.py` pins the
+   files and `scripts/download-embedding-model.py` downloads and verifies them into
+   `src/AiRaccoon/Models/` before `dotnet pack`, as it already did for the ONNX model. The 97 MB
+   `.onnx_data` file is git-ignored.
+
+## Consequences
+
+- One model file for both corpora. The package loses MiniLM (23 MB) and the code tokenizer
+  (0.6 MB) and gains about 100 MB.
+- First start after upgrading re-embeds every bank. ADR-0076 measured roughly 6 minutes of
+  refused tool calls on a 25,917-entry bank with the old engine. The new engine is heavier per
+  row on the CPU and lighter on the GPU. README's Breaking changes names the cost.
+- The chunk budget for the bundled engine moves from 254 tokens to 510 (ADR-0036: min(510,
+  window − 2)), so new writes chunk larger. Stored chunks are not re-chunked.
+- Windows and Linux run on the CPU with the standard package. There, fp16 costs roughly twice
+  fp32's CPU time, because ONNX Runtime upcasts it. A DirectML (Windows) or CUDA (Linux) build is
+  the follow-up that brings the GPU path to those hosts.
+- Committed fixtures that bake bundled-model vectors (ADR-0049/0050) are regenerated with the new
+  engine.
+
+## Alternatives rejected
+
+- **granite-small int8 as the bundled file** (50 MB, the smallest). It cannot use the GPU without
+  changing its vectors (cosine 0.94-0.97), and it inherits ADR-0049's host-dependent arithmetic.
+  It is not cheaper than fp32 on this CPU either: 87 s against 77 s for the same 1,775 chunks.
+- **granite-small fp32.** Exact on the GPU, but 186 MB would put the RID package near the nuget.org
+  ceiling, and it needs twice the GPU memory.
+- **EmbeddingGemma** (best on memory text). 295 MB int8 alone is over the package ceiling, and
+  bundling its weights would make AiRaccoon a distributor under Gemma Terms §3.1. It stays an
+  opt-in `model download`.
+- **granite-embedding-english-r2** (best on the 12-language code eval, 0.838). 577 MB fp32 and
+  161 MB int8. Too large to bundle as fp16/fp32, and int8 is ruled out above.
+- **Keeping MiniLM for memory and bundling granite only for code.** Two models in the package,
+  two vector spaces, and MiniLM loses on every eval.
+- **CoreML instead of WebGPU on macOS.** With dynamic shapes, CoreML took 305 of 400 nodes in 37
+  partitions and ran about 3× slower than the CPU. With fixed shapes, it was no faster than the
+  CPU and loaded in 2-7 s.

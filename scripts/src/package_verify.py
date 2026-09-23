@@ -9,7 +9,10 @@ from pathlib import Path
 
 import bundle
 
-REQUIRED_ENTRIES = ("Models/" + bundle.MODEL_NAME, "Models/" + bundle.VOCAB_NAME)
+_BUNDLED_PINS = tuple(("Models/%s/%s" % (bundle.BUNDLED_DIR, name), sha) for name, _url, sha in bundle.BUNDLED_FILES) + (
+    ("Models/%s/%s" % (bundle.BUNDLED_DIR, bundle.BUNDLED_MANIFEST[0]), bundle.BUNDLED_MANIFEST[1]),
+)
+REQUIRED_ENTRIES = tuple(entry for entry, _sha in _BUNDLED_PINS) + ("Models/" + bundle.VOCAB_NAME,)
 
 _RID_BY_UNAME = {
     ("Darwin", "arm64"): "osx-arm64",
@@ -82,11 +85,12 @@ def verify_nupkg(nupkg, version):
             print("FAIL: %s missing from %s" % (entry, nupkg), file=sys.stderr)
             return 1
         print("present in package: %s" % entry)
-    actual = entry_sha256(nupkg, "Models/" + bundle.MODEL_NAME)
-    if actual != bundle.MODEL_SHA256:
-        print("FAIL: model sha256 mismatch: expected %s, got %s" % (bundle.MODEL_SHA256, actual), file=sys.stderr)
-        return 1
-    print("model sha256 verified: %s" % actual)
+    for entry, expected in _BUNDLED_PINS:
+        actual = entry_sha256(nupkg, entry)
+        if actual != expected:
+            print("FAIL: %s sha256 mismatch: expected %s, got %s" % (entry, expected, actual), file=sys.stderr)
+            return 1
+        print("sha256 verified: %s" % entry)
     print("OK: ai-raccoon.%s.nupkg ships the verified bundled model" % version)
     return 0
 
