@@ -59,8 +59,8 @@ internal static class CliArgs
 
     /// <summary>
     ///     P1 CLI-surface removal: --transport is proxy|http only. When the raw args name a
-    ///     removed value, append one stderr line (the run exits InvalidArgument, 15: a bad value,
-    ///     not unparseable argv). Raw-args scan, so the hint does
+    ///     removed value, append one stderr line (the run exits Usage.RemovedTransport, not
+    ///     unparseable argv). Raw-args scan, so the hint does
     ///     not depend on how System.CommandLine bound the value — and keep-enum (ADR-0104) means
     ///     the members stay as parse-rejected values, so this scan is the mechanism, not a bridge
     ///     to a deletion.
