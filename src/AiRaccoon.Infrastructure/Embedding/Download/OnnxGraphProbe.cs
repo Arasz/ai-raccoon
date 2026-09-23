@@ -145,7 +145,7 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
         }
     }
 
-    private static (string Key, string Value) WalkStringStringEntry(ReadOnlySpan<byte> message, int depth)
+    private static StringEntry WalkStringStringEntry(ReadOnlySpan<byte> message, int depth)
     {
         GuardDepth(depth);
         var reader = new ProtoReader(message);
@@ -167,7 +167,7 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
             }
         }
 
-        return (key, value);
+        return new StringEntry(key, value);
     }
 
     private static void WalkOpset(ReadOnlySpan<byte> message, ProbeBuilder builder)
@@ -300,6 +300,8 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
             return _message[_position++];
         }
     }
+
+    private readonly record struct StringEntry(string Key, string Value);
 
     private sealed class ProbeBuilder
     {

@@ -59,7 +59,7 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
                 .ConfigureAwait(false)).ToList();
             var totalChunks = rows.Count;
 
-            var scan = _scanner.Scan(group.SourceFile, rows.Select(row => (row.Id, row.Hash)).ToList(),
+            var scan = _scanner.Scan(group.SourceFile, rows.Select(row => new StoredChunk(row.Id, row.Hash)).ToList(),
                 maxTokens, overlayTokens, countTokens);
 
             foreach (var row in rows)

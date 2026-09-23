@@ -327,8 +327,8 @@ public sealed partial class EmbeddingService(
     internal static string ThreadCountDisplay(int threads) => threads == 0 ? "ORT default" : threads.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>WP4/G4: the resolved count and its source for `embedding.threads`, in one place — doctor and settings both derived this ternary independently before.</summary>
-    internal static (int Threads, string Source) ResolveThreadCountForDisplay(string? rawSetting) =>
-        (TryParseThreadsSetting(rawSetting, out var explicitThreads)
+    internal static ResolvedThreadCount ResolveThreadCountForDisplay(string? rawSetting) =>
+        new(TryParseThreadsSetting(rawSetting, out var explicitThreads)
             ? explicitThreads
             : HalvedCoreThreadDefault(Environment.ProcessorCount), ThreadCountSource(rawSetting));
 

@@ -10,12 +10,12 @@ public sealed class WatchRetryPolicy : IWatchRetryPolicy
 {
     private const int MaxFailures = 5;
 
-    private readonly Dictionary<(string ProjectId, string Path), Entry> _entries = new(WatchKeyComparer.Instance);
+    private readonly Dictionary<WatchKey, Entry> _entries = new();
 
     /// <summary>True when the watch may attempt a digest now: not stopped and past any backoff.</summary>
     public bool ShouldAttempt(string projectId, string watchPath, DateTimeOffset now)
     {
-        if (!_entries.TryGetValue((projectId, watchPath), out var entry) || entry.ConsecutiveFailures == 0)
+        if (!_entries.TryGetValue(new WatchKey(projectId, watchPath), out var entry) || entry.ConsecutiveFailures == 0)
         {
             return true;
         }
@@ -23,25 +23,25 @@ public sealed class WatchRetryPolicy : IWatchRetryPolicy
         return entry.ConsecutiveFailures < MaxFailures && entry.NextAttemptAt is { } next && now >= next;
     }
 
-    public bool IsStopped(string projectId, string watchPath) => _entries.TryGetValue((projectId, watchPath), out var entry) && entry.ConsecutiveFailures >= MaxFailures;
+    public bool IsStopped(string projectId, string watchPath) => _entries.TryGetValue(new WatchKey(projectId, watchPath), out var entry) && entry.ConsecutiveFailures >= MaxFailures;
 
     /// <summary>Records a failed digest; returns the watch state after this failure.</summary>
     public WatchState RecordFailure(string projectId, string watchPath, DateTimeOffset now)
     {
-        var failures = _entries.TryGetValue((projectId, watchPath), out var entry)
+        var failures = _entries.TryGetValue(new WatchKey(projectId, watchPath), out var entry)
             ? entry.ConsecutiveFailures + 1
             : 1;
         DateTimeOffset? nextAttempt = failures >= MaxFailures
             ? null
             : now + BackoffFor(failures);
-        _entries[(projectId, watchPath)] = new Entry(failures, nextAttempt);
+        _entries[new WatchKey(projectId, watchPath)] = new Entry(failures, nextAttempt);
         return failures >= MaxFailures ? WatchState.Stopped : WatchState.Retrying;
     }
 
     /// <summary>Resets the counter — checking continues with a clean slate.</summary>
-    public void RecordSuccess(string projectId, string watchPath) => _entries.Remove((projectId, watchPath));
+    public void RecordSuccess(string projectId, string watchPath) => _entries.Remove(new WatchKey(projectId, watchPath));
 
-    public void Forget(string projectId, string watchPath) => _entries.Remove((projectId, watchPath));
+    public void Forget(string projectId, string watchPath) => _entries.Remove(new WatchKey(projectId, watchPath));
 
     /// <summary>Backoff after failure #n: 1s, 2s, 4s, 8s (exponential).</summary>
     public static TimeSpan BackoffFor(int consecutiveFailures) => TimeSpan.FromSeconds(1L << consecutiveFailures - 1);

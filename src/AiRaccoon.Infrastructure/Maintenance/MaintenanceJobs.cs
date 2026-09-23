@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -104,11 +105,17 @@ public sealed class Vec0ReclaimJob : IMaintenanceJob
 /// <summary>
 ///     Splits rows holding more text than the embedding window into in-budget pieces (WP3 step 4).
 ///     Once ever: it heals a defect the write paths no longer create, so a second pass would find
-///     nothing and cost a full-table tokenize to discover that.
+///     nothing and cost a full-table tokenize to discover that. Renamed to "-v2" when the routing
+///     rule gained per-file-type chunkers, so every bank still runs it once more under the new rule.
 /// </summary>
-public sealed class ChunkBackfillJob(IMarkdownChunker chunker, TimeProvider timeProvider, IEmbeddingService embeddingService) : IMaintenanceJob
+public sealed class ChunkBackfillJob(
+    IFileTypeMatcher fileTypeMatcher,
+    IMarkdownChunker chunker,
+    IPlainTextChunker fallbackChunker,
+    TimeProvider timeProvider,
+    IEmbeddingService embeddingService) : IMaintenanceJob
 {
-    public const string JobName = "chunk-backfill";
+    public const string JobName = "chunk-backfill-v2";
 
     public string Name => JobName;
 
@@ -119,7 +126,7 @@ public sealed class ChunkBackfillJob(IMarkdownChunker chunker, TimeProvider time
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
-        var report = await new ChunkBackfill(chunker, timeProvider, embeddingService)
+        var report = await new ChunkBackfill(fileTypeMatcher, chunker, fallbackChunker, timeProvider, embeddingService)
             .RunAsync(connection, false, cancellationToken).ConfigureAwait(false);
         // Only a backfill that actually replaced rows leaves anything to embed.
         return report.RowsReplaced > 0;

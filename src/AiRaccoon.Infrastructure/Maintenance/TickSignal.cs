@@ -7,7 +7,7 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 internal sealed class TickSignal
 {
     private readonly Lock _gate = new();
-    private readonly List<(long Target, TaskCompletionSource<bool> Completion)> _waiters = [];
+    private readonly List<Waiter> _waiters = [];
     private long _count;
 
     public long Count
@@ -49,7 +49,7 @@ internal sealed class TickSignal
             }
 
             completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _waiters.Add((target, completion));
+            _waiters.Add(new Waiter(target, completion));
         }
 
         await completion.Task.WaitAsync(cancellationToken);
@@ -67,7 +67,7 @@ internal sealed class TickSignal
             }
 
             completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _waiters.Add((target, completion));
+            _waiters.Add(new Waiter(target, completion));
         }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -75,4 +75,6 @@ internal sealed class TickSignal
         await using var registration = cts.Token.Register(() => completion.TrySetResult(false));
         return await completion.Task;
     }
+
+    private readonly record struct Waiter(long Target, TaskCompletionSource<bool> Completion);
 }

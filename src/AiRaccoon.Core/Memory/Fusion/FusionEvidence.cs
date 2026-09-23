@@ -63,7 +63,7 @@ public static class FusionEvidence
             }
         }
 
-        var scored = new List<(string Hash, double Raw, RetrievalEvidence Evidence)>();
+        var scored = new List<ScoredEvidence>();
         foreach (var pair in raws)
         {
             // A non-finite weight-derived raw nulls that hash's evidence only; the search
@@ -79,7 +79,7 @@ public static class FusionEvidence
                 continue;
             }
 
-            scored.Add((pair.Key, pair.Value, new RetrievalEvidence(pair.Key, strength, legRanks[pair.Key], null)));
+            scored.Add(new ScoredEvidence(pair.Key, pair.Value, new RetrievalEvidence(pair.Key, strength, legRanks[pair.Key], null)));
         }
 
         scored.Sort(static (left, right) =>
@@ -117,4 +117,6 @@ public static class FusionEvidence
             [.. participating.Select(leg => leg.LegName)]);
         return new FusionEvidenceResult(evidence, stats);
     }
+
+    private readonly record struct ScoredEvidence(string Hash, double Raw, RetrievalEvidence Evidence);
 }

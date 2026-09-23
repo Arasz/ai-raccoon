@@ -267,31 +267,31 @@ internal partial class NodeRunner(
     ///     The operator line and exit code for a restart that cannot go ahead. Only outcomes
     ///     <see cref="RestartTransition.MayBind" /> rejects reach it.
     /// </summary>
-    private static (string Message, int Code) RestartRefusal(NodeLaunchDescriptor descriptor, RestartResult result) =>
+    private static Refusal RestartRefusal(NodeLaunchDescriptor descriptor, RestartResult result) =>
         result.Outcome switch
         {
-            RestartOutcome.Foreign => (
+            RestartOutcome.Foreign => new Refusal(
                 $"ai-raccoon: port {descriptor.Port} is held by a listener that does not identify as an ai-raccoon server — stop it yourself, or serve on another port",
                 ErrorCode.Port.ForeignListener),
-            RestartOutcome.Unproven => (
+            RestartOutcome.Unproven => new Refusal(
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the listener did not prove it serves this data root — stop the listener yourself, then run serve again, or serve on another port (--port 0)",
                 ErrorCode.Server.Unproven),
-            RestartOutcome.NoToken => (
+            RestartOutcome.NoToken => new Refusal(
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: {descriptor.TokenFile.Path} holds no token, so it cannot be asked to stop — it may serve another data root; stop it " +
                 $"yourself, or" +
                 $" serve on" +
                 $" another port",
                 ErrorCode.Server.NoToken),
-            RestartOutcome.Refused => (
+            RestartOutcome.Refused => new Refusal(
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it refused the token in {descriptor.TokenFile.Path} — it serves another data root; stop it yourself, or serve on another port",
                 ErrorCode.Server.RestartTokenRefused),
-            RestartOutcome.Unsupported => (
+            RestartOutcome.Unsupported => new Refusal(
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the ai-raccoon {result.Version ?? ServerRestart.UnknownVersion} serving it (pid {result.Pid}) is too old to be asked to stop — stop it yourself, then run serve again",
                 ErrorCode.Server.TooOldToRestart),
-            RestartOutcome.TimedOut => (
+            RestartOutcome.TimedOut => new Refusal(
                 $"ai-raccoon: restart on port {descriptor.Port} timed out: the server (pid {result.Pid}) accepted the shutdown but still held the port {ServerRestart.PortFreeWithin.TotalSeconds:0}s later — stop it yourself, then run serve again",
                 ErrorCode.Port.RestartTimedOut),
-            _ => ThrowHelper.ThrowArgumentOutOfRangeException<(string, int)>(nameof(result),
+            _ => ThrowHelper.ThrowArgumentOutOfRangeException<Refusal>(nameof(result),
                 $"{result.Outcome} lets serve bind, so it has no refusal line")
         };
 
@@ -307,6 +307,8 @@ internal partial class NodeRunner(
         await streams.RenderUrlForInput(descriptor.Url, descriptor.Port, descriptor.Source.McpEntry, descriptor.Source.Format);
         return ErrorCode.Ok.Success;
     }
+
+    private readonly record struct Refusal(string Message, int Code);
 
     /// <summary>
     ///     Either an exit code to stop on, or what the pre-check established about the port —

@@ -40,10 +40,10 @@ public abstract class EmbeddingBackend(IEmbeddingGenerator<string, Embedding<flo
         var results = await generator.GenerateAsync([query], null, cancellationToken);
         var queryVector = results[0].Vector.ToArray();
 
-        var scored = new List<(string Id, double Score)>(_documents.Count);
+        var scored = new List<ScoredDocument>(_documents.Count);
         for (var i = 0; i < _documents.Count; i++)
         {
-            scored.Add((_documents[i].Id, Cosine(queryVector, _documentVectors[i])));
+            scored.Add(new ScoredDocument(_documents[i].Id, Cosine(queryVector, _documentVectors[i])));
         }
 
         scored.Sort((a, b) => b.Score.CompareTo(a.Score));
@@ -51,4 +51,6 @@ public abstract class EmbeddingBackend(IEmbeddingGenerator<string, Embedding<flo
     }
 
     private static double Cosine(float[] a, float[] b) => TensorPrimitives.CosineSimilarity(a, b);
+
+    private readonly record struct ScoredDocument(string Id, double Score);
 }

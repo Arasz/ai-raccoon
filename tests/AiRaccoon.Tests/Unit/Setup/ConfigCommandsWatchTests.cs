@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Watch;
@@ -315,9 +316,9 @@ public class ConfigCommandsWatchTests
     public async Task WatchRegistered_ListsAllRegistrations_SortedByProjectThenPath()
     {
         var watchStore = new FakeWatchStore();
-        watchStore.Watches[("zeta", "/z")] = (1_700_000_000, 0);
-        watchStore.Watches[("acme", "/b")] = (1_700_000_000, 0);
-        watchStore.Watches[("acme", "/a")] = (1_700_000_000, 2_000_000_000);
+        watchStore.Watches[new WatchKey("zeta", "/z")] = (1_700_000_000, 0);
+        watchStore.Watches[new WatchKey("acme", "/b")] = (1_700_000_000, 0);
+        watchStore.Watches[new WatchKey("acme", "/a")] = (1_700_000_000, 2_000_000_000);
 
         var (exit, stdout, err) = await Run(["watch", "registered"], new FakeConfigStore(), watchStore);
 
@@ -333,9 +334,9 @@ public class ConfigCommandsWatchTests
     public async Task WatchRegistered_ProjectFilter_LimitsToProject()
     {
         var watchStore = new FakeWatchStore();
-        watchStore.Watches[("acme", "/a")] = (1_700_000_000, 0);
-        watchStore.Watches[("acme", "/b")] = (1_700_000_000, 0);
-        watchStore.Watches[("zeta", "/z")] = (1_700_000_000, 0);
+        watchStore.Watches[new WatchKey("acme", "/a")] = (1_700_000_000, 0);
+        watchStore.Watches[new WatchKey("acme", "/b")] = (1_700_000_000, 0);
+        watchStore.Watches[new WatchKey("zeta", "/z")] = (1_700_000_000, 0);
 
         var (exit, stdout, err) = await Run(["watch", "registered", "acme"], new FakeConfigStore(), watchStore);
 

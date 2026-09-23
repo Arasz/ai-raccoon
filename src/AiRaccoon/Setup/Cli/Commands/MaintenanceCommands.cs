@@ -110,7 +110,7 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
         return 0;
     }
 
-    private (long TotalBytes, string Timestamp)? ReadPreviousStats()
+    private PreviousStats? ReadPreviousStats()
     {
         try
         {
@@ -121,7 +121,7 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
 
             using var doc = JsonDocument.Parse(File.ReadAllText(StatsSidecarPath));
             var root = doc.RootElement;
-            return (root.GetProperty("totalBytes").GetInt64(), root.GetProperty("ts").GetString() ?? "?");
+            return new PreviousStats(root.GetProperty("totalBytes").GetInt64(), root.GetProperty("ts").GetString() ?? "?");
         }
         catch (Exception)
         {
@@ -165,4 +165,6 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
                 $"{(bytes / (1024.0 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} MB",
             _ => $"{(bytes / (1024.0 * 1024 * 1024)).ToString("0.0", CultureInfo.InvariantCulture)} GB"
         };
+
+    private readonly record struct PreviousStats(long TotalBytes, string Timestamp);
 }

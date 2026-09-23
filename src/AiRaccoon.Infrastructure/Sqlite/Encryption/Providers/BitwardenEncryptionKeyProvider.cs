@@ -44,15 +44,17 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
     }
 
     /// <summary>Derives both keys from the seed, then zeroes it — the seed must not outlive this call.</summary>
-    internal static (string Value, string LegacyValue) DeriveAndZeroSeed(byte[] seed)
+    internal static DerivedKeys DeriveAndZeroSeed(byte[] seed)
     {
         try
         {
-            return (SshKeyDerivation.DeriveRawKey(seed), SshKeyDerivation.DeriveLegacyRawKey(seed));
+            return new DerivedKeys(SshKeyDerivation.DeriveRawKey(seed), SshKeyDerivation.DeriveLegacyRawKey(seed));
         }
         finally
         {
             CryptographicOperations.ZeroMemory(seed);
         }
     }
+
+    internal readonly record struct DerivedKeys(string Value, string LegacyValue);
 }
