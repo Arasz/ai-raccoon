@@ -139,13 +139,17 @@ from the nearest file you happen to be reading is exactly how ids collide.
 
 ```bash
 # every EventId with its file:line, sorted
-grep -rn "EventId = " src --include="*.cs" \
+grep -rn "LoggerMessage(EventId = " src --include="*.cs" \
   | sed -E 's/^([^:]+):([0-9]+):.*EventId = ([0-9]+).*/\3\t\1:\2/' \
   | sort -n
 
 # duplicate check — must print nothing
-grep -rho "EventId = [0-9]\+" src | grep -oE "[0-9]+" | sort -n | uniq -d
+grep -rho "LoggerMessage(EventId = [0-9]\+" src --include="*.cs" | grep -oE "[0-9]+" | sort -n | uniq -d
 ```
+
+Both greps are scoped to `LoggerMessage(EventId = `: a bare `EventId = ` also matches plain
+constants such as `ProjectIdsRepairJob.PassReceiptEventId = 711`, which over-counts and reports a
+false duplicate.
 
 Before claiming a new block is free, run the duplicate check above across the *whole*
 assembly, not just the file or module you're adding to — a block picked by "this looks
