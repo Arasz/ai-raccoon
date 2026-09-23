@@ -72,6 +72,13 @@ invalid value exits **15**, bare launch included. `settings sweep bogus` is ther
 `--transport stdio` is 15. `access set` (missing required argument) stays 15. Nothing launches or
 dispatches in either case. Pinned by `CliExitCodeMeaningTests`.
 
+The same rule now holds after parsing. A command that throws used to exit 15 whatever the
+exception was, so a busy bank, a server 403 or a plain bug all read as "you mistyped".
+`CliFailureExitCode` maps the failure instead. A rejected value (a bad model directory, a
+contradicted `--dims`, a server 400, an undialable `--port`) stays 15. A bank that cannot be
+opened is 2, a migration-open refusal is 25 on every model verb, Ctrl-C is 130, and anything
+else is the new `CommandFailed` (27). Pinned by `CommandFailureExitCodeTests`.
+
 ## Evidence
 
 `tests/AiRaccoon.Tests/Unit/Setup/Serve/AppRunnerUnrecognisedVerbTests.cs`. Both failing cases were

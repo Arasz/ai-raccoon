@@ -437,7 +437,7 @@ public class ConfigCommandsAccessModelTests
         var exit = await TestData.CreateConfigCommands(store)
             .RunAsync(parsed, new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ExitCode.CommandFailed, "a missing switch arm is a bug, not a bad argument");
         stderr.ToString().ShouldContain("unhandled command");
     }
 

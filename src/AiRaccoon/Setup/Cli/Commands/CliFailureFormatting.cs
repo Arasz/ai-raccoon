@@ -8,10 +8,18 @@ internal static class CliFailureFormatting
         ex switch
         {
             UnauthorizedAccessException => $"ai-raccoon: permission denied for --data-root '{dataRoot}' — check the directory's permissions, or pass a different --data-root",
-            IOException io when io.Message.Contains("Read-only file system", StringComparison.OrdinalIgnoreCase) =>
+            IOException io when IsReadOnly(io) =>
                 $"ai-raccoon: --data-root '{dataRoot}' is on a read-only filesystem — pass a writable --data-root",
-            IOException io when io.Message.Contains("too long", StringComparison.OrdinalIgnoreCase) =>
+            IOException io when IsTooLong(io) =>
                 $"ai-raccoon: --data-root '{dataRoot}' is too long for this filesystem — pass a shorter --data-root",
             _ => $"ai-raccoon: {ex.Message}"
         };
+
+    /// <summary>True for the failures <see cref="Format" /> reports as an unusable --data-root value.</summary>
+    internal static bool BlamesDataRoot(Exception ex) =>
+        ex is UnauthorizedAccessException || (ex is IOException io && (IsReadOnly(io) || IsTooLong(io)));
+
+    private static bool IsReadOnly(IOException io) => io.Message.Contains("Read-only file system", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTooLong(IOException io) => io.Message.Contains("too long", StringComparison.OrdinalIgnoreCase);
 }

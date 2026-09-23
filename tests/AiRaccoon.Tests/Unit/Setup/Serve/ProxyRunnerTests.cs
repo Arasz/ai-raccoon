@@ -7,7 +7,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Setup.Serve;
 
 /// <summary>
-///     ProxyRunner acceptance (ADR-0020): a port the proxy cannot dial is refused outright, because
+///     ProxyRunner acceptance (ADR-0020): a port the proxy cannot dial is refused outright as an invalid value, because
 ///     spawning a backend on a port nobody can reach orphans it until the idle watchdog retires it;
 ///     an unpackaged host (the dotnet muxer) is refused before any dial, naming the manual `serve`.
 ///     The process path is an explicit input so neither verdict depends on how this test host runs.
@@ -34,7 +34,7 @@ public sealed class ProxyRunnerTests : IDisposable
 
         var exit = await TestData.CreateProxyRunner().RunAsync(config, new StandardStreams(TextReader.Null, TextWriter.Null, stderr), AppHost, TestContext.Current.CancellationToken);
 
-        exit.ShouldBe(ExitCode.ProxyBackendUnavailable);
+        exit.ShouldBe(ExitCode.InvalidArgument, "the port is a value the proxy cannot use, not a backend that failed");
         var message = stderr.ToString();
         message.ShouldContain("--port 0");
         // Names the supported way to get a random port instead.

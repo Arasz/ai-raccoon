@@ -14,7 +14,7 @@ public static class ProbeExtensions
                 await using var probe = await factory.OpenBankWithKeyAsync(key, ctx);
                 return EncryptionProbeResult.Success;
             }
-            catch (Exception e)
+            catch (Exception e) when (!ctx.IsCancellationRequested)
             {
                 return EncryptionProbeResult.Failure(e);
             }
@@ -30,7 +30,7 @@ public static class ProbeExtensions
                 return EncryptionKeyProbeResult.Success(
                     await encryptionKeyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false));
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 return EncryptionKeyProbeResult.Failure(ex);
             }

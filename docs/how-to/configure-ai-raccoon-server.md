@@ -25,9 +25,9 @@ AiRaccoon stores settings directly in the SQLite `memory.db` settings table. Env
 | `--port <n>` | HTTP listen port for serve mode | `1-65535` (`0` for random free port) | `7721` |
 
 Two `--transport` values were removed outright
-([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)). `stdio` fails at
-parse with exit 9 and a hint on bare launches (exit 15 on verb paths), and `https`
-fails at parse with exit 9. A bare `--transport http` still parses but launches the
+([ADR-0104](../adr/0104-remove-the-stdio-full-server-mode.md)). On a bare launch,
+`stdio` and `https` are invalid values and exit 15 (`stdio` with a hint); after
+`serve`, which takes no `--transport` at all, the option is unparseable and exits 9. A bare `--transport http` still parses but launches the
 proxy like any bare run. Full servers come only from `serve`.
 
 ---
@@ -243,8 +243,14 @@ delivered never reports success:
 | `17` | the server refused the loopback token — it may serve another data root |
 | `18` | the server could not be reached or auto-started within the acquire budget |
 | `23` | the server answered but failed with a 5xx — a server-side fault, distinct from `15` (`InvalidArgument`, "you mistyped") |
-| `25` | the settings server refused `settings model reset` / `settings model embedding reset` because a model migration outbox row is open (ADR-0076) — every MCP tool call is refused until it finishes; nothing was deleted |
+| `25` | the settings server refused a model verb (`settings model reset`, `model embedding set`) because a model migration outbox row is open (ADR-0076); every MCP tool call is refused until it finishes, and nothing changed |
 | `130` | the command was cancelled before it finished (Ctrl-C / SIGTERM); the command changed nothing |
+
+Two codes apply to every command, not just this channel. `15` (`InvalidArgument`) means a value
+you passed was rejected, including a `--port` the command cannot dial and a 400 from the server.
+`27` (`CommandFailed`) means the command failed for a reason no other code names: an I/O fault, a
+server answer it could not use, or a bug. It is never a bad argument, so a script can tell "fix
+the call" from "look at stderr".
 
 **Why it works this way.** Two processes writing one SQLite file is a lock-contention problem nobody
 chose; it accumulated one command family at a time. Routing every settings write through the server
