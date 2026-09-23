@@ -1,8 +1,17 @@
 {
- "lastUpdated": "2026-09-23T19:00:00+02:00",
+ "lastUpdated": "2026-09-23T23:35:00+02:00",
  "notesRef": ".ai-badger/status-notes.json",
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
+  {
+   "id": "air-code-retrieval-eval-measured-improvements",
+   "title": "Multi-language code eval (12 languages, 332 queries), baseline, measured code-search changes: identifier-split code_fts column + HTML/CSS/SQL indexing kept; test down-weight, path header, AST chunking dropped (1.48.0)",
+   "pr": 686,
+   "merged": true,
+   "date": "2026-09-23",
+   "hasNotes": false,
+   "summary": "#673 corpus+runner, #686 queries+verdicts+shipping. nDCG@5 0.501 (B0) -> 0.654 (+html/css/sql) -> 0.689 (+identifiers, held-out +0.052 CI [0.021,0.088]); on granite (#687) 0.801 -> 0.824 (P2 still KEEP, +0.037). Dropped: test-file weight (test-intent collapses), path header (CI incl. 0), AST chunking (+0.018, CI [-0.006,0.044]). Scores deterministic (noise 0). ADR-0109. Record: docs/work/2026-09-23-code-retrieval-eval-results.md."
+  },
   {
    "id": "air-keyword-floor-neighbour-attach-exit",
    "title": "Search floor keeps keyword matches, anchor-first file#section, leader outranks neighbour boost; CLI exit codes carry their meaning, then the categorized two-digit ErrorCode scheme (1.44.2 -> 1.45.0)",
@@ -132,7 +141,10 @@
   "#504 embedding fallback-chain shapes",
   "#519 TestData.CreateMemoryStore optional Null defaults (from #518)",
   "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable — 1.33.0 checklist)",
-  "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement"
+  "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement",
+  "code eval: AST chunking closest miss (+0.018 held-out) - needs ~3x held-out queries to settle (docs/work/2026-09-23-code-retrieval-eval-results.md F9)",
+  "code eval: re-measure P3/P4/P5 on granite (only P2 re-verified, F12)",
+  "code ingest: byte-identical chunks in one file share a content hash and dedupe to one row (F9)"
  ],
  "research": [],
  "stillTrue": [
