@@ -120,7 +120,7 @@ public sealed class MemorySchemaCodeCorpusTests
             [
                 "id", "hash", "path", "value", "source_file", "line_start", "line_end", "project_id",
                 "created_at", "updated_at", "embed_state", "embedding", "chunk_index", "total_chunks",
-                "embed_attempts"
+                "embed_attempts", "identifiers"
             ],
             ignoreOrder: true);
 

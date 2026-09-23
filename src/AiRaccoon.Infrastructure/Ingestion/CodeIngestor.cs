@@ -80,7 +80,8 @@ public sealed class CodeIngestor(
                         {
                             hash, path = normalizedPath, value = chunk.Text, sourceFile = normalizedPath,
                             lineStart = chunk.LineStart, lineEnd = chunk.LineEnd, projectId,
-                            createdAt = now, updatedAt = now, chunkIndex = ordinal, totalChunks = chunks.Count
+                            createdAt = now, updatedAt = now, chunkIndex = ordinal, totalChunks = chunks.Count,
+                            identifiers = IdentifierSplitter.Identifiers(chunk.Text)
                         }, cancellationToken))
                 .ConfigureAwait(false);
 
