@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using Microsoft.AspNetCore.Http;
 using Shouldly;
@@ -132,6 +133,36 @@ public sealed class McpTokenGateTests
 
         nextCalled.ShouldBeTrue();
         context.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+    }
+
+    /// <summary>
+    ///     The allowlist widening is exactly one path: the pre-token proof route passes without a
+    ///     credential while /mcp still does not.
+    /// </summary>
+    [Fact]
+    public async Task ProofPath_IsOpenWithoutACredential_WhileMcpPath_StillRefuses()
+    {
+        var proof = NewContext(IdentityProof.EndpointPath);
+        var proofNextCalled = false;
+        await BuildGate(_ =>
+            {
+                proofNextCalled = true;
+                return Task.CompletedTask;
+            })
+            .InvokeAsync(proof);
+
+        var mcp = NewMcpContext();
+        var mcpNextCalled = false;
+        await BuildGate(_ =>
+            {
+                mcpNextCalled = true;
+                return Task.CompletedTask;
+            })
+            .InvokeAsync(mcp);
+
+        proofNextCalled.ShouldBeTrue();
+        mcpNextCalled.ShouldBeFalse();
+        mcp.Response.StatusCode.ShouldBe(StatusCodes.Status401Unauthorized);
     }
 
     /// <summary>R4: a present-but-wrong credential must read differently from an absent one, in

@@ -124,6 +124,29 @@ public sealed class IdentityProverTests : IDisposable
         }
     }
 
+    /// <summary>
+    ///     The fixture's remaining mis-programmings: a signature bound to another port, and a rootFp
+    ///     that is not this root's. Both fail the verifier's transcript reconstruction.
+    /// </summary>
+    [RetryFact]
+    public async Task Verifier_RejectsASameKeySignatureBoundToAnotherPortOrRoot()
+    {
+        using var key = await MintAsync();
+
+        await using (var otherPort = await StartFakeAsync(Proof(key) with { PortOverride = 1 }))
+        {
+            (await Prover().ProveAsync(McpEndpoint(otherPort.Port), TestContext.Current.CancellationToken))
+                .ShouldBe(IdentityProofFailure.BadSignature);
+        }
+
+        var elsewhere = IdentityProof.RootFingerprint(Path.Combine(_dataRoot, "elsewhere"));
+        await using (var otherRoot = await StartFakeAsync(Proof(key) with { RootFp = elsewhere }))
+        {
+            (await Prover().ProveAsync(McpEndpoint(otherRoot.Port), TestContext.Current.CancellationToken))
+                .ShouldBe(IdentityProofFailure.BadSignature);
+        }
+    }
+
     private static Uri McpEndpoint(int port) => new($"http://127.0.0.1:{port}/mcp");
 
     private IdentityProver Prover() => new(Options, _client);
