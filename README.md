@@ -30,6 +30,7 @@ flowchart LR
 
 ## What's new
 
+- **BREAKING: `--attach` is gone. The proxy and settings verbs attach only to a listener that proves it holds this root's identity key over a bounded challenge, falling back to a private backend otherwise, and `serve` refuses an unproven port holder with exit 3. A client auto-launch at an empty non-default `--data-root` now exits 22 instead of minting a bank there.** [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md)
 - **BREAKING: the proxy spawns its own private backend — attaching to a running server is now an explicit `--attach`, and settings commands attach-or-start.** (1.43.0) [ADR-0105](docs/adr/0105-private-spawn-is-the-launch-default.md)
 - **`memory_search` reports the content cosine as evidence, enforces an absolute relevance floor with an explicit unranked marker, and names the floor when it truncates.** (1.43.0)
 - **`memory_delete` removes the whole write (all N chunks), and sync tombstones are label-aware (bank schema v15) — a label-scoped delete no longer tombstones a peer's same-hash row under another label, and a re-created fact survives its tombstone.** (1.43.0)
