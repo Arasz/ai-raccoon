@@ -8,7 +8,7 @@ namespace AiRaccoon.Core.Chunking;
 /// </summary>
 internal sealed class HeadingStack
 {
-    private readonly List<(int Level, string Text)> _stack = [];
+    private readonly List<Heading> _stack = [];
 
     public string Path { get; private set; } = "";
 
@@ -28,7 +28,7 @@ internal sealed class HeadingStack
             _stack.RemoveAt(_stack.Count - 1);
         }
 
-        _stack.Add((level, text));
+        _stack.Add(new Heading(level, text));
         Path = string.Join(" > ", _stack.Select(h => h.Text));
     }
 
