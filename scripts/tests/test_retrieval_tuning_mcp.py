@@ -160,8 +160,27 @@ class TestMemorySearch:
                 "scope": "project",
                 "limit": 5,
                 "minRelativeScore": 0.0,
+                "sessionId": "retrieval-tuning-harness",
             }
             assert "rrfK" not in args  # settings-driven: no tuning args on the wire
+        finally:
+            stub.close()
+
+
+class TestToolErrorText:
+    def test_non_json_tool_text_raises_with_the_server_message(self):
+        stub = StubMcpServer(
+            [
+                (200, "application/json", sse_frame(rpc_result(1, {}))),
+                (200, "application/json", sse_frame(rpc_result(2, {}))),
+                (200, "application/json", sse_frame(tools_call_result(3, "Value cannot be null. (Parameter 'sessionId')"))),
+            ]
+        )
+        try:
+            client = make_client(stub)
+            client.initialize()
+            with pytest.raises(McpError, match="sessionId"):
+                client.memory_search(project_id="p", query="q")
         finally:
             stub.close()
 
