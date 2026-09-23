@@ -15,7 +15,7 @@ public sealed class SourcePathQueryTests
             .ShouldBeTrue();
 
         expression.ShouldBe(
-            "{source_file section} : (docs AND adr AND 0011 AND frontend AND chassis AND stack AND md AND \"decision\")");
+            "{source_file} : \"docs adr 0011 frontend chassis stack md\" AND {source_file section} : \"decision\"");
     }
 
     [Fact]
@@ -24,7 +24,7 @@ public sealed class SourcePathQueryTests
         SourcePathQuery.TryBuild("docs/adr/0011-frontend-chassis-stack.md", out var expression)
             .ShouldBeTrue();
 
-        expression.ShouldBe("{source_file} : (docs AND adr AND 0011 AND frontend AND chassis AND stack AND md)");
+        expression.ShouldBe("{source_file} : \"docs adr 0011 frontend chassis stack md\"");
     }
 
     [Theory]
@@ -44,24 +44,50 @@ public sealed class SourcePathQueryTests
     {
         SourcePathQuery.TryBuild("notes.md#getting-started", out var expression).ShouldBeTrue();
 
-        expression.ShouldBe("{source_file section} : (notes AND md AND \"getting-started\")");
+        expression.ShouldBe("{source_file} : \"notes md\" AND {source_file section} : \"getting-started\"");
     }
 
+    /// <summary>A section named the way its heading reads, spaces and all, is still an anchor.</summary>
     [Fact]
-    public void TryBuild_ReservedWordToken_IsQuoted()
+    public void TryBuild_SectionWithSpaces_IsAnAnchor()
     {
-        SourcePathQuery.TryBuild("docs/and.md#or", out var expression).ShouldBeTrue();
+        SourcePathQuery.TryBuild("observatory.md#Coastal duties", out var expression).ShouldBeTrue();
 
-        expression.ShouldBe("{source_file section} : (docs AND \"and\" AND md AND \"or\")");
+        expression.ShouldBe("{source_file} : \"observatory md\" AND {source_file section} : \"coastal duties\"");
     }
 
-    [Fact]
-    public void TryBuild_MixedCaseReservedWord_IsQuoted()
+    /// <summary>Inside a quoted phrase an FTS5 operator word is an ordinary token.</summary>
+    [Theory]
+    [InlineData("docs/and.md#or")]
+    [InlineData("docs/AND.md#OR")]
+    public void TryBuild_ReservedWordToken_StaysInsideAPhrase(string query)
     {
-        // Tokens are lowercased before the Reserved check, so casing never reaches the
-        // set — the contract that lets it use Ordinal comparison.
-        SourcePathQuery.TryBuild("docs/AND.md#OR", out var expression).ShouldBeTrue();
+        SourcePathQuery.TryBuild(query, out var expression).ShouldBeTrue();
 
-        expression.ShouldBe("{source_file section} : (docs AND \"and\" AND md AND \"or\")");
+        expression.ShouldBe("{source_file} : \"docs and md\" AND {source_file section} : \"or\"");
+    }
+
+    [Theory]
+    [InlineData("ferry-notes.md", "/docs/ferry-notes.md", true)]
+    [InlineData("Ferry-Notes.MD", "/docs/ferry-notes.md", true)]
+    [InlineData("docs/ferry-notes.md", "/work/docs/ferry-notes.md", true)]
+    [InlineData("/docs/ferry-notes.md", "/docs/ferry-notes.md", true)]
+    [InlineData("ferry-notes.md", "/ferry/notes.md", false)]
+    [InlineData("ferry-notes.md", "/docs/old-ferry-notes.md", false)]
+    [InlineData("docs/ferry-notes.md", "/work/olddocs/ferry-notes.md", false)]
+    [InlineData("/docs/ferry-notes.md", "/work/docs/ferry-notes.md", false)]
+    [InlineData("ferry-notes.md", null, false)]
+    public void NamesFile_MatchesTheTypedNameAtAPathBoundary(string anchorFile, string? sourceFile, bool expected)
+    {
+        SourcePathQuery.NamesFile(anchorFile, sourceFile).ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData("notes.md#what does it say?")]
+    [InlineData("notes.md#two  spaces")]
+    [InlineData("notes.md# leading")]
+    public void TryBuild_SectionThatIsNotAHeadingShape_IsNotAnAnchor(string query)
+    {
+        SourcePathQuery.TryBuild(query, out _).ShouldBeFalse();
     }
 }

@@ -185,7 +185,7 @@ public sealed partial class SqliteMemoryStore(
             await GetSearchParameterDefaultsAsync(connection, cancellationToken).ConfigureAwait(false));
 
         var embedStart = timeProvider.GetTimestamp();
-        var plan = FtsQueryNormalizer.BuildPlan(query.Query).AsPathQuery(query.Query);
+        var plan = await PlanAsync(connection, query.Query, cancellationToken).ConfigureAwait(false);
         var queryVector = await embedder.EmbedQueryAsync(connection, query.Query, cancellationToken).ConfigureAwait(false);
         queryVector = queryVector with { Alpha = parameters.StructureAlpha };
 
@@ -634,6 +634,11 @@ public sealed partial class SqliteMemoryStore(
 
         var ftsStart = timeProvider.GetTimestamp();
         var ftsResults = await QueryFtsBatchAsync(connection, query, parameters, plan, queryVector, contextFilter, byHashIndex, cancellationToken);
+        if (plan.AnchorFile is { } anchorFile)
+        {
+            ftsResults = [.. ftsResults.Where(result => SourcePathQuery.NamesFile(anchorFile, result.SourceFile))];
+        }
+
         IReadOnlyList<string> allTermsMatched = plan.MatchesAllTerms ? [.. ftsResults.Select(result => result.Hash)] : [];
 
         if (plan.Fallback is null || ftsResults.Count > Math.Max(plan.TokenCount, query.Limit))

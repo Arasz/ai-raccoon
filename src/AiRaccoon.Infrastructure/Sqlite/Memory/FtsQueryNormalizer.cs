@@ -68,6 +68,9 @@ public sealed record FtsQueryPlan(string Expression, string? Fallback, int Token
 {
     public bool IsPathQuery { get; init; }
 
+    /// <summary>The file a file#section anchor names, as typed; null for any other query.</summary>
+    public string? AnchorFile { get; init; }
+
     /// <summary>True when <see cref="Expression" /> requires every content term, so a row it matches contains the whole query.</summary>
     public bool MatchesAllTerms { get; init; }
 }
