@@ -52,10 +52,11 @@ def _word(term: str) -> "re.Pattern":
 _RE_SERVE = _word("serve")
 _RE_TEST = _word("test")
 _RE_DOTNET = _word("dotnet")
+_RE_ASPIRE = _word("aspire")
 
 BUSY_PATTERNS: tuple[tuple[str, Callable[[str], bool]], ...] = (
     ("ai-raccoon serve", lambda cmd: "ai-raccoon" in cmd and _RE_SERVE.search(cmd) is not None),
-    ("aspire", lambda cmd: "aspire" in cmd),
+    ("aspire", lambda cmd: _RE_ASPIRE.search(cmd) is not None),
     ("dotnet test", lambda cmd: _RE_DOTNET.search(cmd) is not None and _RE_TEST.search(cmd) is not None),
 )
 

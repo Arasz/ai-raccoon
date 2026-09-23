@@ -177,6 +177,11 @@ class TestBusyProcessRefusal:
         assert found[0]["pid"] == 555
         assert found[0]["label"] == "ai-raccoon serve"
 
+    def test_aspire_inside_a_longer_token_is_not_busy(self):
+        runner = _load_runner()
+        ps_output = self.PS_HEADER + "\n" + "  324  90.0 unaspired-widget --run\n"
+        assert runner.find_busy_processes(ps_output) == []
+
     def test_aspire_is_flagged(self):
         runner = _load_runner()
         found = runner.find_busy_processes(self.PS_BUSY_ASPIRE)
