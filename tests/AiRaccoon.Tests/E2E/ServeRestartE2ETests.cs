@@ -13,10 +13,10 @@ using AiRaccoon.Tests.TestHelpers;
 namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
-///     `serve --restart --attach` against a real second process (ADR-0022): the running server
-///     exits, the port frees, and what answers afterwards is a different process reporting this
-///     binary's version. Also pins the bounded wait — a server that will not go produces a non-zero
-///     exit. `--attach` is the F70/K1 opt-in that authorises sending the listener the token.
+///     Bare `serve --restart` against a real second process (ADR-0022, ADR-0106): the running proven
+///     server exits, the port frees, and what answers afterwards is a different process reporting
+///     this binary's version. Also pins the bounded wait — a server that will not go produces a
+///     non-zero exit. The proof of identity is what authorises sending the listener the token.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.E2E)]
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
@@ -92,10 +92,15 @@ public sealed class ServeRestartE2ETests : IAsyncLifetime
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
-        // Accepts the shutdown and keeps listening: the port never frees.
+        // Accepts the shutdown and keeps listening: the port never frees. It must also prove
+        // (ADR-0106), or the restart refuses it as unproven before ever reaching the timeout.
+        var keyFile = new IdentityKeyFile(TestData.CreateInfrastructureOptions(_dataRoot));
+        var signer = await keyFile.EnsureAsync(TestContext.Current.CancellationToken)
+                     ?? throw new InvalidOperationException("the fixture could not mint its identity key");
         lease.ReleaseForBind();
         await using var fake = await FakeRaccoon.StartAsync(port, HttpStatusCode.Accepted,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken,
+            proof: new FakeRaccoonProof { Signer = signer, RootFp = IdentityProof.RootFingerprint(keyFile.StateDirectory) });
         await using var run = StartRestartInProcess(port);
 
         // The restart's own timeout is what ends this run (exit code below); its duration is a
