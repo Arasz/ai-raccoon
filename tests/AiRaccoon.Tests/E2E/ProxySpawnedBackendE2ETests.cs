@@ -106,7 +106,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
 
         var pid = await FindBackendPidAsync(budget);
         pid.ShouldNotBeNull();
-        File.Exists(Path.Combine(_dataRoot, McpTokenFile.FileName)).ShouldBeTrue();
+        File.Exists(new McpTokenFile(_dataRoot).Path).ShouldBeTrue();
 
         // Eventual-one-pid: the backend is still that same process once the dust settles —
         // no second starter won the port behind the first.
@@ -128,7 +128,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
 
         result.IsError.ShouldNotBe(true);
         // The backend really is a gated `serve`: it minted this file strictly before it bound.
-        File.Exists(Path.Combine(_dataRoot, McpTokenFile.FileName)).ShouldBeTrue();
+        File.Exists(new McpTokenFile(_dataRoot).Path).ShouldBeTrue();
     }
 
     private async Task StopSpawnedBackendAsync()
