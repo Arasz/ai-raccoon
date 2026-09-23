@@ -4,6 +4,7 @@ using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Setup.Logging;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
@@ -97,12 +98,27 @@ public sealed class SecretPlacementE2ETests : IAsyncLifetime
             ], ProxyProcess.Stateless);
             (await proxy.ListToolsAsync(Ct)).ShouldNotBeEmpty();
             (await proxy.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, proxy.Stderr);
-            proxy.Stderr.ShouldNotContain("did not prove", Case.Sensitive, "the restored key must prove to the restored root");
+            (proxy.Stderr + ReadQuietLog(options)).ShouldNotContain("did not prove", Case.Sensitive,
+                "the restored key must prove to the restored root");
         }
 
         File.ReadAllText(Path.Combine(stateDirectory, McpTokenFile.FileName)).ShouldBe(token, "the restore must not re-mint the token");
         new IdentityKeyFile(options).ReadKeyId().ShouldBe(keyId, "the restore must not re-mint the identity key");
         Directory.EnumerateFileSystemEntries(_root).Select(Path.GetFileName).ShouldBe([".ai-raccoon"]);
+    }
+
+    /// <summary>The quiet proxy logs its warnings here, not on stderr; the serve still holds it open.</summary>
+    private static string ReadQuietLog(InfrastructureOptions options)
+    {
+        var path = QuietLogging.LogFilePath(options);
+        if (!File.Exists(path))
+        {
+            return "";
+        }
+
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 
     private static Task<RealServe> StartQuietServeAsync(InfrastructureOptions options, int port) =>

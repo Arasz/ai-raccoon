@@ -10,6 +10,8 @@ public static class ProxyRegistrations
     {
         public void RegisterProxyServices()
         {
+            // The relay's MCP client and stdio server log per message at Information.
+            serviceCollection.AddLogging(builder => builder.AddFilter("ModelContextProtocol", LogLevel.Warning));
             serviceCollection.AddSingleton(TimeProvider.System);
             serviceCollection.AddHttpClient(nameof(ServerProbe)).RemoveAllLoggers().ConfigureHttpClient(client => client.Timeout = ServerProbe.RequestTimeout);
             serviceCollection.AddSingleton<ServerProbe>(sp => new ServerProbe(sp.GetRequiredService<IHttpClientFactory>()));
