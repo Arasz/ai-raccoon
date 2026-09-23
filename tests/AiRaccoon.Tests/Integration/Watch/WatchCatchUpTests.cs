@@ -157,7 +157,7 @@ public sealed class WatchCatchUpTests
 
         stack.Memory.Ingested.Select(i => i.Path).ShouldContain(a);
         stack.Memory.Ingested.Select(i => i.Path).ShouldContain(b);
-        stack.Store.Watches[(Project, dir.Path)].LastChangeTs.ShouldBeGreaterThan(0);
+        stack.Store.Watches[new WatchKey(Project, dir.Path)].LastChangeTs.ShouldBeGreaterThan(0);
     }
 
     [RetryFact]

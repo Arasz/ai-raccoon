@@ -658,7 +658,7 @@ public sealed partial class MemoryTools(
     ///     Stage-2 distributions). Carries the caller's queryHash unchanged, so the
     ///     code-adjacent null rule applies to these series exactly as to the phase series.
     /// </summary>
-    private static IEnumerable<(string Name, double Value, string Unit)> FusionSignalMeasurements(SearchResults results)
+    private static IEnumerable<GaugeReading> FusionSignalMeasurements(SearchResults results)
     {
         double? topStrength = null;
         if (results.EvidenceByHash is { } byHash)
@@ -676,17 +676,17 @@ public sealed partial class MemoryTools(
 
         if (topStrength is { } strength)
         {
-            yield return (FusionStats.TopStrengthMetric, strength, "ratio");
+            yield return new GaugeReading(FusionStats.TopStrengthMetric, strength, "ratio");
         }
 
         if (results.Stats is { } stats)
         {
             if (stats.TopMargin is { } margin)
             {
-                yield return (FusionStats.TopMarginMetric, margin, "ratio");
+                yield return new GaugeReading(FusionStats.TopMarginMetric, margin, "ratio");
             }
 
-            yield return (FusionStats.LegsFiredMetric, stats.ParticipatingLegs.Count, "legs");
+            yield return new GaugeReading(FusionStats.LegsFiredMetric, stats.ParticipatingLegs.Count, "legs");
         }
     }
 

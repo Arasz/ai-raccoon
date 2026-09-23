@@ -229,7 +229,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
     ///     read on the pipe and handed back as a task, not relayed — and stderr is captured (bounded)
     ///     so a failure can report why, not just an exit code.
     /// </summary>
-    private static (Process Backend, TailCapture Stderr, Task<string?> UrlLine) Start(string fileName, IReadOnlyList<string> arguments)
+    private static StartedBackend Start(string fileName, IReadOnlyList<string> arguments)
     {
         var startInfo = new ProcessStartInfo(fileName)
         {
@@ -256,7 +256,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         var urlLine = WatchUrlLineAsync(backend.StandardOutput);
         var stderr = new TailCapture(StderrCaptureCharLimit);
         _ = CaptureAsync(backend.StandardError, stderr);
-        return (backend, stderr, urlLine);
+        return new StartedBackend(backend, stderr, urlLine);
     }
 
     /// <summary>
@@ -323,6 +323,8 @@ internal sealed partial class BackendLauncher : IBackendLauncher
             // The pipe closed with the backend; nothing left to capture.
         }
     }
+
+    private readonly record struct StartedBackend(Process Backend, TailCapture Stderr, Task<string?> UrlLine);
 
     /// <summary>Thread-safe accumulator keeping only the last <paramref name="maxChars"/> characters
     /// written, readable at any time — the backend may still be running when a snapshot is taken.</summary>

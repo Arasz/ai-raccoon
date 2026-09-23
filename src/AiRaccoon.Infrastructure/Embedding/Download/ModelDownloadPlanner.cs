@@ -228,19 +228,19 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         return paths.Distinct(StringComparer.Ordinal).Select(p => Pinned(tree, p)).ToList();
     }
 
-    private static (TokenizerFamily Family, string FileName) PairTokenizer(string configJson)
+    private static TokenizerPair PairTokenizer(string configJson)
     {
         var modelType = ModelType(configJson);
         if (modelType.StartsWith("bert", StringComparison.OrdinalIgnoreCase)
             || modelType.Equals("new", StringComparison.OrdinalIgnoreCase)
             || modelType.StartsWith("gte", StringComparison.OrdinalIgnoreCase))
         {
-            return (TokenizerFamily.BertWordpiece, "vocab.txt");
+            return new TokenizerPair(TokenizerFamily.BertWordpiece, "vocab.txt");
         }
 
         if (modelType is "xlm-roberta" or "roberta" or "t5" || modelType.StartsWith("roberta-", StringComparison.OrdinalIgnoreCase))
         {
-            return (TokenizerFamily.SentencePiece, modelType == "t5" ? "spiece.model" : "sentencepiece.bpe.model");
+            return new TokenizerPair(TokenizerFamily.SentencePiece, modelType == "t5" ? "spiece.model" : "sentencepiece.bpe.model");
         }
 
         if (modelType is "gpt2" or "gpt_neo" or "gpt_neox" or "llama" or "qwen2"
@@ -286,7 +286,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     ///     (<c>Pending</c> true, empty map) until the caller supplies <paramref name="sentencePieceVocabulary" />
     ///     from the downloaded file. Every other family is unaffected: no piece table, no fallback.
     /// </remarks>
-    private static (IReadOnlyDictionary<string, int> Tokens, bool Pending) ResolveSpecialTokens(
+    private static SpecialTokenSet ResolveSpecialTokens(
         string tokenizerConfigJson, TokenizerFamily family, IReadOnlyDictionary<string, int>? sentencePieceVocabulary)
     {
         using var doc = JsonDocument.Parse(tokenizerConfigJson);
@@ -305,7 +305,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
                 }
             }
 
-            return (ResolveFromContentMap(root, contentById,
+            return new SpecialTokenSet(ResolveFromContentMap(root, contentById,
                 "is not in tokenizer_config.json's added_tokens_decoder; its id is never guessed — fix the tokenizer_config.json or hand-write the manifest"), false);
         }
 
@@ -319,10 +319,10 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         {
             // Deferred: the sentencepiece .model file isn't downloaded yet — the caller re-plans
             // with its piece table once the tokenizer file lands on disk (never guessed, D1).
-            return (new Dictionary<string, int>(StringComparer.Ordinal), true);
+            return new SpecialTokenSet(new Dictionary<string, int>(StringComparer.Ordinal), true);
         }
 
-        return (ResolveFromContentMap(root, sentencePieceVocabulary,
+        return new SpecialTokenSet(ResolveFromContentMap(root, sentencePieceVocabulary,
             "is not a piece in the sentencepiece model's vocabulary; its id is never guessed — fix tokenizer_config.json or hand-write the manifest"), false);
     }
 
@@ -349,7 +349,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         return specials;
     }
 
-    private static (PoolingMode Mode, NormalizationMode Normalization, string Provenance) PoolingDecision(
+    private static PoolingChoice PoolingDecision(
         IReadOnlyDictionary<string, string> rawFiles, OnnxGraphProbe? probe)
     {
         var hasPooledOutput = probe is not null && SelectOutputs(probe).EmbeddingOutput is not null;
@@ -372,16 +372,16 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             // can rely on for every model).
             if (hasPooledOutput)
             {
-                return (PoolingMode.ModelOutput, normalization, "onnx-graph");
+                return new PoolingChoice(PoolingMode.ModelOutput, normalization, "onnx-graph");
             }
 
-            return (mode, normalization, "sentence-transformers");
+            return new PoolingChoice(mode, normalization, "sentence-transformers");
         }
 
         // D11 placeholder: no machine-readable pooling provenance — WP5's parity measurement
         // rewrites pooling (and normalization) before the model is trusted.
         var placeholder = hasPooledOutput ? PoolingMode.ModelOutput : PoolingMode.Cls;
-        return (placeholder, NormalizationMode.L2, "placeholder(wp5)");
+        return new PoolingChoice(placeholder, NormalizationMode.L2, "placeholder(wp5)");
     }
 
     private static PoolingMode PoolingFromFlags(string poolingJson)
@@ -527,23 +527,23 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     ///     heuristic entirely only when rank is unknown for a role (including the sole-output
     ///     #470/#475 shape, which the real rank check corrects later).
     /// </summary>
-    private static (string? TokenEmbeddingsOutput, string? EmbeddingOutput) SelectOutputs(OnnxGraphProbe probe)
+    private static GraphOutputs SelectOutputs(OnnxGraphProbe probe)
     {
         var outputs = probe.OutputNames;
         if (outputs.Count <= 1)
         {
-            return (outputs.Count == 0 ? string.Empty : outputs[0], null);
+            return new GraphOutputs(outputs.Count == 0 ? string.Empty : outputs[0], null);
         }
 
         var tokenCandidates = outputs.Where(n => RankOf(probe, n) == OnnxOutputRanks.TokenLevelRank).ToList();
         var embeddingCandidates = outputs.Where(n => RankOf(probe, n) == OnnxOutputRanks.PooledRank).ToList();
         if (tokenCandidates.Count > 0 && embeddingCandidates.Count > 0)
         {
-            return (PreferRecognizedName(tokenCandidates, IsTokenEmbeddingsName), PreferRecognizedName(embeddingCandidates, IsEmbeddingName));
+            return new GraphOutputs(PreferRecognizedName(tokenCandidates, IsTokenEmbeddingsName), PreferRecognizedName(embeddingCandidates, IsEmbeddingName));
         }
 
         var tokenByName = SelectTokenEmbeddingsOutput(outputs);
-        return (tokenByName, SelectEmbeddingOutput(outputs, tokenByName));
+        return new GraphOutputs(tokenByName, SelectEmbeddingOutput(outputs, tokenByName));
     }
 
     /// <summary>The first name a role's own recognized-names list matches, else the first
@@ -664,4 +664,12 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     }
 
     private static string JoinPath(string dir, string file) => dir.Length == 0 ? file : $"{dir}/{file}";
+
+    private readonly record struct TokenizerPair(TokenizerFamily Family, string FileName);
+
+    private readonly record struct SpecialTokenSet(IReadOnlyDictionary<string, int> Tokens, bool Pending);
+
+    private readonly record struct PoolingChoice(PoolingMode Mode, NormalizationMode Normalization, string Provenance);
+
+    private readonly record struct GraphOutputs(string? TokenEmbeddingsOutput, string? EmbeddingOutput);
 }

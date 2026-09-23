@@ -84,7 +84,7 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
                 continue;
             }
 
-            var scan = scanner.Scan(group.SourceFile, rows.Select(row => (row.Id, row.Hash)).ToList(),
+            var scan = scanner.Scan(group.SourceFile, rows.Select(row => new StoredChunk(row.Id, row.Hash)).ToList(),
                 maxTokens, overlayTokens, countTokens);
 
             // A missing/unreadable/unhandled file is never a candidate — a repair verb re-ingests,

@@ -16,14 +16,14 @@ public sealed partial class WatchHostedService : BackgroundService
     /// <summary>Span name and `operation` tag of one reconcile pass.</summary>
     internal const string OperationName = "watch.reconcile";
 
-    private readonly HashSet<(string ProjectId, string Path)> _active = new(WatchKeyComparer.Instance);
+    private readonly HashSet<WatchKey> _active = [];
     private readonly Lock _activeGate = new();
     private readonly WatchCatchUp _catchUp;
     private readonly WatchEventSource _eventSource;
     private readonly ILogger<WatchHostedService> _logger;
     private readonly IMemoryStore _memory;
     private readonly WatchPipeline _pipeline;
-    private readonly HashSet<(string ProjectId, string Path)> _registered = new(WatchKeyComparer.Instance);
+    private readonly HashSet<WatchKey> _registered = [];
     private readonly IWatchStore _store;
     private readonly IOperationTelemetry _telemetry;
     private readonly TimeProvider _timeProvider;
@@ -51,8 +51,8 @@ public sealed partial class WatchHostedService : BackgroundService
     {
         lock (_activeGate)
         {
-            _active.Remove((projectId, path));
-            _registered.Remove((projectId, path));
+            _active.Remove(new WatchKey(projectId, path));
+            _registered.Remove(new WatchKey(projectId, path));
         }
     }
 
@@ -132,10 +132,10 @@ public sealed partial class WatchHostedService : BackgroundService
     {
         var registrations = await _store.ListWatchesAsync(cancellationToken).ConfigureAwait(false);
         pass.Tag("registrations", registrations.Count.ToString());
-        var seen = new HashSet<(string ProjectId, string Path)>(WatchKeyComparer.Instance);
+        var seen = new HashSet<WatchKey>();
         foreach (var registration in registrations)
         {
-            var key = (registration.ProjectId, registration.Path);
+            var key = new WatchKey(registration.ProjectId, registration.Path);
             seen.Add(key);
             _pipeline.RegisterWatch(registration.ProjectId, registration.Path);
             lock (_activeGate)
@@ -184,7 +184,7 @@ public sealed partial class WatchHostedService : BackgroundService
             }
         }
 
-        (string ProjectId, string Path)[] stale;
+        WatchKey[] stale;
         lock (_activeGate)
         {
             stale = [.. _registered.Where(k => !seen.Contains(k))];
