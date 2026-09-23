@@ -191,7 +191,8 @@ public static partial class AppRegistrations
             // pass instead of the next one.
             services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(sp =>
             [
-                new ChunkBackfillJob(sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<TimeProvider>(),
+                new ChunkBackfillJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
+                    sp.GetRequiredService<IPlainTextChunker>(), sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<IEmbeddingService>()),
                 new Vec0ReclaimJob(),
                 new VacuumJob(),

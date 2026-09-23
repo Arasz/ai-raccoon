@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.EventPump;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
@@ -167,6 +168,20 @@ public static class TestData
         var tokenizer = new O200kTokenizer();
         return new JsonFileTypeChunker(tokenizer.CountTokens, fallback ?? new MarkdownChunker(tokenizer.CountTokens),
             ChunkingDefaults.OverlayTokens);
+    }
+
+    /// <summary>Real o200k-backed plain text chunker for tests that exercise token bounds without markdown structure.</summary>
+    public static IPlainTextChunker RealPlainTextChunker() => new PlainTextChunker(new O200kTokenizer().CountTokens);
+
+    /// <summary>Real matcher for .md/.txt/.json — the same handler registry <c>ChunkBackfill</c> and
+    /// the ingest path route through. <paramref name="markdown"/> overrides the markdown handler's
+    /// (and the JSON handler's fallback) chunker; omitted, both get their own <see cref="RealMarkdownChunker"/>.</summary>
+    public static IFileTypeMatcher RealFileTypeMatcher(IMarkdownChunker? markdown = null)
+    {
+        var noteChunker = markdown ?? RealMarkdownChunker();
+        return new FileTypeMatcher(
+            [new MarkdownFileTypeHandler(noteChunker), new PlainTextFileTypeHandler(RealPlainTextChunker()),
+             new JsonFileTypeHandler(RealJsonChunker(noteChunker))]);
     }
 
     /// <summary>Builds a <see cref="ConfigCommands"/> with only the sub-command(s) a test needs; unused sub-commands

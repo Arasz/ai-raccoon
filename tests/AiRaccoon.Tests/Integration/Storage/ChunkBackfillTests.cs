@@ -120,7 +120,8 @@ public sealed class ChunkBackfillTests : IDisposable
     }
 
     private static ChunkBackfill Backfill() =>
-        new(TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
+        new(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
+            new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
 
     private static string Paragraphs(int count) =>
         string.Join("\n\n", Enumerable.Range(0, count).Select(i =>
