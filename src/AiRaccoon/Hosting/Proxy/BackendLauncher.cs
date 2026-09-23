@@ -11,12 +11,16 @@ internal sealed class BackendStartException(string message, Exception inner) : E
 
 /// <summary>
 ///     Acquires a live ai-raccoon HTTP backend for the proxy (ADR-0020). The default path is
-///     private spawn (F70/K1): start `ai-raccoon serve --port 0` and trust only the URL that child
-///     prints while it is still alive, so no pre-existing listener is ever contacted. The explicit
-///     attach path keeps the legacy behaviour: probe first, else start `serve` on the port and poll.
-///     Never kills, signals or terminates the backend itself: the proxy stops the private
-///     backends it starts over the token-guarded /shutdown when it shuts down (owner ruling
-///     2026-09-22), and a shared backend's lifetime belongs to IdleWatchdog alone.
+///     attach-or-start behind the identity proof (ADR-0106): the composition root probes the
+///     configured port, attaches to a proven listener, starts one there when nothing answers, and
+///     falls back to a private ephemeral child when the holder cannot prove — the policy lives in
+///     <see cref="BackendSessions.AcquireSharedAsync" />. This launcher owns the process mechanics:
+///     <see cref="AcquireAsync" /> probes, starts and polls the configured port, and
+///     <see cref="StartPrivateAsync" /> starts the fallback child and trusts only the URL that child
+///     prints while it is still alive. Never kills, signals or terminates the backend itself: the
+///     proxy stops the private fallbacks it starts over the token-guarded /shutdown when it shuts
+///     down (owner ruling 2026-09-22), and a shared backend's lifetime belongs to IdleWatchdog
+///     alone.
 /// </summary>
 internal sealed partial class BackendLauncher : IBackendLauncher
 {

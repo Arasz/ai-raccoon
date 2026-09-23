@@ -52,6 +52,25 @@ internal static class BackendLaunchArguments
     /// </summary>
     public static string[] PrivateServeArguments(ServerConfig config) => Arguments(config, 0);
 
+    /// <summary>
+    ///     The private fallback arguments: the same ephemeral child, with an idle timeout when the
+    ///     caller must bound it (the one-shot settings fallback). Omitted, the child keeps the
+    ///     default idle watchdog and the proxy owns its stop (K1a).
+    /// </summary>
+    public static string[] PrivateServeArguments(ServerConfig config, TimeSpan? idleTimeout) =>
+        idleTimeout is { } idle ? [.. Arguments(config, 0), "--idle-timeout", FormatIdleTimeout(idle)] : Arguments(config, 0);
+
+    /// <summary>
+    ///     How long a one-shot settings command's private fallback outlives it when the configured
+    ///     port could not be proven: the command exits immediately, so nothing else can stop it.
+    /// </summary>
+    public static readonly TimeSpan FallbackIdleTimeout = TimeSpan.FromMinutes(5);
+
+    private static string FormatIdleTimeout(TimeSpan idle) =>
+        idle.TotalSeconds % 60 == 0
+            ? $"{(int)idle.TotalMinutes}m"
+            : $"{(int)idle.TotalSeconds}s";
+
     private static string[] Arguments(ServerConfig config, int port)
     {
         var arguments = new List<string>

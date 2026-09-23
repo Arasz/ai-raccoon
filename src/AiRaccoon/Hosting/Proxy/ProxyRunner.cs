@@ -8,7 +8,7 @@ namespace AiRaccoon.Hosting.Proxy;
 ///     The bare-launch composition root (docs/adr/0020-always-on-http-stdio-proxy.md): acquire one
 ///     HTTP backend and relay every stdio message to it. Resolves no key, opens no bank, loads no model.
 /// </summary>
-public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLauncher backendLauncher, IHttpClientFactory httpClientFactory, ILogger<ProxyRunner> logger) : IProxyRunner
+public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLauncher backendLauncher, IServerProbe serverProbe, IHttpClientFactory httpClientFactory, ILogger<ProxyRunner> logger) : IProxyRunner
 {
     public async Task<int> RunAsync(ServerConfig serverConfig, StandardStreams streams, string? processPath, CancellationToken ctx)
     {
@@ -19,7 +19,10 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
         }
 
         var loggerFactory = CreateMcpLoggerFactory(serverConfig);
-        await using var backendSessions = new BackendSessions(backendLauncher, httpClientFactory, loggerFactory, processPath, serverConfig);
+        // The verifier is bound to this launch's resolved root, exactly like the token reader below:
+        // reading it from a DI singleton would tie the proof to whichever root registered first.
+        var prover = new IdentityProver(serverConfig.Options, httpClientFactory);
+        await using var backendSessions = new BackendSessions(backendLauncher, prover, serverProbe, httpClientFactory, loggerFactory, processPath, serverConfig);
 
         McpClient backend;
         try
