@@ -33,8 +33,9 @@ internal static class BankPresenceGuard
             return;
         }
 
+        var scope = options.Scope == InstallScope.Project ? " --install-scope project" : "";
         throw new BankMissingException(
-            $"ai-raccoon: no bank exists at '{bankPath}' — create it with 'ai-raccoon serve --data-root {options.DataRoot}', or check --data-root for a typo");
+            $"ai-raccoon: no bank exists at '{bankPath}' — create it with 'ai-raccoon --data-root {options.DataRoot}{scope} serve', or check --data-root for a typo");
     }
 
     /// <summary>Path identity, not "was --data-root passed": compared after expansion so a trailing

@@ -50,6 +50,9 @@ public sealed class IdentityKeyFile
     /// <summary>Why the last ensure or read refused, with the remedy; null when it did not.</summary>
     public string? RefusalReason { get; private set; }
 
+    /// <summary>True when the last ensure tightened an owned state directory others could only read to 0700.</summary>
+    public bool TightenedStateDirectory { get; private set; }
+
     /// <summary>
     ///     The key, minted or healed when needed; null when the state directory or an existing file is
     ///     not owner-only, or the file cannot be written. Only `serve` calls this.
@@ -57,9 +60,10 @@ public sealed class IdentityKeyFile
     public async Task<ECDsa?> EnsureAsync(CancellationToken cancellationToken)
     {
         RefusalReason = null;
+        TightenedStateDirectory = false;
         try
         {
-            OwnerOnlyFile.EnsureDirectory(StateDirectory);
+            TightenedStateDirectory = OwnerOnlyFile.EnsureDirectory(StateDirectory);
             await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {

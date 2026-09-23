@@ -94,7 +94,7 @@ cannot prove it holds this root's identity key is treated as untrusted
 A `--data-root` that resolves to neither the default root nor an existing bank refuses
 before any of this — a client auto-launch never mints a bank at a typo'd path (F39,
 `ExitCode.NoBank` = `22`), with a line naming the fix:
-`ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon serve --data-root <path>', or check --data-root for a typo`.
+`ai-raccoon: no bank exists at '<path>' — create it with 'ai-raccoon --data-root <path> serve', or check --data-root for a typo` (a project-scope launch adds `--install-scope project` before `serve`).
 
 ### Idle watchdog
 

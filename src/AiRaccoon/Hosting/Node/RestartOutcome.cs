@@ -15,14 +15,13 @@ public enum RestartOutcome
     /// <summary>The server stopped and the port freed.</summary>
     Stopped,
 
-    /// <summary>Something is listening but does not identify as an ai-raccoon server.</summary>
+    /// <summary>The listener proved this root's key but does not identify as an ai-raccoon server.</summary>
     Foreign,
 
     /// <summary>
-    ///     The listener identifies as an ai-raccoon server, but it could not prove it holds this
-    ///     root's identity key (ADR-0106). A self-asserted name is not identity, so the restart
-    ///     refuses before reading or sending the token — cycling means handing the token to whoever
-    ///     holds the port.
+    ///     The listener could not prove it holds this root's identity key (ADR-0106). The proof comes
+    ///     before the identify read, so the restart refuses having sent it only the probe and the
+    ///     challenge — cycling means handing the token to whoever holds the port.
     /// </summary>
     Unproven,
 

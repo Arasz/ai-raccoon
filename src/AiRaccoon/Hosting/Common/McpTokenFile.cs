@@ -68,6 +68,9 @@ public sealed class McpTokenFile
     /// <summary>Why the last ensure or read refused, with the remedy; null when it did not.</summary>
     public string? RefusalReason { get; private set; }
 
+    /// <summary>True when the last ensure tightened an owned state directory others could only read to 0700.</summary>
+    public bool TightenedStateDirectory { get; private set; }
+
     /// <summary>
     ///     The token, or null when it can be neither read nor minted. Racing callers converge on one
     ///     secret, debris left by a crash is healed rather than wedging every later start, and a
@@ -76,9 +79,10 @@ public sealed class McpTokenFile
     public async Task<string?> EnsureAsync(CancellationToken cancellationToken)
     {
         RefusalReason = null;
+        TightenedStateDirectory = false;
         try
         {
-            OwnerOnlyFile.EnsureDirectory(StateDirectory);
+            TightenedStateDirectory = OwnerOnlyFile.EnsureDirectory(StateDirectory);
             await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {

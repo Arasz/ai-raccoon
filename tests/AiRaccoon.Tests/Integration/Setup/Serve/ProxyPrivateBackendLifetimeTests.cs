@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Globalization;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.E2E;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
@@ -111,6 +113,111 @@ public sealed class ProxyPrivateBackendLifetimeTests : IDisposable
             await sessions.DisposeAsync();
             await RaccoonBackendCleanup.ShutdownIfRunningAsync(_dataRoot, port, CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    ///     A fallback child that fails its own proof is never sent the token, so it cannot be stopped
+    ///     over /shutdown; the proxy spawned it and holds its process, so it stops it at once instead
+    ///     of leaving it to its idle timeout.
+    /// </summary>
+    [RetryFact]
+    public async Task AFallbackThatFailsItsOwnProof_IsStoppedAtOnce()
+    {
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
+        using var squatter = new Squatter();
+        var launcher = new ChildRecordingLauncher(new BackendLauncher(TestData.CreateServerProbe(),
+            BackendLauncher.DefaultBudget, TimeProvider.System, NullLogger<BackendLauncher>.Instance));
+        var config = new ServerConfig(squatter.Port, McpTransport.Http,
+            new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
+        var sessions = new BackendSessions(launcher, new NeverProven(), TestData.CreateServerProbe(),
+            new PlainHttpClientFactory(), NullLoggerFactory.Instance, ServeExecutable, config);
+        try
+        {
+            await Should.ThrowAsync<BackendUnavailableException>(
+                () => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+
+            var child = launcher.ChildPid.ShouldNotBeNull("the gate needs a live fallback child that then failed its proof");
+            (await ExitsWithinAsync(child, TimeSpan.FromSeconds(10))).ShouldBeTrue(
+                $"the fallback child (pid {child}) failed its proof but is still running — the proxy must stop it, not leave it to its idle timeout");
+        }
+        finally
+        {
+            await sessions.DisposeAsync();
+            if (launcher.ChildPid is { } pid)
+            {
+                KillIfRunning(pid);
+            }
+        }
+    }
+
+    private static async Task<bool> ExitsWithinAsync(int pid, TimeSpan bound)
+    {
+        Process process;
+        try
+        {
+            process = Process.GetProcessById(pid);
+        }
+        catch (ArgumentException)
+        {
+            return true;
+        }
+
+        using (process)
+        {
+            try
+            {
+                await process.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(bound);
+                return true;
+            }
+            catch (TimeoutException)
+            {
+                return false;
+            }
+        }
+    }
+
+    private static void KillIfRunning(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            RaccoonProcess.KillTree(process);
+        }
+        catch (ArgumentException)
+        {
+            // Already gone.
+        }
+    }
+
+    /// <summary>A verifier every listener fails, the fallback child included.</summary>
+    private sealed class NeverProven : IIdentityProver
+    {
+        public Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx) =>
+            Task.FromResult<IdentityProofFailure?>(IdentityProofFailure.BadSignature);
+    }
+
+    /// <summary>The real launcher, noting the pid the private child reports while it is still live.</summary>
+    private sealed class ChildRecordingLauncher(IBackendLauncher inner) : IBackendLauncher
+    {
+        public int? ChildPid { get; private set; }
+
+        public async Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments,
+            CancellationToken ctx)
+        {
+            var result = await inner.StartPrivateAsync(fileName, arguments, ctx);
+            if (result.Url is { } url)
+            {
+                ChildPid = await RealServe.PidOnAsync(new Uri(url).Port, ctx);
+            }
+
+            return result;
+        }
+
+        public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments,
+            CancellationToken ctx) =>
+            inner.AcquireAsync(port, fileName, arguments, ctx);
     }
 
     /// <summary>True once nothing holds the port; a backend shutting down keeps it a moment longer.</summary>

@@ -243,7 +243,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
 
             foreach (var racer in racers)
             {
-                AssertNothingSecret(racer, LaunchPath.Dispose);
+                AssertNothingSecret(racer);
                 racer.Challenges.ShouldBeGreaterThan(0, "the stop must have reached the proof");
                 proxy.Stderr.ShouldContain(
                     $"the private backend at http://127.0.0.1:{racer.Port}/mcp no longer proves it serves this data root ({nameof(IdentityProofFailure.Malformed)})");
@@ -251,7 +251,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
 
             exit.ShouldBe(ExitCode.Success, proxy.Stderr);
 
-            AssertNothingSecret(squatter, LaunchPath.Acquire);
+            AssertNothingSecret(squatter);
         }
         finally
         {
@@ -368,7 +368,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             var exit = await proxy.CloseAsync(HardCap);
 
             AssertTheAttackGotNothing(attack, attacker, LaunchPath.Dispose);
-            AssertNothingSecret(squatter, LaunchPath.Acquire);
+            AssertNothingSecret(squatter);
             exit.ShouldBe(ExitCode.Success, proxy.Stderr);
             proxy.Stderr.ShouldContain(
                 $"the private backend at http://127.0.0.1:{childPort}/mcp no longer proves it serves this data root ({ExpectedReason(attacker, LaunchPath.Dispose)})");
@@ -401,7 +401,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
     {
         if (attack.Listener is { } listener)
         {
-            AssertNothingSecret(listener, path);
+            AssertNothingSecret(listener);
             if (attacker is Attacker.PlantedKey && path is not LaunchPath.Dispose)
             {
                 listener.Challenges.ShouldBe(0, "a key file others can read is refused before any challenge goes out");
@@ -429,16 +429,15 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         }
     }
 
-    /// <summary>Zero secret bytes, and nothing but the probe and the challenge (plus restart's identify read).</summary>
-    private void AssertNothingSecret(Impostor listener, LaunchPath path)
+    /// <summary>Zero secret bytes, and nothing but the probe and the challenge, on every path (ADR-0106 D5).</summary>
+    private void AssertNothingSecret(Impostor listener)
     {
         listener.SecretsSeen(_secrets).ShouldBeEmpty();
         listener.Requests.ShouldNotContain(request => request.CarriesTheTokenHeader);
         foreach (var request in listener.Requests)
         {
             var allowed = request is { Method: "POST", Path: "/mcp", BodyText: "x" }
-                          || request is { Method: "POST", Path: IdentityProof.EndpointPath }
-                          || (path is LaunchPath.Restart && request is { Method: "GET", Path: "/observability" });
+                          || request is { Method: "POST", Path: IdentityProof.EndpointPath };
             allowed.ShouldBeTrue($"an unproven listener received {request}");
         }
     }
