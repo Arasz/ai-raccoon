@@ -25,6 +25,10 @@ src/AiRaccoon/Models/
 tests/AiRaccoon.Tests/search_quality_eval.json
 tests/AiRaccoon.Tests/Unit/Memory/QueryGuard/Structural/assets/
 scripts/retrieval_tuning/corpora/
+# The code eval corpus: vendored third-party source plus frozen snapshots of our own files,
+# which would otherwise surface as duplicate or foreign project code in code search.
+scripts/retrieval_tuning/code-corpus/
+scripts/tests/fixtures/code_eval/
 
 # Generated test-runner output (empty today; guard so a future `dotnet test` run
 # never indexes .trx artifacts). See also the starter template's universal set:

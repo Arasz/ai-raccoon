@@ -105,20 +105,19 @@ def build(seed: dict) -> dict:
         size_band = entry.get("sizeBand")
         path = entry["path"]
 
+        vendored_rel = f"{code_corpus.CODE_CORPUS_DIR}/files/{family}/{path}"
+        vendored_abs = REPO_ROOT / vendored_rel
         if family == SELF_FAMILY:
-            source_path = REPO_ROOT / path
-            data = source_path.read_bytes()
-            vendored_path = None
+            # Snapshot, not a live reference: an edit to the repo file must not move the corpus.
+            data = vendored_abs.read_bytes() if vendored_abs.exists() else (REPO_ROOT / path).read_bytes()
         else:
             repo = repo_meta["repo"]
             sha = repo_meta["sha"]
             data = _fetch_bytes(_raw_url(repo, sha, path))
-            vendored_rel = f"{code_corpus.CODE_CORPUS_DIR}/files/{family}/{path}"
-            vendored_abs = REPO_ROOT / vendored_rel
-            vendored_abs.parent.mkdir(parents=True, exist_ok=True)
-            vendored_abs.write_bytes(data)
-            vendored_path = vendored_rel
-
+        vendored_abs.parent.mkdir(parents=True, exist_ok=True)
+        vendored_abs.write_bytes(data)
+        vendored_path = vendored_rel
+        if family != SELF_FAMILY:
             if family not in fetched_licenses:
                 license_data = _fetch_bytes(_raw_url(repo, sha, repo_meta["licensePath"]))
                 LICENSES_DIR.mkdir(parents=True, exist_ok=True)

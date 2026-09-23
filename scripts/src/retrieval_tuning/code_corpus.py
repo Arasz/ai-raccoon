@@ -32,9 +32,20 @@ SELF_FAMILY = "self"
 
 
 def _resolve_file_path(row: dict, root: Path) -> Path:
-    """A row's actual bytes: the vendored copy, or (self family) `root/path` directly."""
-    relative = row.get("vendoredPath") or row["path"]
-    return root / relative
+    """A row's bytes: its frozen copy under `files/`."""
+    return root / row["vendoredPath"]
+
+
+def _check_snapshots(files: list[dict], problems: list[str]) -> bool:
+    """Every row, self included, must be a frozen copy under files/; a live path drifts on edit."""
+    prefix = f"{CODE_CORPUS_DIR}/files/"
+    ok = True
+    for row in files:
+        vendored = row.get("vendoredPath") or ""
+        if not vendored.startswith(prefix):
+            problems.append(f"{row['path']}: vendoredPath must be a snapshot under {prefix} (got {vendored!r})")
+            ok = False
+    return ok
 
 
 def _count_nonblank_lines(path: Path) -> int:
@@ -159,7 +170,7 @@ def validate_manifest(manifest: dict, root: Path) -> list[str]:
     """Structural + integrity validation of a loaded MANIFEST.json.
 
     `root` is the repository root: vendored files resolve at
-    `root/<vendoredPath>`, self-family files resolve at `root/<path>`, and
+    `root/<vendoredPath>` (self-family files too, snapshotted under files/self/), and
     per-family LICENSES files live under `root/<CODE_CORPUS_DIR>/LICENSES/`.
     Returns a list of problems (empty = valid).
     """
@@ -171,6 +182,8 @@ def validate_manifest(manifest: dict, root: Path) -> list[str]:
         problems.append("manifest has no files")
         return problems
 
+    if not _check_snapshots(files, problems):
+        return problems
     _check_band_counts(manifest, files, problems)
     _check_band_matches_measured_lines(files, root, problems)
     _check_sha256(files, root, problems)
