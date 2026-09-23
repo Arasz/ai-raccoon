@@ -107,7 +107,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public async Task GetPassphraseAsync_BwsNotFound_PropagatesInstallGuidance()
     {
-        var runner = new FakeBwsRunner(new BwsInvocationException(
+        var runner = new FakeBwsRunner(new BwsInvocationException(BwsFailure.NotInstalled,
             "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)"));
 
         var ex = await Should.ThrowAsync<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
@@ -118,7 +118,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public async Task GetPassphraseAsync_Timeout_PropagatesTimeoutText()
     {
-        var runner = new FakeBwsRunner(new BwsInvocationException("bws timed out after 15s"));
+        var runner = new FakeBwsRunner(new BwsInvocationException(BwsFailure.TimedOut, "bws timed out after 15s"));
 
         var ex = await Should.ThrowAsync<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 

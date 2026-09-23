@@ -213,7 +213,7 @@ public class ConfigCommandsWatchTests
 
             var (exit, _, err) = await Run(["settings", "watch", "concurrency", "acme", value], store);
 
-            exit.ShouldBe(ExitCode.InvalidArgument);
+            exit.ShouldBe(ErrorCode.Usage.InvalidValue);
             err.ShouldContain("1..16");
             store.Settings.ShouldNotContainKey(WatchConfigKeys.ConcurrencyProject("acme"));
         }

@@ -21,14 +21,17 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
 
     public async Task<Passphrase> GetPassphraseAsync(EncryptionData encryptionData, CancellationToken cancellationToken = default)
     {
-        Guard.IsNotNullOrWhiteSpace(encryptionData.SecretId);
+        if (string.IsNullOrWhiteSpace(encryptionData.SecretId))
+        {
+            throw new EncryptionSourceException("the encryption source is bitwarden but names no secret id — run 'ai-raccoon encryption bitwarden' again");
+        }
 
         var result = await cliSecretManager.RunAsync(["secret", "get", encryptionData.SecretId], null, FetchTimeout,
             cancellationToken).ConfigureAwait(false);
 
         if (result.ExitCode != 0)
         {
-            throw new BwsInvocationException($"bws failed (exit {result.ExitCode}): {result.FirstErrorLine}");
+            throw new BwsInvocationException(BwsFailure.Failed, $"bws failed (exit {result.ExitCode}): {result.FirstErrorLine}");
         }
 
         var seed = OpenSshPrivateKeyParser.ParseSeed(result.Stdout.Trim());

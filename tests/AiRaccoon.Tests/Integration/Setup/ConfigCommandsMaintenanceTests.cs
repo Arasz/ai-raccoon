@@ -94,7 +94,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["settings", "maintenance", "interval", "0"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("positive number of minutes");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal);
     }
@@ -106,7 +106,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["settings", "maintenance", "interval", "often"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("positive number of minutes");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal);
     }
@@ -130,7 +130,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["settings", "maintenance", "vacuum-interval", "-1"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("positive number of days");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal);
     }
@@ -142,7 +142,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["settings", "maintenance", "vacuum-interval", "20000000"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("days");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal);
     }
@@ -235,7 +235,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "0"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("positive");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }
@@ -247,7 +247,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "many"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("positive");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }
@@ -259,7 +259,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", ""], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("positive");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }
@@ -277,7 +277,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
 
         var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "2000000000"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain(BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ToString());
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }

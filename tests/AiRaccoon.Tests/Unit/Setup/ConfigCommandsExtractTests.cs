@@ -69,7 +69,7 @@ public class ConfigCommandsExtractTests
 
         var (exit, _, err) = await Run(["settings", "extract", "mode", "auto"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("mode must be 'propose' or 'promote'");
         store.Settings.ShouldNotContainKey(ExtractionConfigKeys.ModeGlobal);
     }
@@ -93,7 +93,7 @@ public class ConfigCommandsExtractTests
 
         var (exit, _, err) = await Run(["settings", "extract", "interval", "0"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("interval must be a positive number of minutes");
         store.Settings.ShouldNotContainKey(ExtractionConfigKeys.IntervalMinutesGlobal);
     }
@@ -105,7 +105,7 @@ public class ConfigCommandsExtractTests
 
         var (exit, _, err) = await Run(["settings", "extract", "interval", "often"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("interval must be a positive number of minutes");
         store.Settings.ShouldNotContainKey(ExtractionConfigKeys.IntervalMinutesGlobal);
     }
@@ -129,7 +129,7 @@ public class ConfigCommandsExtractTests
 
         var (exit, _, err) = await Run(["settings", "extract", "capacity", "0"], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("capacity must be a positive number");
         store.Settings.ShouldNotContainKey(ExtractionConfigKeys.QueueCapacityGlobal);
     }
@@ -169,7 +169,7 @@ public class ConfigCommandsExtractTests
 
         var (exit, _, err) = await Run(["settings", "extract", "auto-promote-threshold", raw], store);
 
-        exit.ShouldBe(ExitCode.InvalidArgument);
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
         err.ShouldContain("threshold must be a score 0..4 or 'off'");
         store.Settings.ShouldNotContainKey(ExtractionConfigKeys.AutoPromoteThresholdGlobal);
     }

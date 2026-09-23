@@ -76,7 +76,7 @@ public sealed class NoBankE2ETests : IAsyncLifetime
                         run = new ProcessRun(-1, "", "it did not exit: it launched instead of refusing");
                     }
 
-                    if (run.ExitCode != ExitCode.NoBank)
+                    if (run.ExitCode != ErrorCode.Bank.NoBank)
                     {
                         violations.Add($"'{shown}' at {Path.GetFileName(root)} exited {run.ExitCode}: {run.Stderr.Trim()}");
                     }

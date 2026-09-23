@@ -1,3 +1,6 @@
+using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Options;
 using System.Net;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
@@ -40,7 +43,7 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stdout.ShouldBe($"http://127.0.0.1:{port}/mcp{Environment.NewLine}");
     }
 
@@ -75,7 +78,7 @@ public sealed class NodeRunnerTests : IDisposable
 
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stdout.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
     }
 
@@ -88,10 +91,91 @@ public sealed class NodeRunnerTests : IDisposable
 
         var exit = await run.Exit;
 
-        exit.ShouldBe(ExitCode.PortInUse);
+        exit.ShouldBe(ErrorCode.Port.InUse);
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain("in use");
         run.Stderr.ShouldContain("--port 0");
+        run.Stderr.ShouldNotContain("   at ");
+    }
+
+    [RetryFact]
+    public async Task UnusableIdentityKeyPath_ReportsIdentityKeyUnavailable_WithThePath()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        var keyPath = Path.Combine(_dataRoot, IdentityKeyFile.FileName);
+        Directory.CreateDirectory(keyPath);
+
+        lease.ReleaseForBind();
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var exit = await run.Exit;
+
+        exit.ShouldBe(ErrorCode.Environment.IdentityKeyUnavailable);
+        run.Stderr.ShouldContain(keyPath);
+        run.Stderr.ShouldNotContain("   at ");
+    }
+
+    [RetryFact]
+    public async Task AStateDirectoryOthersCanWrite_ReportsSecretNotPrivate()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("owner-only modes are POSIX");
+            return;
+        }
+
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        File.SetUnixFileMode(_dataRoot, (UnixFileMode)0b111_111_111);
+
+        lease.ReleaseForBind();
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var exit = await run.Exit;
+
+        exit.ShouldBe(ErrorCode.Environment.SecretNotPrivate);
+        run.Stderr.ShouldContain("not owner-only");
+    }
+
+    /// <summary>A key source that cannot be read says so on stderr and exits the Key case, instead of a silent exit.</summary>
+    [RetryFact]
+    public async Task ACorruptEncryptionSourceSidecar_ReportsItAndExitsSourceSidecarInvalid()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        var bankPath = SqliteConnectionFactory.BankPathFor(new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
+        Directory.CreateDirectory(Path.GetDirectoryName(bankPath)!);
+        File.WriteAllText(EncryptionSourceSidecar.PathFor(bankPath), "{not json");
+
+        lease.ReleaseForBind();
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var exit = await run.Exit;
+
+        exit.ShouldBe(ErrorCode.Key.SourceSidecarInvalid);
+        run.Stderr.ShouldContain("corrupt");
+        run.Stderr.ShouldNotContain("   at ");
+    }
+
+    /// <summary>A bank that will not open says so on stderr and exits the Bank case, instead of a silent exit.</summary>
+    [RetryFact]
+    public async Task ABankThatIsNotADatabase_ReportsItAndExitsCorrupted()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        var bankPath = SqliteConnectionFactory.BankPathFor(new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
+        Directory.CreateDirectory(Path.GetDirectoryName(bankPath)!);
+        await File.WriteAllBytesAsync(bankPath, [.. Enumerable.Range(0, 8192).Select(i => (byte)(i * 31 % 251))],
+            TestContext.Current.CancellationToken);
+
+        lease.ReleaseForBind();
+        await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        var exit = await run.Exit;
+
+        exit.ShouldBe(ErrorCode.Bank.Corrupted);
+        run.Stderr.ShouldContain(bankPath);
         run.Stderr.ShouldNotContain("   at ");
     }
 
@@ -109,7 +193,7 @@ public sealed class NodeRunnerTests : IDisposable
         await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
         var exit = await run.Exit;
 
-        exit.ShouldBe(ExitCode.McpTokenUnavailable);
+        exit.ShouldBe(ErrorCode.Environment.TokenUnavailable);
         run.Stdout.ShouldBeEmpty();
         run.Stderr.ShouldContain(tokenPath);
         run.Stderr.ShouldNotContain("   at ");
@@ -130,7 +214,7 @@ public sealed class NodeRunnerTests : IDisposable
         await using var second = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--mcp-entry", "--format", "hermes"]);
         var secondExit = await second.Exit;
 
-        secondExit.ShouldBe(ExitCode.Success);
+        secondExit.ShouldBe(ErrorCode.Ok.Success);
         second.Stdout.ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
         second.Stderr.ShouldContain("attached");
         second.Stderr.ShouldContain("proved");
@@ -141,7 +225,7 @@ public sealed class NodeRunnerTests : IDisposable
         response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed); // GET unmapped; any real response proves ownership
 
         var firstExit = await first.StopAsync();
-        firstExit.ShouldBe(ExitCode.Success);
+        firstExit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     /// <summary>
@@ -150,7 +234,7 @@ public sealed class NodeRunnerTests : IDisposable
     ///     keeps serving. The refusal names the remedy, never a token.
     /// </summary>
     [RetryFact]
-    public async Task Serve_OnAnotherRootsServer_RefusesExit3_WithTheRemedy()
+    public async Task Serve_OnAnotherRootsServer_RefusesUnproven_WithTheRemedy()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
@@ -165,7 +249,7 @@ public sealed class NodeRunnerTests : IDisposable
             await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString()]);
             var secondExit = await second.Exit;
 
-            secondExit.ShouldBe(ExitCode.PortInUse);
+            secondExit.ShouldBe(ErrorCode.Server.Unproven);
             second.Stdout.ShouldBeEmpty();
             second.Stderr.ShouldContain("did not prove");
             second.Stderr.ShouldContain("stop the listener");
@@ -179,11 +263,11 @@ public sealed class NodeRunnerTests : IDisposable
         }
 
         var firstExit = await first.StopAsync();
-        firstExit.ShouldBe(ExitCode.Success);
+        firstExit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
-    public async Task ConcurrentStartsOnSamePort_ExactlyOneOwns_TheOtherAttachesOrReturnsPortInUse()
+    public async Task ConcurrentStartsOnSamePort_ExactlyOneOwns_TheOtherAttachesOrIsRefused()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
         var secondRoot = TestData.CreateTempRoot("ai-raccoon-serve-race");
@@ -213,7 +297,7 @@ public sealed class NodeRunnerTests : IDisposable
                 // The loser (PortInUse) completes first; the winner keeps serving until stopped.
                 await Task.WhenAny(first.Exit, second.Exit);
                 exits = [await first.StopAsync(), await second.StopAsync()];
-                if (exits.Count(exit => exit == ExitCode.Success) >= 1)
+                if (exits.Count(exit => exit == ErrorCode.Ok.Success) >= 1)
                 {
                     break;
                 }
@@ -222,9 +306,11 @@ public sealed class NodeRunnerTests : IDisposable
                 await second.DisposeAsync();
             }
 
-            exits.ShouldAllBe(exit => exit == ExitCode.Success || exit == ExitCode.PortInUse);
-            exits.Count(exit => exit == ExitCode.Success).ShouldBeGreaterThanOrEqualTo(1);
-            if (exits[0] == ExitCode.Success)
+            // A loser that probes before the winner can answer the identity challenge is refused as
+            // unproven; one that loses the bind itself is refused as in use. Both are "the other".
+            exits.ShouldAllBe(exit => exit == ErrorCode.Ok.Success || exit == ErrorCode.Port.InUse || exit == ErrorCode.Server.Unproven);
+            exits.Count(exit => exit == ErrorCode.Ok.Success).ShouldBeGreaterThanOrEqualTo(1);
+            if (exits[0] == ErrorCode.Ok.Success)
             {
                 first.Stdout.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
             }
@@ -234,7 +320,7 @@ public sealed class NodeRunnerTests : IDisposable
                 first.Stderr.ShouldContain("in use");
             }
 
-            if (exits[1] == ExitCode.Success)
+            if (exits[1] == ErrorCode.Ok.Success)
             {
                 second.Stdout.ShouldMatch(@"^http://127\.0\.0\.1:\d+/mcp\r?\n$");
             }
@@ -272,7 +358,7 @@ public sealed class NodeRunnerTests : IDisposable
         line.ShouldBe(McpEntryRenderer.RenderHermes(port));
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stdout.ShouldBe($"{McpEntryRenderer.RenderHermes(port)}{Environment.NewLine}");
     }
 
@@ -291,7 +377,7 @@ public sealed class NodeRunnerTests : IDisposable
         line.ShouldBe(McpEntryRenderer.RenderClaude(port));
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -307,7 +393,7 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -326,7 +412,7 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{servePort}/mcp");
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -344,7 +430,7 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stderr.ShouldContain("serve always uses http");
         run.Stderr.ShouldContain("proxy");
     }
@@ -363,7 +449,7 @@ public sealed class NodeRunnerTests : IDisposable
         url.ShouldBe($"http://127.0.0.1:{port}/mcp");
         var exit = await run.StopAsync();
 
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
         run.Stderr.ShouldNotContain("ignoring --transport");
         run.Stderr.ShouldNotContain("serve always uses http");
     }
@@ -385,7 +471,7 @@ public sealed class NodeRunnerTests : IDisposable
 
         // The self-exit is the fact; its duration is not a verdict (PR #464). A fully broken idle
         // timeout hangs the await above and is caught by the harness cap / job timeout.
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     [RetryFact]
@@ -407,7 +493,7 @@ public sealed class NodeRunnerTests : IDisposable
         response.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
 
         var exit = await run.StopAsync();
-        exit.ShouldBe(ExitCode.Success);
+        exit.ShouldBe(ErrorCode.Ok.Success);
     }
 
     /// <summary>A /mcp request carrying the token minted under the given data root.</summary>

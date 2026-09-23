@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -7,7 +8,11 @@ namespace AiRaccoon.Infrastructure.Embedding.Download;
 public sealed record HfTreeEntry(string Path, string Type, long Size, string? LfsOid);
 
 /// <summary>The HF API refused or misbehaved: missing repo/revision, non-success status, or a malformed listing.</summary>
-public sealed class HfApiException(string message, Exception? inner = null) : Exception(message, inner);
+public sealed class HfApiException(string message, Exception? inner = null, HttpStatusCode? statusCode = null) : Exception(message, inner)
+{
+    /// <summary>The Hub's status when it answered with a non-success; null when the answer itself was unusable.</summary>
+    public HttpStatusCode? StatusCode { get; } = statusCode;
+}
 
 /// <summary>
 ///     Resolves a repo's file tree via <c>GET /api/models/&lt;repo&gt;/tree/&lt;rev&gt;?recursive=true&amp;expand=true</c>
@@ -43,7 +48,7 @@ public sealed class HfTreeClient
             {
                 throw new HfApiException(
                     $"could not resolve '{repoId}' at revision '{revision}' on Hugging Face (HTTP {(int)response.StatusCode}). " +
-                    "Check the repo id and revision, then retry.");
+                    "Check the repo id and revision, then retry.", statusCode: response.StatusCode);
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
