@@ -22,7 +22,7 @@ normally, code results are keyword-only, and the response carries the warning.
 ## What gets indexed
 
 Any file watched via `memory_watch_add` whose extension is in the code registry is
-automatically ingested into the code corpus. The 24 supported extensions:
+automatically ingested into the code corpus. The 30 supported extensions:
 
 `.cs` `.fs` `.fsx` `.py` `.ts` `.tsx` `.js` `.jsx` `.go` `.rs` `.java` `.kt` `.kts`
 `.swift` `.rb` `.php` `.c` `.h` `.cc` `.cpp` `.hpp` `.m` `.mm` `.scala` `.lua` `.html` `.htm` `.css` `.scss` `.sql`
