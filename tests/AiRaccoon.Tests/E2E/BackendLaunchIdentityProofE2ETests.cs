@@ -7,6 +7,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
@@ -142,6 +143,67 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             case LaunchPath.Dispose:
                 await DisposeCellAsync(attacker);
                 break;
+        }
+    }
+
+    /// <summary>
+    ///     The honest life of one root, every handover proven by the real binaries: nothing is
+    ///     listening, so the proxy starts the shared instance on the configured port; a settings write
+    ///     and read attach to that same instance; a bare `serve --restart` proves it and cycles it; the
+    ///     next proxy attaches to the cycled instance and reads back what the first proxy wrote. No
+    ///     client ever falls back, and no second backend is ever started.
+    /// </summary>
+    [Fact]
+    public async Task FullFlow_ProvenAttach_HandoverWorksAcrossProxySettingsAndRestart()
+    {
+        var port = FreePort();
+        try
+        {
+            string hash;
+            await using (var first = StartProxy(port))
+            {
+                (await first.ListToolsAsync(Ct)).ShouldNotBeEmpty();
+                var written = await first.CallToolAsync("memory_write",
+                    new JsonObject { ["projectId"] = "flow", ["content"] = "identity proof full flow marker" }, Ct);
+                hash = JsonDocument.Parse(written).RootElement.GetProperty("data").GetProperty("hash").GetString()!;
+                (await first.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, first.Stderr);
+                first.Stderr.ShouldNotContain("did not prove");
+            }
+
+            var owner = await RealServe.PidOnAsync(port, Ct)
+                        ?? throw new InvalidOperationException("the instance the proxy started must outlive it on the configured port");
+            ChildPorts().ShouldAllBe(child => child == port, "the only backend the proxy may start is the shared one on the configured port");
+
+            var set = await RunCliAsync(port, "settings", "sweep", "interval-hours", "12");
+            set.ExitCode.ShouldBe(ExitCode.Success, set.Stderr);
+            var show = await RunCliAsync(port, "settings", "sweep", "show");
+            show.ExitCode.ShouldBe(ExitCode.Success, show.Stderr);
+            show.Stdout.ShouldContain("12");
+            (set.Stderr + show.Stderr).ShouldNotContain("did not prove");
+            (await RealServe.PidOnAsync(port, Ct)).ShouldBe(owner, "the settings verbs must attach to the proven instance");
+
+            using var old = Process.GetProcessById(owner);
+            await using var cycled = await RealServe.StartAsync(_options,
+                ["serve", "--port", port.ToString(CultureInfo.InvariantCulture), "--restart"], port, Ct);
+            await old.WaitForExitAsync(Ct).WaitAsync(HardCap, Ct);
+            cycled.Stderr.ShouldNotContain("did not prove");
+
+            await using (var second = StartProxy(port))
+            {
+                var read = await second.CallToolAsync("memory_get",
+                    new JsonObject { ["projectId"] = "flow", ["hash"] = hash }, Ct);
+                read.ShouldContain("identity proof full flow marker");
+                (await second.CloseAsync(HardCap)).ShouldBe(ExitCode.Success, second.Stderr);
+                second.Stderr.ShouldNotContain("did not prove");
+            }
+
+            (await RunCliAsync(port, "settings", "sweep", "show")).Stdout.ShouldContain("12");
+            (await RealServe.PidOnAsync(port, Ct)).ShouldBe(cycled.Process.Id, "every client after the restart attached to the cycled instance");
+            ChildPorts().ShouldAllBe(child => child == port);
+        }
+        finally
+        {
+            await RealServe.StopByPortAsync(port, _options);
         }
     }
 
@@ -490,6 +552,13 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
 
         return copy;
     }
+
+    private Task<ProcessRun> RunCliAsync(int port, params string[] verb) =>
+        RaccoonProcess.RunAsync(
+        [
+            "--data-root", _options.DataRoot, "--install-scope", "project",
+            "--port", port.ToString(CultureInfo.InvariantCulture), .. verb
+        ], HardCap, Ct);
 
     /// <summary>The bare proxy on this root, quiet so it and every child it starts log to the state directory.</summary>
     private ProxyProcess StartProxy(int port, string revision = ProxyProcess.Stateless) =>
