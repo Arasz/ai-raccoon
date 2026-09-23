@@ -503,7 +503,7 @@ public sealed partial class SqliteMemoryStore(
         searchTimingsCollector.Fts = searchResults.FtsTotalTiming;
         searchTimingsCollector.Vector = searchResults.VectorTotalTiming;
 
-        var fusedResults = SearchResultFusion(query, parameters, searchResults);
+        var fusedResults = SearchResultFusion(parameters, plan, searchResults);
         searchTimingsCollector.Fusion = fusedResults.SearchTiming;
 
         var mergedResults = SearchResultMerge(query, parameters, plan, fusedResults);
@@ -562,7 +562,7 @@ public sealed partial class SqliteMemoryStore(
         return new MergedSearchResult(outcome.Results, timeProvider.GetElapsedTime(mergeStart)) { DroppedByFloor = outcome.DroppedByFloor };
     }
 
-    private FusedSearchResult SearchResultFusion(SearchQuery query, SearchParameters parameters, SearchResults searchResults)
+    private FusedSearchResult SearchResultFusion(SearchParameters parameters, FtsQueryPlan plan, SearchResults searchResults)
     {
         var fusionStart = timeProvider.GetTimestamp();
         var ftsCandidates = ModalityCandidates.ByBm25(searchResults);
@@ -576,7 +576,8 @@ public sealed partial class SqliteMemoryStore(
             [new NamedWeightedCandidates(ftsCandidates, parameters.FtsWeight, "fts"),
              new NamedWeightedCandidates(vectorCandidates, parameters.VectorWeight, "vector")],
             parameters.RrfK, 0, int.MaxValue);
-        return new FusedSearchResult(fused.Results, timeProvider.GetElapsedTime(fusionStart))
+        var results = plan.IsPathQuery ? AnchorMatchesFirst(fused.Results, searchResults.AllTermsMatched) : fused.Results;
+        return new FusedSearchResult(results, timeProvider.GetElapsedTime(fusionStart))
         {
             VectorCandidates = vectorCandidates,
             FtsCandidates = ftsCandidates,

@@ -1,10 +1,12 @@
 using AiRaccoon.Access;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
+using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -29,6 +31,7 @@ public sealed class KeywordMatchRelevanceFloorTests : IAsyncLifetime
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-keyword-floor-tests");
+    private SqliteConnectionFactory _factory = null!;
     private SqliteMemoryStore _store = null!;
     private MemoryTools _tools = null!;
 
@@ -37,14 +40,14 @@ public sealed class KeywordMatchRelevanceFloorTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
         await TestData.CreateBundledModel().EnsureAsync(ct);
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
-        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        var factory = _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         var clock = new FakeTimeProvider(FixedNow);
         var embeddings = TestData.CreateEmbeddingService();
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory),
             TestData.RealMarkdownChunker(), clock, embeddings, null, null, null, null, null, null, null);
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, factory, embeddings, "local", null, null, ct, clock);
 
-        var settings = new InMemorySettings();
+        var settings = new SqliteSettingsStore(factory);
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(),
             new AllowingRegistrationGuard(), new NeverMigratedGate());
         _tools = new MemoryTools(_store, gate,
@@ -112,6 +115,81 @@ public sealed class KeywordMatchRelevanceFloorTests : IAsyncLifetime
         var envelope = await _tools.Search(ProjectId, "how to braise a wombat in aspic", Session, kind: "memory", cancellationToken: ct);
 
         envelope.Data!.Results.ShouldBeEmpty();
+    }
+
+    /// <summary>
+    ///     A file#section anchor names one section, so its rows lead the response whatever the vector
+    ///     leg makes of a path string. Here the section is freshly ingested and not yet embedded, so
+    ///     it scores keyword rank 1 only and ties the vector leg's rank-1 row from another file.
+    /// </summary>
+    [RetryTheory]
+    [InlineData(SearchDefaults.MinRelativeScore)]
+    [InlineData(0.0)]
+    public async Task Search_FileSectionAnchor_RanksTheNamedSectionFirst(double minRelativeScore)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await AllowIngestAsync(ct);
+        await IngestAsync("a-deploy-notes.md",
+            "# Deploy notes\n\nThe deploy runbook rollback section explains how to roll a deploy back.\n", ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+        var runbook = await IngestAsync("deploy-runbook.md", RunbookText(), ct);
+
+        var envelope = await _tools.Search(ProjectId, $"{runbook}#rollback", Session, kind: "memory",
+            minRelativeScore: minRelativeScore, cancellationToken: ct);
+
+        envelope.Data!.Results.ShouldNotBeEmpty("the anchored section is an answer, not noise under a cosine floor");
+        var top = envelope.Data!.Results[0];
+        top.SourceFile.ShouldBe(runbook);
+        (await SectionOfAsync(top.Hash, ct)).ShouldBe("Rollback", StringCompareShould.IgnoreCase);
+    }
+
+    /// <summary>
+    ///     An embedded section's content cosine to a path string is near zero, which is no evidence
+    ///     either way: the default call still serves the named section, first.
+    /// </summary>
+    [RetryFact]
+    public async Task Search_FileSectionAnchor_EmbeddedSection_IsServedFirstByTheDefaultCall()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await AllowIngestAsync(ct);
+        var runbook = await IngestAsync("deploy-runbook.md", RunbookText(), ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+
+        var envelope = await _tools.Search(ProjectId, $"{runbook}#rollback", Session, kind: "memory", cancellationToken: ct);
+
+        envelope.Data!.Results.ShouldNotBeEmpty();
+        (await SectionOfAsync(envelope.Data!.Results[0].Hash, ct)).ShouldBe("Rollback", StringCompareShould.IgnoreCase);
+    }
+
+    private static string RunbookText()
+    {
+        var sections = new[]
+        {
+            ("Overview", "This runbook describes how the platform team ships the web tier."),
+            ("Preparation", "Before a deploy the on-call engineer checks the change calendar and warms the build cache."),
+            ("Rollback", "Kittens nap on warm windowsills while gardeners water tomatoes and bees drift between blossoms."),
+            ("Verification", "After the deploy the team watches dashboards and confirms synthetic probes stay green.")
+        };
+        return "# Deploy runbook\n\n" + string.Join("\n\n", sections.Select(section =>
+            $"## {section.Item1}\n\n{string.Join(" ", Enumerable.Repeat(section.Item2, 12))}")) + "\n";
+    }
+
+    private Task AllowIngestAsync(CancellationToken ct) =>
+        _store.SetSettingAsync(IngestScopeKeys.ScopeProject(ProjectId), IngestScopeKeys.Serialize([_dataRoot]), ct);
+
+    private async Task<string> IngestAsync(string name, string content, CancellationToken ct)
+    {
+        var file = Path.Combine(_dataRoot, name);
+        await File.WriteAllTextAsync(file, content, ct);
+        (await _store.IngestFileAsync(ProjectId, file, null, ct)).ShouldBe(1);
+        return file;
+    }
+
+    private async Task<string?> SectionOfAsync(string hash, CancellationToken ct)
+    {
+        await using var connection = await _factory.OpenBankAsync(ct);
+        return await connection.QuerySingleOrDefaultAsync<string?>(
+            new CommandDefinition("SELECT section FROM entries WHERE hash = @hash", new { hash }, cancellationToken: ct));
     }
 
     private async Task<MemoryEntry> SeedProseBankAsync(CancellationToken ct)
