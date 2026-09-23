@@ -34,7 +34,7 @@ public sealed record ChunkPositionScan(
 /// </summary>
 public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbeddingService embeddingService)
 {
-    public ChunkPositionScan Scan(string sourceFile, IReadOnlyList<(long Id, string Hash)> rows,
+    public ChunkPositionScan Scan(string sourceFile, IReadOnlyList<StoredChunk> rows,
         int maxTokens, int overlayTokens, TokenCount countTokens)
     {
         if (!fileTypeMatcher.TryGetHandler(sourceFile, out var handler) || !TryReadFile(sourceFile, out var content))

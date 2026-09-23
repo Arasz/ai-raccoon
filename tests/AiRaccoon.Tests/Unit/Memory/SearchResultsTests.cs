@@ -92,15 +92,15 @@ public sealed class SearchResultsTests
 
         phases.ShouldBe(
         [
-            ("search.open", TimeSpan.FromMilliseconds(1)),
-            ("search.embed", TimeSpan.FromMilliseconds(2)),
-            ("search.fts", TimeSpan.FromMilliseconds(3)),
-            ("search.vector", TimeSpan.FromMilliseconds(4)),
-            ("search.fusion", TimeSpan.FromMilliseconds(5)),
-            ("search.affinity", TimeSpan.FromMilliseconds(6)),
-            ("search.adjustment", TimeSpan.FromMilliseconds(7)),
-            ("search.snippets", TimeSpan.FromMilliseconds(8)),
-            ("search.bump", TimeSpan.FromMilliseconds(9))
+            new PhaseTiming("search.open", TimeSpan.FromMilliseconds(1)),
+            new PhaseTiming("search.embed", TimeSpan.FromMilliseconds(2)),
+            new PhaseTiming("search.fts", TimeSpan.FromMilliseconds(3)),
+            new PhaseTiming("search.vector", TimeSpan.FromMilliseconds(4)),
+            new PhaseTiming("search.fusion", TimeSpan.FromMilliseconds(5)),
+            new PhaseTiming("search.affinity", TimeSpan.FromMilliseconds(6)),
+            new PhaseTiming("search.adjustment", TimeSpan.FromMilliseconds(7)),
+            new PhaseTiming("search.snippets", TimeSpan.FromMilliseconds(8)),
+            new PhaseTiming("search.bump", TimeSpan.FromMilliseconds(9))
         ]);
     }
 
@@ -114,6 +114,6 @@ public sealed class SearchResultsTests
             TimeSpan.FromMilliseconds(7), TimeSpan.FromMilliseconds(8), TimeSpan.FromMilliseconds(9),
             TimeSpan.FromMilliseconds(10));
 
-        timings.Measurements().ShouldBe([.. timings.Phases(), ("search.total", TimeSpan.FromMilliseconds(10))]);
+        timings.Measurements().ShouldBe([.. timings.Phases(), new PhaseTiming("search.total", TimeSpan.FromMilliseconds(10))]);
     }
 }

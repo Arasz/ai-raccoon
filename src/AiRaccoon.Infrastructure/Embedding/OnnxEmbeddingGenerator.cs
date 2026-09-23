@@ -126,7 +126,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     // One row per session run: ORT keeps each run's activation peak, and a 32 x 510 batch on a 400M
     // model holds 3-7 GB for no per-row speedup (docs/work/2026-09-23-server-memory-usage.md F5/F6).
     private GeneratedEmbeddings<Embedding<float>> RunEachRow(
-        IReadOnlyList<(int[] Ids, int[] Mask)> items, GeneratedEmbeddings<Embedding<float>> embeddings,
+        IReadOnlyList<EncodedText> items, GeneratedEmbeddings<Embedding<float>> embeddings,
         CancellationToken cancellationToken)
     {
         foreach (var item in items)
@@ -138,7 +138,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     }
 
     private GeneratedEmbeddings<Embedding<float>> RunBatch(
-        IReadOnlyList<(int[] Ids, int[] Mask)> items, GeneratedEmbeddings<Embedding<float>> embeddings,
+        IReadOnlyList<EncodedText> items, GeneratedEmbeddings<Embedding<float>> embeddings,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -296,7 +296,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// </summary>
     private const int UnkCollapseMinChars = 100;
 
-    private (int[] Ids, int[] Mask) Encode(string text)
+    private EncodedText Encode(string text)
     {
         var ids = _tokenizer.EncodeToIds(text, true);
         if (ids.Count > _window)
@@ -311,8 +311,10 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
         var mask = new int[ids.Count];
         Array.Fill(mask, 1);
-        return ([.. ids], mask);
+        return new EncodedText([.. ids], mask);
     }
+
+    private readonly record struct EncodedText(int[] Ids, int[] Mask);
 
     public static partial class Log
     {

@@ -97,7 +97,7 @@ public sealed class WatchHostedServiceTests
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
 
         source.IsWatching(Project, dir.Path).ShouldBeFalse();
-        stack.Store.Watches.ShouldContainKey((Project, dir.Path));
+        stack.Store.Watches.ShouldContainKey(new WatchKey(Project, dir.Path));
         var status = (await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken)).Single();
         status.Path.ShouldBe(dir.Path);
         status.State.ShouldBe(WatchState.Scanning);
@@ -185,7 +185,7 @@ public sealed class WatchHostedServiceTests
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
 
         source.IsWatching(Project, dir.Path).ShouldBeFalse();
-        stack.Store.Watches.ShouldContainKey((Project, dir.Path));
+        stack.Store.Watches.ShouldContainKey(new WatchKey(Project, dir.Path));
         await hosted.StopAsync(CancellationToken.None);
     }
 

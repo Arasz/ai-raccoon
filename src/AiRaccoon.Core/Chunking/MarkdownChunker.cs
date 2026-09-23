@@ -165,7 +165,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
     ///     maxTokens alone when it was built, so shrinking down to it always terminates and, per that
     ///     same proof, always ends up within budget (docs/adr/0036).
     /// </summary>
-    private static (List<Unit> ChunkUnits, int NextCursor, int NewUnitCount) BuildChunk(List<Unit> units, int cursor,
+    private static ChunkBuild BuildChunk(List<Unit> units, int cursor,
         List<Unit> overlay, int maxTokens, TokenCount countTokens)
     {
         var chunkUnits = new List<Unit>(overlay);
@@ -214,7 +214,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
             c -= deferred;
         } while (deferred > 0);
 
-        return (chunkUnits, c, newUnitCount);
+        return new ChunkBuild(chunkUnits, c, newUnitCount);
     }
 
     /// <summary>A heading opens the chunk holding its section; a cut section defers whole
@@ -570,11 +570,11 @@ public sealed class MarkdownChunker : IMarkdownChunker
     /// <summary>The (level, text) HeadingStack.Push needs for a unit already known to be a section
     /// opener — same level scan IsHeadingLine/IsSectionOpenerUnit use, same text HeadingPathParser
     /// would extract.</summary>
-    private static (int Level, string Text) SectionOpenerLevelAndText(Unit unit)
+    private static Heading SectionOpenerLevelAndText(Unit unit)
     {
         var trimmed = unit.Lines[0].TrimStart();
         var level = HeadingLevel(trimmed);
-        return (level, trimmed[level..].Trim());
+        return new Heading(level, trimmed[level..].Trim());
     }
 
     private static bool IsSourceProvenanceUnit(Unit unit) => unit.Lines.Count == 1 && unit.Lines[0].TrimStart().StartsWith("## Source:", StringComparison.OrdinalIgnoreCase);
@@ -637,4 +637,6 @@ public sealed class MarkdownChunker : IMarkdownChunker
         /// <summary>An ATX heading line; stamped once by BuildUnits, never for plain text.</summary>
         public bool IsHeading { get; init; }
     }
+
+    private readonly record struct ChunkBuild(List<Unit> ChunkUnits, int NextCursor, int NewUnitCount);
 }
