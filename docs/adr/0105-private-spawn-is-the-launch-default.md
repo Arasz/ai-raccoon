@@ -4,7 +4,13 @@ Date: 2026-09-22 (owner ruling K1) · implementation PSR P1.3; join-review follo
 day; owner re-ruling the same evening (K1a/N1: settings verbs back to attach-or-start,
 the proxy owns its private backend's lifetime, disclosure for what outlives a command)
 
-Status: Accepted
+Status: **Superseded** — by ADR-0106 (2026-09-23). ADR-0106 takes the "mutual proof" alternative
+this record rejects: a later owner ruling put a purpose-built cryptographic proof of backend identity
+in scope — a per-root key the listener must prove it holds over a bounded, port-bound transcript —
+which answers the "unauthenticated cryptographic oracle" objection below rather than the handshake-
+after-the-token or `/observability`-name proofs this record weighed. Attach-or-start is the launch
+default again and `--attach` is removed. The body stays as the record of what F70 measured and why
+private spawn was the first fix.
 
 ## Context
 
