@@ -1,11 +1,13 @@
 using System.Data;
 using System.Text;
+using AiRaccoon;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Setup.Cli.Commands;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
@@ -113,7 +115,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     }
 
     [RetryFact]
-    public async Task OpenBankAsync_WithWrongPassphrase_FailsToOpen()
+    public async Task OpenBankAsync_WithWrongPassphrase_ThrowsKeyMismatchOverSqlite26()
     {
         var passphrase = "correct-passphrase";
         var factory = Factory(passphrase);
@@ -128,11 +130,11 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         var options = Options();
         var wrongFactory = new SqliteConnectionFactory(options, Resolver(options, new StubEncryptionKeyProvider("wrong-passphrase")));
 
-        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var conn = await wrongFactory.OpenBankAsync(TestContext.Current.CancellationToken);
         });
-        ex.SqliteErrorCode.ShouldBe(26);
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
     [RetryFact]
@@ -170,11 +172,11 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         }
 
         // …and the old passphrase no longer works.
-        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var old = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
         });
-        ex.SqliteErrorCode.ShouldBe(26);
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
     [RetryFact]
@@ -246,6 +248,80 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
             await using var conn = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
         });
         ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
+    }
+
+    /// <summary>
+    ///     A source with no legacy derivation (env) must not surface a raw
+    ///     <see cref="SqliteException" /> on a wrong key — the same key-mismatch diagnosis the
+    ///     bitwarden (legacy-bearing) source gets in
+    ///     <see cref="OpenBankAsync_ResolverReturnsDifferentKey_ThrowsKeyMismatchOverSqlite26" />.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_ResolverReturnsDifferentKey_NoLegacySource_ThrowsKeyMismatchOverSqlite26()
+    {
+        var options = Options();
+        var bankFactory = new SqliteConnectionFactory(options, Resolver(options, new StubEncryptionKeyProvider("bank-key-A")));
+        await using (var connection = await bankFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        // StubEncryptionKeyProvider never sets LegacyValue, so the resolved key (like the real env
+        // source) has no earlier derivation to fall back to.
+        var wrongKeyFactory = new SqliteConnectionFactory(options, Resolver(options, new StubEncryptionKeyProvider("bank-key-B")));
+
+        var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
+        {
+            await using var conn = await wrongKeyFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+        });
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
+        ex.LegacyDerivation.ShouldBeFalse();
+    }
+
+    /// <summary>
+    ///     An unencrypted bank (env source resolving no passphrase, which is
+    ///     what the "none" source is in practice — see <see cref="EncryptionKeyResolver.ResolveAsync" />)
+    ///     that is genuinely corrupt, not wrong-keyed, must surface the raw <see cref="SqliteException" />
+    ///     so the CLI maps it to <see cref="ErrorCode.Bank.Corrupted" />. There is no key to be wrong
+    ///     about, so converting this open failure to <see cref="BankKeyMismatchException" /> would
+    ///     misreport it as <see cref="ErrorCode.Key.WrongKey" />.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_CorruptUnencryptedBank_ThrowsSqliteException26NotKeyMismatch()
+    {
+        var factory = Factory(passphrase: null);
+        Directory.CreateDirectory(Path.GetDirectoryName(factory.BankPath)!);
+        await File.WriteAllBytesAsync(factory.BankPath, "not a sqlite database at all, just garbage bytes"u8.ToArray(),
+            TestContext.Current.CancellationToken);
+
+        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        {
+            await using var conn = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        });
+
+        ex.SqliteErrorCode.ShouldBe(26);
+        CliFailureErrorCode.For(ex).ShouldBe(ErrorCode.Bank.Corrupted);
+    }
+
+    /// <summary>
+    ///     SQLITE_BUSY/LOCKED on an env-keyed bank is transient contention,
+    ///     not a wrong key, and must reach the CLI as <see cref="ErrorCode.Bank.Busy" /> — never
+    ///     converted to <see cref="BankKeyMismatchException" />. Exercised through the
+    ///     classification seam directly: a real SQLITE_BUSY needs a second connection holding a
+    ///     conflicting lock, which is not deterministic to arrange here.
+    /// </summary>
+    [RetryFact]
+    public void ClassifyNoLegacySourceFailure_SqliteBusyOnEnvKeyedBank_PropagatesUnchanged()
+    {
+        var factory = Factory("env-passphrase");
+        var resolvedKey = new ResolvedKey("env-passphrase", "env");
+        var busyFailure = new SqliteException("database is locked", 5);
+
+        var classified = factory.ClassifyNoLegacySourceFailure(resolvedKey, busyFailure);
+
+        classified.ShouldBeSameAs(busyFailure);
     }
 
     [RetryFact]
@@ -330,7 +406,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
         // ...and the key that would have been the rekey target does not.
         var newKeyFactory = new SqliteConnectionFactory(Options(), Resolver(Options(), new StubEncryptionKeyProvider(DerivedRawKey)));
-        await Should.ThrowAsync<SqliteException>(async () =>
+        await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var conn = await newKeyFactory.OpenBankAsync(TestContext.Current.CancellationToken);
         });
