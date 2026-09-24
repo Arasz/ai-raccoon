@@ -63,6 +63,7 @@ From F3 to F5: on repositories the allow-list is right about binaries, the missi
 ## Still open
 
 - Whether AST helps C# with a larger C# query set: 33 queries from one repository cannot separate a real per-language effect from noise. A second C# repository in the corpus would settle it.
+  - *Answered 2026-09-24:* no. On two whole repositories (JSAA C#/TS, 144 queries; ai-badger Python, 96) AST changes span-hit MRR by −0.010 [−0.064, +0.041] and +0.014 [−0.039, +0.071] — no effect detected — see [2026-09-24-ast-chunking-on-whole-repos.md](2026-09-24-ast-chunking-on-whole-repos.md).
 - Whether a larger code chunk budget (granite's window is 8,190 tokens) changes either arm. Both ran at 510.
 - Structured config files (YAML, TOML, XML, csproj) stay unindexed until the config chunkers task; tree-sitter's size (F6) is the cost to weigh there against Tomlyn and SharpYaml.
 - The census did not apply `ai-raccoon.ignore`, so a few skipped files may already be excluded on purpose.

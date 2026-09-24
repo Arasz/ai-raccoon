@@ -152,5 +152,7 @@ The keyword-leg gain shrinks on a stronger vector engine (from +0.052 on code-da
 ## Still open
 
 - **Whether a larger held-out set would settle AST chunking.** Its +0.018 point estimate needs about three times the held-out queries to resolve.
+  *Answered 2026-09-24:* on granite the AST arm is a DROP here (−0.009) and shows no effect on two other whole repositories ([2026-09-24-ast-chunking-on-whole-repos.md](2026-09-24-ast-chunking-on-whole-repos.md)).
 - **Whether these verdicts hold on linux-x64 CI.** They are scoped to this machine (ADR-0015).
 - **Whether P3–P5 would flip on granite.** Only P2 was re-measured on the new engine.
+  *Answered 2026-09-24:* P3, P4 and P5 were all re-measured on granite and none is kept — P3 in [2026-09-24-followup-batch-measurements.md](2026-09-24-followup-batch-measurements.md) F2, P4 in [2026-09-24-symbol-path-header-on-line-chunks.md](2026-09-24-symbol-path-header-on-line-chunks.md), P5 in [2026-09-23-ast-chunking-on-granite-and-magika.md](2026-09-23-ast-chunking-on-granite-and-magika.md) F1.
