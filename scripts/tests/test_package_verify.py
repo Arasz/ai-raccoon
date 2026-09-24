@@ -83,51 +83,62 @@ def test_detect_rid_failure_exits_1(monkeypatch, capsys):
     assert "cannot determine host RID (dotnet --info unavailable)" in capsys.readouterr().err
 
 
+_MODEL_ENTRY = "Models/%s/model_fp16.onnx" % bundle.BUNDLED_DIR
+
+
+def _all_required(overrides=None):
+    data = {entry: b"x" for entry in package_verify.REQUIRED_ENTRIES}
+    data.update(overrides or {})
+    return list(data.items())
+
+
 def test_required_entries_derive_from_bundle_pins():
+    model_dir = "Models/%s/" % bundle.BUNDLED_DIR
     assert package_verify.REQUIRED_ENTRIES == (
-        "Models/" + bundle.MODEL_NAME,
-        "Models/" + bundle.VOCAB_NAME,
+        tuple(model_dir + name for name, _url, _sha in bundle.BUNDLED_FILES)
+        + (model_dir + bundle.BUNDLED_MANIFEST[0], "Models/" + bundle.VOCAB_NAME)
     )
 
 
 def test_missing_entries_none_when_all_present():
-    z = _zip_bytes([("Models/model_qint8_arm64.onnx", b"model"), ("Models/vocab.txt", b"vocab")])
-    assert package_verify.missing_entries(z) == []
+    assert package_verify.missing_entries(_zip_bytes(_all_required())) == []
 
 
 def test_missing_entries_detects_absent_model():
-    z = _zip_bytes([("Models/vocab.txt", b"vocab")])
-    assert package_verify.missing_entries(z) == ["Models/" + bundle.MODEL_NAME]
+    entries = [(name, data) for name, data in _all_required() if name != _MODEL_ENTRY]
+    assert package_verify.missing_entries(_zip_bytes(entries)) == [_MODEL_ENTRY]
 
 
 def test_missing_entries_requires_exact_names():
-    z = _zip_bytes([("Models/model_qint8_arm64.onnx.bak", b"model"), ("Models/vocab.txt", b"vocab")])
-    assert package_verify.missing_entries(z) == ["Models/" + bundle.MODEL_NAME]
+    entries = [(name + ".bak" if name == _MODEL_ENTRY else name, data) for name, data in _all_required()]
+    assert package_verify.missing_entries(_zip_bytes(entries)) == [_MODEL_ENTRY]
 
 
 def test_entry_sha256_matches_hashlib_reference():
     data = b"known model bytes for the sha256 test"
-    z = _zip_bytes([("Models/model_qint8_arm64.onnx", data)])
-    assert package_verify.entry_sha256(z, "Models/" + bundle.MODEL_NAME) == hashlib.sha256(data).hexdigest()
+    z = _zip_bytes([(_MODEL_ENTRY, data)])
+    assert package_verify.entry_sha256(z, _MODEL_ENTRY) == hashlib.sha256(data).hexdigest()
 
 
 def test_verify_nupkg_reports_missing_entry(tmp_path, capsys):
     nupkg = tmp_path / "ai-raccoon.1.0.10.nupkg"
     _write_zip(nupkg, [("Models/vocab.txt", b"vocab")])
     assert package_verify.verify_nupkg(nupkg, "1.0.10") == 1
-    assert "FAIL: Models/model_qint8_arm64.onnx missing from %s" % nupkg in capsys.readouterr().err
+    assert "FAIL: %s missing from %s" % (_MODEL_ENTRY, nupkg) in capsys.readouterr().err
 
 
 def test_verify_nupkg_reports_sha_mismatch_against_bundle_pin(tmp_path, capsys):
     model_data = b"not the real model"
     nupkg = tmp_path / "ai-raccoon.1.0.10.nupkg"
-    _write_zip(nupkg, [("Models/model_qint8_arm64.onnx", model_data), ("Models/vocab.txt", b"vocab")])
+    _write_zip(nupkg, _all_required({_MODEL_ENTRY: model_data}))
     assert package_verify.verify_nupkg(nupkg, "1.0.10") == 1
     captured = capsys.readouterr()
-    assert "present in package: Models/model_qint8_arm64.onnx" in captured.out
+    assert "present in package: %s" % _MODEL_ENTRY in captured.out
     assert "present in package: Models/vocab.txt" in captured.out
-    expected = "FAIL: model sha256 mismatch: expected %s, got %s" % (
-        bundle.MODEL_SHA256,
+    pinned = dict((name, sha) for name, _url, sha in bundle.BUNDLED_FILES)["model_fp16.onnx"]
+    expected = "FAIL: %s sha256 mismatch: expected %s, got %s" % (
+        _MODEL_ENTRY,
+        pinned,
         hashlib.sha256(model_data).hexdigest(),
     )
     assert expected in captured.err
