@@ -196,4 +196,30 @@ public sealed class IdentityProofTests
             TestData.DeleteTempRoot(root);
         }
     }
+
+    /// <summary>
+    ///     ADR-0107 PC.3: every <see cref="IdentityProofFailure" /> gets its own operator-facing
+    ///     clause — collapsing them all to "did not prove" was the defect this replaces. NoKey and
+    ///     NonSuccessStatus each cover two prover branches (IdentityProver.cs:74-78/147 and
+    ///     :101-106/133-139), so their text names both rather than asserting one as fact.
+    /// </summary>
+    [Theory]
+    [InlineData(IdentityProofFailure.NoKey, "no identity key")]
+    [InlineData(IdentityProofFailure.RootMismatch, "another data root")]
+    [InlineData(IdentityProofFailure.BadSignature, "signature")]
+    [InlineData(IdentityProofFailure.Malformed, "not a valid identity proof")]
+    [InlineData(IdentityProofFailure.NonSuccessStatus, "did not answer the identity challenge")]
+    [InlineData(IdentityProofFailure.Timeout, "in time")]
+    public void RefusalText_NamesTheFailure(IdentityProofFailure failure, string expectedSubstring)
+    {
+        IdentityProof.RefusalText(failure).ShouldContain(expectedSubstring);
+    }
+
+    [Fact]
+    public void RefusalText_NeverClaimsTheListenerIsAnOlderServer()
+    {
+        // MUST4: NonSuccessStatus also covers a refused connection and a non-ai-raccoon listener,
+        // so the text may not assert "too old" as fact.
+        IdentityProof.RefusalText(IdentityProofFailure.NonSuccessStatus).ShouldNotContain("too old");
+    }
 }

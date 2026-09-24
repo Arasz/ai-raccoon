@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
+using System.ClientModel;
 using System.CommandLine;
 using System.Globalization;
 using AiRaccoon.Core.Access;
@@ -133,20 +134,33 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         var baseUrl = parseResult.GetResult("base-url") is not null ? parseResult.GetValue<string>("base-url") : null;
         var apiKey = parseResult.GetResult("--api-key") is not null ? parseResult.GetValue<string>("--api-key") : null;
 
+        // ADR-0107 PC.1: refused before anything is persisted or probed — a base-url this malformed
+        // can never be reached, so failing here (78) beats a misleading EndpointUnreachable (77).
+        if (baseUrl is not null && !IsUsableHttpUrl(baseUrl))
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: model embedding set openai: '{baseUrl}' is not a usable absolute http(s) URL; " +
+                "pass a full URL such as https://api.example.com/v1. Nothing has been changed.");
+            return ErrorCode.Model.BadBaseUrl;
+        }
+
         // The key is persisted in settings; write it before the engine so the migration's own
         // re-embed can resolve it once the relay picks the row up.
+        var storedApiKey = await store.GetSettingAsync(EmbeddingSettingsKeys.ApiKey, cancellationToken);
         if (apiKey is not null)
         {
             await store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, apiKey, cancellationToken);
         }
-        else if (string.IsNullOrWhiteSpace(await store.GetSettingAsync(EmbeddingSettingsKeys.ApiKey, cancellationToken)))
+        else if (string.IsNullOrWhiteSpace(storedApiKey))
         {
             await streams.WriteErrorLineAsync(
                 "ai-raccoon: warning — no API key set; run 'ai-raccoon model embedding set openai <model> --api-key <key>' or embeddings will fail");
         }
 
         var dims = parseResult.GetResult("--dims") is not null ? parseResult.GetValue<int?>("--dims") : null;
-        dims = await ProbeDimensionsAsync(model!, baseUrl, apiKey, dims, cancellationToken);
+        // A re-run that omits --api-key still probes with the already-stored key (ADR-0107 PC.2) —
+        // otherwise the probe goes unauthenticated and a valid stored key is misreported as rejected.
+        dims = await ProbeDimensionsAsync(model!, baseUrl, apiKey ?? storedApiKey, dims, cancellationToken);
 
         // Written before the outbox commits: the relay reconciles vec0 to this dimension as its
         // first drain phase, so the row has to be readable by the time the migration opens (D2/D3).
@@ -179,6 +193,16 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         {
             probed = await dimensionProbe.ProbeAsync(model, baseUrl, apiKey, cancellationToken);
         }
+        // ADR-0107 PC.2: the OpenAI SDK reports a rejected key as ClientResultException, not
+        // HttpRequestException — named on its own so the operator is told to check the key,
+        // rather than being told to "fix the endpoint" for a credential problem. Exit code is
+        // still EndpointUnreachable (77): the Model range has no free "rejected key" case.
+        catch (ClientResultException ex) when (ex.Status is 401 or 403)
+        {
+            throw new EmbeddingEndpointUnreachableException(
+                $"The embedding endpoint for '{model}' rejected the API key (HTTP {ex.Status}). " +
+                "Check the --api-key value and re-run; nothing has been changed.", ex);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             throw new EmbeddingEndpointUnreachableException(
@@ -202,6 +226,11 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
 
         return declared;
     }
+
+    /// <summary>An absolute URI an HTTP client can actually dial — http(s) only, and not e.g. a scheme-less "host:port".</summary>
+    private static bool IsUsableHttpUrl(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     /// <summary>
     ///     §3.3 D-E9: the CLI's fast pre-flight before the store's own checks (the store is the

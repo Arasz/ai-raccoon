@@ -1,3 +1,5 @@
+using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Net;
 using System.Net.Sockets;
 using AiRaccoon.Core.Encryption;
@@ -178,6 +180,30 @@ public sealed class CommandFailureExitCodeTests
         exit.ShouldBe(ErrorCode.Model.DimensionMismatch);
     }
 
+    /// <summary>
+    ///     ADR-0107 PC.1: a base-url that is not a usable absolute http(s) URL is refused by a
+    ///     pre-check, before the API key is persisted or the probe ever runs — never the generic
+    ///     EndpointUnreachable (77) a probe failure would produce.
+    /// </summary>
+    [Theory]
+    [InlineData("not-a-url")]
+    [InlineData("localhost:8080")]
+    public async Task ModelSetOpenAi_BaseUrlIsNotAUsableHttpUrl_ExitsBadBaseUrl_WithoutPersistingOrProbing(string baseUrl)
+    {
+        var store = new FakeConfigStore();
+        var commands = TestData.CreateConfigCommands(store, settings: new SettingsCommands(new UnreachableProbe()),
+            modelMigrations: store);
+
+        var (exit, _, err) = await CliRun.RunAsync(
+            ["model", "embedding", "set", "openai", "some-model", baseUrl, "--api-key", "k"], commands);
+
+        exit.ShouldBe(ErrorCode.Model.BadBaseUrl);
+        err.ShouldContain(baseUrl);
+        store.Settings.ShouldNotContainKey(EmbeddingSettingsKeys.ApiKey,
+            "a refused base-url must not persist the API key first");
+        store.Configured.ShouldBeNull();
+    }
+
     [Fact]
     public async Task ModelSetOpenAi_AnEndpointThatCannotBeReached_ExitsEndpointUnreachable()
     {
@@ -190,6 +216,48 @@ public sealed class CommandFailureExitCodeTests
 
         exit.ShouldBe(ErrorCode.Model.EndpointUnreachable);
         err.ShouldContain("could not be reached");
+    }
+
+    /// <summary>
+    ///     ADR-0107 PC.2: the OpenAI SDK reports a 401/403 as <see cref="ClientResultException" />
+    ///     (not <see cref="HttpRequestException" />) — driven here with the real exception type so
+    ///     the catch that names it is proven against the actual shape, not an assumed one. Exit
+    ///     code stays EndpointUnreachable (77): the Model range has no free "rejected key" case.
+    /// </summary>
+    [Fact]
+    public async Task ModelSetOpenAi_TheEndpointRejectsTheApiKey_NamesTheKey_StaysOnEndpointUnreachable()
+    {
+        var store = new FakeConfigStore();
+        var commands = TestData.CreateConfigCommands(store, settings: new SettingsCommands(new RejectedKeyProbe()),
+            modelMigrations: store);
+
+        var (exit, _, err) = await CliRun.RunAsync(
+            ["model", "embedding", "set", "openai", "some-model", "--api-key", "bad-key"], commands);
+
+        exit.ShouldBe(ErrorCode.Model.EndpointUnreachable);
+        err.ShouldContain("rejected the API key");
+        err.ShouldContain("401");
+        store.Configured.ShouldBeNull("a rejected key must not commit the migration");
+    }
+
+    /// <summary>
+    ///     ADR-0107 PC.2 (SHOULD12): a re-run that omits --api-key still has a stored key — the
+    ///     probe must be asked with it, not with null, or a perfectly valid stored key looks
+    ///     rejected.
+    /// </summary>
+    [Fact]
+    public async Task ModelSetOpenAi_ReRunWithoutApiKey_ProbesWithTheAlreadyStoredKey()
+    {
+        var store = new FakeConfigStore();
+        store.Settings[EmbeddingSettingsKeys.ApiKey] = "already-stored-key";
+        var probe = new RecordingProbe(384);
+        var commands = TestData.CreateConfigCommands(store, settings: new SettingsCommands(probe),
+            modelMigrations: store);
+
+        var (exit, _, _) = await CliRun.RunAsync(["model", "embedding", "set", "openai", "some-model"], commands);
+
+        exit.ShouldBe(0);
+        probe.LastApiKey.ShouldBe("already-stored-key");
     }
 
     private static Exception Failure(string name) =>
@@ -247,10 +315,74 @@ public sealed class CommandFailureExitCodeTests
             throw new HttpRequestException("Connection refused");
     }
 
+    /// <summary>Fails the test if ever invoked — proves the bad-base-url refusal never reaches the probe.</summary>
+    private sealed class UnreachableProbe : IRemoteDimensionProbe
+    {
+        public Task<int> ProbeAsync(string model, string? baseUrl, string? apiKey, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("the probe must not run for a refused base-url");
+    }
+
+    /// <summary>Throws the real exception type the OpenAI SDK raises for a 401/403 response.</summary>
+    private sealed class RejectedKeyProbe : IRemoteDimensionProbe
+    {
+        public Task<int> ProbeAsync(string model, string? baseUrl, string? apiKey, CancellationToken cancellationToken) =>
+            throw new ClientResultException(new FakeStatusResponse(401));
+    }
+
+    /// <summary>The minimal concrete <see cref="PipelineResponse" /> a status-only fake needs.</summary>
+    private sealed class FakeStatusResponse(int status) : PipelineResponse
+    {
+        public override int Status { get; } = status;
+        public override string ReasonPhrase => string.Empty;
+        public override Stream? ContentStream { get; set; }
+        public override BinaryData Content => BinaryData.FromString(string.Empty);
+        protected override PipelineResponseHeaders HeadersCore => FakeHeaders.Instance;
+        public override void Dispose()
+        {
+        }
+
+        public override BinaryData BufferContent(CancellationToken cancellationToken = default) => Content;
+
+        public override ValueTask<BinaryData> BufferContentAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(Content);
+
+        private sealed class FakeHeaders : PipelineResponseHeaders
+        {
+            public static readonly FakeHeaders Instance = new();
+
+            public override IEnumerator<KeyValuePair<string, string>> GetEnumerator() =>
+                Enumerable.Empty<KeyValuePair<string, string>>().GetEnumerator();
+
+            public override bool TryGetValue(string name, out string? value)
+            {
+                value = null;
+                return false;
+            }
+
+            public override bool TryGetValues(string name, out IEnumerable<string>? values)
+            {
+                values = null;
+                return false;
+            }
+        }
+    }
+
     private sealed class StubProbe(int dimensions) : IRemoteDimensionProbe
     {
         public Task<int> ProbeAsync(string model, string? baseUrl, string? apiKey, CancellationToken cancellationToken) =>
             Task.FromResult(dimensions);
+    }
+
+    /// <summary>Records the apiKey it was probed with, so a re-run's fallback to the stored key is provable.</summary>
+    private sealed class RecordingProbe(int dimensions) : IRemoteDimensionProbe
+    {
+        public string? LastApiKey { get; private set; }
+
+        public Task<int> ProbeAsync(string model, string? baseUrl, string? apiKey, CancellationToken cancellationToken)
+        {
+            LastApiKey = apiKey;
+            return Task.FromResult(dimensions);
+        }
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)

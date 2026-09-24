@@ -125,4 +125,28 @@ public static class IdentityProof
             ? null
             : IdentityProofFailure.BadSignature;
     }
+
+    /// <summary>
+    ///     The operator-facing clause for a proof <paramref name="failure" /> (ADR-0107 PC.3) — never
+    ///     the log line (EventId 603/657 stay unchanged), stderr only. <see cref="IdentityProofFailure.NoKey" />
+    ///     and <see cref="IdentityProofFailure.NonSuccessStatus" /> each cover two distinct prover
+    ///     branches (a local check and a remote answer), so the text names both rather than picking
+    ///     one as fact.
+    /// </summary>
+    public static string RefusalText(IdentityProofFailure failure) => failure switch
+    {
+        IdentityProofFailure.NoKey =>
+            "this data root has no identity key, or the listener reported it has none",
+        IdentityProofFailure.RootMismatch =>
+            "it serves another data root",
+        IdentityProofFailure.BadSignature =>
+            "its signature does not match this data root's identity key",
+        IdentityProofFailure.Malformed =>
+            "its answer was not a valid identity proof",
+        IdentityProofFailure.NonSuccessStatus =>
+            "it did not answer the identity challenge — an older ai-raccoon build, a non-ai-raccoon listener and a refused connection all look the same",
+        IdentityProofFailure.Timeout =>
+            "it did not answer the identity challenge in time",
+        _ => ThrowHelper.ThrowArgumentOutOfRangeException<string>(nameof(failure))
+    };
 }

@@ -267,9 +267,51 @@ public sealed class CliSettingsBackendTests
 
             error.Message.ShouldContain(McpTokenFile.FileName);
             error.Code.ShouldBe(ErrorCode.Server.NoToken);
+            // ADR-0107 PC.4: identity is already proven (FakeIdentityProver defaults to proven) by
+            // the time the token is read, so "another data root" is never a live possibility here.
+            error.Message.ShouldNotContain("another data root");
         }
         finally
         {
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    /// <summary>
+    ///     ADR-0107 PC.4: <see cref="McpTokenFile.RefusalReason" /> (set by <see cref="McpTokenFile.Read" />
+    ///     when the state directory is not owner-only) is the real, actionable cause — it must be
+    ///     surfaced instead of the generic "holds no token" line.
+    /// </summary>
+    [Fact]
+    public async Task AcquireAsync_WhenTheStateDirectoryIsNotOwnerOnly_SurfacesTheRefusalReason()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("UnixFileMode is POSIX-only");
+            return;
+        }
+
+        var dataRoot = TestData.CreateTempRoot("cli-settings-backend-not-owner-only");
+        try
+        {
+            await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(dataRoot), TestContext.Current.CancellationToken);
+            File.SetUnixFileMode(dataRoot,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute);
+            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:1/mcp", null));
+
+            var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+                CliSettingsBackend.AcquireAsync(launcher, new FakeIdentityProver(), new FakeServerProbe(ProbeVerdict.Answered),
+                    AppHost, Config(1, dataRoot), new FakeLogger(), TestContext.Current.CancellationToken));
+
+            error.Code.ShouldBe(ErrorCode.Server.NoToken);
+            error.Message.ShouldContain("chmod 700");
+        }
+        finally
+        {
+            File.SetUnixFileMode(dataRoot,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             TestData.DeleteTempRoot(dataRoot);
         }
     }
