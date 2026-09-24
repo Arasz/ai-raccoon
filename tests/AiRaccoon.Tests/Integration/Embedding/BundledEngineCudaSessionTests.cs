@@ -62,6 +62,16 @@ public sealed class BundledEngineCudaSessionTests
     }
 
     [RetryFact]
+    public void RelativeLibraryPath_IsRefused_BeforeThePlatformCheck()
+    {
+        const string relative = "relative/onnxruntime_providers_cuda.so";
+
+        using var generator = Generator(relative);
+
+        generator.ExecutionProvider.ShouldContain($"(CUDA refused: provider library path must be absolute: {relative})");
+    }
+
+    [RetryFact]
     public void OnMacOs_CudaIsRefused_AndWebGpuOrTheCpuRunsTheSession()
     {
         if (!OperatingSystem.IsMacOS())

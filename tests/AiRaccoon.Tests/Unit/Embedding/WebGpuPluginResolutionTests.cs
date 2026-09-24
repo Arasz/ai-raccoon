@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Embedding;
+using Microsoft.ML.OnnxRuntime;
 using Shouldly;
 using Xunit;
 
@@ -104,6 +105,56 @@ public sealed class WebGpuPluginResolutionTests
 
         refusal.ShouldBeNull();
         calls.ShouldBe(1);
+    }
+
+    [Fact]
+    public void WebGpuPluginDevicesOrCachedRefusal_SecondCall_ReusesTheCachedRefusal_WithoutCallingResolveAndRegisterAgain()
+    {
+        OnnxEmbeddingGenerator.ResetWebGpuPluginRefusalForTests();
+        try
+        {
+            var calls = 0;
+            (IReadOnlyList<OrtEpDevice>? Devices, string? Refusal) ResolveAndRegister()
+            {
+                calls++;
+                return (null, "no WebGPU GPU device after registration");
+            }
+
+            var first = OnnxEmbeddingGenerator.WebGpuPluginDevicesOrCachedRefusal(ResolveAndRegister);
+            var second = OnnxEmbeddingGenerator.WebGpuPluginDevicesOrCachedRefusal(ResolveAndRegister);
+
+            first.Refusal.ShouldBe("no WebGPU GPU device after registration");
+            second.Refusal.ShouldBe("no WebGPU GPU device after registration");
+            calls.ShouldBe(1);
+        }
+        finally
+        {
+            OnnxEmbeddingGenerator.ResetWebGpuPluginRefusalForTests();
+        }
+    }
+
+    [Fact]
+    public void WebGpuPluginDevicesOrCachedRefusal_DevicesFound_IsNotCached_AndRunsAgainNextTime()
+    {
+        OnnxEmbeddingGenerator.ResetWebGpuPluginRefusalForTests();
+        try
+        {
+            var calls = 0;
+            (IReadOnlyList<OrtEpDevice>? Devices, string? Refusal) ResolveAndRegister()
+            {
+                calls++;
+                return (Array.Empty<OrtEpDevice>(), null);
+            }
+
+            OnnxEmbeddingGenerator.WebGpuPluginDevicesOrCachedRefusal(ResolveAndRegister);
+            OnnxEmbeddingGenerator.WebGpuPluginDevicesOrCachedRefusal(ResolveAndRegister);
+
+            calls.ShouldBe(2);
+        }
+        finally
+        {
+            OnnxEmbeddingGenerator.ResetWebGpuPluginRefusalForTests();
+        }
     }
 
     private static string UniqueName() => $"TestExecutionProvider{Guid.NewGuid():N}";

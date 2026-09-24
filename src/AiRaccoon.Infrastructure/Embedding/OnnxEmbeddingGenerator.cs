@@ -308,6 +308,9 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// registration, no GPU device — so later sessions skip straight to the CPU with the same reason.</summary>
     private static volatile string? _webGpuPluginRefusal;
 
+    /// <summary>Test seam: clears the cached WebGPU-plugin refusal (D8) so one test's cache does not leak into another.</summary>
+    internal static void ResetWebGpuPluginRefusalForTests() => _webGpuPluginRefusal = null;
+
     private static readonly Lock RegistrationGate = new();
 
     /// <summary>Plugin libraries registered with the process-wide <see cref="OrtEnv" />, by registration name.</summary>
@@ -345,36 +348,54 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     private static string? EnsureRegistered(OrtEnv env, string name, string libraryPath) =>
         EnsureRegistered(name, libraryPath, env.RegisterExecutionProviderLibrary);
 
+    /// <summary>
+    ///     The WebGPU-plugin refusal cache (D8): reuses an earlier every-session refusal — a missing
+    ///     library, a failed registration, no GPU device — without calling <paramref name="resolveAndRegister" />
+    ///     again; a refusal from actually building one model's session on already-registered devices is
+    ///     never passed here, so it is never cached, and the next session retries the plugin from scratch.
+    /// </summary>
+    internal static (IReadOnlyList<OrtEpDevice>? Devices, string? Refusal) WebGpuPluginDevicesOrCachedRefusal(
+        Func<(IReadOnlyList<OrtEpDevice>? Devices, string? Refusal)> resolveAndRegister)
+    {
+        if (_webGpuPluginRefusal is { } cached)
+        {
+            return (null, cached);
+        }
+
+        var (devices, refusal) = resolveAndRegister();
+        if (devices is null)
+        {
+            _webGpuPluginRefusal = refusal;
+        }
+
+        return (devices, refusal);
+    }
+
     /// <summary>A session on the WebGPU plugin, or null with the refusal in <see cref="ExecutionProvider" />.
     /// Takes <see cref="GpuGate" /> like the built-in provider: both share one GPU context per process.</summary>
     private InferenceSession? CreatePluginWebGpuSessionOrNull(string modelPath, int intraOpThreads)
     {
-        var refusal = _webGpuPluginRefusal;
-        InferenceSession? session = null;
-        if (refusal is null)
+        var (devices, refusal) = WebGpuPluginDevicesOrCachedRefusal(() =>
         {
             var library = ResolveWebGpuPluginLibrary(AppContext.BaseDirectory);
             if (library is null)
             {
-                refusal = $"WebGPU plugin library not found under {Path.Combine(AppContext.BaseDirectory, WebGpuPluginDirectoryName)}";
-                _webGpuPluginRefusal = refusal;
+                return (null, $"WebGPU plugin library not found under {Path.Combine(AppContext.BaseDirectory, WebGpuPluginDirectoryName)}");
             }
-            else
+
+            lock (GpuGate)
             {
-                lock (GpuGate)
-                {
-                    var (devices, deviceRefusal) = RegisterPluginGpuDevice(WebGpuExecutionProviderName, library,
-                        "no WebGPU GPU device after registration (Linux needs libvulkan.so.1)");
-                    if (devices is null)
-                    {
-                        refusal = deviceRefusal;
-                        _webGpuPluginRefusal = refusal;
-                    }
-                    else
-                    {
-                        (session, refusal) = CreatePluginSessionOrNull(modelPath, intraOpThreads, devices);
-                    }
-                }
+                return RegisterPluginGpuDevice(WebGpuExecutionProviderName, library,
+                    "no WebGPU GPU device after registration (Linux needs libvulkan.so.1)");
+            }
+        });
+
+        InferenceSession? session = null;
+        if (devices is not null)
+        {
+            lock (GpuGate)
+            {
+                (session, refusal) = CreatePluginSessionOrNull(modelPath, intraOpThreads, devices);
             }
         }
 
@@ -450,6 +471,12 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         if (libraryPath.Length == 0)
         {
             refusalReason = "no provider library configured; run 'ai-raccoon settings model device cuda <path>'";
+            return null;
+        }
+
+        if (!Path.IsPathFullyQualified(libraryPath))
+        {
+            refusalReason = $"provider library path must be absolute: {libraryPath}";
             return null;
         }
 

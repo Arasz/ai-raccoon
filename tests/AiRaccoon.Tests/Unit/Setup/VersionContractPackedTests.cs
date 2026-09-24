@@ -53,6 +53,9 @@ public class VersionContractPackedTests
             root.GetProperty("version").GetString().ShouldBe(expected);
             root.GetProperty("packages")[0].GetProperty("version").GetString().ShouldBe(expected);
 
+            zip.Entries.Select(e => e.FullName).ShouldNotContain(e => e.Contains("providers_webgpu", StringComparison.Ordinal),
+                "the RID-agnostic nupkg must not carry the WebGPU plugin");
+
             AssertWebGpuPluginPlacement(outDir, expected);
         }
         finally

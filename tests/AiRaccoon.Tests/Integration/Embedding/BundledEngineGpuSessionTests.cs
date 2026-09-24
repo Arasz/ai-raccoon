@@ -35,10 +35,13 @@ public sealed class BundledEngineGpuSessionTests
         TestData.Cosine(onGpu[0].Vector, onCpu[0].Vector).ShouldBeGreaterThan(0.999);
     }
 
+    /// <summary>The RIDs the WebGPU plugin package ships a native library for, off macOS (ADR-0112).</summary>
+    private static readonly string[] PluginRids = ["win-x64", "win-arm64", "linux-x64", "linux-arm64"];
+
     /// <summary>
     ///     Off macOS the WebGPU plugin shipped under webgpu/ runs the session, or the session falls back
-    ///     to the CPU with the reason. On Windows and linux-x64 the build copies the plugin into this
-    ///     test output, so the reason may be "no GPU", never a missing library.
+    ///     to the CPU with the reason. On a RID the plugin ships for, the only honest refusal is no GPU
+    ///     device found after registration — never a missing library, since the build copies it in.
     /// </summary>
     [RetryFact]
     public async Task PreferGpu_OffMacOs_RunsOnThePluginWebGpu_OrFallsBackWithAReason()
@@ -61,24 +64,22 @@ public sealed class BundledEngineGpuSessionTests
         }
 
         gpu.ExecutionProvider.ShouldStartWith("CPU (GPU refused: ");
-        var pluginShipsHere = OperatingSystem.IsWindows()
-                              || (OperatingSystem.IsLinux() && RuntimeInformation.ProcessArchitecture == Architecture.X64);
-        if (pluginShipsHere)
+        if (PluginRids.Contains(RuntimeInformation.RuntimeIdentifier))
         {
-            gpu.ExecutionProvider.ShouldNotContain("plugin library not found");
+            gpu.ExecutionProvider.ShouldStartWith("CPU (GPU refused: no WebGPU GPU device");
         }
     }
 
     [RetryFact]
     public async Task TwoGpuSessions_EmbeddingAtOnce_BothSucceed()
     {
-        if (!OperatingSystem.IsMacOS())
-        {
-            Assert.Skip("the standard ORT build implements WebGPU only on macOS");
-        }
-
         // Memory and code each hold a session; WebGPU sessions share one process-wide GPU context.
         using var first = Generator(preferGpu: true);
+        if (first.ExecutionProvider != "WebGPU")
+        {
+            Assert.Skip("no WebGPU device is available on this host (built-in on macOS, plugin elsewhere)");
+        }
+
         using var second = Generator(preferGpu: true);
         var texts = Enumerable.Range(0, 24).Select(i => string.Join(' ', Enumerable.Repeat($"row {i} token", 4 + i * 5))).ToArray();
 
