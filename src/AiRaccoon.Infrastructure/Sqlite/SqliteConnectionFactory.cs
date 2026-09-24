@@ -461,16 +461,14 @@ public sealed partial class SqliteConnectionFactory(
             }
 
             // data_version moves when another connection commits; schema_version, user_version and
-            // application_id move when anything, this handle included, changes what the schema pass
-            // reads. All four unchanged means the pass would find nothing to do.
+            // application_id move when anything, this handle included, changes what the version and
+            // digest checks read. All four unchanged: only the every-open steps need to run.
             var bankState = await connection.QuerySingleAsync<BankState>(
                 new CommandDefinition(BankStateSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
-            if (known && ensuredAt!.Value == bankState)
-            {
-                return connection;
-            }
-
-            var overlapResult = await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+            var unchanged = known && ensuredAt!.Value == bankState;
+            var overlapResult = unchanged
+                ? await MemorySchema.RunEveryOpenStepsAsync(connection, cancellationToken).ConfigureAwait(false)
+                : await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
             if (logger is not null)
             {
                 if (overlapResult.Pruned.Count > 0)
@@ -494,10 +492,14 @@ public sealed partial class SqliteConnectionFactory(
                 }
             }
 
-            // Re-read: the pass may itself have stamped the version or digest it just brought up to date.
-            bankState = await connection.QuerySingleAsync<BankState>(
-                new CommandDefinition(BankStateSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
-            InitializedHandles.AddOrUpdate(handle, new StrongBox<BankState>(bankState));
+            if (!unchanged)
+            {
+                // Re-read: the full pass may itself have stamped the version or digest it brought up to date.
+                bankState = await connection.QuerySingleAsync<BankState>(
+                    new CommandDefinition(BankStateSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+                InitializedHandles.AddOrUpdate(handle, new StrongBox<BankState>(bankState));
+            }
+
             return connection;
         }
         catch

@@ -241,11 +241,11 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
     /// <summary>
     ///     The reconcile loop opens the bank about 30 times a second. A pooled native handle this
-    ///     process already initialised (vec0 loaded, schema ensured) must not redo that work while no
-    ///     other connection has committed: the re-open runs only the per-open pragmas.
+    ///     process already initialised must not repeat the version and digest checks while no other
+    ///     connection has committed; only the every-open steps run.
     /// </summary>
     [RetryFact]
-    public async Task OpenBankAsync_OnAPooledHandleAlreadyInitialised_RunsNoSchemaStatements()
+    public async Task OpenBankAsync_OnAPooledHandleAlreadyInitialised_SkipsTheVersionAndDigestChecks()
     {
         var ct = TestContext.Current.CancellationToken;
         var factory = Factory();
@@ -262,12 +262,10 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
             await using var second = await factory.OpenBankAsync(ct);
 
             second.Handle.ShouldBeSameAs(handle, "the pool must hand the same native handle back");
-            statements.ShouldAllBe(sql => sql.StartsWith("PRAGMA foreign_keys", StringComparison.Ordinal) ||
-                                          sql.StartsWith("PRAGMA journal_mode", StringComparison.Ordinal) ||
-                                          sql.StartsWith("PRAGMA busy_timeout", StringComparison.Ordinal) ||
-                                          sql.StartsWith("SELECT (SELECT data_version", StringComparison.Ordinal) ||
-                                          sql.StartsWith("-- PRAGMA ", StringComparison.Ordinal),
+            statements.ShouldNotContain(sql => sql == "PRAGMA user_version" || sql == "PRAGMA application_id",
                 string.Join(" | ", statements));
+            statements.ShouldContain(sql => sql.Contains("FROM watches", StringComparison.Ordinal),
+                "the watch-overlap prune runs on every open: " + string.Join(" | ", statements));
         }
         finally
         {

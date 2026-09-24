@@ -633,6 +633,30 @@ internal static class MemorySchema
     }
 
     /// <summary>
+    ///     The steps that run on every open, version or digest current or not. The connection
+    ///     factory runs these alone on a pooled handle whose bank state has not moved since its
+    ///     last full pass (<see cref="SqliteConnectionFactory" />).
+    /// </summary>
+    internal static async Task<WatchOverlapPruneResult> RunEveryOpenStepsAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        // Runs on every open, version or not: it is a data move guarding a deny-by-default gate,
+        // it costs one indexed count, and a bank that was stamped by a newer build and then
+        // written by an older one would otherwise keep an unreachable scope forever.
+        await MigrateIngestScopeKeysAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        // Runs on every open, version or not, same shape as above: one indexed sqlite_master read,
+        // write only when the stored trigger body still needs the H4 scope guard.
+        await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        // Runs on every open, version or not (orchestrator ruling, S7): no-overlapping-watches was
+        // originally a one-time v11 ladder step; demoted to an unconditional, ungated step in the
+        // same "runs regardless" family as the two calls above — it must reach a fresh bank too
+        // (harmlessly no-ops: no watches rows yet) and a bank already at CurrentVersion.
+        return await PruneOverlappingWatchesAsync(connection, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     ///     Returns the unconditional no-overlapping-watches prune step's outcome for THIS call
     ///     (pruned list empty on a fresh bank or when nothing overlapped; warnings non-empty only
     ///     when a project's rows could not be resolved) — <see cref="SqliteConnectionFactory.InitializeAsync" />
@@ -697,20 +721,7 @@ internal static class MemorySchema
             }
         }
 
-        // Runs on every open, version or not: it is a data move guarding a deny-by-default gate,
-        // it costs one indexed count, and a bank that was stamped by a newer build and then
-        // written by an older one would otherwise keep an unreachable scope forever.
-        await MigrateIngestScopeKeysAsync(connection, cancellationToken).ConfigureAwait(false);
-
-        // Runs on every open, version or not, same shape as above: one indexed sqlite_master read,
-        // write only when the stored trigger body still needs the H4 scope guard.
-        await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken).ConfigureAwait(false);
-
-        // Runs on every open, version or not (orchestrator ruling, S7): no-overlapping-watches was
-        // originally a one-time v11 ladder step; demoted to an unconditional, ungated step in the
-        // same "runs regardless" family as the two calls above — it must reach a fresh bank too
-        // (harmlessly no-ops: no watches rows yet) and a bank already at CurrentVersion.
-        var overlapResult = await PruneOverlappingWatchesAsync(connection, cancellationToken).ConfigureAwait(false);
+        var overlapResult = await RunEveryOpenStepsAsync(connection, cancellationToken).ConfigureAwait(false);
 
         if (fresh)
         {

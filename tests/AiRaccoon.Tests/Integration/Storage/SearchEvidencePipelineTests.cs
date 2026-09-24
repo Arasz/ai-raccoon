@@ -185,10 +185,10 @@ public sealed class SearchEvidencePipelineTests(ITestOutputHelper output) : IDis
     // adding a query to the search path means updating this literal (SearchResultsTests.PhaseNames
     // precedent: the pin is the review gate). Pair-update with the P7 G5 conjunction pin
     // (SearchSignalPreservationStageOneTests.EquippedSearch_AddsExactlyOneStatementBeyondTheUnequippedPath,
-    // same 12 re-proven through the full tools path) and the P7 vector-path pin
+    // same 15 re-proven through the full tools path) and the P7 vector-path pin
     // (LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount): any search-path query change
     // must reconcile all three.
-    // 12 since the pooled-handle cache (SqliteConnectionFactory.InitializedHandles): a re-open of an
-    // initialised handle runs 3 PRAGMAs + 1 bank-state read instead of 5 PRAGMAs + 3 schema checks.
-    private const int ExpectedStatementCount = 12;
+    // 15 since the pooled-handle cache (SqliteConnectionFactory.InitializedHandles): a re-open of an
+    // initialised handle reads the bank state once instead of PRAGMA user_version + application_id.
+    private const int ExpectedStatementCount = 15;
 }
