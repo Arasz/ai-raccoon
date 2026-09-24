@@ -61,6 +61,13 @@ PINNED_MODEL_REVISION = repo_data.KNOBS["PINNED_MODEL_REVISION"]
 BM25_WEIGHTS = tuple(repo_data.KNOBS["BM25_WEIGHTS"])
 EMBED_BATCH_SIZE = repo_data.KNOBS["EMBED_BATCH_SIZE"]
 
+# Token window handed to SentenceTransformer (issue #707): mirrors the product's
+# manifest-local chunk budget for granite — EmbeddingService.ResolveChunkBudgetFor
+# caps content at min(510, ctx-2) tokens (src/AiRaccoon.Infrastructure/Embedding/
+# EmbeddingService.cs:198-212), i.e. 512 tokens total once the two special tokens
+# are added at embed time.
+EMBED_MAX_SEQ_LENGTH = repo_data.KNOBS["EMBED_MAX_SEQ_LENGTH"]
+
 # Chroma upsert batching: one call trips the server max-batch cap (5461 at
 # chromadb 1.5.9; production content holds 11,816 rows). 4000 leaves headroom
 # for payload variance; a future lower cap still fails loud (InternalError).
@@ -206,33 +213,34 @@ def heading_of(row: dict) -> str:
 
 
 def create_embedding_model(model_name: str = MODEL_NAME, offline: bool = False):
-    """HF weights via llama_index HuggingFaceEmbedding + two documented repairs.
+    """HF weights via llama_index HuggingFaceEmbedding, matched to the product's
+    ONNX path (issue #707 granite re-baseline).
 
-    1. trust_remote_code=True: the checkpoint ships custom modeling code
-       (Alibaba-NLP/new-impl) — loading refuses without it.
-    2. position_ids buffer repair: the published safetensors carries a garbage
-       non-persistent position_ids tensor (random int64, e.g. 7453010313431162915
-       at index 0); without the repair every encode dies with
-       ``IndexError: index 35 is out of bounds for dimension 0 with size 6``.
-       Restoring arange() is init semantics; a future fixed checkpoint makes
-       this a no-op.
-    3. float32 (model_kwargs dtype): bfloat16 weights NaN on this CPU path
-       (embeddings finite, encoder layer 0 NaN); fp32 is finite and exact.
+    granite-embedding-small-english-r2 is a ModernBERT bi-encoder shipped as a
+    sentence-transformers checkpoint whose ``1_Pooling/config.json`` declares
+    ``pooling_mode_cls_token=true`` (every other mode false) — SentenceTransformer
+    loads that module automatically (no ``pooling=`` argument needed, and
+    passing one is refused by llama_index as deprecated), so this CLS-pools the
+    same way the product's ONNX graph does: the manifest's ``pooling.mode`` is
+    "model-output" because the graph pools CLS internally, and
+    ``OnnxEmbeddingGenerator.PoolAlreadyPooledOutput`` L2-normalizes that pooled
+    "sentence_embedding" output (src/AiRaccoon.Infrastructure/Embedding/
+    OnnxEmbeddingGenerator.cs:328-343) — matched here by leaving pooling to the
+    checkpoint's own module and ``normalize=True`` (HuggingFaceEmbedding's
+    default). ``max_length=EMBED_MAX_SEQ_LENGTH`` mirrors
+    ``EmbeddingService.ResolveChunkBudgetFor``'s manifest-local cap so a
+    longer-than-budget harness row truncates the same number of tokens the
+    product's chunker would ever hand the embedder (native architecture, no
+    custom modeling code or repair needed; fp32 keeps CPU inference exact).
     """
     if offline:
         os.environ["HF_HUB_OFFLINE"] = "1"
-    model = HuggingFaceEmbedding(
+    return HuggingFaceEmbedding(
         model_name=model_name,
-        trust_remote_code=True,
+        max_length=EMBED_MAX_SEQ_LENGTH,
         device="cpu",
         model_kwargs={"dtype": torch.float32},
     )
-    auto = model._model[0].auto_model
-    with torch.no_grad():
-        auto.embeddings.position_ids.copy_(
-            torch.arange(auto.embeddings.position_ids.numel())
-        )
-    return model
 
 
 def embed_texts(embed_fn, texts: list[str], batch_size: int = EMBED_BATCH_SIZE,

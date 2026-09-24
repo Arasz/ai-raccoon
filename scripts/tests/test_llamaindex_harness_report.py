@@ -207,6 +207,27 @@ def test_report_gap_taxonomy_conservation_and_oracle_labels():
     assert "0.0%" in text  # unknown share rendered in the taxonomy table
 
 
+def test_report_renders_fusion_take_and_floor_breakdown():
+    # Package D (issue #707): the per-row leg ranks let the report attribute a
+    # fusion drop to a Take(limit) cut vs a relative-floor cut, not just
+    # "fusion" undifferentiated.
+    out = _results_c_cell_taxonomy()
+    out["rows"][1]["harness"]["floor_rank"] = 5  # E002: cleared the floor...
+    out["rows"][1]["harness"]["fused_rank"] = 5  # ...ranked beyond Take(limit)
+    text = report.render(out, _context())
+    assert "Fusion-drop attribution" in text
+    assert "fusion_take" in text and "fusion_floor" in text
+    assert "| fusion_take | 1 |" in text
+    assert "| fusion_floor | 0 |" in text
+
+
+def test_report_omits_fusion_breakdown_when_no_fusion_rows():
+    # _results(): harness hits both rows, so gap_label is "none" everywhere —
+    # no c-cell, no 'fusion' rows, and the breakdown section must not print.
+    text = report.render(_results(), _context())
+    assert "Fusion-drop attribution" not in text
+
+
 def test_report_discloses_exclusions():
     text = report.render(_results_with_gaps(), _context())
     assert "aib" in text and "ai-badger" in text

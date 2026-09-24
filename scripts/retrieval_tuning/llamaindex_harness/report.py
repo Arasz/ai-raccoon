@@ -208,16 +208,22 @@ def render(results: dict, context: dict) -> str:
         *_stratification_lines(rows),
         "## Parity-gap discussion",
         "",
-        "- Embedding seam (C13/C14, corrected mechanism): both systems use the same "
-        "SFR-Embedding-Code-400M_R weights with CLS pooling — the harness was verified "
-        "CLS (llama-index defaults `get_pooling_mode` to 'cls'; the live Pooling module "
-        "reports pooling_mode='cls'; harness output equals the model-card recipe at "
-        "cos 1.00000), so this is NOT a pooling difference (that explanation is "
-        "retracted). The bank runs its own ONNX export while the harness runs the HF "
-        "safetensors path: bank-ONNX self-consistency 0.9826, ONNX-vs-HF same-text "
-        "cos 0.5934, store == current HFE path 1.00000; harness vector_hit=1 on only "
-        "8/99 rows (78/99 are fts=1/vec=0; 14/15 c-cell rows are fts=1/vec=0). "
-        "The taxonomy below labels rows against MEASURED leg positions and never claims "
+        f"- Embedding seam (issue #707 granite re-baseline): both systems embed with "
+        f"{context.get('model', '?')} — the harness loads it through "
+        "sentence-transformers, which reads the checkpoint's own `1_Pooling/config.json` "
+        "(`pooling_mode_cls_token=true`) and CLS-pools automatically, matching the "
+        "product's ONNX graph (`pooling.mode: model-output` — the graph pools CLS "
+        "internally) plus the L2 normalization "
+        "`OnnxEmbeddingGenerator.PoolAlreadyPooledOutput` applies afterward "
+        "(src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs). "
+        + (f"Sanity check: median cosine {context['sanity_cosine_median']:.4f} between "
+           "harness-computed and bank-stored granite vectors over "
+           f"{context.get('sanity_cosine_n', '?')} sampled rows (see the dated record for "
+           "the full method) — "
+           if context.get("sanity_cosine_median") is not None else "")
+        + "The remaining runtime seam, if any, is the harness's HF/PyTorch path vs the "
+        "product's fp16 ONNX export, not a pooling or normalization difference. The "
+        "taxonomy below labels rows against MEASURED leg positions and never claims "
         "the harness embedding equals the bank's: a row whose FTS window held the anchor "
         "is `fusion` even when the vector leg missed (C10), and only rows where BOTH "
         "windows missed are `embedding`/`unrecoverable` (composition-aware, C9).",
@@ -230,6 +236,7 @@ def render(results: dict, context: dict) -> str:
         "report, never tune silently).",
         "",
         *_classified_gap_table(rows),
+        *_fusion_subtaxonomy_lines(rows),
         *_shared_scope_lines(rows),
         _exclusion_lines(results, context),
         "",
@@ -379,6 +386,36 @@ def _classified_gap_table(rows: list[dict]) -> list[str]:
         f"| c_cell (bank-hit/harness-miss of {tax['n_paired']} paired) | "
         f"{tax['c_cell']} | deficit labels sum; unknown share "
         f"{tax['unknownShare']:.1%} (cap 5%) |")
+    return lines + [""]
+
+
+def _fusion_subtaxonomy_lines(rows: list[dict]) -> list[str]:
+    """Package D: within the 'fusion' cell, attribute the drop to Take(limit)
+    vs the relative floor, from the per-row leg/fusion rank columns. Absent
+    entirely when there are no 'fusion' rows, so a golden report with none
+    (or an older artifact predating the rank columns) is unchanged."""
+    sub = evaluate.fusion_subtaxonomy(rows)
+    if sub["n_fusion"] == 0:
+        return []
+    cells = sub["cells"]
+    readings = {
+        "fusion_take": "cleared the relative floor but ranked beyond Take(limit)",
+        "fusion_floor": "ranked in the fused pipeline but below the relative floor",
+        "unattributed": "fusion-labelled but the per-row rank columns are absent "
+                        "(older artifact, or carried under a different served hash "
+                        "by content-dedupe)",
+    }
+    lines = [
+        "### Fusion-drop attribution (package D: where in the pipeline the "
+        "anchor was lost)",
+        "",
+        "| label | n | reading |",
+        "|---|---|---|",
+    ]
+    for label in evaluate.FUSION_SUBLABELS:
+        lines.append(f"| {label} | {cells[label]} | {readings[label]} |")
+    lines.append(f"| fusion (n={sub['n_fusion']}) | — | must equal the "
+                 "`fusion` row of the classified gap taxonomy above |")
     return lines + [""]
 
 

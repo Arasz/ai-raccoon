@@ -162,13 +162,16 @@ class FusionRetriever(BaseRetriever):
         return {h: (t or "", m or {}) for h, t, m in
                 zip(got["ids"], got["documents"], got["metadatas"])}
 
-    def _retrieve_with_limit(self, query: str, limit: int) -> list[NodeWithScore]:
-        fts_rows, plan = self.fts_leg(query, limit)
-        vec_rows = self.vector_leg(query, limit)
+    def _candidates(self, fts_rows: list[tuple[str, float]], vec_rows: list[tuple[str, float]],
+                    plan: Any) -> tuple[list[RankedHit], dict[str, tuple[str, dict]], float]:
+        """Fts/vector window rows -> (RRF-fused candidates, their carriers, source_lambda).
 
+        The shared assembly step between serving (_retrieve_with_limit) and
+        diagnosing (leg_and_fusion_ranks) a query — one candidate-set builder,
+        so the two never drift on dedupe/RRF-leg-weighting behavior."""
         payload_ids = {h for h, _ in fts_rows} | {h for h, _ in vec_rows}
         if not payload_ids:
-            return []
+            return [], {}, 0.0
         payloads = self._payloads(sorted(payload_ids))
 
         def with_payload(rows: list[tuple[str, float]]) -> list[tuple[str, float, str, str]]:
@@ -188,7 +191,7 @@ class FusionRetriever(BaseRetriever):
             for h, _ in vec_deduped:
                 carriers.setdefault(h, payloads[h])
         if not legs:
-            return []
+            return [], carriers, 0.0
 
         paths = {h: carriers[h][1].get("path", "") for h in carriers}
         fused = fusion.fuse_rrf(legs, paths, self._rrf_k, 0.0, 2**31 - 1)
@@ -198,6 +201,15 @@ class FusionRetriever(BaseRetriever):
                            int(carriers[h][1].get("total_chunks", 0)))
                  for h, r in fused]
         source_lambda = 0.0 if plan.is_path_query else self._lambda
+        return cands, carriers, source_lambda
+
+    def _retrieve_with_limit(self, query: str, limit: int) -> list[NodeWithScore]:
+        fts_rows, plan = self.fts_leg(query, limit)
+        vec_rows = self.vector_leg(query, limit)
+        cands, carriers, source_lambda = self._candidates(fts_rows, vec_rows, plan)
+        if not cands:
+            return []
+
         merged = fusion.merge_results(cands, limit, self._min_rel, self._rrf_k,
                                       source_lambda, self._threshold, self._formula)
         served = []
@@ -207,6 +219,41 @@ class FusionRetriever(BaseRetriever):
                 node=TextNode(id_=c.hash, text=text, metadata=dict(meta)),
                 score=c.ranking))
         return served
+
+    def leg_and_fusion_ranks(self, query: str, limit: Optional[int] = None) -> dict:
+        """Package D: per-leg window rank + fusion-pipeline rank/floor rank for
+        one query, keyed by hash — the per-row evidence a c-cell miss needs to
+        tell an embedding-gap window miss from a fusion drop, and within a
+        fusion drop, a relative-floor cut from a Take(limit) cut.
+
+        ``fts_rank_of``/``vector_rank_of`` are 1-based positions in each leg's
+        OWN window list (matches the fts_hit/vector_hit window semantics
+        exactly — same leg calls, so no extra FTS/ANN queries beyond what
+        computing them already costs). ``fused_rank_of`` is the position in
+        the fused+affinity ranking BEFORE the relative floor or Take(limit);
+        ``floor_rank_of`` is the position AFTER the floor (a hash present here
+        cleared the floor — if it is still missing from what get served, the
+        limit cut it, never the floor).
+        """
+        limit = self._default_limit if limit is None else limit
+        fts_rows, plan = self.fts_leg(query, limit)
+        vec_rows = self.vector_leg(query, limit)
+        fts_rank_of = {h: i for i, (h, _) in enumerate(fts_rows, start=1)}
+        vector_rank_of = {h: i for i, (h, _) in enumerate(vec_rows, start=1)}
+        cands, _carriers, source_lambda = self._candidates(fts_rows, vec_rows, plan)
+        if not cands:
+            return {"fts_rank_of": fts_rank_of, "vector_rank_of": vector_rank_of,
+                    "fused_rank_of": {}, "floor_rank_of": {},
+                    "min_relative_score": self._min_rel}
+
+        ranked = fusion.rank_pipeline(cands, self._rrf_k, source_lambda, self._threshold,
+                                      self._formula)
+        fused_rank_of = {c.hash: i for i, c in enumerate(ranked, start=1)}
+        floored = [c for c in ranked if c.ranking >= self._min_rel]
+        floor_rank_of = {c.hash: i for i, c in enumerate(floored, start=1)}
+        return {"fts_rank_of": fts_rank_of, "vector_rank_of": vector_rank_of,
+                "fused_rank_of": fused_rank_of, "floor_rank_of": floor_rank_of,
+                "min_relative_score": self._min_rel}
 
     def _retrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
         return self._retrieve_with_limit(query_bundle.query_str, self._default_limit)
