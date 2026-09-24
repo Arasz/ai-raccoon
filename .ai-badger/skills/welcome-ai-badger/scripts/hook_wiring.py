@@ -111,14 +111,20 @@ def drop_declined(existing_hooks: Dict[str, Any], declined: Set[str]) -> List[st
     return dropped
 
 
-def _hook_key(command: str) -> str:
-    """Dedupe key: script identity for framework hooks, the literal command otherwise."""
-    return skill_script_id(command) or command
+def _hook_key(matcher: Optional[str], command: str) -> tuple:
+    """Dedupe key: matcher plus script identity for framework hooks, the literal command otherwise.
+
+    The manifest wires one framework script for two tools as two hooks, so its matcher is part
+    of its identity.
+    """
+    script_id = skill_script_id(command)
+    return (matcher or "", script_id) if script_id else ("", command)
 
 
 def _prune(event_hooks: List[Any], superseded: set) -> List[Any]:
-    """Drop framework hooks that an incoming command replaces, and their own repeats.
+    """Drop framework hooks whose script an incoming command replaces, and their own repeats.
 
+    A superseded script goes under every matcher, so a changed matcher leaves no stale copy.
     Hooks the framework does not own are copied through untouched.
     """
     kept_entries = []
@@ -131,9 +137,10 @@ def _prune(event_hooks: List[Any], superseded: set) -> List[Any]:
             if script_id is None:
                 kept.append(hook)
                 continue
-            if script_id in superseded or script_id in seen:
+            key = _hook_key(entry.get("matcher"), hook.get("command", ""))
+            if script_id in superseded or key in seen:
                 continue
-            seen.add(script_id)
+            seen.add(key)
             kept.append(hook)
         if not kept and hooks:
             continue
@@ -163,11 +170,11 @@ def select_hooks(source_event_hooks, script):
 
 
 def merge_hooks(existing_hooks: Dict[str, Any], new_hooks: Dict[str, Any]) -> None:
-    """Merge *new_hooks* into *existing_hooks* in-place, deduplicating by script identity.
+    """Merge *new_hooks* into *existing_hooks* in-place, deduplicating by matcher and script.
 
-    A framework hook is identified by the skill-relative script it runs, so the same
-    script wired from another checkout collapses instead of accumulating; anything else
-    is matched on its literal command and left alone.
+    A framework hook is identified by its matcher and the skill-relative script it runs, so
+    the same script wired from another checkout collapses instead of accumulating, while one
+    script wired for two matchers keeps both; anything else is matched on its literal command.
     """
     for event, hook_entries in new_hooks.items():
         superseded = {
@@ -178,21 +185,22 @@ def merge_hooks(existing_hooks: Dict[str, Any], new_hooks: Dict[str, Any]) -> No
             if script_id is not None
         }
         existing_event_hooks = _prune(existing_hooks.get(event, []), superseded)
-        registered_cmds = {
-            _hook_key(h.get("command", ""))
+        registered = {
+            _hook_key(entry.get("matcher"), h.get("command", ""))
             for entry in existing_event_hooks
             for h in entry.get("hooks", [])
         }
         for new_entry in hook_entries:
+            matcher = new_entry.get("matcher")
             new_hs = [
                 h for h in new_entry.get("hooks", [])
-                if _hook_key(h.get("command", "")) not in registered_cmds
+                if _hook_key(matcher, h.get("command", "")) not in registered
             ]
             if new_hs:
                 filtered = dict(new_entry)
                 filtered["hooks"] = new_hs
                 existing_event_hooks.append(filtered)
-                registered_cmds.update(_hook_key(h.get("command", "")) for h in new_hs)
+                registered.update(_hook_key(matcher, h.get("command", "")) for h in new_hs)
         existing_hooks[event] = existing_event_hooks
 
 

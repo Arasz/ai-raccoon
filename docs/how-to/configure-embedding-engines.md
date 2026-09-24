@@ -97,11 +97,22 @@ run, taking effect on the next server restart:
 ai-raccoon settings model device auto   # default: the bundled model on the GPU, other models on the CPU
 ai-raccoon settings model device gpu    # every local model on the GPU where the platform has one
 ai-raccoon settings model device cpu    # never the GPU
+ai-raccoon settings model device mlx    # bundled model only, osx-arm64 only — see below
 ```
 
 `auto` keeps downloaded models on the CPU because a quantized (int8) model produces slightly
 different vectors on the GPU than the ones already stored from the CPU. Switch to `gpu` only for
 a model whose bank you are happy to have embedded on the GPU from the start.
+
+**`mlx` is opt-in and bundled-engine-only** ([ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md)):
+it runs the bundled engine through the onnxruntime MLX plugin execution provider instead of
+WebGPU, on a rewritten copy of the graph that lets the plugin claim the whole thing as one fused
+subgraph. It needs macOS on Apple Silicon and the plugin's native runtime, which only the
+osx-arm64 package carries (about 43 MB compressed) — a build that never fetched that runtime, or a
+non-Apple-Silicon machine, falls straight through to the existing WebGPU-then-CPU path and says so
+in the "execution provider" line (`WebGPU (MLX refused: …)` or `CPU (MLX refused: …)`). Setting it
+for a downloaded (non-bundled) model is a no-op: no rewritten graph exists for it, so that model
+keeps running wherever `auto`/`gpu`/`cpu` already put it.
 
 ### Recipe 2: Configure OpenAI embeddings
 

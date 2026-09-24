@@ -48,8 +48,7 @@ Seeded READMEs are meant to be edited. They carry no generated-file header and n
    empty** — no content is written before it does. Content written into a wrong tree has to be
    moved, and moving it costs the file's history on every file.
 4. **Write the root README and each directory README as complete, visual-first maps.**
-    - **Root README:** Keep it concise and low-noise: a high-level architecture/flow diagram authored with `archify` (fall back to Mermaid only when Node.js 18+ or the skill is unavailable, or the diagram must render inline), quick start
-      snippet, capabilities matrix, and clear links to dedicated Diátaxis pages.
+   - **Root README:** Keep it concise and low-noise: a high-level architecture/flow diagram authored with `archify` (fall back to Mermaid only when Node.js 18+ or the skill is unavailable, or the diagram must render inline), quick start snippet, capabilities matrix, and clear links to dedicated Diátaxis pages.
    - **Directory READMEs:** One row per file, describing purpose directly without fluffy prose.
    - **Humanization:** Apply `humanizer` rules — active verbs, no em-dash filler, no empty copulas (`serves as`).
    **Postcondition:** every **file** in each governed directory appears in its parent README, and every relative link in what you wrote resolves to a path that exists. Check both by hand; a missing entry is a document nobody will find.

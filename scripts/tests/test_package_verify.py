@@ -83,51 +83,138 @@ def test_detect_rid_failure_exits_1(monkeypatch, capsys):
     assert "cannot determine host RID (dotnet --info unavailable)" in capsys.readouterr().err
 
 
+_MODEL_ENTRY = "Models/%s/model_fp16.onnx" % bundle.BUNDLED_DIR
+
+
+def _all_required(overrides=None):
+    data = {entry: b"x" for entry in package_verify.REQUIRED_ENTRIES}
+    data.update(overrides or {})
+    return list(data.items())
+
+
 def test_required_entries_derive_from_bundle_pins():
+    model_dir = "Models/%s/" % bundle.BUNDLED_DIR
     assert package_verify.REQUIRED_ENTRIES == (
-        "Models/" + bundle.MODEL_NAME,
-        "Models/" + bundle.VOCAB_NAME,
+        tuple(model_dir + name for name, _url, _sha in bundle.BUNDLED_FILES)
+        + (
+            model_dir + bundle.BUNDLED_MANIFEST[0],
+            model_dir + bundle.BUNDLED_MLX_GRAPH[0],
+            "Models/" + bundle.VOCAB_NAME,
+        )
     )
 
 
 def test_missing_entries_none_when_all_present():
-    z = _zip_bytes([("Models/model_qint8_arm64.onnx", b"model"), ("Models/vocab.txt", b"vocab")])
-    assert package_verify.missing_entries(z) == []
+    assert package_verify.missing_entries(_zip_bytes(_all_required())) == []
 
 
 def test_missing_entries_detects_absent_model():
-    z = _zip_bytes([("Models/vocab.txt", b"vocab")])
-    assert package_verify.missing_entries(z) == ["Models/" + bundle.MODEL_NAME]
+    entries = [(name, data) for name, data in _all_required() if name != _MODEL_ENTRY]
+    assert package_verify.missing_entries(_zip_bytes(entries)) == [_MODEL_ENTRY]
 
 
 def test_missing_entries_requires_exact_names():
-    z = _zip_bytes([("Models/model_qint8_arm64.onnx.bak", b"model"), ("Models/vocab.txt", b"vocab")])
-    assert package_verify.missing_entries(z) == ["Models/" + bundle.MODEL_NAME]
+    entries = [(name + ".bak" if name == _MODEL_ENTRY else name, data) for name, data in _all_required()]
+    assert package_verify.missing_entries(_zip_bytes(entries)) == [_MODEL_ENTRY]
 
 
 def test_entry_sha256_matches_hashlib_reference():
     data = b"known model bytes for the sha256 test"
-    z = _zip_bytes([("Models/model_qint8_arm64.onnx", data)])
-    assert package_verify.entry_sha256(z, "Models/" + bundle.MODEL_NAME) == hashlib.sha256(data).hexdigest()
+    z = _zip_bytes([(_MODEL_ENTRY, data)])
+    assert package_verify.entry_sha256(z, _MODEL_ENTRY) == hashlib.sha256(data).hexdigest()
 
 
 def test_verify_nupkg_reports_missing_entry(tmp_path, capsys):
     nupkg = tmp_path / "ai-raccoon.1.0.10.nupkg"
     _write_zip(nupkg, [("Models/vocab.txt", b"vocab")])
     assert package_verify.verify_nupkg(nupkg, "1.0.10") == 1
-    assert "FAIL: Models/model_qint8_arm64.onnx missing from %s" % nupkg in capsys.readouterr().err
+    assert "FAIL: %s missing from %s" % (_MODEL_ENTRY, nupkg) in capsys.readouterr().err
 
 
 def test_verify_nupkg_reports_sha_mismatch_against_bundle_pin(tmp_path, capsys):
     model_data = b"not the real model"
     nupkg = tmp_path / "ai-raccoon.1.0.10.nupkg"
-    _write_zip(nupkg, [("Models/model_qint8_arm64.onnx", model_data), ("Models/vocab.txt", b"vocab")])
+    _write_zip(nupkg, _all_required({_MODEL_ENTRY: model_data}))
     assert package_verify.verify_nupkg(nupkg, "1.0.10") == 1
     captured = capsys.readouterr()
-    assert "present in package: Models/model_qint8_arm64.onnx" in captured.out
+    assert "present in package: %s" % _MODEL_ENTRY in captured.out
     assert "present in package: Models/vocab.txt" in captured.out
-    expected = "FAIL: model sha256 mismatch: expected %s, got %s" % (
-        bundle.MODEL_SHA256,
+    pinned = dict((name, sha) for name, _url, sha in bundle.BUNDLED_FILES)["model_fp16.onnx"]
+    expected = "FAIL: %s sha256 mismatch: expected %s, got %s" % (
+        _MODEL_ENTRY,
+        pinned,
         hashlib.sha256(model_data).hexdigest(),
     )
     assert expected in captured.err
+
+
+# --- suffix-based matching: a required entry is satisfied by ANY path ending in it (package root
+# or tools/net10.0/<rid>/…), and it is a failure for it to be packed more than once anywhere. ---
+
+
+def test_entries_matching_finds_every_path_ending_in_the_suffix():
+    suffix = "Models/x/model.bin"
+    z = _zip_bytes([(suffix, b"data"), ("tools/net10.0/osx-arm64/" + suffix, b"data"), ("Models/other.txt", b"nope")])
+    assert package_verify.entries_matching(z, suffix) == [suffix, "tools/net10.0/osx-arm64/" + suffix]
+
+
+def test_missing_entries_satisfied_by_a_rid_scoped_copy_alone(monkeypatch):
+    monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
+    z = _zip_bytes([("tools/net10.0/osx-arm64/Models/x/model.bin", b"data")])
+    assert package_verify.missing_entries(z) == []
+
+
+def test_missing_entries_still_reports_absent_suffix(monkeypatch):
+    monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
+    z = _zip_bytes([("Models/x/other.bin", b"data")])
+    assert package_verify.missing_entries(z) == ["Models/x/model.bin"]
+
+
+def test_duplicate_entries_empty_when_packed_exactly_once(monkeypatch):
+    monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
+    z = _zip_bytes([("tools/net10.0/osx-arm64/Models/x/model.bin", b"data")])
+    assert package_verify.duplicate_entries(z) == []
+
+
+def test_duplicate_entries_flags_a_suffix_packed_at_root_and_under_tools(monkeypatch):
+    monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
+    z = _zip_bytes([("Models/x/model.bin", b"data"), ("tools/net10.0/osx-arm64/Models/x/model.bin", b"data")])
+    duplicates = package_verify.duplicate_entries(z)
+    assert len(duplicates) == 1
+    entry, matches = duplicates[0]
+    assert entry == "Models/x/model.bin"
+    assert sorted(matches) == ["Models/x/model.bin", "tools/net10.0/osx-arm64/Models/x/model.bin"]
+
+
+def test_verify_nupkg_fails_when_the_bundled_weights_are_packed_twice(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
+    monkeypatch.setattr(package_verify, "_BUNDLED_PINS", (("Models/x/model.bin", hashlib.sha256(b"data").hexdigest()),))
+    nupkg = tmp_path / "ai-raccoon.osx-arm64.1.0.10.nupkg"
+    _write_zip(nupkg, [("Models/x/model.bin", b"data"), ("tools/net10.0/osx-arm64/Models/x/model.bin", b"data")])
+    assert package_verify.verify_nupkg(nupkg, "1.0.10") == 1
+    err = capsys.readouterr().err
+    assert "Models/x/model.bin" in err
+    assert "packed 2 times" in err
+
+
+def test_verify_nupkg_passes_when_the_bundled_weights_are_packed_exactly_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
+    monkeypatch.setattr(package_verify, "_BUNDLED_PINS", (("Models/x/model.bin", hashlib.sha256(b"data").hexdigest()),))
+    nupkg = tmp_path / "ai-raccoon.osx-arm64.1.0.10.nupkg"
+    _write_zip(nupkg, [("tools/net10.0/osx-arm64/Models/x/model.bin", b"data")])
+    assert package_verify.verify_nupkg(nupkg, "1.0.10") == 0
+
+
+def test_verify_no_bundled_weights_passes_for_a_clean_top_level_shim(tmp_path, monkeypatch):
+    monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
+    nupkg = tmp_path / "ai-raccoon.1.0.10.nupkg"
+    _write_zip(nupkg, [("tools/net10.0/any/ai-raccoon.dll", b"shim")])
+    assert package_verify.verify_no_bundled_weights(nupkg) == 0
+
+
+def test_verify_no_bundled_weights_fails_when_the_shim_still_carries_a_copy(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
+    nupkg = tmp_path / "ai-raccoon.1.0.10.nupkg"
+    _write_zip(nupkg, [("Models/x/model.bin", b"data")])
+    assert package_verify.verify_no_bundled_weights(nupkg) == 1
+    assert "unexpectedly present" in capsys.readouterr().err

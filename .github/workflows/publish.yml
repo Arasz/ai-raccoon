@@ -59,6 +59,11 @@ jobs:
         # (scripts/src/download.py) — this costs one hash and exits 1 on mismatch,
         # which is the only thing standing between a corrupted binary and nuget.org.
         run: python3 scripts/download-embedding-model.py
+      - name: Fetch and verify the MLX runtime (osx-arm64 only)
+        # The osx-arm64 pack's RequireMlxRuntimeFiles guard (ADR-0110) fails without this —
+        # the plugin's native files are not committed, same reason as the embedding model above.
+        if: matrix.rid == 'osx-arm64'
+        run: python3 scripts/download-mlx-runtime.py
       - name: Pack (${{ matrix.rid }})
         # nuget.config references the gitignored local feed .nupkg-local/; make it
         # exist on the fresh runner or restore fails with NU1301.

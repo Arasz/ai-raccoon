@@ -308,7 +308,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         return 0;
     }
 
-    /// <summary>`settings model device auto|gpu|cpu` (ADR-0108); anything else is refused, nothing written.</summary>
+    /// <summary>`settings model device auto|gpu|cpu|mlx` (ADR-0108, ADR-0110); anything else is refused, nothing written.</summary>
     public async Task<int> ModelDeviceSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {

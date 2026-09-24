@@ -174,7 +174,7 @@
         ]
       },
       {
-        "matcher": "memory_search",
+        "matcher": "^(mcp__.+__|.+-)?memory_search$",
         "hooks": [
           {
             "type": "command",
@@ -183,7 +183,7 @@
         ]
       },
       {
-        "matcher": "memory_search",
+        "matcher": "^(mcp__.+__|.+-)?memory_search$",
         "hooks": [
           {
             "type": "command",
@@ -201,7 +201,7 @@
         ]
       },
       {
-        "matcher": "export_graph",
+        "matcher": "^(mcp__.+__|.+-)?export_graph$",
         "hooks": [
           {
             "type": "command",

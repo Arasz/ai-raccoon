@@ -60,8 +60,7 @@ directory, which cannot ship.
    inside a block you edited. A span left `untrusted` in edited text is a false claim with a fresh
    timestamp.
 5. **Write the change with visual focus & humanizer discipline.**
-    - **Visual-first preference:** Represent complex flows, architectures, state transitions, or component relationships with visual diagrams instead of dense paragraphs — author them with `archify`, and fall back to Mermaid only when
-      Node.js 18+ or the skill is unavailable or the diagram must render inline.
+   - **Visual-first preference:** Represent complex flows, architectures, state transitions, or component relationships with visual diagrams instead of dense paragraphs — author them with `archify`, and fall back to Mermaid only when Node.js 18+ or the skill is unavailable or the diagram must render inline.
    - **Low-noise root READMEs:** Keep root and index READMEs concise (high-level architecture diagram + feature matrix + quick start) and link out to dedicated Diátaxis pages for deep dives.
    - **Humanizer pass:** Apply `humanizer` rules to strip AI writing tells (`serves as`, em-dashes `—`, filler connectors `Additionally`, `Furthermore`, `At its core`). Keep sentence lengths bursty and active.
    - Each factual statement about the running system gets a `trustchecked` marker with `evidence=<path>:<line>` you actually opened.

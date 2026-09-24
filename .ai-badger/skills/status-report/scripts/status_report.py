@@ -41,6 +41,7 @@ STATE_FILE = ".ai-badger/state.json"
 CHECKBOX_RE = re.compile(r"^[-*]\s+\[[ xX]\]\s+")
 DONE_RE = re.compile(r"^[-*]\s+\[[xX]\]\s+")
 PACKAGE_RE = re.compile(r"^\*\*(P\d+[^*]*)\*\*")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 
 NO_TASK = "(no task in progress)"
 NOT_FOUND = "(not found)"
@@ -114,37 +115,56 @@ def _last_finished(tasks: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 # ---------------------------------------------------------------- plan checklist
 
 
-def _plan_for(target: Path, task_id: str) -> Optional[Path]:
-    """The plan file for a task: best filename-token match, else the newest plan, else None.
+def _match(name: str, task_id: str) -> tuple:
+    """How a plan filename relates to a task: (strength, is_review).
 
-    Plan files are named `<date>-<slug>.md` and slugs drift from task ids, so a zero-score
-    match still falls back to the newest file — reported with matched=False so the reader
-    can sanity-check it instead of the report going silently wrong or silently empty.
+    Strength 2 is the contract name `<date>-<taskId>.md`; 1 is the whole task id as a run
+    of hyphen tokens inside a longer name; 0 is no match. Tokens compare whole, never as
+    substrings, and the repo alias alone never matches. A review marker counts only outside
+    the matched run, so a task named for reviews still owns its plan.
     """
-    plans_dir = target / PLANS_DIR
-    try:
-        files = sorted(p for p in plans_dir.iterdir() if p.is_file())
-    except OSError:
-        return None
-    if not files:
-        return None
-    tokens = [t for t in task_id.split("-") if t]
+    stem = name.lower().removesuffix(".md")
+    base, _, suffix = stem.partition(".")
+    tokens = DATE_RE.sub("", base).split("-")
+    wanted = task_id.lower().split("-")
+    size = len(wanted)
+    start = next((i for i in range(len(tokens) - size + 1)
+                  if tokens[i:i + size] == wanted), None)
+    outside = tokens if start is None else tokens[:start] + tokens[start + size:]
+    is_review = "review" in suffix or any("review" in t for t in outside)
+    if start is None:
+        return 0, is_review
+    return (2 if tokens == wanted and not suffix else 1), is_review
 
-    def score(path: Path) -> int:
-        name = path.name.lower()
-        return sum(1 for t in tokens if t in name)
 
+def _plan_for(target: Path, task_id: str) -> tuple:
+    """The task's plan file and whether it truly matched: (path or None, matched).
+
+    Only a non-review file carrying the whole task id matches. Anything else falls back
+    to the newest non-review file, then the newest review document, with matched=False
+    so the report says so instead of presenting another task's plan as this one's.
+    """
     try:
+        files = [p for p in (target / PLANS_DIR).iterdir() if p.is_file()]
         # stat() sits in the guarded region too: the report runs mid-task while the plan
         # pipeline writes here, and a file listed-then-removed must degrade, not crash.
-        return max(files, key=lambda p: (score(p), p.stat().st_mtime))
+        newest = {p: (p.stat().st_mtime, p.name) for p in files}
     except OSError:
-        return None
+        return None, False
+    matches = {p: _match(p.name, task_id) for p in files}
+    plans = [p for p in files if not matches[p][1]]
+    owned = [p for p in plans if matches[p][0]]
+    if owned:
+        return max(owned, key=lambda p: (matches[p][0], newest[p])), True
+    pool = plans or files
+    if not pool:
+        return None, False
+    return max(pool, key=newest.get), False
 
 
 def plan_checklist(target: Path, task_id: str) -> Dict[str, Any]:
     """Progress evidence from the task's plan file: package headings + checkbox counts."""
-    plan = _plan_for(target, task_id)
+    plan, matched = _plan_for(target, task_id)
     if plan is None:
         return {"plan_file": None, "matched": False, "packages": [], "checked": 0, "total": 0}
     try:
@@ -155,13 +175,8 @@ def plan_checklist(target: Path, task_id: str) -> Dict[str, Any]:
     packages = [m.group(1).strip() for line in lines if (m := PACKAGE_RE.match(line))]
     items = [line for line in lines if CHECKBOX_RE.match(line)]
     done = [line for line in items if DONE_RE.match(line)]
-    return {"plan_file": str(plan), "matched": score_known(plan, task_id),
+    return {"plan_file": str(plan), "matched": matched,
             "packages": packages, "checked": len(done), "total": len(items)}
-
-
-def score_known(plan: Path, task_id: str) -> bool:
-    """Whether the plan file actually matched the task id by tokens (vs newest-file fallback)."""
-    return any(t in plan.name.lower() for t in task_id.split("-") if t)
 
 
 # ---------------------------------------------------------------- delegation

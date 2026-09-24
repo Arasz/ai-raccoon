@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "httpx",
     "numpy",
+    "onnx",
     "scikit-learn",
     "pytest",
     "optuna>=4.9.0",

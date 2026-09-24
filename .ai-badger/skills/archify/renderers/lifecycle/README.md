@@ -55,24 +55,24 @@ backed by rendered states receive Semantic Legend controls.
 
 ## Layout budget
 
-| Band    | Lane id           | Top y | Column centers                         | Default state |
-|---------|-------------------|-------|----------------------------------------|---------------|
-| Phase   | `main` (required) | 126   | `col` 0–4 → x = 94, 248, 402, 556, 710 | 118×62        |
-| Event   | any other id      | 278   | `col` 0–2 → x = 402, 556, 710          | 126×58        |
-| Outcome | `terminal`        | 450   | `col` 0–2 → x = 402, 556, 710          | 118×58        |
+| Band | Lane id | Top y | Column centers | Default state |
+|------|---------|-------|----------------|---------------|
+| Phase | `main` (required) | 126 | `col` 0–4 → x = 94, 248, 402, 556, 710 | 118×62 |
+| Event | any other id | 278 | `col` 0–2 → x = 402, 556, 710 | 126×58 |
+| Outcome | `terminal` | 450 | `col` 0–2 → x = 402, 556, 710 | 118×58 |
 
 Event and terminal columns are intentionally offset from the main rail:
 event/terminal `col: N` uses the same x coordinate as main `col: N + 2`.
 For example, lower-band columns 0, 1, and 2 align beneath main columns 2, 3,
 and 4 respectively.
 
-| Constant          | Value                                                                                                                                          |
-|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
-| viewBox           | default `[980, 660]`; schema minimum `[420, 566]`                                                                                              |
-| State area        | x within `[32, width − 32]`; state bottom at or above `height − 122`                                                                           |
-| State spacing     | ≥10px between any two states — checked across lanes, because all event lanes share one band; separate same-band states with `col` or `yOffset` |
-| Transition length | ≥32px between endpoints                                                                                                                        |
-| Legend row        | final baseline y = height − 36; extra measured rows wrap upward                                                                                |
+| Constant | Value |
+|----------|-------|
+| viewBox | default `[980, 660]`; schema minimum `[420, 566]` |
+| State area | x within `[32, width − 32]`; state bottom at or above `height − 122` |
+| State spacing | ≥10px between any two states — checked across lanes, because all event lanes share one band; separate same-band states with `col` or `yOffset` |
+| Transition length | ≥32px between endpoints |
+| Legend row | final baseline y = height − 36; extra measured rows wrap upward |
 
 The primary lifecycle rail runs along the phase band and extends to the
 furthest occupied phase column. Route presets for transitions: `straight`,
