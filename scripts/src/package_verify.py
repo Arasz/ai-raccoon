@@ -64,39 +64,75 @@ def detect_rid():
     raise SystemExit(1)
 
 
+def entries_matching(nupkg, suffix):
+    """Stored paths in the nupkg ending in suffix — a bundled file may live at the package root or
+    under tools/net10.0/<rid>/…, and this matches it wherever it was packed."""
+    with zipfile.ZipFile(nupkg) as zf:
+        names = zf.namelist()
+    return [name for name in names if name.endswith(suffix)]
+
+
 def missing_entries(nupkg):
-    """Required entries absent from the nupkg (exact stored-name match)."""
-    with zipfile.ZipFile(nupkg) as zf:
-        names = set(zf.namelist())
-    return [entry for entry in REQUIRED_ENTRIES if entry not in names]
+    """Required entries with no path in the nupkg ending in them."""
+    return [entry for entry in REQUIRED_ENTRIES if not entries_matching(nupkg, entry)]
 
 
-def entry_sha256(nupkg, entry):
-    """Lowercase hex SHA-256 of the stored bytes of entry in the nupkg."""
+def duplicate_entries(nupkg):
+    """Required entries packed at more than one path, as (entry, matching_paths) pairs."""
+    duplicates = []
+    for entry in REQUIRED_ENTRIES:
+        matches = entries_matching(nupkg, entry)
+        if len(matches) > 1:
+            duplicates.append((entry, matches))
+    return duplicates
+
+
+def entry_sha256(nupkg, path):
+    """Lowercase hex SHA-256 of the stored bytes of the exact path in the nupkg."""
     with zipfile.ZipFile(nupkg) as zf:
-        return hashlib.sha256(zf.read(entry)).hexdigest()
+        return hashlib.sha256(zf.read(path)).hexdigest()
 
 
 def verify_nupkg(nupkg, version):
-    """Check required entries and the model sha against the bundle pins; print and return 0/1."""
+    """Check every required entry is packed exactly once with the right sha; print and return 0/1."""
     missing = missing_entries(nupkg)
+    for entry in missing:
+        print("FAIL: %s missing from %s" % (entry, nupkg), file=sys.stderr)
+    if missing:
+        return 1
+    duplicates = duplicate_entries(nupkg)
+    for entry, matches in duplicates:
+        print("FAIL: %s packed %d times in %s: %s" % (entry, len(matches), nupkg, ", ".join(matches)), file=sys.stderr)
+    if duplicates:
+        return 1
     for entry in REQUIRED_ENTRIES:
-        if entry in missing:
-            print("FAIL: %s missing from %s" % (entry, nupkg), file=sys.stderr)
-            return 1
         print("present in package: %s" % entry)
     for entry, expected in _BUNDLED_PINS:
-        actual = entry_sha256(nupkg, entry)
+        [path] = entries_matching(nupkg, entry)
+        actual = entry_sha256(nupkg, path)
         if actual != expected:
             print("FAIL: %s sha256 mismatch: expected %s, got %s" % (entry, expected, actual), file=sys.stderr)
             return 1
         print("sha256 verified: %s" % entry)
-    print("OK: ai-raccoon.%s.nupkg ships the verified bundled model" % version)
+    print("OK: ai-raccoon.%s.nupkg ships the verified bundled model exactly once" % version)
+    return 0
+
+
+def verify_no_bundled_weights(nupkg):
+    """The RID-agnostic shim package ships no copy of the bundled weights of its own; print and
+    return 0/1 — the RID-specific packages are the only ones that need to carry them."""
+    present = [entry for entry in REQUIRED_ENTRIES if entries_matching(nupkg, entry)]
+    for entry in present:
+        print("FAIL: %s unexpectedly present in top-level %s" % (entry, nupkg), file=sys.stderr)
+    if present:
+        return 1
+    print("OK: %s ships no bundled weights" % nupkg)
     return 0
 
 
 def pack_and_verify(csproj, rid, out_dir):
-    """dotnet pack csproj into out_dir, then verify the produced nupkg; return the exit code."""
+    """dotnet pack csproj into out_dir for rid, then verify the RID-specific nupkg carries the
+    bundled model exactly once and the top-level shim package carries none of it."""
     version = read_version(csproj)
     if version is None:
         print("FAIL: no VERSION file above %s" % csproj, file=sys.stderr)
@@ -118,8 +154,14 @@ def pack_and_verify(csproj, rid, out_dir):
         )
     except subprocess.CalledProcessError as exc:
         return exc.returncode
-    nupkg = Path(out_dir) / ("ai-raccoon.%s.nupkg" % version)
-    if not nupkg.is_file():
-        print("FAIL: %s was not produced" % nupkg, file=sys.stderr)
+    rid_nupkg = Path(out_dir) / ("ai-raccoon.%s.%s.nupkg" % (rid, version))
+    if not rid_nupkg.is_file():
+        print("FAIL: %s was not produced" % rid_nupkg, file=sys.stderr)
         return 1
-    return verify_nupkg(nupkg, version)
+    result = verify_nupkg(rid_nupkg, version)
+    if result != 0:
+        return result
+    top_nupkg = Path(out_dir) / ("ai-raccoon.%s.nupkg" % version)
+    if top_nupkg.is_file():
+        result = verify_no_bundled_weights(top_nupkg)
+    return result
