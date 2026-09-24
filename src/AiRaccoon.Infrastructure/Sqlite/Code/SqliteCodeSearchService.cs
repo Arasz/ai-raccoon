@@ -79,6 +79,8 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
         return row is null ? null : new CodeEntry(row.Hash, row.Value, row.Path, row.LineStart, row.LineEnd);
     }
 
+    // Hash tie-break (owner ruling), matching MemorySql.SearchByFilter and the harness's
+    // ORDER BY bm25(...), e.hash port -- see that constant's comment for the rationale.
     private static async Task<IReadOnlyList<CodeFtsRow>> QueryFtsAsync(SqliteConnection connection, CodeSearchQuery query,
         FtsQueryPlan plan, int limit, CancellationToken cancellationToken) =>
         (await connection.QueryAsync<CodeFtsRow>(new CommandDefinition(
@@ -89,7 +91,7 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
             FROM code_fts
             JOIN code_entries e ON e.id = code_fts.rowid
             WHERE code_fts MATCH @match AND e.project_id = @projectId
-            ORDER BY bm25(code_fts)
+            ORDER BY bm25(code_fts), e.hash
             LIMIT @limit
             """,
             new { match = plan.Expression, projectId = query.ProjectId, limit },

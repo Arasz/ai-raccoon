@@ -120,6 +120,10 @@ internal static class MemorySql
                                                   LIMIT 200
                                                   """;
 
+    // Hash tie-break (owner ruling): an exact bm25 score tie is real over short chunks, and without
+    // a total order the result is whatever rowid sqlite happens to visit first -- ties by e.hash
+    // instead, matching the harness's ORDER BY bm25(...), e.hash port
+    // (scripts/retrieval_tuning/llamaindex_harness/ingest.py's _bank_fts_order).
     public const string SearchByFilter = """
                                          SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 4.0) AS Ranking,
                                                 e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
@@ -128,7 +132,7 @@ internal static class MemorySql
                                          FROM entries_fts
                                          JOIN entries e ON e.id = entries_fts.rowid
                                          WHERE entries_fts MATCH @query AND {filter}
-                                         ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0)
+                                         ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0), e.hash
                                          LIMIT @limit
                                          """;
 
