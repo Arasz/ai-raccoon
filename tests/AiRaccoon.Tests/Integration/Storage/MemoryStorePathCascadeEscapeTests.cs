@@ -11,9 +11,9 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
-///     Real-SQLite proof that LikePattern.Escape earns its place: DeleteSourcePathAsync's subtree
-///     cascade runs `path LIKE @pathPrefix ESCAPE '\'`, so an unescaped '_' or '%' in the deleted
-///     path matches sibling directories and deletes their rows.
+///     Real-SQLite proof that DeleteSourcePathAsync's subtree cascade treats '_' and '%' in the
+///     deleted path as plain characters: the PathSubtree range compares bytes, so a sibling that
+///     differs only where a former LIKE wildcard sat keeps its rows.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

@@ -38,7 +38,8 @@ public sealed class MemorySchemaDdlStatementCountTests
     ///     58 = the pre-code-corpus 42 plus the corpus's Ddl (code_entries/code_fts/vec_code,
     ///     trigger families, indexes, and the idx_code_entries_path DROP), plus 1 for the
     ///     ADR-0089 <c>projects</c> table, plus 1 for the WP12 <c>watch_digest_claims</c> table,
-    ///     plus 1 for the Package-D <c>project_id_aliases</c> table.
+    ///     plus 1 for the Package-D <c>project_id_aliases</c> table, plus 1 for
+    ///     <c>idx_entries_project_path</c> (the index-seek path cascades).
     ///     The project-scoped tombstone repair moved to the v11 ladder step (MigrateToV11Async)
     ///     and no longer runs in the digest-gated Ddl block.
     /// </summary>
@@ -71,7 +72,7 @@ public sealed class MemorySchemaDdlStatementCountTests
         // probes fall under the existing code_entries exclusion above and add nothing here. The
         // project-scoped tombstone repair (5 statements) moved to MigrateToV11Async in the
         // version ladder.
-        CountDdl(statements).ShouldBe(65, Report(statements));
+        CountDdl(statements).ShouldBe(66, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)

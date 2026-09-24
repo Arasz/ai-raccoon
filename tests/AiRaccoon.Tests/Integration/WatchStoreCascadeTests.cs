@@ -49,6 +49,23 @@ public sealed class WatchStoreCascadeTests
         (await stack.Store.ListWatchesAsync(ct)).ShouldBeEmpty("the refused creates stored nothing");
     }
 
+    /// <summary>The digest's excluded-path gate: a fingerprint at the path or anywhere under it counts, a sibling sharing its name as a prefix does not.</summary>
+    [RetryFact]
+    public async Task HasFingerprintAtOrUnderAsync_SeesThePathAndItsSubtree_NotAPrefixSibling()
+    {
+        using var stack = new Stack();
+        var ct = TestContext.Current.CancellationToken;
+        var dir = stack.Dir("repo", "docs");
+        await stack.Store.UpsertFileHashAsync(Project, stack.Dir("repo", "docs", "deep", "a.md"), "h", 1, ct);
+        await stack.Store.UpsertFileHashAsync(Project, stack.Dir("repo", "docs-old.md"), "h", 1, ct);
+        await stack.Store.UpsertFileHashAsync(OtherProject, stack.Dir("repo", "other.md"), "h", 1, ct);
+
+        (await stack.Store.HasFingerprintAtOrUnderAsync(Project, dir, ct)).ShouldBeTrue("a file under the directory");
+        (await stack.Store.HasFingerprintAtOrUnderAsync(Project, stack.Dir("repo", "docs-old.md"), ct)).ShouldBeTrue("the path itself");
+        (await stack.Store.HasFingerprintAtOrUnderAsync(Project, stack.Dir("repo", "docs-old"), ct)).ShouldBeFalse("docs-old.md is a sibling, not under docs-old");
+        (await stack.Store.HasFingerprintAtOrUnderAsync(Project, stack.Dir("repo", "other.md"), ct)).ShouldBeFalse("another project's fingerprint");
+    }
+
     [RetryFact]
     public async Task RemoveWatchAsync_AlsoDeletesTheFingerprintsUnderTheWatch()
     {

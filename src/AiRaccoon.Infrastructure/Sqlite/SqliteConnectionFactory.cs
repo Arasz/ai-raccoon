@@ -5,6 +5,8 @@ using CommunityToolkit.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using SQLitePCL;
+using System.Runtime.CompilerServices;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
@@ -18,6 +20,22 @@ public sealed partial class SqliteConnectionFactory(
     IEncryptionKeyResolver keyResolver,
     ILogger<SqliteConnectionFactory>? logger = null) : ISqliteConnectionFactory
 {
+    /// <summary>
+    ///     Native handles this process has initialised, with the bank state their last schema pass saw. The pool hands a handle back on every open; reloading vec0 (a dlopen) and repeating
+    ///     the schema pass dominated the idle reconcile loop's CPU. Weak keys: a handle the pool closes
+    ///     drops out on its own.
+    /// </summary>
+    private static readonly ConditionalWeakTable<sqlite3, StrongBox<BankState>> InitializedHandles = new();
+
+    private const string BankStateSql =
+        "SELECT (SELECT data_version FROM pragma_data_version) AS DataVersion, " +
+        "(SELECT schema_version FROM pragma_schema_version) AS SchemaVersion, " +
+        "(SELECT user_version FROM pragma_user_version) AS UserVersion, " +
+        "(SELECT application_id FROM pragma_application_id) AS ApplicationId";
+
+    /// <summary>What the schema pass's work depends on; equal values mean it would find nothing to do.</summary>
+    private readonly record struct BankState(long DataVersion, long SchemaVersion, long UserVersion, long ApplicationId);
+
     /// <summary>SQLITE_NOTADB (26): the file exists but is not a database (or not this key's database).</summary>
     private const int NotADatabaseErrorCode = 26;
 
@@ -433,10 +451,24 @@ public sealed partial class SqliteConnectionFactory(
     {
         try
         {
-            connection.EnableExtensions();
-            // vec0 ships in the NuGet package — always available, no provisioning.
-            connection.LoadVector();
-            var overlapResult = await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+            var handle = connection.Handle!;
+            var known = InitializedHandles.TryGetValue(handle, out var ensuredAt);
+            if (!known)
+            {
+                connection.EnableExtensions();
+                // vec0 ships in the NuGet package — always available, no provisioning.
+                connection.LoadVector();
+            }
+
+            // data_version moves when another connection commits; schema_version, user_version and
+            // application_id move when anything, this handle included, changes what the version and
+            // digest checks read. All four unchanged: only the every-open steps need to run.
+            var bankState = await connection.QuerySingleAsync<BankState>(
+                new CommandDefinition(BankStateSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            var unchanged = known && ensuredAt!.Value == bankState;
+            var overlapResult = unchanged
+                ? await MemorySchema.RunEveryOpenStepsAsync(connection, cancellationToken).ConfigureAwait(false)
+                : await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
             if (logger is not null)
             {
                 if (overlapResult.Pruned.Count > 0)
@@ -458,6 +490,14 @@ public sealed partial class SqliteConnectionFactory(
                 {
                     Log.ScopelessEntriesRemoved(logger, overlapResult.ScopelessEntriesRemoved);
                 }
+            }
+
+            if (!unchanged)
+            {
+                // Re-read: the full pass may itself have stamped the version or digest it brought up to date.
+                bankState = await connection.QuerySingleAsync<BankState>(
+                    new CommandDefinition(BankStateSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+                InitializedHandles.AddOrUpdate(handle, new StrongBox<BankState>(bankState));
             }
 
             return connection;
