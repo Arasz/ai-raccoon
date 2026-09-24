@@ -25,7 +25,7 @@ public sealed class IgnoreRulesProvider : IIgnoreRulesProvider
             return IgnoreRules.Empty;
         }
 
-        var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        var content = await File.ReadAllTextAsync(path, cancellationToken);
         return IgnoreRules.Parse(content);
     }
 }

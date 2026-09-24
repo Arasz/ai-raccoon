@@ -38,8 +38,8 @@ public sealed class EntryEmbedder(
     /// <inheritdoc />
     public async Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var stored = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken).ConfigureAwait(false);
-        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        var stored = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken);
+        var settings = await ReadSettingsAsync(connection, cancellationToken);
         if (stored is null || string.IsNullOrWhiteSpace(settings.Provider)
                            || string.Equals(stored, embeddings.EngineFingerprint(settings.Provider, settings.Model, settings.BaseUrl), StringComparison.Ordinal))
         {
@@ -47,14 +47,13 @@ public sealed class EntryEmbedder(
         }
 
         var open = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken));
         if (open > 0)
         {
             return false;
         }
 
-        await StartMigrationAsync(connection, settings.Provider, settings.Model, settings.BaseUrl, timeProvider.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        await StartMigrationAsync(connection, settings.Provider, settings.Model, settings.BaseUrl, timeProvider.GetUtcNow(), cancellationToken);
         return true;
     }
 
@@ -62,53 +61,41 @@ public sealed class EntryEmbedder(
     public async Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider,
         string? model, string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var previous = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken)
-            .ConfigureAwait(false);
+        var previous = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken);
         var engine = embeddings.EngineFingerprint(provider, model, baseUrl);
 
         if (previous is null || string.Equals(previous, engine, StringComparison.Ordinal))
         {
-            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken)
-                .ConfigureAwait(false);
-            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken)
-                .ConfigureAwait(false);
-            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken)
-                .ConfigureAwait(false);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken);
             await connection.ExecuteAsync(Def(MemorySql.UpsertSetting,
-                    new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken))
-                .ConfigureAwait(false);
+                    new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken));
             return new EmbeddingConfig(provider, model ?? BundledModel, engine);
         }
 
-        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         try
         {
-            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken, transaction)
-                .ConfigureAwait(false);
-            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken, transaction)
-                .ConfigureAwait(false);
-            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken, transaction)
-                .ConfigureAwait(false);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken, transaction);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken, transaction);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken, transaction);
             await connection.ExecuteAsync(Def(MemorySql.UpsertSetting,
-                    new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken, transaction))
-                .ConfigureAwait(false);
+                    new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken, transaction));
 
             var started = await connection.ExecuteAsync(Def(MemorySql.StartModelMigration,
                     new { provider, model, baseUrl, engine, startedAt = now.ToUnixTimeSeconds() }, cancellationToken,
-                    transaction))
-                .ConfigureAwait(false);
+                    transaction));
             if (started == 0)
             {
-                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.RollbackAsync(cancellationToken);
                 throw new ModelMigrationInProgressException(
                     "ai-raccoon: a model migration is already in progress; wait for it to finish before starting another");
             }
 
-            await connection.ExecuteAsync(Def(MemorySql.MarkAllEmbeddedPending, cancellationToken, transaction))
-                .ConfigureAwait(false);
+            await connection.ExecuteAsync(Def(MemorySql.MarkAllEmbeddedPending, cancellationToken, transaction));
 
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken);
         }
         catch (ModelMigrationInProgressException)
         {
@@ -116,7 +103,7 @@ public sealed class EntryEmbedder(
         }
         catch
         {
-            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            await transaction.RollbackAsync(CancellationToken.None);
             throw;
         }
 
@@ -136,9 +123,9 @@ public sealed class EntryEmbedder(
 
         // The lease's pre-state, read BEFORE acquiring: after acquisition the row carries OUR
         // owner, so the previous holder is only knowable here (1009, LANE P4).
-        var preState = await ReadOpenMigrationStateAsync(connection, cancellationToken).ConfigureAwait(false);
+        var preState = await ReadOpenMigrationStateAsync(connection, cancellationToken);
 
-        if (!await migrationLease.TryAcquireAsync(connection, cancellationToken).ConfigureAwait(false))
+        if (!await migrationLease.TryAcquireAsync(connection, cancellationToken))
         {
             reporter.MigrationLeaseHeld(logger, corpus);
             return false;
@@ -153,7 +140,7 @@ public sealed class EntryEmbedder(
             // makes it race-free. False here means the migration finished between the relay's
             // due-check and this pass.
             var open = await connection.QuerySingleOrDefaultAsync<long?>(
-                Def(MemorySql.HasOpenModelMigration, cancellationToken)).ConfigureAwait(false) > 0;
+                Def(MemorySql.HasOpenModelMigration, cancellationToken)) > 0;
             if (!open)
             {
                 reporter.MigrationAlreadyFinished(logger, corpus);
@@ -166,7 +153,7 @@ public sealed class EntryEmbedder(
                 reporter.MigrationResumedAfterStall(logger, corpus, state.LeaseOwner!, state.Age(now));
             }
 
-            if (!await HasProviderAsync(connection, cancellationToken).ConfigureAwait(false))
+            if (!await HasProviderAsync(connection, cancellationToken))
             {
                 if (preState?.StartedAt != _warnedNoProviderMigration)
                 {
@@ -181,11 +168,10 @@ public sealed class EntryEmbedder(
                     "and the bank stays ToolGate-locked until a provider is set or the migration is closed");
             }
 
-            var owed = await connection.ExecuteScalarAsync<long>(Def(MemorySql.CountPendingEmbed, cancellationToken))
-                .ConfigureAwait(false);
+            var owed = await connection.ExecuteScalarAsync<long>(Def(MemorySql.CountPendingEmbed, cancellationToken));
             reporter.MigrationStarted(logger, corpus, owed);
 
-            await ReconcileVecDimensionsAsync(connection, cancellationToken).ConfigureAwait(false);
+            await ReconcileVecDimensionsAsync(connection, cancellationToken);
 
             // Time-strided, NOT per-batch: a per-batch line floods (1,492 lines on the owner's
             // 47,723-row backlog) and the metric buffer would drop records. One 1013 per lease
@@ -195,14 +181,14 @@ public sealed class EntryEmbedder(
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var batch = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectAllPendingForEmbed,
-                    new { limit = BatchSize }, cancellationToken)).ConfigureAwait(false)).ToList();
+                    new { limit = BatchSize }, cancellationToken))).ToList();
                 if (batch.Count == 0)
                 {
                     break;
                 }
 
-                drained += await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
-                await migrationLease.TryRenewAsync(connection, cancellationToken).ConfigureAwait(false);
+                drained += await EmbedAsync(connection, batch, cancellationToken);
+                await migrationLease.TryRenewAsync(connection, cancellationToken);
                 if (timeProvider.GetUtcNow() >= nextReport)
                 {
                     reporter.MigrationProgress(logger, corpus, drained, timeProvider.GetElapsedTime(startedAt));
@@ -211,8 +197,7 @@ public sealed class EntryEmbedder(
             }
 
             await connection.ExecuteAsync(Def(MemorySql.FinishModelMigration,
-                    new { finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() }, cancellationToken))
-                .ConfigureAwait(false);
+                    new { finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() }, cancellationToken));
             if (drained > 0)
             {
                 pass.NoteWork();
@@ -233,43 +218,40 @@ public sealed class EntryEmbedder(
         }
         finally
         {
-            await migrationLease.ReleaseAsync(connection, cancellationToken).ConfigureAwait(false);
+            await migrationLease.ReleaseAsync(connection, cancellationToken);
         }
     }
 
     /// <inheritdoc />
     public async Task ReconcileVecDimensionsAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        var settings = await ReadSettingsAsync(connection, cancellationToken);
         if (string.IsNullOrWhiteSpace(settings.Provider))
         {
             return;
         }
 
-        await vecDimensions.ReconcileMemoryAsync(connection, embeddings.ResolveDimensions(settings), cancellationToken).ConfigureAwait(false);
+        await vecDimensions.ReconcileMemoryAsync(connection, embeddings.ResolveDimensions(settings), cancellationToken);
     }
 
     /// <summary>Embeds one row when an engine is configured; a bank with no engine is left pending.</summary>
     public async Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
         CancellationToken cancellationToken)
     {
-        var provider = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken)
-            .ConfigureAwait(false);
+        var provider = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken);
         if (string.IsNullOrWhiteSpace(provider))
         {
             return;
         }
 
-        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        var settings = await ReadSettingsAsync(connection, cancellationToken);
         var generator = embeddings.CreateGenerator(settings);
         var headingPath = HeadingPathParser.Parse(value);
 
         var result = headingPath.Length > 0
             ? await generator.GenerateAsync([embeddings.DocumentText(settings, value), embeddings.DocumentText(settings, headingPath)],
                     cancellationToken: cancellationToken)
-                .ConfigureAwait(false)
-            : await generator.GenerateAsync([embeddings.DocumentText(settings, value)], cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
+            : await generator.GenerateAsync([embeddings.DocumentText(settings, value)], cancellationToken: cancellationToken);
         var structureEmbedding = headingPath.Length > 0 ? EmbeddingBlob.ToBytes(result[1].Vector) : null;
 
         await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
@@ -279,8 +261,7 @@ public sealed class EntryEmbedder(
                     embedding = EmbeddingBlob.ToBytes(result[0].Vector),
                     headingPath,
                     structureEmbedding
-                }, cancellationToken))
-            .ConfigureAwait(false);
+                }, cancellationToken));
     }
 
     /// <summary>Embeds a project's pending rows in batches with the configured engine.</summary>
@@ -297,20 +278,19 @@ public sealed class EntryEmbedder(
             }
 
             var batch = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectPendingForEmbed,
-                    new { projectId, limit = Math.Min(BatchSize, remaining) }, cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                    new { projectId, limit = Math.Min(BatchSize, remaining) }, cancellationToken))).ToList();
             if (batch.Count == 0)
             {
                 break;
             }
 
-            processed += await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
+            processed += await EmbedAsync(connection, batch, cancellationToken);
         }
 
         var healBudget = (limit ?? int.MaxValue) - processed;
         if (healBudget > 0)
         {
-            await HealStructureAsync(connection, projectId, healBudget, cancellationToken).ConfigureAwait(false);
+            await HealStructureAsync(connection, projectId, healBudget, cancellationToken);
         }
 
         return processed;
@@ -325,15 +305,15 @@ public sealed class EntryEmbedder(
         CancellationToken cancellationToken)
     {
         var batch = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectAllPendingForEmbed,
-            new { limit }, cancellationToken)).ConfigureAwait(false)).ToList();
-        return await EmbedAsync(connection, batch, cancellationToken).ConfigureAwait(false);
+            new { limit }, cancellationToken))).ToList();
+        return await EmbedAsync(connection, batch, cancellationToken);
     }
 
     /// <summary>Embeds a query string, or null when the bank has no engine — search degrades rather than failing.</summary>
     public async Task<QueryVector> EmbedQueryAsync(SqliteConnection connection, string query,
         CancellationToken cancellationToken)
     {
-        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        var settings = await ReadSettingsAsync(connection, cancellationToken);
         if (string.IsNullOrWhiteSpace(settings.Provider))
         {
             return QueryVector.Empty;
@@ -341,20 +321,18 @@ public sealed class EntryEmbedder(
 
         var generator = embeddings.CreateGenerator(settings);
         var embedded = embeddings.TrimQueryToWindow(settings, query);
-        var embedding = await generator.GenerateAsync([embedded], cancellationToken: cancellationToken).ConfigureAwait(false);
+        var embedding = await generator.GenerateAsync([embedded], cancellationToken: cancellationToken);
         return new QueryVector(EmbeddingBlob.ToBytes(embedding[0].Vector)) { RelevanceFloor = embeddings.RelevanceFloor(settings) };
     }
 
     public async Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,
         CancellationToken cancellationToken) =>
-        new(await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken)
-                .ConfigureAwait(false) ?? "",
-            await ReadSettingAsync(connection, EmbeddingSettingsKeys.Model, cancellationToken).ConfigureAwait(false),
-            await ReadSettingAsync(connection, EmbeddingSettingsKeys.BaseUrl, cancellationToken).ConfigureAwait(false),
-            await ReadSettingAsync(connection, EmbeddingSettingsKeys.ApiKey, cancellationToken).ConfigureAwait(false),
+        new(await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken) ?? "",
+            await ReadSettingAsync(connection, EmbeddingSettingsKeys.Model, cancellationToken),
+            await ReadSettingAsync(connection, EmbeddingSettingsKeys.BaseUrl, cancellationToken),
+            await ReadSettingAsync(connection, EmbeddingSettingsKeys.ApiKey, cancellationToken),
             int.TryParse(
-                await ReadSettingAsync(connection, EmbeddingSettingsKeys.Dimensions, cancellationToken)
-                    .ConfigureAwait(false),
+                await ReadSettingAsync(connection, EmbeddingSettingsKeys.Dimensions, cancellationToken),
                 NumberStyles.Integer, CultureInfo.InvariantCulture, out var dimensions)
                 ? dimensions
                 : null);
@@ -374,23 +352,22 @@ public sealed class EntryEmbedder(
             return 0;
         }
 
-        var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        var settings = await ReadSettingsAsync(connection, cancellationToken);
         var generator = embeddings.CreateGenerator(settings);
         var affected = 0;
         for (var offset = 0; offset < rows.Count; offset += BatchSize)
         {
             var batch = rows.Skip(offset).Take(BatchSize).ToList();
             var result = await generator.GenerateAsync(batch.Select(r => embeddings.DocumentText(settings, r.Value)),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken);
 
             var headingPaths = batch.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
             var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, path => embeddings.DocumentText(settings, path),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
             var embeddingBlobs = result.Select(r => EmbeddingBlob.ToBytes(r.Vector)).ToList();
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
             try
             {
                 for (var i = 0; i < batch.Count; i++)
@@ -405,19 +382,16 @@ public sealed class EntryEmbedder(
                                 headingPath,
                                 structureEmbedding
                             },
-                            cancellationToken))
-                        .ConfigureAwait(false);
+                            cancellationToken));
                 }
 
                 await connection.ExecuteAsync(
-                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
             }
             catch
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
                 throw;
             }
         }
@@ -438,27 +412,24 @@ public sealed class EntryEmbedder(
         while (remaining > 0)
         {
             var candidates = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectStructureHealCandidates,
-                    new { projectId, limit = Math.Min(BatchSize, remaining) }, cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                    new { projectId, limit = Math.Min(BatchSize, remaining) }, cancellationToken))).ToList();
             if (candidates.Count == 0)
             {
                 return;
             }
 
-            var settings = await ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+            var settings = await ReadSettingsAsync(connection, cancellationToken);
             var generator = embeddings.CreateGenerator(settings);
             var headingPaths = candidates.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
             var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, path => embeddings.DocumentText(settings, path),
-                    cancellationToken)
-                .ConfigureAwait(false);
+                    cancellationToken);
 
             for (var i = 0; i < candidates.Count; i++)
             {
                 var headingPath = headingPaths[i];
                 structure.TryGetValue(headingPath, out var structureEmbedding);
                 await connection.ExecuteAsync(Def(MemorySql.MarkStructure,
-                        new { id = candidates[i].Id, headingPath, structureEmbedding }, cancellationToken))
-                    .ConfigureAwait(false);
+                        new { id = candidates[i].Id, headingPath, structureEmbedding }, cancellationToken));
             }
 
             remaining -= candidates.Count;
@@ -476,8 +447,7 @@ public sealed class EntryEmbedder(
             return [];
         }
 
-        var result = await generator.GenerateAsync(distinct.Select(documentText), cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        var result = await generator.GenerateAsync(distinct.Select(documentText), cancellationToken: cancellationToken);
         var vectors = new Dictionary<string, byte[]>(distinct.Count, StringComparer.Ordinal);
         for (var i = 0; i < distinct.Count; i++)
         {
@@ -490,19 +460,18 @@ public sealed class EntryEmbedder(
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
         CancellationToken cancellationToken) =>
         await connection.QuerySingleOrDefaultAsync<string?>(
-            Def(MemorySql.SelectSetting, new { key }, cancellationToken)).ConfigureAwait(false);
+            Def(MemorySql.SelectSetting, new { key }, cancellationToken));
 
     private static async Task<bool> HasProviderAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var provider = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken)
-            .ConfigureAwait(false);
+        var provider = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken);
         return !string.IsNullOrWhiteSpace(provider);
     }
 
     private static async Task<OpenMigrationState?> ReadOpenMigrationStateAsync(SqliteConnection connection,
         CancellationToken cancellationToken) =>
         await connection.QuerySingleOrDefaultAsync<OpenMigrationState>(
-            Def(MemorySql.SelectOpenModelMigrationLease, cancellationToken)).ConfigureAwait(false);
+            Def(MemorySql.SelectOpenModelMigrationLease, cancellationToken));
 
     /// <summary>The open migration's pre-acquisition lease state (LANE P4): the previous holder
     /// and the row's age, read before the lease is taken — after acquisition the row carries our
@@ -525,7 +494,7 @@ public sealed class EntryEmbedder(
         CancellationToken cancellationToken, SqliteTransaction? transaction = null) =>
         await connection.ExecuteAsync(value is null
             ? Def(MemorySql.DeleteSetting, new { key }, cancellationToken, transaction)
-            : Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken, transaction)).ConfigureAwait(false);
+            : Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken, transaction));
 
     private static CommandDefinition Def(string sql, object? parameters, CancellationToken cancellationToken,
         SqliteTransaction? transaction = null) =>

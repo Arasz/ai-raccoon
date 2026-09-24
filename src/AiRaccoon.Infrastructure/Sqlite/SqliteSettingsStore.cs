@@ -10,10 +10,9 @@ public sealed class SqliteSettingsStore(ISqliteConnectionFactory factory) : ISet
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection.QuerySingleOrDefaultAsync<string?>(
-                new CommandDefinition(MemorySql.SelectSetting, new { key }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition(MemorySql.SelectSetting, new { key }, cancellationToken: cancellationToken));
     }
 
     public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
@@ -21,10 +20,9 @@ public sealed class SqliteSettingsStore(ISqliteConnectionFactory factory) : ISet
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(value);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(
-                new CommandDefinition(MemorySql.UpsertSetting, new { key, value }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition(MemorySql.UpsertSetting, new { key, value }, cancellationToken: cancellationToken));
     }
 
     public async Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
@@ -32,11 +30,10 @@ public sealed class SqliteSettingsStore(ISqliteConnectionFactory factory) : ISet
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         var rows = await connection.QueryAsync<SettingRow>(
                 new CommandDefinition(MemorySql.SelectSettingsByPrefix, new { prefix },
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         return rows.ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
     }
 
@@ -44,10 +41,9 @@ public sealed class SqliteSettingsStore(ISqliteConnectionFactory factory) : ISet
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(
-                new CommandDefinition(MemorySql.DeleteSetting, new { key }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition(MemorySql.DeleteSetting, new { key }, cancellationToken: cancellationToken));
     }
 
     private sealed record SettingRow(string Key, string Value);

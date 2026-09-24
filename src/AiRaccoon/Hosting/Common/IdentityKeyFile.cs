@@ -68,12 +68,12 @@ public sealed class IdentityKeyFile
         try
         {
             TightenedStateDirectory = OwnerOnlyFile.EnsureDirectory(StateDirectory);
-            await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await Gate.WaitAsync(cancellationToken);
             try
             {
                 await using var held = await OwnerOnlyFile
-                    .AcquireLockAsync(Path, _timeProvider, cancellationToken).ConfigureAwait(false);
-                var ensured = await EnsureLockedAsync(cancellationToken).ConfigureAwait(false);
+                    .AcquireLockAsync(Path, _timeProvider, cancellationToken);
+                var ensured = await EnsureLockedAsync(cancellationToken);
                 if (ensured is not null)
                 {
                     RefusalReason = null; // a refused read that a later mint healed is not a refusal anymore
@@ -130,7 +130,7 @@ public sealed class IdentityKeyFile
             return existing;
         }
 
-        if (await AcquireAsync(cancellationToken).ConfigureAwait(false) is { } minted)
+        if (await AcquireAsync(cancellationToken) is { } minted)
         {
             return minted;
         }
@@ -141,7 +141,7 @@ public sealed class IdentityKeyFile
             return ReadStateKey();
         }
 
-        return await AcquireAsync(cancellationToken).ConfigureAwait(false);
+        return await AcquireAsync(cancellationToken);
     }
 
     /// <summary>Reads or mints, retrying until the heal wait expires.</summary>
@@ -159,13 +159,13 @@ public sealed class IdentityKeyFile
                     return existing;
                 }
 
-                if (await TryMintAsync(cancellationToken).ConfigureAwait(false) is { } minted)
+                if (await TryMintAsync(cancellationToken) is { } minted)
                 {
                     return minted;
                 }
             }
             // Lost the exclusive create, or the winner has not finished writing: re-read.
-            while (await timer.WaitForNextTickAsync(waiting.Token).ConfigureAwait(false));
+            while (await timer.WaitForNextTickAsync(waiting.Token));
         }
         catch (OperationCanceledException)
             when (waited.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
@@ -195,7 +195,7 @@ public sealed class IdentityKeyFile
         try
         {
             await using var stream = new FileStream(Path, options);
-            await stream.WriteAsync(Encoding.UTF8.GetBytes(pem), cancellationToken).ConfigureAwait(false);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(pem), cancellationToken);
             _signer = fresh;
             return fresh;
         }

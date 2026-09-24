@@ -641,7 +641,7 @@ internal static class MemorySchema
     /// </summary>
     public static async Task<WatchOverlapPruneResult> EnsureAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var storedVersion = await ReadVersionAsync(connection, cancellationToken).ConfigureAwait(false);
+        var storedVersion = await ReadVersionAsync(connection, cancellationToken);
 
         // EnsureAsync runs on the read-write open path (SqliteConnectionFactory.InitializeAsync) and
         // refuses a bank stamped newer than CurrentVersion rather than silently no-oping. Note the sync
@@ -659,12 +659,12 @@ internal static class MemorySchema
                     && await connection.ExecuteScalarAsync<long>(
                         new CommandDefinition(
                             "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
-                            cancellationToken: cancellationToken)).ConfigureAwait(false) == 0;
+                            cancellationToken: cancellationToken)) == 0;
 
         // ADR-0075: Ddl is a no-op read once every object exists (all CREATE ... IF NOT EXISTS),
         // but it is still ~30 statements to reach that no-op, so it is gated on a digest of
         // itself rather than run unconditionally on every open.
-        var storedDigest = await ReadApplicationIdAsync(connection, cancellationToken).ConfigureAwait(false);
+        var storedDigest = await ReadApplicationIdAsync(connection, cancellationToken);
         // Data F1 / D5: the digest is stamped only once this whole open's schema work is durable
         // (every return point below), never here — a crash between the Ddl block and the version
         // ladder's own stamp must leave the digest stale, or EnsureCheapAsync's digest-only check
@@ -674,59 +674,59 @@ internal static class MemorySchema
         {
             await using var command = connection.CreateCommand();
             command.CommandText = Ddl;
-            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await command.ExecuteNonQueryAsync(cancellationToken);
 
             // Not folded into the Ddl string: unlike CREATE/DROP ... IF [NOT] EXISTS there, a
             // bare ALTER TABLE ADD COLUMN is not idempotent under two connections racing the same
             // digest mismatch — its own step, with its own column-existence check (see
             // EnsureCodeEmbedAttemptsColumnAsync).
-            await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken).ConfigureAwait(false);
-            await EnsureSearchQualityResultFeaturesColumnAsync(connection, cancellationToken).ConfigureAwait(false);
-            await EnsureRepairRequestsMapJsonColumnAsync(connection, cancellationToken).ConfigureAwait(false);
+            await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken);
+            await EnsureSearchQualityResultFeaturesColumnAsync(connection, cancellationToken);
+            await EnsureRepairRequestsMapJsonColumnAsync(connection, cancellationToken);
 
             // P2-B (docs/adr/0109): identifiers column first, then the code_fts rebuild that reads
             // it — EnsureCodeFtsIdentifiersAsync's backfill assumes the column already exists.
-            await EnsureCodeIdentifiersColumnAsync(connection, cancellationToken).ConfigureAwait(false);
-            await EnsureCodeFtsIdentifiersAsync(connection, cancellationToken).ConfigureAwait(false);
+            await EnsureCodeIdentifiersColumnAsync(connection, cancellationToken);
+            await EnsureCodeFtsIdentifiersAsync(connection, cancellationToken);
 
             var testHook = TestOnlyAfterDdlHookAsync.Value;
             if (testHook is not null)
             {
-                await testHook(cancellationToken).ConfigureAwait(false);
+                await testHook(cancellationToken);
             }
         }
 
         // Runs on every open, version or not: it is a data move guarding a deny-by-default gate,
         // it costs one indexed count, and a bank that was stamped by a newer build and then
         // written by an older one would otherwise keep an unreachable scope forever.
-        await MigrateIngestScopeKeysAsync(connection, cancellationToken).ConfigureAwait(false);
+        await MigrateIngestScopeKeysAsync(connection, cancellationToken);
 
         // Runs on every open, version or not, same shape as above: one indexed sqlite_master read,
         // write only when the stored trigger body still needs the H4 scope guard.
-        await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken).ConfigureAwait(false);
+        await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken);
 
         // Runs on every open, version or not (orchestrator ruling, S7): no-overlapping-watches was
         // originally a one-time v11 ladder step; demoted to an unconditional, ungated step in the
         // same "runs regardless" family as the two calls above — it must reach a fresh bank too
         // (harmlessly no-ops: no watches rows yet) and a bank already at CurrentVersion.
-        var overlapResult = await PruneOverlappingWatchesAsync(connection, cancellationToken).ConfigureAwait(false);
+        var overlapResult = await PruneOverlappingWatchesAsync(connection, cancellationToken);
 
         if (fresh)
         {
             await connection.ExecuteAsync(
-                new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken)).ConfigureAwait(false);
+                new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken));
             await connection.ExecuteAsync(
-                new CommandDefinition(TombstoneIndexDdl, cancellationToken: cancellationToken)).ConfigureAwait(false);
+                new CommandDefinition(TombstoneIndexDdl, cancellationToken: cancellationToken));
             // source_id index: created here for fresh banks (DDL already has the column),
             // and in MigrateToV5Async for v4→v5 migration banks.
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     "CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id)",
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
-            await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
+            await StampAsync(connection, CurrentVersion, cancellationToken);
             if (needsDigestStamp)
             {
-                await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
+                await StampSchemaDigestAsync(connection, cancellationToken);
             }
 
             return overlapResult;
@@ -739,7 +739,7 @@ internal static class MemorySchema
             // remaining exit for that case, so the digest must be stamped here too.
             if (needsDigestStamp)
             {
-                await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
+                await StampSchemaDigestAsync(connection, cancellationToken);
             }
 
             return overlapResult;
@@ -753,21 +753,21 @@ internal static class MemorySchema
         var healthy = !TestOnlyForceUnhealthyLadder.Value;
         if (healthy && storedVersion < 1)
         {
-            healthy = await MigrateToV1Async(connection, cancellationToken).ConfigureAwait(false);
+            healthy = await MigrateToV1Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 2)
         {
             // Hard step, deliberately not soft: an empty-shell vec_entries answers every vector
             // query with silence, which is worse than the bank failing to open.
-            await MigrateToV2Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV2Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 3)
         {
             // Hard step: heals rows a pre-guard binary wrote into a v2 bank without running the
             // write-path chunk recompute.
-            await MigrateToV3Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV3Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 4)
@@ -776,75 +776,75 @@ internal static class MemorySchema
             // (unlike promotion_queue_entries_ad above, which reaches every bank on every open —
             // no version gate at all — because EnsurePromotionQueueTriggerScopeGuardAsync runs
             // unconditionally, outside both the version ladder and the Ddl digest gate).
-            await MigrateToV4Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV4Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 5)
         {
-            await MigrateToV5Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV5Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 6)
         {
-            await MigrateToV6Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV6Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 7)
         {
             // Soft, like the v1 step: a dedupe failure leaves the bank open, degraded, retried
             // on the next open, rather than refusing to open at all.
-            healthy = await MigrateToV7Async(connection, cancellationToken).ConfigureAwait(false);
+            healthy = await MigrateToV7Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 8)
         {
-            await MigrateToV8Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV8Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 9)
         {
-            await MigrateToV9Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV9Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 10)
         {
-            await MigrateToV10Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV10Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 11)
         {
-            await MigrateToV11Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV11Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 12)
         {
-            await MigrateToV12Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV12Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 13)
         {
-            await MigrateToV13Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV13Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 14)
         {
-            await MigrateToV14Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV14Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 15)
         {
-            await MigrateToV15Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV15Async(connection, cancellationToken);
         }
 
         if (healthy && storedVersion < 16)
         {
-            await MigrateToV16Async(connection, cancellationToken).ConfigureAwait(false);
+            await MigrateToV16Async(connection, cancellationToken);
         }
 
         var scopelessEntriesRemoved = 0L;
         if (healthy && storedVersion < 17)
         {
-            scopelessEntriesRemoved = await MigrateToV17Async(connection, cancellationToken).ConfigureAwait(false);
+            scopelessEntriesRemoved = await MigrateToV17Async(connection, cancellationToken);
         }
 
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
@@ -852,10 +852,10 @@ internal static class MemorySchema
         // never completed, the same bug this reordering exists to close (Data F1 / D5).
         if (healthy)
         {
-            await StampAsync(connection, CurrentVersion, cancellationToken).ConfigureAwait(false);
+            await StampAsync(connection, CurrentVersion, cancellationToken);
             if (needsDigestStamp)
             {
-                await StampSchemaDigestAsync(connection, cancellationToken).ConfigureAwait(false);
+                await StampSchemaDigestAsync(connection, cancellationToken);
             }
         }
 
@@ -889,7 +889,7 @@ internal static class MemorySchema
                                embedding float[384] distance_metric=cosine
                            );
                            """;
-        await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -907,8 +907,7 @@ internal static class MemorySchema
         var hasWorkspaceIndex = await connection.ExecuteScalarAsync<long?>(
                 new CommandDefinition(
                     "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_workspace_bucket'",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false) is not null;
+                    cancellationToken: cancellationToken)) is not null;
         if (hasWorkspaceIndex)
         {
             return true;
@@ -917,8 +916,7 @@ internal static class MemorySchema
         try
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
             try
             {
                 await connection.ExecuteAsync(
@@ -935,17 +933,14 @@ internal static class MemorySchema
                                 ON entries(path, hash, workspace_id)
                                 WHERE workspace_id IS NOT NULL;
                             """,
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
-                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
             }
             catch
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
                 throw;
             }
         }
@@ -970,15 +965,13 @@ internal static class MemorySchema
         var columns = (await connection.QueryAsync<string>(
                 new CommandDefinition(
                     "SELECT name FROM pragma_table_info('promotion_queue')",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
         if (!columns.Contains("claimed_at"))
         {
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE promotion_queue ADD COLUMN claimed_at INTEGER NULL",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
         }
     }
 
@@ -989,36 +982,29 @@ internal static class MemorySchema
     /// </summary>
     private static async Task MigrateToV9Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var entriesDimension = await ReadVecDimensionAsync(connection, "vec_entries", cancellationToken)
-            .ConfigureAwait(false);
-        var structureDimension = await ReadVecDimensionAsync(connection, "vec_structure", cancellationToken)
-            .ConfigureAwait(false);
+        var entriesDimension = await ReadVecDimensionAsync(connection, "vec_entries", cancellationToken);
+        var structureDimension = await ReadVecDimensionAsync(connection, "vec_structure", cancellationToken);
 
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             await RebuildVecTableAsync(connection, "vec_entries", entriesDimension, "embedding",
-                    "embed_state = 'embedded' AND embedding IS NOT NULL", cancellationToken)
-                .ConfigureAwait(false);
+                    "embed_state = 'embedded' AND embedding IS NOT NULL", cancellationToken);
             await RebuildVecTableAsync(connection, "vec_structure", structureDimension, "structure_embedding",
-                    "structure_embedding IS NOT NULL", cancellationToken)
-                .ConfigureAwait(false);
+                    "structure_embedding IS NOT NULL", cancellationToken);
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
 
-        await VacuumBestEffortAsync(connection, cancellationToken).ConfigureAwait(false);
+        await VacuumBestEffortAsync(connection, cancellationToken);
     }
 
     /// <summary>
@@ -1033,8 +1019,7 @@ internal static class MemorySchema
     {
         try
         {
-            await connection.ExecuteAsync(new CommandDefinition("VACUUM;", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+            await connection.ExecuteAsync(new CommandDefinition("VACUUM;", cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.IsBankBusy())
         {
@@ -1052,8 +1037,7 @@ internal static class MemorySchema
                     last_run_at INTEGER NOT NULL,
                     run_count   INTEGER NOT NULL DEFAULT 0
                 )
-                """, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                """, cancellationToken: cancellationToken));
 
     /// <summary>
     ///     Ladder step 11: the <c>sync_tombstones</c> table must carry the v11-era exact composite
@@ -1071,23 +1055,20 @@ internal static class MemorySchema
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'sync_tombstones'",
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return;
         }
 
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             var columnRows = (await connection.QueryAsync<PragmaColumnRow>(
                     new CommandDefinition(
                         "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                        cancellationToken: cancellationToken))).ToList();
 
             // Full-shape check, not just project_id: every column's declared type must match the
             // Ddl and all three key members must be part of the composite PRIMARY KEY (pk 1..3).
@@ -1096,8 +1077,7 @@ internal static class MemorySchema
             if (ShapeMatchesDdl(columnRows))
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
                 return;
             }
 
@@ -1122,8 +1102,7 @@ internal static class MemorySchema
                             FROM sync_tombstones
                             WHERE project_id IS NOT NULL AND project_id != ''
                             """,
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false)).ToList();
+                            cancellationToken: cancellationToken))).ToList();
                 existingRows = raw.Select(r => new TombstoneRow(
                     (string)r.ProjectId, (string)r.Hash, (string)r.Scope, (long)r.DeletedAt)).ToList();
             }
@@ -1133,8 +1112,7 @@ internal static class MemorySchema
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("DROP TABLE sync_tombstones", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("DROP TABLE sync_tombstones", cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
                     new CommandDefinition(
@@ -1147,8 +1125,7 @@ internal static class MemorySchema
                             PRIMARY KEY (project_id, hash, scope)
                         )
                         """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             foreach (var row in existingRows)
             {
@@ -1156,8 +1133,7 @@ internal static class MemorySchema
                         new CommandDefinition(
                             "INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@ProjectId, @Hash, @Scope, @DeletedAt)",
                             row,
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
             }
 
             // Drop the legacy unique index if it survived the table drop (it did not — SQLite
@@ -1165,18 +1141,15 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "DROP INDEX IF EXISTS uq_sync_tombstones_project_identity",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -1198,57 +1171,48 @@ internal static class MemorySchema
     private static async Task MigrateToV12Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             // Re-probed under the write lock — another opener may have migrated between the
             // ladder's version read and this BEGIN.
             var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                     "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false) > 0;
+                    cancellationToken: cancellationToken)) > 0;
             if (!hasTable)
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition(SearchQualityTableDdl, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition(SearchQualityTableDdl, cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
-                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
                 return;
             }
 
             var columns = (await connection.QueryAsync<string>(
                     new CommandDefinition(
                         "SELECT name FROM pragma_table_info('search_quality')",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                        cancellationToken: cancellationToken))).ToList();
             if (!columns.Contains("kind", StringComparer.Ordinal))
             {
                 await connection.ExecuteAsync(
                         new CommandDefinition(
                             "ALTER TABLE search_quality ADD COLUMN kind TEXT CHECK(kind IN ('memory','code','both'))",
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "UPDATE search_quality SET kind = 'memory' WHERE kind IS NULL AND created_at < @Cutoff",
                         new { Cutoff = SearchQualityKindBackfillCutoff },
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -1261,45 +1225,38 @@ internal static class MemorySchema
     private static async Task MigrateToV13Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                     "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'repair_requests'",
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false) > 0;
+                    cancellationToken: cancellationToken)) > 0;
             if (!hasTable)
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
                 return;
             }
 
             var columns = (await connection.QueryAsync<string>(
                     new CommandDefinition(
                         "SELECT name FROM pragma_table_info('repair_requests')",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                        cancellationToken: cancellationToken))).ToList();
             if (!columns.Contains("map_json", StringComparer.Ordinal))
             {
                 await connection.ExecuteAsync(
                         new CommandDefinition(
                             "ALTER TABLE repair_requests ADD COLUMN map_json TEXT NULL",
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -1319,23 +1276,19 @@ internal static class MemorySchema
     private static async Task MigrateToV14Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(ProjectIdAliases.TableDdl, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition(ProjectIdAliases.TableDdl, cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -1349,8 +1302,7 @@ internal static class MemorySchema
     private static async Task MigrateToV15Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             // Re-probed under the write lock: another opener may have migrated between the
@@ -1358,15 +1310,13 @@ internal static class MemorySchema
             var columns = (await connection.QueryAsync<string>(
                     new CommandDefinition(
                         "SELECT name FROM pragma_table_info('sync_tombstones')",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                        cancellationToken: cancellationToken))).ToList();
 
             if (!columns.Contains("context_label", StringComparer.Ordinal))
             {
                 await connection.ExecuteAsync(
                         new CommandDefinition("ALTER TABLE sync_tombstones RENAME TO sync_tombstones_v14",
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
                         new CommandDefinition(
                             """
@@ -1378,34 +1328,28 @@ internal static class MemorySchema
                                 deleted_at INTEGER NOT NULL
                             )
                             """,
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
                         new CommandDefinition(
                             """
                             INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at)
                             SELECT project_id, hash, scope, NULL, deleted_at FROM sync_tombstones_v14
                             """,
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
-                        new CommandDefinition("DROP TABLE sync_tombstones_v14", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("DROP TABLE sync_tombstones_v14", cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(TombstoneIndexDdl, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition(TombstoneIndexDdl, cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
 
@@ -1413,7 +1357,7 @@ internal static class MemorySchema
         // root page, so unlike the v11 rebuild they are not reused and the reclaim has to run here
         // too — same reasoning as the v9 rebuild's vacuum. Or Vec0PartitionKeyDemotionTests'
         // freelist-0 contract reads 1 the moment a v15 bank is migrated.
-        await VacuumBestEffortAsync(connection, cancellationToken).ConfigureAwait(false);
+        await VacuumBestEffortAsync(connection, cancellationToken);
     }
 
     /// <summary>
@@ -1427,39 +1371,33 @@ internal static class MemorySchema
     private static async Task MigrateToV16Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             var columns = (await connection.QueryAsync<string>(
                     new CommandDefinition(
                         "SELECT name FROM pragma_table_info('sync_tombstones')",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                        cancellationToken: cancellationToken))).ToList();
 
             if (!columns.Contains("received_at", StringComparer.Ordinal))
             {
                 await connection.ExecuteAsync(
                         new CommandDefinition(
                             "ALTER TABLE sync_tombstones ADD COLUMN received_at INTEGER NULL",
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
                         new CommandDefinition(
                             "UPDATE sync_tombstones SET received_at = deleted_at WHERE received_at IS NULL",
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -1487,15 +1425,13 @@ internal static class MemorySchema
     {
         long scopelessCount;
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             scopelessCount = await connection.ExecuteScalarAsync<long>(
                     new CommandDefinition(
                         "SELECT count(*) FROM entries WHERE scope IS NULL AND workspace_id IS NULL",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
             if (scopelessCount > 0)
             {
                 // Fires entries_fts_ad / vec_entries_ad / vec_structure_ad / promotion_queue_entries_ad
@@ -1504,13 +1440,11 @@ internal static class MemorySchema
                 await connection.ExecuteAsync(
                         new CommandDefinition(
                             "DELETE FROM entries WHERE scope IS NULL AND workspace_id IS NULL",
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("ALTER TABLE entries RENAME TO entries_v16", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ALTER TABLE entries RENAME TO entries_v16", cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
                     new CommandDefinition(
@@ -1544,8 +1478,7 @@ internal static class MemorySchema
                             CHECK ((workspace_id IS NULL AND scope IS NOT NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
                         )
                         """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             // Explicit column list, id included: the rebuild must preserve every surviving row's
             // rowid, since entries_fts (content_rowid='id') and vec_entries/vec_structure
@@ -1565,12 +1498,10 @@ internal static class MemorySchema
                                total_chunks, source_id
                         FROM entries_v16
                         """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("DROP TABLE entries_v16", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("DROP TABLE entries_v16", cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
                     new CommandDefinition(
@@ -1626,16 +1557,13 @@ internal static class MemorySchema
                              DELETE FROM vec_structure WHERE rowid = OLD.id;
                          END;
                          """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(PromotionQueueTriggerDdl, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition(PromotionQueueTriggerDdl, cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
                     new CommandDefinition(
@@ -1646,24 +1574,21 @@ internal static class MemorySchema
                         CREATE INDEX idx_entries_embed_state ON entries(embed_state, project_id);
                         CREATE INDEX idx_entries_source_id ON entries(source_id);
                         """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
 
         // Same reclaim reasoning as the v9/v15 rebuilds: the DROP's freed pages are not reused by
         // the new table's own root page, so the file does not shrink without an explicit VACUUM.
-        await VacuumBestEffortAsync(connection, cancellationToken).ConfigureAwait(false);
+        await VacuumBestEffortAsync(connection, cancellationToken);
 
         return scopelessCount;
     }
@@ -1712,8 +1637,7 @@ internal static class MemorySchema
         var rows = await connection.QueryAsync<WatchRow>(
                 new CommandDefinition(
                     "SELECT project_id AS ProjectId, path AS Path, created_at AS CreatedAt FROM watches",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
 
         var resolver = new WatchOverlapResolver();
         var toPrune = new List<ProjectPrune>();
@@ -1743,8 +1667,7 @@ internal static class MemorySchema
         }
 
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             foreach (var (projectId, pruned) in toPrune)
@@ -1752,23 +1675,19 @@ internal static class MemorySchema
                 var pathPrefix = LikePattern.Escape(pruned.Path) + "/%";
                 await connection.ExecuteAsync(
                         new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
-                            new { projectId, path = pruned.Path, pathPrefix }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            new { projectId, path = pruned.Path, pathPrefix }, cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
                         new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
 
@@ -1789,16 +1708,14 @@ internal static class MemorySchema
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'code_entries'",
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return; // the Ddl block just above creates code_entries; nothing to alter yet
         }
 
         var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('code_entries')", cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).Contains("embed_attempts", StringComparer.Ordinal);
+                "SELECT name FROM pragma_table_info('code_entries')", cancellationToken: cancellationToken))).Contains("embed_attempts", StringComparer.Ordinal);
         if (hasColumn)
         {
             return;
@@ -1808,8 +1725,7 @@ internal static class MemorySchema
         {
             await connection.ExecuteAsync(new CommandDefinition(
                     "ALTER TABLE code_entries ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0",
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
@@ -1827,16 +1743,14 @@ internal static class MemorySchema
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'code_entries'",
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return; // the Ddl block just above creates code_entries; nothing to alter yet
         }
 
         var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('code_entries')", cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).Contains("identifiers", StringComparer.Ordinal);
+                "SELECT name FROM pragma_table_info('code_entries')", cancellationToken: cancellationToken))).Contains("identifiers", StringComparer.Ordinal);
         if (hasColumn)
         {
             return;
@@ -1846,8 +1760,7 @@ internal static class MemorySchema
         {
             await connection.ExecuteAsync(new CommandDefinition(
                     "ALTER TABLE code_entries ADD COLUMN identifiers TEXT NOT NULL DEFAULT ''",
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
@@ -1871,39 +1784,34 @@ internal static class MemorySchema
     private static async Task<bool> CodeFtsHasIdentifiersAsync(SqliteConnection connection,
         CancellationToken cancellationToken) =>
         (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('code_fts')", cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).Contains("identifiers", StringComparer.Ordinal);
+                "SELECT name FROM pragma_table_info('code_fts')", cancellationToken: cancellationToken))).Contains("identifiers", StringComparer.Ordinal);
 
     private static async Task EnsureCodeFtsIdentifiersAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        if (await CodeFtsHasIdentifiersAsync(connection, cancellationToken).ConfigureAwait(false))
+        if (await CodeFtsHasIdentifiersAsync(connection, cancellationToken))
         {
             return;
         }
 
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             // Re-checked under the write lock: a connection that raced the same digest mismatch may
             // have finished the rebuild while this one waited on BEGIN IMMEDIATE.
-            if (await CodeFtsHasIdentifiersAsync(connection, cancellationToken).ConfigureAwait(false))
+            if (await CodeFtsHasIdentifiersAsync(connection, cancellationToken))
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
                 return;
             }
 
             var rows = (await connection.QueryAsync<(long Id, string Value)>(new CommandDefinition(
-                    "SELECT id, value FROM code_entries", cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                    "SELECT id, value FROM code_entries", cancellationToken: cancellationToken))).ToList();
             await connection.ExecuteAsync(new CommandDefinition(
                     "UPDATE code_entries SET identifiers = @identifiers WHERE id = @id",
                     rows.Select(row => new { id = row.Id, identifiers = IdentifierSplitter.Identifiers(row.Value) }),
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
                     new CommandDefinition(
@@ -1940,17 +1848,14 @@ internal static class MemorySchema
 
                         INSERT INTO code_fts(code_fts) VALUES('rebuild');
                         """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -1967,16 +1872,14 @@ internal static class MemorySchema
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return; // the Ddl block just above creates search_quality; nothing to alter yet
         }
 
         var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('search_quality')", cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).Contains("result_features", StringComparer.Ordinal);
+                "SELECT name FROM pragma_table_info('search_quality')", cancellationToken: cancellationToken))).Contains("result_features", StringComparer.Ordinal);
         if (hasColumn)
         {
             return;
@@ -1986,8 +1889,7 @@ internal static class MemorySchema
         {
             await connection.ExecuteAsync(new CommandDefinition(
                     "ALTER TABLE search_quality ADD COLUMN result_features TEXT",
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
@@ -2005,16 +1907,14 @@ internal static class MemorySchema
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'repair_requests'",
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return; // the Ddl block just above creates repair_requests; nothing to alter yet
         }
 
         var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('repair_requests')", cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).Contains("map_json", StringComparer.Ordinal);
+                "SELECT name FROM pragma_table_info('repair_requests')", cancellationToken: cancellationToken))).Contains("map_json", StringComparer.Ordinal);
         if (hasColumn)
         {
             return;
@@ -2024,8 +1924,7 @@ internal static class MemorySchema
         {
             await connection.ExecuteAsync(new CommandDefinition(
                     "ALTER TABLE repair_requests ADD COLUMN map_json TEXT NULL",
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
@@ -2044,8 +1943,7 @@ internal static class MemorySchema
         var legacyScopeRows = await connection.ExecuteScalarAsync<long>(
                 new CommandDefinition(
                     "SELECT count(*) FROM settings WHERE key LIKE 'watch.scope.%'",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         if (legacyScopeRows == 0)
         {
             return;
@@ -2059,8 +1957,7 @@ internal static class MemorySchema
                      WHERE key LIKE 'watch.scope.%';
                     DELETE FROM settings WHERE key LIKE 'watch.scope.%';
                     """,
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -2085,8 +1982,7 @@ internal static class MemorySchema
         var storedSql = await connection.ExecuteScalarAsync<string?>(
                 new CommandDefinition(
                     "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'promotion_queue_entries_ad'",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         // Compared against the body we intend, not sniffed for a substring: the previous probe
         // asked whether the stored SQL mentioned "scope" at all, so the ADR-0046 widening would
         // have left every existing bank on the old body forever while reading as up to date.
@@ -2102,8 +1998,7 @@ internal static class MemorySchema
 
                      {PromotionQueueTriggerDdl}
                      """,
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -2123,32 +2018,30 @@ internal static class MemorySchema
     /// </summary>
     public static async Task EnsureCheapAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var digest = await ReadApplicationIdAsync(connection, cancellationToken).ConfigureAwait(false);
+        var digest = await ReadApplicationIdAsync(connection, cancellationToken);
         if (digest != SchemaDigest)
         {
-            await EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+            await EnsureAsync(connection, cancellationToken);
         }
     }
 
     private static async Task<long> ReadVersionAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(
-            new CommandDefinition("PRAGMA user_version", cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition("PRAGMA user_version", cancellationToken: cancellationToken));
 
     /// <summary>PRAGMA user_version takes no parameter binding, hence the interpolation of an int constant.</summary>
     private static async Task StampAsync(SqliteConnection connection, int version, CancellationToken cancellationToken) =>
         await connection.ExecuteAsync(
-                new CommandDefinition($"PRAGMA user_version = {version}", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition($"PRAGMA user_version = {version}", cancellationToken: cancellationToken));
 
     private static async Task<int> ReadApplicationIdAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<int>(
-            new CommandDefinition("PRAGMA application_id", cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition("PRAGMA application_id", cancellationToken: cancellationToken));
 
     /// <summary>PRAGMA application_id takes no parameter binding, hence the interpolation of an int constant.</summary>
     private static async Task StampSchemaDigestAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteAsync(
-                new CommandDefinition($"PRAGMA application_id = {SchemaDigest}", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition($"PRAGMA application_id = {SchemaDigest}", cancellationToken: cancellationToken));
 
     /// <summary>
     ///     Ladder step 1 — everything shipped before the version marker existed: entries/watch-lease
@@ -2161,15 +2054,13 @@ internal static class MemorySchema
         var columns = (await connection.QueryAsync<string>(
                 new CommandDefinition(
                     "SELECT name FROM pragma_table_info('entries')",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
         if (!columns.Contains("source_file"))
         {
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE entries ADD COLUMN source_file TEXT",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
         }
 
         if (!columns.Contains("section"))
@@ -2177,8 +2068,7 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE entries ADD COLUMN section TEXT",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
         }
 
         if (!columns.Contains("heading_path"))
@@ -2186,8 +2076,7 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE entries ADD COLUMN heading_path TEXT",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
         }
 
         if (!columns.Contains("structure_embedding"))
@@ -2195,8 +2084,7 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE entries ADD COLUMN structure_embedding BLOB",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
         }
 
         // Cross-process scan lease (docs/plans/2026-08-07-watch-scan-runaway-fix.md): the lease
@@ -2204,15 +2092,13 @@ internal static class MemorySchema
         var watchColumns = (await connection.QueryAsync<string>(
                 new CommandDefinition(
                     "SELECT name FROM pragma_table_info('watches')",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
         if (!watchColumns.Contains("scan_owner"))
         {
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE watches ADD COLUMN scan_owner TEXT",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
         }
 
         if (!watchColumns.Contains("scan_lease_expires_at"))
@@ -2220,15 +2106,13 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE watches ADD COLUMN scan_lease_expires_at INTEGER NOT NULL DEFAULT 0",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
         }
 
         var ftsSql = await connection.ExecuteScalarAsync<string?>(
                 new CommandDefinition(
                     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries_fts'",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         var ftsNeedsRebuild = ftsSql is null
                               || !ftsSql.Contains("source_file", StringComparison.Ordinal)
                               || !ftsSql.Contains("section", StringComparison.Ordinal);
@@ -2237,11 +2121,9 @@ internal static class MemorySchema
             // New shape in place; verify it is not an empty shell left by a crash between the
             // DROP/CREATE and the repopulate — the triggers keep it in sync only from here on.
             var ftsRows = await connection.ExecuteScalarAsync<long>(
-                    new CommandDefinition("SELECT count(*) FROM entries_fts", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("SELECT count(*) FROM entries_fts", cancellationToken: cancellationToken));
             var entryRows = await connection.ExecuteScalarAsync<long>(
-                    new CommandDefinition("SELECT count(*) FROM entries", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("SELECT count(*) FROM entries", cancellationToken: cancellationToken));
             if (ftsRows != entryRows)
             {
                 ftsNeedsRebuild = true;
@@ -2255,8 +2137,7 @@ internal static class MemorySchema
             // One transaction, so a crash mid-rebuild cannot leave a bank without an FTS index
             // (or with an empty shell) that never heals on reopen.
             await connection.ExecuteAsync(
-                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
             try
             {
                 await connection.ExecuteAsync(
@@ -2295,17 +2176,14 @@ internal static class MemorySchema
                             INSERT INTO entries_fts(rowid, value, source_file, section)
                             SELECT id, value, source_file, section FROM entries;
                             """,
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
-                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
             }
             catch
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
                 throw;
             }
         }
@@ -2319,20 +2197,17 @@ internal static class MemorySchema
         var hasSharedIndex = await connection.ExecuteScalarAsync<long?>(
                 new CommandDefinition(
                     "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_shared_bucket'",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false) is not null;
+                    cancellationToken: cancellationToken)) is not null;
         var hasCommittedIndex = await connection.ExecuteScalarAsync<long?>(
                 new CommandDefinition(
                     "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_committed_bucket'",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false) is not null;
+                    cancellationToken: cancellationToken)) is not null;
         if (!hasSharedIndex || !hasCommittedIndex)
         {
             try
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
                 try
                 {
                     // Dedupe first (survivor = earliest row; content is identical within a group by
@@ -2364,17 +2239,14 @@ internal static class MemorySchema
                                     ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
                                     WHERE scope IN ('project', 'custom');
                                 """,
-                                cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
+                                cancellationToken: cancellationToken));
                     await connection.ExecuteAsync(
-                            new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
+                            new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
                 }
                 catch
                 {
                     await connection.ExecuteAsync(
-                            new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
+                            new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
                     throw;
                 }
             }
@@ -2401,8 +2273,7 @@ internal static class MemorySchema
         var columns = (await connection.QueryAsync<string>(
                 new CommandDefinition(
                     "SELECT name FROM pragma_table_info('entries')",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
         if (!columns.Contains("chunk_index"))
         {
             await connection.ExecuteAsync(
@@ -2411,8 +2282,7 @@ internal static class MemorySchema
                         // this migration cannot yet order needs its own "unknown" default so the
                         // bank-wide recompute below (fill-unknown-only) actually fills it in.
                         "ALTER TABLE entries ADD COLUMN chunk_index INTEGER NOT NULL DEFAULT -1",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
         }
 
         if (!columns.Contains("total_chunks"))
@@ -2420,33 +2290,26 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE entries ADD COLUMN total_chunks INTEGER NOT NULL DEFAULT 0",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
         }
 
         // The embedder owns the dimension when the model is not all-MiniLM (384); read each
         // table's own declared dimension rather than re-hardcoding, so a bank on a different
         // model keeps its vectors through the rebuild.
-        var entriesDimension = await ReadVecDimensionAsync(connection, "vec_entries", cancellationToken)
-            .ConfigureAwait(false);
-        var structureDimension = await ReadVecDimensionAsync(connection, "vec_structure", cancellationToken)
-            .ConfigureAwait(false);
+        var entriesDimension = await ReadVecDimensionAsync(connection, "vec_entries", cancellationToken);
+        var structureDimension = await ReadVecDimensionAsync(connection, "vec_structure", cancellationToken);
 
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
 
             await RebuildVecTableAsync(connection, "vec_entries", entriesDimension, "embedding",
-                    "embed_state = 'embedded' AND embedding IS NOT NULL", cancellationToken)
-                .ConfigureAwait(false);
+                    "embed_state = 'embedded' AND embedding IS NOT NULL", cancellationToken);
             await RebuildVecTableAsync(connection, "vec_structure", structureDimension, "structure_embedding",
-                    "structure_embedding IS NOT NULL", cancellationToken)
-                .ConfigureAwait(false);
+                    "structure_embedding IS NOT NULL", cancellationToken);
 
             // vec_entries_pending/vec_entries_ad need no ctx and are unchanged in shape; dropped
             // and recreated anyway so every trigger on the table comes from one place post-rebuild.
@@ -2474,18 +2337,15 @@ internal static class MemorySchema
                              DELETE FROM vec_entries WHERE rowid = OLD.id;
                          END;
                          """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -2498,22 +2358,18 @@ internal static class MemorySchema
     private static async Task MigrateToV3Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -2528,15 +2384,13 @@ internal static class MemorySchema
         var columns = (await connection.QueryAsync<string>(
                 new CommandDefinition(
                     "SELECT name FROM pragma_table_info('promotion_queue')",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
         if (!columns.Contains("scorer_version"))
         {
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "ALTER TABLE promotion_queue ADD COLUMN scorer_version INTEGER NOT NULL DEFAULT 0",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
         }
     }
 
@@ -2547,8 +2401,7 @@ internal static class MemorySchema
     private static async Task MigrateToV5Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             // 1. Create memory_source table (idempotent via IF NOT EXISTS in Ddl, but the
@@ -2567,8 +2420,7 @@ internal static class MemorySchema
                         CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source
                             ON memory_source(source_type, source_locator, COALESCE(section, ''));
                         """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             // 2. Populate from existing entries (deduplicated by the unique constraint).
             await connection.ExecuteAsync(
@@ -2589,22 +2441,19 @@ internal static class MemorySchema
                         INSERT OR IGNORE INTO memory_source (source_type, source_locator, section)
                         VALUES ('manual', '', NULL);
                         """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             // 3. Add source_id column to entries.
             var columns = (await connection.QueryAsync<string>(
                     new CommandDefinition(
                         "SELECT name FROM pragma_table_info('entries')",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
+                        cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
             if (!columns.Contains("source_id"))
             {
                 await connection.ExecuteAsync(
                         new CommandDefinition(
                             "ALTER TABLE entries ADD COLUMN source_id INTEGER NULL",
-                            cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken: cancellationToken));
             }
 
             // 4. Backfill source_id.
@@ -2623,15 +2472,13 @@ internal static class MemorySchema
                               END
                         );
                         """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             // 5. Verify no NULL source_id remains.
             var nullCount = await connection.ExecuteScalarAsync<long>(
                     new CommandDefinition(
                         "SELECT count(*) FROM entries WHERE source_id IS NULL",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
             if (nullCount > 0)
             {
                 throw new InvalidOperationException(
@@ -2642,8 +2489,7 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                     new CommandDefinition(
                         "CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id)",
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             // 7. Rebuild FTS (same pattern as MigrateToV1Async).
             await connection.ExecuteAsync(
@@ -2678,18 +2524,15 @@ internal static class MemorySchema
                         INSERT INTO entries_fts(rowid, value, source_file, section)
                         SELECT id, value, source_file, section FROM entries;
                         """,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -2699,21 +2542,18 @@ internal static class MemorySchema
         string sourceColumn, string wherePredicate, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
-                new CommandDefinition($"DROP TABLE IF EXISTS {table}", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition($"DROP TABLE IF EXISTS {table}", cancellationToken: cancellationToken));
         await connection.ExecuteAsync(
                 new CommandDefinition(
                     $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT, embedding float[{dimension}] distance_metric=cosine)",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         await connection.ExecuteAsync(
                 new CommandDefinition(
                     $"""
                      INSERT INTO {table}(rowid, ctx, embedding)
                      SELECT id, {MemorySql.ContextKeyExpression("")}, {sourceColumn} FROM entries WHERE {wherePredicate}
                      """,
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
     }
 
     /// <summary>Reads the embedding dimension a vec0 table was declared with, falling back to 384 when the table (or a recognizable declaration) is absent.</summary>
@@ -2723,8 +2563,7 @@ internal static class MemorySchema
         var sql = await connection.ExecuteScalarAsync<string?>(
                 new CommandDefinition(
                     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table",
-                    new { table }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    new { table }, cancellationToken: cancellationToken));
         if (sql is null)
         {
             return DefaultEmbeddingDimension;

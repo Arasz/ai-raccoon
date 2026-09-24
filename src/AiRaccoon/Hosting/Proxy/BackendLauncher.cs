@@ -274,7 +274,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
             string? url = null;
             try
             {
-                while (await pipe.ReadLineAsync().ConfigureAwait(false) is { } line)
+                while (await pipe.ReadLineAsync() is { } line)
                 {
                     if (url is null && TryParseBackendUrl(line) is { } parsed)
                     {

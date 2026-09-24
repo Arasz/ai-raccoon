@@ -31,18 +31,18 @@ public sealed partial class PromotionQueueService(
 
         // Residue sweep first (docs/adr/0026): rows that became shared or were rejected by an
         // earlier discard leave the queue before this pass re-ranks and re-inserts anything.
-        var pruned = await queue.PruneRejectedAsync(projectId, cancellationToken).ConfigureAwait(false);
+        var pruned = await queue.PruneRejectedAsync(projectId, cancellationToken);
         if (pruned > 0)
         {
             metrics.RecordPruned(projectId, pruned);
             Log.Pruned(logger, projectId, pruned);
         }
 
-        var upsert = await queue.UpsertAsync(projectId, candidates, cancellationToken).ConfigureAwait(false);
+        var upsert = await queue.UpsertAsync(projectId, candidates, cancellationToken);
 
-        var cap = await ReadCapAsync(cancellationToken).ConfigureAwait(false);
+        var cap = await ReadCapAsync(cancellationToken);
         var evicted = new List<EvictedRow>();
-        var stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
+        var stats = await queue.GetStatsAsync(cancellationToken);
         while (PromotionCapacityPolicy.NeedsEviction(stats.TotalCount, cap))
         {
             var target = eviction.EvictionTarget(stats.PerProject);
@@ -51,7 +51,7 @@ public sealed partial class PromotionQueueService(
                 break;
             }
 
-            var victim = await queue.EvictVictimAsync(target, cancellationToken).ConfigureAwait(false);
+            var victim = await queue.EvictVictimAsync(target, cancellationToken);
             if (victim is null)
             {
                 break;
@@ -59,13 +59,13 @@ public sealed partial class PromotionQueueService(
 
             evicted.Add(new EvictedRow(target, victim.Hash, victim.Score, EvictionReason));
             metrics.RecordEviction(target, victim.Score, EvictionReason);
-            stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
+            stats = await queue.GetStatsAsync(cancellationToken);
         }
 
         // The final queue is the only honest answer to "did this candidate land?" — UpsertAsync's
         // count cannot tell a refused row from a refreshed one, and this pass's own eviction can
         // remove a row it just inserted.
-        var queued = (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
+        var queued = (await queue.ListAsync(projectId, cancellationToken))
             .Select(r => r.Hash)
             .ToHashSet(StringComparer.Ordinal);
         var notQueued = candidates.Select(c => c.Hash)
@@ -87,13 +87,13 @@ public sealed partial class PromotionQueueService(
 
         // A-F11: a claim left behind by a caller that died or hung mid-ShareAsync would otherwise
         // sit claimed forever — release it back to the queue before this pass drains it.
-        var reclaimed = await queue.ReclaimStaleClaimsAsync(StaleClaimAge, cancellationToken).ConfigureAwait(false);
+        var reclaimed = await queue.ReclaimStaleClaimsAsync(StaleClaimAge, cancellationToken);
         if (reclaimed > 0)
         {
             Log.StaleClaimsReclaimed(logger, reclaimed);
         }
 
-        var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
+        var sharedIndex = await store.GetSharedIndexAsync(cancellationToken);
         // Mutable in-batch copies of the shared index in EXACTLY the formats the classifier uses
         // (whitespace-stripped values, full "shared/<sha256(value)>.md" strings), refreshed after
         // every created share so later rows in this batch classify against what THIS call just wrote.
@@ -109,14 +109,14 @@ public sealed partial class PromotionQueueService(
         {
             // Residue sweep (docs/adr/0026): a row rejected by an earlier discard must not be
             // promotable — the mode flip to promote happens after propose-only queues grew.
-            var pruned = await queue.PruneRejectedAsync(projectId, cancellationToken).ConfigureAwait(false);
+            var pruned = await queue.PruneRejectedAsync(projectId, cancellationToken);
             if (pruned > 0)
             {
                 metrics.RecordPruned(projectId, pruned);
                 Log.Pruned(logger, projectId, pruned);
             }
 
-            var rows = (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
+            var rows = (await queue.ListAsync(projectId, cancellationToken))
                 .Where(r => !minScore.HasValue || r.Score >= minScore.Value)
                 .Take(limit).ToList();
             foreach (var row in rows)
@@ -129,8 +129,7 @@ public sealed partial class PromotionQueueService(
                     // ShareAsync failure below no longer destroys the row: it stays claimed until
                     // either this call finalizes it (success/absorbed/skipped, or a genuinely dead
                     // hash) or ReclaimStaleClaimsAsync releases it back to the queue.
-                    var claimed = await queue.ClaimAsync(projectId, row.Hash, cancellationToken)
-                        .ConfigureAwait(false);
+                    var claimed = await queue.ClaimAsync(projectId, row.Hash, cancellationToken);
                     if (claimed is null)
                     {
                         continue;
@@ -152,8 +151,7 @@ public sealed partial class PromotionQueueService(
                     }
                     else
                     {
-                        var shared = await store.ShareAsync(projectId, row.Hash, cancellationToken)
-                            .ConfigureAwait(false);
+                        var shared = await store.ShareAsync(projectId, row.Hash, cancellationToken);
                         if (shared.Created)
                         {
                             promoted.Add(row.Hash);
@@ -172,7 +170,7 @@ public sealed partial class PromotionQueueService(
 
                     // Resolved one way or another (promoted, absorbed, or a duplicate skip) — the
                     // queue no longer needs this row.
-                    await queue.DiscardAsync(projectId, row.Hash, cancellationToken).ConfigureAwait(false);
+                    await queue.DiscardAsync(projectId, row.Hash, cancellationToken);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -180,7 +178,7 @@ public sealed partial class PromotionQueueService(
                     {
                         // The backing entry is genuinely gone; retrying can never succeed, so this
                         // claim is released permanently rather than left for the stale-claim sweep.
-                        await queue.DiscardAsync(projectId, row.Hash, cancellationToken).ConfigureAwait(false);
+                        await queue.DiscardAsync(projectId, row.Hash, cancellationToken);
                     }
 
                     // Any other failure (locked database, disk full mid-ShareAsync, ...) leaves the
@@ -194,8 +192,8 @@ public sealed partial class PromotionQueueService(
             }
         }
 
-        var remaining = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
-        metrics.RecordSnapshot(remaining, await ReadCapAsync(cancellationToken).ConfigureAwait(false));
+        var remaining = await queue.GetStatsAsync(cancellationToken);
+        metrics.RecordSnapshot(remaining, await ReadCapAsync(cancellationToken));
         foreach (var group in failures.GroupBy(f => f.ProjectId))
         {
             metrics.RecordFailed(group.Key, group.Count());
@@ -210,7 +208,7 @@ public sealed partial class PromotionQueueService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var removed = await queue.DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
+        var removed = await queue.DiscardAsync(projectId, hash, cancellationToken);
         if (removed.Count > 0)
         {
             foreach (var row in removed)
@@ -223,11 +221,10 @@ public sealed partial class PromotionQueueService(
             // (docs/adr/0026). The claim path of PromoteAsync shares this store method and
             // never calls RememberDiscardsAsync — promotions are not rejections.
             await queue.RememberDiscardsAsync(projectId, [.. removed.Select(r => r.Hash)],
-                    cancellationToken)
-                .ConfigureAwait(false);
+                    cancellationToken);
 
-            var stats = await queue.GetStatsAsync(cancellationToken).ConfigureAwait(false);
-            metrics.RecordSnapshot(stats, await ReadCapAsync(cancellationToken).ConfigureAwait(false));
+            var stats = await queue.GetStatsAsync(cancellationToken);
+            metrics.RecordSnapshot(stats, await ReadCapAsync(cancellationToken));
             Log.Discarded(logger, projectId, removed.Count);
         }
 
@@ -241,7 +238,7 @@ public sealed partial class PromotionQueueService(
 
         return
         [
-            .. (await queue.ListAsync(projectId, cancellationToken).ConfigureAwait(false))
+            .. (await queue.ListAsync(projectId, cancellationToken))
             .Take(limit)
         ];
     }
@@ -249,12 +246,12 @@ public sealed partial class PromotionQueueService(
     public async Task<PromotionMeta> GetMetaAsync(string? projectId,
         CancellationToken cancellationToken = default)
     {
-        var stats = await queue.GetWaitStatsAsync(projectId, cancellationToken).ConfigureAwait(false);
+        var stats = await queue.GetWaitStatsAsync(projectId, cancellationToken);
         PromotionCapacityInfo? capacity = null;
         if (projectId is not null && stats.WaitingCount > 0)
         {
             // OccupyingProjects, not the full roster: that's what UniformCountEvictionPolicy competes over.
-            var cap = await ReadCapAsync(cancellationToken).ConfigureAwait(false);
+            var cap = await ReadCapAsync(cancellationToken);
             capacity = PromotionCapacityPolicy.CapacityFor(cap, stats.OccupyingProjects, stats.WaitingCount);
         }
 
@@ -270,8 +267,7 @@ public sealed partial class PromotionQueueService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var cleared = await queue.ClearStaleAsync(projectId, currentScorerVersion, cancellationToken)
-            .ConfigureAwait(false);
+        var cleared = await queue.ClearStaleAsync(projectId, currentScorerVersion, cancellationToken);
         if (cleared > 0)
         {
             Log.StaleCleared(logger, projectId, cleared);
@@ -285,8 +281,7 @@ public sealed partial class PromotionQueueService(
         try
         {
             return ExtractionConfigKeys.ParseQueueCapacity(
-                await store.GetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, cancellationToken)
-                    .ConfigureAwait(false));
+                await store.GetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, cancellationToken));
         }
         catch (Exception ex)
         {

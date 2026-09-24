@@ -162,10 +162,10 @@ public sealed class CodeCorpusFeatureContext : IDisposable
     /// <summary>One reconcile pass + await the catch-up scan it enqueued (mirrors FileWatcherFeatureContext).</summary>
     public async Task ReconcileOnceAsync(CancellationToken cancellationToken = default)
     {
-        await Hosted.ReconcileAsync(cancellationToken).ConfigureAwait(false);
+        await Hosted.ReconcileAsync(cancellationToken);
         if (CatchUp.LastScan is { } scan)
         {
-            await scan.ConfigureAwait(false);
+            await scan;
         }
     }
 
@@ -177,17 +177,17 @@ public sealed class CodeCorpusFeatureContext : IDisposable
     {
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
-            await ReconcileOnceAsync(cancellationToken).ConfigureAwait(false);
-            await Pipeline.TickOnceAsync(cancellationToken).ConfigureAwait(false);
-            if (await condition().ConfigureAwait(false))
+            await ReconcileOnceAsync(cancellationToken);
+            await Pipeline.TickOnceAsync(cancellationToken);
+            if (await condition())
             {
                 return true;
             }
 
-            await Task.Delay(20, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(20, cancellationToken);
         }
 
-        return await condition().ConfigureAwait(false);
+        return await condition();
     }
 
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default) =>

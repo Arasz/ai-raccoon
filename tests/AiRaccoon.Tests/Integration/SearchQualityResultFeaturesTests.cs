@@ -49,8 +49,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return await connection.QuerySingleOrDefaultAsync<string?>(
             new CommandDefinition("SELECT result_features FROM search_quality WHERE correlation_id = @Id",
-                new { Id = correlationId }, cancellationToken: TestContext.Current.CancellationToken))
-            .ConfigureAwait(false);
+                new { Id = correlationId }, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private static IReadOnlyList<RetrievalEvidence> TwoRowEvidence() =>
@@ -72,7 +71,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
 
         var columns = (await connection.QueryAsync<string>(new CommandDefinition(
             "SELECT name FROM pragma_table_info('search_quality')",
-            cancellationToken: TestContext.Current.CancellationToken)).ConfigureAwait(false)).ToList();
+            cancellationToken: TestContext.Current.CancellationToken))).ToList();
         columns.Contains("result_features").ShouldBeTrue(
             "M1: the digest-Ddl change carries the column to fresh banks");
     }
@@ -100,7 +99,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
 
         var columns = (await connection.QueryAsync<string>(new CommandDefinition(
             "SELECT name FROM pragma_table_info('search_quality')",
-            cancellationToken: TestContext.Current.CancellationToken)).ConfigureAwait(false)).ToList();
+            cancellationToken: TestContext.Current.CancellationToken))).ToList();
         columns.Contains("result_features").ShouldBeTrue(
             "the digest-mismatch ensure heals legacy banks with no version bump");
 

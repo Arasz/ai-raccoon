@@ -62,7 +62,7 @@ public sealed partial class EmbedDrainService(
         {
             try
             {
-                await pump.WaitForItemAsync(stoppingToken).ConfigureAwait(false);
+                await pump.WaitForItemAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -85,7 +85,7 @@ public sealed partial class EmbedDrainService(
 
             try
             {
-                await DrainOnceAsync(taken[0], stoppingToken).ConfigureAwait(false);
+                await DrainOnceAsync(taken[0], stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -110,13 +110,12 @@ public sealed partial class EmbedDrainService(
         var startedAt = timeProvider.GetTimestamp();
         try
         {
-            var raw = await settings.GetSettingAsync(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal, cancellationToken)
-                .ConfigureAwait(false);
+            var raw = await settings.GetSettingAsync(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal, cancellationToken);
             var rowsPerRun = ResolveRowsPerRun(raw);
-            await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+            await using var connection = await factory.OpenBankAsync(cancellationToken);
             var drained = request.Corpus == EmbedCorpus.Code
-                ? await codeEmbedder.EmbedPendingBatchAsync(connection, rowsPerRun, cancellationToken).ConfigureAwait(false)
-                : await entryEmbedder.EmbedPendingBatchAsync(connection, rowsPerRun, cancellationToken).ConfigureAwait(false);
+                ? await codeEmbedder.EmbedPendingBatchAsync(connection, rowsPerRun, cancellationToken)
+                : await entryEmbedder.EmbedPendingBatchAsync(connection, rowsPerRun, cancellationToken);
 
             if (drained > 0)
             {

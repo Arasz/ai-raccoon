@@ -207,7 +207,7 @@ public sealed class SearchParametersResolutionTests : IDisposable
         public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default)
         {
             OpenCount++;
-            return await inner.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+            return await inner.OpenBankAsync(cancellationToken);
         }
 
         public Task<bool> MigrateLegacyKeyAsync(CancellationToken cancellationToken = default) =>

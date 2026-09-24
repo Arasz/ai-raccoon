@@ -105,9 +105,8 @@ public sealed class ReplaceHoldsTheLockOnlyForTheWriteTests : IDisposable
             string path, string? context, CancellationToken cancellationToken)
         {
             Entered.TrySetResult();
-            await _release.Task.ConfigureAwait(false);
-            return await inner.IngestFileAsync(connection, projectId, path, context, cancellationToken)
-                .ConfigureAwait(false);
+            await _release.Task;
+            return await inner.IngestFileAsync(connection, projectId, path, context, cancellationToken);
         }
 
         public Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId,

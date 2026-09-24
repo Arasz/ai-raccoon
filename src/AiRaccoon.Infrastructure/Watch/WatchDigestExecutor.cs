@@ -34,7 +34,7 @@ public sealed class WatchDigestExecutor(
         // Bank-write boundary (air-merge: in-flight scans outlive the repair rename holding the
         // loser id — without this fold a post-repair scan resurrects the loser key in watch_files).
         // Marker-gated like the ToolGate choke: unmigrated banks pass through verbatim.
-        if (await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false))
+        if (await migrationGate.IsMigratedAsync(cancellationToken))
         {
             projectId = ProjectIdAliasMap.Default.Fold(projectId);
         }
@@ -45,8 +45,7 @@ public sealed class WatchDigestExecutor(
 
         if (kind == WatchEventKind.Renamed && oldPath is not null)
         {
-            await DeletePathAsync(projectId, normalizedWatch, IngestPath.Normalize(oldPath), cancellationToken)
-                .ConfigureAwait(false);
+            await DeletePathAsync(projectId, normalizedWatch, IngestPath.Normalize(oldPath), cancellationToken);
         }
 
         if (Directory.Exists(normalized))
@@ -59,7 +58,7 @@ public sealed class WatchDigestExecutor(
 
         if (!File.Exists(normalized))
         {
-            await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
+            await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken);
             if (isIgnoreFile)
             {
                 scanInitiator.Value.EnqueueInitialScan(projectId, normalizedWatch);
@@ -68,39 +67,35 @@ public sealed class WatchDigestExecutor(
             return;
         }
 
-        if (!isIgnoreFile && await IsExcludedAsync(projectId, normalizedWatch, normalized, cancellationToken)
-                .ConfigureAwait(false))
+        if (!isIgnoreFile && await IsExcludedAsync(projectId, normalizedWatch, normalized, cancellationToken))
         {
             // Never fingerprinted (a later un-exclude must not hash-skip on unchanged content),
             // never chunked — only stale chunks from before the rule started matching are cleaned.
             // DeleteSourcePathAsync already cascades the fingerprint delete for this exact path
             // (MemorySql.DeleteWatchFilesByProjectPathCascade).
-            await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
+            await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken);
             return;
         }
 
-        var content = await File.ReadAllTextAsync(normalized, cancellationToken).ConfigureAwait(false);
+        var content = await File.ReadAllTextAsync(normalized, cancellationToken);
         var hash = ComputeHash(normalized, content);
-        var previous = await watchStore.GetFileHashAsync(projectId, normalized, cancellationToken)
-            .ConfigureAwait(false);
+        var previous = await watchStore.GetFileHashAsync(projectId, normalized, cancellationToken);
         if (string.Equals(previous, hash, StringComparison.Ordinal))
         {
             // Hash-skip: metadata-only touch — refresh timestamps, never touch memory or hooks.
-            await TouchAsync(projectId, normalizedWatch, normalized, hash, cancellationToken).ConfigureAwait(false);
+            await TouchAsync(projectId, normalizedWatch, normalized, hash, cancellationToken);
             return;
         }
 
         // Delete + re-ingest + fingerprint are one transaction in the store: the pre-check above is
         // only a cheap filter, and a concurrent process either loses the race and skips or, on a
         // crash mid-digest, rolls back — the file is never left chunkless behind a matching hash.
-        var replaceResult = await store.ReplaceIfFileChangedAsync(projectId, normalized, hash, cancellationToken)
-            .ConfigureAwait(false);
+        var replaceResult = await store.ReplaceIfFileChangedAsync(projectId, normalized, hash, cancellationToken);
         // Signals whichever corpus the replace actually wrote to; rows stay embed_state='pending'
         // (the durable outbox, ADR-0076) until EmbedDrainService's single reader drains them.
         embedDrainPump.SignalWritten(replaceResult.Corpus);
 
-        await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken)
-            .ConfigureAwait(false);
+        await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken);
 
         if (isIgnoreFile)
         {
@@ -123,8 +118,7 @@ public sealed class WatchDigestExecutor(
             return true;
         }
 
-        var ignoreRules = await ignoreRulesProvider.LoadAsync(normalizedWatch, cancellationToken)
-            .ConfigureAwait(false);
+        var ignoreRules = await ignoreRulesProvider.LoadAsync(normalizedWatch, cancellationToken);
         return ignoreRules.HasRules &&
                ignoreRules.IsIgnored(Path.GetRelativePath(normalizedWatch, normalized), false);
     }
@@ -135,15 +129,15 @@ public sealed class WatchDigestExecutor(
     private async Task DeletePathAsync(string projectId, string watchPath, string path,
         CancellationToken cancellationToken)
     {
-        await store.DeleteSourcePathAsync(projectId, path, cancellationToken).ConfigureAwait(false);
-        await watchStore.UpdateLastChangeAsync(projectId, watchPath, Now(), cancellationToken).ConfigureAwait(false);
+        await store.DeleteSourcePathAsync(projectId, path, cancellationToken);
+        await watchStore.UpdateLastChangeAsync(projectId, watchPath, Now(), cancellationToken);
     }
 
     private async Task TouchAsync(string projectId, string watchPath, string path, string hash,
         CancellationToken cancellationToken)
     {
-        await watchStore.UpsertFileHashAsync(projectId, path, hash, Now(), cancellationToken).ConfigureAwait(false);
-        await watchStore.UpdateLastChangeAsync(projectId, watchPath, Now(), cancellationToken).ConfigureAwait(false);
+        await watchStore.UpsertFileHashAsync(projectId, path, hash, Now(), cancellationToken);
+        await watchStore.UpdateLastChangeAsync(projectId, watchPath, Now(), cancellationToken);
     }
 
     private long Now() => timeProvider.GetUtcNow().ToUnixTimeSeconds();

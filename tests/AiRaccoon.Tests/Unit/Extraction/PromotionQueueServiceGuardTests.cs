@@ -97,7 +97,7 @@ public sealed class PromotionQueueServiceGuardTests
         /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>
         public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
-            (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
+            (await DiscardAsync(projectId, hash, cancellationToken)).SingleOrDefault();
         public Task<UpsertOutcome> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -148,7 +148,7 @@ public sealed class PromotionQueueServiceGuardTests
         /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>
         public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
-            (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
+            (await DiscardAsync(projectId, hash, cancellationToken)).SingleOrDefault();
         public Task<UpsertOutcome> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

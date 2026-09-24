@@ -30,16 +30,14 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        var (maxTokens, overlayTokens, countTokens) = await _scanner.BudgetAsync(connection, cancellationToken)
-            .ConfigureAwait(false);
+        var (maxTokens, overlayTokens, countTokens) = await _scanner.BudgetAsync(connection, cancellationToken);
 
         var groups = (await connection.QueryAsync<GroupKey>(new CommandDefinition(
                 $"""
                  SELECT DISTINCT {MemorySql.ContextKeyExpression("")} AS Ctx, source_file AS SourceFile
                  FROM entries
                  WHERE source_file IS NOT NULL
-                 """, cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).ToList();
+                 """, cancellationToken: cancellationToken))).ToList();
 
         var groupsExamined = 0;
         var repositioned = 0;
@@ -55,8 +53,7 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
                      SELECT id AS Id, hash AS Hash, chunk_index AS ChunkIndex, section AS Section
                      FROM entries
                      WHERE source_file = @sourceFile AND ({MemorySql.ContextKeyExpression("")}) = @ctx
-                     """, new { sourceFile = group.SourceFile, ctx = group.Ctx }, cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                     """, new { sourceFile = group.SourceFile, ctx = group.Ctx }, cancellationToken: cancellationToken))).ToList();
             var totalChunks = rows.Count;
 
             var scan = _scanner.Scan(group.SourceFile, rows.Select(row => new StoredChunk(row.Id, row.Hash)).ToList(),
@@ -85,8 +82,7 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
                     // comment 3838133861) — keep what it already had rather than clearing it.
                     var section = newIndex < 0 ? row.Section : scan.SectionById[row.Id];
                     await connection.ExecuteAsync(new CommandDefinition(MemorySql.SetChunkPosition,
-                            new { id = row.Id, chunkIndex = newIndex, totalChunks, section }, cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
+                            new { id = row.Id, chunkIndex = newIndex, totalChunks, section }, cancellationToken: cancellationToken));
                 }
             }
         }

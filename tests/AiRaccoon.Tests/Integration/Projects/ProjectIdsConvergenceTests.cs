@@ -391,17 +391,17 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
 
         public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null)
         {
-            await inner.RequestRepairAsync(kind, cancellationToken, projectIdsMapJson).ConfigureAwait(false);
+            await inner.RequestRepairAsync(kind, cancellationToken, projectIdsMapJson);
             RequestCalls++;
-            await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+            await using var connection = await factory.OpenBankAsync(cancellationToken);
             await new ProjectIdsRepairJob(matcher, TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow))
-                .RunAsync(connection, cancellationToken).ConfigureAwait(false);
-            await store.EmbedPendingAsync(Winner, null, cancellationToken).ConfigureAwait(false);
-            await store.EmbedPendingAsync(SharedLoser, null, cancellationToken).ConfigureAwait(false);
+                .RunAsync(connection, cancellationToken);
+            await store.EmbedPendingAsync(Winner, null, cancellationToken);
+            await store.EmbedPendingAsync(SharedLoser, null, cancellationToken);
             Drains++;
             if (RequestCalls == 1)
             {
-                await afterFirstApplyAsync(cancellationToken).ConfigureAwait(false);
+                await afterFirstApplyAsync(cancellationToken);
             }
         }
 

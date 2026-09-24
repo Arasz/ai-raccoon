@@ -31,14 +31,14 @@ public sealed class CodeIngestor(
         var normalizedPath = IngestPath.Normalize(path);
         if (scope is null)
         {
-            await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
+            await RequireInScopeAsync(connection, projectId, path, cancellationToken);
         }
         else if (!scope.Any(entry => IngestPath.IsWithinScope(normalizedPath, entry)))
         {
             throw new PathOutsideScopeException(normalizedPath);
         }
 
-        var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        var content = await File.ReadAllTextAsync(path, cancellationToken);
         if (BinaryContent.IsBinary(content))
         {
             return new CodeIngestResult(0, true, []);
@@ -61,8 +61,7 @@ public sealed class CodeIngestor(
             hashes.Add(hash);
             var existingId = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.SelectCodeChunkIdByPathAndHash,
-                        new { projectId, path = normalizedPath, hash }, cancellationToken))
-                .ConfigureAwait(false);
+                        new { projectId, path = normalizedPath, hash }, cancellationToken));
 
             if (existingId is not null)
             {
@@ -72,10 +71,13 @@ public sealed class CodeIngestor(
                         Def(MemorySql.UpdateCodeChunkPosition,
                             new
                             {
-                                id = existingId.Value, lineStart = chunk.LineStart, lineEnd = chunk.LineEnd,
-                                chunkIndex = ordinal, totalChunks = chunks.Count, updatedAt = now
-                            }, cancellationToken))
-                    .ConfigureAwait(false);
+                                id = existingId.Value,
+                                lineStart = chunk.LineStart,
+                                lineEnd = chunk.LineEnd,
+                                chunkIndex = ordinal,
+                                totalChunks = chunks.Count,
+                                updatedAt = now
+                            }, cancellationToken));
                 continue;
             }
 
@@ -83,19 +85,25 @@ public sealed class CodeIngestor(
                     Def(MemorySql.InsertCodeEntry,
                         new
                         {
-                            hash, path = normalizedPath, value = chunk.Text, sourceFile = normalizedPath,
-                            lineStart = chunk.LineStart, lineEnd = chunk.LineEnd, projectId,
-                            createdAt = now, updatedAt = now, chunkIndex = ordinal, totalChunks = chunks.Count,
+                            hash,
+                            path = normalizedPath,
+                            value = chunk.Text,
+                            sourceFile = normalizedPath,
+                            lineStart = chunk.LineStart,
+                            lineEnd = chunk.LineEnd,
+                            projectId,
+                            createdAt = now,
+                            updatedAt = now,
+                            chunkIndex = ordinal,
+                            totalChunks = chunks.Count,
                             identifiers = IdentifierSplitter.Identifiers(chunk.Text)
-                        }, cancellationToken))
-                .ConfigureAwait(false);
+                        }, cancellationToken));
 
             // Post-conflict re-read (FileIngestor.cs ~167-184's shape): a concurrent ingest may
             // have won the ON CONFLICT DO NOTHING race, so re-read rather than trust the insert.
             var newId = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.SelectCodeChunkIdByPathAndHash,
-                        new { projectId, path = normalizedPath, hash }, cancellationToken))
-                .ConfigureAwait(false);
+                        new { projectId, path = normalizedPath, hash }, cancellationToken));
             if (newId is null)
             {
                 continue;
@@ -110,7 +118,7 @@ public sealed class CodeIngestor(
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
     {
-        var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
+        var scope = await ReadScopeAsync(connection, projectId, cancellationToken);
         var normalized = IngestPath.Normalize(path);
         if (!scope.Any(entry => IngestPath.IsWithinScope(normalized, entry)))
         {
@@ -121,18 +129,15 @@ public sealed class CodeIngestor(
     private static async Task<IReadOnlyList<string>> ReadScopeAsync(SqliteConnection connection, string projectId,
         CancellationToken cancellationToken) =>
         IngestScopeKeys.Parse(
-            await ReadSettingAsync(connection, IngestScopeKeys.ScopeProject(projectId), cancellationToken)
-                .ConfigureAwait(false))
+            await ReadSettingAsync(connection, IngestScopeKeys.ScopeProject(projectId), cancellationToken))
         ?? IngestScopeKeys.Parse(
-            await ReadSettingAsync(connection, IngestScopeKeys.ScopeGlobal, cancellationToken)
-                .ConfigureAwait(false))
+            await ReadSettingAsync(connection, IngestScopeKeys.ScopeGlobal, cancellationToken))
         ?? [];
 
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
         CancellationToken cancellationToken) =>
         await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key }, cancellationToken))
-            .ConfigureAwait(false);
+                Def(MemorySql.SelectSetting, new { key }, cancellationToken));
 
     private static bool IsHidden(string path) => Path.GetFileName(path).StartsWith('.');
 

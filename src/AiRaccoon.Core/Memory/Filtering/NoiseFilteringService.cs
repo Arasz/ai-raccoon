@@ -11,7 +11,7 @@ public sealed class NoiseFilteringService(IEnumerable<INoiseFilterPolicy> polici
     {
         foreach (var policy in policies)
         {
-            var result = await policy.EvaluateAsync(request, cancellationToken).ConfigureAwait(false);
+            var result = await policy.EvaluateAsync(request, cancellationToken);
             if (result.IsNoise)
             {
                 return result;

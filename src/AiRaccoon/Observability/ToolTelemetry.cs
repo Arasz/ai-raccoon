@@ -61,9 +61,9 @@ internal static class ToolTelemetry
             var timeProvider = request.Services?.GetService<TimeProvider>();
             var migrationGate = request.Services?.GetService<IProjectIdsMigrationGate>();
             return metrics is null
-                ? await next(request, cancellationToken).ConfigureAwait(false)
+                ? await next(request, cancellationToken)
                 : await RecordAsync(metrics, request.Params?.Name ?? string.Empty, request.Params?.Arguments,
-                    token => next(request, token), cancellationToken, recorder, timeProvider, migrationGate).ConfigureAwait(false);
+                    token => next(request, token), cancellationToken, recorder, timeProvider, migrationGate);
         };
 
     /// <summary>
@@ -78,11 +78,11 @@ internal static class ToolTelemetry
         IProjectIdsMigrationGate? migrationGate = null)
     {
         var project = ProjectFor(toolName, arguments);
-        var bankProjectId = await BankProjectIdAsync(migrationGate, project.SpanId, cancellationToken).ConfigureAwait(false);
+        var bankProjectId = await BankProjectIdAsync(migrationGate, project.SpanId, cancellationToken);
         using var activity = new ToolExecutionActivity(metrics, toolName, project.SpanId, project.MetricId, recorder, timeProvider, bankProjectId);
         try
         {
-            var result = await next(cancellationToken).ConfigureAwait(false);
+            var result = await next(cancellationToken);
             activity.RecordInvocation();
             return result;
         }
@@ -116,7 +116,7 @@ internal static class ToolTelemetry
                 return ProjectIdAliasMap.Default.Fold(spanId);
             }
 
-            if (!await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false))
+            if (!await migrationGate.IsMigratedAsync(cancellationToken))
             {
                 return spanId;
             }

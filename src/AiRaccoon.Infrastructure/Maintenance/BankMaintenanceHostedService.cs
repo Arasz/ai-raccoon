@@ -86,7 +86,7 @@ public sealed partial class BankMaintenanceHostedService(
         // always asks each job's HasWorkAsync, regardless of any cadence or poll interval below.
         try
         {
-            await RunOnceAsync(stoppingToken).ConfigureAwait(false);
+            await RunOnceAsync(stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -101,7 +101,7 @@ public sealed partial class BankMaintenanceHostedService(
             Ticks.Increment();
         }
 
-        using var timer = new PeriodicTimer(await ReadCheckpointIntervalSafeAsync(stoppingToken).ConfigureAwait(false),
+        using var timer = new PeriodicTimer(await ReadCheckpointIntervalSafeAsync(stoppingToken),
             timeProvider);
         TimerArmed.Increment();
 
@@ -111,7 +111,7 @@ public sealed partial class BankMaintenanceHostedService(
         // the same one invoked more often for the jobs that want that (ADR-0076).
         await Task.WhenAll(
             RunHeavyPassLoopAsync(timer, stoppingToken),
-            RunOnDemandPollLoopAsync(stoppingToken)).ConfigureAwait(false);
+            RunOnDemandPollLoopAsync(stoppingToken));
     }
 
     private async Task RunHeavyPassLoopAsync(PeriodicTimer timer, CancellationToken stoppingToken)
@@ -120,7 +120,7 @@ public sealed partial class BankMaintenanceHostedService(
         {
             try
             {
-                await RunOnceAsync(stoppingToken).ConfigureAwait(false);
+                await RunOnceAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -136,7 +136,7 @@ public sealed partial class BankMaintenanceHostedService(
             }
 
             // Re-read the interval so config changes apply without a restart.
-            timer.Period = await ReadCheckpointIntervalSafeAsync(stoppingToken).ConfigureAwait(false);
+            timer.Period = await ReadCheckpointIntervalSafeAsync(stoppingToken);
             IntervalReReads.Increment();
         }
     }
@@ -160,8 +160,8 @@ public sealed partial class BankMaintenanceHostedService(
         {
             try
             {
-                await using var connection = await factory.OpenBankAsync(stoppingToken).ConfigureAwait(false);
-                await _jobRunner.RunDueAsync(connection, _jobs, stoppingToken).ConfigureAwait(false);
+                await using var connection = await factory.OpenBankAsync(stoppingToken);
+                await _jobRunner.RunDueAsync(connection, _jobs, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -186,14 +186,14 @@ public sealed partial class BankMaintenanceHostedService(
     {
         try
         {
-            await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+            await using var connection = await factory.OpenBankAsync(cancellationToken);
             try
             {
-                await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
+                await RunCheckpointAsync(connection, cancellationToken);
             }
             finally
             {
-                await RestoreBusyTimeoutAsync(connection, CancellationToken.None).ConfigureAwait(false);
+                await RestoreBusyTimeoutAsync(connection, CancellationToken.None);
             }
         }
         catch (Exception ex)
@@ -210,7 +210,7 @@ public sealed partial class BankMaintenanceHostedService(
         using var pass = telemetry.Begin(OperationName);
         try
         {
-            await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
+            await RunPassAsync(pass, cancellationToken);
             pass.Succeeded();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -229,12 +229,12 @@ public sealed partial class BankMaintenanceHostedService(
         // Hourly-or-slower cadence (WP13 span-volume fix): spanning every pass costs nothing here,
         // so every pass is worth reading rather than distinguishing checkpoint-only from vacuumed.
         pass.NoteWork();
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         try
         {
-            await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
-            await PurgeExpiredNoiseEntriesAsync(cancellationToken).ConfigureAwait(false);
-            await PurgeExpiredRetentionAsync(connection, cancellationToken).ConfigureAwait(false);
+            await RunCheckpointAsync(connection, cancellationToken);
+            await PurgeExpiredNoiseEntriesAsync(cancellationToken);
+            await PurgeExpiredRetentionAsync(connection, cancellationToken);
 
             // Scheduling moved into MaintenanceJobRunner and the bank's maintenance_jobs ledger
             // (ADR-0070). The clock it replaces was the _lastVacuumUtc field below, seeded on first
@@ -248,20 +248,20 @@ public sealed partial class BankMaintenanceHostedService(
             // second sweep here.
             var outcomes = _jobRunner is null
                 ? []
-                : await _jobRunner.RunDueAsync(connection, _jobs, cancellationToken).ConfigureAwait(false);
+                : await _jobRunner.RunDueAsync(connection, _jobs, cancellationToken);
             if (outcomes.Any(o => o.Ran))
             {
                 pass.Tag("jobs.ran", string.Join(',', outcomes.Where(o => o.Ran).Select(o => o.Name)));
 
                 // A VACUUM rewrites the whole file through the WAL; truncate it now, not next tick.
-                await RunCheckpointAsync(connection, cancellationToken).ConfigureAwait(false);
+                await RunCheckpointAsync(connection, cancellationToken);
             }
         }
         finally
         {
             // The connection returns to the pool: restore the factory's busy timeout so a
             // future borrower never inherits the maintenance connection's short one.
-            await RestoreBusyTimeoutAsync(connection, CancellationToken.None).ConfigureAwait(false);
+            await RestoreBusyTimeoutAsync(connection, CancellationToken.None);
         }
     }
 
@@ -276,13 +276,13 @@ public sealed partial class BankMaintenanceHostedService(
         await using (var busy = connection.CreateCommand())
         {
             busy.CommandText = $"PRAGMA busy_timeout={CheckpointBusyTimeoutMs}";
-            await busy.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await busy.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await using var command = connection.CreateCommand();
         command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE)";
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
         var busyFrames = reader.GetInt32(0);
         if (busyFrames > 0)
         {
@@ -306,9 +306,9 @@ public sealed partial class BankMaintenanceHostedService(
 
             var discardDays = await ReadIntervalAsync(connection,
                 BankMaintenanceConfigKeys.PromotionDiscardRetentionDaysGlobal,
-                BankMaintenanceConfigKeys.ParsePromotionDiscardRetentionDays, cancellationToken).ConfigureAwait(false);
+                BankMaintenanceConfigKeys.ParsePromotionDiscardRetentionDays, cancellationToken);
             var discards = await promotionQueueStore
-                .PurgeOldDiscardsAsync(now, discardDays, cancellationToken).ConfigureAwait(false);
+                .PurgeOldDiscardsAsync(now, discardDays, cancellationToken);
             if (discards > 0)
             {
                 Log.PromotionDiscardsPurged(logger, discards, discardDays);
@@ -316,9 +316,9 @@ public sealed partial class BankMaintenanceHostedService(
 
             var qualityDays = await ReadIntervalAsync(connection,
                 BankMaintenanceConfigKeys.SearchQualityRetentionDaysGlobal,
-                BankMaintenanceConfigKeys.ParseSearchQualityRetentionDays, cancellationToken).ConfigureAwait(false);
+                BankMaintenanceConfigKeys.ParseSearchQualityRetentionDays, cancellationToken);
             var quality = await searchQuality
-                .PurgeOlderThanAsync(now, qualityDays, cancellationToken).ConfigureAwait(false);
+                .PurgeOlderThanAsync(now, qualityDays, cancellationToken);
             if (quality > 0)
             {
                 Log.SearchQualityPurged(logger, quality, qualityDays);
@@ -344,7 +344,7 @@ public sealed partial class BankMaintenanceHostedService(
         try
         {
             var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-            var purged = await noiseEntryStore.PurgeExpiredAsync(now, cancellationToken).ConfigureAwait(false);
+            var purged = await noiseEntryStore.PurgeExpiredAsync(now, cancellationToken);
             if (purged > 0)
             {
                 Log.NoiseEntriesPurged(logger, purged);
@@ -365,17 +365,17 @@ public sealed partial class BankMaintenanceHostedService(
     {
         await using var busy = connection.CreateCommand();
         busy.CommandText = "PRAGMA busy_timeout=5000";
-        await busy.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await busy.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private async Task<TimeSpan> ReadCheckpointIntervalSafeAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+            await using var connection = await factory.OpenBankAsync(cancellationToken);
             var minutes = await ReadIntervalAsync(connection,
                 BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal,
-                BankMaintenanceConfigKeys.ParseCheckpointIntervalMinutes, cancellationToken).ConfigureAwait(false);
+                BankMaintenanceConfigKeys.ParseCheckpointIntervalMinutes, cancellationToken);
             return TimeSpan.FromMinutes(minutes);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -395,7 +395,7 @@ public sealed partial class BankMaintenanceHostedService(
         try
         {
             return await ReadIntervalAsync(connection, BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal,
-                BankMaintenanceConfigKeys.ParseVacuumIntervalDays, cancellationToken).ConfigureAwait(false);
+                BankMaintenanceConfigKeys.ParseVacuumIntervalDays, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -414,7 +414,7 @@ public sealed partial class BankMaintenanceHostedService(
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT value FROM settings WHERE key = @key LIMIT 1";
         command.Parameters.AddWithValue("@key", key);
-        return parse(Convert.ToString(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)));
+        return parse(Convert.ToString(await command.ExecuteScalarAsync(cancellationToken)));
     }
 
     private static partial class Log

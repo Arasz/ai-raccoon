@@ -80,12 +80,12 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
 
             try
             {
-                await process.WaitForExitAsync(linkedCts.Token).ConfigureAwait(false);
+                await process.WaitForExitAsync(linkedCts.Token);
             }
             catch (OperationCanceledException)
             {
                 TryKill(process);
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                await process.WaitForExitAsync(CancellationToken.None);
                 if (timeoutCts.IsCancellationRequested)
                 {
                     throw new BwsInvocationException(BwsFailure.TimedOut, $"bws timed out after {(int)timeout.TotalSeconds}s");
@@ -94,8 +94,8 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
                 throw; // the caller's own token cancelled the run — propagate as-is
             }
 
-            var stdout = await stdoutTask.ConfigureAwait(false);
-            var stderr = await stderrTask.ConfigureAwait(false);
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
 
             if (process.ExitCode == 0 && string.IsNullOrWhiteSpace(stdout))
             {

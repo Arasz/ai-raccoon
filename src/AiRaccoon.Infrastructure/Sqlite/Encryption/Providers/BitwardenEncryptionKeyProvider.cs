@@ -27,7 +27,7 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
         }
 
         var result = await cliSecretManager.RunAsync(["secret", "get", encryptionData.SecretId], null, FetchTimeout,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
 
         if (result.ExitCode != 0)
         {

@@ -17,7 +17,7 @@ public sealed partial class EmbeddingAvailability(ILogger<EmbeddingAvailability>
         cts.CancelAfter(Timeout);
         try
         {
-            var result = await bundledModel.EnsureAsync(cts.Token).ConfigureAwait(false);
+            var result = await bundledModel.EnsureAsync(cts.Token);
             if (!result.AllPresent)
             {
                 Log.BundledEmbedingModuleUnavailable(logger, string.Join("; ", result.Errors));

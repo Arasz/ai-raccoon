@@ -101,7 +101,7 @@ public sealed partial class WatchCatchUp(
     private async Task ScanCoreAsync(string projectId, string path, long? sinceWatermark,
         CancellationToken cancellationToken)
     {
-        if (!await scanLease.TryAcquireAsync(projectId, path, cancellationToken).ConfigureAwait(false))
+        if (!await scanLease.TryAcquireAsync(projectId, path, cancellationToken))
         {
             return;
         }
@@ -112,9 +112,8 @@ public sealed partial class WatchCatchUp(
             var watermark = sinceWatermark;
             for (var attempt = 0; attempt < MaxRescanAttempts; attempt++)
             {
-                var ignoreRules = await ignoreRulesProvider.LoadAsync(path, cancellationToken).ConfigureAwait(false);
-                if (!await RunOnePassAsync(projectId, path, watermark, ignoreRules, cancellationToken)
-                        .ConfigureAwait(false))
+                var ignoreRules = await ignoreRulesProvider.LoadAsync(path, cancellationToken);
+                if (!await RunOnePassAsync(projectId, path, watermark, ignoreRules, cancellationToken))
                 {
                     // Lease lost mid-pass — already logged and released by RunOnePassAsync's caller contract.
                     return;
@@ -123,7 +122,7 @@ public sealed partial class WatchCatchUp(
                 // Re-read at the end of the pass: a mid-scan ignore-file edit must apply before the
                 // scan chain settles, without any new WatchScanGuard queue state (pinned H10) — the
                 // running scan simply redoes its own walk, full (watermark null), with fresh rules.
-                var reread = await ignoreRulesProvider.LoadAsync(path, cancellationToken).ConfigureAwait(false);
+                var reread = await ignoreRulesProvider.LoadAsync(path, cancellationToken);
                 if (reread == ignoreRules)
                 {
                     break;
@@ -144,7 +143,7 @@ public sealed partial class WatchCatchUp(
         {
             // Never with the scan's own (possibly cancelled) token: a cancelled release would
             // never happen, parking the lease for a full TTL on every removal.
-            await scanLease.ReleaseAsync(projectId, path, CancellationToken.None).ConfigureAwait(false);
+            await scanLease.ReleaseAsync(projectId, path, CancellationToken.None);
         }
     }
 
@@ -154,7 +153,7 @@ public sealed partial class WatchCatchUp(
     {
         var fingerprinted = sinceWatermark is null
             ? (IReadOnlySet<string>)new HashSet<string>()
-            : (await watchStore.ListFilesAsync(projectId, cancellationToken).ConfigureAwait(false))
+            : (await watchStore.ListFilesAsync(projectId, cancellationToken))
             .ToHashSet(IngestPath.PathComparer);
         var nextRenew = timeProvider.GetUtcNow() + SqliteWatchScanLease.HeartbeatInterval;
         foreach (var file in EnumerateFiles(path, sinceWatermark, fingerprinted, ignoreRules))
@@ -165,7 +164,7 @@ public sealed partial class WatchCatchUp(
             var now = timeProvider.GetUtcNow();
             if (now >= nextRenew)
             {
-                if (!await scanLease.TryRenewAsync(projectId, path, cancellationToken).ConfigureAwait(false))
+                if (!await scanLease.TryRenewAsync(projectId, path, cancellationToken))
                 {
                     Log.ScanLeaseLost(logger, path);
                     return false;
@@ -177,7 +176,7 @@ public sealed partial class WatchCatchUp(
             pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Created));
         }
 
-        await ReconcileAsync(projectId, path, ignoreRules, cancellationToken).ConfigureAwait(false);
+        await ReconcileAsync(projectId, path, ignoreRules, cancellationToken);
         return true;
     }
 
@@ -190,7 +189,7 @@ public sealed partial class WatchCatchUp(
     private async Task ReconcileAsync(string projectId, string watchPath, IgnoreRules ignoreRules,
         CancellationToken cancellationToken)
     {
-        foreach (var file in await watchStore.ListFilesAsync(projectId, cancellationToken).ConfigureAwait(false))
+        foreach (var file in await watchStore.ListFilesAsync(projectId, cancellationToken))
         {
             if (!IngestPath.IsWithinScope(file, watchPath))
             {

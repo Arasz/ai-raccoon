@@ -87,7 +87,7 @@ public partial class SyncService(
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             $"SELECT COUNT(*) FROM {schema}.sqlite_master WHERE type = 'table' AND name = 'project_id_aliases'";
-        return (long)(await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))! > 0;
+        return (long)(await cmd.ExecuteScalarAsync(cancellationToken))! > 0;
     }
 
     /// <summary>
@@ -101,7 +101,7 @@ public partial class SyncService(
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}', '{schema}') WHERE name = @column";
         cmd.Parameters.AddWithValue("@column", column);
-        return (long)(await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))! > 0;
+        return (long)(await cmd.ExecuteScalarAsync(cancellationToken))! > 0;
     }
 
     /// <summary>
@@ -119,8 +119,8 @@ public partial class SyncService(
             WHERE COALESCE(l.winner, '') <> COALESCE(r.winner, '') OR l.kind <> r.kind
             LIMIT 1
             """;
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (await reader.ReadAsync(cancellationToken))
         {
             throw new SyncAliasConflictException(
                 reader.GetString(0),
@@ -145,10 +145,10 @@ public partial class SyncService(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         var key = string.IsNullOrWhiteSpace(objectKey) ? $"memory-{projectId}.db" : objectKey;
 
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _gate.WaitAsync(cancellationToken);
         try
         {
-            return await SyncCycleAsync(projectId, key, cancellationToken).ConfigureAwait(false);
+            return await SyncCycleAsync(projectId, key, cancellationToken);
         }
         finally
         {
@@ -161,7 +161,7 @@ public partial class SyncService(
     {
         // The cloud store is resolved per call from the current settings rows — `sync add/remove`
         // take effect without a restart.
-        var cloud = await resolveCloud(cancellationToken).ConfigureAwait(false);
+        var cloud = await resolveCloud(cancellationToken);
 
         // Fail fast, before any local VACUUM/read work: an unconfigured sync is guaranteed to
         // fail on push anyway (NullCloudStore.PushAsync throws), so there is no reason to touch
@@ -175,22 +175,22 @@ public partial class SyncService(
         var localSnapshot = Path.GetTempFileName();
         try
         {
-            await using (var conn = await openBank(cancellationToken).ConfigureAwait(false))
+            await using (var conn = await openBank(cancellationToken))
             {
                 await using var cmd = conn.CreateCommand();
                 cmd.CommandText = $"VACUUM INTO '{localSnapshot}'";
-                await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
 
-            await StripNonSyncableAsync(localSnapshot, cancellationToken).ConfigureAwait(false);
+            await StripNonSyncableAsync(localSnapshot, cancellationToken);
 
             // 2. Integrity check on the snapshot.
-            await EnsureSnapshotIntegrityAsync(localSnapshot, "Local", cancellationToken).ConfigureAwait(false);
+            await EnsureSnapshotIntegrityAsync(localSnapshot, "Local", cancellationToken);
 
-            var snapshotBytes = await File.ReadAllBytesAsync(localSnapshot, cancellationToken).ConfigureAwait(false);
+            var snapshotBytes = await File.ReadAllBytesAsync(localSnapshot, cancellationToken);
 
             // 3. Pull the remote snapshot.
-            var remote = await cloud.PullAsync(objectKey, cancellationToken).ConfigureAwait(false);
+            var remote = await cloud.PullAsync(objectKey, cancellationToken);
 
             var sent = 0;
             var received = 0;
@@ -200,22 +200,22 @@ public partial class SyncService(
             if (remote is not null)
             {
                 // Remote exists — ATTACH and merge.
-                (received, reindexed) = await MergeRemoteAsync(cloud, objectKey, projectId, remote.Data, cancellationToken).ConfigureAwait(false);
+                (received, reindexed) = await MergeRemoteAsync(cloud, objectKey, projectId, remote.Data, cancellationToken);
                 // Re-read the merged local bank as the new snapshot.
                 var mergedPath = Path.GetTempFileName();
                 try
                 {
-                    await WaitForWalCheckpointAsync(cancellationToken).ConfigureAwait(false);
-                    await using (var conn = await openBank(cancellationToken).ConfigureAwait(false))
+                    await WaitForWalCheckpointAsync(cancellationToken);
+                    await using (var conn = await openBank(cancellationToken))
                     {
                         await using var cmd = conn.CreateCommand();
                         cmd.CommandText = $"VACUUM INTO '{mergedPath}'";
-                        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        await cmd.ExecuteNonQueryAsync(cancellationToken);
                     }
 
-                    await StripNonSyncableAsync(mergedPath, cancellationToken).ConfigureAwait(false);
-                    await EnsureSnapshotIntegrityAsync(mergedPath, "Merged", cancellationToken).ConfigureAwait(false);
-                    snapshotBytes = await File.ReadAllBytesAsync(mergedPath, cancellationToken).ConfigureAwait(false);
+                    await StripNonSyncableAsync(mergedPath, cancellationToken);
+                    await EnsureSnapshotIntegrityAsync(mergedPath, "Merged", cancellationToken);
+                    snapshotBytes = await File.ReadAllBytesAsync(mergedPath, cancellationToken);
                 }
                 finally
                 {
@@ -237,23 +237,22 @@ public partial class SyncService(
                     // CAS push — there is no window between two writes for a torn publish (a
                     // network blip, or a losing device's concurrent push) to leave a new blob
                     // paired with a stale or missing tag.
-                    var passphrase = await ReadPassphraseAsync(cancellationToken).ConfigureAwait(false);
+                    var passphrase = await ReadPassphraseAsync(cancellationToken);
                     var uploadBytes = string.IsNullOrEmpty(passphrase)
                         ? snapshotBytes
                         : _authenticator.Wrap(passphrase, snapshotBytes);
 
-                    var newETag = await cloud.PushAsync(objectKey, uploadBytes, pushETag, cancellationToken)
-                        .ConfigureAwait(false);
+                    var newETag = await cloud.PushAsync(objectKey, uploadBytes, pushETag, cancellationToken);
 
                     // Record the ETag watermark and, on an encrypted bank, the authenticity
                     // watermark (sync_auth_seen) — same connection, one read of the passphrase
                     // already done above.
-                    await using (var conn = await openBank(cancellationToken).ConfigureAwait(false))
+                    await using (var conn = await openBank(cancellationToken))
                     {
                         await using var upsert = conn.CreateCommand();
                         upsert.CommandText = "INSERT INTO sync_meta (key, value) VALUES ('last_etag', @value) ON CONFLICT(key) DO UPDATE SET value = excluded.value";
                         upsert.Parameters.AddWithValue("@value", newETag);
-                        await upsert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        await upsert.ExecuteNonQueryAsync(cancellationToken);
 
                         if (string.IsNullOrEmpty(passphrase))
                         {
@@ -261,7 +260,7 @@ public partial class SyncService(
                         }
                         else
                         {
-                            await MarkAuthTagSeenAsync(conn, objectKey, cancellationToken).ConfigureAwait(false);
+                            await MarkAuthTagSeenAsync(conn, objectKey, cancellationToken);
                         }
                     }
 
@@ -271,28 +270,27 @@ public partial class SyncService(
                 catch (SyncConflictException) when (attempt < MaxPushRetries)
                 {
                     // Re-pull and re-merge.
-                    remote = await cloud.PullAsync(objectKey, cancellationToken).ConfigureAwait(false);
+                    remote = await cloud.PullAsync(objectKey, cancellationToken);
                     remoteETag = remote?.ETag;
                     pushETag = remoteETag;
                     if (remote is not null)
                     {
-                        (received, reindexed) = await MergeRemoteAsync(cloud, objectKey, projectId, remote.Data, cancellationToken)
-                            .ConfigureAwait(false);
+                        (received, reindexed) = await MergeRemoteAsync(cloud, objectKey, projectId, remote.Data, cancellationToken);
                         // Re-read merged snapshot.
                         var retryPath = Path.GetTempFileName();
                         try
                         {
-                            await WaitForWalCheckpointAsync(cancellationToken).ConfigureAwait(false);
-                            await using (var conn = await openBank(cancellationToken).ConfigureAwait(false))
+                            await WaitForWalCheckpointAsync(cancellationToken);
+                            await using (var conn = await openBank(cancellationToken))
                             {
                                 await using var cmd = conn.CreateCommand();
                                 cmd.CommandText = $"VACUUM INTO '{retryPath}'";
-                                await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                                await cmd.ExecuteNonQueryAsync(cancellationToken);
                             }
 
-                            await StripNonSyncableAsync(retryPath, cancellationToken).ConfigureAwait(false);
-                            await EnsureSnapshotIntegrityAsync(retryPath, "Retry-merged", cancellationToken).ConfigureAwait(false);
-                            snapshotBytes = await File.ReadAllBytesAsync(retryPath, cancellationToken).ConfigureAwait(false);
+                            await StripNonSyncableAsync(retryPath, cancellationToken);
+                            await EnsureSnapshotIntegrityAsync(retryPath, "Retry-merged", cancellationToken);
+                            snapshotBytes = await File.ReadAllBytesAsync(retryPath, cancellationToken);
                         }
                         finally
                         {
@@ -327,7 +325,7 @@ public partial class SyncService(
         var remotePath = Path.GetTempFileName();
         try
         {
-            await using var conn = await openBank(cancellationToken).ConfigureAwait(false);
+            await using var conn = await openBank(cancellationToken);
 
             // The same passphrase ATTACH will key the snapshot with also keys the authenticity
             // check — both read it off the live bank's connection string.
@@ -337,19 +335,18 @@ public partial class SyncService(
             // BEFORE integrity (quick_check only detects corruption, not a valid-but-substituted
             // blob) and BEFORE ATTACH — a refused blob must never reach the live bank, and the
             // header/tag must never reach the file SQLite itself opens.
-            var snapshotData = await VerifyAndUnwrapRemoteAsync(conn, objectKey, remoteData, attachKey, cancellationToken)
-                .ConfigureAwait(false);
+            var snapshotData = await VerifyAndUnwrapRemoteAsync(conn, objectKey, remoteData, attachKey, cancellationToken);
 
-            await File.WriteAllBytesAsync(remotePath, snapshotData, cancellationToken).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(remotePath, snapshotData, cancellationToken);
 
             // Integrity check the remote snapshot.
             try
             {
-                await using (var ro = await openReadOnly(remotePath, cancellationToken).ConfigureAwait(false))
+                await using (var ro = await openReadOnly(remotePath, cancellationToken))
                 {
                     await using var check = ro.CreateCommand();
                     check.CommandText = "PRAGMA quick_check";
-                    var result = (string)(await check.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+                    var result = (string)(await check.ExecuteScalarAsync(cancellationToken))!;
                     if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
                     {
                         throw new SyncCorruptFileException($"Remote snapshot integrity check failed: {result}");
@@ -375,12 +372,12 @@ public partial class SyncService(
                 await using var quote = conn.CreateCommand();
                 quote.CommandText = "SELECT quote($key)";
                 quote.Parameters.AddWithValue("$key", attachKey);
-                attachSql = $"ATTACH DATABASE '{remotePath}' AS remote KEY {(string)(await quote.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!}";
+                attachSql = $"ATTACH DATABASE '{remotePath}' AS remote KEY {(string)(await quote.ExecuteScalarAsync(cancellationToken))!}";
             }
 
             await using var attach = conn.CreateCommand();
             attach.CommandText = attachSql;
-            await attach.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await attach.ExecuteNonQueryAsync(cancellationToken);
 
             try
             {
@@ -390,7 +387,7 @@ public partial class SyncService(
                 await using (var versionCheck = conn.CreateCommand())
                 {
                     versionCheck.CommandText = "PRAGMA remote.user_version";
-                    var remoteVersion = (long)(await versionCheck.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+                    var remoteVersion = (long)(await versionCheck.ExecuteScalarAsync(cancellationToken))!;
                     if (remoteVersion > MemorySchema.CurrentVersion)
                     {
                         throw new UnsupportedSchemaVersionException(
@@ -406,10 +403,10 @@ public partial class SyncService(
                 // before anything else mutates, surfacing for a human. Either side may predate
                 // v14 (no table) — then there is nothing to merge and the arm skips. A merged map
                 // reloads the choke-point cache off the table, so the next write folds through it.
-                if (await AliasTableExistsAsync(conn, "main", cancellationToken).ConfigureAwait(false) &&
-                    await AliasTableExistsAsync(conn, "remote", cancellationToken).ConfigureAwait(false))
+                if (await AliasTableExistsAsync(conn, "main", cancellationToken) &&
+                    await AliasTableExistsAsync(conn, "remote", cancellationToken))
                 {
-                    await ThrowOnAliasConflictAsync(conn, cancellationToken).ConfigureAwait(false);
+                    await ThrowOnAliasConflictAsync(conn, cancellationToken);
                     int mergedAliases;
                     await using (var mergeAliases = conn.CreateCommand())
                     {
@@ -417,7 +414,7 @@ public partial class SyncService(
                             INSERT OR IGNORE INTO project_id_aliases (alias, winner, kind, applied_at)
                             SELECT alias, winner, kind, applied_at FROM remote.project_id_aliases
                             """;
-                        mergedAliases = await mergeAliases.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        mergedAliases = await mergeAliases.ExecuteNonQueryAsync(cancellationToken);
                     }
 
                     // Reload on map CHANGE, not on every pull: the cache is process-wide, so a
@@ -426,7 +423,7 @@ public partial class SyncService(
                     // remote that carries the same rows, or none).
                     if (mergedAliases > 0)
                     {
-                        await ProjectIdAliases.LoadAndCacheAsync(conn, logger, cancellationToken).ConfigureAwait(false);
+                        await ProjectIdAliases.LoadAndCacheAsync(conn, logger, cancellationToken);
                     }
                 }
 
@@ -475,7 +472,7 @@ public partial class SyncService(
                                                        AND (t.context_label IS NULL OR t.context_label IS r.context_label)
                                                  )
                                                """;
-                    received += await mergeEntries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    received += await mergeEntries.ExecuteNonQueryAsync(cancellationToken);
                 }
 
                 // Resolve source_id for newly merged rows: populate the memory_source table
@@ -494,7 +491,7 @@ public partial class SyncService(
                                                 FROM entries e
                                                 WHERE e.source_id IS NULL AND e.workspace_id IS NULL
                                                 """;
-                    await resolveSource.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    await resolveSource.ExecuteNonQueryAsync(cancellationToken);
                 }
 
                 await using (var backfillSourceId = conn.CreateCommand())
@@ -512,7 +509,7 @@ public partial class SyncService(
                                                    )
                                                    WHERE source_id IS NULL AND workspace_id IS NULL
                                                    """;
-                    await backfillSourceId.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    await backfillSourceId.ExecuteNonQueryAsync(cancellationToken);
                 }
 
                 // Settings are per-machine (cloud credentials, embedding endpoint/key) and never
@@ -523,7 +520,7 @@ public partial class SyncService(
                 // context_label — probed once, reused by both legs below, so a pull never throws
                 // "no such column" against an older peer's snapshot.
                 var remoteHasContextLabel = await ColumnExistsAsync(conn, "remote", "sync_tombstones",
-                    "context_label", cancellationToken).ConfigureAwait(false);
+                    "context_label", cancellationToken);
                 var remoteContextLabelColumn = remoteHasContextLabel ? "context_label" : "NULL";
 
                 // F36: this pull's own instant, stamped as received_at on every tombstone the merge
@@ -546,7 +543,7 @@ public partial class SyncService(
                                                   SELECT {foldedTombstoneProject}, hash, scope, {remoteContextLabelColumn}, deleted_at, @receivedAt FROM remote.sync_tombstones
                                                   """;
                     mergeTombstones.Parameters.AddWithValue("@receivedAt", pullNow);
-                    await mergeTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    await mergeTombstones.ExecuteNonQueryAsync(cancellationToken);
                 }
 
                 // Apply tombstones: delete rows locally that remote deleted — the remote side folds
@@ -573,7 +570,7 @@ public partial class SyncService(
                                                         AND ({(remoteHasContextLabel ? "t.context_label IS NULL OR t.context_label IS entries.context_label" : "1 = 1")})
                                                   )
                                                   """;
-                    await applyTombstones.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    await applyTombstones.ExecuteNonQueryAsync(cancellationToken);
                 }
 
                 // GC tombstones: remove rows this bank received before the last pull watermark.
@@ -586,13 +583,13 @@ public partial class SyncService(
                 await using (var watermarkCmd = conn.CreateCommand())
                 {
                     watermarkCmd.CommandText = "SELECT value FROM sync_meta WHERE key = 'last_pull_at'";
-                    var lastPullStr = (string?)await watermarkCmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+                    var lastPullStr = (string?)await watermarkCmd.ExecuteScalarAsync(cancellationToken);
                     if (long.TryParse(lastPullStr, out var lastPull))
                     {
                         await using var gc = conn.CreateCommand();
                         gc.CommandText = "DELETE FROM sync_tombstones WHERE COALESCE(received_at, deleted_at) < @watermark";
                         gc.Parameters.AddWithValue("@watermark", lastPull);
-                        await gc.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        await gc.ExecuteNonQueryAsync(cancellationToken);
                     }
                 }
 
@@ -603,7 +600,7 @@ public partial class SyncService(
                     updateWatermark.CommandText =
                         "INSERT INTO sync_meta (key, value) VALUES ('last_pull_at', @value) ON CONFLICT(key) DO UPDATE SET value = excluded.value";
                     updateWatermark.Parameters.AddWithValue("@value", pullNow.ToString());
-                    await updateWatermark.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    await updateWatermark.ExecuteNonQueryAsync(cancellationToken);
                 }
 
                 // Reindex: enqueue new/changed rows into the pending embed queue.
@@ -624,7 +621,7 @@ public partial class SyncService(
                                                    WHERE e.workspace_id IS NULL
                                                )
                                              """;
-                    reindexed = await reindexCmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    reindexed = await reindexCmd.ExecuteNonQueryAsync(cancellationToken);
                 }
 
                 // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): the
@@ -637,7 +634,7 @@ public partial class SyncService(
                 await using (var recompute = conn.CreateCommand())
                 {
                     recompute.CommandText = MemorySql.RecomputeChunkColumnsBankWideFromIdOrder;
-                    await recompute.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    await recompute.ExecuteNonQueryAsync(cancellationToken);
                 }
 
                 return new MergeCounts(received, reindexed);
@@ -646,7 +643,7 @@ public partial class SyncService(
             {
                 await using var detach = conn.CreateCommand();
                 detach.CommandText = "DETACH DATABASE remote";
-                await detach.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                await detach.ExecuteNonQueryAsync(cancellationToken);
             }
         }
         finally
@@ -673,21 +670,21 @@ public partial class SyncService(
         // The snapshot of an encrypted bank is itself encrypted, so the strip opens through
         // openSnapshot with the bank key, read-write (DELETE + VACUUM) and vec0 loaded (the
         // entry triggers need it).
-        await using var snap = await openSnapshot(snapshotPath, cancellationToken).ConfigureAwait(false);
+        await using var snap = await openSnapshot(snapshotPath, cancellationToken);
         await using var del = snap.CreateCommand();
         del.CommandText = "DELETE FROM entries WHERE workspace_id IS NOT NULL";
-        await del.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await del.ExecuteNonQueryAsync(cancellationToken);
         await using var delSettings = snap.CreateCommand();
         delSettings.CommandText = "DELETE FROM settings";
-        await delSettings.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await delSettings.ExecuteNonQueryAsync(cancellationToken);
 
-        await FoldSnapshotProjectIdsAsync(snap, cancellationToken).ConfigureAwait(false);
+        await FoldSnapshotProjectIdsAsync(snap, cancellationToken);
 
         foreach (var table in MachineLocalTables)
         {
             await using var dropTable = snap.CreateCommand();
             dropTable.CommandText = $"DROP TABLE IF EXISTS {table}";
-            await dropTable.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await dropTable.ExecuteNonQueryAsync(cancellationToken);
         }
 
         // IF EXISTS: a snapshot opened via openSnapshot never ran EnsureAsync, so a bank that
@@ -695,13 +692,13 @@ public partial class SyncService(
         // would throw SqliteException ("no such table") and abort the push.
         await using var dropCodeEntries = snap.CreateCommand();
         dropCodeEntries.CommandText = "DROP TABLE IF EXISTS code_entries";
-        await dropCodeEntries.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await dropCodeEntries.ExecuteNonQueryAsync(cancellationToken);
         await using var dropCodeFts = snap.CreateCommand();
         dropCodeFts.CommandText = "DROP TABLE IF EXISTS code_fts";
-        await dropCodeFts.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await dropCodeFts.ExecuteNonQueryAsync(cancellationToken);
         await using var dropVecCode = snap.CreateCommand();
         dropVecCode.CommandText = "DROP TABLE IF EXISTS vec_code";
-        await dropVecCode.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await dropVecCode.ExecuteNonQueryAsync(cancellationToken);
 
         // ADR-0098: telemetry never syncs — the merge reads entries + sync_tombstones only, so
         // nothing consumes synced telemetry. DROP (not DELETE): telemetry has no FTS/shadow
@@ -710,10 +707,10 @@ public partial class SyncService(
         // abort the push, same H6 shape as the code corpus above.
         await using var dropSearchQuality = snap.CreateCommand();
         dropSearchQuality.CommandText = "DROP TABLE IF EXISTS search_quality";
-        await dropSearchQuality.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await dropSearchQuality.ExecuteNonQueryAsync(cancellationToken);
         await using var dropMetrics = snap.CreateCommand();
         dropMetrics.CommandText = "DROP TABLE IF EXISTS metrics";
-        await dropMetrics.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await dropMetrics.ExecuteNonQueryAsync(cancellationToken);
 
         // The stamped application_id is a digest of the Ddl block that still declares the code
         // corpus (MemorySchema.SchemaDigest) — leaving it in place would make a hand-restored
@@ -722,11 +719,11 @@ public partial class SyncService(
         // EnsureAsync re-runs the Ddl block unconditionally.
         await using var resetDigest = snap.CreateCommand();
         resetDigest.CommandText = "PRAGMA application_id = 0";
-        await resetDigest.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await resetDigest.ExecuteNonQueryAsync(cancellationToken);
 
         await using var vac = snap.CreateCommand();
         vac.CommandText = "VACUUM";
-        await vac.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await vac.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
@@ -753,9 +750,9 @@ public partial class SyncService(
             return;
         }
 
-        var hasEntries = await SnapshotTableExistsAsync(snap, "entries", cancellationToken).ConfigureAwait(false);
+        var hasEntries = await SnapshotTableExistsAsync(snap, "entries", cancellationToken);
         var hasTombstones =
-            await SnapshotTableExistsAsync(snap, "sync_tombstones", cancellationToken).ConfigureAwait(false);
+            await SnapshotTableExistsAsync(snap, "sync_tombstones", cancellationToken);
         // One alias at a time, in map order: two losers folding to the same winner collide with
         // each other exactly as they collide with a pre-existing winner row, and the second pass
         // sees the first one's result.
@@ -763,12 +760,12 @@ public partial class SyncService(
         {
             if (hasEntries)
             {
-                await FoldSnapshotEntriesAsync(snap, entry, cancellationToken).ConfigureAwait(false);
+                await FoldSnapshotEntriesAsync(snap, entry, cancellationToken);
             }
 
             if (hasTombstones)
             {
-                await FoldSnapshotTombstonesAsync(snap, entry, cancellationToken).ConfigureAwait(false);
+                await FoldSnapshotTombstonesAsync(snap, entry, cancellationToken);
             }
         }
     }
@@ -779,7 +776,7 @@ public partial class SyncService(
         await using var exists = snap.CreateCommand();
         exists.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @table";
         exists.Parameters.AddWithValue("@table", table);
-        return (long)(await exists.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))! > 0;
+        return (long)(await exists.ExecuteScalarAsync(cancellationToken))! > 0;
     }
 
     /// <summary>
@@ -804,14 +801,14 @@ public partial class SyncService(
                 """;
             dedup.Parameters.AddWithValue("@loser", entry.Alias);
             dedup.Parameters.AddWithValue("@winner", entry.Canonical);
-            await dedup.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await dedup.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await using var move = snap.CreateCommand();
         move.CommandText = $"UPDATE entries SET project_id = @winner WHERE {ProjectRows.CommittedScope("", "loser")}";
         move.Parameters.AddWithValue("@loser", entry.Alias);
         move.Parameters.AddWithValue("@winner", entry.Canonical);
-        await move.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await move.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
@@ -835,7 +832,7 @@ public partial class SyncService(
                 """;
             merge.Parameters.AddWithValue("@loser", entry.Alias);
             merge.Parameters.AddWithValue("@winner", entry.Canonical);
-            await merge.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await merge.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await using (var dedup = snap.CreateCommand())
@@ -849,23 +846,23 @@ public partial class SyncService(
                 """;
             dedup.Parameters.AddWithValue("@loser", entry.Alias);
             dedup.Parameters.AddWithValue("@winner", entry.Canonical);
-            await dedup.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await dedup.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await using var move = snap.CreateCommand();
         move.CommandText = "UPDATE sync_tombstones SET project_id = @winner WHERE project_id = @loser";
         move.Parameters.AddWithValue("@loser", entry.Alias);
         move.Parameters.AddWithValue("@winner", entry.Canonical);
-        await move.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await move.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>Runs PRAGMA quick_check against a snapshot file and throws SyncCorruptFileException when the result is not "ok". Every path that pushes a snapshot must call this.</summary>
     private async Task EnsureSnapshotIntegrityAsync(string snapshotPath, string label, CancellationToken cancellationToken)
     {
-        await using var ro = await openReadOnly(snapshotPath, cancellationToken).ConfigureAwait(false);
+        await using var ro = await openReadOnly(snapshotPath, cancellationToken);
         await using var integrity = ro.CreateCommand();
         integrity.CommandText = "PRAGMA quick_check";
-        var result = (string)(await integrity.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        var result = (string)(await integrity.ExecuteScalarAsync(cancellationToken))!;
         if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
         {
             throw new SyncCorruptFileException($"{label} snapshot integrity check failed: {result}");
@@ -874,15 +871,15 @@ public partial class SyncService(
 
     private async Task WaitForWalCheckpointAsync(CancellationToken cancellationToken)
     {
-        await using var conn = await openBank(cancellationToken).ConfigureAwait(false);
+        await using var conn = await openBank(cancellationToken);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "PRAGMA wal_checkpoint(TRUNCATE)";
-        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private async Task<string?> ReadPassphraseAsync(CancellationToken cancellationToken)
     {
-        await using var conn = await openBank(cancellationToken).ConfigureAwait(false);
+        await using var conn = await openBank(cancellationToken);
         return new SqliteConnectionStringBuilder(conn.ConnectionString).Password;
     }
 
@@ -918,11 +915,11 @@ public partial class SyncService(
                     "remote object, or delete it and let this bank re-push a fresh copy.");
             }
 
-            await MarkAuthTagSeenAsync(conn, objectKey, cancellationToken).ConfigureAwait(false);
+            await MarkAuthTagSeenAsync(conn, objectKey, cancellationToken);
             return innerData;
         }
 
-        if (await HasSeenAuthTagAsync(conn, objectKey, cancellationToken).ConfigureAwait(false))
+        if (await HasSeenAuthTagAsync(conn, objectKey, cancellationToken))
         {
             throw new SyncTamperedRemoteException(
                 $"Remote snapshot '{objectKey}' has no authenticity tag, but this bank has previously verified " +
@@ -942,7 +939,7 @@ public partial class SyncService(
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "INSERT INTO sync_meta (key, value) VALUES (@key, '1') ON CONFLICT(key) DO UPDATE SET value = excluded.value";
         cmd.Parameters.AddWithValue("@key", AuthSeenKey(objectKey));
-        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task<bool> HasSeenAuthTagAsync(SqliteConnection conn, string objectKey, CancellationToken cancellationToken)
@@ -950,7 +947,7 @@ public partial class SyncService(
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT 1 FROM sync_meta WHERE key = @key";
         cmd.Parameters.AddWithValue("@key", AuthSeenKey(objectKey));
-        return await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null;
+        return await cmd.ExecuteScalarAsync(cancellationToken) is not null;
     }
 
     private static partial class Log

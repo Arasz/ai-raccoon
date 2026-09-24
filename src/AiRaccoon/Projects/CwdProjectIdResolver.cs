@@ -32,7 +32,7 @@ public sealed class CwdProjectIdResolver(
         var cwd = cwdProbe.CurrentDirectory;
         Dictionary<string, string> candidates = new(StringComparer.Ordinal);
 
-        var scopes = await settings.GetSettingsByPrefixAsync(ScopePrefix, cancellationToken).ConfigureAwait(false);
+        var scopes = await settings.GetSettingsByPrefixAsync(ScopePrefix, cancellationToken);
         foreach (var (key, value) in scopes)
         {
             if (key == IngestScopeKeys.ScopeGlobal)
@@ -54,7 +54,7 @@ public sealed class CwdProjectIdResolver(
             }
         }
 
-        foreach (var watch in await watches.ListWatchesAsync(cancellationToken).ConfigureAwait(false))
+        foreach (var watch in await watches.ListWatchesAsync(cancellationToken))
         {
             if (IngestPath.IsWithinScope(cwd, watch.Path))
             {

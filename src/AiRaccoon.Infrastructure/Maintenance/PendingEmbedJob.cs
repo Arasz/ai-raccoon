@@ -28,15 +28,14 @@ public sealed class PendingEmbedJob(IEntryEmbedder embedder, IEventPump<EmbedDra
 
     public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var settings = await embedder.ReadSettingsAsync(connection, cancellationToken).ConfigureAwait(false);
+        var settings = await embedder.ReadSettingsAsync(connection, cancellationToken);
         if (string.IsNullOrWhiteSpace(settings.Provider))
         {
             return false; // no engine configured: a pending row here is legitimately unembeddable
         }
 
         return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
-                MemorySql.HasPendingEmbed, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                MemorySql.HasPendingEmbed, cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -54,5 +53,5 @@ public sealed class PendingEmbedJob(IEntryEmbedder embedder, IEventPump<EmbedDra
     /// <summary>WP3 (#477): `job.pending-embed.rows` — the bank-wide backlog immediately after signalling the drain, before it has run.</summary>
     public async ValueTask<long> CountOutstandingRowsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            MemorySql.CountPendingEmbed, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            MemorySql.CountPendingEmbed, cancellationToken: cancellationToken));
 }

@@ -68,7 +68,7 @@ public sealed class FakeEmbeddingEndpoint : IAsyncDisposable
 
         app.MapPost("/v1/embeddings", async context =>
         {
-            using var document = await JsonDocument.ParseAsync(context.Request.Body).ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(context.Request.Body);
             var root = document.RootElement;
             var model = root.TryGetProperty("model", out var modelProperty) ? modelProperty.GetString() ?? "" : "";
             var inputs = ReadInputs(root);
@@ -76,11 +76,10 @@ public sealed class FakeEmbeddingEndpoint : IAsyncDisposable
             var data = inputs.Select((text, index) => new { @object = "embedding", index, embedding = VectorFor(text) });
             await context.Response.WriteAsJsonAsync(
                     new { @object = "list", data, model, usage = new { prompt_tokens = 1, total_tokens = 1 } },
-                    cancellationToken: context.RequestAborted)
-                .ConfigureAwait(false);
+                    cancellationToken: context.RequestAborted);
         });
 
-        await app.StartAsync(cancellationToken).ConfigureAwait(false);
+        await app.StartAsync(cancellationToken);
         return new FakeEmbeddingEndpoint(app, $"{app.Urls.First()}/v1");
     }
 
@@ -106,5 +105,5 @@ public sealed class FakeEmbeddingEndpoint : IAsyncDisposable
         return inputs;
     }
 
-    public async ValueTask DisposeAsync() => await _app.DisposeAsync().ConfigureAwait(false);
+    public async ValueTask DisposeAsync() => await _app.DisposeAsync();
 }

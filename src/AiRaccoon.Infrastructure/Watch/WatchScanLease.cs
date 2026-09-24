@@ -41,26 +41,25 @@ public sealed class SqliteWatchScanLease(ISqliteConnectionFactory factory, TimeP
         var now = Now();
         return await ExecuteAsync(MemorySql.AcquireWatchScanLease,
             new { projectId, path, owner = Owner, now, expiresAt = now + (long)LeaseTtl.TotalSeconds },
-            cancellationToken).ConfigureAwait(false) == 1;
+            cancellationToken) == 1;
     }
 
     public async Task<bool> TryRenewAsync(string projectId, string path,
         CancellationToken cancellationToken = default) =>
         await ExecuteAsync(MemorySql.RenewWatchScanLease,
             new { projectId, path, owner = Owner, expiresAt = Now() + (long)LeaseTtl.TotalSeconds },
-            cancellationToken).ConfigureAwait(false) == 1;
+            cancellationToken) == 1;
 
     public async Task ReleaseAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
         await ExecuteAsync(MemorySql.ReleaseWatchScanLease, new { projectId, path, owner = Owner },
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
 
     private long Now() => timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
     private async Task<int> ExecuteAsync(string sql, object parameters, CancellationToken cancellationToken)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection
-            .ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+            .ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
     }
 }

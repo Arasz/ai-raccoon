@@ -49,7 +49,7 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
         }
 
         var targetDir = RepoModelsDirectory() ?? Path.Combine(AppContext.BaseDirectory, "Models");
-        return await EnsureDownloadsAsync(targetDir, cancellationToken).ConfigureAwait(false);
+        return await EnsureDownloadsAsync(targetDir, cancellationToken);
     }
 
     /// <summary>
@@ -150,7 +150,7 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
         }
 
         Log.DownloadingBundledModelAsset(logger, resource.Name, resource.ResourcePath);
-        var error = await DownloadAsync(httpClient, resource.Url, resource.ResourcePath, resource.Sha256, cancellationToken).ConfigureAwait(false);
+        var error = await DownloadAsync(httpClient, resource.Url, resource.ResourcePath, resource.Sha256, cancellationToken);
         if (error is not null)
         {
             Log.FailedToDownloadBundledModelAsset(logger, resource.Name, error);
@@ -203,14 +203,14 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
     {
         try
         {
-            var bytes = await new AssetDownloader(http).GetAsync(url, cancellationToken).ConfigureAwait(false);
+            var bytes = await new AssetDownloader(http).GetAsync(url, cancellationToken);
             var actual = Convert.ToHexString(SHA256.HashData(bytes));
             if (!actual.Equals(expectedSha, StringComparison.OrdinalIgnoreCase))
             {
                 return $"{Path.GetFileName(target)}: expected sha256 {expectedSha}, got {actual}";
             }
 
-            await File.WriteAllBytesAsync(target, bytes, cancellationToken).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(target, bytes, cancellationToken);
             return null;
         }
         catch (EmptyDownloadException ex)

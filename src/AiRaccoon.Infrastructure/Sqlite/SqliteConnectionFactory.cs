@@ -30,7 +30,7 @@ public sealed partial class SqliteConnectionFactory(
 
     public async Task<SqliteConnection> OpenBankAsync(CancellationToken cancellationToken = default) =>
         await OpenBankWithResolvedKeyAsync(
-            await keyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+            await keyResolver.ResolveAsync(cancellationToken), cancellationToken);
 
     /// <summary>
     ///     Rekeys a bank still encrypted under the pre-ADR-0012 derivation to the HKDF key (ADR-0012).
@@ -40,12 +40,12 @@ public sealed partial class SqliteConnectionFactory(
     /// <returns>True when the bank was rekeyed; false when it already opened under the current key.</returns>
     public async Task<bool> MigrateLegacyKeyAsync(CancellationToken cancellationToken = default)
     {
-        var resolvedKey = await keyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false);
+        var resolvedKey = await keyResolver.ResolveAsync(cancellationToken);
 
         SqliteConnection connection;
         try
         {
-            connection = await OpenConnectionAsync(resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
+            connection = await OpenConnectionAsync(resolvedKey.Passphrase, cancellationToken);
         }
         catch (SqliteException openFailure)
         {
@@ -61,13 +61,13 @@ public sealed partial class SqliteConnectionFactory(
                 throw classified;
             }
 
-            if (!await LegacyKeyOpensHealthyBankAsync(resolvedKey.LegacyPassphrase, cancellationToken).ConfigureAwait(false))
+            if (!await LegacyKeyOpensHealthyBankAsync(resolvedKey.LegacyPassphrase, cancellationToken))
             {
                 throw TryDiagnoseWithKeyCheck(resolvedKey.Passphrase, openFailure) ?? NotLegacyKeyed(resolvedKey, openFailure);
             }
 
             // Only reached with positive proof that the legacy key opens a healthy bank.
-            await RekeyBankAsync(resolvedKey.Passphrase!, resolvedKey.LegacyPassphrase!, cancellationToken).ConfigureAwait(false);
+            await RekeyBankAsync(resolvedKey.Passphrase!, resolvedKey.LegacyPassphrase!, cancellationToken);
             return true;
         }
 
@@ -75,7 +75,7 @@ public sealed partial class SqliteConnectionFactory(
         // migrate. Dispose the bare probe connection without ever calling InitializeAsync: this
         // path must not run MemorySchema.EnsureAsync, or "nothing to do" would be a lie for a
         // bank that had no schema yet.
-        await connection.DisposeAsync().ConfigureAwait(false);
+        await connection.DisposeAsync();
         return false;
     }
 
@@ -90,13 +90,13 @@ public sealed partial class SqliteConnectionFactory(
         SqliteConnection connection;
         try
         {
-            connection = await OpenConnectionAsync(resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
+            connection = await OpenConnectionAsync(resolvedKey.Passphrase, cancellationToken);
         }
         catch (SqliteException openFailure)
         {
             if (resolvedKey.LegacyPassphrase is not null)
             {
-                throw await DiagnoseAsync(resolvedKey, openFailure, cancellationToken).ConfigureAwait(false);
+                throw await DiagnoseAsync(resolvedKey, openFailure, cancellationToken);
             }
 
             var classified = ClassifyNoLegacySourceFailure(resolvedKey, openFailure);
@@ -110,7 +110,7 @@ public sealed partial class SqliteConnectionFactory(
 
         // Post-open failures (extensions, vector load, schema DDL) are not key-related and
         // must propagate unchanged — only the open above proves whether the key is wrong.
-        return await InitializeAsync(connection, cancellationToken, logger).ConfigureAwait(false);
+        return await InitializeAsync(connection, cancellationToken, logger);
     }
 
     /// <summary>
@@ -121,8 +121,8 @@ public sealed partial class SqliteConnectionFactory(
     /// </summary>
     public async Task RekeyBankAsync(string newKey, CancellationToken cancellationToken = default)
     {
-        var resolvedKey = await keyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false);
-        await RekeyBankAsync(newKey, resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
+        var resolvedKey = await keyResolver.ResolveAsync(cancellationToken);
+        await RekeyBankAsync(newKey, resolvedKey.Passphrase, cancellationToken);
     }
 
     /// <summary>
@@ -143,23 +143,23 @@ public sealed partial class SqliteConnectionFactory(
         {
             SqliteConnection.ClearPool(new SqliteConnection(BuildConnectionString(currentKey)));
 
-            await using (var connection = await OpenRekeyConnectionAsync(currentKey, cancellationToken).ConfigureAwait(false))
+            await using (var connection = await OpenRekeyConnectionAsync(currentKey, cancellationToken))
             {
                 // quote() produces the same literal form Microsoft.Data.Sqlite uses for Password — it
                 // escapes both raw x'…' keys and passphrases (docs/plans/encryption-bitwarden-implementation.md).
                 await using var quoteCommand = connection.CreateCommand();
                 quoteCommand.CommandText = "SELECT quote($newKey)";
                 quoteCommand.Parameters.AddWithValue("$newKey", newKey);
-                var quoted = (string)(await quoteCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+                var quoted = (string)(await quoteCommand.ExecuteScalarAsync(cancellationToken))!;
 
                 await using var rekeyCommand = connection.CreateCommand();
                 rekeyCommand.CommandText = $"PRAGMA rekey = {quoted}";
-                await rekeyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                await rekeyCommand.ExecuteNonQueryAsync(cancellationToken);
             }
 
             // Verify: the bank must reopen with the new key, or the rekey did not land. The sidecar
             // rewrite this reopen triggers (EnsureKeyCheck) is what closes the window the marker guards.
-            await using var verify = await OpenBankWithKeyAsync(newKey, cancellationToken).ConfigureAwait(false);
+            await using var verify = await OpenBankWithKeyAsync(newKey, cancellationToken);
         }
         finally
         {
@@ -178,21 +178,21 @@ public sealed partial class SqliteConnectionFactory(
         SqliteConnection connection;
         try
         {
-            connection = await OpenConnectionAsync(key, cancellationToken).ConfigureAwait(false);
+            connection = await OpenConnectionAsync(key, cancellationToken);
         }
         catch (SqliteException openFailure)
         {
             throw TryDiagnoseWithKeyCheck(key, openFailure) ?? openFailure;
         }
 
-        return await InitializeAsync(connection, cancellationToken, logger).ConfigureAwait(false);
+        return await InitializeAsync(connection, cancellationToken, logger);
     }
 
     /// <inheritdoc cref="ISqliteConnectionFactory.OpenBankSkippingEnsureAsync" />
     public async Task<SqliteConnection> OpenBankSkippingEnsureAsync(CancellationToken cancellationToken = default)
     {
-        var resolvedKey = await keyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false);
-        var connection = await OpenConnectionAsync(resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
+        var resolvedKey = await keyResolver.ResolveAsync(cancellationToken);
+        var connection = await OpenConnectionAsync(resolvedKey.Passphrase, cancellationToken);
         try
         {
             // Free (no SQL statement) — only exercised if the caller falls back to EnsureAsync,
@@ -203,7 +203,7 @@ public sealed partial class SqliteConnectionFactory(
         }
         catch
         {
-            await connection.DisposeAsync().ConfigureAwait(false);
+            await connection.DisposeAsync();
             throw;
         }
     }
@@ -218,7 +218,7 @@ public sealed partial class SqliteConnectionFactory(
     private async Task<Exception> DiagnoseAsync(ResolvedKey resolvedKey, SqliteException openFailure,
         CancellationToken cancellationToken)
     {
-        if (!await LegacyKeyOpensHealthyBankAsync(resolvedKey.LegacyPassphrase!, cancellationToken).ConfigureAwait(false))
+        if (!await LegacyKeyOpensHealthyBankAsync(resolvedKey.LegacyPassphrase!, cancellationToken))
         {
             return TryDiagnoseWithKeyCheck(resolvedKey.Passphrase, openFailure) ?? NotLegacyKeyed(resolvedKey, openFailure);
         }
@@ -390,11 +390,11 @@ public sealed partial class SqliteConnectionFactory(
         try
         {
             await using var connection = new SqliteConnection(csb.ToString());
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await connection.OpenAsync(cancellationToken);
 
             await using var check = connection.CreateCommand();
             check.CommandText = "PRAGMA quick_check";
-            var result = await check.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as string;
+            var result = await check.ExecuteScalarAsync(cancellationToken) as string;
 
             return string.Equals(result, "ok", StringComparison.Ordinal);
         }
@@ -414,7 +414,7 @@ public sealed partial class SqliteConnectionFactory(
         BankPaths.CreateDirectory(BankDirectoryFor(options));
 
         var connection = new SqliteConnection(BuildConnectionString(key));
-        await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
+        await OpenWithPragmasAsync(connection, cancellationToken);
         EnsureKeyCheck(key);
         return connection;
     }
@@ -436,7 +436,7 @@ public sealed partial class SqliteConnectionFactory(
             connection.EnableExtensions();
             // vec0 ships in the NuGet package — always available, no provisioning.
             connection.LoadVector();
-            var overlapResult = await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+            var overlapResult = await MemorySchema.EnsureAsync(connection, cancellationToken);
             if (logger is not null)
             {
                 if (overlapResult.Pruned.Count > 0)
@@ -464,7 +464,7 @@ public sealed partial class SqliteConnectionFactory(
         }
         catch
         {
-            await connection.DisposeAsync().ConfigureAwait(false);
+            await connection.DisposeAsync();
             throw;
         }
     }
@@ -505,30 +505,30 @@ public sealed partial class SqliteConnectionFactory(
         }
 
         var connection = new SqliteConnection(csb.ToString());
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await connection.OpenAsync(cancellationToken);
 
         await using var journal = connection.CreateCommand();
         journal.CommandText = "PRAGMA journal_mode=DELETE";
-        await journal.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await journal.ExecuteNonQueryAsync(cancellationToken);
 
         return connection;
     }
 
     private static async Task OpenWithPragmasAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await connection.OpenAsync(cancellationToken);
 
         await using var fk = connection.CreateCommand();
         fk.CommandText = "PRAGMA foreign_keys = ON";
-        await fk.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await fk.ExecuteNonQueryAsync(cancellationToken);
 
         await using var wal = connection.CreateCommand();
         wal.CommandText = "PRAGMA journal_mode=WAL";
-        await wal.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await wal.ExecuteNonQueryAsync(cancellationToken);
 
         await using var busy = connection.CreateCommand();
         busy.CommandText = "PRAGMA busy_timeout=5000";
-        await busy.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await busy.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static partial class Log

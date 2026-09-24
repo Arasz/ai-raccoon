@@ -39,8 +39,8 @@ public sealed class CodeReindexJob(ICodeEmbedder embedder, IEventPump<EmbedDrain
     /// </summary>
     public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        await embedder.ReconcileFingerprintAsync(connection, cancellationToken).ConfigureAwait(false);
-        return await embedder.HasPendingWorkAsync(connection, cancellationToken).ConfigureAwait(false);
+        await embedder.ReconcileFingerprintAsync(connection, cancellationToken);
+        return await embedder.HasPendingWorkAsync(connection, cancellationToken);
     }
 
     /// <summary>Signals the embed topic instead of embedding inline (WP11-B2); never leaves anything new pending itself.</summary>
@@ -53,5 +53,5 @@ public sealed class CodeReindexJob(ICodeEmbedder embedder, IEventPump<EmbedDrain
     /// <summary>WP3 (#477): `job.code-reindex.rows` — the bank-wide backlog immediately after signalling the drain, before it has run.</summary>
     public async ValueTask<long> CountOutstandingRowsAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            MemorySql.CountPendingCodeEmbed, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            MemorySql.CountPendingCodeEmbed, cancellationToken: cancellationToken));
 }

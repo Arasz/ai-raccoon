@@ -66,7 +66,7 @@ public sealed partial class WatchHostedService : BackgroundService
         {
             try
             {
-                await ReconcileAsync(stoppingToken).ConfigureAwait(false);
+                await ReconcileAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -79,7 +79,7 @@ public sealed partial class WatchHostedService : BackgroundService
 
             try
             {
-                await Task.Delay(PollInterval, _timeProvider, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(PollInterval, _timeProvider, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -87,7 +87,7 @@ public sealed partial class WatchHostedService : BackgroundService
             }
         }
 
-        await pipelineLoop.ConfigureAwait(false);
+        await pipelineLoop;
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
@@ -102,7 +102,7 @@ public sealed partial class WatchHostedService : BackgroundService
             _registered.Clear();
         }
 
-        await base.StopAsync(cancellationToken).ConfigureAwait(false);
+        await base.StopAsync(cancellationToken);
     }
 
     /// <summary>
@@ -114,7 +114,7 @@ public sealed partial class WatchHostedService : BackgroundService
         using var pass = _telemetry.Begin(OperationName);
         try
         {
-            await ReconcilePassAsync(pass, cancellationToken).ConfigureAwait(false);
+            await ReconcilePassAsync(pass, cancellationToken);
             pass.Succeeded();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -130,7 +130,7 @@ public sealed partial class WatchHostedService : BackgroundService
 
     private async Task ReconcilePassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {
-        var registrations = await _store.ListWatchesAsync(cancellationToken).ConfigureAwait(false);
+        var registrations = await _store.ListWatchesAsync(cancellationToken);
         pass.Tag("registrations", registrations.Count.ToString());
         var seen = new HashSet<WatchKey>();
         foreach (var registration in registrations)
@@ -143,7 +143,7 @@ public sealed partial class WatchHostedService : BackgroundService
                 _registered.Add(key);
             }
 
-            if (!await IsEnabledAsync(registration.ProjectId, cancellationToken).ConfigureAwait(false))
+            if (!await IsEnabledAsync(registration.ProjectId, cancellationToken))
             {
                 bool wasActive;
                 lock (_activeGate)
@@ -206,7 +206,7 @@ public sealed partial class WatchHostedService : BackgroundService
         var values = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var key in new[] { WatchConfigKeys.EnabledProject(projectId), WatchConfigKeys.EnabledGlobal })
         {
-            values[key] = await _memory.GetSettingAsync(key, cancellationToken).ConfigureAwait(false);
+            values[key] = await _memory.GetSettingAsync(key, cancellationToken);
         }
 
         return WatchConfig.Resolve(projectId, key => values.GetValueOrDefault(key)).Enabled;

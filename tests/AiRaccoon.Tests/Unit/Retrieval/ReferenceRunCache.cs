@@ -14,7 +14,7 @@ public static class ReferenceRunCache
 
     private static async Task<ReferenceRun> BuildAsync()
     {
-        var ensured = await ReferenceAssets.EnsureAsync().ConfigureAwait(false);
+        var ensured = await ReferenceAssets.EnsureAsync();
         if (!ensured.AllPresent)
         {
             throw new InvalidOperationException(
@@ -22,6 +22,6 @@ public static class ReferenceRunCache
         }
 
         return await ReferenceRunner.RunAsync(
-            RealWorldCorpus.Documents, RealWorldQueries.Queries).ConfigureAwait(false);
+            RealWorldCorpus.Documents, RealWorldQueries.Queries);
     }
 }

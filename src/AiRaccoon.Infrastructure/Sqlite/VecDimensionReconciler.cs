@@ -60,25 +60,22 @@ public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(targetDimension, 0);
 
         var ownsTransaction = transaction is null;
-        var tx = transaction ?? (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var tx = transaction ?? (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         var changed = false;
         try
         {
             foreach (var table in tables)
             {
-                if (await NeedsRecreateAsync(connection, tx, table, targetDimension, cancellationToken)
-                        .ConfigureAwait(false))
+                if (await NeedsRecreateAsync(connection, tx, table, targetDimension, cancellationToken))
                 {
-                    await RecreateAsync(connection, tx, table, targetDimension, cancellationToken)
-                        .ConfigureAwait(false);
+                    await RecreateAsync(connection, tx, table, targetDimension, cancellationToken);
                     changed = true;
                 }
             }
 
             if (ownsTransaction)
             {
-                await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+                await tx.CommitAsync(cancellationToken);
             }
 
             return changed;
@@ -87,7 +84,7 @@ public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
         {
             if (ownsTransaction)
             {
-                await tx.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+                await tx.RollbackAsync(CancellationToken.None);
             }
 
             throw;
@@ -99,7 +96,7 @@ public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
     {
         var sql = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table",
-            new { table }, transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new { table }, transaction, cancellationToken: cancellationToken));
 
         // Presence is read explicitly: a missing table is not a table that already matches.
         if (sql is null)
@@ -116,13 +113,13 @@ public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
         string table, int targetDimension, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(new CommandDefinition(
-            $"DROP TABLE IF EXISTS {table}", transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            $"DROP TABLE IF EXISTS {table}", transaction, cancellationToken: cancellationToken));
 
         // The six vec triggers survive the DROP and bind to the recreated table by name; the drain's
         // MarkEmbedded refills both tables through them, so there is nothing to repopulate here.
         await connection.ExecuteAsync(new CommandDefinition(
             $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT, embedding float[{targetDimension}] distance_metric=cosine)",
-            transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            transaction, cancellationToken: cancellationToken));
     }
 
     [GeneratedRegex(@"float\[(\d+)\]")]

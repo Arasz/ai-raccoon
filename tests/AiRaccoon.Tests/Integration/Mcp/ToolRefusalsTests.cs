@@ -377,10 +377,9 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         var factory = new SqliteConnectionFactory(options,
             new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
                 [new EnvEncryptionKeyProvider()]));
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
-                $"PRAGMA user_version = {MemorySchema.CurrentVersion + 1}", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                $"PRAGMA user_version = {MemorySchema.CurrentVersion + 1}", cancellationToken: cancellationToken));
     }
 
 

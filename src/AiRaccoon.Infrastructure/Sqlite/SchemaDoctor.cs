@@ -15,9 +15,9 @@ internal static class SchemaDoctor
     public static async Task<SchemaDoctorReport> DiagnoseAsync(SqliteConnection bank, CancellationToken cancellationToken)
     {
         var storedVersion = await bank.ExecuteScalarAsync<long>(
-            new CommandDefinition("PRAGMA user_version", cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition("PRAGMA user_version", cancellationToken: cancellationToken));
         var storedDigest = await bank.ExecuteScalarAsync<int>(
-            new CommandDefinition("PRAGMA application_id", cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new CommandDefinition("PRAGMA application_id", cancellationToken: cancellationToken));
 
         // A bank stamped by a newer build than this one has a shape this binary cannot know —
         // diffing it against our own current shape would misreport version skew as corruption.
@@ -27,8 +27,8 @@ internal static class SchemaDoctor
                 MemorySchema.CurrentVersion, storedDigest, MemorySchema.SchemaDigest, []);
         }
 
-        await using var expected = await BuildExpectedSchemaConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var findings = await CompareAsync(expected, bank, cancellationToken).ConfigureAwait(false);
+        await using var expected = await BuildExpectedSchemaConnectionAsync(cancellationToken);
+        var findings = await CompareAsync(expected, bank, cancellationToken);
         var status = findings.Count == 0 ? SchemaDoctorStatus.Healthy : SchemaDoctorStatus.ShapeMismatch;
         return new SchemaDoctorReport(status, storedVersion, MemorySchema.CurrentVersion, storedDigest, MemorySchema.SchemaDigest, findings);
     }
@@ -37,12 +37,12 @@ internal static class SchemaDoctor
     private static async Task<SqliteConnection> BuildExpectedSchemaConnectionAsync(CancellationToken cancellationToken)
     {
         var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await connection.OpenAsync(cancellationToken);
         // Ddl declares vec0 virtual tables, so the module has to be loaded first, exactly as
         // SqliteConnectionFactory.InitializeAsync does.
         connection.EnableExtensions();
         connection.LoadVector();
-        await MemorySchema.EnsureAsync(connection, cancellationToken).ConfigureAwait(false);
+        await MemorySchema.EnsureAsync(connection, cancellationToken);
         return connection;
     }
 
@@ -51,8 +51,8 @@ internal static class SchemaDoctor
     {
         var findings = new List<SchemaFinding>();
 
-        var expectedObjects = await ObjectInventoryAsync(expected, cancellationToken).ConfigureAwait(false);
-        var actualObjects = await ObjectInventoryAsync(actual, cancellationToken).ConfigureAwait(false);
+        var expectedObjects = await ObjectInventoryAsync(expected, cancellationToken);
+        var actualObjects = await ObjectInventoryAsync(actual, cancellationToken);
 
         foreach (var (type, name) in expectedObjects)
         {
@@ -64,7 +64,7 @@ internal static class SchemaDoctor
 
             if (type == "table")
             {
-                findings.AddRange(await CompareColumnsAsync(expected, actual, name, cancellationToken).ConfigureAwait(false));
+                findings.AddRange(await CompareColumnsAsync(expected, actual, name, cancellationToken));
             }
         }
 
@@ -78,7 +78,7 @@ internal static class SchemaDoctor
         var rows = await connection.QueryAsync<ObjectRow>(
             new CommandDefinition(
                 "SELECT type, name FROM sqlite_master WHERE type IN ('table','index','trigger') AND name NOT LIKE 'sqlite_%'",
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+                cancellationToken: cancellationToken));
         return [.. rows.Select(r => new SchemaObject(r.Type, r.Name))];
     }
 
@@ -86,8 +86,8 @@ internal static class SchemaDoctor
     private static async Task<IReadOnlyList<SchemaFinding>> CompareColumnsAsync(SqliteConnection expected, SqliteConnection actual,
         string table, CancellationToken cancellationToken)
     {
-        var expectedColumns = await ColumnsAsync(expected, table, cancellationToken).ConfigureAwait(false);
-        var actualColumns = await ColumnsAsync(actual, table, cancellationToken).ConfigureAwait(false);
+        var expectedColumns = await ColumnsAsync(expected, table, cancellationToken);
+        var actualColumns = await ColumnsAsync(actual, table, cancellationToken);
 
         var findings = new List<SchemaFinding>();
         foreach (var (name, column) in expectedColumns)
@@ -123,7 +123,7 @@ internal static class SchemaDoctor
         // MemorySchemaVersionTests' ColumnsAsync helper.
         var rows = await connection.QueryAsync<ColumnRow>(
             new CommandDefinition($"SELECT name, type, \"notnull\", pk FROM pragma_table_info('{table}')",
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+                cancellationToken: cancellationToken));
         return rows.ToDictionary(r => r.Name, r => new ColumnShape(r.Type, r.NotNull != 0, r.Pk != 0), StringComparer.Ordinal);
     }
 

@@ -39,7 +39,7 @@ public sealed class AssetDownloader
 
         var response = await _pipeline.ExecuteAsync(async ct =>
         {
-            var res = await _http.GetAsync(url, ct).ConfigureAwait(false);
+            var res = await _http.GetAsync(url, ct);
             if (res.IsSuccessStatusCode)
             {
                 var contentLen = res.Content.Headers.ContentLength;
@@ -51,11 +51,11 @@ public sealed class AssetDownloader
             }
 
             return res;
-        }, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken);
 
         if (response.IsSuccessStatusCode)
         {
-            var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
             if (bytes.Length > 0)
             {
                 return bytes;

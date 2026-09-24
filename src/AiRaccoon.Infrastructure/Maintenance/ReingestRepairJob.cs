@@ -35,19 +35,17 @@ public sealed class ReingestRepairJob(
 
     public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(MemorySql.HasOpenRepairRequest,
-                new { kind = RepairKinds.Reingest }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                new { kind = RepairKinds.Reingest }, cancellationToken: cancellationToken)) > 0;
 
     /// <summary>Re-scans and applies, then marks the request finished — leaves rows pending for PendingEmbedJob, ordered after this in the job list.</summary>
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var report = await new ReingestRepair(new ChunkPositionScanner(fileTypeMatcher, embeddingService))
-            .RunAsync(connection, store, true, cancellationToken).ConfigureAwait(false);
+            .RunAsync(connection, store, true, cancellationToken);
 
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
                 new { kind = RepairKinds.Reingest, finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                cancellationToken: cancellationToken));
 
         return report.ChunksToEmbed > 0;
     }

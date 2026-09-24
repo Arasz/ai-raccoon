@@ -22,7 +22,7 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
     /// </summary>
     public async Task<double> GetSweepThresholdAsync(CancellationToken cancellationToken = default)
     {
-        var raw = await store.GetSettingAsync(SweepThresholdSettingKey, cancellationToken).ConfigureAwait(false);
+        var raw = await store.GetSettingAsync(SweepThresholdSettingKey, cancellationToken);
         return SweepThreshold.Parse(raw);
     }
 
@@ -35,11 +35,9 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
         CancellationToken cancellationToken = default)
     {
         await access.EnsureAsync(projectId, AccessRequirement.Destructive, "memory_sweep_threshold",
-                cancellationToken)
-            .ConfigureAwait(false);
+                cancellationToken);
         await store.SetSettingAsync(SweepThresholdSettingKey,
-                SweepThreshold.Format(threshold), cancellationToken)
-            .ConfigureAwait(false);
+                SweepThreshold.Format(threshold), cancellationToken);
     }
 
     /// <summary>Sets or clears one entry's TTL, then reports it next to the rating gate a sweep also checks.</summary>
@@ -47,18 +45,17 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
         CancellationToken cancellationToken = default)
     {
         await access.EnsureAsync(projectId, AccessRequirement.Destructive, "memory_set_ttl",
-                cancellationToken)
-            .ConfigureAwait(false);
+                cancellationToken);
         EntryTtl.EnsureValid(ttlDays);
 
         // Wrong project and unknown hash are the same refusal here — one project must not learn another's hashes.
-        if (!await store.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken).ConfigureAwait(false))
+        if (!await store.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken))
         {
             throw new UnknownHashException(hash, projectId);
         }
 
-        var threshold = await GetSweepThresholdAsync(cancellationToken).ConfigureAwait(false);
-        var metadata = await store.GetMetadataAsync(projectId, hash, cancellationToken).ConfigureAwait(false);
+        var threshold = await GetSweepThresholdAsync(cancellationToken);
+        var metadata = await store.GetMetadataAsync(projectId, hash, cancellationToken);
         var rating = metadata?.Rating ?? RatingPolicy.DefaultBaseScore;
         return new TtlResult(hash, metadata?.TtlDays, rating, threshold,
             DegradationPolicy.CanEverExpire(rating, threshold, metadata?.TtlDays));

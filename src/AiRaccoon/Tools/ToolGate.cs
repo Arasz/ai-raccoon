@@ -31,7 +31,7 @@ public sealed class ToolGate(
     /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
     public async Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken)
     {
-        if (await migrations.HasOpenModelMigrationAsync(cancellationToken).ConfigureAwait(false))
+        if (await migrations.HasOpenModelMigrationAsync(cancellationToken))
         {
             throw new ModelMigrationInProgressException(
                 $"ai-raccoon: a model migration is in progress; try again once it finishes ({toolName})");
@@ -55,15 +55,15 @@ public sealed class ToolGate(
     public async Task<string> RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
         CancellationToken cancellationToken)
     {
-        await RequireBankAvailableAsync(toolName, cancellationToken).ConfigureAwait(false);
+        await RequireBankAvailableAsync(toolName, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(projectId))
         {
-            projectId = await ResolveFromCwdAsync(cancellationToken).ConfigureAwait(false);
+            projectId = await ResolveFromCwdAsync(cancellationToken);
         }
 
         var canonical = ProjectId.Canonicalize(projectId);
-        if (await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false))
+        if (await migrationGate.IsMigratedAsync(cancellationToken))
         {
             canonical = ProjectIdAliasMap.Default.Fold(canonical);
             if (requirement is not AccessRequirement.Read && ProjectIdAliasMap.Default.IsDropped(canonical))
@@ -72,8 +72,8 @@ public sealed class ToolGate(
             }
         }
 
-        await access.EnsureAsync(canonical, requirement, toolName, cancellationToken).ConfigureAwait(false);
-        await registration.EnsureAsync(canonical, requirement, cancellationToken).ConfigureAwait(false);
+        await access.EnsureAsync(canonical, requirement, toolName, cancellationToken);
+        await registration.EnsureAsync(canonical, requirement, cancellationToken);
         return canonical;
     }
 
@@ -88,7 +88,7 @@ public sealed class ToolGate(
     {
         if (resolver is not null)
         {
-            switch (await resolver.ResolveAsync(cancellationToken).ConfigureAwait(false))
+            switch (await resolver.ResolveAsync(cancellationToken))
             {
                 case ProjectIdResolution.Resolved resolved when !string.IsNullOrWhiteSpace(resolved.ProjectId):
                     return resolved.ProjectId;
@@ -110,5 +110,5 @@ public sealed class ToolGate(
     ///     project — the whole bank only when the call itself named no project.
     /// </summary>
     public async Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(projectId, cancellationToken).ConfigureAwait(false));
+        new(data, await queue.GetMetaAsync(projectId, cancellationToken));
 }

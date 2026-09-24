@@ -23,7 +23,7 @@ public sealed class ShareTools(
     [Description(
         "Promotes an existing project entry into the flat shared context — the curated, cross-project, sweep-exempt tier. Nothing is shared without this explicit promotion.")]
     public async Task<ApiEnvelope<ShareResult>> Share(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The content hash to promote.")]
         string hash,
         CancellationToken cancellationToken = default)
@@ -73,8 +73,7 @@ public sealed class ShareTools(
         {
             canonicalIds.Add(await gate.RequireAsync(projectId,
                     request.Promotes ? AccessRequirement.Write : AccessRequirement.Read,
-                    TnMemoryShareExtract, cancellationToken)
-                .ConfigureAwait(false));
+                    TnMemoryShareExtract, cancellationToken));
         }
 
         // Fragments of one project meet here (old-id + Old-Id both fold to old-id under an
@@ -82,7 +81,7 @@ public sealed class ShareTools(
         // twice and the meta would read bank-wide instead of scoped to the single project the
         // call actually named.
         request = request with { ProjectIds = [.. canonicalIds.Distinct(StringComparer.Ordinal)] };
-        var result = await shareExtract.RunAsync(request, cancellationToken).ConfigureAwait(false);
+        var result = await shareExtract.RunAsync(request, cancellationToken);
         return await gate.WrapAsync(request.MetaProjectId, result, cancellationToken);
     }
 

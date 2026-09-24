@@ -50,11 +50,9 @@ public sealed class VacuumJob(Func<SqliteConnection, CancellationToken, Task<Tim
         // The trailing semicolons are load-bearing: Dapper infers CommandType.StoredProcedure for a
         // SQL string with no whitespace, so a bare "VACUUM" throws "The CommandType 'StoredProcedure'
         // is not supported" instead of running. Found by a test asserting the job actually ran.
-        await connection.ExecuteAsync(new CommandDefinition("VACUUM;", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition("VACUUM;", cancellationToken: cancellationToken));
         // VACUUM drops sqlite_stat1, so ANALYZE has to follow it rather than precede it.
-        await connection.ExecuteAsync(new CommandDefinition("ANALYZE;", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition("ANALYZE;", cancellationToken: cancellationToken));
         return false;
     }
 
@@ -63,15 +61,14 @@ public sealed class VacuumJob(Func<SqliteConnection, CancellationToken, Task<Tim
     {
         if (configuredInterval is not null)
         {
-            _resolved = await configuredInterval(connection, cancellationToken).ConfigureAwait(false);
+            _resolved = await configuredInterval(connection, cancellationToken);
             return;
         }
 
         var raw = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
                 "SELECT value FROM settings WHERE key = @key",
                 new { key = BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal },
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                cancellationToken: cancellationToken));
         _resolved = raw is null ? null : TimeSpan.FromDays(BankMaintenanceConfigKeys.ParseVacuumIntervalDays(raw));
     }
 }
@@ -96,8 +93,7 @@ public sealed class Vec0ReclaimJob : IMaintenanceJob
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
-        await connection.ExecuteAsync(new CommandDefinition("VACUUM;", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition("VACUUM;", cancellationToken: cancellationToken));
         return false;
     }
 }
@@ -127,7 +123,7 @@ public sealed class ChunkBackfillJob(
     {
         ArgumentNullException.ThrowIfNull(connection);
         var report = await new ChunkBackfill(fileTypeMatcher, chunker, fallbackChunker, timeProvider, embeddingService)
-            .RunAsync(connection, false, cancellationToken).ConfigureAwait(false);
+            .RunAsync(connection, false, cancellationToken);
         // Only a backfill that actually replaced rows leaves anything to embed.
         return report.RowsReplaced > 0;
     }
@@ -153,12 +149,11 @@ public sealed class MetricsRetentionJob(TimeProvider timeProvider) : IMaintenanc
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
-        var days = await ReadRetentionDaysAsync(connection, cancellationToken).ConfigureAwait(false);
+        var days = await ReadRetentionDaysAsync(connection, cancellationToken);
         var cutoff = timeProvider.GetUtcNow().AddDays(-days).ToUnixTimeSeconds();
         await connection.ExecuteAsync(new CommandDefinition(
                 "DELETE FROM metrics WHERE recorded_at < @cutoff",
-                new { cutoff }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new { cutoff }, cancellationToken: cancellationToken));
         // A reaper only deletes; it never leaves a row needing an embedding.
         return false;
     }
@@ -168,8 +163,7 @@ public sealed class MetricsRetentionJob(TimeProvider timeProvider) : IMaintenanc
     {
         var raw = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
                 "SELECT value FROM settings WHERE key = @key",
-                new { key = MetricsConfigKeys.RetentionDaysGlobal }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new { key = MetricsConfigKeys.RetentionDaysGlobal }, cancellationToken: cancellationToken));
         return MetricsConfigKeys.ParseRetentionDays(raw);
     }
 }

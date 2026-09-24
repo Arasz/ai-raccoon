@@ -10,8 +10,7 @@ public sealed class MemoryAccessGuard(IMemoryStore store) : IMemoryAccessGuard
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        var settings = await store.GetSettingsByPrefixAsync(AccessModePolicy.SettingKeyPrefix, cancellationToken)
-            .ConfigureAwait(false);
+        var settings = await store.GetSettingsByPrefixAsync(AccessModePolicy.SettingKeyPrefix, cancellationToken);
 
         settings.TryGetValue(AccessModePolicy.GlobalSettingKey, out var globalRaw);
         // d-426 SHOULD-1 / d-425 SHOULD-3: CLI key writes fold the id at construction while the
@@ -37,7 +36,7 @@ public sealed class MemoryAccessGuard(IMemoryStore store) : IMemoryAccessGuard
             return;
         }
 
-        var mode = await ResolveAsync(projectId, cancellationToken).ConfigureAwait(false);
+        var mode = await ResolveAsync(projectId, cancellationToken);
         if (AccessModePolicy.Allows(mode, requirement))
         {
             return;

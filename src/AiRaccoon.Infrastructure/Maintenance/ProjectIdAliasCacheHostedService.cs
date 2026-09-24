@@ -35,9 +35,8 @@ public sealed partial class ProjectIdAliasCacheHostedService(
             // hosts + this warm on one fresh bank, and a skip-ensure opener can read a
             // partially-written header (SQLite Error 26) ahead of the creator. Joining the
             // guarded ladder the transports use makes the warm just another open.
-            await using var connection = await connectionFactory.OpenBankAsync(cancellationToken)
-                .ConfigureAwait(false);
-            await ProjectIdAliases.LoadAndCacheAsync(connection, logger, cancellationToken).ConfigureAwait(false);
+            await using var connection = await connectionFactory.OpenBankAsync(cancellationToken);
+            await ProjectIdAliases.LoadAndCacheAsync(connection, logger, cancellationToken);
             // Startup-only pass: it either loaded rows worth a span or correctly found none.
             pass.NoteWork();
             pass.Succeeded();

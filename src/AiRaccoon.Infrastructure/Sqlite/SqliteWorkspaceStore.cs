@@ -12,7 +12,7 @@ public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory) : IWo
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNull(workspace);
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         await connection.ExecuteAsync(
             new CommandDefinition(
@@ -29,12 +29,12 @@ public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory) : IWo
                     status = workspace.Status.ToString(),
                     createdAt = startedAt.ToUnixTimeSeconds()
                 },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+                cancellationToken: cancellationToken));
     }
 
     public async Task CloseAsync(string projectId, string workspaceId, WorkspaceStatus status, DateTimeOffset closedAt,
         CancellationToken cancellationToken = default) =>
-        await TryCloseAsync(projectId, workspaceId, status, closedAt, cancellationToken).ConfigureAwait(false);
+        await TryCloseAsync(projectId, workspaceId, status, closedAt, cancellationToken);
 
     /// <summary>The real compare-and-swap (WP5b/A-F7): conditional on the row still being Active,
     /// so a concurrent consolidate and discard on the same workspace can never both succeed.</summary>
@@ -47,7 +47,7 @@ public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory) : IWo
                 "A workspace cannot be closed into the Active status.");
         }
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         var affected = await connection.ExecuteAsync(
             new CommandDefinition(
@@ -63,19 +63,18 @@ public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory) : IWo
                     status = status.ToString(),
                     closedAt = closedAt.ToUnixTimeSeconds()
                 },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+                cancellationToken: cancellationToken));
         return affected > 0;
     }
 
     public async Task<WorkspaceRecord> RequireActiveAsync(string projectId, string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         var row = await connection.QueryFirstOrDefaultAsync<Row>(
                 new CommandDefinition(MemorySql.SelectWorkspace, new { workspaceId, projectId },
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         if (row?.Status != WorkspaceStatus.Active.ToString())
         {
             throw new UnknownWorkspaceException(workspaceId, projectId);

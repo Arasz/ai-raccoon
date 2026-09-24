@@ -84,7 +84,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await _embeddings.DisposeAsync().ConfigureAwait(false);
+        await _embeddings.DisposeAsync();
         if (Directory.Exists(_dataRoot))
         {
             Directory.Delete(_dataRoot, true);
@@ -123,26 +123,24 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         // Rows land pending (no engine configured yet) so the fixture write loop pays for one
         // round trip per row, not one HTTP call per row; embedding happens once, batched, below.
         var random = new Random(RandomSeed);
-        await WriteFixtureAsync(store, random, cancellationToken).ConfigureAwait(false);
+        await WriteFixtureAsync(store, random, cancellationToken);
 
-        var embeddings = await FakeEmbeddingEndpoint.StartAsync(cancellationToken).ConfigureAwait(false);
-        await store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "bench-fake-key", cancellationToken)
-            .ConfigureAwait(false);
+        var embeddings = await FakeEmbeddingEndpoint.StartAsync(cancellationToken);
+        await store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "bench-fake-key", cancellationToken);
         // D4: ConfigureEmbeddingAsync is gone from the port. Production configures embedding
         // through the ADR-0076 outbox (StartModelMigrationAsync writes settings; a relay drains
         // it) — drive that same seam here, then drain immediately with a REAL lease (not the
         // fixture's NSubstitute ModelMigrationLease, which never acquires) since the fixture
         // needs the engine usable before EmbedPendingAsync runs below.
-        await store.StartModelMigrationAsync("openai", "bench-embed-model", embeddings.BaseUrl, cancellationToken)
-            .ConfigureAwait(false);
+        await store.StartModelMigrationAsync("openai", "bench-embed-model", embeddings.BaseUrl, cancellationToken);
         var drainEmbedder = new EntryEmbedder(embeddingService, new SqliteModelMigrationLease(TimeProvider),
             TimeProvider, new VecDimensionReconciler(), new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, TimeProvider),
             NullOperationTelemetry.Instance, NullLogger<EntryEmbedder>.Instance);
-        await using (var migrationConnection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false))
+        await using (var migrationConnection = await factory.OpenBankAsync(cancellationToken))
         {
-            await drainEmbedder.DrainMigrationAsync(migrationConnection, cancellationToken).ConfigureAwait(false);
+            await drainEmbedder.DrainMigrationAsync(migrationConnection, cancellationToken);
         }
-        var embedded = await store.EmbedPendingAsync(ProjectId, null, cancellationToken).ConfigureAwait(false);
+        var embedded = await store.EmbedPendingAsync(ProjectId, null, cancellationToken);
         if (embedded.Pending > 0)
         {
             throw new InvalidOperationException(
@@ -150,7 +148,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         }
 
         var bank = new SearchFixtureBank(dataRoot, factory, embeddings, store);
-        await bank.VerifyAsync(cancellationToken).ConfigureAwait(false);
+        await bank.VerifyAsync(cancellationToken);
         return bank;
     }
 
@@ -163,17 +161,15 @@ public sealed class SearchFixtureBank : IAsyncDisposable
     /// </summary>
     private async Task VerifyAsync(CancellationToken cancellationToken)
     {
-        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        var vectorRows = await Scalar(connection, "SELECT COUNT(*) FROM vec_entries", cancellationToken)
-            .ConfigureAwait(false);
+        await using var connection = await _factory.OpenBankAsync(cancellationToken);
+        var vectorRows = await Scalar(connection, "SELECT COUNT(*) FROM vec_entries", cancellationToken);
         if (vectorRows <= 0)
         {
             throw new InvalidOperationException(
                 "Search fixture bank has 0 vec_entries rows after embedding — the benchmark would measure nothing.");
         }
 
-        var structureRows = await Scalar(connection, "SELECT COUNT(*) FROM vec_structure", cancellationToken)
-            .ConfigureAwait(false);
+        var structureRows = await Scalar(connection, "SELECT COUNT(*) FROM vec_structure", cancellationToken);
         if (structureRows <= 0)
         {
             throw new InvalidOperationException(
@@ -181,18 +177,15 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         }
 
         var structuredEntries = await Scalar(connection,
-                "SELECT COUNT(*) FROM entries WHERE structure_embedding IS NOT NULL", cancellationToken)
-            .ConfigureAwait(false);
-        var totalEntries = await Scalar(connection, "SELECT COUNT(*) FROM entries", cancellationToken)
-            .ConfigureAwait(false);
+                "SELECT COUNT(*) FROM entries WHERE structure_embedding IS NOT NULL", cancellationToken);
+        var totalEntries = await Scalar(connection, "SELECT COUNT(*) FROM entries", cancellationToken);
         Console.WriteLine(
             $"[SearchFixtureBank] structure-populated fraction: {structuredEntries}/{totalEntries} " +
             $"({(double)structuredEntries / totalEntries:P1})");
 
         var probe = await Store.SearchAsync(
                 new SearchQuery(ProjectId, Queries[0], Limit: 10, MinRelativeScore: 0.0),
-                cancellationToken)
-            .ConfigureAwait(false);
+                cancellationToken);
         if (probe.Results.Count == 0)
         {
             throw new InvalidOperationException(
@@ -208,9 +201,9 @@ public sealed class SearchFixtureBank : IAsyncDisposable
         for (var topicIndex = 0; topicIndex < Queries.Count; topicIndex++)
         {
             await WriteTopicAsync(store, random, topicIndex, ProjectEntryCount / Queries.Count,
-                ContextNaming.ProjectContext(ProjectId), "project", cancellationToken).ConfigureAwait(false);
+                ContextNaming.ProjectContext(ProjectId), "project", cancellationToken);
             await WriteTopicAsync(store, random, topicIndex, SharedEntryCount / Queries.Count,
-                ContextNaming.SharedContext, "shared", cancellationToken).ConfigureAwait(false);
+                ContextNaming.SharedContext, "shared", cancellationToken);
         }
     }
 
@@ -228,8 +221,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             var path = $"bench/{scopeTag}/topic-{topicIndex}/doc-{i:D5}.md";
             var content = ContentFor(topic, random, grouped, positionInBlock);
             await store.AddContentAsync(ProjectId, path, content, context, sourceFile,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
+                    cancellationToken: cancellationToken);
         }
     }
 

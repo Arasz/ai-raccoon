@@ -31,10 +31,10 @@ public sealed class SharedExtractionRunner(
         // Auto-clear before ranking (ADR-0018): a row stamped by a retired scorer version is
         // deleted rather than re-scored in place — it may no longer be a candidate at all, and the
         // ranking below re-admits anything still eligible on merit in this same pass.
-        await queue.ClearStaleAsync(projectId, PromotionScorer.Version, cancellationToken).ConfigureAwait(false);
+        await queue.ClearStaleAsync(projectId, PromotionScorer.Version, cancellationToken);
 
-        var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken).ConfigureAwait(false);
-        var allProjectIds = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
+        var rows = await store.ExtractCandidatesAsync(projectId, includeTtlRows, cancellationToken);
+        var allProjectIds = await store.GetProjectIdsAsync(cancellationToken);
         var ranked = extraction.RankAll(projectId, allProjectIds, rows,
             sharedIndex.Values, sharedIndex.Paths, includeTtlRows, timeProvider.GetUtcNow());
         if (minScore.HasValue)
@@ -48,8 +48,7 @@ public sealed class SharedExtractionRunner(
             // a queued row is refreshed regardless of rank, but a not-yet-queued row is bounded by
             // `limit` and the per-source-document cap, so one pass cannot insert the whole eligible
             // pool nor let one document flood the queue (docs/work/2026-08-09-promotion-scoring-measurement.md).
-            var existingQueueRows = await queue.ListAsync(projectId, int.MaxValue, cancellationToken)
-                .ConfigureAwait(false);
+            var existingQueueRows = await queue.ListAsync(projectId, int.MaxValue, cancellationToken);
             var alreadyQueued = existingQueueRows.Select(r => r.Hash).ToHashSet(StringComparer.Ordinal);
             var queuedCountsBySourceFile = existingQueueRows
                 .Where(r => r.SourceFile is not null)
@@ -63,8 +62,7 @@ public sealed class SharedExtractionRunner(
             if (toQueue.Count > 0)
             {
                 var existingByHash = existingQueueRows.ToDictionary(r => r.Hash, StringComparer.Ordinal);
-                await queue.ProposeAsync(projectId, ToQueueCandidates(rows, toQueue, existingByHash), cancellationToken)
-                    .ConfigureAwait(false);
+                await queue.ProposeAsync(projectId, ToQueueCandidates(rows, toQueue, existingByHash), cancellationToken);
             }
         }
 

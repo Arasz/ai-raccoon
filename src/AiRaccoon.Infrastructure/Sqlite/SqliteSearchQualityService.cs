@@ -30,8 +30,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
     {
         try
         {
-            await RecordSearchAsync(correlationId, query, scope, projectId, kind, sessionId, resultCount, topSourceFiles, ct, evidence)
-                .ConfigureAwait(false);
+            await RecordSearchAsync(correlationId, query, scope, projectId, kind, sessionId, resultCount, topSourceFiles, ct, evidence);
         }
         catch (Exception ex) when (ex.IsBankBusy())
         {
@@ -65,7 +64,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
             throw new ArgumentException($"Invalid kind '{kind}': expected memory, code, or both.", nameof(kind));
         }
 
-        await using var connection = await factory.OpenBankAsync(ct).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(ct);
         var topFilesJson = topSourceFiles.Count > 0 ? JsonSerializer.Serialize(topSourceFiles) : null;
         var resultFeaturesJson = SerializeResultFeatures(evidence);
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -89,7 +88,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
                 TopSourceFiles = topFilesJson,
                 ResultFeatures = resultFeaturesJson,
                 CreatedAt = now
-            }).ConfigureAwait(false);
+            });
     }
 
     /// <summary>
@@ -145,7 +144,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
             ArgumentOutOfRangeException.ThrowIfLessThan(servedRank.Value, 1);
         }
 
-        await using var connection = await factory.OpenBankAsync(ct).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(ct);
 
         // The codec is the migration (no DDL): legacy plain-string cells upgrade in memory to
         // uniform object rows on append, and the cell always round-trips the object shape.
@@ -153,7 +152,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         // rank is filled once by a later non-null.
         var existing = await connection.QuerySingleOrDefaultAsync<string?>(
             "SELECT follow_through_files FROM search_quality WHERE correlation_id = @Id",
-            new { Id = correlationId }).ConfigureAwait(false);
+            new { Id = correlationId });
 
         var entries = DecodeFollowThrough(existing);
         var index = entries.FindIndex(e => string.Equals(e.Path, filePath, StringComparison.Ordinal));
@@ -177,7 +176,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
                 Id = correlationId,
                 entries.Count,
                 Files = JsonSerializer.Serialize(entries)
-            }).ConfigureAwait(false);
+            });
     }
 
     /// <summary>
@@ -226,7 +225,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         string? note,
         CancellationToken ct = default)
     {
-        await using var connection = await factory.OpenBankAsync(ct).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(ct);
 
         await connection.ExecuteAsync(
             """
@@ -234,7 +233,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
             SET usefulness_grade = @Grade, grade_note = @Note
             WHERE correlation_id = @Id
             """,
-            new { Id = correlationId, Grade = grade, Note = note }).ConfigureAwait(false);
+            new { Id = correlationId, Grade = grade, Note = note });
     }
 
     public async Task<SearchQualityMetrics> GetMetricsAsync(
@@ -242,7 +241,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         DateTimeOffset from,
         CancellationToken ct = default)
     {
-        await using var connection = await factory.OpenBankAsync(ct).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(ct);
         var fromUnix = from.ToUnixTimeSeconds();
 
         var row = await connection.QuerySingleOrDefaultAsync(
@@ -256,7 +255,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
             WHERE created_at >= @From
               AND (@ProjectId IS NULL OR project_id = @ProjectId)
             """,
-            new { From = fromUnix, ProjectId = projectId }).ConfigureAwait(false);
+            new { From = fromUnix, ProjectId = projectId });
 
         var total = (int)(row?.TotalSearches ?? 0);
         var followThrough = (int)(row?.FollowThroughSearches ?? 0);
@@ -279,13 +278,12 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         CancellationToken cancellationToken = default)
     {
         var cutoff = nowUnixSeconds - (long)retentionDays * 86_400;
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         // Retention is global, so no project filter: idx_sq_project_time leads with project_id and
         // serves ReadMetricsAsync, not this — SQLite skip-scans or scans here.
         return await connection.ExecuteAsync(
                 new CommandDefinition("DELETE FROM search_quality WHERE created_at < @cutoff",
-                    new { cutoff }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    new { cutoff }, cancellationToken: cancellationToken));
     }
 
     private static partial class Log
