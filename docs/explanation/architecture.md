@@ -177,8 +177,9 @@ permanent, per-project "no" — never synced, never swept, written only by the
   Wave 2c). Queries shaped like a source path
   (`docs/adr/0011-frontend-chassis-stack.md#decision`) match the source/section columns
   with AND semantics, so the exact chunk ranks first.
-- `vec_entries` — vec0 virtual table (dimension 384, matching all-MiniLM-L6-v2)
-  for semantic search. Triggers sync it with `embed_state` changes.
+- `vec_entries` — vec0 virtual table (dimension 384, matching the bundled
+  granite-embedding-small-english-r2 engine, ADR-0108) for semantic search. Triggers sync it
+  with `embed_state` changes.
 - `vec_structure` — vec0 virtual table over heading-path embeddings (rowid = entry
   id). Populated by `EntryEmbedder` at the embed transition — it derives the
   heading path per chunk and embeds distinct non-empty paths once per batch —
@@ -218,11 +219,14 @@ digest-gated DDL block (no `CurrentVersion` bump — the metrics-table precedent
   curated knowledge).
 - `code_fts` — FTS5 external-content index over `code_entries(value, source_file)`, with the
   same insert/delete/update trigger family as `entries_fts`.
-- `vec_code` — vec0 virtual table, `float[768]` by default (`code-daemon-embed-v1`'s dimension,
-  distinct from `vec_entries`' 384; reconciled to any manifest dimension at activation —
-  vec-code-unfix-dim) with `ctx = project_id` directly — no `ContextKeyExpression`
-  branching, since code is project-scoped only. `embed_state` UPDATE triggers keep it in sync
-  with `code_entries`, mirroring `vec_entries`.
+- `vec_code` — vec0 virtual table, `float[768]` by default (a legacy placeholder dimension
+  from before ADR-0108, distinct from `vec_entries`' 384; reconciled to whatever dimension the
+  activated engine declares, vec-code-unfix-dim) with `ctx = project_id` directly (no
+  `ContextKeyExpression` branching, since code is project-scoped only). `embed_state` UPDATE
+  triggers keep it in sync with `code_entries`, mirroring `vec_entries`. Since ADR-0108,
+  `ai-raccoon model code set default` activates the same bundled granite-embedding-small-english-r2
+  engine memory uses (384 dims, nothing downloaded); `model code set local <dir>` still accepts
+  any other manifest model and dimension.
 
 **Lifecycle exclusions** (deliberate, not oversights): the code corpus never syncs (a pushed
 snapshot `DROP`s `code_entries`/`code_fts`/`vec_code` rather than stripping rows), never
@@ -230,7 +234,8 @@ sweeps, carries no TTL, and never promotes to the shared tier. Losing it costs a
 from disk, not knowledge — the opposite of `entries`.
 
 **Its own embedding engine and drain, deliberately simpler than the memory engine's:**
-`ai-raccoon model set code local <dir>` writes `embedding.codeModel`/`embedding.codeEngine`
+`ai-raccoon model code set default` (the bundled engine, nothing downloaded) or
+`model code set local <dir>` writes `embedding.codeModel`/`embedding.codeEngine`
 and marks every currently-embedded code row `pending`, in one transaction — the
 `vec_code_pending` trigger empties `vec_code` at that same commit, so there is no
 stale-vector window. Unlike a memory engine change, this does **not** go through the
@@ -253,10 +258,9 @@ ingest time, independent of `embed_state`).
 ### Schema versioning
 
 `MemorySchema.EnsureAsync` reads `PRAGMA user_version` before the DDL runs and walks an
-ordered ladder (`MigrateToV1Async` … `MigrateToV10Async`) up to `CurrentVersion` (currently
-**10**, corrected 2026-08-16 — this said 5 and had been stale for five ladder steps) on every
-read-write open (ADR 0011). A fresh bank is stamped at the current version directly and
-never walks the ladder; a stamped bank at the current version skips it entirely.
+ordered ladder (`MigrateToV1Async` … `MigrateToV17Async`) up to `CurrentVersion` (currently
+**17**) on every read-write open (ADR 0011). A fresh bank is stamped at the current version
+directly and never walks the ladder; a stamped bank at the current version skips it entirely.
 
 **The DDL block is gated on a digest of itself** (ADR-0075). `PRAGMA application_id` holds the
 first 32 bits of `SHA-256(Ddl)`, stamped only *after* the block completes. When it matches, the
@@ -340,9 +344,10 @@ has not yet reached. The chunker uses the o200k_base tokenizer with code-fence-a
 and an overlay window for context continuity between chunks.
 
 **Chunk bounds** are clamped to the configured embedding engine's maximum input
-tokens: 256 for the bundled all-MiniLM-L6-v2, 8191 for OpenAI-compatible models.
-When no engine is configured, the default is 256 tokens per chunk with a 48-token
-overlay.
+tokens: 254 content tokens for the bundled granite-embedding-small-english-r2 engine (a
+256-token window minus 2 reserved special tokens; ADR-0108), 8191 for OpenAI-compatible
+models. An unconfigured bank resolves to the same bundled default: 254 tokens per chunk
+with a 48-token overlay.
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:36-113`
 > (`memory_write`), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:27-61`
@@ -863,15 +868,12 @@ line/brace based:
 The budget is a fixed **510** tokens — `EmbeddingService.MaxManifestChunkTokens`
 (512 minus the 2-token `<s>`/`</s>` reservation), the same manifest cap
 `ResolveChunkBudgetFor` derives for manifest-local embedding models, never
-the memory chunker's 254/256. An earlier **126** figure (`min(510,
+the memory chunker's 254. An earlier **126** figure (`min(510,
 128 − 2)`) rested on a 128-token context claim the ONNX graph does not have
-— measured on #422, retired by #453 so the flagship model's own manifest
-(ctx 512) can activate without hand-editing it down to 128. Counting uses `ICodeTokenizer`: the
-bundled code-daemon-embed-v1 sentencepiece tokenizer
-(`src/AiRaccoon/Models/code-sentencepiece.bpe.model`, 626 KB, sha256-pinned)
-whenever no code engine is configured (`embedding.codeModel` absent) — the
-v1 default; a configured code engine's own tokenizer is a later extension
-point, not exercised in v1.
+(measured on #422, retired by #453). Counting uses `ICodeTokenizer`: since ADR-0108, the
+bundled granite-embedding-small-english-r2 `tokenizer.json` (the same tokenizer the memory
+engine uses), whenever no code engine is configured (`embedding.codeModel` absent); a
+configured code engine's own tokenizer is a later extension point, not exercised in v1.
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Chunking/CodeChunker.cs`
 > (splitter), `src/AiRaccoon.Infrastructure/Embedding/CodeTokenizer.cs`
@@ -879,19 +881,43 @@ point, not exercised in v1.
 > (hard-split), `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs:170-180`
 > (`ResolveChunkBudgetFor`, the shared min(510, ctx−reservation) rule)
 
+## Projects
+
+Five `.csproj` projects, one solution:
+
+| Project | Kind | Role |
+|---|---|---|
+| `src/AiRaccoon` | Exe | The MCP server binary: tools, CLI, hosting, DI. Depends on Core and Infrastructure. |
+| `src/AiRaccoon.Core` | Library | Pure domain layer: ports, records, policies. Zero framework deps. |
+| `src/AiRaccoon.Infrastructure` | Library | Adapters implementing Core's ports: SQLite/Dapper, sync, embedding, watch. |
+| `tests/AiRaccoon.Tests` | Test suite | `BDD/`, `E2E/`, `Integration/`, `Unit/` (the four tiers), plus `Resources/`, `TestData/`, `TestHelpers/`. |
+| `benchmarks/AiRaccoon.Benchmarks` | Benchmark suite | `Benchmarks/` (BenchmarkDotNet cases), `Corpus/` (real-world query/document fixtures), `Embedders/`, `Metrics/`, `SearchFixture/`. |
+
 ## Layering
 
 ```
 src/AiRaccoon/              Thin MCP server — tool definitions, transport, DI
-  Tools/MemoryTools.cs      10 [McpServerTool] methods, no business logic
-                            (28 tools in all, across the ten Tools/*.cs classes)
-  Tools/PerformanceTools.cs memory_performance — thin over MetricsReportService (ADR-0065)
+  Tools/                    29 [McpServerTool] methods across 11 classes (MemoryTools carries 10,
+                            the rest split across CodeTools, PerformanceTools, ProjectTools,
+                            PromotionTools, QualityTools, ShareTools, SweepTools, SyncTools,
+                            WatchTools, WorkspaceTools), no business logic
   Access/MemoryAccessGuard  Enforces access modes at the tool boundary
   Setup/McpServerSetup.cs   launch routing (bare runs proxy, `serve` builds the HTTP host)
+  Setup/Cli/                the `ai-raccoon` CLI: command tree, settings/doctor/model/repair verbs
+  Setup/Diagnostics/        `doctor`'s per-corpus engine report (CorpusEngineProbe/Lines)
   Hosting/                  proxy (the default) and serve, moved out of Setup/Serve/ 2026-08-22:
                             Proxy/ (ProxyRunner, ProxyForwarder, BackendLauncher), Node/ (NodeRunner,
                             ServerRestart, ObservabilityRunner, McpTokenGate), Common/ (ServerProbe,
-                            McpTokenFile), Watchdog/ (IdleWatchdog) (ADR-0020)
+                            McpTokenFile, IdentityProof/IdentityKeyFile primitives, ADR-0106),
+                            Watchdog/ (IdleWatchdog) (ADR-0020)
+  Setup/Identity/           the `/identity/prove` endpoint mapping (IdentityProofEndpoint, ADR-0106)
+  Observability/            OTLP export, ToolCallMetrics/ToolExecutionActivity, the /observability endpoint
+  Settings/                 the settings server backend and its endpoints (model/repair/watch/noise/…)
+  Projects/                 cwd-based project id resolution and registration guards
+  Prompts/MemoryPrompts.cs  MCP prompt definitions
+  Models/                   the bundled granite-embedding-small-english-r2 manifest + weights,
+                            and the legacy all-MiniLM-L6-v2 BERT vocab (ADR-0108)
+  .mcp/server.json          MCP registry manifest
 
 src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Memory/                   IMemoryStore port, records, ContentHash, SearchQuery, ContextNaming,
@@ -906,12 +932,16 @@ src/AiRaccoon.Core/         Pure domain layer — zero framework deps
   Ingestion/                IFileTypeHandler, IFileTypeMatcher, IngestPath, IngestScopeKeys/List,
                             PathOutsideScopeException, PathNotFoundException, CodeExtensions,
                             ICodeFileTypeMatcher, CorpusKind, IngestDispatcher (code corpus routing)
+  Embedding/                EmbeddingMath (pure vector ops), EmbeddingModelRejectedException
   Rating/                   RatingPolicy
   Degradation/              DegradationPolicy
   Isolation/                Workspace record, IWorkspaceStore/IWorkspaceService ports, ConsolidationResult
   Encryption/               SshKeyDerivation, OpenSshPrivateKeyParser, EncryptionData
   Validation/               ValidatorConfiguration (FluentValidation wiring)
   Watch/                    IWatchService port, WatchConfig, WatchState, WatchPath
+  Projects/                 ProjectId, IProjectRegistry, alias map, fold plan, census report
+  SearchQuality/            ISearchQualityService port, FollowThroughEntry, SearchQualityMetrics
+  Sync/                     SyncNotConfiguredException and the other sync-port exceptions
   EventPump/                IEventPump<T>/EventPump<T>, PumpTopic (bounded-channel pump, one instance
                             per topic — metrics and embed-drain signalling, ADR-0091)
 
@@ -919,11 +949,12 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Sqlite/                   SqliteMemoryStore, MemorySchema, ReciprocalRankFusion,
                             SearchContexts, SearchResultMerger, EntryBucket
   Sqlite/Encryption/        EncryptionKeyResolver, EncryptionSourceSidecar, key Providers
-  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel, EntryEmbedder,
+  Embedding/                EmbeddingService, OnnxEmbeddingGenerator, BundledModel (ADR-0108's
+                            granite-embedding-small-english-r2 fp16, GPU-first), EntryEmbedder,
                             CodeEmbedder, EmbedDrainService (the embed topic's single consumer,
                             ADR-0076/ADR-0091), EmbedDrainRequest/EmbedDrainSignal,
-                            ICodeTokenizer/CodeTokenizer (bundled code-daemon-embed-v1 sentencepiece
-                            counting tokenizer, unconfigured-code-engine default)
+                            ICodeTokenizer/CodeTokenizer (the bundled granite tokenizer.json,
+                            shared with the memory engine, when no code engine is configured)
   Ingestion/                FileIngestor (scope containment, chunking, chunk insertion; WI-8),
                             FileTypeMatcher, MarkdownFileTypeHandler, JsonFileTypeHandler, IFileIngestor,
                             CodeIngestor, CodeFileTypeMatcher (code corpus, self-filtering)
@@ -935,9 +966,15 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Watch/                    WatchService, WatchPipeline, WatchScheduler, WatchHostedService
   Promotion/                PromotionQueueService (propose-tier queue, ADR-0007)
   Extraction/               ExtractionHostedService (background shared-extraction loop, #55)
+  Assets/                   AssetDownloader (fetches and SHA-256-verifies bundled model files)
+  Resilience/               ResiliencePipelineFactory (retry/timeout policies for outbound calls)
   Maintenance/              BankMaintenanceHostedService (WAL checkpoint, #79) running a job list
                             (ADR-0070): VacuumJob, Vec0ReclaimJob, ChunkBackfillJob,
-                            MetricsRetentionJob (purges `metrics` past its retention window)
+                            MetricsRetentionJob (purges `metrics` past its retention window),
+                            ChunkIndexRepairJob, ReingestRepairJob (on-demand repair verbs),
+                            PendingEmbedJob, CodeReindexJob (enqueue-only embed-drain signalers;
+                            `HasWorkAsync` is the crash-recovery path, kept deliberately even though
+                            they only ever signal, never drain inline)
   Metrics/                  MeasurementBuffer (thin adapter over EventPump<Measurement>, ADR-0091), MetricsFlusher (fixed-interval
                             BackgroundService), SqliteMetricsStore, MetricsRecorder,
                             MetricsReportService (window/bucket aggregation for memory_performance)

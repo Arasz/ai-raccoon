@@ -41,9 +41,9 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 | `/observability` endpoint (HTTP mode) | Returns the server's PID, binary version and OTLP export state on the same loopback port as `/mcp`                                                                          | Any process that can reach the listening port |
 | `/shutdown` endpoint (`serve` only) | Stops the server gracefully for `serve --restart` (ADR-0022). POST only, **guarded by the same loopback token as `/mcp`**, and mapped only on token-gated `serve` hosts | Any local process that can read the token file |
 | OTLP export (opt-in)       | Exports metrics and traces to the collector named by `OTEL_EXPORTER_OTLP_ENDPOINT`; off entirely when that variable is unset                                                           | Whoever sets the environment variable for the server process |
-| Memory tools (26 tools)    | Read/write/search/manage the SQLite memory bank; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to a cloud object store (S3 or Azure Blob) | The calling MCP client                        |
+| Memory tools (29 tools)    | Read/write/search/manage the SQLite memory bank and the indexed code corpus; watch files/directories; begin/consolidate/discard workspaces; run degradation sweeps; sync to a cloud object store (S3 or Azure Blob) | The calling MCP client                        |
 | NuGet package / local feed | Ships the built tool via `dotnet pack` and the local `.nupkg-local/` feed                                                                                                               | The pack/push commands and feed contents      |
-| Embedded ONNX model        | Runs `all-MiniLM-L6-v2` inference in-process for local embeddings (~23 MB, bundled)                                                                                                     | The model file shipped with the binary        |
+| Embedded ONNX model        | Runs `granite-embedding-small-english-r2` (fp16) inference in-process for local embeddings, serving both the memory and code corpora (~97 MB, bundled; ADR-0108, GPU-first where available) | The model file shipped with the binary        |
 | Cloud sync (opt-in)        | Pushes/pulls VACUUM snapshots to/from a cloud object store (S3-compatible or Azure Blob)                                                                                                | Credentials from the bank's settings table    |
 | SQLite encryption (opt-in) | Transparent page-level encryption via SQLite3MC (SQLite3MC.PCLRaw bundle, default cipher chacha20/sqleet); FTS5 and vec0 work unchanged                                              | Passphrase from `AIRACCOON_DB_PASSPHRASE`, or an ed25519 SSH key from Bitwarden Secrets Manager via `ai-raccoon encryption bitwarden` (HKDF-derived; ADR 0012) |
 
@@ -77,13 +77,13 @@ together with the root fingerprint, the key id and the port the caller dialled �
 any secret reaches it. A proven listener is attached to and nothing is spawned; nothing
 listening → one is started on the configured port; an unproven listener, a failed proof
 or an unanswered probe → the client falls back to a private ephemeral backend, while
-`serve` on an unproven port holder refuses with exit 3. The proof is required again
-immediately before every token-bearing request — the acquire, `serve --restart`'s
+`serve` on an unproven port holder refuses with exit `50` (`Server.Unproven`). The proof is
+required again immediately before every token-bearing request — the acquire, `serve --restart`'s
 shutdown POST, and the proxy's stop of its own child — so a listener that cannot prove is
 sent nothing at any of those moments. `--attach` no longer exists: passing it, in either
-the root or the `serve` spelling, is an unrecognized argument (exit 9). The same proof
-rule governs the server-routed CLI commands (`settings …`, `model …`, `watch registered`,
-`noise entries`, `repair`, …).
+the root or the `serve` spelling, is an unrecognized argument (exit `11`, `Usage.Unparseable`).
+The same proof rule governs the server-routed CLI commands (`settings …`, `model …`,
+`watch registered`, `noise entries`, `repair`, …).
 
 **The invariant is *zero secret bytes*, not zero requests.** The acquire probe
 (`POST /mcp` with a bare body) and the bounded nonce challenge do reach an unproven
@@ -94,8 +94,8 @@ that window is a residual (ADR-0106 residual 2).
 
 **A mistyped `--data-root` no longer mints anything.** Client auto-launches (the proxy,
 and the server-routed settings verbs) refuse an empty, non-default root before they probe
-or spawn: exit 22, zero files, so a typo cannot bootstrap a bank, token and identity key
-under a stray directory (F39, ADR-0106). The default root keeps its bootstrap, and
+or spawn: exit `31` (`Bank.NoBank`), zero files, so a typo cannot bootstrap a bank, token
+and identity key under a stray directory (F39, ADR-0106). The default root keeps its bootstrap, and
 `serve`, `encryption` and `doctor` still create a bank where they are pointed.
 
 **The token now also authorises stopping the server (ADR-0022).** `serve --restart` cycles
@@ -112,7 +112,7 @@ host with no token. `serve --restart` itself no longer reads or sends that token
 listener that merely answers `/observability` with the ai-raccoon name: the join review
 measured the handover. Since ADR-0106 a bare cycle requires the listener to prove its
 per-root identity first — a different root's server is refused — and an unproven holder
-gets no token and earns exit 3 with a line naming the manual stop.
+gets no token and earns exit `50` (`Server.Unproven`) with a line naming the manual stop.
 
 **One known gap, stated rather than implied, and one retired.** The ungated
 direct `--transport http` launch this section used to warn about is gone: a bare
@@ -215,13 +215,18 @@ exactly the case it exists for — a server whose data root the caller does not 
 
 State plainly, so nobody assumes coverage that does not exist:
 
-- **No automated security scanning.** CI (`.github/workflows/`) builds and runs the
-  fast test suite on every PR, and the full suite nightly — but none of that is a
+- **No automated security scanning.** CI (`.github/workflows/build.yml`) runs the fast,
+  BDD and slow test tiers on every PR and every push to `main`; the `Speed=Nightly` tier
+  runs only when a PR carries the `run-nightly-gates` label or is triggered manually
+  (`workflow_dispatch`); there is no cron-scheduled nightly run. None of these tiers is a
   security scan: no CodeQL, no Dependabot, no gitleaks. Secrets are kept out by review
   and by the "no hardcoded secrets" invariant in [`CLAUDE.md`](CLAUDE.md) — verify with
   a manual scan (`grep -riE 'api[_-]?key|secret|password' src tests`) before any push.
-- **No release automation.** Versions are set by hand in the csproj; releases are
-  traceable per the "releases are traceable" invariant, nothing more.
+- **Releases are automated past a human gate, not manual.** The version lives in a
+  single top-level `VERSION` file (`Directory.Build.props` reads it into every csproj); a
+  push to `main` that changes it (`.github/workflows/release.yml`) tags the commit and cuts
+  a GitHub release automatically. Publishing the NuGet package (`publish.yml`) still waits
+  on a manual approval under the `production` environment before it pushes.
 
 ## Out of scope
 

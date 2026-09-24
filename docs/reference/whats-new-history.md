@@ -1,11 +1,22 @@
 # What's new — history
 
-Older release highlights, archived from the README. Newest at the top.
+Older release highlights, archived from the README: 1.6.0 through 1.43.0. Newest at the top.
 
 For current highlights, see [README.md](../../README.md#whats-new).
 
 ---
 
+- `memory_search` reports the content cosine as evidence, applies an absolute relevance floor, and names the floor when it truncates. (1.43.0)
+- `memory_delete` removes the whole write, and sync tombstones are label-aware. (1.43.0)
+- Refusals name their remedy, and refused queries are redacted from logs and spans. (1.43.0)
+- Run-once project-ids repair with P3 enforcement. (1.41.0) [ADR-0100](../adr/0100-repair-folds-all-committed-scopes.md) · [ADR-0101](../adr/0101-repair-verdicts-ignore-telemetry-workspaces-block.md) · [ADR-0102](../adr/0102-durable-alias-map-with-p3-enforcement.md) · [ADR-0103](../adr/0103-run-until-fixed-loop-with-falsifiable-verdict.md)
+- Pre-filled project-ids repair template. (1.40.0) [ADR-0099](../adr/0099-empty-default-alias-map.md)
+- Memory and code engines are configured separately. (1.35.0) [How-to](../how-to/configure-embedding-engines.md)
+- The code corpus accepts any embedding dimension. (1.35.0) [ADR-0093](../adr/0093-vec-code-is-dimension-agnostic-through-the-shared-d3-reconciler.md) · [How-to](../how-to/search-the-code-corpus.md)
+- `memory_search` defaults to `kind=both`. (1.34.0) [ADR-0088](../adr/0088-code-search-surface-kind-envelope-no-fusion.md) · [How-to](../how-to/search-the-code-corpus.md)
+- `project_id_token_get` mints and registers a project id. (1.33.2) [ADR-0089](../adr/0089-the-project-id-is-a-guidv7-and-that-is-not-access-control.md)
+- `memory_performance` reports the maintenance-job, embed-drain, replace-lock and query-truncation series. (1.33.2) [ADR-0091](../adr/0091-the-event-pump-never-blocks-a-producer.md)
+- Two knobs bound the embedding engine. (1.33.0) [ADR-0091](../adr/0091-the-event-pump-never-blocks-a-producer.md)
 - **The default code model installs with one command.** `ai-raccoon model code set default` downloads and activates `faxenoff/code-daemon-embed-v1` (187 MB, 768-dim) into `<data-root>/models/`. Re-running against an already-downloaded directory only re-activates. (1.32.0) [How-to](../how-to/configure-embedding-engines.md#recipe-5-activate-the-code-corpuss-embedding-engine)
 - **Cloud snapshots are authenticity-checked (HMAC) before attach, and model activation verifies sha256 pins.** (1.31.0)
 - **A second corpus indexes your code, searchable via `memory_search kind=code`.** Never synced, never mixed with memory. Watches and file ingest feed it automatically; `code_get` reads a chunk's full source by hash. (1.30.0) [Feature](../features/code-corpus/) · [ADR-0085](../adr/0085-a-second-code-only-corpus-in-the-same-bank.md)

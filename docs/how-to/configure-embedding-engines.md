@@ -10,31 +10,65 @@ Select, configure, and switch embedding models for vector search.
 
 ## Supported embedding engines
 
-AiRaccoon supports two vector embedding engines:
+AiRaccoon embeds with one of three engine kinds. Memory and the code corpus each pick their own
+independently (Recipe 5); a fresh bank starts with neither configured.
 
 ```mermaid
 graph LR
     subgraph Local ["Local ONNX Engine (recommended)"]
-        ONNX["Bundled all-MiniLM-L6-v2\n(int8 quantized, ~23MB)"]
-        L_Prop["• 100% Offline\n• ~9ms / query\n• Zero API cost"]
+        ONNX["Bundled granite-embedding-small-english-r2\n(fp16, 384-dim, ~97MB)"]
+        L_Prop["• 100% Offline\n• GPU first (WebGPU on macOS)\n• Zero API cost"]
     end
-    
+
+    subgraph LocalOther ["Any other local ONNX model"]
+        Other["Downloaded via 'model download'\n(WordPiece, SentencePiece, or any tokenizer.json repo)"]
+        O_Prop["• 100% Offline\n• CPU by default; 'gpu' opts in\n• Any dimension"]
+    end
+
     subgraph Remote ["Remote OpenAI-Compatible"]
         OpenAI["OpenAI / Ollama / LM Studio\n(/v1/embeddings)"]
-        R_Prop["• High-dimensional embeddings\n• Custom domain models\n• Requires API Key or Local Endpoint"]
+        R_Prop["• Custom domain models\n• Requires API Key or Local Endpoint"]
     end
-    
+
     ONNX --- L_Prop
+    Other --- O_Prop
     OpenAI --- R_Prop
 ```
 
+### Supported models
+
+| Engine kind | Model | Dimensions | Context window | Used for | Activate with |
+|---|---|---:|---:|---|---|
+| Local, bundled (default) | `granite-embedding-small-english-r2` (fp16, Apache-2.0) | 384 | 8,190 tokens (chunked to 254 for memory, 510 for code) | Memory + code | `model embedding set local` / `model code set default` |
+| Local, downloaded | Any Hugging Face repo whose `config.json` reports a `bert*`/`new`/`gte*` model type with a `vocab.txt` (WordPiece), an `xlm-roberta`/`roberta`/`t5` type (SentencePiece), or that simply ships a `tokenizer.json` (BPE/byte-level, including decoder-style models pooled last-token) | Whatever the manifest declares | Whatever the manifest declares | Memory or code | `model download <repo-id>`, then `model embedding set local <dir>` / `model code set local <dir>` |
+| Remote, OpenAI-compatible | Any `/v1/embeddings` endpoint: OpenAI (`text-embedding-3-small`/`-large`), Ollama, LM Studio, etc. | Endpoint-reported, or `--dims` | Provider's own (8,191 assumed) | Memory only — the code corpus is local-only | `model embedding set openai <model> [base-url] --api-key --dims` |
+
+Named examples this project's own research has downloaded or scored: `BAAI/bge-m3`,
+`ibm-granite/granite-embedding-english-r2`, `Alibaba-NLP/gte-modernbert-base`,
+`jinaai/jina-embeddings-v2-base-code`, the `Qwen3-Embedding` family, and `google/embeddinggemma-300m`
+(gated under the [Gemma Terms](https://ai.google.dev/gemma/terms) — see Recipe 4). Any other repo
+that satisfies one of the three tokenizer families above is supported the same way;
+`model download <repo-id> --dry-run` says so before anything is fetched.
+
+**Before ADR-0108 (pre-1.47.0):** memory used a bundled `all-MiniLM-L6-v2` (int8, 23 MB) and the
+code corpus downloaded `faxenoff/code-daemon-embed-v1` (179 MB) by default. Both lost to
+granite-small on every retrieval eval run against them — see
+[Embedding benchmark](../reference/embedding-benchmark.md) for the numbers and
+[ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md) for the decision.
+
 ### Performance & latency comparison
 
-| Engine | Model | Latency | Offline | MRR Score |
-|---|---|---|---|---|
-| **Local (recommended)** | `all-MiniLM-L6-v2` (int8) | ~9 ms | Yes | 0.836 |
-| **Remote OpenAI** | `text-embedding-3-small` | ~60-120 ms | No | 0.854 |
-| **Remote Local LLM** | `bge-m3` (via Ollama) | ~25-50 ms | Yes | 0.858 |
+The bundled granite-embedding-small-english-r2 (fp16) beats the engines it replaced on every
+retrieval eval measured, and runs faster on the GPU than they ran on the CPU
+([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)):
+
+| Engine | Model | Where it runs | Memory nDCG@10 |
+|---|---|---|---:|
+| Local, bundled (current default) | `granite-embedding-small-english-r2` (fp16) | GPU (WebGPU on macOS), else CPU | 0.632 |
+| Local, bundled (default before 1.47.0) | `all-MiniLM-L6-v2` (int8) | CPU only | 0.605 |
+
+Full quality and latency numbers for every engine measured, including the remote OpenAI/Ollama
+comparison, live in [Embedding benchmark](../reference/embedding-benchmark.md).
 
 ---
 

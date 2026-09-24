@@ -9,9 +9,13 @@ Feature: Code corpus
     So that I can retrieve a function or a config line without leaving the MCP surface
 
     # Baseline (plan §1, §3.1): a second, code-only corpus in the SAME memory.db
-    # (code_entries + code_fts + vec_code float[768]), fed by the existing watch/ingest
+    # (code_entries + code_fts + vec_code, float[768] fresh-bank default, reconciled to
+    # the active engine's dimension per ADR-0093), fed by the existing watch/ingest
     # machinery, reachable through memory_search kind=memory|code|both and code_get.
-    # Model: faxenoff/code-daemon-embed-v1, 768-dim, chunk budget 510 (min(510, ctx-2)).
+    # Model at authoring: faxenoff/code-daemon-embed-v1, 768-dim, chunk budget 510
+    # (min(510, ctx-2)). ADR-0108 (2026-09-23) replaced it: `model code set default` now
+    # activates the bundled granite-embedding-small-english-r2 (fp16, 384-dim, nothing
+    # downloaded); the code corpus kept its own 510-token chunk budget.
 
     # Explicitly OUT OF SCOPE for this contract (plan §1, §12.4 OQ5):
     # - Flipping the shipped default embedding model or chunker arm — the owner decides
