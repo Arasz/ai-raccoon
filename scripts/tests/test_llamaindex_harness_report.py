@@ -208,9 +208,9 @@ def test_report_gap_taxonomy_conservation_and_oracle_labels():
 
 
 def test_report_renders_fusion_take_and_floor_breakdown():
-    # Package D (issue #707): the per-row leg ranks let the report attribute a
-    # fusion drop to a Take(limit) cut vs a relative-floor cut, not just
-    # "fusion" undifferentiated.
+    # Package D: the per-row leg ranks let the report attribute a fusion drop
+    # to a Take(limit) cut vs a relative-floor cut, not just "fusion"
+    # undifferentiated.
     out = _results_c_cell_taxonomy()
     out["rows"][1]["harness"]["floor_rank"] = 5  # E002: cleared the floor...
     out["rows"][1]["harness"]["fused_rank"] = 5  # ...ranked beyond Take(limit)
@@ -400,11 +400,9 @@ def test_frozen_golden_c_cell_is_fusion_with_shared_oracle_rows():
 
 
 def test_granite_golden_fusion_subtaxonomy_conserves_against_the_fusion_cell():
-    # Package D oracle against the granite re-baseline golden (issue #707):
-    # every fusion_sublabel is one of the three known cells, and their total
-    # equals the taxonomy's 'fusion' count exactly (n_fusion == fusion cell) —
-    # the per-row rank columns must attribute every fusion-labelled row, not
-    # just some of them.
+    # Package D oracle against the granite re-baseline golden: every
+    # fusion_sublabel is one of the three known cells, and their total equals
+    # the taxonomy's 'fusion' count exactly (n_fusion == fusion cell).
     golden = (Path(__file__).resolve().parents[2] / "docs" / "work"
               / "results-granite.json")
     if not golden.exists():

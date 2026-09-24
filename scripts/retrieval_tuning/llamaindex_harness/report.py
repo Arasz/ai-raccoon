@@ -208,7 +208,7 @@ def render(results: dict, context: dict) -> str:
         *_stratification_lines(rows),
         "## Parity-gap discussion",
         "",
-        f"- Embedding seam (issue #707 granite re-baseline): both systems embed with "
+        f"- Embedding seam (granite re-baseline): both systems embed with "
         f"{context.get('model', '?')} — the harness loads it through "
         "sentence-transformers, which reads the checkpoint's own `1_Pooling/config.json` "
         "(`pooling_mode_cls_token=true`) and CLS-pools automatically, matching the "

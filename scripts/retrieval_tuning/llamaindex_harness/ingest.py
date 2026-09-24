@@ -61,7 +61,7 @@ PINNED_MODEL_REVISION = repo_data.KNOBS["PINNED_MODEL_REVISION"]
 BM25_WEIGHTS = tuple(repo_data.KNOBS["BM25_WEIGHTS"])
 EMBED_BATCH_SIZE = repo_data.KNOBS["EMBED_BATCH_SIZE"]
 
-# Token window handed to SentenceTransformer (issue #707): mirrors the product's
+# Token window handed to SentenceTransformer: mirrors the product's
 # manifest-local chunk budget for granite — EmbeddingService.ResolveChunkBudgetFor
 # caps content at min(510, ctx-2) tokens (src/AiRaccoon.Infrastructure/Embedding/
 # EmbeddingService.cs:198-212), i.e. 512 tokens total once the two special tokens
@@ -214,7 +214,7 @@ def heading_of(row: dict) -> str:
 
 def create_embedding_model(model_name: str = MODEL_NAME, offline: bool = False):
     """HF weights via llama_index HuggingFaceEmbedding, matched to the product's
-    ONNX path (issue #707 granite re-baseline).
+    ONNX path.
 
     granite-embedding-small-english-r2 is a ModernBERT bi-encoder shipped as a
     sentence-transformers checkpoint whose ``1_Pooling/config.json`` declares

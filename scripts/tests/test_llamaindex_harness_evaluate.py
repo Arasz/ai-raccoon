@@ -499,9 +499,9 @@ def test_gap_counts_sum_to_paired():
 
 
 def test_score_side_persists_the_package_d_rank_columns():
-    # Additive schema (issue #707 package D): fts_rank/vector_rank/fused_rank/
-    # floor_rank/min_relative_score ride along beside the existing fts_hit/
-    # vector_hit booleans whenever the harness leg reports them.
+    # Additive schema (package D): fts_rank/vector_rank/fused_rank/floor_rank/
+    # min_relative_score ride along beside the existing fts_hit/vector_hit
+    # booleans whenever the harness leg reports them.
     outcome = {"hashes": ["h1"], "fts_hit": 1, "vector_hit": 0, "fts_rank": 3,
                "vector_rank": None, "fused_rank": 5, "floor_rank": None,
                "min_relative_score": 0.6, "error": None}
