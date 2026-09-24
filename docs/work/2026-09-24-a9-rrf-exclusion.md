@@ -70,6 +70,16 @@ fails the gate. A real fusion fix (weighted RRF, ADR-0078's no-regression flag, 
 out of scope here — it is a ranking-behavior change that would need its own measurement pass
 across every query, not a test-only nightly-gate fix.
 
+## Addendum — re-verified against PR #694 (FusionLeader / full-recall leader, 1.49.2)
+
+A sibling lane's #694 (`bc5c06f1`, merged to main ahead of this branch's fetch) touches
+`FusionLeader.cs`, `SourceAffinityRanker.cs` and `SqliteMemoryStore.cs`. `bc5c06f1` was already
+an ancestor of this branch at its creation (confirmed with `git merge-base --is-ancestor bc5c06f1
+HEAD`), so every measurement in this document already reflects the post-#694 ranking. A rebuild
+and re-run against the fully up-to-date branch (main tip through #699) reproduces the same
+numbers: A9 still measures hybrid rank 3 against best-single rank 2 (fts 2, vector miss) — gate
+(c) still needs the exclusion, and F4's table is unchanged.
+
 ## Still open
 
 - A real fix for #367 (equal-weight RRF cannot express one confident leg) would need to move
