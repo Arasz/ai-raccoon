@@ -120,24 +120,37 @@ public sealed partial class SqliteConnectionFactory(
     {
         Guard.IsNotNullOrWhiteSpace(newKey);
 
-        SqliteConnection.ClearPool(new SqliteConnection(BuildConnectionString(currentKey)));
-
-        await using (var connection = await OpenRekeyConnectionAsync(currentKey, cancellationToken).ConfigureAwait(false))
+        // Held across the whole rekey — PRAGMA rekey through the sidecar rewrite in the verify
+        // reopen below — so a concurrent opener still on the old key that hits this exact window
+        // is diagnosed as ambiguous, never confidently "corrupt" (ADR-0111 D6, issue #705).
+        var marker = new RekeyMarker(BankPath);
+        marker.Mark();
+        try
         {
-            // quote() produces the same literal form Microsoft.Data.Sqlite uses for Password — it
-            // escapes both raw x'…' keys and passphrases (docs/plans/encryption-bitwarden-implementation.md).
-            await using var quoteCommand = connection.CreateCommand();
-            quoteCommand.CommandText = "SELECT quote($newKey)";
-            quoteCommand.Parameters.AddWithValue("$newKey", newKey);
-            var quoted = (string)(await quoteCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+            SqliteConnection.ClearPool(new SqliteConnection(BuildConnectionString(currentKey)));
 
-            await using var rekeyCommand = connection.CreateCommand();
-            rekeyCommand.CommandText = $"PRAGMA rekey = {quoted}";
-            await rekeyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await using (var connection = await OpenRekeyConnectionAsync(currentKey, cancellationToken).ConfigureAwait(false))
+            {
+                // quote() produces the same literal form Microsoft.Data.Sqlite uses for Password — it
+                // escapes both raw x'…' keys and passphrases (docs/plans/encryption-bitwarden-implementation.md).
+                await using var quoteCommand = connection.CreateCommand();
+                quoteCommand.CommandText = "SELECT quote($newKey)";
+                quoteCommand.Parameters.AddWithValue("$newKey", newKey);
+                var quoted = (string)(await quoteCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+
+                await using var rekeyCommand = connection.CreateCommand();
+                rekeyCommand.CommandText = $"PRAGMA rekey = {quoted}";
+                await rekeyCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            // Verify: the bank must reopen with the new key, or the rekey did not land. The sidecar
+            // rewrite this reopen triggers (EnsureKeyCheck) is what closes the window the marker guards.
+            await using var verify = await OpenBankWithKeyAsync(newKey, cancellationToken).ConfigureAwait(false);
         }
-
-        // Verify: the bank must reopen with the new key, or the rekey did not land.
-        await using var verify = await OpenBankWithKeyAsync(newKey, cancellationToken).ConfigureAwait(false);
+        finally
+        {
+            marker.Clear();
+        }
     }
 
     /// <summary>
@@ -243,12 +256,22 @@ public sealed partial class SqliteConnectionFactory(
             return null;
         }
 
-        return KeyCheckSidecar.Verifies(record, key)
-            ? new BankCorruptedException(
-                $"the bank at '{BankPath}' is corrupt — its key verifier confirms the encryption key is right, so the file itself is damaged; restore it from a backup",
-                openFailure)
-            : new BankKeyMismatchException(
+        if (!KeyCheckSidecar.Verifies(record, key))
+        {
+            return new BankKeyMismatchException(
                 $"the bank at '{BankPath}' does not open with the resolved encryption key — its key verifier confirms this key is wrong; check the encryption key source",
+                openFailure);
+        }
+
+        // The sidecar verifies this key, which normally proves the bank itself is damaged. But a
+        // rekey in progress (ADR-0111 D6) may not have rewritten the sidecar for its new key yet —
+        // this open could be hitting exactly that window, not a truly corrupt file — so fall back
+        // to the caller's own ambiguous, both-causes diagnosis rather than confidently claiming
+        // corruption (issue #705).
+        return new RekeyMarker(BankPath).IsPresent
+            ? null
+            : new BankCorruptedException(
+                $"the bank at '{BankPath}' is corrupt — its key verifier confirms the encryption key is right, so the file itself is damaged; restore it from a backup",
                 openFailure);
     }
 

@@ -86,7 +86,9 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
     ///     ADR-0111 key-check sidecar exists and can be trusted, doctor reports the confident
     ///     verdict it proves — right key means the bank file itself is corrupt; wrong key means the
     ///     resolved key is wrong. A missing or unusable sidecar keeps naming both causes and both
-    ///     remedies, as before. Read-only throughout — doctor never mints or rewrites the sidecar.
+    ///     remedies, as before — so does a verifier that confirms the key while a rekey marker
+    ///     (ADR-0111 D6) is present, since the sidecar may not have caught up with an in-progress
+    ///     rekey yet. Read-only throughout — doctor never mints, rewrites, or clears either file.
     /// </summary>
     private async Task<int> ReportNotADatabaseAsync(string bankPath, ResolvedKey resolvedKey, SqliteException ex,
         StandardStreams streams)
@@ -96,18 +98,26 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         var verifier = TryReadKeyCheck(bankPath);
         if (verifier is not null && resolvedKey.Passphrase is not null)
         {
-            if (KeyCheckSidecar.Verifies(verifier, resolvedKey.Passphrase))
+            if (!KeyCheckSidecar.Verifies(verifier, resolvedKey.Passphrase))
+            {
+                await streams.WriteErrorLineAsync(
+                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
+                    "its key verifier confirms the resolved encryption key is wrong — check the encryption key source");
+                return ErrorCode.Key.WrongKey;
+            }
+
+            // The verifier confirms this key, which normally proves the bank itself is damaged.
+            // But a rekey in progress (ADR-0111 D6, issue #705) may not have rewritten it for its
+            // new key yet — this could be exactly that window, not a truly corrupt file — so fall
+            // through to the ambiguous, both-causes verdict below instead of confidently naming
+            // corruption. Read-only: doctor never mints, rewrites, or clears the marker itself.
+            if (!new RekeyMarker(bankPath).IsPresent)
             {
                 await streams.WriteErrorLineAsync(
                     $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
                     "its key verifier confirms the encryption key is right, so the bank file itself is corrupt — restore it from a backup");
                 return ErrorCode.Bank.Corrupted;
             }
-
-            await streams.WriteErrorLineAsync(
-                $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
-                "its key verifier confirms the resolved encryption key is wrong — check the encryption key source");
-            return ErrorCode.Key.WrongKey;
         }
 
         await streams.WriteErrorLineAsync(

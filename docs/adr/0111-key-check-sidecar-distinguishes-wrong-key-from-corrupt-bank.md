@@ -118,6 +118,35 @@ opened again after upgrading and so never get a sidecar minted retroactively.
 read-only by construction, and inspecting a bank must not have the side effect of changing what a
 later confident diagnosis depends on.
 
+### D5 — A crash mid-rekey self-heals; a concurrent *opener* mid-rekey does not, on its own
+
+D3's "a crash between `PRAGMA rekey` and the reopen heals itself on the next successful open"
+is true for the rekeying caller, but it understates a second actor: between the pragma landing and
+`RekeyBankAsync`'s verify-reopen rewriting the sidecar, a *different* opener still holding the old
+key hits the newly-rekeyed bytes as `SQLITE_NOTADB`, reads the sidecar — still verifying the old
+key, because the rewrite has not run yet — and D4's rule reads that as "tag matches → corrupt".
+The verdict is confident-looking and wrong: the bank is fine, mid-rekey, under a different key.
+Found in review (#729).
+
+### D6 — A rekey marker makes that window ambiguous instead of confidently wrong
+
+`RekeyMarker` (`RekeyMarker.cs`) is a second sidecar-adjacent file, `memory.db.rekeying`, holding no
+content — its only signal is whether it exists. `RekeyBankAsync` marks it before `PRAGMA rekey` and
+clears it in a `finally` spanning the whole operation (success or failure), so it is present for
+exactly D5's window and never longer. `TryDiagnoseWithKeyCheck` and `DoctorCommands`'s
+`ReportNotADatabaseAsync` both check it before returning the confident `BankCorruptedException` (a
+sidecar mismatch → wrong-key verdict is untouched, since that is correct regardless of a rekey in
+flight): marker present → fall through to the same both-causes ambiguous default a missing sidecar
+already gets, never a new exception shape. Rejected: holding a lock across the rekey and every
+opener (the callers are not all in the same process — `encryption migrate`/`rekey` is a CLI
+one-shot, the bank is typically also open in a running `serve` process — so an in-process lock does
+not close the window between processes, while a file-existence check does); rewriting the sidecar
+*before* the pragma (a concurrent opener that still succeeds under the old key, because the rekey
+has not landed yet, would then re-win the sidecar back to the old key on its own successful open,
+reopening the same window from the other direction). Tested by reproducing the exact gap
+deterministically — the pragma applied directly and the marker set by hand, not two racing threads
+— red before the marker check existed, green after.
+
 ## Consequences
 
 - A wrong key and a genuine corruption are told apart with certainty once a bank has opened
@@ -130,6 +159,9 @@ later confident diagnosis depends on.
   requiring a migration step.
 - Two new `[LoggerMessage]` `EventId`s (905, 906) extend `SqliteConnectionFactory`'s existing
   901-904 block; `docs/reference/logging-event-ids.md`'s count and table are updated with them.
+- A rekey now leaves a third file next to the bank for its duration only: `memory.db.rekeying`
+  (D6). It never survives a completed or failed `RekeyBankAsync` call, so it adds no new steady
+  state to reason about — only a narrower window in which "corrupt" is downgraded to "ambiguous".
 
 ## Alternatives rejected
 

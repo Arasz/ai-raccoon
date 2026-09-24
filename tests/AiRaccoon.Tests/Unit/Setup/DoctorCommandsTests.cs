@@ -859,6 +859,51 @@ public sealed class DoctorCommandsTests : IDisposable
         err.ShouldNotContain("wrong");
     }
 
+    /// <summary>
+    ///     Issue #705 follow-up: mid-rekey (a <see cref="RekeyMarker" /> present), the sidecar may
+    ///     still be describing the key rekey is replacing, not the on-disk reality this open just
+    ///     hit — doctor must not confidently claim corruption from that stale verdict either, the
+    ///     same guard <see cref="SqliteConnectionFactory.TryDiagnoseWithKeyCheck" /> applies.
+    /// </summary>
+    [RetryFact]
+    public async Task Doctor_NotASqliteDatabase_VerifierMatchesButRekeyMarkerPresent_ExitsAmbiguous()
+    {
+        var encryptedFactory = new SqliteConnectionFactory(_options, FixedKeyResolver("old-key"));
+        await using (await encryptedFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        // Simulate the exact rekey-window gap: the bank is rekeyed on disk, but the sidecar has
+        // not been rewritten yet, so it still verifies "old-key".
+        SqliteConnection.ClearAllPools();
+        await using (var rekeyConnection = new SqliteConnection($"Data Source={encryptedFactory.BankPath};Password=old-key;Pooling=false"))
+        {
+            await rekeyConnection.OpenAsync(TestContext.Current.CancellationToken);
+            await using var journal = rekeyConnection.CreateCommand();
+            journal.CommandText = "PRAGMA journal_mode=DELETE";
+            await journal.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            await using var rekey = rekeyConnection.CreateCommand();
+            rekey.CommandText = "PRAGMA rekey = 'new-key'";
+            await rekey.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var marker = new RekeyMarker(encryptedFactory.BankPath);
+        marker.Mark();
+        try
+        {
+            var (exit, outp, err) = await Run(CreateDoctor(FixedKeyResolver("old-key")), ["doctor"]);
+
+            outp.ShouldBeEmpty();
+            err.ShouldContain("wrong key or corrupt bank");
+            exit.ShouldBe(ErrorCode.Bank.Corrupted); // doctor's pre-ADR-0111 ambiguous default exit code
+        }
+        finally
+        {
+            marker.Clear();
+        }
+    }
+
     /// <summary>ADR-0111, AC1: a key-check sidecar that mismatches the resolved key proves the key is wrong — doctor exits 21, naming the key.</summary>
     [RetryFact]
     public async Task Doctor_NotASqliteDatabase_VerifierMismatches_ExitsWrongKey_NamingTheKeyOnly()

@@ -323,6 +323,73 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         (await File.ReadAllBytesAsync(sidecarPath, TestContext.Current.CancellationToken)).ShouldBe(before);
     }
 
+    /// <summary>
+    ///     Issue #705 follow-up: between `PRAGMA rekey` landing and the sidecar rewrite in
+    ///     <c>RekeyBankAsync</c>'s verify-reopen, a concurrent opener still holding the old key gets
+    ///     SQLITE_NOTADB and finds a sidecar that still verifies that old key (it has not been
+    ///     rewritten yet) — a confident-looking, but false, "bank is corrupt" signal. Reproduces the
+    ///     exact gap deterministically (rekey applied directly, bypassing the sidecar rewrite;
+    ///     <see cref="RekeyMarker" /> marked exactly as <c>RekeyBankAsync</c> would hold it) rather
+    ///     than racing real threads.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_ConcurrentOldKeyOpenDuringRekeyWindow_DoesNotClaimCorruption()
+    {
+        var factory = Factory("old-key");
+        await using (await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        // PRAGMA rekey applied directly (bypassing RekeyBankAsync's own verify-reopen), leaving the
+        // sidecar exactly as RekeyBankAsync's real window leaves it: still verifying "old-key".
+        SqliteConnection.ClearAllPools();
+        await using (var rekeyConnection = new SqliteConnection($"Data Source={factory.BankPath};Password=old-key;Pooling=false"))
+        {
+            await rekeyConnection.OpenAsync(TestContext.Current.CancellationToken);
+            await using var journal = rekeyConnection.CreateCommand();
+            journal.CommandText = "PRAGMA journal_mode=DELETE";
+            await journal.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            await using var quote = rekeyConnection.CreateCommand();
+            quote.CommandText = "SELECT quote($newKey)";
+            quote.Parameters.AddWithValue("$newKey", DerivedRawKey);
+            var quoted = (string)(await quote.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+
+            await using var rekey = rekeyConnection.CreateCommand();
+            rekey.CommandText = $"PRAGMA rekey = {quoted}";
+            await rekey.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var marker = new RekeyMarker(factory.BankPath);
+        marker.Mark();
+        try
+        {
+            var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
+            {
+                await using var conn = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+            });
+            ex.Message.ShouldContain("keyed to a different secret");
+        }
+        finally
+        {
+            marker.Clear();
+        }
+    }
+
+    /// <summary>The marker must never outlive a rekey — success or failure — or every later ambiguous-open path would stay permanently ambiguous.</summary>
+    [RetryFact]
+    public async Task RekeyBankAsync_LeavesNoRekeyMarkerBehindOnSuccess()
+    {
+        var factory = Factory("old-key");
+        await using (await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        await factory.RekeyBankAsync(DerivedRawKey, TestContext.Current.CancellationToken);
+
+        new RekeyMarker(factory.BankPath).IsPresent.ShouldBeFalse();
+    }
+
     /// <summary>AC4: rekey rewrites the sidecar — the old key now reports wrong-key, the new key opens and verifies.</summary>
     [RetryFact]
     public async Task RekeyBankAsync_RewritesTheVerifier_OldKeyMismatches_NewKeyOpensAndVerifies()
@@ -496,6 +563,9 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         {
             await using var conn = await newKeyFactory.OpenBankAsync(TestContext.Current.CancellationToken);
         });
+
+        // A refused rekey must not leave the ambiguity marker behind either.
+        new RekeyMarker(factory.BankPath).IsPresent.ShouldBeFalse();
     }
 
     /// <summary>.NET-F2: a Bitwarden-sourced key is cached across bank opens — N opens shell out to bws once, not N times.</summary>
