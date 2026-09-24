@@ -22,6 +22,10 @@ dependencies = [
     "llama-index-embeddings-huggingface==0.8.0",
     "torch==2.13.0",
     "sqlite-vec==0.1.9",
+    # Chunk-window eval runs the bundled granite graph directly; onnxruntime matches the
+    # product's pinned ORT (1.30.0) so its CPU arithmetic is the product's.
+    "onnxruntime==1.30.0",
+    "tokenizers==0.23.2",
 ]
 
 [tool.pytest.ini_options]
