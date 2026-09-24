@@ -245,21 +245,27 @@ internal partial class NodeRunner(
     ///     token and tool traffic.
     /// </summary>
     private async Task<int> AttachOrRefuseAsync(NodeLaunchDescriptor descriptor, StandardStreams streams,
-        CancellationToken ctx) =>
-        await identityProver.ProveAsync(ServerProbe.EndpointFor(descriptor.Port), ctx) is null
+        CancellationToken ctx)
+    {
+        var failure = await identityProver.ProveAsync(ServerProbe.EndpointFor(descriptor.Port), ctx);
+        return failure is null
             ? await ReportAttachedAsync(descriptor, streams)
-            : await RefuseExistingServerAsync(descriptor, streams);
+            : await RefuseExistingServerAsync(descriptor, failure.Value, streams);
+    }
 
     /// <summary>
     ///     ADR-0106: an ai-raccoon server already owns the port but could not prove it serves this
     ///     data root. The operator is told to stop the listener (or pick another port) rather than
-    ///     being handed a flag that no longer exists.
+    ///     being handed a flag that no longer exists. ADR-0107 PC.3: <paramref name="reason" /> names
+    ///     the actual cause on stderr — never the log line (EventId 603 stays unchanged).
     /// </summary>
-    private async Task<int> RefuseExistingServerAsync(NodeLaunchDescriptor descriptor, StandardStreams streams)
+    private async Task<int> RefuseExistingServerAsync(NodeLaunchDescriptor descriptor, IdentityProofFailure reason,
+        StandardStreams streams)
     {
         Log.PortInUse(logger, descriptor.Port);
         await streams.WriteErrorLineAsync(
-            $"ai-raccoon: port {descriptor.Port} is in use by a listener that did not prove it serves this data root — stop the listener yourself, or serve on another port (--port 0)");
+            $"ai-raccoon: port {descriptor.Port} is in use by a listener that did not prove it serves this data root " +
+            $"({IdentityProof.RefusalText(reason)}) — stop the listener yourself, or serve on another port (--port 0)");
         return ErrorCode.Server.Unproven;
     }
 
