@@ -59,6 +59,14 @@ public sealed class WatchDigestExecutor(
 
         if (!File.Exists(normalized))
         {
+            if (!isIgnoreFile && await IsExcludedAsync(projectId, normalizedWatch, normalized, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                await DeleteIfFingerprintedAsync(projectId, normalizedWatch, normalized, cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
             await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
             if (isIgnoreFile)
             {
@@ -75,7 +83,8 @@ public sealed class WatchDigestExecutor(
             // never chunked — only stale chunks from before the rule started matching are cleaned.
             // DeleteSourcePathAsync already cascades the fingerprint delete for this exact path
             // (MemorySql.DeleteWatchFilesByProjectPathCascade).
-            await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken).ConfigureAwait(false);
+            await DeleteIfFingerprintedAsync(projectId, normalizedWatch, normalized, cancellationToken)
+                .ConfigureAwait(false);
             return;
         }
 
@@ -137,6 +146,20 @@ public sealed class WatchDigestExecutor(
     {
         await store.DeleteSourcePathAsync(projectId, path, cancellationToken).ConfigureAwait(false);
         await watchStore.UpdateLastChangeAsync(projectId, watchPath, Now(), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     An excluded path's cleanup: only a path the digest once fingerprinted (it was indexed before
+    ///     the rule matched) has stored rows. The rest — every `.git` and build-output write — is a
+    ///     no-op, answered by a key lookup instead of the delete cascade.
+    /// </summary>
+    private async Task DeleteIfFingerprintedAsync(string projectId, string watchPath, string path,
+        CancellationToken cancellationToken)
+    {
+        if (await watchStore.HasFingerprintAtOrUnderAsync(projectId, path, cancellationToken).ConfigureAwait(false))
+        {
+            await DeletePathAsync(projectId, watchPath, path, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task TouchAsync(string projectId, string watchPath, string path, string hash,
