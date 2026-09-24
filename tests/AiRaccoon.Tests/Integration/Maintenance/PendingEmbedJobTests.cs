@@ -133,7 +133,9 @@ public sealed class PendingEmbedJobTests : IDisposable
                 """,
                 new
                 {
-                    hash = $"{Guid.NewGuid():N}-{i}", path = $"p{i}.md", value = $"pending row {i}",
+                    hash = $"{Guid.NewGuid():N}-{i}",
+                    path = $"p{i}.md",
+                    value = $"pending row {i}",
                     projectId = ProjectId
                 },
                 cancellationToken: TestContext.Current.CancellationToken));

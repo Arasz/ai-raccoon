@@ -228,17 +228,17 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
             case "Split" when byteFallback:
                 return PreTokenizerKind.SentencePieceSplit;
             case "Sequence":
-            {
-                var steps = preTokenizer.GetProperty("pretokenizers").EnumerateArray().ToList();
-                var split = steps.FirstOrDefault(s => s.GetProperty("type").GetString() == "Split");
-                var hasByteLevel = steps.Any(s => s.GetProperty("type").GetString() == "ByteLevel");
-                if (split.ValueKind == JsonValueKind.Object && hasByteLevel)
                 {
-                    return new PreTokenizerKind.SequenceSplitThenByteLevel(split.GetProperty("pattern").GetProperty("Regex").GetString()!);
-                }
+                    var steps = preTokenizer.GetProperty("pretokenizers").EnumerateArray().ToList();
+                    var split = steps.FirstOrDefault(s => s.GetProperty("type").GetString() == "Split");
+                    var hasByteLevel = steps.Any(s => s.GetProperty("type").GetString() == "ByteLevel");
+                    if (split.ValueKind == JsonValueKind.Object && hasByteLevel)
+                    {
+                        return new PreTokenizerKind.SequenceSplitThenByteLevel(split.GetProperty("pattern").GetProperty("Regex").GetString()!);
+                    }
 
-                throw new NotSupportedException("tokenizer.json pre_tokenizer Sequence must contain a Split(Regex) step and a ByteLevel step.");
-            }
+                    throw new NotSupportedException("tokenizer.json pre_tokenizer Sequence must contain a Split(Regex) step and a ByteLevel step.");
+                }
             default:
                 throw new NotSupportedException($"tokenizer.json pre_tokenizer.type '{type}' is not supported.");
         }

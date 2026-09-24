@@ -42,27 +42,27 @@ public sealed class EmbeddingServiceManifestBudgetTests
     // callers that write real fixture content pass its sha256 instead of the "vocab"/"model" default.
     private static JsonObject Manifest(int contextWindowTokens = 8192, string family = "bert-wordpiece",
         string? vocabSha = null, string? onnxSha = null) => new()
-    {
-        ["manifestVersion"] = 1,
-        ["model"] = "budget-test-model",
-        ["source"] = new JsonObject { ["repo"] = "test/budget-test-model", ["revision"] = "main" },
-        ["provider"] = "local",
-        ["dimensions"] = 384,
-        ["contextWindowTokens"] = contextWindowTokens,
-        ["normalization"] = "l2",
-        ["tokenizer"] = new JsonObject
         {
-            ["family"] = family,
-            ["files"] = new JsonArray(new JsonObject { ["path"] = "vocab.txt", ["sha256"] = vocabSha ?? ShaOf("vocab") })
-        },
-        ["onnx"] = new JsonObject
-        {
-            ["files"] = new JsonArray(new JsonObject { ["path"] = "model.onnx", ["sha256"] = onnxSha ?? ShaOf("model") }),
-            ["inputs"] = new JsonArray("input_ids", "attention_mask", "token_type_ids"),
-            ["tokenEmbeddingsOutput"] = "last_hidden_state"
-        },
-        ["pooling"] = new JsonObject { ["mode"] = "mean" }
-    };
+            ["manifestVersion"] = 1,
+            ["model"] = "budget-test-model",
+            ["source"] = new JsonObject { ["repo"] = "test/budget-test-model", ["revision"] = "main" },
+            ["provider"] = "local",
+            ["dimensions"] = 384,
+            ["contextWindowTokens"] = contextWindowTokens,
+            ["normalization"] = "l2",
+            ["tokenizer"] = new JsonObject
+            {
+                ["family"] = family,
+                ["files"] = new JsonArray(new JsonObject { ["path"] = "vocab.txt", ["sha256"] = vocabSha ?? ShaOf("vocab") })
+            },
+            ["onnx"] = new JsonObject
+            {
+                ["files"] = new JsonArray(new JsonObject { ["path"] = "model.onnx", ["sha256"] = onnxSha ?? ShaOf("model") }),
+                ["inputs"] = new JsonArray("input_ids", "attention_mask", "token_type_ids"),
+                ["tokenEmbeddingsOutput"] = "last_hidden_state"
+            },
+            ["pooling"] = new JsonObject { ["mode"] = "mean" }
+        };
 
     private static EmbeddingService Service() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),

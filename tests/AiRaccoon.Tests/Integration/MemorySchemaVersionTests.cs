@@ -1043,8 +1043,12 @@ public sealed class MemorySchemaVersionTests
                 """,
                 new
                 {
-                    hash = row.Hash, path = row.Path, sourceFile = row.SourceFile,
-                    scope = row.Scope, projectId = row.ProjectId, workspaceId = row.WorkspaceId
+                    hash = row.Hash,
+                    path = row.Path,
+                    sourceFile = row.SourceFile,
+                    scope = row.Scope,
+                    projectId = row.ProjectId,
+                    workspaceId = row.WorkspaceId
                 },
                 cancellationToken: TestContext.Current.CancellationToken));
         }

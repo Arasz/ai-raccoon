@@ -204,7 +204,10 @@ public sealed class ReingestRepairTests : IDisposable
             new
             {
                 hash = ContentHash.Of(missingFile, "orphaned content"),
-                path = missingFile, value = "orphaned content", sourceFile = missingFile, projectId = ProjectId
+                path = missingFile,
+                value = "orphaned content",
+                sourceFile = missingFile,
+                projectId = ProjectId
             });
     }
 

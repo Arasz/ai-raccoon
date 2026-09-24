@@ -38,7 +38,8 @@ public sealed class TestDataDeleteTempRootTests
             Thread.Sleep(TimeSpan.FromMilliseconds(30));
             Unlock(root);
             unlocked.Set();
-        }) { IsBackground = true };
+        })
+        { IsBackground = true };
         unlocker.Start();
 
         TestData.DeleteTempRoot(root);

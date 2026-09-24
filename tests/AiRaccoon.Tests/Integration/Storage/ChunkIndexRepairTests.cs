@@ -131,8 +131,14 @@ public sealed class ChunkIndexRepairTests : IDisposable
             """,
             new
             {
-                hash = ContentHash.Of(file, staleValue), path = file, value = staleValue, sourceFile = file,
-                section = "Keep", projectId = ProjectId, chunkIndex = 0, totalChunks = 1
+                hash = ContentHash.Of(file, staleValue),
+                path = file,
+                value = staleValue,
+                sourceFile = file,
+                section = "Keep",
+                projectId = ProjectId,
+                chunkIndex = 0,
+                totalChunks = 1
             });
 
         var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
@@ -175,7 +181,12 @@ public sealed class ChunkIndexRepairTests : IDisposable
                 new
                 {
                     hash = ContentHash.Of(sourceFile, value),
-                    path = sourceFile, value, sourceFile, projectId = ProjectId, chunkIndex, totalChunks = rows.Length
+                    path = sourceFile,
+                    value,
+                    sourceFile,
+                    projectId = ProjectId,
+                    chunkIndex,
+                    totalChunks = rows.Length
                 });
         }
 
