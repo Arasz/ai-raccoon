@@ -802,6 +802,8 @@ public sealed class DoctorCommandsTests : IDisposable
     ///     F7 (ruling K7): a file that exists but is not a SQLite database must exit the distinct
     ///     corrupt-bank code, not InvalidArgument (15) with the raw SQLite error text — the deferred
     ///     open failure surfaces from SchemaDoctor's first statement, outside OpenBankReadOnlyAsync.
+    ///     ADR-0107 PC.0: SQLCipher reports SQLITE_NOTADB (26) identically for a corrupt bank and a
+    ///     wrong key, so the message must name both causes and both remedies — never just "corrupt".
     /// </summary>
     [RetryFact]
     public async Task Doctor_NotASqliteDatabase_ExitsBankCorrupted_WithACleanMessage()
@@ -815,7 +817,9 @@ public sealed class DoctorCommandsTests : IDisposable
         exit.ShouldBe(ErrorCode.Bank.Corrupted);
         outp.ShouldBeEmpty();
         err.Trim().ShouldBe(
-            $"ai-raccoon: doctor: the bank at {_factory.BankPath} exists but is not a SQLite database (SQLite error 26); restore it from a backup or check --data-root");
+            $"ai-raccoon: doctor: the bank at {_factory.BankPath} exists but is not a SQLite database (SQLite error 26); " +
+            "wrong key or corrupt bank — check the encryption key source if this data root was working before, " +
+            "or restore the bank from a backup if the file itself is damaged");
         err.ShouldNotContain("Parameter");
     }
 
