@@ -62,10 +62,9 @@ BM25_WEIGHTS = tuple(repo_data.KNOBS["BM25_WEIGHTS"])
 EMBED_BATCH_SIZE = repo_data.KNOBS["EMBED_BATCH_SIZE"]
 
 # Token window handed to SentenceTransformer: mirrors the product's
-# manifest-local chunk budget for granite — EmbeddingService.ResolveChunkBudgetFor
-# caps content at min(510, ctx-2) tokens (src/AiRaccoon.Infrastructure/Embedding/
-# EmbeddingService.cs:198-212), i.e. 512 tokens total once the two special tokens
-# are added at embed time.
+# manifest-local chunk budget for granite — EmbeddingService.ManifestContentBudget
+# takes the manifest's explicit chunkTokens (254 for granite) ahead of the
+# min(510, ctx-2) fallback, i.e. 256 tokens once the two special tokens are added.
 EMBED_MAX_SEQ_LENGTH = repo_data.KNOBS["EMBED_MAX_SEQ_LENGTH"]
 
 # Chroma upsert batching: one call trips the server max-batch cap (5461 at
@@ -225,10 +224,11 @@ def create_embedding_model(model_name: str = MODEL_NAME, offline: bool = False):
     "model-output" because the graph pools CLS internally, and
     ``OnnxEmbeddingGenerator.PoolAlreadyPooledOutput`` L2-normalizes that pooled
     "sentence_embedding" output (src/AiRaccoon.Infrastructure/Embedding/
-    OnnxEmbeddingGenerator.cs:328-343) — matched here by leaving pooling to the
+    OnnxEmbeddingGenerator.cs:548) — matched here by leaving pooling to the
     checkpoint's own module and ``normalize=True`` (HuggingFaceEmbedding's
     default). ``max_length=EMBED_MAX_SEQ_LENGTH`` mirrors
-    ``EmbeddingService.ResolveChunkBudgetFor``'s manifest-local cap so a
+    ``EmbeddingService.ManifestContentBudget`` (the manifest's ``chunkTokens``
+    plus two special tokens) so a
     longer-than-budget harness row truncates the same number of tokens the
     product's chunker would ever hand the embedder (native architecture, no
     custom modeling code or repair needed; fp32 keeps CPU inference exact).

@@ -499,7 +499,7 @@ def test_create_embedding_model_passes_model_name_and_max_length(monkeypatch):
     # No weights load here: HuggingFaceEmbedding itself is replaced with a
     # recording fake, so the only thing under test is the kwargs ingest hands
     # it (a typo'd or dropped max_length would silently stop mirroring
-    # EmbeddingService.ResolveChunkBudgetFor's token cap).
+    # EmbeddingService.ManifestContentBudget's token cap).
     captured = {}
 
     class _FakeHuggingFaceEmbedding:
@@ -510,6 +510,16 @@ def test_create_embedding_model_passes_model_name_and_max_length(monkeypatch):
     ingest.create_embedding_model()
     assert captured["model_name"] == ingest.MODEL_NAME
     assert captured["max_length"] == ingest.EMBED_MAX_SEQ_LENGTH
+
+
+def test_embed_max_seq_length_matches_bundled_granite_chunk_budget():
+    # The product embeds at most the manifest's chunkTokens plus two special
+    # tokens (EmbeddingService.ManifestContentBudget prefers chunkTokens over
+    # the min(510, ctx-2) fallback), so the harness window must equal that.
+    manifest = json.loads(
+        (Path(__file__).resolve().parents[2] / "src" / "AiRaccoon" / "Models"
+         / "granite-embedding-small-english-r2" / "ai-raccoon.manifest.json").read_text())
+    assert ingest.EMBED_MAX_SEQ_LENGTH == manifest["chunkTokens"] + 2
 
 
 def _dupe_copy(path: Path, second_value: str | None = None):

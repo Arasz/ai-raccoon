@@ -6,7 +6,7 @@
   "BM25_WEIGHTS": [1.0, 8.0, 4.0],
   "UPSERT_BATCH_SIZE": 4000,
   "EMBED_BATCH_SIZE": 32,
-  "EMBED_MAX_SEQ_LENGTH": 512,
+  "EMBED_MAX_SEQ_LENGTH": 256,
   "PARAMS": {
     "rrfK": 60,
     "ftsWeight": 1,

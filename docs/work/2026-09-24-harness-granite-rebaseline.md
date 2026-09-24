@@ -47,7 +47,7 @@ deprecated) CLS-pools without any harness-side choice. The product's manifest
 (`src/AiRaccoon/Models/granite-embedding-small-english-r2/ai-raccoon.manifest.json`)
 declares `pooling.mode: "model-output"` because its ONNX graph pools CLS
 internally, and `OnnxEmbeddingGenerator.PoolAlreadyPooledOutput`
-(`src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs:328-343`)
+(`src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs:548`)
 L2-normalizes that pooled output when `normalization: "l2"`, exactly what
 `HuggingFaceEmbedding(normalize=True)` (the default) does on the harness
 side. A verification run (`smoke_granite.py`, this task) confirmed the
@@ -62,19 +62,18 @@ resolves `llama-index-embeddings-huggingface`), the two cited product files,
 
 ### F3: The harness's manifest-local token budget now mirrors the product's exactly [READ]
 
-`EmbeddingService.ResolveChunkBudgetFor` caps manifest-local models at
-`min(510, ctx-2)` content tokens
-(`src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs:196-212`,
-`MaxManifestChunkTokens = 512 - EngineDescriptor.DefaultSpecialTokenReservation`
-at line 49). That is 512 tokens total once the two special tokens are added. Since
-granite's own `contextWindowTokens` (8190/8192) is far larger than 510, this
-cap binds. The harness now passes `max_length=512`
-(`EMBED_MAX_SEQ_LENGTH` in `data/knobs.json`) to
+`EmbeddingService.ManifestContentBudget` returns
+`descriptor.ChunkTokens ?? min(510, ctx-2)`
+(`src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs:434-446`), and the
+bundled granite manifest sets `"chunkTokens": 254`
+(`src/AiRaccoon/Models/granite-embedding-small-english-r2/ai-raccoon.manifest.json:75`),
+so the explicit value wins and the `min(510, ctx-2)` fallback never applies.
+That is 256 tokens total once the two special tokens are added. The harness
+now passes `max_length=256` (`EMBED_MAX_SEQ_LENGTH` in `data/knobs.json`) to
 `HuggingFaceEmbedding`/`SentenceTransformer`, which otherwise defaults to the
-checkpoint's own 8192-token `max_seq_length`
-(`sentence_bert_config.json`). An un-pinned harness would have silently
-diverged from the product's real per-chunk truncation behavior on any
-longer-than-510-token row.
+checkpoint's own 8192-token `max_seq_length` (`sentence_bert_config.json`).
+An un-pinned harness would have silently diverged from the product's real
+per-chunk truncation behavior on any longer-than-254-token row.
 
 **Evidence:** the two cited C# lines, `data/knobs.json`, and
 `ingest.create_embedding_model`'s docstring (this PR).
