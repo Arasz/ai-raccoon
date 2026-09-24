@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
@@ -32,6 +33,40 @@ public sealed class BundledEngineGpuSessionTests
         gpu.ExecutionProvider.ShouldBe("WebGPU");
         cpu.ExecutionProvider.ShouldBe("CPU");
         TestData.Cosine(onGpu[0].Vector, onCpu[0].Vector).ShouldBeGreaterThan(0.999);
+    }
+
+    /// <summary>
+    ///     Off macOS the WebGPU plugin shipped under webgpu/ runs the session, or the session falls back
+    ///     to the CPU with the reason. On Windows and linux-x64 the build copies the plugin into this
+    ///     test output, so the reason may be "no GPU", never a missing library.
+    /// </summary>
+    [RetryFact]
+    public async Task PreferGpu_OffMacOs_RunsOnThePluginWebGpu_OrFallsBackWithAReason()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            Assert.Skip("macOS uses the built-in WebGPU provider, not the plugin");
+        }
+
+        using var gpu = Generator(preferGpu: true);
+
+        if (gpu.ExecutionProvider == "WebGPU")
+        {
+            using var cpu = Generator(preferGpu: false);
+            const string text = "The drain embeds pending rows one at a time on the GPU.";
+            var onGpu = await gpu.GenerateAsync([text], cancellationToken: TestContext.Current.CancellationToken);
+            var onCpu = await cpu.GenerateAsync([text], cancellationToken: TestContext.Current.CancellationToken);
+            TestData.Cosine(onGpu[0].Vector, onCpu[0].Vector).ShouldBeGreaterThan(0.999);
+            return;
+        }
+
+        gpu.ExecutionProvider.ShouldStartWith("CPU (GPU refused: ");
+        var pluginShipsHere = OperatingSystem.IsWindows()
+                              || (OperatingSystem.IsLinux() && RuntimeInformation.ProcessArchitecture == Architecture.X64);
+        if (pluginShipsHere)
+        {
+            gpu.ExecutionProvider.ShouldNotContain("plugin library not found");
+        }
     }
 
     [RetryFact]
