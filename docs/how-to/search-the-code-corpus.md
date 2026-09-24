@@ -10,8 +10,8 @@ A code-corpus embedding engine must be active. If you have not set one up yet:
 ai-raccoon model code set default
 ```
 
-This downloads and activates `faxenoff/code-daemon-embed-v1` (187 MB, 768-dim) into
-`<data-root>/models/`. See [Configure embedding engines](configure-embedding-engines.md#recipe-5-activate-the-code-corpuss-embedding-engine)
+This activates the embedding model bundled with the tool (granite-embedding-small-english-r2,
+384-dim, ADR-0108); nothing is downloaded. See [Configure embedding engines](configure-embedding-engines.md#recipe-5-activate-the-code-corpuss-embedding-engine)
 for details.
 
 Without a code engine, `kind=code` and `kind=both` searches degrade to FTS5-only

@@ -5,7 +5,7 @@ namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 /// <summary>
 ///     Source-affinity ranking (see docs/adr/0005-source-affinity-ranking.md): adjacent-chunk boost, source
 ///     consolidation, document-first tie-break over the fused list. λ = 0 is a no-op. A leader
-///     (the row every leg ranked first) stays first: no boost lifts another row above it.
+///     (see <see cref="FusionLeader" />) stays first: no boost lifts another row above it.
 /// </summary>
 internal static class SourceAffinityRanker
 {

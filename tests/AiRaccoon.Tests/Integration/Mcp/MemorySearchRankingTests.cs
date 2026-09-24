@@ -246,6 +246,48 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         envelope.Data!.Results[0].Hash.ShouldBe(note.Hash, "a same-source boost must not lift weaker neighbours above it");
     }
 
+    /// <summary>
+    ///     An identifier only the keyword leg finds, buried at the end of a long note, wins fusion; two
+    ///     adjacent chunks of one file that only the vector leg found each gain the neighbour boost.
+    ///     The row matching every query term keeps rank 1 with every score cutoff off.
+    /// </summary>
+    [RetryFact]
+    public async Task Search_AllTermsKeywordMatchThatWinsFusion_StaysFirstAboveBoostedNeighbours()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNoteText()), ct);
+        await AllowIngestAsync(ct);
+        var observatory = await IngestAsync("observatory.md", ObservatoryText(), ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+
+        var envelope = await _tools.Search(ProjectId, "vk83jq", Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+
+        var evidence = envelope.Data!.EvidenceByHash.ShouldNotBeNull();
+        evidence[note.Hash].Legs.ShouldContain(leg => leg.LegName == "fts" && leg.Rank == 1, "premise: the keyword leg ranks the note first");
+        evidence[note.Hash].Legs.ShouldNotContain(leg => leg.LegName == "vector" && leg.Rank == 1,
+            "premise: the vector leg does not rank the note first, so the both-legs rule does not apply");
+        var chunks = envelope.Data!.Results.Where(result => result.SourceFile == observatory).Select(result => result.ChunkIndex).ToList();
+        chunks.ShouldContain(chunk => chunks.Contains(chunk + 1), "premise: the vector leg serves two adjacent observatory chunks");
+        envelope.Data!.Results[0].Hash.ShouldBe(note.Hash, "a same-source boost must not lift vector-only neighbours above it");
+    }
+
+    private static string LongNoteText() =>
+        string.Join(" ", Enumerable.Repeat(
+            "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", 8))
+        + " Invoice reference vk83jq was filed with the parish council.";
+
+    private static string ObservatoryText()
+    {
+        var sections = new[]
+        {
+            ("Telescope", "The observatory telescope tracks faint galaxies and catalogues their spectra overnight."),
+            ("Calibration", "Calibration frames subtract detector noise before the spectra are reduced."),
+            ("Archive", "Reduced spectra are archived with catalogue codes such as qx7 and zr42.")
+        };
+        return "# Observatory\n\n" + string.Join("\n\n", sections.Select(section =>
+            $"## {section.Item1}\n\n{string.Join(" ", Enumerable.Repeat(section.Item2, 12))}")) + "\n";
+    }
+
     private static string RunbookText()
     {
         var sections = new[]

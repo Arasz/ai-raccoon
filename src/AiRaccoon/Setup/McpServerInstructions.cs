@@ -19,7 +19,7 @@ internal static class McpServerInstructions
         "memory_search result carries the warning \"" + SearchWarnings.EngineNotConfiguredPrefix + "\", " +
         "the memory section came from keyword matching alone: semantic memory matches are missing, not " +
         "absent. Tell the user once, verbatim, to run '" + EmbeddingEngineSetup.DefaultModelCommand + "' " +
-        "— it downloads and activates the default memory embedding model — and say that memory results " +
+        "— it activates the embedding model bundled with the tool — and say that memory results " +
         "were keyword-only until then. When it carries \"" + CodeSearchWarnings.EngineNotConfiguredPrefix + "\", " +
         "the same is true of the code section, whose engine is installed by '" +
         CodeEngineSetup.DefaultModelCommand + "'. Do not re-run the search hoping for vectors; nothing " +
