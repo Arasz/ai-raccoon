@@ -135,9 +135,13 @@ public sealed class RrfParameterSweepTests : IDisposable
 
         // Gate (c): fusion — hybrid must not rank the expected chunk below the best single
         // modality; the measured exclusions are documented in docs/work/archive/2026-08-06-baseline-repin-new-corpus.md.
+        // A9 excluded here too (#691): equal-weight RRF cannot express one confident leg when
+        // the other modality misses entirely (#367) — measured fts 2 / vector miss / hybrid 3,
+        // recorded with the held-out floor in docs/work/2026-09-24-a9-rrf-exclusion.md. Pinned as
+        // a ceiling right below instead, so a further regression still goes red.
         foreach (var item in fusion)
         {
-            if (item.QueryId is "A2" or "A3" or "A8" or "A10" or "C1" or "C2" or "C5" or "S2")
+            if (item.QueryId is "A2" or "A3" or "A8" or "A9" or "A10" or "C1" or "C2" or "C5" or "S2")
             {
                 continue;
             }
@@ -153,6 +157,13 @@ public sealed class RrfParameterSweepTests : IDisposable
             item.HybridExactRank!.Value.ShouldBeLessThanOrEqualTo(bestSingle.Value,
                 $"{item.QueryId}: hybrid exact rank {item.HybridExactRank} must not exceed the best single modality's {bestSingle} (fts {item.FtsExactRank?.ToString() ?? "-"}, vector {item.VectorExactRank?.ToString() ?? "-"})");
         }
+
+        // A9's own ceiling (#691, #367): excluded from the general fusion check above, but still
+        // pinned so a fusion regression (hybrid dropping below its measured rank 3) goes red.
+        var a9Fusion = fusion.Single(item => item.QueryId == "A9");
+        a9Fusion.HybridExactRank.ShouldNotBeNull("A9 must appear in the top-k results");
+        a9Fusion.HybridExactRank!.Value.ShouldBeLessThanOrEqualTo(3,
+            "A9 must hold its measured hybrid rank ceiling of 3 (#691, #367)");
 
         // Gate (d): measured re-pinned ranks (WP4 corpus regeneration,
         // docs/plans/2026-08-14-code-quality-improvement-plan.md) — the corpus grew 761 -> 2518
