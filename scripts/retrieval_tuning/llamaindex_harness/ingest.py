@@ -61,11 +61,14 @@ PINNED_MODEL_REVISION = repo_data.KNOBS["PINNED_MODEL_REVISION"]
 BM25_WEIGHTS = tuple(repo_data.KNOBS["BM25_WEIGHTS"])
 EMBED_BATCH_SIZE = repo_data.KNOBS["EMBED_BATCH_SIZE"]
 
-# Token window handed to SentenceTransformer: mirrors the product's
-# manifest-local chunk budget for granite — EmbeddingService.ResolveChunkBudgetFor
-# caps content at min(510, ctx-2) tokens (src/AiRaccoon.Infrastructure/Embedding/
-# EmbeddingService.cs:198-212), i.e. 512 tokens total once the two special tokens
-# are added at embed time.
+# Token window handed to SentenceTransformer: mirrors the product's memory
+# chunk budget for the bundled granite engine. EmbeddingService.ResolveChunkBudgetFor
+# resolves this through EmbeddingService.ManifestContentBudget, which returns the
+# bundled manifest's own chunkTokens (254, ai-raccoon.manifest.json) directly
+# whenever it is set, bypassing the min(510, ctx-2) fallback that would otherwise
+# apply for a manifest model with no override (ADR-0108 item 5: chunkTokens=254
+# pins the memory chunk size so switching embedding models never changes it).
+# 256 tokens total once the two special tokens are added at embed time.
 EMBED_MAX_SEQ_LENGTH = repo_data.KNOBS["EMBED_MAX_SEQ_LENGTH"]
 
 # Chroma upsert batching: one call trips the server max-batch cap (5461 at
@@ -224,11 +227,11 @@ def create_embedding_model(model_name: str = MODEL_NAME, offline: bool = False):
     same way the product's ONNX graph does: the manifest's ``pooling.mode`` is
     "model-output" because the graph pools CLS internally, and
     ``OnnxEmbeddingGenerator.PoolAlreadyPooledOutput`` L2-normalizes that pooled
-    "sentence_embedding" output (src/AiRaccoon.Infrastructure/Embedding/
-    OnnxEmbeddingGenerator.cs:328-343) — matched here by leaving pooling to the
+    "sentence_embedding" output, matched here by leaving pooling to the
     checkpoint's own module and ``normalize=True`` (HuggingFaceEmbedding's
     default). ``max_length=EMBED_MAX_SEQ_LENGTH`` mirrors
-    ``EmbeddingService.ResolveChunkBudgetFor``'s manifest-local cap so a
+    ``EmbeddingService.ResolveChunkBudgetFor``'s bundled-manifest cap (the
+    manifest's own ``chunkTokens=254`` plus the 2 special tokens) so a
     longer-than-budget harness row truncates the same number of tokens the
     product's chunker would ever hand the embedder (native architecture, no
     custom modeling code or repair needed; fp32 keeps CPU inference exact).
