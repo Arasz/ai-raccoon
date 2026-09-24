@@ -66,6 +66,10 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// construction, Run, Dispose — is pinned to one dedicated thread (ADR-0110).</summary>
     private SingleThreadExecutor? _mlxExecutor;
 
+    /// <summary>Guards <see cref="Dispose" /> against being called twice — the standard IDisposable
+    /// contract — since <see cref="_mlxExecutor" /> is itself single-use and throws on a second Run.</summary>
+    private bool _disposed;
+
     internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
         int intraOpThreads = 0, bool preferGpu = false, bool preferMlx = false)
     {
@@ -152,6 +156,12 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         if (_mlxExecutor is { } executor)
         {
             executor.Run(() =>
@@ -165,6 +175,10 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
         _session.Dispose();
     }
+
+    /// <summary>Attaches an executor to a normally-constructed (CPU) generator so Dispose's MLX
+    /// branch is exercisable without a real onnxruntime MLX plugin. Test seam.</summary>
+    internal void AttachMlxExecutorForTesting(SingleThreadExecutor executor) => _mlxExecutor = executor;
 
     private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Run(List<NamedOnnxValue> feed)
     {
