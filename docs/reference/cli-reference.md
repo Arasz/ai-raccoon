@@ -168,7 +168,7 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 29 | `Key.BankKeyedToEnv` | `encryption bitwarden` did not switch the source | no |
 | 30 | `Bank.OpenFailed` | SQLite refused to open or read the bank | no |
 | 31 | `Bank.NoBank` | No bank file exists at the resolved path | no |
-| 32 | `Bank.Corrupted` | The file exists but is not a SQLite database | no |
+| 32 | `Bank.Corrupted` | The file exists but does not open as a database: a corrupt bank or a wrong key, which SQLCipher cannot tell apart (the message names both remedies) | no |
 | 33 | `Bank.Busy` | The bank is locked or busy | yes |
 | 34 | `Bank.SchemaMismatch` | The schema shape differs from this binary's DDL; `serve` repairs it on open | no |
 | 35 | `Bank.SchemaNewerThanBinary` | The bank's `user_version` is newer than this binary supports | no |
@@ -181,7 +181,7 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 42 | `Port.LostDuringRestart` | `serve --restart`: another server took the port while this one was starting | yes |
 | 43 | `Port.HeldUnanswered` | `serve --restart`: the port gave the probe no answer | no |
 | 44 | `Port.RestartTimedOut` | `serve --restart`: the server accepted shutdown but still held the port at the bound | no |
-| 50 | `Server.Unproven` | An ai-raccoon listener holds the port but did not prove it serves this data root | no |
+| 50 | `Server.Unproven` | An ai-raccoon listener holds the port but did not prove it serves this data root (the message names why the proof failed) | no |
 | 51 | `Server.NoToken` | This data root holds no token, so the server on the port cannot be asked anything | no |
 | 52 | `Server.RestartTokenRefused` | `serve --restart`: the server refused this root's token | no |
 | 53 | `Server.RequestTokenRefused` | A control-plane request got 401 | no |
@@ -205,7 +205,7 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 74 | `Model.RuntimeRejected` | The downloaded ONNX graph failed the ONNX Runtime smoke load | no |
 | 75 | `Model.RepoUnsupported` | The repo cannot be planned: no ONNX export, unsupported model or tokenizer | no |
 | 76 | `Model.ManifestRejected` | A local model directory is unusable: no/invalid manifest, or a declared file missing or re-hashed | no |
-| 77 | `Model.EndpointUnreachable` | `model embedding set openai`: the endpoint could not be reached or refused the probe | no |
+| 77 | `Model.EndpointUnreachable` | `model embedding set openai`: the endpoint could not be reached, refused the probe, or rejected the API key (the message names the key) | no |
 | 78 | `Model.BadBaseUrl` | `model embedding set openai`: `base-url` is not a usable absolute http(s) URL | no |
 | 79 | `Model.DimensionMismatch` | `model embedding set openai`: the endpoint's dimension contradicts `--dims`, or is non-384 with no `--dims` | no |
 | 80 | `Environment.IoFailed` | A local filesystem operation failed for a reason no narrower case names | no |
