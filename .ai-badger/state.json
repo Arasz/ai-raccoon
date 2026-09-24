@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-code-index-uncovered-lines-711",
+   "title": "Code-index line-coverage gap investigated: watcher lag, not a chunker/ingest defect",
+   "pr": 723,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "Every uncovered line (208 paths, 3,783 lines) sits in a file edited after its newest row; 0 unexplained gaps once lines split on '\\n' like CodeChunker (the 2 'trailing' lines were U+2028/U+2029 literals Python splitlines counts). New WatchIntegrationTests prove insert/modify/append and atomic-rename edits re-cover every line; CodeChunker covers an unterminated last line. Open: why restart catch-up leaves files stale for weeks after git checkout -> #724."
+  },
+  {
    "id": "air-wrong-key-no-legacy-source-710",
    "title": "Wrong key under a key source with no legacy derivation reports key mismatch, not a raw SqliteException",
    "pr": 721,
@@ -205,7 +214,7 @@
   "#705 key verifier outside the bank (ADR-0107 item 1)",
   "#706 fusion that trusts one confident leg (A9 / #367)",
   "#707 re-baseline the retrieval harness on granite (absorbs harness package D)",
-  "#711 0.26% of non-blank lines covered by no code row (hypothesis: stale positions)"
+  "#724 watch catch-up leaves files stale for weeks after directory-entry replaces (git checkout)"
  ],
  "research": [],
  "stillTrue": [
