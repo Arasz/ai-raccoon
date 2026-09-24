@@ -609,10 +609,31 @@ headroom under the limit.
 including the before/after `unzip -l` and the install-and-load proof. Graded READ because the pack
 was run by the delegated lane, not in this record's session.
 
+### F45 — Through the product's hybrid memory search, CPU and WebGPU give the same quality [MEASURED]
+
+The 174-doc memory corpus was written as markdown files (`# Title` + body) and ingested with
+`memory_ingest_directory` into a fresh scratch bank per arm. Production chunking, headings,
+structure fusion, the sibling boost and the relevance floor all applied. Each arm drained all 174
+entries before any query ran. The 68 queries went through `memory_search(kind=memory,
+scope=project, limit=10, minRelativeScore=0)`, with results mapped to documents by source file.
+
+| arm (installed 1.49.2) | nDCG@10 | MRR@10 |
+|---|---|---|
+| `settings model device cpu` (log: execution provider CPU) | 0.6844 | 0.9170 |
+| `auto` (log: execution provider WebGPU) | 0.6863 | 0.9178 |
+
+Top-1 is identical on 68/68 queries, top-5 on 64/68 and top-10 on 46/68. Hybrid nDCG is higher than
+the dense-only 0.636 (F28) because the keyword leg and structure fusion add signal.
+
+**Evidence:** `memeval_product.py <scratch> {cpu cpu|webgpu auto} ai-raccoon`, which uses the repo's
+`retrieval_tuning.server.start_server`. The device was set on a first server start, then a second
+start loaded the engine and ran the evaluation. Output is in `memeval-{cpu,webgpu}.json`, with the
+provider taken from `memeval-<arm>/serve.log`.
+
 ## Still open
 
-- **Memory hybrid search per provider** (F43). Structure fusion, the sibling boost and the
-  relevance-floor rescale sit on top of RRF there and were not simulated.
+- **Memory hybrid search on MLX.** F45 covers CPU and WebGPU; the MLX arm needs the product's
+  opt-in MLX device (in progress as a separate draft PR).
 - **The real MLX path in the product.** Everything MLX here goes through the scratch harness
   (`bench.cs`) and a simulation (F40). An end-to-end server run needs product support for the
   plugin, which doesn't exist yet.
