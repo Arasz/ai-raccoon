@@ -1,0 +1,184 @@
+using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Memory.Fusion;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Tests.Integration.Retrieval;
+using AiRaccoon.Tests.Unit.Retrieval;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+using Shouldly;
+using Xunit;
+using xRetry.v3;
+using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
+
+namespace AiRaccoon.Tests.Integration;
+
+/// <summary>
+///     Measures confidence-weighted RRF (<see cref="FusionConfigKeys.LegConfidenceEnabledGlobal" />,
+///     issue #706 round 2) against RrfParameterSweepTests' gate (c) population at the production
+///     config and the shipped parameterization (k=5, bounds [0.5, 2.0] — <see cref="LegConfidence" />'s
+///     defaults). Does it get A9 (fts rank 2, vector miss, hybrid rank 3) down to rank &lt;= 2, and
+///     does it disturb any query the gate already holds without it? See
+///     docs/work/2026-09-24-fusion-leg-confidence-measured.md for the full sweep, including the two
+///     other pre-declared parameterizations this class does not pin.
+/// </summary>
+[Trait(TestCategories.Category, TestCategories.Retrieval)]
+[Trait(TestCategories.Speed, TestCategories.Nightly)]
+public sealed class LegConfidenceFusionGateTests : IDisposable
+{
+    private const string ProjectId = "ai-raccoon";
+    private const int SearchLimit = 10;
+    private const int ChosenK = 60;
+    private const int ChosenFtsWeight = 1;
+    private const int ChosenVectorWeight = 1;
+    private const double FixedSourceLambda = 0.1;
+    private const double FixedConsolidationThreshold = 0.1;
+
+    private static readonly DateTimeOffset FixedNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>RrfParameterSweepTests' gate (c) exclusion set, minus A9: this test puts A9 back
+    /// under the general rule to measure the flag's effect on it instead of excluding it.</summary>
+    private static readonly string[] StillExcluded = ["A2", "A3", "A8", "A10", "C1", "C2", "C5", "S2"];
+
+    /// <summary>
+    ///     Measured 2026-09-24 at the chosen config (k=60, 1:1, lambda=0.1, threshold=0.1, Max) with
+    ///     the flag on at the shipped parameterization (LegConfidence k=5, bounds [0.5, 2.0]): pinned
+    ///     so a change to this measurement — better or worse — is visible rather than silently
+    ///     absorbed. A9 reaches hybrid rank 2 here (its own pinned ceiling in RrfParameterSweepTests
+    ///     is 3, so this is an improvement, not a violation) — unlike ADR-0078's no-regression
+    ///     reorder (docs/work/2026-09-24-fusion-no-regression-flag-measured.md), which cannot move it
+    ///     at all. A6 is a new regression this parameterization introduces (fts rank 1, hybrid drops
+    ///     to rank 2) — see docs/work/2026-09-24-fusion-leg-confidence-measured.md F1/F2.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, int> MeasuredHybridRankWithLegConfidenceOn =
+        new Dictionary<string, int>(StringComparer.Ordinal) { ["A9"] = 2, ["A6"] = 2 };
+
+    private static readonly string[] RrfGateQueryIds =
+        RetrievalTuningSets.SweepGateQueryIds(BaselineQueryCatalog.Load());
+
+    private readonly string _dataRoot;
+    private readonly Dictionary<string, string> _hashMap;
+    private readonly ITestOutputHelper _output;
+    private readonly SqliteMemoryStore _store;
+
+    public LegConfidenceFusionGateTests(ITestOutputHelper output)
+    {
+        _output = output;
+        _dataRoot = TestData.CreateTempRoot("ai-raccoon-leg-confidence-gate");
+        var bundledDb = Path.Combine(AppContext.BaseDirectory, "Resources", "docs-memory.db");
+        TestData.CopyMiniLmCorpusBank(bundledDb, Path.Combine(_dataRoot, "memory.db"));
+
+        var factory = new SqliteConnectionFactory(
+            new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User },
+            NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
+        _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+            PinnedQueryVectors.EmbeddingService(), null, null, null, null, null, null, null);
+
+        (_hashMap, _) = CorpusHashMap.Build(
+            Path.Combine(_dataRoot, "memory.db"),
+            BaselineQueryCatalog.Load()
+                .Where(q => q.ExpectedSource is not null && RrfGateQueryIds.Contains(q.Id))
+                .Select(q => q.ExpectedSource!));
+    }
+
+    public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
+
+    /// <summary>
+    ///     With the flag on at the shipped parameterization, every gate (c) query outside the
+    ///     measured/pinned set above must still hold hybrid &lt;= best single leg, and the pinned set
+    ///     must hold its measured rank exactly — a drift either way is a finding for
+    ///     docs/work/2026-09-24-fusion-leg-confidence-measured.md, not a silent pass.
+    /// </summary>
+    [RetryFact]
+    public async Task Sweep_LegConfidenceEnabled_HoldsExceptTheMeasuredA9Regression()
+    {
+        await _store.SetSettingAsync(FusionConfigKeys.LegConfidenceEnabledGlobal, "true",
+            TestContext.Current.CancellationToken);
+
+        var queries = BaselineQueryCatalog.Load()
+            .Where(q => q.ExpectedSource is not null && RrfGateQueryIds.Contains(q.Id))
+            .ToList();
+
+        var violations = new List<string>();
+        var pinnedRanks = new Dictionary<string, int?>(StringComparer.Ordinal);
+        foreach (var query in queries)
+        {
+            var hybridRank = await ExactRankAsync(query, ChosenFtsWeight, ChosenVectorWeight,
+                TestContext.Current.CancellationToken);
+            var ftsRank = await ExactRankAsync(query, 1, 0, TestContext.Current.CancellationToken);
+            var vectorRank = await ExactRankAsync(query, 0, 1, TestContext.Current.CancellationToken);
+            var bestSingle = Min(ftsRank, vectorRank);
+
+            _output.WriteLine(
+                $"{query.Id}: hybrid={hybridRank?.ToString() ?? "-"} fts={ftsRank?.ToString() ?? "-"} " +
+                $"vector={vectorRank?.ToString() ?? "-"} bestSingle={bestSingle?.ToString() ?? "-"}");
+
+            if (MeasuredHybridRankWithLegConfidenceOn.ContainsKey(query.Id))
+            {
+                pinnedRanks[query.Id] = hybridRank;
+                continue;
+            }
+
+            if (StillExcluded.Contains(query.Id) || bestSingle is null)
+            {
+                continue;
+            }
+
+            if (hybridRank is null || hybridRank.Value > bestSingle.Value)
+            {
+                violations.Add(
+                    $"{query.Id}: hybrid {hybridRank?.ToString() ?? "-"} > best single leg {bestSingle} " +
+                    $"(fts {ftsRank?.ToString() ?? "-"}, vector {vectorRank?.ToString() ?? "-"})");
+            }
+        }
+
+        violations.ShouldBeEmpty(
+            $"leg-confidence fusion introduced a regression outside the measured/pinned set: {string.Join("; ", violations)}");
+
+        foreach (var (id, measuredRank) in MeasuredHybridRankWithLegConfidenceOn)
+        {
+            pinnedRanks[id].ShouldBe(measuredRank,
+                $"{id}: leg-confidence hybrid rank drifted from the 2026-09-24 measurement ({measuredRank}) — " +
+                "re-measure and update docs/work/2026-09-24-fusion-leg-confidence-measured.md");
+        }
+    }
+
+    private async Task<int?> ExactRankAsync(
+        CatalogQuery query, int ftsWeight, int vectorWeight, CancellationToken cancellationToken)
+    {
+        var expectedHash = _hashMap[query.ExpectedSource!];
+        var results = (await _store.SearchAsync(new SearchQuery(
+            ProjectId, query.Query, SearchScope.Project,
+            Limit: SearchLimit, MinRelativeScore: 0.0, RrfK: ChosenK,
+            FtsWeight: ftsWeight, VectorWeight: vectorWeight,
+            SourceLambda: FixedSourceLambda, ConsolidationThreshold: FixedConsolidationThreshold,
+            DocScoreFormula: DocScoreFormula.Max, CandidateWindow: CandidateWindowMode.Max3X100),
+            cancellationToken)).Results;
+
+        for (var i = 0; i < results.Count; i++)
+        {
+            if (results[i].Hash == expectedHash)
+            {
+                return i + 1;
+            }
+        }
+
+        return null;
+    }
+
+    private static int? Min(int? first, int? second)
+    {
+        if (first is null)
+        {
+            return second;
+        }
+
+        if (second is null)
+        {
+            return first;
+        }
+
+        return Math.Min(first.Value, second.Value);
+    }
+}
