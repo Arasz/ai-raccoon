@@ -11,7 +11,7 @@ Provides feature-parity with Claude Code hooks:
   + message-bus per-turn delivery
 - pre_tool_call: memory-first gate — block text search until the session consulted memory_search
 - post_tool_call: log tool usage, index hit/miss metrics, and learned-skill sync
-- on_session_end: message-bus cursor cleanup
+- on_session_end: message-bus close is a no-op (D3); the cursor dies via the 4-day prune only
 
 Installation (0.80.0+): `welcome-ai-badger` ships these hooks as a Hermes
 DIRECTORY plugin at ~/.hermes/plugins/ai-badger/ (plugin.yaml declaring the hooks,
@@ -730,9 +730,13 @@ def pre_llm_inject_context(
 
 
 def tags_for_display(tool_name: str, index: dict[str, Any]) -> list[str]:
-    """Helper to look up tags for a tool in the index. Used in pre_llm_inject_context."""
+    """Tags for one `server:tool` name, or `[]` when the tool isn't in the index.
+
+    Splits on the LAST colon (mcp_index.py's `_split_tool_ref`, L6-5): a plugin-provided
+    server is decorated `plugin:<plugin>:<server>` by `claude mcp list`, and splitting on
+    the first colon resolves that to a server literally named "plugin"."""
     if ":" in tool_name:
-        sname, tname = tool_name.split(":", 1)
+        sname, _, tname = tool_name.rpartition(":")
         for server in index.get("sources", []):
             if server["name"] == sname:
                 tool = server.get("tools", {}).get(tname, {})
@@ -1055,22 +1059,16 @@ def _bus_turn_context(session_id: str, cwd: str) -> Optional[str]:
 
 
 def on_session_end_message_delivery(session_id: str = "", **kwargs: Any) -> None:
-    """Remove the session's cursor — the close-event cleanup; the 4-day TTL is the backstop."""
+    """SessionEnd is a no-op for the bus (D3): deleting the cursor here let a reused
+    session id (a host's --resume) look like a brand-new session and replay
+    already-delivered mail (L2-6). Rule 6's cursor death is the 4-day prune only."""
     try:
         session_id = session_id or kwargs.get("session_id") or ""
         if not session_id:
             return
-        store_lib = _load_message_bus_store()
-        if store_lib is None:
-            return
-        store = store_lib.open_user()
-        try:
-            store.delete_cursor(session_id)
-        finally:
-            store.close()
         _debug("ai_badger_hooks/message_bus", "closed", session=session_id)
     except Exception:  # pylint: disable=broad-exception-caught
-        logger.warning("message-bus cursor cleanup failed", exc_info=True)
+        logger.warning("message-bus session-end no-op failed", exc_info=True)
 
 
 # ---------------------------------------------------------------------------

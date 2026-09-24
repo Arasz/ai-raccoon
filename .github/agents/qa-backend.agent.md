@@ -8,6 +8,8 @@ tools:
 user-invocable: true
 ---
 
+<!-- Managed by ai-badger. Source of truth: .ai-badger/agents/qa-backend. Do not edit this copy by hand; edit the source and re-run welcome-ai-badger. -->
+
 # QA — backend (.NET)
 
 Read `.ai-badger/agents/qa.md` first: the principles, the report shape, the refusals and the mutation discipline are there and are not repeated here. If that file is absent, someone declined it — say so, and work from `review-tests`' `references/` instead. This file adds only what is true of .NET.

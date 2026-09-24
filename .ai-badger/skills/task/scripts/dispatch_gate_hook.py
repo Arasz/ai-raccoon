@@ -47,6 +47,11 @@ MODEL_KEY = "model:"
 
 DISALLOWED_KEY = "disallowedTools:"
 
+# Claude's own frontmatter/param spelling for "use the session's model" — exactly what this
+# gate exists to deny, so a non-empty `model: inherit` must not count as a declared model
+# (L5-7). Compared case-insensitively: YAML scalars are not case-sensitive by convention here.
+INHERIT_MODEL = "inherit"
+
 # Mirrors the harness's file-touching tools. A hand-kept list with nothing to derive it from
 # and nothing to compare it against — a conscious exception to derive-or-delete-the-list.
 # Consumed with all(), so a MISSING entry widens the read-only exemption rather than
@@ -104,8 +109,14 @@ def lane_file(root: Optional[str], subagent_type: str) -> Optional[Path]:
     return None
 
 
+def _names_a_model(value: str) -> bool:
+    """Non-empty and not the `inherit` sentinel — the only shapes that actually pin a model."""
+    value = value.strip()
+    return bool(value) and value.lower() != INHERIT_MODEL
+
+
 def declares_model(path: Path) -> bool:
-    """True when the agent file's YAML frontmatter carries a non-empty top-level `model:` key."""
+    """True when the agent file's YAML frontmatter carries a real, non-inherit `model:` key."""
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:  # pragma: no cover - an unreadable lane file declares nothing
@@ -116,7 +127,7 @@ def declares_model(path: Path) -> bool:
         if line.strip() == FRONTMATTER_FENCE:
             return False
         if line.startswith(MODEL_KEY):
-            return bool(line[len(MODEL_KEY):].strip())
+            return _names_a_model(line[len(MODEL_KEY):])
     return False
 
 
@@ -197,8 +208,8 @@ def decide(payload: Dict[str, Any]) -> int:
     root = project_root(payload)
     model = tool_input.get("model")
     lane = lane_file(root, subagent_type)
-    has_model = (isinstance(model, str) and model.strip()) or (
-        lane is not None and declares_model(lane))
+    explicit_model = isinstance(model, str) and _names_a_model(model)
+    has_model = explicit_model or (lane is not None and declares_model(lane))
     if not has_model:
         _debug("deny", project=root, subagentType=subagent_type, why="no_model")
         _deny(DENY_REASON.format(subagent_type=subagent_type))
@@ -211,7 +222,7 @@ def decide(payload: Dict[str, Any]) -> int:
         return 0
 
     _debug("allow", project=root, subagentType=subagent_type,
-           why="explicit_model" if (isinstance(model, str) and model.strip()) else "lane_file")
+           why="explicit_model" if explicit_model else "lane_file")
     return 0
 
 

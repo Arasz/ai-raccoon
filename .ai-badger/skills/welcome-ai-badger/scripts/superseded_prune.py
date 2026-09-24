@@ -44,7 +44,13 @@ class SupersededPrune:
                     self.ctx.notes.append(f"{rel} holds project-owned {', '.join(owned)} — "
                                           f"left in place ({reason})")
                     continue
-            if self._edited_here(entry, entries):
+            edited = self._edited_here(entry, entries)
+            if edited is None:
+                self.ctx.notes.append(
+                    f"{rel} left in place — cannot tell whether it was edited "
+                    f"(no outputHash recorded) ({reason})")
+                continue
+            if edited:
                 self.ctx.notes.append(f"{rel} was edited here — left in place ({reason})")
                 continue
             if directory:
@@ -70,23 +76,39 @@ class SupersededPrune:
             return "no longer in the framework catalog"
         return None
 
-    def _edited_here(self, entry: Dict[str, Any], entries: List[Dict[str, Any]]) -> bool:
-        """True when the copy on disk no longer matches the hash the manifest recorded.
+    def _edited_here(self, entry: Dict[str, Any], entries: List[Dict[str, Any]]
+                      ) -> Optional[bool]:
+        """Whether the on-disk copy differs from what this run would write — None when the
+        comparison cannot be made at all.
 
-        A directory entry owns its subtree, so an edit to any entry nested inside it counts
-        too — pruning the tree would otherwise take that edit with it.
+        A `hashes_source` entry's `hash` is the framework SOURCE's hash (ADR-0006), which
+        never matches rendered output, so its `outputHash` (D11) is what compares here when
+        present. Without one — an older manifest, or a seed-once entry recorded before its
+        first copy — the answer is unknown, not "edited": the caller must not blame the
+        project for an edit it cannot show. A directory entry owns its subtree, so an edit to
+        any entry nested inside it counts too — pruning the tree would otherwise take it along.
         """
         import badger_lib as bl
 
         rel = (entry.get("target") or "").rstrip("/")
         path = self.ctx.target / rel
         if path.is_file():
+            if "outputHash" in entry:
+                return bl.content_hash_ignoring_version_stamp(path) != entry["outputHash"]
+            if bl.feature_type(entry.get("feature")).hashes_source:
+                return None
             return bl.sha256_file(path) != entry.get("hash")
         if not path.is_dir():
             return False
         fingerprint = bl.dir_content_hash(
             path, exclude=bl.SKILL_EXCLUDE_PATTERNS + ["extensions"],
             exclude_rel=bl.nested_entry_targets(entries, rel))
-        return (fingerprint["content_hash"] != entry.get("hash")
-                or any(self._edited_here(nested, entries) for nested in entries
-                       if (nested.get("target") or "").startswith(rel + "/")))
+        if fingerprint["content_hash"] != entry.get("hash"):
+            return True
+        nested = [self._edited_here(n, entries) for n in entries
+                  if (n.get("target") or "").startswith(rel + "/")]
+        if any(n is True for n in nested):
+            return True
+        if any(n is None for n in nested):
+            return None
+        return False
