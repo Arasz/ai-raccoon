@@ -626,6 +626,11 @@ def load_current_sessions() -> dict:
         return store.sessions_map()
 
 
+def live_session_ids() -> set:
+    """Ids of recorded sessions whose process is still running (signal-0 probe, linux and macOS)."""
+    return {sid for sid, info in load_current_sessions().items() if _pid_alive(info.get("pid"))}
+
+
 def save_current_session(session_id: str, transcript_path: str, cwd: str = "") -> None:
     """Record this session into the shared multi-session index (one store transaction).
 

@@ -62,13 +62,13 @@
         "type": "command",
         "bash": "if [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py not found - hook skipped\"}'; fi",
         "timeoutSec": 10,
-        "matcher": "memory_search"
+        "matcher": "^(mcp__.+__|.+-)?memory_search$"
       },
       {
         "type": "command",
         "bash": "if [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py not found - hook skipped\"}'; fi",
         "timeoutSec": 10,
-        "matcher": "memory_search"
+        "matcher": "^(mcp__.+__|.+-)?memory_search$"
       },
       {
         "type": "command",
@@ -80,7 +80,7 @@
         "type": "command",
         "bash": "if [ -f \".ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\" ]; then python3 \".ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py not found - hook skipped\"}'; fi",
         "timeoutSec": 10,
-        "matcher": "export_graph"
+        "matcher": "^(mcp__.+__|.+-)?export_graph$"
       },
       {
         "type": "command",

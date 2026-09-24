@@ -54,18 +54,18 @@ not create edge facts.
 
 ## Layout budget
 
-| Constant            | Value                                                                                                   |
-|---------------------|---------------------------------------------------------------------------------------------------------|
-| viewBox             | default `[920, 760]`; schema minimum `[480, 480]`                                                       |
-| Participant boxes   | `fixed` (default): 86×54 at y 72; `spread`: viewBox-relative width from 86px up to 190px                |
+| Constant | Value |
+|----------|-------|
+| viewBox | default `[920, 760]`; schema minimum `[480, 480]` |
+| Participant boxes | `fixed` (default): 86×54 at y 72; `spread`: viewBox-relative width from 86px up to 190px |
 | Participant columns | `fixed`: centers at x = 62 + index×108; `spread`: columns distribute across the available viewBox width |
-| Participant count   | the last box must end at or before width − 40; layouts that cannot fit fail closed                      |
-| Lifelines           | from y 142 down to height − 65; band must be ≥120px tall                                                |
-| Message `y` range   | `[160, height − 83]`                                                                                    |
-| Message spacing     | ≥28px vertical between messages that share horizontal space                                             |
-| Arrow span          | ≥60px horizontal between the two participants                                                           |
-| Segments            | y pixel ranges with `to > from`, inside `[72, lifeline bottom + 20]`                                    |
-| Legend row          | y = height − 54                                                                                         |
+| Participant count | the last box must end at or before width − 40; layouts that cannot fit fail closed |
+| Lifelines | from y 142 down to height − 65; band must be ≥120px tall |
+| Message `y` range | `[160, height − 83]` |
+| Message spacing | ≥28px vertical between messages that share horizontal space |
+| Arrow span | ≥60px horizontal between the two participants |
+| Segments | y pixel ranges with `to > from`, inside `[72, lifeline bottom + 20]` |
+| Legend row | y = height − 54 |
 
 `segments[].from/to` and `activations[].from/to` are y pixel coordinates, not
 participant ids; activations also require `to > from`.

@@ -2,10 +2,11 @@
 """Every-30-min cron: resume unfinished task sessions after a usage-limit stall.
 
 Logic:
-- A task counts as STALLED when its state is not FINISHED and its transcript
-  has not changed for STALE_MINUTES — i.e. the session died mid-task, which is
-  what hitting a usage limit looks like from the outside. An actively running
-  session keeps writing its transcript, so we never touch healthy work.
+- A task counts as STALLED when its state is not FINISHED, its session's recorded
+  process is no longer running, and its transcript has not changed for
+  STALE_MINUTES — i.e. the session died mid-task, which is what hitting a usage
+  limit looks like from the outside. A quiet transcript alone is not enough: an
+  idle interactive session writes nothing, and resuming it would run it twice.
 - If nothing is stalled: do nothing (we haven't hit a limit, or nothing is tracked).
 - If something is stalled: probe with a one-shot cheap Haiku call. If the probe
   fails (limit still in force), do nothing and try again in 30 min. If it
@@ -147,11 +148,13 @@ def run(dry_run: bool) -> int:
         return 0
 
     tasks = lib.load_tasks()
+    live = lib.live_session_ids()
     stalled = [
         t
         for t in tasks["tasks"]
         if t.get("state") != lib.STATE_FINISHED
         and t.get("sessionId")
+        and t["sessionId"] not in live
         and transcript_stale(t)
         and not recently_attempted(t)
     ]

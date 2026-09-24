@@ -194,7 +194,7 @@
         ]
       },
       {
-        "matcher": "memory_search",
+        "matcher": "^(mcp__.+__|.+-)?memory_search$",
         "hooks": [
           {
             "type": "command",
@@ -203,7 +203,7 @@
         ]
       },
       {
-        "matcher": "memory_search",
+        "matcher": "^(mcp__.+__|.+-)?memory_search$",
         "hooks": [
           {
             "type": "command",
@@ -212,7 +212,16 @@
         ]
       },
       {
-        "matcher": "export_graph",
+        "matcher": "Read|ReadFile",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\"; elif [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py not found - hook skipped\"}'; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "^(mcp__.+__|.+-)?export_graph$",
         "hooks": [
           {
             "type": "command",

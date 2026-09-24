@@ -28,6 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tracker_lib as lib
+from task_tracker import is_task_id  # pylint: disable=wrong-import-position
 
 # pylint: disable=no-member  # debug_log is an exec-populated shim; pylint cannot see its members
 try:
@@ -57,9 +58,13 @@ TASK_ID_RE = re.compile(r"^/(?:[\w-]+:)?task(?::\S+)?\s+([A-Za-z0-9._-]+)")
 
 
 def task_id_from_prompt(prompt: str) -> str | None:
-    """Return the task id in a leading `/task <id>` invocation, or None if there isn't one."""
+    """Return the task id in a leading `/task <id>` invocation, or None if there isn't one.
+
+    `/task <free-form prose>` is None too: its first word is not a `{repo-alias}-{key}` id,
+    and the model derives the real one before it runs `task_tracker.py start`.
+    """
     match = TASK_ID_RE.match(prompt.strip())
-    return match.group(1) if match else None
+    return match.group(1) if match and is_task_id(match.group(1)) else None
 
 
 def _register_task(task_id: str, session_id: str, transcript: str) -> None:

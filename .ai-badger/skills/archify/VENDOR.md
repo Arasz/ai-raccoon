@@ -11,7 +11,8 @@ packet so scaffolded projects receive working diagram renderers without a networ
 - Asset sha256: `4c59fa6557a2385beaaef8c7219cc414573acc9f0c30a932d5053b0b20689a46`
 - Commit id: asserted from the release page and recorded in `vendor.json`; the **verified**
   anchor is the asset sha256 above, not the commit (a `--revendor` run does not re-resolve it).
-- Staging: the asset was verified against that sha, then compared byte-for-byte (`diff -r`) with the output of upstream's own `scripts/stage-clean-skill.mjs` run from
+- Staging: the asset was verified against that sha, then compared byte-for-byte
+  (`diff -r`) with the output of upstream's own `scripts/stage-clean-skill.mjs` run from
   tag `v2.16.0` — identical. The 76 files here are that staged tree, except `SKILL.md`
   (adapted, see below).
 
@@ -73,7 +74,8 @@ one-line fix, which is what `--check` does).
 
 Upstream's stager is hardened for publishing to strangers (snapshot fds, TOCTOU checks,
 mode enforcement). This is a maintainer-run vendor op, so `--revendor` re-implements only
-the exclusion semantics, symlink refusal, and `package.json` cleaning in Python (stdlib-only: `--check` must run where Node may be absent). One generalisation: the two
+the exclusion semantics, symlink refusal, and `package.json` cleaning in Python
+(stdlib-only: `--check` must run where Node may be absent). One generalisation: the two
 named `scripts/generate-*.mjs` exclusions are matched as a glob, so a future generator is
 excluded rather than shipped by accident.
 

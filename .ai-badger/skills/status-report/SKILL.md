@@ -95,8 +95,10 @@ minutes for the task to end; answering late is answering wrong.
 - A worktree matching no tracker row in any state is reported as an untracked worktree —
   work without tracking (the task was never `start`ed, or `start` failed and the agent
   proceeded anyway). Offer `start`/`reattach`; do not silently adopt it as the current task.
-- When no plan filename carries the task id, the report falls back to the newest plan and
-  says so — verify it is actually this task's plan before quoting its checklist as progress.
+- A plan matches only when its filename carries the whole task id as hyphen tokens
+  (`<date>-<taskId>.md` first); review documents (`*.review.md`, `*.plan-review-*`,
+  `*-impl-review*`) never count as the plan. Otherwise the report falls back to the newest
+  plan and says so — verify it is actually this task's plan before quoting its checklist.
 - The checklist counts only `- [ ]`/`- [x]` checkbox lines. Plans written without checkboxes
   report "no checkbox items — read the plan file"; that is a plan-format gap, not zero
   progress.

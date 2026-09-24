@@ -117,7 +117,9 @@ Multiple Claude Code sessions run against this repo concurrently in normal use (
 manually-opened windows, worktree agents), so a single-slot record would let one session's hook
 clobber another's. Columns: `session_id` (PK), `transcript_path`, `cwd`, `pid`,
 `recorded_at`. Written by the SessionStart and UserPromptSubmit hooks on every fire,
-opportunistically pruning entries whose recorded pid is no longer alive.
+opportunistically pruning entries whose recorded pid is no longer alive. The usage-limit
+resumers (`poll_limit.py`, `resume_cron.py`) read it too: they resume only unfinished tracked
+tasks, and skip any whose session's recorded pid is still alive.
 
 Tracker commands resolve *their own* session via `tracker_lib.resolve_own_session()`, never by
 grabbing "whatever's most recent":
