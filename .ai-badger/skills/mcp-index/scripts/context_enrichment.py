@@ -148,9 +148,13 @@ def format_top_candidates(scored: List[Any], limit: int = TOP_N) -> str:
 
 
 def tags_for_display(tool_name: str, index: Dict[str, Any]) -> List[str]:
-    """Tags for one `server:tool` name, or `[]` when the tool isn't in the index."""
+    """Tags for one `server:tool` name, or `[]` when the tool isn't in the index.
+
+    Splits on the LAST colon (mcp_index.py's `_split_tool_ref`, L6-5): a plugin-provided
+    server is decorated `plugin:<plugin>:<server>` by `claude mcp list`, and splitting on
+    the first colon resolves that to a server literally named "plugin"."""
     if ":" in tool_name:
-        sname, tname = tool_name.split(":", 1)
+        sname, _, tname = tool_name.rpartition(":")
         for server in index.get("sources", []):
             if server.get("name") == sname:
                 tool = server.get("tools", {}).get(tname, {})

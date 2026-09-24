@@ -71,12 +71,32 @@ def _split_physical_lines(text: str) -> list[str]:
     return text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
 
 
+def _open_quoted_value(content: str) -> Optional[str]:
+    """The inline value already accumulated for this logical line, or None if there is none.
+
+    Handles both a `key: value` mapping entry and a `- value` sequence item — the two shapes
+    a scalar can be the (possibly already partly folded) value of.
+    """
+    if content.startswith("- "):
+        return content[2:]
+    match = _KEY_RE.match(content)
+    return match.group(2) if match and match.group(2) is not None else None
+
+
 def _logical_lines(text: str) -> list[tuple[int, str]]:
     """(indent, content) pairs with wrapped plain-scalar continuations folded in.
 
     A physical line is a continuation of the previous logical line when its indent is
     exactly the previous key's indent + 2 and it is neither a `- ` sequence item nor a
     `key:` mapping entry at that indent — the one shape pyyaml's wrapping produces.
+
+    That shape is also how pyyaml folds a *quoted* (single- or double-quoted) scalar across
+    lines — including its one-blank-line convention for an embedded literal newline, and a
+    double-quoted scalar's escaped line join. This parser does not implement that folding: a
+    continuation of an already-quoted value is refused (L6-3) rather than space-joined into a
+    value that silently drops the real line break the source encoded — a value that can look
+    innocuous to the round-trip guard when it happens to need requoting for an unrelated
+    reason (see the module docstring).
     """
     physical = _split_physical_lines(text)
     logical: list[tuple[int, str]] = []
@@ -94,6 +114,9 @@ def _logical_lines(text: str) -> list[tuple[int, str]]:
                 is_continuation = True
         if is_continuation:
             prev_indent, prev_content = logical[-1]
+            value = _open_quoted_value(prev_content)
+            if value is not None and value[:1] in ("'", '"'):
+                raise _SubsetParseError("a quoted scalar spans multiple lines")
             logical[-1] = (prev_indent, f"{prev_content} {content}")
         else:
             logical.append((indent, content))

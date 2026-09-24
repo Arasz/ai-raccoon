@@ -63,8 +63,7 @@ class AgentFiles:
                 )
                 continue
 
-            if file_entry["source"].startswith("templates/"):
-                self.ctx.record_template(source, target, seed_once=seed_once)
+            is_managed_template = file_entry["source"].startswith("templates/")
 
             # Determine the body content
             source_of_truth = aib_copy or file_entry["target"]
@@ -83,24 +82,34 @@ class AgentFiles:
                     aib_dest.parent.mkdir(parents=True, exist_ok=True)
                     aib_dest.write_text(carried, encoding="utf-8")
 
-            # Seed-once: skip if target already exists
+            # Seed-once: skip if target already exists. Recorded here too — this run did not
+            # write the target, but it is still ai-badger's own seed, not a hand-authored file.
             if seed_once and target.exists():
                 self.ctx.notes.append(
                     f"preserved seed-once {file_entry['target']} for '{agent_name}'"
                 )
+                if is_managed_template:
+                    self.ctx.record_template(source, target, seed_once=seed_once)
                 continue
 
             # Write the primary target. The header must name the .ai-badger/ copy it is
             # generated from — its own target path is where edits get discarded (F-08).
+            # A preserved hand-authored target (managed=True, `written` False) is the
+            # project's own file: recording it as generated would let the edit-time guard
+            # refuse the project's own future edits to it (L3-6).
             content = body
+            written = True
             if managed:
-                self.rendering.copy_with_header(target, source_of_truth, content)
+                written = self.rendering.copy_with_header(target, source_of_truth, content)
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if is_template:
                     target.write_text(content, encoding="utf-8")
                 else:
                     shutil.copyfile(source, target)
+
+            if is_managed_template and written:
+                self.ctx.record_template(source, target, seed_once=seed_once)
 
             # Write alsoTarget (e.g. .hermes.md alias)
             if also_target:

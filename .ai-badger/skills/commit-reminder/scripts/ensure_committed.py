@@ -6,8 +6,14 @@ agent that triggered it and has no channel to that agent's parent, so the hook r
 reports — a parent runs it to find a subagent that is about to lose work while there is still
 time to take over, commit, or kill it.
 
-Reports; never gates. Exit status is 0 even when work is at risk, so nothing that runs this
-fails because of what it found.
+Reports; never gates *known* state. Exit status is 0 whether or not work is at risk, so nothing
+that runs this fails because of what it found — but 1 when the state itself could not be read at
+all (the store is broken): "nothing is at risk" and "this report is unreliable" must never look
+the same (L9-3). The state read is strict (`commit_reminder.load_state(strict=True)`) for
+exactly this reason — the one reader of this module that must fail closed rather than silently
+reading a broken store as empty. A project whose own `git status` fails or times out stays in
+the report (exit 0) but is listed with `"uncommitted": "unknown"` rather than being dropped as
+if the work were already committed.
 
 Usage: ensure_committed.py [--quiet]
 """
@@ -22,23 +28,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import commit_reminder  # pylint: disable=wrong-import-position
 
 
-def at_risk_report() -> dict:
+def at_risk_report(strict: bool = False) -> dict:
     """Every project at or past the escalation bar that still has uncommitted work.
 
     The entry only clears on a later hook run in that project, so a finished or deleted
     worktree would stay "at risk" forever. `git status` is the live answer; a vanished
-    worktree reports nothing uncommitted and drops out for the same reason.
+    worktree reports nothing uncommitted and drops out for the same reason. A project whose
+    `git status` fails or times out is neither: it is listed as `"uncommitted": "unknown"`
+    rather than silently dropped as if it were clean (L9-3) — a check that could not run must
+    never look like a check that passed.
     """
-    entries = [
-        {
+    entries = []
+    for root, entry in commit_reminder.at_risk_entries(strict=strict).items():
+        status = commit_reminder.git_status(root)
+        if status is commit_reminder.GIT_UNKNOWN:
+            uncommitted = "unknown"
+        elif not status:
+            continue  # work has since been committed; no longer at risk
+        else:
+            uncommitted = len(status)
+        entries.append({
             "project": root,
             "unanswered": entry.get("fires", 0),
             "session": entry.get("session", ""),
             "since": entry.get("since", ""),
-        }
-        for root, entry in commit_reminder.at_risk_entries().items()
-        if commit_reminder.uncommitted_files(root)
-    ]
+            "uncommitted": uncommitted,
+        })
     entries.sort(key=lambda e: (-e["unanswered"], e["project"]))
     return {"atRisk": entries, "escalateAfter": commit_reminder.ESCALATE_AFTER}
 
@@ -68,12 +83,21 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     # A parent runs this to find out whether it is about to lose work. Crashing on malformed
-    # state would be a worse failure than the one being reported, so nothing propagates.
+    # state would be a worse failure than the one being reported — but a state that could not
+    # be read at all must not silently read as "nothing is at risk" either (L9-3), so this is
+    # the one place `load_state(strict=True)` is asked for and its failure is never rendered
+    # through `format_report` (which always reads an empty `atRisk` as "nothing is at risk").
     try:
-        report = at_risk_report()
+        report = at_risk_report(strict=True)
     except Exception:  # pylint: disable=broad-except
         report = {"atRisk": [], "escalateAfter": commit_reminder.ESCALATE_AFTER,
                   "error": "state unreadable"}
+        if not args.quiet:
+            print("[ai-badger] state unreadable — this is NOT the same as nothing being at "
+                  "risk; the store could not be read. Check it directly.", file=sys.stderr)
+        print(json.dumps(report, indent=2))
+        return 1
+
     if not args.quiet:
         print(format_report(report), file=sys.stderr)
     print(json.dumps(report, indent=2))

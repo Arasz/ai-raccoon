@@ -201,12 +201,15 @@ class StatusLineWiring:
         if store_mod is not None:
             try:
                 with closing(_open_delegate_store(store_mod, tracking)) as store:
-                    record = store.kv_get("statusline", "delegate", {})
+                    record = store.kv_get("statusline", "delegate", None)
                 if isinstance(record, dict):
                     return record
             except (OSError, sqlite3.Error):
                 pass
-        record, _note = cg.read_json_mapping(self.ctx.target / DELEGATE_RECORD)
+        legacy = self.ctx.target / DELEGATE_RECORD
+        if not legacy.is_file():
+            return None
+        record, _note = cg.read_json_mapping(legacy)
         return record
 
     def _record_delegate(self, command: Optional[str]) -> None:

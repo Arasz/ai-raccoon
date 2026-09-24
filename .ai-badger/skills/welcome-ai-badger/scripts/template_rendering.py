@@ -295,17 +295,23 @@ class TemplateRendering:
             self.ctx.notes.append(f"carried preserved regions into {rel}")
         return carried
 
-    def copy_with_header(self, dest: Path, name: str, body: str) -> None:
-        """Write body to dest with managed header, preserving hand-authored files."""
+    def copy_with_header(self, dest: Path, name: str, body: str) -> bool:
+        """Write body to dest with managed header, preserving hand-authored files.
+
+        Returns whether this call actually wrote dest — False when an existing
+        hand-authored file was preserved instead, so a caller recording provenance
+        (L3-6) knows not to claim a target it left untouched as generated.
+        """
         if (not self.ctx.overwrite and dest.exists()
                 and not _is_managed(dest.read_text(encoding="utf-8", errors="ignore"))):
             self.ctx.notes.append(
                 f"preserved hand-authored {dest.relative_to(self.ctx.target).as_posix()} "
                 "(source written to .ai-badger/; pass --overwrite-agent-files to replace)"
             )
-            return
+            return False
         carried = self.carried_body(dest, body)
         if carried is None:
-            return
+            return False
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(_with_managed_header(carried, name), encoding="utf-8")
+        return True

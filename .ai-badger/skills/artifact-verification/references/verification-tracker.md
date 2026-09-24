@@ -73,7 +73,7 @@ artifact, not evidence.
 ## Canonical-gate wrapper (code changes)
 
 ```bash
-VERIFY_SCRIPT=$(mktemp /private/var/folders/k9/gxjyv0q50tn0_sngj8zg30140000gn/T/hermes-verify-<purpose>-XXXXXX.sh)
+VERIFY_SCRIPT=$(mktemp -t hermes-verify-<purpose>-XXXXXX.sh)
 cat > "$VERIFY_SCRIPT" <<'EOF'
 #!/bin/bash
 set -u
