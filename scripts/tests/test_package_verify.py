@@ -96,7 +96,11 @@ def test_required_entries_derive_from_bundle_pins():
     model_dir = "Models/%s/" % bundle.BUNDLED_DIR
     assert package_verify.REQUIRED_ENTRIES == (
         tuple(model_dir + name for name, _url, _sha in bundle.BUNDLED_FILES)
-        + (model_dir + bundle.BUNDLED_MANIFEST[0], "Models/" + bundle.VOCAB_NAME)
+        + (
+            model_dir + bundle.BUNDLED_MANIFEST[0],
+            model_dir + bundle.BUNDLED_MLX_GRAPH[0],
+            "Models/" + bundle.VOCAB_NAME,
+        )
     )
 
 
