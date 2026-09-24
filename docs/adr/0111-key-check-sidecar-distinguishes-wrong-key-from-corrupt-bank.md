@@ -118,6 +118,21 @@ opened again after upgrading and so never get a sidecar minted retroactively.
 read-only by construction, and inspecting a bank must not have the side effect of changing what a
 later confident diagnosis depends on.
 
+### D4a — Only SQLITE_NOTADB (26) is the ambiguous shape; anything else propagates as itself
+
+Found in review (round 5, #729): `NoLegacyDerivationToTry`, `NotLegacyKeyed`, and
+`MigrateLegacyKeyAsync`'s own inline no-legacy-derivation branch each unconditionally wrapped
+*any* `SqliteException` reaching them into `BankKeyMismatchException` — not only SQLITE_NOTADB.
+`OpenBankWithKeyAsync`'s `?? openFailure` already got this right; these three did not.
+Reproduced deterministically (no timing race needed): pointing `BankPath` at an existing directory
+makes every open fail with SQLITE_CANTOPEN (14), not 26, and a resolved key with no legacy
+derivation (`env`, the common case) turned that into a confidently-wrong "wrong key or corrupt"
+verdict. `AmbiguousOrOriginal(openFailure, ambiguous)` centralizes the guard the three call sites
+lacked: only SQLITE_NOTADB is entitled to the ambiguous both-causes diagnosis; every other code
+(SQLITE_BUSY, SQLITE_CANTOPEN, …) propagates as the original, correctly-coded exception —
+`CliFailureErrorCode` already maps those to `Bank.Busy`/`Bank.OpenFailed`, distinct from
+`Key.WrongKey`, so this is a strictly more accurate diagnosis, not merely "less wrong."
+
 ### D5 — A crash mid-rekey self-heals; a concurrent *opener* mid-rekey does not, on its own
 
 D3's "a crash between `PRAGMA rekey` and the reopen heals itself on the next successful open"

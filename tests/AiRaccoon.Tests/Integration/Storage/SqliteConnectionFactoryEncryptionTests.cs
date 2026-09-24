@@ -32,6 +32,42 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
     private SqliteConnectionFactory Factory(string? passphrase = null) => new(Options(), Resolver(Options(), new StubEncryptionKeyProvider(passphrase)));
 
+    /// <summary>
+    ///     Review round 5 finding: only SQLITE_NOTADB (26) is the shared "wrong key or corrupt"
+    ///     shape (ADR-0107 PC.0) the ambiguous fallback exists to name. A different failure — here,
+    ///     SQLITE_CANTOPEN (14), reproduced deterministically by making the bank path itself a
+    ///     directory — is not key-related and must propagate as the real <see cref="SqliteException" />,
+    ///     the same rule <see cref="SqliteConnectionFactory.OpenBankWithKeyAsync" /> already applies
+    ///     via its own <c>?? openFailure</c>. An env source (no legacy derivation) previously
+    ///     mislabeled this as a wrong-key/corrupt-bank problem via <c>NoLegacyDerivationToTry</c>.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_NonKeyRelatedSqliteFailure_NoLegacySource_PropagatesTheRealSqliteException()
+    {
+        var factory = Factory("some-key");
+        Directory.CreateDirectory(factory.BankPath); // SQLite reports SQLITE_CANTOPEN (14) opening a directory as a file.
+
+        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        {
+            await using var c = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        });
+
+        ex.SqliteErrorCode.ShouldBe(14);
+    }
+
+    /// <summary>The same review finding, on <see cref="SqliteConnectionFactory.MigrateLegacyKeyAsync" />'s own inline no-legacy-derivation fallback.</summary>
+    [RetryFact]
+    public async Task MigrateLegacyKeyAsync_NonKeyRelatedSqliteFailure_NoLegacySource_PropagatesTheRealSqliteException()
+    {
+        var factory = Factory("some-key");
+        Directory.CreateDirectory(factory.BankPath);
+
+        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+            await factory.MigrateLegacyKeyAsync(TestContext.Current.CancellationToken));
+
+        ex.SqliteErrorCode.ShouldBe(14);
+    }
+
     [RetryFact]
     public async Task OpenBankAsync_WithPassphrase_CreatesEncryptedDatabase()
     {
