@@ -5,9 +5,10 @@ name: architect
 tools:
 - read
 - search
-- list_files
 user-invocable: true
 ---
+
+<!-- Managed by ai-badger. Source of truth: .ai-badger/agents/architect. Do not edit this copy by hand; edit the source and re-run welcome-ai-badger. -->
 
 # Architect
 

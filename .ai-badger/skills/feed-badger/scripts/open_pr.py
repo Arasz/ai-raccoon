@@ -5,9 +5,10 @@ The agent first writes the generalized feature files into the ai-badger CHECKOUT
 right {stack}/{feature}/ paths) and regenerates index.json. This script does the mechanical
 git+PR work: branch, commit, push, `gh pr create --draft`. No LLM.
 
-Every declared path is scanned for credential-shaped literals first; a finding refuses the
-PR. Only declared paths are staged — an unrelated dirty file in the checkout never rides along
-(security I4).
+Only declared paths are staged, taken literally (no globs), into an index that must be clean
+beforehand — an unrelated dirty or already-staged file never rides along (security I4). What
+was staged is then scanned for credential-shaped literals; a finding, or a file too large for
+the scan, refuses the PR and unstages.
 
 Usage:
   open_pr.py --checkout <ai-badger checkout> --branch feed/<slug> \
@@ -134,6 +135,21 @@ FRAMEWORK_ROOT = _bootstrap_lib()
 import unsafe_literals as ul  # pylint: disable=wrong-import-position
 
 
+GIT_LOCATION_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+                    "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                    "GIT_PREFIX", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES")
+
+
+def git_env(env=None) -> dict:
+    """`env` (default `os.environ`) minus every variable that pins git to another repository,
+    with pathspec magic off, so `--path 'features/**'` names that one file."""
+    out = dict(os.environ if env is None else env)
+    for name in GIT_LOCATION_ENV:
+        out.pop(name, None)
+    out["GIT_LITERAL_PATHSPECS"] = "1"
+    return out
+
+
 def run(cmd: List[str], cwd: Path, dry: bool) -> int:
     """Print `cmd`, then execute it in `cwd` unless `dry` is set; return its exit code."""
     printable = " ".join(cmd)
@@ -141,8 +157,65 @@ def run(cmd: List[str], cwd: Path, dry: bool) -> int:
         print(f"    $ {printable}")
         return 0
     print(f"    $ {printable}")
-    proc = subprocess.run(cmd, cwd=str(cwd), check=False)
+    proc = subprocess.run(cmd, cwd=str(cwd), check=False, env=git_env())
     return proc.returncode
+
+
+def staged_files(checkout: Path) -> List[str]:
+    """Checkout-relative names of every path in the index that differs from HEAD."""
+    proc = subprocess.run(["git", "diff", "--cached", "--name-only", "-z"], cwd=str(checkout),
+                          capture_output=True, text=True, check=True, env=git_env())
+    return [name for name in proc.stdout.split("\0") if name]
+
+
+def refusals(checkout: Path, rel_paths: List[str]) -> List[str]:
+    """Why the files at `rel_paths` (directories expanded) must not leave: credential-shaped
+    literals, or a file too big for the scan to read."""
+    reasons = [f"{f['file']}: {f['pattern']}" for f in ul.scan_paths(checkout, rel_paths)]
+    for rel in rel_paths:
+        target = checkout / rel
+        for path in sorted(target.rglob("*")) if target.is_dir() else [target]:
+            if path.is_file() and not path.is_symlink() \
+                    and path.stat().st_size > ul.LITERAL_SCAN_MAX_BYTES:
+                reasons.append(f"{path.relative_to(checkout).as_posix()}: larger than "
+                               f"{ul.LITERAL_SCAN_MAX_BYTES} bytes, which the credential "
+                               f"scan skips")
+    return reasons
+
+
+def refuse(reasons: List[str]) -> int:
+    """Print why the PR was refused and return the refusal exit code."""
+    print("refusing to open a PR — a file could not be cleared by the credential scan:")
+    for reason in reasons:
+        print(f"    - {reason}")
+    print("Remove it (or replace it with an obviously fake value) and re-run. This is a "
+          "guard, not proof: it checks known literal shapes, nothing more.")
+    return 1
+
+
+def stage(checkout: Path, rel_paths: List[str]) -> int:
+    """Stage exactly the declared paths into a clean index and scan what was staged.
+
+    Refuses when anything was staged beforehand, because `git commit` would take it too.
+    On a scan refusal the index is reset, which puts back the clean index it started from.
+    """
+    already = staged_files(checkout)
+    if already:
+        print("refusing to open a PR — the index already holds staged changes, and the commit "
+              "would carry them although they were never declared or scanned:")
+        for name in already:
+            print(f"    - {name}")
+        print("Commit them, or unstage them with `git restore --staged`, and re-run.")
+        return 1
+    rc = run(["git", "add", "--", *rel_paths], checkout, dry=False)
+    if rc != 0:
+        print(f"step failed ({rc}); aborting.")
+        return rc
+    reasons = refusals(checkout, staged_files(checkout))
+    if reasons:
+        run(["git", "reset", "-q"], checkout, dry=False)
+        return refuse(reasons)
+    return 0
 
 
 def main(argv=None) -> int:
@@ -163,24 +236,24 @@ def main(argv=None) -> int:
     checkout = Path(args.checkout).resolve()
     dry = args.dry_run
 
-    findings = ul.scan_paths(checkout, args.paths)
-    if findings:
-        print("refusing to open a PR — content that looks like a credential was found:")
-        for finding in findings:
-            print(f"    - {finding['file']}: {finding['pattern']}")
-        print("Remove it (or replace it with an obviously fake value) and re-run. This is a "
-              "guard, not proof: it checks known literal shapes, nothing more.")
-        return 1
-
     steps = [
         ["git", "checkout", "-b", args.branch],
-        ["git", "add", "--", *args.paths],
         ["git", "commit", "-m", args.title],
         ["git", "push", "-u", "origin", args.branch],
         ["gh", "pr", "create", "--draft", "--repo", args.repo,
          "--title", args.title, "--body-file", args.body_file],
     ]
     print(f"opening draft PR to {args.repo} from {checkout} (dry-run={dry}):")
+    if dry:
+        # Nothing is staged in a dry run, so the declared paths stand in for the staged set.
+        reasons = refusals(checkout, args.paths)
+        if reasons:
+            return refuse(reasons)
+        run(["git", "add", "--", *args.paths], checkout, dry)
+    else:
+        rc = stage(checkout, args.paths)
+        if rc != 0:
+            return rc
     for step in steps:
         rc = run(step, checkout, dry)
         if rc != 0 and not dry:

@@ -72,20 +72,6 @@ def field(payload: dict, *names, default=""):
     return default
 
 
-def is_empty_checkpoint(checkpoint) -> bool:
-    """True when a checkpoint carries no measurement at all.
-
-    `assistantMessages` is deliberately not consulted: the degenerate records downstream read
-    `contextTokens: 0, assistantMessages: 3` with an all-zero `cumulative`, and a message count
-    with no tokens behind it measures nothing.
-    """
-    if not isinstance(checkpoint, dict):
-        return True
-    if checkpoint.get("contextTokens"):
-        return False
-    return not any((checkpoint.get("cumulative") or {}).values())
-
-
 def replaces(existing, candidate) -> bool:
     """Whether *candidate* may be written over *existing*.
 
@@ -93,9 +79,9 @@ def replaces(existing, candidate) -> bool:
     that spent nothing — so an empty checkpoint is refused over a populated one. Overwriting
     real numbers with zeros is worse than not checkpointing at all (#141).
     """
-    if is_empty_checkpoint(existing):
+    if lib.is_empty_checkpoint(existing):
         return True
-    return not is_empty_checkpoint(candidate)
+    return not lib.is_empty_checkpoint(candidate)
 
 
 def blocks_spent(tasks: dict, session_id: str) -> int:

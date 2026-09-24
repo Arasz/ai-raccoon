@@ -17,10 +17,13 @@ script's own location is nowhere near the user's project, so a naive fixed-depth
 lookup would misroot. Anything project-specific (build/test commands, source-control platform,
 persona routing) lives in the project's `.ai-badger/config.json`, not here.
 """
-# pylint: disable=missing-function-docstring,invalid-name
+# pylint: disable=missing-function-docstring,invalid-name,too-many-lines
 # Ported verbatim from the originating job-search-ai-assistant repo's /task skill: kept in
 # lockstep with that source rather than churned for local docstring/naming style rules.
 # `locked_store` (lower_snake_case class) is referenced by that name elsewhere; not renamed.
+# too-many-lines: every helper the hook scripts and CLI verbs share lives here (badger_store.py
+# carries the same disable for the same reason); splitting it would scatter one shared surface
+# across files that would each still have to import all of it.
 
 from __future__ import annotations
 
@@ -92,23 +95,47 @@ def git_env(env=None) -> dict:
     return out
 
 
+def _is_inside(candidate: Path, parent: Path) -> bool:
+    """Whether *candidate* sits under *parent*, without relying on `Path.is_relative_to`."""
+    try:
+        candidate.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
 def _git_worktree_facts(project: Path) -> tuple:
     """(toplevel, main checkout) for *project*, or (None, None) when git cannot say.
 
-    One `git rev-parse` for both answers: `--git-common-dir` is the shared `.git` a linked
-    worktree points back at, so its parent is the checkout that owns the tracking store.
+    Parsed from `git worktree list --porcelain` line by line, never `.split()`ed as one blob
+    (L5-8): a checkout path with a space used to come apart under a whitespace split over the
+    whole `rev-parse` output. Git lists the main worktree first. *toplevel* is the longest
+    (innermost) listed entry *project* sits under — not just the first — because a task
+    worktree lives nested inside its own checkout, which would otherwise match too.
     """
     try:
         result = subprocess.run(
-            ["git", "-C", str(project), "rev-parse", "--show-toplevel", "--git-common-dir"],
+            ["git", "-C", str(project), "worktree", "list", "--porcelain"],
             capture_output=True, text=True, check=False, timeout=10, env=git_env(),
         )
     except (OSError, subprocess.SubprocessError):
         return None, None
-    lines = result.stdout.split()
-    if result.returncode != 0 or len(lines) < 2:
+    if result.returncode != 0:
         return None, None
-    return Path(lines[0]).resolve(), (project / lines[1]).resolve().parent
+    worktrees = [
+        Path(line[len("worktree "):]).resolve()
+        for line in result.stdout.splitlines()
+        if line.startswith("worktree ")
+    ]
+    if not worktrees:
+        return None, None
+    main_checkout = worktrees[0]
+    resolved_project = project.resolve()
+    candidates = [
+        wt for wt in worktrees if wt == resolved_project or _is_inside(resolved_project, wt)
+    ]
+    toplevel = max(candidates, key=lambda p: len(str(p))) if candidates else None
+    return toplevel, main_checkout
 
 
 def collapse_worktree(project: Path) -> Path:
@@ -331,15 +358,6 @@ def load_json(path: Path, default):
 
 REAL_WRITE_LOG_ENV = "AI_BADGER_REAL_WRITE_LOG"
 REAL_ROOT_ENV = "AI_BADGER_REAL_ROOT"
-
-
-def _is_inside(candidate: Path, parent: Path) -> bool:
-    """Whether *candidate* sits under *parent*, without relying on `Path.is_relative_to`."""
-    try:
-        candidate.relative_to(parent)
-        return True
-    except ValueError:
-        return False
 
 
 def _record_real_write(path: Path) -> None:
@@ -601,11 +619,22 @@ def find_entry(doc: dict, task_id: str):
 
 
 def find_other_entry_with_session(doc: dict, session_id: str, exclude_task_id: str):
-    """Another task already attached to session_id, if any (used to catch cross-task collisions)."""
+    """Another task already attached to session_id, if any (used to catch cross-task collisions).
+
+    Scans every entry rather than stopping at the first: a session can carry more than one row
+    (a FINISHED task, plus a still-active one recorded after it), and the caller's conflict
+    check must see the active one (L5-5). A finished match is still returned when nothing
+    unfinished exists, so the caller's own finished-is-not-a-conflict check is unaffected.
+    """
+    finished = None
     for entry in doc["tasks"]:
-        if entry.get("taskId") != exclude_task_id and entry.get("sessionId") == session_id:
+        if entry.get("taskId") == exclude_task_id or entry.get("sessionId") != session_id:
+            continue
+        if entry.get("state") != STATE_FINISHED:
             return entry
-    return None
+        if finished is None:
+            finished = entry
+    return finished
 
 
 def _pid_alive(pid) -> bool:
@@ -805,6 +834,21 @@ def parse_transcript_usage(transcript_path: str) -> dict:
         "cumulative": cumulative,
         "transcriptFound": True,
     }
+
+
+def is_empty_checkpoint(checkpoint) -> bool:
+    """True when a checkpoint carries no measurement at all.
+
+    Shared by stop_hook's per-turn checkpointing and finish's own checkpoint, so neither can
+    overwrite a populated checkpoint with one that measures nothing (R32). `assistantMessages`
+    is not consulted: `contextTokens: 0, assistantMessages: 3` with an all-zero `cumulative` is
+    a message count with no tokens behind it, which measures nothing.
+    """
+    if not isinstance(checkpoint, dict):
+        return True
+    if checkpoint.get("contextTokens"):
+        return False
+    return not any((checkpoint.get("cumulative") or {}).values())
 
 
 def make_checkpoint(transcript_path: str) -> dict:

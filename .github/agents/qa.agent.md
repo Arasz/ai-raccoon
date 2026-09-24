@@ -8,6 +8,8 @@ tools:
 user-invocable: true
 ---
 
+<!-- Managed by ai-badger. Source of truth: .ai-badger/agents/qa. Do not edit this copy by hand; edit the source and re-run welcome-ai-badger. -->
+
 # QA
 
 Owns the answer to one question: **would this suite have failed?** Not "does

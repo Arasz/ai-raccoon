@@ -29,6 +29,7 @@ task start).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shlex
@@ -37,7 +38,12 @@ import sys
 
 import tracker_lib as lib
 
-CRON_MARKER = "# task-skill-resume"
+# The legacy (pre-hash) marker text, and the pattern that finds a legacy line without also
+# matching a hashed one. `(?!:)` is what keeps a hashed marker from being a superstring of
+# this match: "# task-skill-resume:<hash>" has a `:` right after the prefix, so the lookahead
+# fails there and the hashed line is never mistaken for a legacy one.
+CRON_MARKER_PREFIX = "# task-skill-resume"
+_LEGACY_MARKER_RE = re.compile(re.escape(CRON_MARKER_PREFIX) + r"(?!:)")
 _NO_CRONTAB_MARKER = "no crontab for"
 
 
@@ -402,11 +408,21 @@ def cmd_finish(args) -> int:
             }
             usage["tasks"].append(usage_entry)
         checkpoints = usage_entry.setdefault("checkpoints", {})
+        existing_latest = checkpoints.get("latest")
+        # A missing transcriptPath on the entry (e.g. a hook never fired for it) parses to an
+        # empty checkpoint — indistinguishable from a session that spent nothing. Never let
+        # that overwrite a populated `latest` that stop_hook's own periodic checkpointing
+        # already recorded, or usage collapses to 0 (L5-3, the same guard stop_hook uses).
+        end_cp = (
+            existing_latest
+            if lib.is_empty_checkpoint(checkpoint) and not lib.is_empty_checkpoint(existing_latest)
+            else checkpoint
+        )
         checkpoints["finish"] = checkpoint
-        checkpoints["latest"] = checkpoint
-        start_cp = checkpoints.get("start", checkpoint)
+        checkpoints["latest"] = end_cp
+        start_cp = checkpoints.get("start", end_cp)
         usage_entry["usage"] = lib.compute_usage(
-            start_cp, checkpoint, usage_entry.get("subagents", [])
+            start_cp, end_cp, usage_entry.get("subagents", [])
         )
         lib.save_usage(store, usage)
 
@@ -644,10 +660,51 @@ def _current_crontab() -> str:
     raise CrontabUnavailable(stderr or f"crontab -l exited with status {result.returncode}")
 
 
+def _project_marker_hash() -> str:
+    """Short, stable hash of this project's root.
+
+    Computed at call time (never cached at import), because `lib.PROJECT_ROOT` is exactly
+    what tests redirect and what genuinely differs between two real projects on one host.
+    """
+    return hashlib.sha256(str(lib.PROJECT_ROOT).encode("utf-8")).hexdigest()[:12]
+
+
+def _cron_marker() -> str:
+    """This project's own cron marker.
+
+    Hashed by project root so installing or uninstalling in one project can never touch
+    another project's line (L5-4): the old single fixed marker matched every project's line
+    alike, so installing in project B silently rewrote project A's resume job, and
+    uninstalling anywhere removed every project's.
+    """
+    return f"{CRON_MARKER_PREFIX}:{_project_marker_hash()}"
+
+
+def __getattr__(name):
+    # `CRON_MARKER` is exposed dynamically (PEP 562), not as a plain module global: it must
+    # reflect *this call's* `lib.PROJECT_ROOT`, including a test that redirects it mid-test to
+    # exercise two different projects in the same process.
+    if name == "CRON_MARKER":
+        return _cron_marker()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _is_our_legacy_line(line: str) -> bool:
+    """Whether a legacy (unhashed) marker line's command path is this project's own.
+
+    Checked against the log path rather than the script path: the script may be a *shared*
+    plugin-cache copy of task_tracker.py used by every project on the machine, but each
+    project's resume log always sits under its own `.ai-badger/task-tracking/` — the one part
+    of the line that is reliably project-specific either way.
+    """
+    log = shlex.quote(_cron_escape(str(lib.DATA_DIR / "resume.log")))
+    return log in line
+
+
 def _desired_cron_line() -> str:
     script = shlex.quote(_cron_escape(str(lib.SCRIPT_DIR / "resume_cron.py")))
     log = shlex.quote(_cron_escape(str(lib.DATA_DIR / "resume.log")))
-    return f"*/30 * * * * /usr/bin/env python3 {script} run >> {log} 2>&1 {CRON_MARKER}"
+    return f"*/30 * * * * /usr/bin/env python3 {script} run >> {log} 2>&1 {_cron_marker()}"
 
 
 def _cron_escape(value: str) -> str:
@@ -673,8 +730,9 @@ def install_cron(quiet: bool = False) -> int:
         print(f"Not installing resume cron job: {exc}", file=sys.stderr)
         return 1
     desired_line = _desired_cron_line()
+    marker = _cron_marker()
     lines = current.splitlines()
-    marker_indices = [i for i, line in enumerate(lines) if CRON_MARKER in line]
+    marker_indices = [i for i, line in enumerate(lines) if marker in line]
 
     if marker_indices and all(lines[i] == desired_line for i in marker_indices):
         if not quiet:
@@ -690,8 +748,23 @@ def install_cron(quiet: bool = False) -> int:
             del new_lines[i]
         verb = "Updated"
     else:
-        new_lines = lines + [desired_line]
-        verb = "Installed"
+        # No hashed marker of ours yet: migrate a legacy (pre-hash) marker line, but only when
+        # it is genuinely this project's own — never another project's legacy line, which the
+        # naive "any line with the marker text" check used to delete outright (L5-4).
+        legacy_indices = [
+            i for i, line in enumerate(lines)
+            if _LEGACY_MARKER_RE.search(line) and _is_our_legacy_line(line)
+        ]
+        if legacy_indices:
+            new_lines = list(lines)
+            first = legacy_indices[0]
+            new_lines[first] = desired_line
+            for i in reversed(legacy_indices[1:]):
+                del new_lines[i]
+            verb = "Updated"
+        else:
+            new_lines = lines + [desired_line]
+            verb = "Installed"
     new_tab = "\n".join(new_lines) + "\n"
     try:
         result = _run_crontab(["crontab", "-"], input=new_tab)
@@ -712,7 +785,12 @@ def uninstall_cron() -> int:
     except CrontabUnavailable as exc:
         print(f"Not modifying crontab: {exc}", file=sys.stderr)
         return 1
-    kept = [line for line in current.splitlines() if CRON_MARKER not in line]
+    marker = _cron_marker()
+    kept = [
+        line for line in current.splitlines()
+        if marker not in line
+        and not (_LEGACY_MARKER_RE.search(line) and _is_our_legacy_line(line))
+    ]
     try:
         result = _run_crontab(["crontab", "-"], input="\n".join(kept) + "\n")
     except CrontabUnavailable as exc:
