@@ -397,12 +397,12 @@ def code_corpus(repo: Path) -> tuple[list[tuple[str, str]], list[Query]]:
     root = repo / "scripts/retrieval_tuning/code-corpus"
     manifest = json.loads((root / "MANIFEST.json").read_text())["files"]
     prefix = "scripts/retrieval_tuning/code-corpus/files/"
-    files = [(f["vendoredPath"][len(prefix):], (repo / f["vendoredPath"]).read_text(encoding="utf-8"))
-             for f in manifest if f["language"] not in CODE_EXCLUDED_LANGUAGES]
+    sources = [(f["vendoredPath"][len(prefix):], (repo / f["vendoredPath"]).read_text(encoding="utf-8"))
+               for f in manifest if f["language"] not in CODE_EXCLUDED_LANGUAGES]
     queries = [Query(q["id"], q["query"], q["expectedSource"], lines=tuple(q["expectedLines"]))
                for q in json.loads((root / "queries.json").read_text())
                if not q["negativeTest"] and q["language"] not in CODE_EXCLUDED_LANGUAGES]
-    return files, queries
+    return sources, queries
 
 
 # ---------------------------------------------------------------------------------------------
