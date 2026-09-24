@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-fusion-confidence-weighted-rrf-706",
+   "title": "Confidence-weighted RRF measured (#706 round 2): A9 -> 2 but A6 and 6 held-out floors regress; keep off",
+   "pr": 730,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "LegConfidence (Core pure fn, rank-1 vs rank-5 gap, weight clamped [0.5,2]) behind fusion.legConfidence.enabled.global (default false). ON: A9 3->2, A6 1->2 (near-tie flipped by a both-leg consensus candidate), held-out floors A4/A6/A7/A8/S1/S2 break, mean -0.0127, parity -0.0086. Keep rule fails. Two rounds done; #706 left open for an owner ruling (pin A9 and close, or telemetry first). PR #730: owner picks merge-as-off vs record only."
+  },
+  {
    "id": "air-bank-key-verifier-sidecar-705",
    "title": "Key-check sidecar tells a wrong key from a corrupt bank (ADR-0111)",
    "pr": 729,
@@ -227,7 +236,7 @@
    "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
   }
  ],
- "next": "Next task: structured config chunkers (XML/YAML/TOML) + file-type registry + PlainTextChunker as the one fallback, seed docs/work/2026-09-23-structured-config-chunkers-seed.md (parsers: Tomlyn, SharpYaml). Owner: approve the publish.yml production gate for 1.49.3 (PR #704). Open follow-ups: #705-#711, #695 (chunker splits words mid-token).",
+ "next": "Owner: merge ready PRs #717 #718 #719 #721 (before #729) #723 #725 #727 (before #730) #729 #730, then this state PR #720; rule on #706 (pin A9 + close, or ADR-0078 telemetry) and on #730 (merge off-flag vs record only); cut one release after the fixes land. Next task: structured config chunkers (XML/YAML/TOML) seed docs/work/2026-09-23-structured-config-chunkers-seed.md. Open: #724 watch catch-up staleness, #726 harness golden overnight run, #728 flaky ranking premise, #695.",
  "filedNotStarted": [
   "#477 no job-level metrics (feature gap)",
   "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
