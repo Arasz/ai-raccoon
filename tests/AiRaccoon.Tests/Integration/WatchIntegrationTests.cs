@@ -544,11 +544,7 @@ public sealed class WatchIntegrationTests
     }
 
     /// <summary>
-    ///     Every non-blank line of a watched code file must be covered by some
-    ///     `code_entries` row after each of three ordinary edit shapes (insert at top, change in
-    ///     the middle, append at the end), each delivered through the real FileSystemWatcher and
-    ///     the production dedup-rediscovery path (<see cref="AiRaccoon.Infrastructure.Ingestion.CodeIngestor" />'s
-    ///     `UpdateCodeChunkPosition`), not asserted against the ingestor directly.
+    ///     Every non-blank line of a watched code file stays covered by a `code_entries` row after an insert, a middle change and an append.
     /// </summary>
     [RetryFact]
     public async Task EditedCodeFile_InsertModifyAppend_CoversEveryNonBlankLineAfterEachEdit()
@@ -600,10 +596,7 @@ public sealed class WatchIntegrationTests
     }
 
     /// <summary>
-    ///     An editor or `git checkout` replaces a file by writing a sibling temp file and
-    ///     renaming it onto the target — a single atomic `rename(2)`, not a Changed event. The
-    ///     digest must treat the incoming Renamed-onto-existing-path event exactly like an ordinary
-    ///     edit: full coverage of the new content, no leftover row under the temp name.
+    ///     An atomic rename onto a watched code file must digest like an ordinary edit: full coverage, no row left under the temp name.
     /// </summary>
     [RetryFact]
     public async Task EditedCodeFile_ViaAtomicRename_CoversEveryNonBlankLine()
