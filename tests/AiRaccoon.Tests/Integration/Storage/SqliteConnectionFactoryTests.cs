@@ -241,8 +241,8 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
     /// <summary>
     ///     The reconcile loop opens the bank about 30 times a second. A pooled native handle this
-    ///     process already initialised (vec0 loaded, schema ensured) must not redo that work: the
-    ///     re-open runs only the per-open pragmas.
+    ///     process already initialised (vec0 loaded, schema ensured) must not redo that work while no
+    ///     other connection has committed: the re-open runs only the per-open pragmas.
     /// </summary>
     [RetryFact]
     public async Task OpenBankAsync_OnAPooledHandleAlreadyInitialised_RunsNoSchemaStatements()
@@ -264,7 +264,9 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
             second.Handle.ShouldBeSameAs(handle, "the pool must hand the same native handle back");
             statements.ShouldAllBe(sql => sql.StartsWith("PRAGMA foreign_keys", StringComparison.Ordinal) ||
                                           sql.StartsWith("PRAGMA journal_mode", StringComparison.Ordinal) ||
-                                          sql.StartsWith("PRAGMA busy_timeout", StringComparison.Ordinal),
+                                          sql.StartsWith("PRAGMA busy_timeout", StringComparison.Ordinal) ||
+                                          sql.StartsWith("SELECT (SELECT data_version", StringComparison.Ordinal) ||
+                                          sql.StartsWith("-- PRAGMA ", StringComparison.Ordinal),
                 string.Join(" | ", statements));
         }
         finally
@@ -291,5 +293,44 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
 
         (await connection.ExecuteScalarAsync<string>(new CommandDefinition("SELECT vec_version()", cancellationToken: ct)))
             .ShouldNotBeNullOrWhiteSpace();
+    }
+
+    /// <summary>
+    ///     The other half of the cache's contract: once another connection commits (an older binary
+    ///     writing legacy keys, a migration in another process), the next open of a pooled handle
+    ///     runs the schema pass again.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_OnAPooledHandle_AfterAnotherConnectionCommits_RunsTheSchemaPassAgain()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var factory = Factory();
+        SQLitePCL.sqlite3 handle;
+        await using (var first = await factory.OpenBankAsync(ct))
+        {
+            handle = first.Handle!;
+        }
+
+        await using (var other = new SqliteConnection($"Data Source={factory.BankPath};Pooling=False"))
+        {
+            await other.OpenAsync(ct);
+            await other.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO settings (key, value) VALUES ('probe', '1')", cancellationToken: ct));
+        }
+
+        var statements = new List<string>();
+        SQLitePCL.raw.sqlite3_trace(handle, (SQLitePCL.strdelegate_trace)((_, sql) => statements.Add(sql)), null);
+        try
+        {
+            await using var second = await factory.OpenBankAsync(ct);
+
+            second.Handle.ShouldBeSameAs(handle);
+            statements.ShouldContain(sql => sql.StartsWith("PRAGMA application_id", StringComparison.Ordinal),
+                string.Join(" | ", statements));
+        }
+        finally
+        {
+            SQLitePCL.raw.sqlite3_trace(handle, (SQLitePCL.strdelegate_trace?)null, null);
+        }
     }
 }

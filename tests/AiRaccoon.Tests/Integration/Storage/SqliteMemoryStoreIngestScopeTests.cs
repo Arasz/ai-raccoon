@@ -4,6 +4,7 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -146,14 +147,20 @@ public sealed class SqliteMemoryStoreIngestScopeTests : IDisposable
     public async Task LegacyWatchScopeKey_IsMigratedOnOpen()
     {
         var file = await WriteFileAsync("notes.md");
-        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        await using (await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
         {
-            await connection.ExecuteAsync(
+        }
+
+        // An older binary is another connection: its commit is what makes the next open re-run
+        // the schema pass, which is where the migration lives.
+        await using (var older = new SqliteConnection($"Data Source={_factory.BankPath};Pooling=False"))
+        {
+            await older.OpenAsync(TestContext.Current.CancellationToken);
+            await older.ExecuteAsync(
                 "INSERT INTO settings (key, value) VALUES (@key, @value)",
                 new { key = "watch.scope.acme", value = IngestScopeKeys.Serialize([_contentRoot]) });
         }
 
-        // The next open runs the schema pass, which is where the migration lives.
         var indexed = await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
 
         indexed.ShouldBeGreaterThan(0);

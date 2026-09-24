@@ -48,13 +48,13 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
     private const int UnitWeight = 1;
 
     // Pinned by running LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount: the count the
-    // both-legs search path issues today, with evidence flowing on both legs (5 open PRAGMAs,
-    // 3 schema/watch checks, the 2-statement settings snapshot, 5 embedding-setting reads, 1 context
+    // both-legs search path issues today, with evidence flowing on both legs (3 open PRAGMAs and
+    // 1 bank-state read on an already-initialised pooled handle, the 2-statement settings snapshot, 5 embedding-setting reads, 1 context
     // resolve, 2 shared + 2 project vector-candidate queries, 2 FTS candidate queries, 1 grouped
     // snippet lookup, and 1 access bump per served row (5)). Deliberate, not incidental —
     // pair-update with the two FTS-only pins (SearchEvidencePipelineTests and the
     // P7 G5 conjunction below): any search-path query change must reconcile all three.
-    private const int ExpectedVectorStatementCount = 28;
+    private const int ExpectedVectorStatementCount = 24;
 
     private readonly List<string> _roots = [];
     private FakeEmbeddingEndpoint _openAi = null!;
@@ -349,7 +349,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
 
         plain.Data!.EvidenceByHash.ShouldNotBeNull("the pin is meaningless unless evidence flowed on the plain path too");
         wired.Data!.EvidenceByHash.ShouldNotBeNull("the pin is meaningless unless evidence flowed on the wired path");
-        plainStatements.Count.ShouldBe(16,
+        plainStatements.Count.ShouldBe(12,
             "the P4 FTS-only pin re-proven through the full tools path (vectorWeight: 0 — the " +
             "both-legs path has its own pin, LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount): " +
             "gate, guard, and buffered recording add zero SQL to the search itself. " +
