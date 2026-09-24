@@ -240,7 +240,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         _lastCli.Err.ShouldContain("connection refused");
     }
 
-    [Then("^it equals SHA-256\\(\"([^\"]+)\" \\|\\| seed\\) formatted as x'<64hex>'$")]
+    [Then("^it equals HKDF-SHA-256\\(seed, salt: none, info: \"([^\"]+)\"\\) formatted as x'<64hex>'$")]
     public void ThenDerivedKeyMatchesVector(string label)
     {
         label.ShouldBe(SshKeyDerivation.Label);
