@@ -11,6 +11,7 @@ from bundle import (  # noqa: E402
     BUNDLED_DIR,
     BUNDLED_FILES,
     BUNDLED_MANIFEST,
+    BUNDLED_MLX_GRAPH,
     GGUF_NAME,
     GGUF_SHA256,
     GGUF_URL,
@@ -35,6 +36,11 @@ def main(argv):
         manifest = target_dir / manifest_name
         if not manifest.is_file() or sha256_file(manifest) != manifest_sha:
             print("FAIL: %s is missing or does not match its pin (it is committed, never fetched)" % manifest, file=sys.stderr)
+            return 1
+        mlx_graph_name, mlx_graph_sha = BUNDLED_MLX_GRAPH
+        mlx_graph = target_dir / mlx_graph_name
+        if not mlx_graph.is_file() or sha256_file(mlx_graph) != mlx_graph_sha:
+            print("FAIL: %s is missing or does not match its pin (it is committed, never fetched)" % mlx_graph, file=sys.stderr)
             return 1
     elif model == "gguf":
         default_root = os.environ.get("AIRACCOON_DATA_ROOT") or str(Path.home() / ".ai-raccoon")

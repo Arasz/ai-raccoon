@@ -31,6 +31,17 @@
         <None Include="Models/granite-embedding-small-english-r2/*" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/granite-embedding-small-english-r2/"/>
     </ItemGroup>
 
+    <!-- ADR-0110: the opt-in MLX execution provider's native runtime, osx-arm64 only — fetched by
+         scripts/download-mlx-runtime.py into the git-ignored mlx-runtime/, never committed. No
+         Pack/PackagePath: CopyToOutputDirectory alone lands these under this RID's own
+         tools/net10.0/osx-arm64/mlx/ (proven in docs/work/2026-09-24-onnx-runtime-providers-gpu-mlx.md F30),
+         so they are absent from every other RID's package and from the RID-agnostic package. -->
+    <ItemGroup Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">
+        <None Include="mlx-runtime/*.dylib" CopyToOutputDirectory="PreserveNewest" Link="mlx/%(Filename)%(Extension)"/>
+        <None Include="mlx-runtime/*.metallib" CopyToOutputDirectory="PreserveNewest" Link="mlx/%(Filename)%(Extension)"/>
+        <None Include="Mlx/THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" Link="mlx/THIRD_PARTY_NOTICES.md"/>
+    </ItemGroup>
+
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Diagnostics"/>
         <PackageReference Include="DotNext"/>
@@ -65,6 +76,13 @@
     <Target Name="RequireBundledModelWeights" BeforeTargets="_GetPackageFiles">
         <Error Condition="!Exists('$(MSBuildProjectDirectory)/Models/granite-embedding-small-english-r2/model_fp16.onnx_data')"
                Text="The bundled embedding model's weights (Models/granite-embedding-small-english-r2/model_fp16.onnx_data) are missing, so this package could not load its default engine. Run 'python3 scripts/download-embedding-model.py' first."/>
+    </Target>
+
+    <!-- The MLX runtime is fetched, not committed, and ships only in the osx-arm64 package (ADR-0110);
+         a pack without it would silently make 'settings model device mlx' unusable there. -->
+    <Target Name="RequireMlxRuntimeFiles" BeforeTargets="_GetPackageFiles" Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">
+        <Error Condition="!Exists('$(MSBuildProjectDirectory)/mlx-runtime/libonnxruntime_mlx_ep.dylib')"
+               Text="The MLX plugin runtime (mlx-runtime/*.dylib, mlx-runtime/mlx.metallib) is missing for an osx-arm64 pack, so 'settings model device mlx' could not load (ADR-0110). Run 'python3 scripts/download-mlx-runtime.py' first."/>
     </Target>
 
     <Target Name="GenerateMcpServerJson" BeforeTargets="_GetPackageFiles">
