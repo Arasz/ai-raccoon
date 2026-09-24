@@ -21,16 +21,19 @@ public static class LegConfidence
 
     /// <summary>
     ///     Scales <paramref name="baseWeight" /> by the normalized gap between <paramref name="bestFirstScores" />'s
-    ///     first (rank-1) and rank-<paramref name="k" /> entries, clamped to [<see cref="MinWeight" />,
-    ///     <see cref="MaxWeight" />]. Fewer than <paramref name="k" /> candidates falls back to the last one as
-    ///     rank-k. A leg with zero or one candidate carries no separation to measure, so its base weight passes
-    ///     through unscaled.
+    ///     first (rank-1) and rank-<paramref name="k" /> entries, clamped to [<paramref name="minWeight" />,
+    ///     <paramref name="maxWeight" />] (the shipped defaults are <see cref="MinWeight" />/<see cref="MaxWeight" />;
+    ///     other bounds exist for measurement sweeps, never for production wiring). Fewer than
+    ///     <paramref name="k" /> candidates falls back to the last one as rank-k. A leg with zero or one candidate
+    ///     carries no separation to measure, so its base weight passes through unscaled.
     /// </summary>
-    public static double Weight(IReadOnlyList<double> bestFirstScores, int k, double baseWeight)
+    public static double Weight(
+        IReadOnlyList<double> bestFirstScores, int k, double baseWeight, double minWeight = MinWeight, double maxWeight = MaxWeight)
     {
         Guard.IsNotNull(bestFirstScores);
         Guard.IsGreaterThan(k, 0);
         Guard.IsGreaterThanOrEqualTo(baseWeight, 0.0);
+        Guard.IsLessThan(minWeight, maxWeight);
 
         if (bestFirstScores.Count < 2)
         {
@@ -42,7 +45,7 @@ public static class LegConfidence
         var scale = Math.Max(Math.Abs(top), Math.Abs(bottom));
         var normalizedGap = scale == 0.0 ? 0.0 : Math.Clamp(Math.Abs(top - bottom) / scale, 0.0, 1.0);
 
-        var multiplier = MinWeight + (normalizedGap * (MaxWeight - MinWeight));
+        var multiplier = minWeight + (normalizedGap * (maxWeight - minWeight));
         return baseWeight * multiplier;
     }
 }

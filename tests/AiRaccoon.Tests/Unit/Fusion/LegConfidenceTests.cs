@@ -101,4 +101,26 @@ public sealed class LegConfidenceTests
     {
         Should.Throw<ArgumentException>(() => LegConfidence.Weight([1.0, 2.0], k: 0, baseWeight: 1.0));
     }
+
+    /// <summary>Measurement sweeps (issue #706) vary bounds without touching the shipped defaults.</summary>
+    [Fact]
+    public void Weight_CustomBounds_ScalesWithinTheProvidedRangeInsteadOfTheDefaults()
+    {
+        double[] scores = [10.0, 0.0, 0.0, 0.0, 0.0];
+
+        var weight = LegConfidence.Weight(scores, k: 5, baseWeight: 1.0, minWeight: 0.3, maxWeight: 3.0);
+
+        // normalizedGap=1.0 (a dominant rank-1 over a zero tail) -> multiplier = maxWeight exactly.
+        weight.ShouldBe(3.0, 0.0001);
+    }
+
+    [Fact]
+    public void Weight_OmittedBounds_DefaultsToTheClassConstants()
+    {
+        double[] scores = [1.0, 1.0, 1.0, 1.0, 1.0];
+
+        var weight = LegConfidence.Weight(scores, k: 5, baseWeight: 1.0);
+
+        weight.ShouldBe(LegConfidence.MinWeight, 0.0001);
+    }
 }
