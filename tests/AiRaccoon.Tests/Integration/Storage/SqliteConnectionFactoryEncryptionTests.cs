@@ -113,7 +113,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     }
 
     [RetryFact]
-    public async Task OpenBankAsync_WithWrongPassphrase_FailsToOpen()
+    public async Task OpenBankAsync_WithWrongPassphrase_ThrowsKeyMismatchOverSqlite26()
     {
         var passphrase = "correct-passphrase";
         var factory = Factory(passphrase);
@@ -128,11 +128,11 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         var options = Options();
         var wrongFactory = new SqliteConnectionFactory(options, Resolver(options, new StubEncryptionKeyProvider("wrong-passphrase")));
 
-        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var conn = await wrongFactory.OpenBankAsync(TestContext.Current.CancellationToken);
         });
-        ex.SqliteErrorCode.ShouldBe(26);
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
     [RetryFact]
@@ -170,11 +170,11 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         }
 
         // …and the old passphrase no longer works.
-        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var old = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
         });
-        ex.SqliteErrorCode.ShouldBe(26);
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
     [RetryFact]
@@ -246,6 +246,36 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
             await using var conn = await resolverFactory.OpenBankAsync(TestContext.Current.CancellationToken);
         });
         ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
+    }
+
+    /// <summary>
+    ///     Issue #710: a source with no legacy derivation (env) must not surface a raw
+    ///     <see cref="SqliteException" /> on a wrong key — the same key-mismatch diagnosis the
+    ///     bitwarden (legacy-bearing) source gets in
+    ///     <see cref="OpenBankAsync_ResolverReturnsDifferentKey_ThrowsKeyMismatchOverSqlite26" />.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_ResolverReturnsDifferentKey_NoLegacySource_ThrowsKeyMismatchOverSqlite26()
+    {
+        var options = Options();
+        var bankFactory = new SqliteConnectionFactory(options, Resolver(options, new StubEncryptionKeyProvider("bank-key-A")));
+        await using (var connection = await bankFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        // StubEncryptionKeyProvider never sets LegacyValue, so the resolved key (like the real env
+        // source) has no earlier derivation to fall back to.
+        var wrongKeyFactory = new SqliteConnectionFactory(options, Resolver(options, new StubEncryptionKeyProvider("bank-key-B")));
+
+        var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
+        {
+            await using var conn = await wrongKeyFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+        });
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
+        ex.LegacyDerivation.ShouldBeFalse();
     }
 
     [RetryFact]
@@ -330,7 +360,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
 
         // ...and the key that would have been the rekey target does not.
         var newKeyFactory = new SqliteConnectionFactory(Options(), Resolver(Options(), new StubEncryptionKeyProvider(DerivedRawKey)));
-        await Should.ThrowAsync<SqliteException>(async () =>
+        await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var conn = await newKeyFactory.OpenBankAsync(TestContext.Current.CancellationToken);
         });

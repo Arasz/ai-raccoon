@@ -84,9 +84,11 @@ public sealed partial class SqliteConnectionFactory(
         {
             connection = await OpenConnectionAsync(resolvedKey.Passphrase, cancellationToken).ConfigureAwait(false);
         }
-        catch (SqliteException openFailure) when (resolvedKey.LegacyPassphrase is not null)
+        catch (SqliteException openFailure)
         {
-            throw await DiagnoseAsync(resolvedKey, openFailure, cancellationToken).ConfigureAwait(false);
+            throw resolvedKey.LegacyPassphrase is not null
+                ? await DiagnoseAsync(resolvedKey, openFailure, cancellationToken).ConfigureAwait(false)
+                : NoLegacyDerivationToTry(resolvedKey, openFailure);
         }
 
         // Post-open failures (extensions, vector load, schema DDL) are not key-related and
@@ -184,6 +186,12 @@ public sealed partial class SqliteConnectionFactory(
 
     private BankKeyMismatchException NotLegacyKeyed(ResolvedKey resolvedKey, SqliteException openFailure) =>
         new($"the bank at '{BankPath}' opens under neither the current nor the pre-ADR-0012 {resolvedKey.SourceName} key derivation — "
+            + "it is corrupt, or keyed to a different secret. It has not been modified; restore it from a backup or check that the encryption source is right.",
+            openFailure);
+
+    /// <summary>The resolved key's source has no earlier derivation to try, so a failed open can only be this bank's own key mismatch.</summary>
+    private BankKeyMismatchException NoLegacyDerivationToTry(ResolvedKey resolvedKey, SqliteException openFailure) =>
+        new($"the bank at '{BankPath}' did not open with the {resolvedKey.SourceName} encryption key, and that source has no earlier key derivation to try — "
             + "it is corrupt, or keyed to a different secret. It has not been modified; restore it from a backup or check that the encryption source is right.",
             openFailure);
 
