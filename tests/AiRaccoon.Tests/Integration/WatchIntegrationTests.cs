@@ -543,6 +543,138 @@ public sealed class WatchIntegrationTests
             .ShouldBeGreaterThanOrEqualTo(300);
     }
 
+    /// <summary>
+    ///     #711: every non-blank line of a watched code file must be covered by some
+    ///     `code_entries` row after each of three ordinary edit shapes (insert at top, change in
+    ///     the middle, append at the end), each delivered through the real FileSystemWatcher and
+    ///     the production dedup-rediscovery path (<see cref="AiRaccoon.Infrastructure.Ingestion.CodeIngestor" />'s
+    ///     `UpdateCodeChunkPosition`), not asserted against the ingestor directly.
+    /// </summary>
+    [RetryFact]
+    public async Task EditedCodeFile_InsertModifyAppend_CoversEveryNonBlankLineAfterEachEdit()
+    {
+        using var stack = new Stack(codeChunker: new StubCodeChunker());
+        await stack.EnableAsync(TestContext.Current.CancellationToken);
+        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
+        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
+        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (stack.CatchUp.LastScan is { } initial)
+        {
+            await initial;
+        }
+
+        var v1 = "class Alpha\n{\n}\n\nclass Beta\n{\n}\n\nclass Gamma\n{\n}\n";
+        stack.Write("Widget.cs", v1);
+        (await stack.StepUntilAsync(
+                async () => await stack.CodeEntryHasValueContainingAsync(stack.File("Widget.cs"), "Gamma",
+                    TestContext.Current.CancellationToken), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("initial code file was never ingested");
+        await AssertFullCoverageAsync(stack, "Widget.cs", v1, TestContext.Current.CancellationToken);
+
+        // Insert lines at the top.
+        var v2 = "// zephyrtop header\n// second header line\n\n" + v1;
+        stack.Write("Widget.cs", v2);
+        (await stack.StepUntilAsync(
+                async () => await stack.CodeEntryHasValueContainingAsync(stack.File("Widget.cs"), "zephyrtop",
+                    TestContext.Current.CancellationToken), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("insert-at-top edit was never re-digested");
+        await AssertFullCoverageAsync(stack, "Widget.cs", v2, TestContext.Current.CancellationToken);
+
+        // Change a line in the middle.
+        var v3 = v2.Replace("class Beta", "class BetaZephyrMiddle", StringComparison.Ordinal);
+        stack.Write("Widget.cs", v3);
+        (await stack.StepUntilAsync(
+                async () => await stack.CodeEntryHasValueContainingAsync(stack.File("Widget.cs"), "BetaZephyrMiddle",
+                    TestContext.Current.CancellationToken), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("middle edit was never re-digested");
+        await AssertFullCoverageAsync(stack, "Widget.cs", v3, TestContext.Current.CancellationToken);
+
+        // Append a new block at the end.
+        var v4 = v3 + "\nclass DeltaZephyrTail\n{\n}\n";
+        stack.Write("Widget.cs", v4);
+        (await stack.StepUntilAsync(
+                async () => await stack.CodeEntryHasValueContainingAsync(stack.File("Widget.cs"), "DeltaZephyrTail",
+                    TestContext.Current.CancellationToken), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("append-at-end edit was never re-digested");
+        await AssertFullCoverageAsync(stack, "Widget.cs", v4, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    ///     #711 H3: an editor or `git checkout` replaces a file by writing a sibling temp file and
+    ///     renaming it onto the target — a single atomic `rename(2)`, not a Changed event. The
+    ///     digest must treat the incoming Renamed-onto-existing-path event exactly like an ordinary
+    ///     edit: full coverage of the new content, no leftover row under the temp name.
+    /// </summary>
+    [RetryFact]
+    public async Task EditedCodeFile_ViaAtomicRename_CoversEveryNonBlankLine()
+    {
+        using var stack = new Stack(codeChunker: new StubCodeChunker());
+        await stack.EnableAsync(TestContext.Current.CancellationToken);
+        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
+        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
+        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        if (stack.CatchUp.LastScan is { } initial)
+        {
+            await initial;
+        }
+
+        var v1 = "class Alpha\n{\n}\n\nclass Beta\n{\n}\n";
+        stack.Write("Widget.cs", v1);
+        (await stack.StepUntilAsync(
+                async () => await stack.CodeEntryHasValueContainingAsync(stack.File("Widget.cs"), "Beta",
+                    TestContext.Current.CancellationToken), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("initial code file was never ingested");
+        await AssertFullCoverageAsync(stack, "Widget.cs", v1, TestContext.Current.CancellationToken);
+
+        // write-temp-then-rename: the idiom editors and git use for an atomic replace.
+        var v2 = "class Alpha\n{\n}\n\nclass BetaZephyrRenamed\n{\n}\n\nclass GammaZephyrNew\n{\n}\n";
+        var tempPath = stack.File("Widget.cs.tmp");
+        await File.WriteAllTextAsync(tempPath, v2, TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(tempPath, stack.Time.GetUtcNow().UtcDateTime);
+        File.Move(tempPath, stack.File("Widget.cs"), true);
+
+        (await stack.StepUntilAsync(
+                async () => await stack.CodeEntryHasValueContainingAsync(stack.File("Widget.cs"), "GammaZephyrNew",
+                    TestContext.Current.CancellationToken), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("atomic-rename edit was never re-digested");
+        await AssertFullCoverageAsync(stack, "Widget.cs", v2, TestContext.Current.CancellationToken);
+        (await stack.CountCodeEntriesUnderAsync(tempPath, TestContext.Current.CancellationToken))
+            .ShouldBe(0, "the temp file used for the atomic rename must leave no code rows under its own path");
+    }
+
+    /// <summary>1-based non-blank line numbers, split on '\n' only — the same convention <c>CodeChunker</c> uses.</summary>
+    private static IReadOnlyList<int> NonBlankLineNumbers(string content)
+    {
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var result = new List<int>();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(lines[i]))
+            {
+                result.Add(i + 1);
+            }
+        }
+
+        return result;
+    }
+
+    private static async Task AssertFullCoverageAsync(Stack stack, string fileName, string content,
+        CancellationToken cancellationToken)
+    {
+        var rows = await stack.CodeRowsAsync(stack.File(fileName), cancellationToken);
+        var covered = new HashSet<int>();
+        foreach (var row in rows)
+        {
+            for (var line = row.LineStart; line <= row.LineEnd; line++)
+            {
+                covered.Add(line);
+            }
+        }
+
+        var gaps = NonBlankLineNumbers(content).Where(n => !covered.Contains(n)).ToArray();
+        gaps.ShouldBeEmpty($"non-blank lines not covered by any code_entries row: [{string.Join(", ", gaps)}]");
+    }
+
     /// <summary>Removing a watch cascades its fingerprints away, so the re-add must fully re-ingest every file exactly once.</summary>
     [RetryFact]
     public async Task RemoveThenReAdd_ReIngestsEveryFile_WithoutDuplicateEntries()
@@ -852,6 +984,29 @@ public sealed class WatchIntegrationTests
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM code_entries WHERE project_id = @p AND path LIKE @prefix",
                 new { p = Project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
+        }
+
+        /// <summary>Every `code_entries` row's line range for one exact path, ordered by chunk_index.</summary>
+        public async Task<IReadOnlyList<(int ChunkIndex, int TotalChunks, int LineStart, int LineEnd)>> CodeRowsAsync(
+            string path, CancellationToken cancellationToken)
+        {
+            await using var connection = await _factory.OpenBankAsync(cancellationToken);
+            var rows = await connection.QueryAsync<(int ChunkIndex, int TotalChunks, int LineStart, int LineEnd)>(
+                new CommandDefinition(
+                    "SELECT chunk_index AS ChunkIndex, total_chunks AS TotalChunks, line_start AS LineStart, "
+                    + "line_end AS LineEnd FROM code_entries WHERE project_id = @p AND path = @path ORDER BY chunk_index",
+                    new { p = Project, path }, cancellationToken: cancellationToken));
+            return rows.ToList();
+        }
+
+        public async Task<bool> CodeEntryHasValueContainingAsync(string path, string marker,
+            CancellationToken cancellationToken)
+        {
+            await using var connection = await _factory.OpenBankAsync(cancellationToken);
+            var count = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT count(*) FROM code_entries WHERE project_id = @p AND path = @path AND value LIKE @marker",
+                new { p = Project, path, marker = $"%{marker}%" }, cancellationToken: cancellationToken));
+            return count > 0;
         }
 
         public async Task<int> CountFingerprintsUnderAsync(string dirPrefix, CancellationToken cancellationToken)

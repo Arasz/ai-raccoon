@@ -235,6 +235,20 @@ public sealed class CodeChunkerTests
         }
     }
 
+    /// <summary>#711 H3: a file saved without a trailing newline must not lose its last line.</summary>
+    [Fact]
+    public void Chunk_FinalLineHasNoTrailingNewline_StillCoversIt()
+    {
+        var text = "void M1()\n{\n}\n\nvoid M2()\n{\n}";
+        var lineCount = text.Split('\n').Length;
+
+        var chunks = Chunker(CodeChunker.DefaultBudget).Chunk(text);
+
+        chunks.ShouldNotBeEmpty();
+        chunks[^1].LineEnd.ShouldBe(lineCount, "the unterminated final line must still be covered");
+        chunks[^1].Text.ShouldEndWith("}");
+    }
+
     [Fact]
     public void Chunk_NoOverlay_LineRangesAreDisjoint()
     {
