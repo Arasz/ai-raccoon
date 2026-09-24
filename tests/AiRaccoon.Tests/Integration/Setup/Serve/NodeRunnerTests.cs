@@ -231,7 +231,9 @@ public sealed class NodeRunnerTests : IDisposable
     /// <summary>
     ///     Cross-root attach (ADR-0106): a listener that serves another data root cannot prove it
     ///     holds this root's identity key, so a plain `serve` refuses it with exit 3 and the owner
-    ///     keeps serving. The refusal names the remedy, never a token.
+    ///     keeps serving. The refusal names the remedy, never a token. secondRoot has not minted its
+    ///     own identity key yet at this point (ADR-0107 PC.3: that IS the reason — NoKey, the
+    ///     client-side branch, not a root-mismatch from the server).
     /// </summary>
     [RetryFact]
     public async Task Serve_OnAnotherRootsServer_RefusesUnproven_WithTheRemedy()
@@ -253,8 +255,46 @@ public sealed class NodeRunnerTests : IDisposable
             second.Stdout.ShouldBeEmpty();
             second.Stderr.ShouldContain("did not prove");
             second.Stderr.ShouldContain("stop the listener");
+            second.Stderr.ShouldContain("no identity key");
             second.Stderr.ShouldNotContain("--attach");
             second.Stderr.ShouldNotContain("   at ");
+            first.Exit.IsCompleted.ShouldBeFalse("the owner must keep serving");
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(secondRoot);
+        }
+
+        var firstExit = await first.StopAsync();
+        firstExit.ShouldBe(ErrorCode.Ok.Success);
+    }
+
+    /// <summary>
+    ///     ADR-0107 PC.3: with secondRoot's own identity key pre-minted (unlike the NoKey case
+    ///     above), the challenge reaches the server, which answers root-mismatch — the refusal
+    ///     names that specific cause, not the generic "did not prove".
+    /// </summary>
+    [RetryFact]
+    public async Task Serve_OnAnotherRootsServer_WithItsOwnKeyAlreadyMinted_NamesRootMismatch()
+    {
+        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
+        await using var first = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        await first.WaitForUrlAsync(TestContext.Current.CancellationToken);
+
+        var secondRoot = TestData.CreateTempRoot("ai-raccoon-serve-cross-root-keyed");
+        try
+        {
+            (await new IdentityKeyFile(TestData.CreateInfrastructureOptions(secondRoot))
+                .EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
+
+            await using var second = ServeHarness.Start(["--data-root", secondRoot, "serve", "--port", port.ToString()]);
+            var secondExit = await second.Exit;
+
+            secondExit.ShouldBe(ErrorCode.Server.Unproven);
+            second.Stderr.ShouldContain("it serves another data root");
             first.Exit.IsCompleted.ShouldBeFalse("the owner must keep serving");
         }
         finally
