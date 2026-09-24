@@ -60,6 +60,7 @@ public sealed class CommandFailureExitCodeTests
     [Theory]
     [InlineData("wrong-key", ErrorCode.Key.WrongKey)]
     [InlineData("legacy-key", ErrorCode.Key.LegacyKeyDerivation)]
+    [InlineData("bank-corrupted", ErrorCode.Bank.Corrupted)]
     [InlineData("bws-missing", ErrorCode.Key.BwsNotInstalled)]
     [InlineData("bws-timeout", ErrorCode.Key.BwsTimedOut)]
     [InlineData("bws-failed", ErrorCode.Key.BwsFailed)]
@@ -265,6 +266,7 @@ public sealed class CommandFailureExitCodeTests
         {
             "wrong-key" => new BankKeyMismatchException("the key does not open the bank"),
             "legacy-key" => new BankKeyMismatchException("still under the old derivation", legacyDerivation: true),
+            "bank-corrupted" => new BankCorruptedException("the bank file itself is corrupt"),
             "bws-missing" => new BwsInvocationException(BwsFailure.NotInstalled, "bws not found"),
             "bws-timeout" => new BwsInvocationException(BwsFailure.TimedOut, "bws timed out after 15s"),
             "bws-failed" => new BwsInvocationException(BwsFailure.Failed, "bws failed (exit 1): no access"),

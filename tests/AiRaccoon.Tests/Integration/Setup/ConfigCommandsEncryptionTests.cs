@@ -324,11 +324,11 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         {
         }
 
-        var wrongKey = await Should.ThrowAsync<SqliteException>(async () =>
+        var wrongKey = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var _ = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken);
         });
-        wrongKey.SqliteErrorCode.ShouldBe(26);
+        wrongKey.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
     [RetryFact]
@@ -514,11 +514,11 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         {
         }
 
-        var wrongKey = await Should.ThrowAsync<SqliteException>(async () =>
+        var wrongKey = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var _ = await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken);
         });
-        wrongKey.SqliteErrorCode.ShouldBe(26);
+        wrongKey.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
     [RetryFact]
@@ -561,11 +561,11 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         {
         }
 
-        var wrongKey = await Should.ThrowAsync<SqliteException>(async () =>
+        var wrongKey = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var _ = await bank.OpenBankWithKeyAsync("env-pass", TestContext.Current.CancellationToken);
         });
-        wrongKey.SqliteErrorCode.ShouldBe(26);
+        wrongKey.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
     [RetryFact]

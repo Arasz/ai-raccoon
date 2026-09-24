@@ -287,14 +287,14 @@ prints a line naming it, so `serve` no longer exits without saying why.
 Cases the code cannot tell apart yet return the category's general code; the list is
 maintained below.
 
-- **Wrong key vs. corrupt bank.** SQLCipher answers the same SQLITE_NOTADB error for a
-  wrong key and for a file that genuinely is not a database, so `Key.WrongKey` (21) and
-  `Bank.Corrupted` (32) both still resolve from one ambiguous signal today. The exit code
-  still depends on the call path — `doctor` reports `Bank.Corrupted` (32); a command that
-  resolves the key and tries the pre-ADR-0012 derivation reports `Key.WrongKey` (21) — but
-  both messages now name the same two causes and both remedies (check the
-  encryption key source, or restore the bank from a backup), instead of asserting one as
-  fact. Splitting the *code* still needs a key verifier kept outside the bank.
+- **Wrong key vs. corrupt bank — split by ADR-0111.** SQLCipher still answers the same
+  SQLITE_NOTADB error for a wrong key and for a file that genuinely is not a database, but
+  a bank that has opened successfully at least once now carries a key-check sidecar
+  (`memory.db.keycheck`) outside the encrypted pages, kept outside the bank as this item
+  originally called for. When that sidecar can settle the question, `Key.WrongKey` (21)
+  and `Bank.Corrupted` (32) resolve to the case it actually is, on every call path
+  including `doctor`. A bank with no sidecar yet (never reopened since upgrading) keeps
+  the prior ambiguous, both-causes message and its call path's old default code.
 - **A bad `base-url` is now distinguished by code**: `model embedding set openai` refuses
   a `base-url` that is not a usable absolute http(s) URL before anything is probed or
   persisted, exiting `Model.BadBaseUrl` (78). An unreachable endpoint and a rejected API
