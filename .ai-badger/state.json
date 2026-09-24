@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-fusion-trust-confident-leg-706",
+   "title": "ADR-0078 no-regression reorder measured against the gates: does not fix A9, regresses S4/S5/S6",
+   "pr": 727,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "Flag on: A9 stays 3 (FTS and vector rank-1 winners are distinct chunks, both claim key 1 — ADR-0078's L-results bound); gate (c) S4 1->3, S5 3->7, S6 2->3 (second SourceAffinityRanker pass, suggestive); held-out mean -0.018 (in band) but 6 per-query floors break; parity delta -0.0004. Keep flag off. New FusionNoRegressionFlagGateTests pins the flag-on ranks. #706 stays open for rank-1 rescue / confidence-weighted RRF."
+  },
+  {
    "id": "air-harness-rebaseline-granite-707",
    "title": "LlamaIndex retrieval harness moved to granite; package D per-row leg ranks",
    "pr": 725,
