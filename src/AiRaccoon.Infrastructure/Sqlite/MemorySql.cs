@@ -235,12 +235,18 @@ internal static class MemorySql
     // Matching is on `path`, not `source_file`: mirror/ingest rows carry the real file path in both
     // columns, while manual memory_write rows carry path = <sha256(content)>.md and merely cite the
     // file in source_file — the digest owns the mirror rows, never manual rows that cite the file.
-    public const string DeleteBySourcePathPredicate = """
-                                                      project_id = @projectId AND workspace_id IS NULL
-                                                        AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
-                                                      """;
+    /// <summary>
+    ///     Rows of <paramref name="table" /> at the path or under it, as two index seeks on
+    ///     (project_id, path) — an OR of the two the planner can only answer by scanning the project.
+    /// </summary>
+    private static string AtOrUnderPath(string table) =>
+        $"rowid IN (SELECT rowid FROM {table} WHERE project_id = @projectId AND path = @path " +
+        $"UNION ALL SELECT rowid FROM {table} WHERE project_id = @projectId " +
+        "AND path >= @subtreeLow AND path < @subtreeHigh)";
 
-    public const string DeleteBySourcePath = "DELETE FROM entries WHERE " + DeleteBySourcePathPredicate;
+    public static readonly string DeleteBySourcePathPredicate = AtOrUnderPath("entries") + " AND workspace_id IS NULL";
+
+    public static readonly string DeleteBySourcePath = "DELETE FROM entries WHERE " + DeleteBySourcePathPredicate;
 
     // A replace deletes every chunk of the path and re-inserts them, so promotion_queue_entries_ad
     // (ADR-0023) fires even for chunks whose text is unchanged and which return under the same hash.
@@ -263,7 +269,7 @@ internal static class MemorySql
                                                                      AND EXISTS (SELECT 1 FROM entries e
                                                                                  WHERE e.project_id = q.project_id AND e.hash = q.hash
                                                                                    AND {ProjectRows.Scope("e.")}
-                                                                                   AND (e.path = @path OR e.path LIKE @pathPrefix ESCAPE '\'))
+                                                                                   AND (e.path = @path OR (e.path >= @subtreeLow AND e.path < @subtreeHigh)))
                                                                    """;
 
     // WP12 Fix A gap: a KEPT hash (still in the ingest's "keep" list) is never deleted from entries,
@@ -280,7 +286,7 @@ internal static class MemorySql
                                                                                          WHERE e.project_id = promotion_queue.project_id
                                                                                            AND e.hash = promotion_queue.hash
                                                                                            AND {ProjectRows.Scope("e.")}
-                                                                                           AND (e.path = @path OR e.path LIKE @pathPrefix ESCAPE '\'))
+                                                                                           AND (e.path = @path OR (e.path >= @subtreeLow AND e.path < @subtreeHigh)))
                                                                            """;
 
     public static readonly string RestoreQueueRowsStillBacked = $"""
@@ -296,11 +302,9 @@ internal static class MemorySql
                                                                  DELETE FROM queue_restore;
                                                                  """;
 
-    public const string DeleteWatchFilesByProjectPathCascade = """
-                                                               DELETE FROM watch_files
-                                                               WHERE project_id = @projectId
-                                                                 AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
-                                                               """;
+    public static readonly string SelectWatchFileAtOrUnder = "SELECT EXISTS (SELECT 1 FROM watch_files WHERE " + AtOrUnderPath("watch_files") + ")";
+
+    public static readonly string DeleteWatchFilesByProjectPathCascade = "DELETE FROM watch_files WHERE " + AtOrUnderPath("watch_files");
 
     public const string InsertWatchIfAbsent = """
                                               INSERT INTO watches (project_id, path, created_at, last_change_ts)
@@ -927,11 +931,7 @@ internal static class MemorySql
                                                    WHERE id = @id
                                                   """;
 
-    public const string DeleteCodeBySourcePath = """
-                                                 DELETE FROM code_entries
-                                                 WHERE project_id = @projectId
-                                                   AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
-                                                 """;
+    public static readonly string DeleteCodeBySourcePath = "DELETE FROM code_entries WHERE " + AtOrUnderPath("code_entries");
 
     // Defect B: after a direct ingest reports the chunk set it wrote or rediscovered, everything
     // else stored under that exact path is a leftover of a previous chunking. Exact path only —
@@ -956,16 +956,7 @@ internal static class MemorySql
     // #436, code-corpus leg of Defect B: same predicate as DeleteCodeBySourcePath (path or
     // subtree prefix) — inert for a single file, since no sibling file's path can equal
     // "<this file>/…", so a single-file re-ingest cannot reach a sibling.
-    public const string DeleteCodeChunksForPathExcept = """
-                                                        DELETE FROM code_entries
-                                                        WHERE project_id = @projectId
-                                                          AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
-                                                          AND hash NOT IN @keep
-                                                        """;
+    public static readonly string DeleteCodeChunksForPathExcept = "DELETE FROM code_entries WHERE " + AtOrUnderPath("code_entries") + " AND hash NOT IN @keep";
 
-    public const string DeleteAllCodeChunksForPath = """
-                                                     DELETE FROM code_entries
-                                                     WHERE project_id = @projectId
-                                                       AND (path = @path OR path LIKE @pathPrefix ESCAPE '\')
-                                                     """;
+    public static readonly string DeleteAllCodeChunksForPath = "DELETE FROM code_entries WHERE " + AtOrUnderPath("code_entries");
 }

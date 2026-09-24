@@ -50,6 +50,8 @@ public sealed class NullWatchStore : IWatchStore
 
     public Task<string?> GetFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
 
+    public Task<bool> HasFingerprintAtOrUnderAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.FromResult(false);
+
     public Task UpsertFileHashAsync(string projectId, string path, string fileHash, long updatedAt,
         CancellationToken cancellationToken = default) =>
         Task.CompletedTask;

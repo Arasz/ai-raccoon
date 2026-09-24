@@ -381,6 +381,7 @@ internal static class MemorySchema
 
                                           CREATE INDEX IF NOT EXISTS idx_entries_scope_project ON entries(scope, project_id);
                                           CREATE INDEX IF NOT EXISTS idx_entries_hash ON entries(hash);
+                                          CREATE INDEX IF NOT EXISTS idx_entries_project_path ON entries(project_id, path);
                                           CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);
                                           CREATE INDEX IF NOT EXISTS idx_entries_embed_state ON entries(embed_state, project_id);
                                           CREATE INDEX IF NOT EXISTS idx_watches_project ON watches(project_id);
@@ -1642,6 +1643,7 @@ internal static class MemorySchema
                         """
                         CREATE INDEX idx_entries_scope_project ON entries(scope, project_id);
                         CREATE INDEX idx_entries_hash ON entries(hash);
+                        CREATE INDEX idx_entries_project_path ON entries(project_id, path);
                         CREATE INDEX idx_entries_workspace ON entries(workspace_id);
                         CREATE INDEX idx_entries_embed_state ON entries(embed_state, project_id);
                         CREATE INDEX idx_entries_source_id ON entries(source_id);
@@ -1749,10 +1751,9 @@ internal static class MemorySchema
         {
             foreach (var (projectId, pruned) in toPrune)
             {
-                var pathPrefix = LikePattern.Escape(pruned.Path) + "/%";
-                await connection.ExecuteAsync(
+                                await connection.ExecuteAsync(
                         new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
-                            new { projectId, path = pruned.Path, pathPrefix }, cancellationToken: cancellationToken))
+                            new { projectId, path = pruned.Path, subtreeLow = PathSubtree.Low(pruned.Path), subtreeHigh = PathSubtree.High(pruned.Path) }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
                 await connection.ExecuteAsync(
                         new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
