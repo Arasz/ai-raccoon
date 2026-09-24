@@ -98,6 +98,10 @@ public sealed class ServeRestartTests : IDisposable
         exit.ShouldBe(ErrorCode.Server.Unproven);
         run.Stderr.ShouldContain("did not prove");
         run.Stderr.ShouldContain("stop the listener");
+        // #709: no identity key was ever minted for _dataRoot, so the restart's own prover fails
+        // client-side (NoKey) before any challenge reaches the fake — the refusal names that cause
+        // the same way the attach path does (RefuseExistingServerAsync), not a generic "did not prove".
+        run.Stderr.ShouldContain("no identity key");
         run.Stderr.ShouldNotContain("--attach");
         run.Stdout.ShouldBeEmpty();
     }

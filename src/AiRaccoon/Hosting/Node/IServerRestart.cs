@@ -14,5 +14,10 @@ public interface IServerRestart
     Task<RestartResult> CycleAsync(int port, McpTokenFile tokenFile, CancellationToken ctx);
 }
 
-/// <summary>What the restart attempt ended as, plus whatever the server said about itself.</summary>
-public readonly record struct RestartResult(RestartOutcome Outcome, int? Pid = null, string? Version = null);
+/// <summary>
+///     What the restart attempt ended as, plus whatever the server said about itself.
+///     <paramref name="Reason" /> is set only for <see cref="RestartOutcome.Unproven" /> — the same
+///     <see cref="IdentityProofFailure" /> the attach path names via <see cref="IdentityProof.RefusalText" />.
+/// </summary>
+public readonly record struct RestartResult(RestartOutcome Outcome, int? Pid = null, string? Version = null,
+    IdentityProofFailure? Reason = null);

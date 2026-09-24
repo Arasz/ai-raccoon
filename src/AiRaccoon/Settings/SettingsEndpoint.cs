@@ -98,6 +98,16 @@ internal static partial class SettingsEndpoint
                         return Results.BadRequest("ai-raccoon: a model migration needs a provider");
                     }
 
+                    // #708: the CLI refuses an unusable base-url before persisting anything (ADR-0107
+                    // PC.1, #700), but a direct (non-CLI) caller reaches this route unchecked — refuse
+                    // it here too, before the outbox commits or a migration opens.
+                    if (request.BaseUrl is not null && !BaseUrlValidation.IsUsableHttpUrl(request.BaseUrl))
+                    {
+                        return Results.BadRequest(
+                            $"ai-raccoon: '{request.BaseUrl}' is not a usable absolute http(s) URL; " +
+                            "pass a full URL such as https://api.example.com/v1");
+                    }
+
                     try
                     {
                         var config = await store.StartModelMigrationAsync(request.Provider, request.Model,
