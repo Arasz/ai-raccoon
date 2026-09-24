@@ -1,6 +1,6 @@
 {
   "$schema": "./schemas/config.schema.json",
-  "frameworkVersion": "0.172.13",
+  "frameworkVersion": "0.177.0",
   "project": {
     "name": "AiRaccoon",
     "summary": "C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.",
@@ -49,18 +49,8 @@
   "skillScope": "default",
   "include": {
     "skills": [
-      "debug-issue",
-      "evidence-first-research",
-      "complete-project-scope-code-review",
-      "explore-codebase",
-      "migrate-documentation",
-      "scaffold-documentation",
-      "update-documentation",
-      "documentation-drift-audit",
-      "worktree-agent-isolation",
       "sqlite-bank-space-diagnosis",
-      "sqlite-schema-review",
-      "scripts-tooling-refactor"
+      "sqlite-schema-review"
     ]
   },
   "docs": {},

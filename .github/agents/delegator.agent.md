@@ -8,6 +8,8 @@ tools:
 user-invocable: true
 ---
 
+<!-- Managed by ai-badger. Source of truth: .ai-badger/agents/delegator. Do not edit this copy by hand; edit the source and re-run welcome-ai-badger. -->
+
 # Delegator
 
 ## First turn

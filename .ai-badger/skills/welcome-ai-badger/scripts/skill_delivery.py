@@ -59,13 +59,15 @@ def _owns_link(entry: Path, skills_root: Path) -> bool:
 
 
 def relink_hermes_skills(target: Path, config: Dict[str, Any],
-                         skills: List[str]) -> Dict[str, List[str]]:
+                         skills: List[str], root: Optional[Path] = None) -> Dict[str, List[str]]:
     """Rebuild ~/.hermes/skills/<project>/ so it links exactly *skills* plus learned/.
 
     Only symlinks resolving into <target>/.ai-badger/skills/ are removed; every other entry
     is left exactly as found (docs/adr/0003-hermes-skill-discovery-via-namespaced-symlinks.md).
     An empty *skills* is not evidence the project stopped wanting them (#129), so it leaves
-    the namespace untouched. Returns {"created": [...], "removed": [...]}.
+    the namespace untouched. `root` resolves gateway aliases the same way the Scaffolder does
+    — a stale member name excludes the gateway too — and is optional only for callers with no
+    framework root at hand. Returns {"created": [...], "removed": [...]}.
     """
     import badger_lib as bl
 
@@ -86,7 +88,8 @@ def relink_hermes_skills(target: Path, config: Dict[str, Any],
 
     # Declined skills are filtered here too: den-refresh re-links from the names on disk,
     # where an excluded skill's copy is deliberately left behind.
-    declined = bl.exclusions(config)["skills"]
+    aliases = bl.gateway_aliases(root) if root is not None else None
+    declined = bl.exclusions(config, aliases)["skills"]
     wanted = [n for n in dict.fromkeys(skills)
               if n not in declined and (skills_root / n).is_dir()]
     if (skills_root / LEARNED_SKILLS_DIR).is_dir() and LEARNED_SKILLS_DIR not in wanted:
@@ -353,7 +356,8 @@ class SkillDelivery:
         if "hermes" not in self.ctx.config.get("agents", []):
             return
         try:
-            links = relink_hermes_skills(self.ctx.target, self.ctx.config, self.ctx.skills)
+            links = relink_hermes_skills(self.ctx.target, self.ctx.config, self.ctx.skills,
+                                         root=self.ctx.root)
         except ValueError as exc:
             # A refusal the user can act on: it names their project name as the cause.
             self.ctx.notes.append(f"hermes skill links skipped — {exc}")

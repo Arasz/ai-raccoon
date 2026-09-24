@@ -76,7 +76,7 @@ public sealed partial class ServerRestart : IServerRestart
         if (await _prover.ProveAsync(ServerProbe.EndpointFor(port), ctx) is { } failure)
         {
             Log.Unproven(_logger, port, failure);
-            return new RestartResult(RestartOutcome.Unproven);
+            return new RestartResult(RestartOutcome.Unproven, Reason: failure);
         }
 
         if (await IdentifyAsync(port, ctx) is not { Name: ServerInfo.ServerName } info)

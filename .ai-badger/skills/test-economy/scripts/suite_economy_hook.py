@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: command the test-run economy once full-suite runs start repeating.
+"""PostToolUse / PostToolUseFailure hook: command the test-run economy once full-suite runs
+start repeating.
 
 Named suite_economy_hook (not test_*): the scaffold's delivery ignores test_*.py — a
 production hook script must not wear a test's name.
@@ -7,6 +8,14 @@ production hook script must not wear a test's name.
 Advisory only, never blocking: emits `additionalContext` alone, exit 0, and never
 `decision`/`permissionDecision`/`continue` — a hook coercing tool calls is exactly what
 docs/changelog/0.33.0-no-third-party-tool-call-interception.md documents ripping out.
+
+Two arms wire this one script (hooks-manifest.json: `test-run-economy`, `test-run-economy-
+failure`). Claude's PostToolUse "Runs immediately after a tool completes successfully"
+(hooks.md), so a failing test run — the case this hook exists to catch — never reaches it; a
+second, claude-only manifest entry fires this script on PostToolUseFailure instead, whose
+payload still carries the same `tool_input.command` a passing run does. Every other host
+(Copilot, Hermes, pi) runs its post-tool hook regardless of outcome, so their single
+PostToolUse arm already counts both.
 
 The trigger is the command of a shell-shaped tool call, classified by
 suite_economy.is_test_run. Filtered runs never count; a full-suite run past the session's
@@ -71,6 +80,11 @@ def main() -> int:
         return 0
     _PAYLOAD.update(payload)
 
+    # The event this hook was fired for, echoed back verbatim (R11) — Claude's own PostToolUse
+    # payload never carries one back out, but every existing test predates the field, so a
+    # missing one still means PostToolUse, its only caller until the failure arm existed.
+    event = payload.get("hook_event_name") or payload.get("hookEventName") or "PostToolUse"
+
     tool_name = payload.get("tool_name") or payload.get("toolName") or ""
     if not suite_economy.is_shell_tool(tool_name):
         _debug("skip", reason="not_shell_tool")
@@ -87,11 +101,9 @@ def main() -> int:
         _debug("skip", reason="no_root")
         return 0
 
-    entry = suite_economy.get_entry(root)
-    fires, escalated, entry = suite_economy.advance_session(
-        entry, _session(payload), run["kind"] == "full", now=_now_iso(),
+    fires, escalated, entry = suite_economy.update_entry(
+        root, _session(payload), run["kind"] == "full", now=_now_iso(),
     )
-    suite_economy.set_entry(root, entry)
     _debug("checked", project=root, runner=run["runner"], kind=run["kind"])
 
     if not fires:
@@ -105,7 +117,7 @@ def main() -> int:
     _debug("fire", project=root, runner=run["runner"], escalated=escalated)
     print(json.dumps({
         "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
+            "hookEventName": event,
             "additionalContext": message,
         }
     }))

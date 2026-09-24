@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 import shlex
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
 
 import badger_store  # vendored beside this script in production; engine/ canonical in tests
@@ -111,11 +111,16 @@ def is_test_run(command: str) -> Optional[Dict[str, str]]:
     Returns ``{"runner": <display name>, "kind": "full" | "filtered"}``. Err toward full:
     the pattern this hook exists to catch is the repeated full suite, so an unrecognized
     flag never demotes a run to filtered — only a known selector does.
+
+    Matches on the launcher's basename, not its raw ``argv[0]``: this repo's own mandated
+    ``.venv/bin/python3 -m pytest`` (the venv-python invariant) is a path, not a bare
+    ``python3``, and a runner invoked by an absolute or relative path must count the same
+    as one found on PATH.
     """
     argv = _argv(command or "")
     if not argv:
         return None
-    first = argv[0]
+    first = PurePosixPath(argv[0]).name
 
     # python -m pytest / python -m unittest
     if first in _PY_LAUNCHERS and len(argv) >= 3 and argv[1] == "-m":
@@ -183,13 +188,13 @@ def is_test_run(command: str) -> Optional[Dict[str, str]]:
         positional = [t for t in rest if not t.startswith("-")]
         return {"runner": "cargo test", "kind": "filtered" if positional else "full"}
 
-    if first in ("mvn", "mvnw", "./mvnw") and "test" in argv[1:]:
+    if first in ("mvn", "mvnw") and "test" in argv[1:]:
         rest = argv[1:]
         if any(t.lower().startswith(("-dtest=", "-dtestcase=", "-dgroups=")) for t in rest):
             return {"runner": "mvn test", "kind": "filtered"}
         return {"runner": "mvn test", "kind": "full"}
 
-    gradle = first if first in ("gradle", "gradlew", "./gradlew") else None
+    gradle = first if first in ("gradle", "gradlew") else None
     if gradle and "test" in argv[1:]:
         if "--tests" in argv[1:]:
             return {"runner": "gradle test", "kind": "filtered"}
@@ -218,22 +223,55 @@ def is_test_run(command: str) -> Optional[Dict[str, str]]:
     return None
 
 
+# Shell metacharacters shlex.split leaves as literal tokens: whatever follows one of these
+# belongs to the next stage of the pipeline (`| tail -5`), not to pytest's own arguments.
+_SHELL_METACHARS = frozenset({"|", ";", "&&", ">"})
+
+# pytest flags that take a separate value token (`-p no:cacheprovider`, `-n 4`, `--tb short`):
+# the value must never be mistaken for a positional selector (a path or node id).
+_PYTEST_VALUE_FLAGS = frozenset({"-p", "-n", "--tb", "-W", "-c", "--rootdir", "--confcutdir"})
+
+
+def _split_at_metachar(token: str) -> Tuple[str, Optional[int]]:
+    """*token* truncated at its first shell metacharacter (even glued on with no space, as
+    in ``-q;``), and that cut position, or ``(token, None)`` when it carries none."""
+    positions = [p for p in (token.find(mc) for mc in _SHELL_METACHARS) if p != -1]
+    if not positions:
+        return token, None
+    cut = min(positions)
+    return token[:cut], cut
+
+
 def _pytest_kind(rest: List[str]) -> str:
-    """pytest's kind: a known selector flag or any positional (path/node id) means filtered."""
+    """pytest's kind: a known selector flag or a real positional (path/node id) means
+    filtered. Skips a known flag's value token and stops at a shell metacharacter, so
+    neither is mistaken for a positional filter (L4-7)."""
     i = 0
     while i < len(rest):
-        token = rest[i]
-        if token in ("-k", "-m") or token.startswith(("-k=", "-m=")):
-            return "filtered"
-        if not token.startswith("-"):
-            return "filtered"
+        token, cut = _split_at_metachar(rest[i])
+        if token:
+            if token in ("-k", "-m") or token.startswith(("-k=", "-m=")):
+                return "filtered"
+            if token in _PYTEST_VALUE_FLAGS:
+                if cut is None:
+                    i += 2
+                    continue
+                break  # the flag's value was cut off by the metachar; nothing more to see
+            name = token.split("=", 1)[0]
+            if "=" in token and name in _PYTEST_VALUE_FLAGS:
+                i += 1
+                continue
+            if not token.startswith("-"):
+                return "filtered"
+        if cut is not None:
+            break
         i += 1
     return "full"
 
 
 def new_session_entry() -> Dict[str, Any]:
     """A fresh per-session counter row."""
-    return {"full": 0, "filtered": 0, "fired": 0, "since": ""}
+    return {"full": 0, "filtered": 0, "fired": 0, "since": "", "last_seen": ""}
 
 
 def advance(entry: Dict[str, Any], is_full: bool, now: str = "",
@@ -248,6 +286,7 @@ def advance(entry: Dict[str, Any], is_full: bool, now: str = "",
     budget = _max_full() if max_full is None else max_full
     escalation_bar = _escalate_at() if escalate_at is None else escalate_at
     updated = dict(entry)
+    updated["last_seen"] = now
     if is_full:
         updated["full"] = int(entry.get("full", 0)) + 1
     else:
@@ -280,14 +319,13 @@ def _escalate_at() -> int:
 
 
 def open_store():
-    """The user store narrowed to the test-economy family."""
-    families = {
-        "test_economy": badger_store.Family(
-            table="test_economy", db="user",
-            legacy_path=lambda: None, legacy_kind="map",
-        ),
-    }
-    return badger_store.open_user(families=families)
+    """The default user store: ``test_economy`` is already registered in USER_FAMILIES,
+    born in SQLite with ``legacy_path=None`` — there is nothing to import or resurrect.
+
+    A prior inline family passed ``legacy_path=lambda: None`` (a callable returning None,
+    not an absent one), so ``_check_resurrections`` called ``None.exists()`` on every open.
+    """
+    return badger_store.open_user()
 
 
 def load_state() -> Dict[str, Any]:
@@ -319,6 +357,36 @@ def set_entry(root: str, entry: Dict[str, Any]) -> None:
         store.close()
 
 
+def update_entry(root: str, session: str, is_full: bool, now: str = "",
+                  max_full: Optional[int] = None, escalate_at: Optional[int] = None,
+                  ) -> Tuple[bool, bool, Dict[str, Any]]:
+    """Atomically advance ``root``'s session entry through the store's own `kv_update` (L4-8).
+
+    `get_entry` then `advance_session` then `set_entry`, as the hook used to run it, is three
+    separate store round trips: a second invocation between the read and the write computes
+    from the same stale entry, so one of the two increments is lost. `kv_update` runs the
+    read, the advance, and the write inside one transaction, so a concurrent call blocks on
+    the write lock and sees this call's result before it computes its own.
+    """
+    outcome: Dict[str, Any] = {}
+
+    def _advance(current: Any) -> Dict[str, Any]:
+        normalised = (current if isinstance(current, dict)
+                     and isinstance(current.get("sessions"), dict) else {"sessions": {}})
+        fires, escalated, updated = advance_session(
+            normalised, session, is_full, now=now, max_full=max_full, escalate_at=escalate_at)
+        outcome["fires"], outcome["escalated"] = fires, escalated
+        return updated
+
+    store = open_store()
+    try:
+        entry = store.kv_update("test_economy", str(Path(root).resolve()), _advance,
+                                {"sessions": {}})
+    finally:
+        store.close()
+    return outcome["fires"], outcome["escalated"], entry
+
+
 def session_entry(entry: Dict[str, Any], session: str) -> Dict[str, Any]:
     """One session's counter row inside a project entry (its own budget)."""
     found = entry["sessions"].get(session)
@@ -333,7 +401,12 @@ def session_entry(entry: Dict[str, Any], session: str) -> Dict[str, Any]:
 def advance_session(entry: Dict[str, Any], session: str, is_full: bool, now: str = "",
                     max_full: Optional[int] = None, escalate_at: Optional[int] = None,
                     ) -> Tuple[bool, bool, Dict[str, Any]]:
-    """Advance one session's counters inside the project entry and prune old sessions."""
+    """Advance one session's counters inside the project entry and prune old sessions.
+
+    Eviction drops the session with the oldest ``last_seen``, never dict insertion order
+    (R24): the busiest, longest-lived session is exactly the one insertion order evicted
+    first, since it is also the one that joined earliest.
+    """
     fires, escalated, session_row = advance(session_entry(entry, session), is_full,
                                             now=now, max_full=max_full,
                                             escalate_at=escalate_at)
@@ -341,7 +414,7 @@ def advance_session(entry: Dict[str, Any], session: str, is_full: bool, now: str
     sessions = dict(entry.get("sessions", {}))
     sessions[session] = session_row
     while len(sessions) > MAX_SESSIONS_PER_PROJECT:
-        oldest = next(iter(sessions))
+        oldest = min(sessions, key=lambda s: sessions[s].get("last_seen", ""))
         sessions.pop(oldest)
     updated["sessions"] = sessions
     return fires, escalated, updated
