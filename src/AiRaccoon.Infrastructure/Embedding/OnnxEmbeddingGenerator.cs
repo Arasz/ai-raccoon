@@ -47,13 +47,14 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// <summary>ORT intra-op threads this session was built with (WP11-A/G16); 0 means ORT's own default.</summary>
     public int IntraOpThreads { get; }
 
-    /// <summary>The execution provider the session runs on: "WebGPU", "CPU", "MLX", or one of those
+    /// <summary>The execution provider the session runs on: "WebGPU", "CPU", "MLX", "CUDA", or one of those
     /// with a parenthesized "(… refused: …)" suffix per fallback step actually taken.</summary>
     public string ExecutionProvider { get; private set; } = CpuProvider;
 
     private const string CpuProvider = "CPU";
     private const string WebGpuProvider = "WebGPU";
     private const string MlxProvider = "MLX";
+    private const string CudaProvider = "CUDA";
 
     /// <summary>WebGPU sessions share one process-wide GPU context, which concurrent runs corrupt.</summary>
     private static readonly Lock GpuGate = new();
@@ -76,7 +77,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     private Action _mlxSessionDisposeAction;
 
     internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
-        int intraOpThreads = 0, bool preferGpu = false, bool preferMlx = false)
+        int intraOpThreads = 0, bool preferGpu = false, bool preferMlx = false, string? cudaLibraryPath = null)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         _logger = logger;
@@ -88,11 +89,20 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         IntraOpThreads = intraOpThreads;
 
         string? mlxRefusalReason = null;
+        string? cudaRefusalReason = null;
         var mlxSession = preferMlx ? CreateMlxSessionOrNull(modelPath, intraOpThreads, out mlxRefusalReason) : null;
+        var cudaSession = mlxSession is null && cudaLibraryPath is not null
+            ? CreateCudaSessionOrNull(modelPath, intraOpThreads, cudaLibraryPath, out cudaRefusalReason)
+            : null;
         if (mlxSession is not null)
         {
             _session = mlxSession;
             ExecutionProvider = MlxProvider;
+        }
+        else if (cudaSession is not null)
+        {
+            _session = cudaSession;
+            ExecutionProvider = CudaProvider;
         }
         else
         {
@@ -102,6 +112,11 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
             if (mlxRefusalReason is not null)
             {
                 ExecutionProvider = $"{ExecutionProvider} (MLX refused: {mlxRefusalReason})";
+            }
+
+            if (cudaRefusalReason is not null)
+            {
+                ExecutionProvider = $"{ExecutionProvider} (CUDA refused: {cudaRefusalReason})";
             }
         }
 
@@ -421,6 +436,45 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         {
             return (null, ex.Message);
         }
+    }
+
+    private const string CudaExecutionProviderName = "CUDAExecutionProvider";
+
+    /// <summary>
+    ///     A session on the user-supplied CUDA plugin library, or null with the reason. Unlike WebGPU it
+    ///     needs no <see cref="GpuGate" />: CUDA sessions do not share one device context.
+    /// </summary>
+    private static InferenceSession? CreateCudaSessionOrNull(string modelPath, int intraOpThreads, string libraryPath,
+        out string? refusalReason)
+    {
+        if (libraryPath.Length == 0)
+        {
+            refusalReason = "no provider library configured; run 'ai-raccoon settings model device cuda <path>'";
+            return null;
+        }
+
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+        {
+            refusalReason = "requires Windows or Linux";
+            return null;
+        }
+
+        if (!File.Exists(libraryPath))
+        {
+            refusalReason = $"provider library not found: {libraryPath}";
+            return null;
+        }
+
+        var (devices, deviceRefusal) = RegisterPluginGpuDevice(CudaExecutionProviderName, libraryPath,
+            "no CUDA GPU device after registration");
+        if (devices is null)
+        {
+            refusalReason = deviceRefusal;
+            return null;
+        }
+
+        (var session, refusalReason) = CreatePluginSessionOrNull(modelPath, intraOpThreads, devices);
+        return session;
     }
 
     /// <summary>What a plugin attempt may throw that must become a refusal rather than a failed construction.</summary>
