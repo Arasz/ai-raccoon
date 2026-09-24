@@ -1,8 +1,26 @@
 {
- "lastUpdated": "2026-09-24T05:30:00+02:00",
+ "lastUpdated": "2026-09-24T05:45:00+02:00",
  "notesRef": ".ai-badger/status-notes.json",
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
+  {
+   "id": "air-restart-unproven-names-proof-reason-709",
+   "title": "serve --restart Unproven refusal names the identity-proof reason",
+   "pr": 719,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "RestartResult carries IdentityProofFailure? Reason; ServerRestart.CycleAsync sets it on Unproven; NodeRunner.RestartRefusal prints IdentityProof.RefusalText(reason) like the attach path (#700). EventId 657 unchanged. Note: BackendLaunchIdentityProofE2ETests.RestartCellAsync asserts the log line's wording, not the operator refusal line — a soft spot."
+  },
+  {
+   "id": "air-settings-endpoint-baseurl-validation-708",
+   "title": "SettingsEndpoint model-migration POST refuses an unusable BaseUrl",
+   "pr": 718,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "BaseUrlValidation.IsUsableHttpUrl (AiRaccoon.Settings) shared by the CLI (exit 78) and the SettingsEndpoint POST (400 before StartModelMigrationAsync, nothing persisted). The server refusal is unreachable from current CLI verbs (they validate first), so no CLI exit mapping was added."
+  },
   {
    "id": "air-retrieval-reliability-followup-batch-plan",
    "title": "Code-retrieval and reliability follow-up batch: ADR-0107 exit messages, bm25 hash tie-break, Nightly green (#691/#692), BDD binding fix, dedupe prevalence and eval-P3 on granite (1.49.3)",
@@ -178,8 +196,6 @@
   "#705 key verifier outside the bank (ADR-0107 item 1)",
   "#706 fusion that trusts one confident leg (A9 / #367)",
   "#707 re-baseline the retrieval harness on granite (absorbs harness package D)",
-  "#708 SettingsEndpoint model-migration POST accepts any BaseUrl",
-  "#709 serve --restart Unproven refusal does not name the proof reason",
   "#710 wrong key under a no-legacy source surfaces raw SqliteException (hypothesis)",
   "#711 0.26% of non-blank lines covered by no code row (hypothesis: stale positions)"
  ],
