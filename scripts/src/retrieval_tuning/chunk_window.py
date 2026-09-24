@@ -1,7 +1,8 @@
 """Chunk size vs granite's 128-token local attention window: recall and resource cost per arm.
 
 Runs the bundled engine's own fp16 ONNX graph and tokenizer.json (pinned by SHA-256 in its
-manifest) on the CPU, one row per session run with half the cores, as the product does. The
+manifest), one row per session run as the product does, on the CPU or, on osx-arm64, through the
+onnxruntime MLX plugin with the rewritten model_fp16_mlx.onnx graph (ADR-0110). The
 chunkers are the ports in chunk_ports. Search is brute-force cosine plus an FTS5 leg fused by
 RRF (k=60), an approximation of the product's hybrid search, not a copy of it.
 """
@@ -22,6 +23,7 @@ import numpy as np
 
 from retrieval_tuning import scoring
 from retrieval_tuning.chunk_ports import chunk_code, chunk_markdown, distinct_in_order
+from retrieval_tuning.process_memory import memory_kib
 
 SPECIAL_TOKEN_RESERVATION = 2
 LOCAL_ATTENTION = 128
@@ -35,28 +37,36 @@ POSITION_BUCKETS = ((0, 64), (64, 128), (128, 256), (256, 512), (512, 1 << 30))
 # Engine
 
 
-def rss_kib() -> dict[str, int]:
-    """Current (VmRSS) and peak (VmHWM) resident set of this process, in KiB."""
-    out: dict[str, int] = {}
-    for line in Path("/proc/self/status").read_text().splitlines():
-        key, _, value = line.partition(":")
-        if key in ("VmRSS", "VmHWM"):
-            out[key] = int(value.split()[0])
-    return out
-
-
 class Engine:
-    """The bundled granite fp16 graph, CPU provider, one row per run (OnnxEmbeddingGenerator.RunEachRow)."""
+    """The bundled granite fp16 graph, one row per run (OnnxEmbeddingGenerator.RunEachRow).
 
-    def __init__(self, model_dir: Path, threads: int) -> None:
+    device "cpu" runs model_fp16.onnx on the CPU provider; "mlx" registers the plugin EP from
+    mlx_dir and runs model_fp16_mlx.onnx on it, spinning off, as OnnxEmbeddingGenerator does.
+    """
+
+    def __init__(self, model_dir: Path, threads: int, device: str = "cpu", mlx_dir: Path | None = None) -> None:
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
         self.tokenizer = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
         options = ort.SessionOptions()
         options.intra_op_num_threads = threads
-        self.session = ort.InferenceSession(str(model_dir / "model_fp16.onnx"), options,
-                                            providers=["CPUExecutionProvider"])
+        if device == "mlx":
+            options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+            if mlx_dir is None:
+                raise ValueError("device mlx needs mlx_dir (the folder holding libonnxruntime_mlx_ep.dylib)")
+            ort.register_execution_provider_library("MLXExecutionProvider",
+                                                    str(mlx_dir / "libonnxruntime_mlx_ep.dylib"))
+            options.add_provider_for_devices(
+                [d for d in ort.get_ep_devices() if d.ep_name == "MLXExecutionProvider"], {})
+            self.session = ort.InferenceSession(str(model_dir / "model_fp16_mlx.onnx"), options)
+        elif device == "cpu":
+            self.session = ort.InferenceSession(str(model_dir / "model_fp16.onnx"), options,
+                                                providers=["CPUExecutionProvider"])
+        else:
+            raise ValueError(f"unknown device {device!r}")
+        self.device = device
+        self.seen_lengths: set[int] = set()
         manifest = json.loads((model_dir / "ai-raccoon.manifest.json").read_text())
         self.window = manifest["contextWindowTokens"]
         self.dimensions = manifest["dimensions"]
@@ -65,7 +75,7 @@ class Engine:
         return len(self.tokenizer.encode(text, add_special_tokens=False).ids)
 
     def embed(self, text: str) -> tuple[np.ndarray, int, float, float]:
-        """(unit vector, tokens incl. specials, wall ms, process CPU ms) for one row."""
+        """(unit vector, tokens incl. specials, wall ms, process CPU ms) for one row; new_length says it was a first-seen shape."""
         ids = self.tokenizer.encode(text, add_special_tokens=True).ids[: self.window]
         input_ids = np.asarray([ids], dtype=np.int64)
         wall, cpu = time.perf_counter(), time.process_time()
@@ -73,6 +83,8 @@ class Engine:
                                {"input_ids": input_ids, "attention_mask": np.ones_like(input_ids)})[0][0]
         wall_ms = (time.perf_counter() - wall) * 1000
         cpu_ms = (time.process_time() - cpu) * 1000
+        self.new_length = len(ids) not in self.seen_lengths
+        self.seen_lengths.add(len(ids))
         vector = out.astype(np.float32)
         return vector / np.linalg.norm(vector), len(ids), wall_ms, cpu_ms
 
@@ -206,6 +218,13 @@ class ArmResult:
     rss_kib_after_load: int
     rss_kib_peak_ingest: int
     rss_kib_peak_total: int
+    footprint_kib_after_load: int
+    footprint_kib_peak_ingest: int
+    footprint_kib_peak_total: int
+    device: str
+    embed_ms_first_length: dict[str, float]
+    embed_ms_repeat_length: dict[str, float]
+    distinct_lengths: int
     disk_bytes: int
     vector_bytes: int
     query_ms: dict[str, float]
@@ -219,11 +238,11 @@ class ArmResult:
 
 
 def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads: int,
-            work_dir: Path) -> ArmResult:
+            work_dir: Path, device: str = "cpu", mlx_dir: Path | None = None) -> ArmResult:
     """Chunk, embed and index one corpus at one budget, then run every query twice (second pass timed)."""
     documents, queries = (memory_corpus if corpus == "memory" else code_corpus)(repo)
-    engine = Engine(model_dir, threads)
-    rss_load = rss_kib()["VmRSS"]
+    engine = Engine(model_dir, threads, device, mlx_dir)
+    mem_load = memory_kib()
     work_dir.mkdir(parents=True, exist_ok=True)
     db_path = work_dir / f"{corpus}-{chunk_tokens}.db"
     db = _open_index(db_path)
@@ -238,19 +257,20 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
             chunks += [Stored(source, c.text, c.line_start, c.line_end)
                        for c in chunk_code(text, chunk_tokens, engine.count)]
     vectors = np.zeros((len(chunks), engine.dimensions), dtype=np.float32)
-    lengths, embed_ms, embed_cpu = [], [], []
+    lengths, embed_ms, embed_cpu, first_ms, repeat_ms = [], [], [], [], []
     for i, chunk in enumerate(chunks):
         vectors[i], n, ms, cpu = engine.embed(chunk.text)
         lengths.append(n - SPECIAL_TOKEN_RESERVATION)
         embed_ms.append(ms)
         embed_cpu.append(cpu)
+        (first_ms if engine.new_length else repeat_ms).append(ms)
         db.execute("INSERT INTO chunks VALUES(?,?,?,?,?,?)",
                    (i, chunk.source, chunk.line_start, chunk.line_end, ",".join(chunk.sections), chunk.text))
         db.execute("INSERT INTO vectors VALUES(?,?)", (i, vectors[i].tobytes()))
     db.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')")
     db.commit()
     ingest_wall, ingest_cpu = time.perf_counter() - wall0, time.process_time() - cpu0
-    rss_ingest = rss_kib()["VmHWM"]
+    mem_ingest = memory_kib()
     db.execute("VACUUM")
 
     per_query: list[dict[str, object]] = []
@@ -295,10 +315,17 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
         ingest_wall_s=ingest_wall, ingest_cpu_s=ingest_cpu,
         embed_ms=_timing(embed_ms), embed_cpu_ms=_timing(embed_cpu),
         embed_ms_per_1k_tokens=sum(embed_ms) / (lengths_arr.sum() / 1000),
-        rss_kib_after_load=rss_load, rss_kib_peak_ingest=rss_ingest, rss_kib_peak_total=rss_kib()["VmHWM"],
+        rss_kib_after_load=mem_load.rss, rss_kib_peak_ingest=mem_ingest.rss_peak,
+        rss_kib_peak_total=memory_kib().rss_peak,
+        footprint_kib_after_load=mem_load.footprint, footprint_kib_peak_ingest=mem_ingest.footprint_peak,
+        footprint_kib_peak_total=memory_kib().footprint_peak, device=device,
+        embed_ms_first_length=_timing(first_ms) if first_ms else {},
+        embed_ms_repeat_length=_timing(repeat_ms) if repeat_ms else {},
+        distinct_lengths=len(set(lengths)),
         disk_bytes=db_path.stat().st_size, vector_bytes=int(vectors.nbytes),
         query_ms=_timing(q_ms), query_embed_ms=_timing(q_embed), query_cpu_ms=_timing(q_cpu),
-        gpu="not measured: no GPU in this host; the Linux package runs ORT on the CPU (ADR-0108)",
+        gpu=("MLX plugin EP (unified memory: GPU buffers count in footprint_kib_*)" if device == "mlx"
+             else "not used: CPU provider"),
         vector=mean_of("vector"), hybrid=mean_of("hybrid"), per_query=per_query, gold_position=gold_position,
     )
 
