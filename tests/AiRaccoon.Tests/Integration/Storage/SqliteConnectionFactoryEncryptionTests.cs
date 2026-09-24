@@ -1,11 +1,13 @@
 using System.Data;
 using System.Text;
+using AiRaccoon;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Setup.Cli.Commands;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
@@ -276,6 +278,50 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         });
         ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
         ex.LegacyDerivation.ShouldBeFalse();
+    }
+
+    /// <summary>
+    ///     Issue #710 regression: an unencrypted bank (env source resolving no passphrase, which is
+    ///     what the "none" source is in practice — see <see cref="EncryptionKeyResolver.ResolveAsync" />)
+    ///     that is genuinely corrupt, not wrong-keyed, must surface the raw <see cref="SqliteException" />
+    ///     so the CLI maps it to <see cref="ErrorCode.Bank.Corrupted" />. There is no key to be wrong
+    ///     about, so converting this open failure to <see cref="BankKeyMismatchException" /> would
+    ///     misreport it as <see cref="ErrorCode.Key.WrongKey" />.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_CorruptUnencryptedBank_ThrowsSqliteException26NotKeyMismatch()
+    {
+        var factory = Factory(passphrase: null);
+        Directory.CreateDirectory(Path.GetDirectoryName(factory.BankPath)!);
+        await File.WriteAllBytesAsync(factory.BankPath, "not a sqlite database at all, just garbage bytes"u8.ToArray(),
+            TestContext.Current.CancellationToken);
+
+        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        {
+            await using var conn = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        });
+
+        ex.SqliteErrorCode.ShouldBe(26);
+        CliFailureErrorCode.For(ex).ShouldBe(ErrorCode.Bank.Corrupted);
+    }
+
+    /// <summary>
+    ///     Issue #710 regression: SQLITE_BUSY/LOCKED on an env-keyed bank is transient contention,
+    ///     not a wrong key, and must reach the CLI as <see cref="ErrorCode.Bank.Busy" /> — never
+    ///     converted to <see cref="BankKeyMismatchException" />. Exercised through the
+    ///     classification seam directly: a real SQLITE_BUSY needs a second connection holding a
+    ///     conflicting lock, which is not deterministic to arrange here.
+    /// </summary>
+    [RetryFact]
+    public void ClassifyNoLegacySourceFailure_SqliteBusyOnEnvKeyedBank_PropagatesUnchanged()
+    {
+        var factory = Factory("env-passphrase");
+        var resolvedKey = new ResolvedKey("env-passphrase", "env");
+        var busyFailure = new SqliteException("database is locked", 5);
+
+        var classified = factory.ClassifyNoLegacySourceFailure(resolvedKey, busyFailure);
+
+        classified.ShouldBeSameAs(busyFailure);
     }
 
     [RetryFact]
