@@ -336,7 +336,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     /// <summary>
-    ///     Issue #710: the env source has no legacy derivation to fall back to, but a wrong key still
+    ///     The env source has no legacy derivation to fall back to, but a wrong key still
     ///     gets the same key-mismatch diagnosis as a source that does — never a raw SqliteException.
     /// </summary>
     [RetryFact]

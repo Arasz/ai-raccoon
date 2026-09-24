@@ -251,7 +251,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     }
 
     /// <summary>
-    ///     Issue #710: a source with no legacy derivation (env) must not surface a raw
+    ///     A source with no legacy derivation (env) must not surface a raw
     ///     <see cref="SqliteException" /> on a wrong key — the same key-mismatch diagnosis the
     ///     bitwarden (legacy-bearing) source gets in
     ///     <see cref="OpenBankAsync_ResolverReturnsDifferentKey_ThrowsKeyMismatchOverSqlite26" />.
@@ -281,7 +281,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     }
 
     /// <summary>
-    ///     Issue #710 regression: an unencrypted bank (env source resolving no passphrase, which is
+    ///     An unencrypted bank (env source resolving no passphrase, which is
     ///     what the "none" source is in practice — see <see cref="EncryptionKeyResolver.ResolveAsync" />)
     ///     that is genuinely corrupt, not wrong-keyed, must surface the raw <see cref="SqliteException" />
     ///     so the CLI maps it to <see cref="ErrorCode.Bank.Corrupted" />. There is no key to be wrong
@@ -306,7 +306,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
     }
 
     /// <summary>
-    ///     Issue #710 regression: SQLITE_BUSY/LOCKED on an env-keyed bank is transient contention,
+    ///     SQLITE_BUSY/LOCKED on an env-keyed bank is transient contention,
     ///     not a wrong key, and must reach the CLI as <see cref="ErrorCode.Bank.Busy" /> — never
     ///     converted to <see cref="BankKeyMismatchException" />. Exercised through the
     ///     classification seam directly: a real SQLITE_BUSY needs a second connection holding a

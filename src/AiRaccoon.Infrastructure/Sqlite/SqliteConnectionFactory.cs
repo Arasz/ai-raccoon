@@ -91,7 +91,13 @@ public sealed partial class SqliteConnectionFactory(
                 throw await DiagnoseAsync(resolvedKey, openFailure, cancellationToken).ConfigureAwait(false);
             }
 
-            throw ClassifyNoLegacySourceFailure(resolvedKey, openFailure);
+            var classified = ClassifyNoLegacySourceFailure(resolvedKey, openFailure);
+            if (ReferenceEquals(classified, openFailure))
+            {
+                throw;
+            }
+
+            throw classified;
         }
 
         // Post-open failures (extensions, vector load, schema DDL) are not key-related and
@@ -201,7 +207,7 @@ public sealed partial class SqliteConnectionFactory(
     ///     for SQLITE_NOTADB on a source that actually resolved a key — SQLCipher's signature for a
     ///     wrong key. Busy/locked, a genuinely corrupt unencrypted bank, and every other SQLite
     ///     failure are not key problems and must propagate unchanged, or the CLI misreports
-    ///     Bank.Busy/Bank.Corrupted as a key mismatch (issue #710).
+    ///     Bank.Busy/Bank.Corrupted as a key mismatch.
     /// </summary>
     internal Exception ClassifyNoLegacySourceFailure(ResolvedKey resolvedKey, SqliteException openFailure) =>
         resolvedKey.Passphrase is not null && openFailure.SqliteErrorCode == NotADatabaseErrorCode
