@@ -16,7 +16,7 @@ public class SearchParametersTests
         var defaults = new StubSource(rrfK: 60, ftsWeight: 1, vectorWeight: 1, sourceLambda: 0.1,
             consolidationThreshold: 0.1, docScoreFormula: DocScoreFormula.Max,
             candidateWindow: CandidateWindowMode.Max3X100, structureAlpha: 0.5,
-            fusionNoRegressionEnabled: false);
+            fusionNoRegressionEnabled: false, legConfidenceEnabled: false);
 
         var resolved = SearchParameters.FromSources(query, defaults);
 
@@ -29,6 +29,7 @@ public class SearchParametersTests
         resolved.CandidateWindow.ShouldBe(CandidateWindowMode.Max3X100);
         resolved.StructureAlpha.ShouldBe(0.5);
         resolved.FusionNoRegressionEnabled.ShouldBeFalse();
+        resolved.LegConfidenceEnabled.ShouldBeFalse();
     }
 
     [Fact]
@@ -45,6 +46,26 @@ public class SearchParametersTests
         resolved.CandidateWindow.ShouldBe(SearchParameterSettingsKeys.DefaultCandidateWindow);
         resolved.StructureAlpha.ShouldBe(SearchParameterSettingsKeys.DefaultStructureAlpha);
         resolved.FusionNoRegressionEnabled.ShouldBe(SearchParameterSettingsKeys.DefaultFusionNoRegressionEnabled);
+        resolved.LegConfidenceEnabled.ShouldBe(SearchParameterSettingsKeys.DefaultLegConfidenceEnabled);
+    }
+
+    /// <summary>The new setting must default off, exactly like its ADR-0078 sibling: never change an existing default.</summary>
+    [Fact]
+    public void FromSources_WithNoLegConfidenceOpinionAnywhere_DefaultsToDisabled()
+    {
+        var resolved = SearchParameters.FromSources(new StubSource());
+
+        resolved.LegConfidenceEnabled.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void FromSources_WithLegConfidenceEnabledSetting_SettingWins()
+    {
+        var defaults = new StubSource(legConfidenceEnabled: true);
+
+        var resolved = SearchParameters.FromSources(new StubSource(), defaults);
+
+        resolved.LegConfidenceEnabled.ShouldBeTrue();
     }
 
     [Fact]
@@ -147,7 +168,8 @@ public class SearchParametersTests
         DocScoreFormula? docScoreFormula = null,
         CandidateWindowMode? candidateWindow = null,
         double? structureAlpha = null,
-        bool? fusionNoRegressionEnabled = null) : ISearchParametersSource
+        bool? fusionNoRegressionEnabled = null,
+        bool? legConfidenceEnabled = null) : ISearchParametersSource
     {
         public int? RrfK { get; } = rrfK;
         public int? FtsWeight { get; } = ftsWeight;
@@ -158,5 +180,6 @@ public class SearchParametersTests
         public CandidateWindowMode? CandidateWindow { get; } = candidateWindow;
         public double? StructureAlpha { get; } = structureAlpha;
         public bool? FusionNoRegressionEnabled { get; } = fusionNoRegressionEnabled;
+        public bool? LegConfidenceEnabled { get; } = legConfidenceEnabled;
     }
 }

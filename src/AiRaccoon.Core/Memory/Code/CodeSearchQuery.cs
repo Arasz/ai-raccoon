@@ -30,4 +30,5 @@ public sealed record CodeSearchQuery(
     CandidateWindowMode? ISearchParametersSource.CandidateWindow => CandidateWindow;
     double? ISearchParametersSource.StructureAlpha => null;
     bool? ISearchParametersSource.FusionNoRegressionEnabled => null;
+    bool? ISearchParametersSource.LegConfidenceEnabled => null;
 }

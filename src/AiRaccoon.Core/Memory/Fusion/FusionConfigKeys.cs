@@ -12,4 +12,17 @@ public static class FusionConfigKeys
 
     /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
     public static bool ParseNoRegressionEnabled(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+
+    // Confidence-weighted RRF (issue #706, docs/plans/2026-08-17-issue-close-357-367.md WP5): each
+    // leg's RRF weight is scaled by LegConfidence.Weight before Fuse runs. Default off — the offline
+    // corpus cannot adjudicate a fusion change (docs/adr/0072) any more than ADR-0078's flag could.
+    public const string LegConfidenceEnabledGlobal = "fusion.legConfidence.enabled.global";
+
+    public const bool DefaultLegConfidenceEnabled = false;
+
+    /// <summary>The rank-k window LegConfidence.Weight measures each leg's own separation over.</summary>
+    public const int LegConfidenceK = 5;
+
+    /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
+    public static bool ParseLegConfidenceEnabled(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
 }

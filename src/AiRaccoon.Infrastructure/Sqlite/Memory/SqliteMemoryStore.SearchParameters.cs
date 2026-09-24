@@ -23,7 +23,10 @@ public sealed partial class SqliteMemoryStore
         var fusionFlag = await connection.QuerySingleOrDefaultAsync<string?>(
                 Def(MemorySql.SelectSetting, new { key = FusionConfigKeys.NoRegressionEnabledGlobal }, cancellationToken))
             .ConfigureAwait(false);
-        return new SettingsBackedSearchParameters(rows, fusionFlag);
+        var legConfidenceFlag = await connection.QuerySingleOrDefaultAsync<string?>(
+                Def(MemorySql.SelectSetting, new { key = FusionConfigKeys.LegConfidenceEnabledGlobal }, cancellationToken))
+            .ConfigureAwait(false);
+        return new SettingsBackedSearchParameters(rows, fusionFlag, legConfidenceFlag);
     }
 
     /// <summary>A sparse settings snapshot: null per option when the key is absent or malformed.</summary>
@@ -31,11 +34,13 @@ public sealed partial class SqliteMemoryStore
     {
         private readonly IReadOnlyDictionary<string, string> _retrieval;
         private readonly string? _fusionFlag;
+        private readonly string? _legConfidenceFlag;
 
-        public SettingsBackedSearchParameters(IReadOnlyDictionary<string, string> retrieval, string? fusionFlag)
+        public SettingsBackedSearchParameters(IReadOnlyDictionary<string, string> retrieval, string? fusionFlag, string? legConfidenceFlag)
         {
             _retrieval = retrieval;
             _fusionFlag = fusionFlag;
+            _legConfidenceFlag = legConfidenceFlag;
         }
 
         public int? RrfK => SearchParameterSettingsKeys.ParseNullableInt(Get(SearchParameterSettingsKeys.RrfK), 1);
@@ -53,6 +58,7 @@ public sealed partial class SqliteMemoryStore
                 Get(SearchParameterSettingsKeys.CandidateWindow));
         public double? StructureAlpha => SearchParameterSettingsKeys.ParseNullableDouble(Get(SearchParameterSettingsKeys.StructureAlpha), 0.0, 1.0);
         public bool? FusionNoRegressionEnabled => SearchParameterSettingsKeys.ParseNullableBool(_fusionFlag);
+        public bool? LegConfidenceEnabled => SearchParameterSettingsKeys.ParseNullableBool(_legConfidenceFlag);
 
         private string? Get(string key) => _retrieval.GetValueOrDefault(key);
     }

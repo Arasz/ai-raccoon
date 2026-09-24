@@ -24,6 +24,7 @@ public class SearchParameterSettingsKeysTests
         SearchParameterSettingsKeys.DefaultCandidateWindow.ShouldBe(CandidateWindowMode.Max3X100);
         SearchParameterSettingsKeys.DefaultStructureAlpha.ShouldBe(0.5);
         SearchParameterSettingsKeys.DefaultFusionNoRegressionEnabled.ShouldBeFalse();
+        SearchParameterSettingsKeys.DefaultLegConfidenceEnabled.ShouldBeFalse();
     }
 
     [Fact]
@@ -38,6 +39,7 @@ public class SearchParameterSettingsKeysTests
         SearchParameterSettingsKeys.CandidateWindow.ShouldBe("retrieval.candidateWindow");
         SearchParameterSettingsKeys.StructureAlpha.ShouldBe("retrieval.structureAlpha");
         SearchParameterSettingsKeys.FusionNoRegressionEnabled.ShouldBe("fusion.noRegression.enabled.global");
+        SearchParameterSettingsKeys.LegConfidenceEnabled.ShouldBe("fusion.legConfidence.enabled.global");
     }
 
     [Fact]

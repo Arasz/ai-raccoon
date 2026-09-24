@@ -568,14 +568,15 @@ public sealed partial class SqliteMemoryStore(
         var fusionStart = timeProvider.GetTimestamp();
         var ftsCandidates = ModalityCandidates.ByBm25(searchResults);
         var vectorCandidates = ModalityCandidates.ByCosine(searchResults);
+        var (ftsWeight, vectorWeight) = EffectiveLegWeights(parameters, ftsCandidates, vectorCandidates);
         // S1 capture (Stage 1): FuseWithEvidence fuses exactly like Fuse while attaching each
         // served hash's pre-normalization evidence. Leg names reuse the ModalityLeg vocabulary
         // from LegsFor ("fts"/"vector") — "vector" is the name the seam reads the content cosine by.
         // The carry below is an O(1) reference handoff, keyed by hash: the Merger's
         // reorder/consolidation/drop needs no remapping, and no SQL is issued anywhere on it.
         var fused = ReciprocalRankFusion.FuseWithEvidence(
-            [new NamedWeightedCandidates(ftsCandidates, parameters.FtsWeight, "fts"),
-             new NamedWeightedCandidates(vectorCandidates, parameters.VectorWeight, "vector")],
+            [new NamedWeightedCandidates(ftsCandidates, ftsWeight, "fts"),
+             new NamedWeightedCandidates(vectorCandidates, vectorWeight, "vector")],
             parameters.RrfK, 0, int.MaxValue);
         var results = plan.IsPathQuery ? AnchorMatchesFirst(fused.Results, searchResults.AllTermsMatched) : fused.Results;
         return new FusedSearchResult(results, timeProvider.GetElapsedTime(fusionStart))

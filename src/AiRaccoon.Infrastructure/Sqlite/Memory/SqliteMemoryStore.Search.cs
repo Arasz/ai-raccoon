@@ -39,6 +39,32 @@ public sealed partial class SqliteMemoryStore
         parameters.IsVectorQueried(queryVector) ? ModalityLeg.From("vector", vectorCandidates) : ModalityLeg.Skipped("vector")
     ];
 
+    /// <summary>
+    ///     Confidence-weighted RRF (issue #706, docs/adr/0078's sibling flag): off by default and
+    ///     byte-identical to the plain configured weights when off. On, each leg's own weight is
+    ///     scaled by how decisively its candidates' Ranking (already best-first — bm25 ascending,
+    ///     cosine descending, see ModalityCandidates) separates between rank 1 and rank k, before
+    ///     Fuse ever runs — the only point where injected magnitude can still change the served
+    ///     ORDER (ADR-0058: the second fusion in SearchResultMerger.Merge rebuilds scores from
+    ///     rank, so anything not already reflected in order here is lost).
+    /// </summary>
+    internal static (double FtsWeight, double VectorWeight) EffectiveLegWeights(
+        SearchParameters parameters,
+        IReadOnlyList<MemorySearchResult> ftsCandidates,
+        IReadOnlyList<MemorySearchResult> vectorCandidates)
+    {
+        if (!parameters.LegConfidenceEnabled)
+        {
+            return (parameters.FtsWeight, parameters.VectorWeight);
+        }
+
+        var ftsWeight = LegConfidence.Weight(
+            [.. ftsCandidates.Select(candidate => candidate.Ranking)], FusionConfigKeys.LegConfidenceK, parameters.FtsWeight);
+        var vectorWeight = LegConfidence.Weight(
+            [.. vectorCandidates.Select(candidate => candidate.Ranking)], FusionConfigKeys.LegConfidenceK, parameters.VectorWeight);
+        return (ftsWeight, vectorWeight);
+    }
+
 
     /// <summary>
     ///     Keyword modality: FTS5 candidates without snippet() — deferred (see <see cref="BuildFtsResults" />).

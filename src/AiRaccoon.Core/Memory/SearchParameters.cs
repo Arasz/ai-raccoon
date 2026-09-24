@@ -26,6 +26,8 @@ public interface ISearchParametersSource
     double? StructureAlpha { get; }
 
     bool? FusionNoRegressionEnabled { get; }
+
+    bool? LegConfidenceEnabled { get; }
 }
 
 /// <summary>
@@ -41,7 +43,8 @@ public sealed record SearchParameters(
     DocScoreFormula DocScoreFormula,
     CandidateWindowMode CandidateWindow,
     double StructureAlpha,
-    bool FusionNoRegressionEnabled)
+    bool FusionNoRegressionEnabled,
+    bool LegConfidenceEnabled)
 {
     /// <summary>
     ///     Resolves the options left to right: the first source with a value for an option
@@ -66,7 +69,9 @@ public sealed record SearchParameters(
             First(sources, source => source.CandidateWindow) ?? SearchParameterSettingsKeys.DefaultCandidateWindow,
             First(sources, source => source.StructureAlpha) ?? SearchParameterSettingsKeys.DefaultStructureAlpha,
             First(sources, source => source.FusionNoRegressionEnabled)
-            ?? SearchParameterSettingsKeys.DefaultFusionNoRegressionEnabled);
+            ?? SearchParameterSettingsKeys.DefaultFusionNoRegressionEnabled,
+            First(sources, source => source.LegConfidenceEnabled)
+            ?? SearchParameterSettingsKeys.DefaultLegConfidenceEnabled);
 
         Validator.Instance.ValidateAndThrow(resolved);
         return resolved;

@@ -22,6 +22,7 @@ public static class SearchParameterSettingsKeys
 
     // Kept at its original key for back-compat; the namespace inconsistency is deliberate.
     public const string FusionNoRegressionEnabled = FusionConfigKeys.NoRegressionEnabledGlobal;
+    public const string LegConfidenceEnabled = FusionConfigKeys.LegConfidenceEnabledGlobal;
 
     // Chosen values, docs/adr/0006 (pinned by SearchParameterSettingsKeysTests).
     // DefaultRrfK is aliased to SearchQuery's constant so the value lives in one place.
@@ -34,6 +35,7 @@ public static class SearchParameterSettingsKeys
     public const CandidateWindowMode DefaultCandidateWindow = CandidateWindowMode.Max3X100;
     public const double DefaultStructureAlpha = 0.5;
     public const bool DefaultFusionNoRegressionEnabled = FusionConfigKeys.DefaultNoRegressionEnabled;
+    public const bool DefaultLegConfidenceEnabled = FusionConfigKeys.DefaultLegConfidenceEnabled;
 
     /// <summary>Parses a setting value, or null when absent, malformed or below *minInclusive*.</summary>
     public static int? ParseNullableInt(string? value, int minInclusive)

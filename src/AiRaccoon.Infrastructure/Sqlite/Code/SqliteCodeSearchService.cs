@@ -194,6 +194,7 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
                 Get(SearchParameterSettingsKeys.CandidateWindow));
         public double? StructureAlpha => null; // deliberately never resolved from settings here (§12.2 H7): code has no structure modality
         public bool? FusionNoRegressionEnabled => null;
+        public bool? LegConfidenceEnabled => null;
 
         private string? Get(string key) => retrieval.GetValueOrDefault(key);
     }
