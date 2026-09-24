@@ -26,9 +26,17 @@
         <None Include="..\..\README.md" Pack="true" PackagePath="/"/>
     </ItemGroup>
 
+    <!-- CopyToOutputDirectory alone puts these under tools/net10.0/<rid>/Models/ — where the packed
+         RID tool actually runs from and where BundledModel.ResolveDirectory finds them first. Adding
+         Pack="true" PackagePath="Models/…" here also copies them to the package root and into the
+         RID-agnostic shim package that nothing reads, tripling the ~97 MB weights across packages.
+         The Web SDK's default items separately glob *.json as Content and pack it again under
+         content/ and contentFiles/; removing that glob for the bundled model's json files leaves
+         the CopyToOutputDirectory copy below as their only one. -->
     <ItemGroup>
-        <None Include="Models/vocab.txt" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/"/>
-        <None Include="Models/granite-embedding-small-english-r2/*" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="Models/granite-embedding-small-english-r2/"/>
+        <Content Remove="Models/granite-embedding-small-english-r2/*.json"/>
+        <None Include="Models/vocab.txt" CopyToOutputDirectory="PreserveNewest"/>
+        <None Include="Models/granite-embedding-small-english-r2/*" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <!-- ADR-0110: the opt-in MLX execution provider's native runtime, osx-arm64 only — fetched by
