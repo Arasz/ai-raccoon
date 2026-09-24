@@ -19,14 +19,14 @@ themselves, since everything inside them is exactly what a wrong key also fails 
 A sidecar, `memory.db.keycheck`, sits next to the bank (`BankPaths.DirectoryFor`) and proves which
 key last opened it successfully, independent of the bank's own (possibly corrupt) contents.
 
-### D1 — Content: a bank-id and a keyed tag, never the key
+### D1 — Content: a bank-id, a per-bank salt and work factor, and a keyed tag — never the key
 
-The sidecar holds two fixed-length fields, concatenated: a random 16-byte bank-id (minted once,
-alongside the tag) and a 32-byte tag, `HKDF-SHA256(the raw bank key, info: domain ‖ bank-id)`,
-where `domain = "ai-raccoon-keycheck/v1"`. One platform-KDF call does the whole job — HKDF's own
-construction is already HMAC-based internally, so folding the bank-id into `info` alongside the
-domain binds the tag to (key, domain, bank-id) directly, with no separate hand-assembled
-derive-then-HMAC step on top (the repo's no-hand-rolled-crypto gate,
+The sidecar holds four fields, concatenated: a random 16-byte bank-id, a random 16-byte salt, a
+4-byte big-endian iteration count, and a 32-byte tag, `HKDF-SHA256(key material, info: domain ‖
+bank-id)`, where `domain = "ai-raccoon-keycheck/v1"`. HKDF's own construction is already
+HMAC-based internally, so folding the bank-id into `info` alongside the domain binds the tag to
+(key material, domain, bank-id) directly, with no separate hand-assembled derive-then-HMAC step on
+top (the repo's no-hand-rolled-crypto gate,
 `NoHandRolledCryptoTests.RawHashPrimitives_AppearOnlyOnDocumentedSites`, reserves that two-step
 shape for a site that *applies* a key a distinct earlier HKDF call already produced, such as
 `SyncBlobAuthenticator`, not for a fresh derivation like this one). The `info` string is a domain
@@ -35,6 +35,41 @@ their own purposes — the same platform-primitive pattern, never a hand-rolled 
 (`KeyCheckSidecar.cs`). Verification recomputes the tag from a candidate key and compares with
 `CryptographicOperations.FixedTimeEquals`. The sidecar can prove a key wrong or right without ever
 being able to reveal or reconstruct that key.
+
+### D1a — A leaked sidecar must not be an HMAC-speed dictionary oracle on a human passphrase
+
+Found in review (#729): the shape above, taken straight into HKDF over the raw key bytes, is a
+single fast HMAC-family call. For the `env` source that raw input is a human-typed
+`AIRACCOON_DB_PASSPHRASE` — low entropy by construction — so a leaked 48-byte (now larger) sidecar
+let an attacker brute-force it at HKDF speed instead of paying SQLCipher's own PBKDF2 cost
+(`kdf_iter`, 256,000 by default). `key material` above is therefore not always the raw key bytes:
+`ComputeTag` first checks whether the candidate key is SQLCipher's raw-key literal shape
+(`x'<hex>'`, case-insensitive on the `x`, even-length valid hex) — already 32 high-entropy bytes
+with nothing to dictionary-attack — and only when it is *not* that shape does it pre-stretch the
+key with `Rfc2898DeriveBytes.Pbkdf2` (SHA-256, the stored salt, the stored iteration count, ≥
+256,000) before folding the result into the same HKDF step. The iteration count is stored per
+record rather than assumed from a constant, so raising `WorkFactorIterations` later never
+invalidates a sidecar minted under the old floor — it keeps verifying at the count it was minted
+with. A candidate key's shape alone decides which path a verify takes, exactly mirroring the mint:
+the true key always takes the same path at both ends, so correctness never depends on knowing the
+source out of band, and no source metadata needs threading into `SqliteConnectionFactory`'s call
+sites. Rejected: stretching every key unconditionally (measured ~43ms per PBKDF2-SHA256 call at
+256,000 iterations on osx-arm64/M-series — negligible for a raw 32-byte key that needed none of it,
+but every source pays it regardless of whether anything is actually low-entropy); threading the
+resolved key's `SourceName` through every call site instead of inspecting the key's own shape (more
+plumbing, for a distinction the key string already reveals unambiguously). `KeyCheckSidecarTests`
+proves the stored tag cannot be reproduced by the pre-fix (unstretched) computation and that a raw
+key literal skips the stretch; `NoHandRolledCryptoTests.ObsoletePasswordKdfs_AreNotUsed` narrows to
+ban only the obsolete `Rfc2898DeriveBytes` instance constructor and `PasswordDeriveBytes` — the
+modern static `Pbkdf2(...)` one-shot method (explicit hash, explicit iteration count) is not
+obsolete and is `KeyCheckSidecar`'s one documented caller.
+
+**Per-open cost, measured**: `SqliteConnectionFactory.EnsureKeyCheck` runs on every bank open (most
+store operations open a bank connection per call — D3 below), not once per process, so this ~43ms
+lands on every `env`-passphrase open, every time. Accepted as the security/latency trade-off this
+finding asks for; a raw-key or Bitwarden-derived source pays nothing extra (the shape check skips
+the stretch for those). Revisit with a process-lifetime cache keyed on the resolved key if this
+proves user-visible in practice — not built here, since nothing yet shows it is needed.
 
 ### D2 — File handling: 0600, refuse-not-chmod, atomic writes
 
@@ -110,6 +145,7 @@ later confident diagnosis depends on.
 ## Evidence
 
 `tests/AiRaccoon.Tests/Unit/Encryption/KeyCheckSidecarTests.cs`,
+`tests/AiRaccoon.Tests/Unit/Encryption/NoHandRolledCryptoTests.cs`,
 `tests/AiRaccoon.Tests/Integration/Storage/SqliteConnectionFactoryEncryptionTests.cs`,
 `tests/AiRaccoon.Tests/Integration/EncryptionBitwardenIntegrationTests.cs`,
 `tests/AiRaccoon.Tests/Unit/Setup/DoctorCommandsTests.cs`,
