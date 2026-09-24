@@ -235,6 +235,35 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         ex.Message.ShouldContain(CodeChunker.DefaultBudget.ToString());
     }
 
+    /// <summary>
+    ///     The endpoint refuses an unusable base-url the same way the CLI does (ADR-0107 PC.1), before
+    ///     any setting is written, so a direct caller cannot open a migration nothing can reach.
+    /// </summary>
+    [RetryTheory]
+    [InlineData("not-a-url")]
+    [InlineData("localhost:8080")]
+    public async Task PostModel_BaseUrlIsNotAUsableHttpUrl_IsABadRequest_WithNothingPersisted(string baseUrl)
+    {
+        var response = await _client.PostAsJsonAsync(SettingsProtocol.ModelPath,
+            new ModelMigrationRequest("openai", "some-model", baseUrl), TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var rowsResponse = await _client.GetAsync("/settings?prefix=embedding.", TestContext.Current.CancellationToken);
+        (await rowsResponse.Content.ReadFromJsonAsync<SettingRows>(TestContext.Current.CancellationToken))
+            .ShouldNotBeNull().Rows.ShouldBeEmpty("a refused base-url must not persist settings or open a migration");
+    }
+
+    /// <summary>A usable https base-url is unaffected by the base-url guard.</summary>
+    [RetryFact]
+    public async Task PostModel_AUsableHttpsBaseUrl_Activates()
+    {
+        var response = await _client.PostAsJsonAsync(SettingsProtocol.ModelPath,
+            new ModelMigrationRequest("openai", "some-model", "https://api.example.com/v1"),
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
     private Task<HttpResponseMessage> PutAsync(string key, string value) =>
         _client.PutAsJsonAsync("/settings", new SettingWrite(key, value), TestContext.Current.CancellationToken);
 }

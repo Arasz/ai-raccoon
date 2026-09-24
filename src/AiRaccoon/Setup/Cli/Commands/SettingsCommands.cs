@@ -12,6 +12,7 @@ using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Download;
+using AiRaccoon.Settings;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Setup.Cli.Commands;
@@ -136,7 +137,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
 
         // ADR-0107 PC.1: refused before anything is persisted or probed — a base-url this malformed
         // can never be reached, so failing here (78) beats a misleading EndpointUnreachable (77).
-        if (baseUrl is not null && !IsUsableHttpUrl(baseUrl))
+        if (baseUrl is not null && !BaseUrlValidation.IsUsableHttpUrl(baseUrl))
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: model embedding set openai: '{baseUrl}' is not a usable absolute http(s) URL; " +
@@ -226,11 +227,6 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
 
         return declared;
     }
-
-    /// <summary>An absolute URI an HTTP client can actually dial — http(s) only, and not e.g. a scheme-less "host:port".</summary>
-    private static bool IsUsableHttpUrl(string value) =>
-        Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
     /// <summary>
     ///     §3.3 D-E9: the CLI's fast pre-flight before the store's own checks (the store is the
