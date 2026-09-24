@@ -406,10 +406,10 @@ A healthy bank:
 
 ```
 ai-raccoon doctor: /tmp/doctor-demo-healthy/memory.db
-user_version: 11 (this binary: 11)
-application_id: -1765263351 (expected: -1765263351)
-memory engine: faxenoff/code-daemon-embed-v1 (/tmp/doctor-demo-healthy/models/faxenoff__code-daemon-embed-v1)
-code engine: faxenoff/code-daemon-embed-v1 (/tmp/doctor-demo-healthy/models/code-daemon-embed-v1)
+user_version: 17 (this binary: 17)
+application_id: 1412756172 (expected: 1412756172)
+memory engine: onnx-community/granite-embedding-small-english-r2-ONNX (/tmp/doctor-demo-healthy/models/granite-embedding-small-english-r2)
+code engine: onnx-community/granite-embedding-small-english-r2-ONNX (/tmp/doctor-demo-healthy/models/granite-embedding-small-english-r2)
 embedding threads: 5 (halved-core default)
 memory rows pending: 0
 code rows pending: 0

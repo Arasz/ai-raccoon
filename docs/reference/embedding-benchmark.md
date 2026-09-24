@@ -1,8 +1,69 @@
 # Embedding benchmark
 
-Measured retrieval quality and latency for the embedding models this server can
-use, on a fixed corpus, so the numbers are reproducible. Full runnable harness
-and per-run instructions: [`benchmarks/README.md`](../../benchmarks/README.md).
+Measured retrieval quality and latency for the embedding models this server can use. The
+current bundled default — for both memory and code, since 1.47.0 — is
+`granite-embedding-small-english-r2` (fp16, 384-dim, ADR-0108). The sections below put that
+model's own measurements first; the older multi-backend comparison further down predates it and
+used a different harness (LLamaSharp/GGUF and LM Studio, not the ONNX path AiRaccoon ships), so it
+is kept for the harness and methodology, not as a description of what runs today.
+
+## Current default: granite-embedding-small-english-r2 (fp16)
+
+Measured against the two engines it replaced (memory's bundled `all-MiniLM-L6-v2` int8, and the
+code corpus's downloaded `faxenoff/code-daemon-embed-v1`) across four evals: a documented-method
+code eval built from this repository, a 12-language/72-query code eval (`#673`'s corpus), the
+174-document memory corpus, and a 150-document/1,037-chunk "title → document" eval built from a
+copy of a live bank.
+
+| engine | size | code (this repo) MRR | code (12 languages) MRR@10 | memory nDCG@10 | bank nDCG@10 |
+|---|---:|---:|---:|---:|---:|
+| all-MiniLM-L6-v2 int8 (memory default before 1.47.0) | 23 MB | 0.484 | 0.643 | 0.605 | 0.347 |
+| code-daemon-embed-v1 (code default before 1.47.0) | 179 MB | 0.324 | 0.391 | 0.573 | – |
+| **granite-embedding-small-english-r2 fp16 (current default)** | 97 MB | –¹ | **0.788** | **0.632**² | **0.377** |
+
+¹ Not separately measured for fp16 on this eval; the int8 export (measured here) scored 0.630, and
+fp16/fp32 vectors agree with int8's architecture at cosine 1.00000 on CPU.<br>
+² The fp32 export scored 0.636 on the same eval; fp16 and fp32 agree at cosine 1.00000 on CPU.
+
+**Evidence:** [ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md).
+
+### Code retrieval, through the product's own eval harness
+
+Full-pipeline numbers — identifier-aware keyword search, HTML/CSS/SQL indexing, and the embedding
+engine together — on the 12-language, 332-query code corpus (`scripts/retrieval_tuning/`):
+
+| engine / stack | nDCG@5 | hit@1 | hit@5 | drain (1,775 chunks) |
+|---|---:|---:|---:|---:|
+| code-daemon-embed-v1, pre-identifier-search baseline | 0.501 | 0.446 | 0.581 | 120 s |
+| bundled granite fp16, same baseline stack | 0.603 | 0.554 | 0.660 | 44 s |
+| granite + HTML/CSS/SQL indexing + identifier-split keyword column (shipped) | **0.824** | **0.768** | **0.892** | 32 s |
+
+**Evidence:** [`docs/work/2026-09-23-code-retrieval-eval-results.md`](../work/2026-09-23-code-retrieval-eval-results.md) (F11, F12).
+
+### Latency (Apple M4, ORT 1.30.0, one row per run)
+
+| provider | precision | 128 tokens | 512 tokens |
+|---|---|---:|---:|
+| CPU | fp32 | ~12 ms | ~50 ms |
+| WebGPU (macOS) | fp16 | ~9 ms | ~29 ms |
+
+The WebGPU execution provider also costs 5–10× less process CPU per embed than the CPU provider,
+at the same or better latency: on the fp32 export, 61–64 ms of CPU time on the CPU provider becomes
+4.6–6.9 ms on WebGPU at 128 tokens, and 253–261 ms becomes 52–58 ms at 512 tokens.
+
+**Evidence:** [ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md).
+
+---
+
+## Historical: pre-granite backend comparison (2026-08-03)
+
+**This section predates ADR-0108 and does not describe the bundled engine above.** It compared a
+GGUF build of `all-MiniLM-L6-v2` — run through LLamaSharp, not the ONNX Runtime path AiRaccoon
+actually ships as its bundled engine — against two models served remotely from LM Studio. Kept for
+the harness and methodology; the model names below (`qwen3-embedding-0.6b`,
+`embeddinggemma-300m`) are what was actually measured — neither is `text-embedding-3-small` nor
+`bge-m3`, the models named in the how-to's OpenAI/Ollama recipes. Full runnable harness and
+per-run instructions: [`benchmarks/README.md`](../../benchmarks/README.md).
 
 ## What is being compared
 
@@ -95,11 +156,13 @@ trade-off is:
   37–90 ms per query, ~21 MB on disk vs 334–639 MB, no server process, no
   network dependency, works offline.
 
-**Recommendation:** start with the local model (`scripts/download-embedding-model.py
-all-minilm`). Only move to a served model if retrieval quality — especially
-nDCG — proves insufficient on your own corpus: the served models are 4–10×
-slower per query and 15–30× heavier, for a quality gain visible only in the
-top-10 ranking, not in whether the right memory is found first.
+**Recommendation (as it stood for this comparison):** start with the local model. Only move to a
+served model if retrieval quality — especially nDCG — proves insufficient on your own corpus: the
+served models are 4–10× slower per query and 15–30× heavier, for a quality gain visible only in
+the top-10 ranking, not in whether the right memory is found first. **This still holds today**,
+but the local model to start with is the bundled granite-embedding-small-english-r2 above, which
+needs no download — `ai-raccoon model embedding set local` activates it directly (see
+[Configure embedding engines](../how-to/configure-embedding-engines.md)).
 
 ## How to reproduce
 

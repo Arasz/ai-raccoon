@@ -41,9 +41,9 @@ config channel (see [Command-line options](#command-line-options)).
 
 | Tool                           | Parameters                                                                                                                                                  | Returns                                                                                            |
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
-| `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt}`                                                                 |
+| `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt, stored=true, reason?}`                                           |
 | `memory_get`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
-| `memory_search`                | `projectId`, `query`, `sessionId!`, `scope=all\|project\|shared`, `workspaceId?`, `limit=8`, `minRelativeScore=0.6`, `rrfK=60`, `ftsWeight=1`, `vectorWeight=1`, `contextLabel?`, `kind=memory\|code\|both` (default `both`) | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], evidenceByHash?:{<hash>:{hash, fusionStrength, legs:[{legName, rank}], cosine?}}, fusionStats?:{topMargin?, topVsMedian?, maxPossible, participatingLegs}, unranked?:true, truncation?:[{floor, threshold, dropped}], warning?}` |
+| `memory_search`                | `projectId`, `query`, `sessionId!`, `scope=all\|project\|shared`, `workspaceId?`, `limit=8`, `minRelativeScore=0.6`, `rrfK?` (else 60), `ftsWeight?` (else 1), `vectorWeight?` (else 1), `sourceLambda?` (else 0.1), `consolidationThreshold?` (else 0.1), `docScoreFormula?` ("max"\|"sum", else "max"), `candidateWindow?` ("max3x100"\|"max5x50", else "max3x100"), `contextLabel?`, `kind=memory\|code\|both` (default `both`), `codeLimit?`, `codeMinRelativeScore?` | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], evidenceByHash?:{<hash>:{hash, fusionStrength, legs:[{legName, rank}], cosine?}}, fusionStats?:{topMargin?, topVsMedian?, maxPossible, participatingLegs}, unranked?:true, truncation?:[{floor, threshold, dropped}], warning?}` |
 | `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`, `servedRank?`                                                                                                                    | `{recorded: true}`                                                                                 |
 | `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: true}`                                                                                 |
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
@@ -55,7 +55,7 @@ config channel (see [Command-line options](#command-line-options)).
 | `memory_ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
 | `memory_ingest_directory`      | `projectId`, `path`, `context?`                                                                                                                             | `{scanned: n}`                                                                                     |
 | `memory_embed_pending`         | `projectId`, `limit?`                                                                                                                                       | `{processed, pending}`                                                                             |
-| `memory_watch_add`             | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
+| `memory_watch_add`             | `projectId`, `path`                                                                                                                                         | `{projectId, path, pruned: [], absorbedBy?}`                                                       |
 | `memory_watch_status`          | `projectId`                                                                                                                                                 | `{watches: [{projectId, path, state, lastError?, lastSync?}]}`                                     |
 | `memory_watch_remove`          | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
 | `memory_workspace_begin`       | `projectId`, `agentId?`, `name?`                                                                                                                            | `{workspaceId, context}`                                                                           |
@@ -195,8 +195,9 @@ config channel (see [Command-line options](#command-line-options)).
   from "everything failed" (`failures` covers the whole batch), and can see partial success instead
   of a single pass/fail verdict for the batch.
 - **Embedding engine (CLI, not a tool):** `ai-raccoon model embedding set local [path]` selects
-  the bundled int8 ONNX all-MiniLM-L6-v2 (in-process, ~23 MB, Apache-2.0, SHA-256
-  pinned); `ai-raccoon model embedding set openai {model-id} [base-url] [--api-key <key>]`
+  the bundled granite-embedding-small-english-r2, fp16 export (in-process, ~97 MB,
+  Apache-2.0, SHA-256 pinned, GPU-first where the platform has one — ADR-0108);
+  `ai-raccoon model embedding set openai {model-id} [base-url] [--api-key <key>]`
   selects any OpenAI-compatible `baseUrl` (default `https://api.openai.com/v1`).
   `model` is the model id for openai or a custom ONNX path for local; it defaults to
   the bundled model for local, is required for openai. A local **directory** must contain
@@ -222,7 +223,9 @@ config channel (see [Command-line options](#command-line-options)).
   its own `embedding.codeModel`/`embedding.codeEngine`/`embedding.codeDimensions` settings rows.
   `<dir>` must contain `ai-raccoon.manifest.json`; its declared dimension is accepted as-is and
   `vec_code` is reconciled to it in the same transaction (like the memory bank's D3 reconcile —
-  fresh banks start at `float[768]`, the default-model dimension). A missing/invalid manifest is
+  fresh banks and legacy ones default to `float[768]`, an arbitrary starting shape from before
+  any engine is configured, not tied to any particular model's dimension — vec-code-unfix-dim).
+  A missing/invalid manifest is
   refused with the loader's own error. On success the write commits in one transaction with
   invalidating every already-embedded code row back to `pending` — `vec_code` empties at that
   same commit, no stale-vector window — and the `code-reindex` maintenance job signals the embed
@@ -230,8 +233,9 @@ config channel (see [Command-line options](#command-line-options)).
   own on-demand
   cadence, rather than re-embedding inline itself; there is no outbox, no relay wait, and memory
   tools are never blocked.
-  `ai-raccoon model code set default` downloads `faxenoff/code-daemon-embed-v1` (187 MB, if not
-  already present) and activates it in one command — the recommended path
+  `ai-raccoon model code set default` activates the bundled granite-embedding-small-english-r2
+  model — the same files memory uses — for the code corpus; nothing is downloaded (ADR-0108,
+  replacing the earlier default of downloading `faxenoff/code-daemon-embed-v1`)
   (`CodeEngineSetup.DefaultModelCommand`, the exact string the search warning, `doctor`, and the
   `memory_search` tool description all quote). For a non-default model, the manual two-step still
   applies: `ai-raccoon model download {repo-id}` then `ai-raccoon model code
@@ -798,7 +802,10 @@ meter, and the built-in `System.Runtime` meter. See
 [ADR 0020](../adr/0020-always-on-http-stdio-proxy.md).
 
 Config verbs (each writes settings rows in the bank's settings table; the running
-server hot-reloads them):
+server hot-reloads them). This section covers the memory/embedding/retrieval/sync verbs
+inline; [cli-reference.md](cli-reference.md) is the complete verb tree, including
+`settings noise`, `settings queryguard`, `settings performance`, `repair`, `doctor` and
+every exit code.
 
 Every family below lives under the top-level `settings` command
 (`ai-raccoon settings <family> …`), with four exceptions that stay top-level because they
@@ -822,24 +829,16 @@ ai-raccoon model embedding set openai {model-id} [base-url] [--api-key <key>]
 ai-raccoon settings model embedding reset
 ai-raccoon settings model embedding show
 ai-raccoon settings model threads {n}       # ORT intra-op thread cap; 0 = ORT default, unset = max(1, logicalCores/2)
+ai-raccoon settings model device {auto|gpu|cpu}   # auto (default) puts only the bundled model on the GPU (ADR-0108)
 
 # model code set: the code corpus's own engine — independent settings rows, any manifest
 # dimension accepted (vec_code is reconciled to it), no memory-bank re-embed
-ai-raccoon model code set default   # downloads the default model if needed, then activates it
+ai-raccoon model code set default   # activates the bundled granite-embedding-small-english-r2 model — the same one memory uses; downloads nothing (ADR-0108)
 ai-raccoon model code set local <dir>
 ai-raccoon settings model code reset
 ai-raccoon settings model code show
-ai-raccoon settings model threads {n}      # ORT intra-op thread cap; 0 = ORT default, unset = max(1, logicalCores/2)
-ai-raccoon settings model code reset
-ai-raccoon settings model code show
-ai-raccoon settings model threads {n}      # ORT intra-op thread cap; 0 = ORT default, unset = max(1, logicalCores/2)
 
-# model code set: the code corpus's own engine — independent settings rows, refuses non-768
-# manifests before anything commits (§3.3 D-E9), no memory-bank re-embed
-ai-raccoon model code set default   # downloads the default model if needed, then activates it
-ai-raccoon model code set local <dir>
-
-# settings retrieval: hybrid-search blend weight
+# settings retrieval: hybrid-search blend weight and per-call tuning defaults (full list, docs/reference/search-parameters.md)
 ai-raccoon settings retrieval alpha set {0..1}
 ai-raccoon settings retrieval alpha show
 
@@ -1055,18 +1054,26 @@ config, never in a shared or tracked file:
 
 ## Local embedding model
 
-Local embeddings run in-process on ONNX Runtime over the small int8
-all-MiniLM-L6-v2 model (dimension 384, mean-pool + L2-normalize) **bundled inside
-the tool package** — `ai-raccoon model embedding set local` needs no sidecar, server
-process or download. The binary is gitignored and fetched once by the pinned script
-(SHA-256 verified); the tests FAIL (never skip) when it is missing:
+Local embeddings run in-process on ONNX Runtime over granite-embedding-small-english-r2,
+fp16 export (dimension 384, pools through the graph's own `sentence_embedding` output)
+**bundled inside the tool package** as a manifest model directory —
+`ai-raccoon model embedding set local` needs no sidecar, server process or download.
+It is also the code corpus's default engine (`ai-raccoon model code set default`
+activates the same bundled files for code — see [ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)).
+Sessions try the GPU first where the platform's ONNX Runtime build has one
+(`settings model device` forces `cpu`/`gpu`, default `auto`). The files are gitignored
+and fetched once by the pinned script (SHA-256 verified); the tests FAIL (never skip)
+when they are missing:
 
 ```bash
-scripts/download-embedding-model.py          # -> src/AiRaccoon/Models/model_qint8_arm64.onnx + vocab.txt
+scripts/download-embedding-model.py          # -> src/AiRaccoon/Models/granite-embedding-small-english-r2/
+                                              #    (model_fp16.onnx, model_fp16.onnx_data, tokenizer.json, ai-raccoon.manifest.json, …)
 ```
 
-A custom ONNX model path overrides the bundled model via
-`ai-raccoon model embedding set local /path/to/model.onnx`.
+A custom model overrides the bundled one via `ai-raccoon model embedding set local <dir>`
+(a manifest directory) or, for the legacy single-file path, `ai-raccoon model embedding
+set local /path/to/model.onnx` — the same download script also fetches the
+all-MiniLM-L6-v2 `vocab.txt` that lone-file path still tokenizes with.
 
 ## Embedding configuration matrix
 
@@ -1074,7 +1081,7 @@ The embedding engine (configured via `ai-raccoon model …`) resolves exactly tw
 
 | Engine | `provider` | `model` | `baseUrl` | Key | Notes |
 |---|---|---|---|---|---|
-| Local (bundled ONNX) | `local` | optional ONNX path (default: bundled model) | ignored | none | In-process, offline, no API cost |
+| Local (bundled or manifest ONNX) | `local` | optional path (default: bundled granite model) | ignored | none | In-process, offline, no API cost; GPU-first for the bundled model (`settings model device`) |
 | OpenAI-compatible | `openai` | model id (required), e.g. `nomic-embed-text` | optional endpoint (default `https://api.openai.com/v1`) | `--api-key` (persisted in settings table) | Any OpenAI-compatible `/embeddings` backend (LM Studio, Ollama, self-hosted, OpenAI) |
 
 Changing the engine (provider, model or baseUrl) re-embeds the bank with the new
@@ -1116,7 +1123,7 @@ source of truth; a test cross-checks this table against it.
 | `cancelled` | The tool's work was cancelled while the request connection was still live (a client abort racing completion, or a downstream timeout) — answered as a normal tool error instead of escaping to the SDK's warn-level "request handler failed" | `cancelled: tool 'memory_search' request was cancelled` |
 | `bank-busy` | A transient write-lock loss: SQLITE_BUSY (5) / SQLITE_LOCKED (6) anywhere in the exception chain (WP12's write-lock convoy — another writer holds the bank's write lock past the busy timeout). Special-cased in `ToolRefusals.Filter` rather than tabled by exception type, because the same `SqliteException` also carries non-transient faults (26, `file is not a database`) that stay unmapped. The call did not happen; retry it. The search's access-rating bump is best-effort on top of this: `memory_search` returns its results and logs one Warning instead (EventId 897) when only that bookkeeping write loses the race | `bank-busy: the bank is busy (another writer holds the lock); retry the call` |
 | `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model embedding set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes (memory_write)` |
-| `embedding-install-replaced` | The bundled embedding model/vocab could not be resolved because the install this server process started from (`AppContext.BaseDirectory`) no longer exists on disk — replaced or removed out from under a still-running server (e.g. `dotnet tool update` moving the outgoing version into `.store/.stage` and deleting it; already-mapped assemblies keep the process serving MCP calls even though its own install root is gone). A plain `InvalidOperationException` from the same lookup still means the asset is genuinely missing next to a live install and stays unmapped — only this replaced-install case is refused, because only a restart fixes it | `embedding-install-replaced: Bundled embedding model 'model_qint8_arm64.onnx' could not be resolved: the install this server started from ('<dir>') no longer exists, likely replaced by a tool update (e.g. 'dotnet tool update'). Restart the MCP server (or its host) to pick up the new install.` |
+| `embedding-install-replaced` | The bundled embedding model/vocab could not be resolved because the install this server process started from (`AppContext.BaseDirectory`) no longer exists on disk — replaced or removed out from under a still-running server (e.g. `dotnet tool update` moving the outgoing version into `.store/.stage` and deleting it; already-mapped assemblies keep the process serving MCP calls even though its own install root is gone). A plain `InvalidOperationException` from the same lookup still means the asset is genuinely missing next to a live install and stays unmapped — only this replaced-install case is refused, because only a restart fixes it | `embedding-install-replaced: Bundled embedding model 'model_fp16.onnx' could not be resolved: the install this server started from ('<dir>') no longer exists, likely replaced by a tool update (e.g. 'dotnet tool update'). Restart the MCP server (or its host) to pick up the new install.` |
 | `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only with a section warning, no refusal). Affects `memory_search kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model code set local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without

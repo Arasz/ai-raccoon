@@ -17,11 +17,15 @@ inside the packed tool; it runs from a checkout.
 ## Set up and run
 
 ```bash
-uv sync                                    # creates .venv/, installs httpx/numpy/scikit-learn/pytest
+uv sync                                    # creates .venv/, installs the pinned dependencies
 uv run python3 scripts/<script-name>.py    # run any script through the managed venv
 ```
 
 `uv sync` reads the pinned versions out of `uv.lock`, so everyone gets the same dependency graph.
+Beyond the core `httpx`/`numpy`/`scikit-learn`/`pytest`/`optuna`/`matplotlib` set, `pyproject.toml`
+also pins a retrieval-tuning harness (`chromadb`, `llama-index`, `llama-index-embeddings-huggingface`,
+`torch`, `sqlite-vec`) so that harness resolves identically on every machine. Those pins are large
+downloads (`torch` alone is hundreds of MB), so expect the first `uv sync` to take a while.
 Each script documents its own usage (arguments, what it does, any prerequisites specific to it) in
 its module docstring — read that before running one. `scripts/train-structural-noise-model.py` is
 the exception worth calling out up front: it needs an external corpus that is not checked into
