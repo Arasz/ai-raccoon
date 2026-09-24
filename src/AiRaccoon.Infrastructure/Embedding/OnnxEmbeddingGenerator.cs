@@ -213,9 +213,10 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         return new InferenceSession(modelPath, options);
     }
 
-    /// <summary>GPU intra-op workers spin-wait between kernels by default, which burns CPU on a
-    /// WebGPU session for no latency benefit; CPU-only sessions keep spinning because it helps
-    /// CPU-bound runs. Applied only to <see cref="CreateGpuSessionOrNull" />'s options.</summary>
+    /// <summary>GPU/MLX intra-op workers spin-wait between kernels by default, which burns CPU on a
+    /// WebGPU or MLX session for no latency benefit; CPU-only sessions keep spinning because it helps
+    /// CPU-bound runs. Applied to <see cref="CreateGpuSessionOrNull" />'s and
+    /// <see cref="CreateMlxSessionOnCurrentThread" />'s options (ADR-0110).</summary>
     internal static readonly IReadOnlyDictionary<string, string> GpuSessionConfigEntries =
         new Dictionary<string, string> { ["session.intra_op.allow_spinning"] = "0" };
 
