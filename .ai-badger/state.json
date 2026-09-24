@@ -1,8 +1,80 @@
 {
- "lastUpdated": "2026-09-24T05:30:00+02:00",
+ "lastUpdated": "2026-09-24T05:45:00+02:00",
  "notesRef": ".ai-badger/status-notes.json",
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
+  {
+   "id": "air-fusion-confidence-weighted-rrf-706",
+   "title": "Confidence-weighted RRF measured (#706 round 2): A9 -> 2 but A6 and 6 held-out floors regress; keep off",
+   "pr": 730,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "LegConfidence (Core pure fn, rank-1 vs rank-5 gap, weight clamped [0.5,2]) behind fusion.legConfidence.enabled.global (default false). ON: A9 3->2, A6 1->2 (near-tie flipped by a both-leg consensus candidate), held-out floors A4/A6/A7/A8/S1/S2 break, mean -0.0127, parity -0.0086. Keep rule fails. Two rounds done; #706 left open for an owner ruling (pin A9 and close, or telemetry first). PR #730: owner picks merge-as-off vs record only."
+  },
+  {
+   "id": "air-bank-key-verifier-sidecar-705",
+   "title": "Key-check sidecar tells a wrong key from a corrupt bank (ADR-0111)",
+   "pr": 729,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "memory.db.keycheck: random bank-id + HMAC-SHA256(HKDF subkey, domain||bank-id), FixedTimeEquals, 0600 refuse-not-chmod, atomic writes; minted/rewritten on every successful keyed open (covers rekey/migrate). SQLITE_NOTADB: sidecar mismatch -> 21, sidecar verifies -> BankCorruptedException 32, absent -> both-causes 21; checked after the legacy-derivation probe (else migration breaks, ADR-0111 D4). doctor read-only three-way. EventIds 905/906. Stacked on #721; ADR README has a provisional 0110 row pending #722."
+  },
+  {
+   "id": "air-fusion-trust-confident-leg-706",
+   "title": "ADR-0078 no-regression reorder measured against the gates: does not fix A9, regresses S4/S5/S6",
+   "pr": 727,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "Flag on: A9 stays 3 (FTS and vector rank-1 winners are distinct chunks, both claim key 1 — ADR-0078's L-results bound); gate (c) S4 1->3, S5 3->7, S6 2->3 (second SourceAffinityRanker pass, suggestive); held-out mean -0.018 (in band) but 6 per-query floors break; parity delta -0.0004. Keep flag off. New FusionNoRegressionFlagGateTests pins the flag-on ranks. #706 stays open for rank-1 rescue / confidence-weighted RRF."
+  },
+  {
+   "id": "air-harness-rebaseline-granite-707",
+   "title": "LlamaIndex retrieval harness moved to granite; package D per-row leg ranks",
+   "pr": 725,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "Harness embeds with ibm-granite/granite-embedding-small-english-r2 (pinned), CLS+L2 by the checkpoint's own pooling config, max_length 512 like EmbeddingService's manifest budget; harness vs bank-stored granite vectors median cosine 0.99999 (n=20) vs 0.5934 for the retired gte/ONNX seam. results.json carries fts/vector/fused ranks; report splits fusion into fusion_take/fusion_floor. Golden not regenerated (13 h full-volume) -> #726."
+  },
+  {
+   "id": "air-code-index-uncovered-lines-711",
+   "title": "Code-index line-coverage gap investigated: watcher lag, not a chunker/ingest defect",
+   "pr": 723,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "Every uncovered line (208 paths, 3,783 lines) sits in a file edited after its newest row; 0 unexplained gaps once lines split on '\\n' like CodeChunker (the 2 'trailing' lines were U+2028/U+2029 literals Python splitlines counts). New WatchIntegrationTests prove insert/modify/append and atomic-rename edits re-cover every line; CodeChunker covers an unterminated last line. Open: why restart catch-up leaves files stale for weeks after git checkout -> #724."
+  },
+  {
+   "id": "air-wrong-key-no-legacy-source-710",
+   "title": "Wrong key under a key source with no legacy derivation reports key mismatch, not a raw SqliteException",
+   "pr": 721,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "Confirmed (#710): OpenBankWithResolvedKeyAsync only converted SQLITE_NOTADB when LegacyPassphrase was set, so env-style sources leaked a raw SqliteException. Now always a BankKeyMismatchException (NoLegacyDerivationToTry, both-causes hedge) -> exit 21 per ADR-0107. Four tests had pinned the bug (incl. EncryptionBitwardenIntegrationTests '...RethrowsTheOriginalSqliteException'); updated."
+  },
+  {
+   "id": "air-restart-unproven-names-proof-reason-709",
+   "title": "serve --restart Unproven refusal names the identity-proof reason",
+   "pr": 719,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "RestartResult carries IdentityProofFailure? Reason; ServerRestart.CycleAsync sets it on Unproven; NodeRunner.RestartRefusal prints IdentityProof.RefusalText(reason) like the attach path (#700). EventId 657 unchanged. Note: BackendLaunchIdentityProofE2ETests.RestartCellAsync asserts the log line's wording, not the operator refusal line — a soft spot."
+  },
+  {
+   "id": "air-settings-endpoint-baseurl-validation-708",
+   "title": "SettingsEndpoint model-migration POST refuses an unusable BaseUrl",
+   "pr": 718,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "BaseUrlValidation.IsUsableHttpUrl (AiRaccoon.Settings) shared by the CLI (exit 78) and the SettingsEndpoint POST (400 before StartModelMigrationAsync, nothing persisted). The server refusal is unreachable from current CLI verbs (they validate first), so no CLI exit mapping was added."
+  },
   {
    "id": "air-retrieval-reliability-followup-batch-plan",
    "title": "Code-retrieval and reliability follow-up batch: ADR-0107 exit messages, bm25 hash tie-break, Nightly green (#691/#692), BDD binding fix, dedupe prevalence and eval-P3 on granite (1.49.3)",
@@ -164,7 +236,7 @@
    "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
   }
  ],
- "next": "Next task: structured config chunkers (XML/YAML/TOML) + file-type registry + PlainTextChunker as the one fallback, seed docs/work/2026-09-23-structured-config-chunkers-seed.md (parsers: Tomlyn, SharpYaml). Owner: approve the publish.yml production gate for 1.49.3 (PR #704). Open follow-ups: #705-#711, #695 (chunker splits words mid-token).",
+ "next": "Owner: merge ready PRs #717 #718 #719 #721 (before #729) #723 #725 #727 (before #730) #729 #730, then this state PR #720; rule on #706 (pin A9 + close, or ADR-0078 telemetry) and on #730 (merge off-flag vs record only); cut one release after the fixes land. Next task: structured config chunkers (XML/YAML/TOML) seed docs/work/2026-09-23-structured-config-chunkers-seed.md. Open: #724 watch catch-up staleness, #726 harness golden overnight run, #728 flaky ranking premise, #695.",
  "filedNotStarted": [
   "#477 no job-level metrics (feature gap)",
   "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
@@ -175,13 +247,10 @@
   "#519 TestData.CreateMemoryStore optional Null defaults (from #518)",
   "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable — 1.33.0 checklist)",
   "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement",
-  "#705 key verifier outside the bank (ADR-0107 item 1)",
   "#706 fusion that trusts one confident leg (A9 / #367)",
-  "#707 re-baseline the retrieval harness on granite (absorbs harness package D)",
-  "#708 SettingsEndpoint model-migration POST accepts any BaseUrl",
-  "#709 serve --restart Unproven refusal does not name the proof reason",
-  "#710 wrong key under a no-legacy source surfaces raw SqliteException (hypothesis)",
-  "#711 0.26% of non-blank lines covered by no code row (hypothesis: stale positions)"
+  "#724 watch catch-up leaves files stale for weeks after directory-entry replaces (git checkout)",
+  "#726 regenerate the granite harness golden (overnight full-volume run)",
+  "#728 flaky MemorySearchRankingTests premise on x64 CI"
  ],
  "research": [],
  "stillTrue": [
