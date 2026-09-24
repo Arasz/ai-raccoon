@@ -70,6 +70,11 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// contract — since <see cref="_mlxExecutor" /> is itself single-use and throws on a second Run.</summary>
     private bool _disposed;
 
+    /// <summary>What <see cref="Dispose" /> runs on the MLX thread to release <see cref="_session" />;
+    /// a field (not a direct call) only so a test can substitute a throwing action and prove the
+    /// executor is still disposed on that path. Always the real session's Dispose in production.</summary>
+    private Action _mlxSessionDisposeAction;
+
     internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
         int intraOpThreads = 0, bool preferGpu = false, bool preferMlx = false)
     {
@@ -99,6 +104,8 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
                 ExecutionProvider = $"{ExecutionProvider} (MLX refused: {mlxRefusalReason})";
             }
         }
+
+        _mlxSessionDisposeAction = () => _session.Dispose();
 
         ValidateInputNames(descriptor);
         if (_pooling == "model-output" && string.IsNullOrWhiteSpace(descriptor.EmbeddingOutput))
@@ -164,12 +171,19 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         _disposed = true;
         if (_mlxExecutor is { } executor)
         {
-            executor.Run(() =>
+            try
             {
-                _session.Dispose();
-                return true;
-            });
-            executor.Dispose();
+                executor.Run(() =>
+                {
+                    _mlxSessionDisposeAction();
+                    return true;
+                });
+            }
+            finally
+            {
+                executor.Dispose();
+            }
+
             return;
         }
 
@@ -179,6 +193,10 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// <summary>Attaches an executor to a normally-constructed (CPU) generator so Dispose's MLX
     /// branch is exercisable without a real onnxruntime MLX plugin. Test seam.</summary>
     internal void AttachMlxExecutorForTesting(SingleThreadExecutor executor) => _mlxExecutor = executor;
+
+    /// <summary>Substitutes what Dispose runs on the MLX thread instead of the real session's
+    /// Dispose, so a throwing disposal can be proven not to leak the executor. Test seam.</summary>
+    internal void SetMlxSessionDisposeActionForTesting(Action action) => _mlxSessionDisposeAction = action;
 
     private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Run(List<NamedOnnxValue> feed)
     {
@@ -263,7 +281,12 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         [MlxPluginLibraryFileName, "libmlx.dylib", "libmlxc.dylib", "mlx.metallib"];
 
     private static readonly Lock MlxRegistrationGate = new();
-    private static bool _mlxRegistered;
+
+    /// <summary>One-way latch for the process-wide plugin registration: it never un-flips, so a
+    /// single observed true skips the lock forever (double-checked locking). Read outside the lock
+    /// at that fast-path check, so it must be volatile — same convention as ToolTelemetry's
+    /// migration latch (_migratedLatched).</summary>
+    private static volatile bool _mlxRegistered;
 
     /// <summary>The onnxruntime MLX plugin EP (ADR-0110) is proven only on macOS/Apple Silicon.</summary>
     private static bool MlxPlatformSupported() =>
