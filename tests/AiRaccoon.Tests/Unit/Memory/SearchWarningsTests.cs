@@ -93,4 +93,18 @@ public class SearchWarningsTests
         SearchWarnings.MemoryEngineWarning(null).ShouldBe(SearchWarnings.EngineNotConfigured);
         SearchWarnings.MemoryEngineWarning("  ").ShouldBe(SearchWarnings.EngineNotConfigured);
     }
+
+    /// <summary>
+    ///     The bundled engine ships inside the tool (ADR-0108): the remedy each engine warning names
+    ///     activates it and fetches nothing, so the advice must not promise a download.
+    /// </summary>
+    [Theory]
+    [InlineData(SearchWarnings.EngineNotConfigured)]
+    [InlineData(CodeSearchWarnings.EngineNotConfigured)]
+    [InlineData(AiRaccoon.Setup.McpServerInstructions.Text)]
+    public void EngineAdvice_NamesActivation_NotADownload(string advice)
+    {
+        advice.ShouldNotContain("download", Case.Insensitive);
+        advice.ShouldContain("bundled", Case.Insensitive);
+    }
 }

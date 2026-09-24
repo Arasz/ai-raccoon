@@ -21,7 +21,7 @@ public static class SearchWarnings
     /// <inheritdoc cref="EngineNotConfiguredPrefix" />
     public const string EngineNotConfigured =
         EngineNotConfiguredPrefix + " — the memory section is FTS5-only; run '" + EmbeddingEngineSetup.DefaultModelCommand
-        + "' to download and activate the default memory embedding model";
+        + "' to activate the bundled memory embedding model";
 
     /// <summary>
     ///     Joins every supplied note in order, skipping nulls: guard guidance, length guidance,
