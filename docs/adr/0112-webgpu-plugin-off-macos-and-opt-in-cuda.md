@@ -92,30 +92,42 @@ already does, and sets `_needsGpuGateForRun`; CUDA sessions take no such gate (D
 **`gpu` and `cuda` both reach the plugin path, at different scopes.** `device gpu` for a
 downloaded, non-bundled model now goes through the same `CreateGpuSessionOrNull` the bundled engine
 uses, so it can reach the WebGPU plugin on Windows and Linux too. `device cuda` applies to every
-local model, bundled or not: `PrefersGpu(Cuda, _)` is true regardless of engine,
-`PrefersMlx(Cuda)` is false, and two small helpers, `PrefersCuda` and `CudaLibraryFor(device,
-stored)`, return the stored path only when `device == Cuda` and nothing otherwise (D6).
+local model, bundled or not: `PrefersGpu(Cuda, _)` is true regardless of engine — a new case on the
+existing helper, not a separate one — `PrefersMlx(Cuda)` is false, and a new `CudaLibraryFor(device,
+stored)` returns the stored path only when `device == Cuda` and nothing otherwise (D6).
 
-**Registration is one shared, name-keyed table.** `EnsureRegistered(OrtEnv env, string name, string
-libraryPath)` is keyed by provider name under one lock. Registering the same name again at the same
+**Registration is one shared, name-keyed table.** `EnsureRegistered(string name, string libraryPath,
+Action<string, string> register)` is keyed by provider name under one lock and takes the actual
+registration call as a delegate, so a test can swap in a fake without touching `OrtEnv`; a second
+overload, `EnsureRegistered(OrtEnv env, string name, string libraryPath)`, wraps it with
+`env.RegisterExecutionProviderLibrary` for real callers. Registering the same name again at the same
 path is a no-op; the same name at a different path is refused with "a different `<name>` provider
 library is already registered in this process (restart the server)" — process-wide plugin
 registration cannot be undone, so a second, different library under the same name has nowhere to
 go. A failed registration is never recorded, so the next attempt tries again rather than replaying
-a stale failure. MLX keeps its own `SingleThreadExecutor` path unchanged; WebGPU-plugin and CUDA
-sessions share a small new `CreatePluginSessionOrNull` instead (D7).
+a stale failure. MLX registers through the same table via the `OrtEnv` overload; only its
+`SingleThreadExecutor` path — construction, Run, and Dispose pinned to one thread — stays its own.
+WebGPU-plugin and CUDA sessions share a small new `CreatePluginSessionOrNull` instead (D7).
 
-**A refused WebGPU plugin is cached process-wide, not retried per session.** The first refusal on a
-process is kept in a static field, and later session constructions on the same process reuse that
-cached reason instead of registering and enumerating devices all over again — the case this guards
-is a CI runner building many sessions with no GPU at all. There is no environment-variable kill
-switch for any of this; an operator who wants no GPU attempts already has `settings model device
-cpu` (D8).
+**Only a refusal that applies to every session is cached process-wide.** A missing library, a
+failed registration, or no GPU device found after registration are kept in a static field, and
+later session constructions on the same process reuse that cached reason instead of registering and
+enumerating devices all over again — the case this guards is a CI runner building many sessions
+with no GPU at all. A refusal from actually building one model's session on already-registered
+devices is not cached: it is specific to that model, not to the process, so the next session
+retries the plugin from scratch rather than replaying someone else's bad luck. There is no
+environment-variable kill switch for any of this; an operator who wants no GPU attempts already has
+`settings model device cpu` (D8).
 
-**Plugin paths catch one fixed, narrow exception set.** `OnnxRuntimeException`,
-`DllNotFoundException`, `EntryPointNotFoundException` and `BadImageFormatException` all become a
-refusal carrying the exception's message; nothing on a GPU attempt is allowed to throw out of
-session construction (D9).
+**Plugin paths catch a fixed, narrow exception set — not everything.** `OnnxRuntimeException`,
+`DllNotFoundException`, `EntryPointNotFoundException` and `BadImageFormatException` become a
+refusal carrying the exception's message; a GPU attempt does not throw out of session construction
+for any of the listed exceptions, but nothing here is a blanket `catch (Exception)`. The macOS
+built-in WebGPU path is not a plugin load and keeps catching only `OnnxRuntimeException`, as before.
+The CUDA path also refuses a library path that is not fully qualified — "provider library path must
+be absolute: `<path>`" — before it ever hands the operator-supplied string to the native loader,
+since a relative path resolves against the process's current directory rather than wherever the
+operator meant (D9).
 
 **The constructor gains one new, optional parameter.** `string? cudaLibraryPath = null` — null
 means don't try CUDA at all, and an empty string means CUDA was asked for but has nothing to try,

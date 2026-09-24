@@ -120,13 +120,14 @@ different vectors on the GPU than the ones already stored from the CPU. Switch t
 a model whose bank you are happy to have embedded on the GPU from the start.
 
 **Reading the "execution provider" line.** Every embedding session logs which provider it landed
-on (`CUDA`, `WebGPU`, `MLX` or `CPU`), and appends a reason for every GPU candidate it tried and
-lost, in the order it tried them: `"WebGPU (CUDA refused: provider library not found: <path>)"`,
-or, on a Linux host with no Vulkan loader,
-`"CPU (GPU refused: no WebGPU GPU device after registration (Linux needs libvulkan.so.1)) (CUDA refused: …)"`.
-A session never throws because a GPU attempt failed — it always finishes on some provider, and the
-log line says which one and why the others were skipped. Force the CPU outright with
-`ai-raccoon settings model device cpu`.
+on (`CUDA`, `WebGPU`, `MLX` or `CPU`), with the landing provider's own refusal reason first when it
+had one — for example WebGPU's own `"CPU (GPU refused: …)"` — followed by a suffix for each opt-in
+candidate (MLX, then CUDA) it tried and lost, in that fixed order regardless of what it landed on:
+`"WebGPU (CUDA refused: provider library not found: <path>)"`, or, on a Linux host with no Vulkan
+loader, `"CPU (GPU refused: no WebGPU GPU device after registration (Linux needs libvulkan.so.1))
+(CUDA refused: …)"`. A session never throws because a GPU attempt failed — it always finishes on
+some provider, and the log line says which one and why the others were skipped. Force the CPU
+outright with `ai-raccoon settings model device cpu`.
 
 **`mlx` is opt-in and bundled-engine-only** ([ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md)):
 it runs the bundled engine through the onnxruntime MLX plugin execution provider instead of
@@ -147,7 +148,9 @@ model, not only the bundled one.
 
 1. Install the CUDA execution provider, matching the tool's ONNX Runtime core **exactly**:
    `Microsoft.ML.OnnxRuntime.Gpu.Linux` or `Microsoft.ML.OnnxRuntime.Gpu.Windows`, version
-   `1.30.0`. A different version will not register against this build's core.
+   `1.30.0`. A different version will not register against this build's core. The provider also
+   needs `onnxruntime_providers_shared`, which the tool already ships beside itself — no separate
+   install for that part — and refuses to load if the two do not match.
 2. Point the tool at the provider library:
 
    ```bash
@@ -159,7 +162,9 @@ model, not only the bundled one.
    "execution provider" log line says which one it landed on.
 
 The path is refused up front, with nothing written, when it does not exist, when `cuda` is given
-with no path, or when a path is given for any other device. `cuda` needs an NVIDIA driver and
+with no path, or when a path is given for any other device. A session also refuses a stored path
+that is not absolute — the CLI always writes one, so this only matters for a hand-edited settings
+file — with "provider library path must be absolute: `<path>`". `cuda` needs an NVIDIA driver and
 CUDA 13 on the host. The cuDNN version ONNX Runtime 1.30 needs against CUDA 13 is not published
 yet on its own — [ONNX Runtime's CUDA execution provider requirements
 table](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html) lists 1.27.x
