@@ -19,6 +19,7 @@ from llamaindex_harness.fusion import (
     fuse_rrf,
     merge_results,
     rank_affinity,
+    rank_pipeline,
     structure_fused,
     structure_rank,
 )
@@ -194,6 +195,22 @@ def test_merger_take_limits_after_floor():
                            source_lambda=0.0, consolidation_threshold=float("inf"),
                            formula=DocScoreFormula.MAX)
     assert len(merged) == 8
+
+
+def test_rank_pipeline_is_merge_results_pre_floor_pre_take_stage():
+    # Package D: rank_pipeline is the exact intermediate merge_results derives
+    # its floor+Take cut from — a per-row diagnostic can therefore tell
+    # "cleared the floor but cut by Take" from "never cleared the floor" by
+    # comparing a hash's position here against its position after flooring.
+    cands = [_hit(f"h{i}", 1.0 - i * 0.01, path=f"{i}.md") for i in range(10)]
+    ranked = rank_pipeline(cands, rrf_k=60, source_lambda=0.0,
+                           consolidation_threshold=float("inf"), formula=DocScoreFormula.MAX)
+    assert len(ranked) == 10  # every candidate present: no floor, no Take applied yet
+    merged = merge_results(cands, limit=8, min_relative_score=0.0, rrf_k=60,
+                           source_lambda=0.0, consolidation_threshold=float("inf"),
+                           formula=DocScoreFormula.MAX)
+    floored = [c for c in ranked if c.ranking >= 0.0]
+    assert [c.hash for c in merged] == [c.hash for c in floored[:8]]
 
 
 def test_relative_floor_drops_below_fraction_of_top():

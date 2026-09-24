@@ -232,6 +232,45 @@ def gap_taxonomy(rows: list[dict]) -> dict:
             "unknownShare": (cells["unknown"] / len(paired)) if paired else 0.0}
 
 
+FUSION_SUBLABELS = ("fusion_take", "fusion_floor", "unattributed")
+
+
+def fusion_sublabel(row: dict) -> str | None:
+    """Package D: within a 'fusion'-labelled row, WHERE the anchor was lost.
+
+    'fusion_take'    — cleared the relative floor (floor_rank present) but
+                       ranked beyond Take(limit), so it was never served
+    'fusion_floor'   — ranked in the fused pipeline (fused_rank present) but
+                       below the relative floor (no floor_rank)
+    'unattributed'   — a 'fusion' row whose package-D rank columns are absent
+                       (an older artifact, or a row the dedupe-by-content step
+                       carried under a different served hash)
+    None             — row is not gap-labelled 'fusion' at all
+    """
+    if gap_label(row) != "fusion":
+        return None
+    harness = row.get("harness", {})
+    if harness.get("floor_rank") is not None:
+        return "fusion_take"
+    if harness.get("fused_rank") is not None:
+        return "fusion_floor"
+    return "unattributed"
+
+
+def fusion_subtaxonomy(rows: list[dict]) -> dict:
+    """Counts of fusion_sublabel over every 'fusion'-labelled row; n_fusion ==
+    the taxonomy's 'fusion' cell by construction (same gap_label gate)."""
+    cells = {label: 0 for label in FUSION_SUBLABELS}
+    total = 0
+    for row in rows:
+        label = fusion_sublabel(row)
+        if label is None:
+            continue
+        cells[label] += 1
+        total += 1
+    return {"n_fusion": total, "cells": cells}
+
+
 def _served_sets(run: dict, side: str) -> dict[str, tuple]:
     """Per-query served hash SETS (order-insensitive) for one leg."""
     return {row["id"]: tuple(sorted(set(row[side].get("hashes") or [])))
@@ -378,7 +417,11 @@ def _score_side(expected_hash: str, outcome: dict) -> dict:
     hit, precision, recall, f1 = f1_singleton(expected_hash, hashes)
     scored: dict = {"hashes": hashes, "hit": hit, "precision": precision,
                     "recall": recall, "f1": f1, "error": outcome.get("error")}
-    for key in ("fts_hit", "vector_hit"):  # harness leg diagnostics (M3 split)
+    for key in (
+        "fts_hit", "vector_hit",  # harness leg diagnostics (M3 split)
+        "fts_rank", "vector_rank", "fused_rank", "floor_rank",  # package D
+        "min_relative_score",
+    ):
         if key in outcome:
             scored[key] = outcome[key]
     return scored
@@ -458,11 +501,16 @@ def build_harness_fn(store_dir: Path, offline: bool = False):
             served = retriever.retrieve(entry["query"], limit=EVAL_LIMIT)
             hashes = [n.node.node_id for n in served]
             expected = entry["expectedHash"]
-            fts_rows, _ = retriever.fts_leg(entry["query"], EVAL_LIMIT)
-            vec_rows = retriever.vector_leg(entry["query"], EVAL_LIMIT)
+            diag = retriever.leg_and_fusion_ranks(entry["query"], limit=EVAL_LIMIT)
+            fts_rank = diag["fts_rank_of"].get(expected)
+            vector_rank = diag["vector_rank_of"].get(expected)
             return {"hashes": hashes,
-                    "fts_hit": hit_singleton(expected, [h for h, _ in fts_rows]),
-                    "vector_hit": hit_singleton(expected, [h for h, _ in vec_rows]),
+                    "fts_hit": 1 if fts_rank is not None else 0,
+                    "vector_hit": 1 if vector_rank is not None else 0,
+                    "fts_rank": fts_rank, "vector_rank": vector_rank,
+                    "fused_rank": diag["fused_rank_of"].get(expected),
+                    "floor_rank": diag["floor_rank_of"].get(expected),
+                    "min_relative_score": diag["min_relative_score"],
                     "error": None}
         except Exception as exc:  # noqa: BLE001 — recorded, and main() fails loud
             return {"hashes": [], "error": f"{type(exc).__name__}: {exc}"}
