@@ -236,9 +236,8 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     #708: the CLI refuses an unusable base-url before persisting anything (ADR-0107 PC.1,
-    ///     #700), but the endpoint itself accepted any string — a direct (non-CLI) caller could open
-    ///     a migration nothing could ever reach. Refused the same way, before any setting is written.
+    ///     The endpoint refuses an unusable base-url the same way the CLI does (ADR-0107 PC.1), before
+    ///     any setting is written, so a direct caller cannot open a migration nothing can reach.
     /// </summary>
     [RetryTheory]
     [InlineData("not-a-url")]
@@ -254,7 +253,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
             .ShouldNotBeNull().Rows.ShouldBeEmpty("a refused base-url must not persist settings or open a migration");
     }
 
-    /// <summary>A usable https base-url is unaffected by the #708 guard.</summary>
+    /// <summary>A usable https base-url is unaffected by the base-url guard.</summary>
     [RetryFact]
     public async Task PostModel_AUsableHttpsBaseUrl_Activates()
     {
