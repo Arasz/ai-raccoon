@@ -87,7 +87,9 @@ Linux — and only then the CPU. `ExecutionProvider` on the resulting session lo
 for every candidate that was tried and lost — for example `"WebGPU (CUDA refused: …)"` or
 `"CPU (GPU refused: no WebGPU GPU device after registration (Linux needs libvulkan.so.1)) (CUDA
 refused: …)"`. A plugin WebGPU session takes the same process-wide `GpuGate` the built-in one
-already does, and sets `_needsGpuGateForRun`; CUDA sessions take no such gate (D5).
+already does, and sets `_needsGpuGateForRun`. A CUDA session takes the gate only while it registers
+and builds (plugin registration and device enumeration go through the one shared `OrtEnv`); its runs
+take no gate, since CUDA sessions share no device context (D5).
 
 **`gpu` and `cuda` both reach the plugin path, at different scopes.** `device gpu` for a
 downloaded, non-bundled model now goes through the same `CreateGpuSessionOrNull` the bundled engine

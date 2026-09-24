@@ -462,8 +462,8 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     private const string CudaExecutionProviderName = "CUDAExecutionProvider";
 
     /// <summary>
-    ///     A session on the user-supplied CUDA plugin library, or null with the reason. Unlike WebGPU it
-    ///     needs no <see cref="GpuGate" />: CUDA sessions do not share one device context.
+    ///     A session on the user-supplied CUDA plugin library, or null with the reason. Construction takes
+    ///     <see cref="GpuGate" /> like the WebGPU plugin's; runs do not, as CUDA sessions share no device context.
     /// </summary>
     private static InferenceSession? CreateCudaSessionOrNull(string modelPath, int intraOpThreads, string libraryPath,
         out string? refusalReason)
@@ -492,16 +492,19 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
             return null;
         }
 
-        var (devices, deviceRefusal) = RegisterPluginGpuDevice(CudaExecutionProviderName, libraryPath,
-            "no CUDA GPU device after registration");
-        if (devices is null)
+        lock (GpuGate)
         {
-            refusalReason = deviceRefusal;
-            return null;
-        }
+            var (devices, deviceRefusal) = RegisterPluginGpuDevice(CudaExecutionProviderName, libraryPath,
+                "no CUDA GPU device after registration");
+            if (devices is null)
+            {
+                refusalReason = deviceRefusal;
+                return null;
+            }
 
-        (var session, refusalReason) = CreatePluginSessionOrNull(modelPath, intraOpThreads, devices);
-        return session;
+            (var session, refusalReason) = CreatePluginSessionOrNull(modelPath, intraOpThreads, devices);
+            return session;
+        }
     }
 
     /// <summary>What a plugin attempt may throw that must become a refusal rather than a failed construction.</summary>

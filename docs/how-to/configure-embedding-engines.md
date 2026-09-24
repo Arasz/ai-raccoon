@@ -101,7 +101,7 @@ depends on the RID ([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16
 | `win-x64` | `cuda` (opt-in) → WebGPU (packaged plugin) → CPU | WebGPU needs a GPU driver with D3D12 support. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
 | `win-arm64` | `cuda` (opt-in, but see below) → WebGPU (packaged plugin) → CPU | Same as win-x64. The CUDA provider only ships for x64, so `cuda` here refuses and falls through. |
 | `linux-x64` | `cuda` (opt-in) → WebGPU (packaged plugin) → CPU | WebGPU needs the Vulkan loader, `libvulkan.so.1` (`apt install libvulkan1` or the distro equivalent), plus the vendor's own Vulkan driver. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
-| `linux-arm64` | WebGPU (packaged plugin) → CPU | Same Vulkan loader as linux-x64. No CUDA provider ships for arm64; `cuda` refuses and falls through. |
+| `linux-arm64` | `cuda` (opt-in, but see below) → WebGPU (packaged plugin) → CPU | Same Vulkan loader as linux-x64. No CUDA provider ships for arm64; `cuda` refuses and falls through. |
 | `linux-musl-x64` | CPU only | None — the WebGPU plugin has no musl build. |
 
 `settings model device` changes which of these an operator opts into, taking effect on the next
