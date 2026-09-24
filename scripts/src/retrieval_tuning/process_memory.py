@@ -41,7 +41,7 @@ _RUSAGE_INFO_V4 = 4
 def memory_kib() -> MemorySample:
     if sys.platform == "darwin":
         info = _RusageInfoV4()
-        libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+        libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
         if libproc.proc_pid_rusage(os.getpid(), _RUSAGE_INFO_V4, ctypes.byref(info)) != 0:
             raise OSError(ctypes.get_errno(), "proc_pid_rusage failed")
         peak_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024  # bytes on macOS

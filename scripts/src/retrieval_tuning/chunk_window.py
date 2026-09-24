@@ -9,6 +9,7 @@ RRF (k=60), an approximation of the product's hybrid search, not a copy of it.
 
 from __future__ import annotations
 
+import ctypes
 import json
 import random
 import re
@@ -47,7 +48,7 @@ class Engine:
     """
 
     def __init__(self, model_dir: Path, threads: int, device: str = "cpu", mlx_dir: Path | None = None,
-                 pad_to: int = 0) -> None:
+                 pad_to: int = 0, buckets: Sequence[int] = (), cache_limit_mib: int | None = None) -> None:
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
@@ -63,6 +64,10 @@ class Engine:
             options.add_provider_for_devices(
                 [d for d in ort.get_ep_devices() if d.ep_name == "MLXExecutionProvider"], {})
             self.session = ort.InferenceSession(str(model_dir / "model_fp16_mlx.onnx"), options)
+            self.mlx = ctypes.CDLL(str(mlx_dir / "libmlxc.dylib"))
+            if cache_limit_mib is not None:
+                previous = ctypes.c_size_t()
+                self.mlx.mlx_set_cache_limit(ctypes.byref(previous), ctypes.c_size_t(cache_limit_mib << 20))
         elif device == "cpu":
             self.session = ort.InferenceSession(str(model_dir / "model_fp16.onnx"), options,
                                                 providers=["CPUExecutionProvider"])
@@ -70,10 +75,23 @@ class Engine:
             raise ValueError(f"unknown device {device!r}")
         self.device = device
         self.pad_to = pad_to
+        self.buckets = tuple(buckets)
         self.seen_lengths: set[int] = set()
+        self.padded_tokens = 0
         manifest = json.loads((model_dir / "ai-raccoon.manifest.json").read_text())
         self.window = manifest["contextWindowTokens"]
         self.dimensions = manifest["dimensions"]
+
+    def mlx_memory_mib(self) -> dict[str, int]:
+        """MLX allocator counters (active, free-buffer cache, peak) in MiB; empty off the MLX device."""
+        if self.device != "mlx":
+            return {}
+        out = {}
+        for name in ("active", "cache", "peak"):
+            value = ctypes.c_size_t()
+            getattr(self.mlx, f"mlx_get_{name}_memory")(ctypes.byref(value))
+            out[name] = value.value >> 20
+        return out
 
     def count(self, text: str) -> int:
         return len(self.tokenizer.encode(text, add_special_tokens=False).ids)
@@ -81,13 +99,14 @@ class Engine:
     def embed(self, text: str) -> tuple[np.ndarray, int, float, float]:
         """(unit vector, tokens incl. specials, wall ms, process CPU ms) for one row; new_length says it was a first-seen shape."""
         ids = self.tokenizer.encode(text, add_special_tokens=True).ids[: self.window]
-        padded, mask = pad_row(ids, self.pad_to, PAD_ID)
+        padded, mask = pad_row(ids, self.pad_to, PAD_ID, self.buckets)
         input_ids = np.asarray([padded], dtype=np.int64)
         wall, cpu = time.perf_counter(), time.process_time()
         out = self.session.run(["sentence_embedding"],
                                {"input_ids": input_ids, "attention_mask": np.asarray([mask], dtype=np.int64)})[0][0]
         wall_ms = (time.perf_counter() - wall) * 1000
         cpu_ms = (time.process_time() - cpu) * 1000
+        self.padded_tokens += len(padded) - len(ids)
         self.new_length = len(padded) not in self.seen_lengths
         self.seen_lengths.add(len(padded))
         vector = out.astype(np.float32)
@@ -231,6 +250,10 @@ class ArmResult:
     embed_ms_repeat_length: dict[str, float]
     distinct_lengths: int
     pad_to: int
+    buckets: list[int]
+    cache_limit_mib: int | None
+    mlx_memory_mib: dict[str, int]
+    padded_tokens: int
     disk_bytes: int
     vector_bytes: int
     query_ms: dict[str, float]
@@ -244,10 +267,11 @@ class ArmResult:
 
 
 def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads: int,
-            work_dir: Path, device: str = "cpu", mlx_dir: Path | None = None, pad_to: int = 0) -> ArmResult:
+            work_dir: Path, device: str = "cpu", mlx_dir: Path | None = None, pad_to: int = 0,
+            buckets: Sequence[int] = (), cache_limit_mib: int | None = None) -> ArmResult:
     """Chunk, embed and index one corpus at one budget, then run every query twice (second pass timed)."""
     documents, queries = (memory_corpus if corpus == "memory" else code_corpus)(repo)
-    engine = Engine(model_dir, threads, device, mlx_dir, pad_to)
+    engine = Engine(model_dir, threads, device, mlx_dir, pad_to, buckets, cache_limit_mib)
     mem_load = memory_kib()
     work_dir.mkdir(parents=True, exist_ok=True)
     db_path = work_dir / f"{corpus}-{chunk_tokens}.db"
@@ -327,7 +351,9 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
         footprint_kib_peak_total=memory_kib().footprint_peak, device=device,
         embed_ms_first_length=_timing(first_ms) if first_ms else {},
         embed_ms_repeat_length=_timing(repeat_ms) if repeat_ms else {},
-        distinct_lengths=len(engine.seen_lengths), pad_to=pad_to,
+        distinct_lengths=len(engine.seen_lengths), pad_to=pad_to, buckets=list(buckets),
+        cache_limit_mib=cache_limit_mib, mlx_memory_mib=engine.mlx_memory_mib(),
+        padded_tokens=engine.padded_tokens,
         disk_bytes=db_path.stat().st_size, vector_bytes=int(vectors.nbytes),
         query_ms=_timing(q_ms), query_embed_ms=_timing(q_embed), query_cpu_ms=_timing(q_cpu),
         gpu=("MLX plugin EP (unified memory: GPU buffers count in footprint_kib_*)" if device == "mlx"
