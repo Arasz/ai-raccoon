@@ -682,10 +682,37 @@ They are not a throughput ranking.
 --save-hits --allow-busy` → `hyb/runs/results-mlx.json`, then
 `compare_code_eval.py --target-category behaviour-nl runs/results-cpu.json runs/results-mlx.json`.
 
+### F49 — Uncontended, on one binary, WebGPU and MLX drain the code corpus in the same time [MEASURED]
+
+The same #722 build (`1.49.3+93745ad5`, which has #712's spinning off for both GPU paths) ran
+`auto` (WebGPU) and `mlx` alternately for three rounds, each on a fresh scratch bank with 1,376
+chunks. Load average was 3.6–6.7.
+- **Drain time:** WebGPU 34.1, 34.1 and 34.1 s; MLX 32.1, 32.1 and 34.2 s. The runner polls
+  pending rows every 2 s, so these sit at its resolution. MLX is at most ~2 s (≈6%) faster over the
+  whole drain, and part of each drain is chunking and FTS work that doesn't depend on the device.
+- **Quality:** identical to F48 in every round (WebGPU nDCG@5 0.8239, MLX 0.8225). Both are
+  deterministic across rounds.
+
+The per-embed latency gain of F26 (10–20%) doesn't turn into a meaningful end-to-end drain gain on
+this corpus.
+
+**Evidence:** `EVAL_DEVICE={auto,mlx} python3 hyb/drive.py --binary <scratchpad>/mlx-e2e/tool/ai-raccoon …
+--arm <dev>-r<n> --out tput` → `tput/log.txt`. The drain poll interval is `DRAIN_POLL_SECONDS` in
+`scripts/retrieval_tuning/run_code_eval.py`.
+
+### F50 — MLX's single-thread executor adds no serialization the WebGPU path didn't already have [INFERRED]
+
+This reasons from ADR-0108 and the generator code. Memory and code share one ONNX session, because
+the engine cache is keyed by fingerprint (ADR-0108, Context). WebGPU runs already pass through the
+process-wide `GpuGate` lock (`OnnxEmbeddingGenerator.cs`, `Run`), so every embed is already
+serialized on the GPU path. #722's `SingleThreadExecutor` replaces the lock with a dedicated thread
+(F46). Concurrency stays the same, one run at a time, and only the thread identity changes. It was
+not measured with overlapping memory and code drains.
+
 ## Still open
 
-- **MLX throughput in the product, uncontended.** F48's drain times are single runs on a loaded
-  machine. Rerun the three arms back to back on the same binary (#712's spinning-off applies to
-  WebGPU from 1.49.3) before quoting a throughput gain.
-- **MLX under concurrent embedding load.** #722 serializes MLX calls on one thread. Whether that
-  caps throughput below WebGPU's gated path when memory and code drains overlap is unmeasured.
+- **Overlapping memory and code drains** were not measured on either GPU path. F50 argues that
+  MLX's single-thread executor changes nothing there, but that is not a measurement.
+- **Whether MLX is worth its ~43 MB.** F47–F49 show equal quality and ≤6% end-to-end drain gain on
+  this corpus. The remaining argument for MLX is per-embed CPU (F26: ~3 ms against ~5–8 ms at 512
+  tokens), which matters on a CPU-contended machine. That is the owner's call in ADR-0110.
