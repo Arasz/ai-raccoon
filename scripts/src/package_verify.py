@@ -11,6 +11,7 @@ import bundle
 
 _BUNDLED_PINS = tuple(("Models/%s/%s" % (bundle.BUNDLED_DIR, name), sha) for name, _url, sha in bundle.BUNDLED_FILES) + (
     ("Models/%s/%s" % (bundle.BUNDLED_DIR, bundle.BUNDLED_MANIFEST[0]), bundle.BUNDLED_MANIFEST[1]),
+    ("Models/%s/%s" % (bundle.BUNDLED_DIR, bundle.BUNDLED_MLX_GRAPH[0]), bundle.BUNDLED_MLX_GRAPH[1]),
 )
 REQUIRED_ENTRIES = tuple(entry for entry, _sha in _BUNDLED_PINS) + ("Models/" + bundle.VOCAB_NAME,)
 
