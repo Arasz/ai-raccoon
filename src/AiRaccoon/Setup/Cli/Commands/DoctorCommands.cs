@@ -61,10 +61,14 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             {
                 // Microsoft.Data.Sqlite defers the "file is not a database" verdict to the first
                 // statement, which is inside DiagnoseAsync — OpenBankReadOnlyAsync above cannot see
-                // it. Mapped here so the operator gets the corrupt-bank line, not the catch-all's raw message.
+                // it. Mapped here so the operator gets the corrupt-bank line, not the catch-all's raw
+                // message. SQLITE_NOTADB is what a wrong encryption key looks like too (ADR-0107
+                // PC.0) — doctor cannot tell them apart, so the message names both and both remedies.
                 Log.BankIsNotADatabase(logger, bankPath, ex);
                 await streams.WriteErrorLineAsync(
-                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); restore it from a backup or check --data-root");
+                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
+                    "wrong key or corrupt bank — check the encryption key source if this data root was working before, " +
+                    "or restore the bank from a backup if the file itself is damaged");
                 return ErrorCode.Bank.Corrupted;
             }
 
