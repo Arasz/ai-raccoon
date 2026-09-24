@@ -289,15 +289,19 @@ maintained below.
 
 - **Wrong key vs. corrupt bank.** SQLCipher answers the same SQLITE_NOTADB error for a
   wrong key and for a file that genuinely is not a database, so `Key.WrongKey` (21) and
-  `Bank.Corrupted` (32) both still resolve from one ambiguous signal today.
-  A command given an explicit key (`serve`) reports the NOTADB as `Bank.Corrupted` (32);
-  one that resolves the key and tries the pre-ADR-0012 derivation reports `Key.WrongKey`
-  (21). Splitting them needs a key verifier kept outside the bank.
-- **An unreachable embedding endpoint, a bad `base-url`, and a rejected API key all look
-  the same.** `model embedding set openai`'s dimension probe wraps every failure in one
-  exception, so all three report `Model.EndpointUnreachable` (77) today —
-  `Model.BadBaseUrl` (78) is defined in the table above but not yet returned by any code
-  path.
+  `Bank.Corrupted` (32) both still resolve from one ambiguous signal today. The exit code
+  still depends on the call path — `doctor` reports `Bank.Corrupted` (32); a command that
+  resolves the key and tries the pre-ADR-0012 derivation reports `Key.WrongKey` (21) — but
+  both messages now name the same two causes and both remedies (check the
+  encryption key source, or restore the bank from a backup), instead of asserting one as
+  fact. Splitting the *code* still needs a key verifier kept outside the bank.
+- **A bad `base-url` is now distinguished by code**: `model embedding set openai` refuses
+  a `base-url` that is not a usable absolute http(s) URL before anything is probed or
+  persisted, exiting `Model.BadBaseUrl` (78). An unreachable endpoint and a rejected API
+  key still share `Model.EndpointUnreachable` (77) — the Model range (70-79) has no free
+  case for "rejected key" — but a rejected key (the OpenAI SDK's `ClientResultException`
+  with a 401/403 status) now gets its own message naming the key, instead of the generic
+  "could not be reached" text a truly unreachable endpoint gets.
 - **A malformed or null server body** exits `Internal.Unexpected` (90), not
   `Internal.UnusableResponse` (92): only a non-success status is classified today.
 - **A read-only `--data-root`** (82) is still recognised by the OS message text, which
@@ -306,9 +310,15 @@ maintained below.
   `--data-root`, even when the denied path was a `--dir` elsewhere.
 - **A local write failure during a model download** exits `Model.DownloadFailed` (70),
   not an `Environment` code.
-- **`Server.Unproven` (50)** cannot tell a server on another data root from one too old
-  to hold an identity key, and **`Server.NoToken` (51)** cannot tell another root's server
-  from a deleted token file.
+- **`Server.Unproven` (50)** still collapses every `IdentityProofFailure` (no identity
+  key, a root mismatch, a bad signature, a malformed answer, a non-success status, or a
+  timeout) onto one code — `Server` (50-59) is full — but the refusal now names
+  which one it was on stderr, never the log line. **`Server.NoToken` (51)** no longer
+  hedges "it may serve another data root": every site that returns it has already proven
+  the listener's identity before the token is read, so that was never a live possibility.
+  It now surfaces the token file's own refusal (a chmod-600/700 remedy) when one is set,
+  and otherwise says the token is missing for this data root — never that it was deleted,
+  since a just-spawned fallback `serve` may not have written it yet.
 - **`serve observability`** judges by status alone: a foreign listener that answers 404
   reads as `Server.TooOldForObservability` (56), and an ai-raccoon 5xx as
   `Port.ForeignListener` (41).
