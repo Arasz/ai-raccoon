@@ -1,3 +1,11 @@
 {
-  "ignore": ["python"]
+    "ignore": [
+        "python",
+        "css",
+        "js",
+        "react",
+        "ts",
+        "ux",
+        "node"
+    ]
 }

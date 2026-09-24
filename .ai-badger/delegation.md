@@ -4,7 +4,7 @@
 
 ## Stacks
 
-dotnet, mcp, python, github, ai-raccoon
+dotnet, mcp, python, github, ai-raccoon, changelog
 
 ## Personas available here
 

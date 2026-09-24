@@ -13,7 +13,7 @@
   ],
   "skillScope": "default",
   "pluginScope": "default",
-  "configHash": "2d902b76a7e1a377268cdd84886d3fc9a3c663abf81be854d0c8dc89ea15a6f7",
+    "configHash": "54f7e617273789000c6e1d131d7305b1073b75a0b0beb9858884dccf3c505c42",
   "generatedConfig": [
     {
       "path": ".claude/settings.json",
@@ -479,6 +479,15 @@
       "hash": "775423167ecb74b8ce5abdb1994a9c44b516a142d50b6da567a77362819993d8"
     },
     {
+        "feature": "invariants",
+        "stack": "changelog",
+        "name": "version-changelog-required",
+        "source": "features/changelog/invariants/version-changelog-required.md",
+        "target": ".ai-badger/invariants/version-changelog-required.md",
+        "frameworkVersion": "0.177.2",
+        "hash": "bb1ccec43e0f06d48ccff2e7505be608037dbfacf3e852f66c4c44a0adb36412"
+    },
+      {
       "feature": "skills",
       "stack": "common",
       "name": "den-refresh",
@@ -1674,7 +1683,7 @@
       "target": ".ai-badger/delegation.md",
       "frameworkVersion": "0.177.2",
       "hash": "3376cf087b066d8bd983b60fffa18407e794a7d212be8721316f8a844292ea67",
-      "outputHash": "d9211ae5c96c4ffc0bb57c1f2efcac7943a9279d792b8d625d9e6b15eced0d11",
+        "outputHash": "c97951a7fd03f320a5509f11980e6c2c9cc10253ac247f3f2a263fbb94e1a94a",
       "seedOnce": false
     },
     {
@@ -1685,7 +1694,7 @@
       "target": "CLAUDE.md",
       "frameworkVersion": "0.177.2",
       "hash": "6e93b91f0280cd30e5e11ad011ee37daa1c2ceaae9cafd83359cf3d6c3f5a0c8",
-      "outputHash": "be6ae97b31b4b02958cac4da5a3b8f387330b95ffcceeb4220bfd65e16855065",
+        "outputHash": "74a69aa891eb3be334749d368f62246a3d5cc873a78fe47c88a398c3c8a3e37c",
       "seedOnce": false
     },
     {
@@ -1696,7 +1705,7 @@
       "target": ".github/copilot-instructions.md",
       "frameworkVersion": "0.177.2",
       "hash": "6e93b91f0280cd30e5e11ad011ee37daa1c2ceaae9cafd83359cf3d6c3f5a0c8",
-      "outputHash": "d93d919a2a1c5ad04c648575d286df93f9f58731f6cf63c684f757637bcbb832",
+        "outputHash": "a46039847ac3013d75e6515e5c1b9cd6d1e79bb836607c1e3efc9bed667491a9",
       "seedOnce": false
     },
     {
@@ -1707,7 +1716,7 @@
       "target": "HERMES.md",
       "frameworkVersion": "0.177.2",
       "hash": "92f2f08f916c832b8e96401b2c1bda4eb0a2920fabb36a1390432a68f8d8e294",
-      "outputHash": "d767a3b7aba437149fd651ee969fef4b7706039a99e41595db080fec60b2dab0",
+        "outputHash": "a9a19b0ea4d926d59af51ebab065902c07d8680d41a27f958c9d09a2e8ed4c1f",
       "seedOnce": false
     },
     {

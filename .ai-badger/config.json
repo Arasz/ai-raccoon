@@ -11,7 +11,8 @@
     "mcp",
     "python",
     "github",
-    "ai-raccoon"
+      "ai-raccoon",
+      "changelog"
   ],
   "agents": [
     "claude",

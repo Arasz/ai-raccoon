@@ -5,7 +5,7 @@
 C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
-> Stacks: dotnet, mcp, python, github, ai-raccoon
+> Stacks: dotnet, mcp, python, github, ai-raccoon, changelog
 > Scaffolded by ai-badger 0.177.2. Source of truth for this file: `.ai-badger/HERMES.md`.
 
 ## Commands
@@ -246,6 +246,12 @@ Each tool's own description covers the rest.
 
 - **Pin actions to a commit SHA; declare least-privilege permissions** — Every third-party GitHub Action referenced in a workflow is pinned to a full commit SHA, never a tag or branch — a mutable tag is remote code you re-fetch on every run, not a fixed dependency.
   → `.ai-badger/invariants/pin-actions-to-sha.md`
+
+- **Always bump VERSION and add changelog entry** — Every release — no matter how small — must:
+    1. Bump `VERSION` (semver patch for fixes, minor for features, major for breaking changes)
+    2. Add a `docs/changelog/{version}-{slug}.md` entry describing what changed
+    3. Update `docs/changelog/README.md` if adding a new changelog format convention
+       → `.ai-badger/invariants/version-changelog-required.md`
 
 ## Framework
 
