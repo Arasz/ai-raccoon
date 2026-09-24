@@ -164,16 +164,16 @@ def apply_relative_floor(
     return [(h, r) for h, r in pairs if r >= min_relative_score]
 
 
-def merge_results(
+def rank_pipeline(
     candidates: list[RankedHit],
-    limit: int,
-    min_relative_score: float,
     rrf_k: int,
     source_lambda: float,
     consolidation_threshold: float,
     formula: DocScoreFormula,
 ) -> list[RankedHit]:
-    """Port of SearchResultMerger.Merge: single-list re-fuse, affinity, floor, Take."""
+    """The single-list re-fuse + affinity stage of SearchResultMerger.Merge,
+    stopping BEFORE the relative floor and Take(limit) — the pre-cut ranking
+    package D's per-row diagnostics need to tell a floor drop from a Take drop."""
     fused = fuse_rrf(
         [("fused", 1.0, [c.hash for c in candidates])],
         {c.hash: c.path for c in candidates},
@@ -187,6 +187,19 @@ def merge_results(
                   by_hash[h].total_chunks)
         for h, r in fused
     ]
-    ranked = rank_affinity(rescored, source_lambda, consolidation_threshold, formula)
+    return rank_affinity(rescored, source_lambda, consolidation_threshold, formula)
+
+
+def merge_results(
+    candidates: list[RankedHit],
+    limit: int,
+    min_relative_score: float,
+    rrf_k: int,
+    source_lambda: float,
+    consolidation_threshold: float,
+    formula: DocScoreFormula,
+) -> list[RankedHit]:
+    """Port of SearchResultMerger.Merge: single-list re-fuse, affinity, floor, Take."""
+    ranked = rank_pipeline(candidates, rrf_k, source_lambda, consolidation_threshold, formula)
     floored = [c for c in ranked if c.ranking >= min_relative_score]
     return floored[:limit]

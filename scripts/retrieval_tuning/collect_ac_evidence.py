@@ -40,7 +40,7 @@ FROZEN_PARAMS = {
     "fusionNoRegression": False,
     "scope": "project",
     "kind": "memory",
-    "model": "Salesforce/SFR-Embedding-Code-400M_R",
+    "model": "ibm-granite/granite-embedding-small-english-r2",
 }
 
 # The subset the eval evidence check compares against the store params.

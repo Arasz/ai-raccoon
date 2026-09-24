@@ -207,6 +207,27 @@ def test_report_gap_taxonomy_conservation_and_oracle_labels():
     assert "0.0%" in text  # unknown share rendered in the taxonomy table
 
 
+def test_report_renders_fusion_take_and_floor_breakdown():
+    # Package D: the per-row leg ranks let the report attribute a fusion drop
+    # to a Take(limit) cut vs a relative-floor cut, not just "fusion"
+    # undifferentiated.
+    out = _results_c_cell_taxonomy()
+    out["rows"][1]["harness"]["floor_rank"] = 5  # E002: cleared the floor...
+    out["rows"][1]["harness"]["fused_rank"] = 5  # ...ranked beyond Take(limit)
+    text = report.render(out, _context())
+    assert "Fusion-drop attribution" in text
+    assert "fusion_take" in text and "fusion_floor" in text
+    assert "| fusion_take | 1 |" in text
+    assert "| fusion_floor | 0 |" in text
+
+
+def test_report_omits_fusion_breakdown_when_no_fusion_rows():
+    # _results(): harness hits both rows, so gap_label is "none" everywhere —
+    # no c-cell, no 'fusion' rows, and the breakdown section must not print.
+    text = report.render(_results(), _context())
+    assert "Fusion-drop attribution" not in text
+
+
 def test_report_discloses_exclusions():
     text = report.render(_results_with_gaps(), _context())
     assert "aib" in text and "ai-badger" in text
@@ -376,3 +397,25 @@ def test_frozen_golden_c_cell_is_fusion_with_shared_oracle_rows():
     assert shared, "frozen pair must carry shared-scope rows (C10 oracle)"
     for qid in shared:
         assert labels[qid] == "fusion"
+
+
+def test_granite_golden_fusion_subtaxonomy_conserves_against_the_fusion_cell():
+    # Package D oracle against the granite re-baseline golden: every
+    # fusion_sublabel is one of the three known cells, and their total equals
+    # the taxonomy's 'fusion' count exactly (n_fusion == fusion cell).
+    golden = (Path(__file__).resolve().parents[2] / "docs" / "work"
+              / "results-granite.json")
+    if not golden.exists():
+        pytest.skip("granite golden not present in this checkout")
+    results = json.loads(golden.read_text())
+    tax = evaluate.gap_taxonomy(results["rows"])
+    sub = evaluate.fusion_subtaxonomy(results["rows"])
+    assert sub["n_fusion"] == tax["cells"]["fusion"]
+    assert sum(sub["cells"].values()) == sub["n_fusion"]
+    text = report.render(results, {"date": "2026-09-24",
+                                   "corpus": "project-corpus-100.json",
+                                   "corpus_size": results["summary"]["n"]})
+    if sub["n_fusion"] > 0:
+        assert "Fusion-drop attribution" in text
+    else:
+        assert "Fusion-drop attribution" not in text
