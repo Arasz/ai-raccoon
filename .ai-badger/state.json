@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-harness-rebaseline-granite-707",
+   "title": "LlamaIndex retrieval harness moved to granite; package D per-row leg ranks",
+   "pr": 725,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "Harness embeds with ibm-granite/granite-embedding-small-english-r2 (pinned), CLS+L2 by the checkpoint's own pooling config, max_length 512 like EmbeddingService's manifest budget; harness vs bank-stored granite vectors median cosine 0.99999 (n=20) vs 0.5934 for the retired gte/ONNX seam. results.json carries fts/vector/fused ranks; report splits fusion into fusion_take/fusion_floor. Golden not regenerated (13 h full-volume) -> #726."
+  },
+  {
    "id": "air-code-index-uncovered-lines-711",
    "title": "Code-index line-coverage gap investigated: watcher lag, not a chunker/ingest defect",
    "pr": 723,
@@ -213,8 +222,8 @@
   "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement",
   "#705 key verifier outside the bank (ADR-0107 item 1)",
   "#706 fusion that trusts one confident leg (A9 / #367)",
-  "#707 re-baseline the retrieval harness on granite (absorbs harness package D)",
-  "#724 watch catch-up leaves files stale for weeks after directory-entry replaces (git checkout)"
+  "#724 watch catch-up leaves files stale for weeks after directory-entry replaces (git checkout)",
+  "#726 regenerate the granite harness golden (overnight full-volume run)"
  ],
  "research": [],
  "stillTrue": [
