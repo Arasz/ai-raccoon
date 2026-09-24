@@ -308,16 +308,47 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         return 0;
     }
 
-    /// <summary>`settings model device auto|gpu|cpu|mlx` (ADR-0108, ADR-0110); anything else is refused, nothing written.</summary>
+    /// <summary>
+    ///     `settings model device auto|gpu|cpu|mlx|cuda [path]` (ADR-0108, ADR-0110); cuda requires an existing
+    ///     provider library path and no other device takes one. Every refusal writes nothing.
+    /// </summary>
     public async Task<int> ModelDeviceSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
         var raw = parseResult.GetValue<string>("device")!.Trim().ToLowerInvariant();
+        var path = parseResult.GetValue<string?>("path");
         if (!EmbeddingDeviceSetting.Values.Contains(raw, StringComparer.Ordinal))
         {
             await streams.WriteErrorLineAsync(
                 $"ai-raccoon: invalid device '{raw}' (expected one of: {string.Join(", ", EmbeddingDeviceSetting.Values)})");
             return ErrorCode.Usage.InvalidValue;
+        }
+
+        var isCuda = EmbeddingDeviceSetting.Parse(raw) == EmbeddingDevice.Cuda;
+        if (!isCuda && path is not null)
+        {
+            await streams.WriteErrorLineAsync($"ai-raccoon: only device cuda takes a library path (got device '{raw}')");
+            return ErrorCode.Usage.InvalidValue;
+        }
+
+        if (isCuda)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                await streams.WriteErrorLineAsync(
+                    "ai-raccoon: device cuda needs the path to the onnxruntime CUDA provider library " +
+                    "(ai-raccoon settings model device cuda <path-to-provider-library>)");
+                return ErrorCode.Usage.InvalidValue;
+            }
+
+            var library = Path.GetFullPath(path);
+            if (!File.Exists(library))
+            {
+                await streams.WriteErrorLineAsync($"ai-raccoon: CUDA provider library not found: {library}");
+                return ErrorCode.Usage.InvalidValue;
+            }
+
+            await store.SetSettingAsync(EmbeddingSettingsKeys.CudaLibrary, library, cancellationToken);
         }
 
         await store.SetSettingAsync(EmbeddingSettingsKeys.Device, raw, cancellationToken);

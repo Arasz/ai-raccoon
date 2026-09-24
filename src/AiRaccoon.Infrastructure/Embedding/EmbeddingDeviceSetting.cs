@@ -13,14 +13,17 @@ public enum EmbeddingDevice
     Cpu,
 
     /// <summary>The bundled engine only, through the onnxruntime MLX plugin execution provider (ADR-0110).</summary>
-    Mlx
+    Mlx,
+
+    /// <summary>Every local model through the onnxruntime CUDA plugin execution provider, from a user-supplied library.</summary>
+    Cuda
 }
 
 /// <summary>Parses <c>embedding.device</c> and decides whether a session tries the GPU or MLX.</summary>
 public static class EmbeddingDeviceSetting
 {
     /// <summary>The setting's accepted values, as the CLI and doctor spell them.</summary>
-    public static readonly string[] Values = ["auto", "gpu", "cpu", "mlx"];
+    public static readonly string[] Values = ["auto", "gpu", "cpu", "mlx", "cuda"];
 
     /// <summary>The stored value as a device; unset or unrecognized is <see cref="EmbeddingDevice.Auto" />.</summary>
     public static EmbeddingDevice Parse(string? raw) =>
@@ -29,6 +32,7 @@ public static class EmbeddingDeviceSetting
             "gpu" => EmbeddingDevice.Gpu,
             "cpu" => EmbeddingDevice.Cpu,
             "mlx" => EmbeddingDevice.Mlx,
+            "cuda" => EmbeddingDevice.Cuda,
             _ => EmbeddingDevice.Auto
         };
 
@@ -36,7 +40,8 @@ public static class EmbeddingDeviceSetting
     ///     Auto trusts the GPU only for the bundled fp16 engine, whose GPU vectors match its CPU ones
     ///     (cosine 0.9998); a quantized user model can drift on the GPU (cosine 0.94), so it opts in.
     ///     <see cref="EmbeddingDevice.Mlx" /> keeps this true for the bundled engine too, so a failed
-    ///     MLX attempt still falls back to the GPU before the CPU.
+    ///     MLX attempt still falls back to the GPU before the CPU. <see cref="EmbeddingDevice.Cuda" /> applies
+    ///     to every local model, so a failed CUDA attempt falls back to WebGPU for each of them.
     /// </summary>
     public static bool PrefersGpu(EmbeddingDevice device, bool isBundledEngine) =>
         device switch
@@ -44,6 +49,7 @@ public static class EmbeddingDeviceSetting
             EmbeddingDevice.Gpu => true,
             EmbeddingDevice.Cpu => false,
             EmbeddingDevice.Mlx => isBundledEngine,
+            EmbeddingDevice.Cuda => true,
             _ => isBundledEngine
         };
 
@@ -55,4 +61,11 @@ public static class EmbeddingDeviceSetting
     /// </summary>
     public static bool PrefersMlx(EmbeddingDevice device, bool isBundledEngine) =>
         device == EmbeddingDevice.Mlx && isBundledEngine;
+
+    /// <summary>
+    ///     The CUDA provider library a session should try: the stored path under device cuda ("" when unset,
+    ///     which the session refuses with a hint), otherwise null — a path left over from cuda stays inert.
+    /// </summary>
+    public static string? CudaLibraryFor(EmbeddingDevice device, string? stored) =>
+        device == EmbeddingDevice.Cuda ? stored ?? "" : null;
 }

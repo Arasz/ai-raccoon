@@ -202,6 +202,16 @@ public class SettingsCommandTreeTests
         parseResult.Errors.Select(e => e.Message).ShouldBeEmpty();
     }
 
+    [Fact]
+    public void ModelDevice_TakesAnOptionalLibraryPath()
+    {
+        var parseResult = CliCommandTree.BuildFullRootCommand()
+            .Parse(["settings", "model", "device", "cuda", "/opt/ort/libonnxruntime_providers_cuda.so"]);
+
+        parseResult.Errors.Select(e => e.Message).ShouldBeEmpty();
+        parseResult.GetValue<string?>("path").ShouldBe("/opt/ort/libonnxruntime_providers_cuda.so");
+    }
+
     [Theory]
     [MemberData(nameof(RemovedArgv))]
     public void OldTopLevelConfigPath_NoLongerParses(string[] argv)
