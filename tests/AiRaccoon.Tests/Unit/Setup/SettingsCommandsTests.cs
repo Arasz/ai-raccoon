@@ -186,6 +186,7 @@ public class SettingsCommandsTests
     [InlineData("gpu", "gpu")]
     [InlineData("CPU", "cpu")]
     [InlineData("auto", "auto")]
+    [InlineData("mlx", "mlx")]
     public async Task ModelDeviceSet_StoresTheDevice(string argument, string stored)
     {
         var store = new FakeConfigStore();
