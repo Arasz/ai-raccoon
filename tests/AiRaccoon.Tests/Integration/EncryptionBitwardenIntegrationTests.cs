@@ -335,9 +335,12 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         });
     }
 
-    /// <summary>The env source has no legacy derivation, so its failure must surface unchanged.</summary>
+    /// <summary>
+    ///     The env source has no legacy derivation to fall back to, but a wrong key still
+    ///     gets the same key-mismatch diagnosis as a source that does — never a raw SqliteException.
+    /// </summary>
     [RetryFact]
-    public async Task OpenBankAsync_EnvSourceWrongPassphrase_RethrowsTheOriginalSqliteException()
+    public async Task OpenBankAsync_EnvSourceWrongPassphrase_ThrowsKeyMismatchOverSqlite26()
     {
         var createFactory = new SqliteConnectionFactory(Options(), FixedKeyResolver("passphrase-a"));
         await using (await createFactory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -347,12 +350,13 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         // No sidecar → env source, and the env provider never carries a legacy key.
         var wrongFactory = new SqliteConnectionFactory(Options(), FixedKeyResolver("passphrase-b"));
 
-        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var conn = await wrongFactory.OpenBankAsync(TestContext.Current.CancellationToken);
         });
 
-        ex.SqliteErrorCode.ShouldBe(26);
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
+        ex.LegacyDerivation.ShouldBeFalse();
     }
 
     [RetryFact]
