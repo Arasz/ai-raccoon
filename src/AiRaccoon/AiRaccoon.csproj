@@ -60,6 +60,13 @@
          marker (docs/plans/2026-08-17-search-phase-attribution.md §S4). This substitutes $(Version)
          into a generated copy before the nuspec is built, so the packed manifest (not just the repo
          copy) carries the real version. -->
+    <!-- The bundled model's weights are fetched, not committed: a pack without them would ship a
+         tool whose default engine cannot load (ADR-0108). -->
+    <Target Name="RequireBundledModelWeights" BeforeTargets="_GetPackageFiles">
+        <Error Condition="!Exists('$(MSBuildProjectDirectory)/Models/granite-embedding-small-english-r2/model_fp16.onnx_data')"
+               Text="The bundled embedding model's weights (Models/granite-embedding-small-english-r2/model_fp16.onnx_data) are missing, so this package could not load its default engine. Run 'python3 scripts/download-embedding-model.py' first."/>
+    </Target>
+
     <Target Name="GenerateMcpServerJson" BeforeTargets="_GetPackageFiles">
         <PropertyGroup>
             <_McpServerJsonSource>$(MSBuildProjectDirectory)\.mcp\server.json</_McpServerJsonSource>

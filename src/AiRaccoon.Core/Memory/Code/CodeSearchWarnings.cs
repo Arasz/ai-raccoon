@@ -14,7 +14,7 @@ public static class CodeSearchWarnings
     /// <inheritdoc cref="EngineNotConfiguredPrefix" />
     public const string EngineNotConfigured =
         EngineNotConfiguredPrefix + " — the code section is FTS5-only; run '" + CodeEngineSetup.DefaultModelCommand
-        + "' to download and activate the default code embedding model";
+        + "' to activate the bundled code embedding model";
 
     /// <summary>
     ///     The query exceeded the configured code engine's manifest window (510 tokens for

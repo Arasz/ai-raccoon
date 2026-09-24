@@ -211,6 +211,8 @@ Explore the complete [Documentation Tree](docs/README.md):
 - `scripts/` holds standalone Python tooling (embedding-model download, JSAA docs ingest,
   benchmark-corpus generation, and more) — see [Run the Python scripts](docs/how-to/run-the-python-scripts.md)
   for setup with `uv`.
+- Before packing the tool from source, run `python3 scripts/download-embedding-model.py`. The bundled
+  model's weights are downloaded, not committed, and `dotnet pack` stops without them.
 - Report security issues privately per [SECURITY.md](SECURITY.md).
 
 ## License
