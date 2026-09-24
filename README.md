@@ -28,6 +28,8 @@ What to do when you upgrade past each version. A version not listed here needs n
 
 ## What's new
 
+- An encrypted bank tells a wrong key (exit `21`) from a corrupt file (exit `32`), using a key-check file next to the bank that never holds the key. (1.50.0) [ADR-0111](docs/adr/0111-key-check-sidecar-distinguishes-wrong-key-from-corrupt-bank.md)
+- On Apple silicon the bundled engine can run through the MLX execution provider, opt-in with `ai-raccoon settings model device mlx`. (1.50.0) [ADR-0110](docs/adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md) · [how-to](docs/how-to/configure-embedding-engines.md)
 - Code search indexes `.mjs`/`.cjs`, Vue, shell, Terraform/HCL and Gherkin `.feature` files, and ingest skips binary files whatever their extension. (1.49.0) [how-to](docs/how-to/search-the-code-corpus.md#what-gets-indexed) · [research](docs/work/2026-09-23-ast-chunking-on-granite-and-magika.md)
 - Code search matches words inside identifiers (`overlap` finds `WatchOverlapResolver`) and indexes HTML, CSS/SCSS and SQL files. (1.48.0) [ADR-0109](docs/adr/0109-code-fts-carries-a-derived-identifiers-column.md) · [results](docs/work/2026-09-23-code-retrieval-eval-results.md)
 - One bundled embedding model for memory and code, granite-embedding-small-english-r2, which beats the old defaults on every retrieval eval, and runs on the GPU where available (macOS). (1.47.0) [ADR-0108](docs/adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)
