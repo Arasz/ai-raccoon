@@ -1,0 +1,261 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-09-24",
+    "branch": "detached HEAD at v1.49.3 in worktree .worktrees/checklist-1493",
+    "commit": "ed5c4010016c9ecef009df25ac731bd4f748ffce (tag v1.49.3). origin/main and HEAD are 68d6b96a = v1.49.3+4; git diff v1.49.3..HEAD -- src/ scripts/ is empty, so the tested tree and main are the same product build.",
+    "data-root": "/tmp/airchk1493/dr (scratch, user scope), server bound via --port 0 to 127.0.0.1:59529. Never ~/.ai-raccoon; port 7721 answered 401 before and after and was never bound. All scratch processes stopped after the run.",
+    "note": "Release checklist for 1.49.3, the first release since the 1.49.1 run. Product changes since 1.49.1: the 1.49.2 checklist fixes (pack guard for the bundled weights, bundled-model warning wording, widened FusionLeader for full recall), bm25 hash tie-break (#702), ADR-0107 PC.0-PC.4 exit-message follow-up (#700), and the WebGPU intra-op spinning change (#712). The 1.49.1 run's three dropped items (attach-or-start-identity-proof, f49-secret-layout, busy-bank-refusal-and-best-effort-bump) are restored here; see findings-against-prior-runs. The global tool was force-installed from the local Release pack (uninstall+install: dotnet tool update refuses to replace an already-installed same version). The reinstall replaced the 1.49.3 store directory the owner's running :7721 server loaded from; that server stayed alive and kept answering 401."
+  },
+  "derived": {
+    "version": "1.49.3",
+    "mcp-tool-count": "29",
+    "mcp-prompt-count": "2",
+    "note": "python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py <worktree> -> version=1.49.3 mcp-tool-count=29 mcp-prompt-count=2, exit 0"
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "docs/work/checklist/2026-09-24-1.49.1-release.json",
+      "prior-claim": "The run note says: 'Not re-run this time: attach-or-start-identity-proof, f49-secret-layout, busy-bank-refusal-and-best-effort-bump (no changes to their code paths since 1.44.0 by commit subjects; not re-verified).'",
+      "what-is-actually-true": "Those three items are absent from the 1.49.1 items array entirely, not marked skipped with a reason. The JSON therefore shows an 18-item checklist with no trace of the three dropped checks, while all three features still exist in the product (ADR-0106 identity proof and secret layout, and the bank-busy refusal path).",
+      "evidence": "python3 parse of 2026-09-24-1.49.1-release.json: 18 items, none named attach-or-start-identity-proof, f49-secret-layout or busy-bank-refusal-and-best-effort-bump. All three were run this time and passed (see the items below).",
+      "so-what": "Coverage silently shrank by three items and a reader of the checklist cannot see it. Per the skill, an item is deleted only when its feature no longer exists; these should have been kept or skipped with a reason."
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-09-24-1.49.1-release.json",
+      "prior-claim": "write-path-noise-filtering: 'each registered write-path policy rejects what it claims to' — status pass.",
+      "what-is-actually-true": "The 1.49.1 item never read the registered policy set; its own evidence admits 'The registered-policy set was not re-read from source this run'. It could not have failed if a second registered policy were broken, because it never knew how many policies were registered.",
+      "evidence": "AppRegistrations.cs:332 is the only INoiseFilterPolicy registration at v1.49.3 (HermesProcessNoisePolicy); the 1.49.1 evidence names rejections from that one policy only.",
+      "so-what": "The item as written was unfalsifiable on policy count. This run reads the registration in source first, then probes every shape the registered policy declares."
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-09-24-1.49.1-release.json",
+      "prior-claim": "The run is presented as a finished result ('17 pass / 1 fail', commit 656eaaed).",
+      "what-is-actually-true": "full-recall-ranking-order carried accepted=null, which the skill defines as unanswered — a run with any null left in it is unfinished, not a run with no objections.",
+      "evidence": "2026-09-24-1.49.1-release.json, items[full-recall-ranking-order].accepted == null (every other item was true).",
+      "so-what": "The unanswered item was resolved by the 1.49.2 FusionLeader fix and passes this run, but the 1.49.1 checklist shipped without an acceptance decision on its one failure."
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed only with the bundled weights present (the 1.49.2 pack guard); the global ai-raccoon tool force-installs this build and `ai-raccoon --version` matches derived.version with a byte-identical binary",
+      "command": "MSBUILDDISABLENODEREUSE=1 dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=osx-arm64 -p:SuppressDeployToLocalSource=true -o /tmp/airchk1493/pack-red (before the weights) ; python3 scripts/download-embedding-model.py ; MSBUILDDISABLENODEREUSE=1 dotnet build AiRaccoon.slnx -c Release ; dotnet pack ... -o /tmp/airchk1493/pack ; python3 scripts/verify-tool-package.py ; dotnet tool uninstall -g ai-raccoon ; dotnet tool install -g ai-raccoon --add-source /tmp/airchk1493/pack --version 1.49.3 ; ai-raccoon --version ; shasum -a 256 of installed vs publish AiRaccoon.dll and host",
+      "evidence": "pack before weights: exit=1, 'error : The bundled embedding model's weights (Models/granite-embedding-small-english-r2/model_fp16.onnx_data) are missing, so this package could not load its default engine. Run 'python3 scripts/download-embedding-model.py' first.' download: exit=0, model_fp16.onnx_data 97402880 bytes. build exit=0 '0 Error(s)'. pack exit=0 (ai-raccoon.1.49.3.nupkg 76323697 B; ai-raccoon.osx-arm64.1.49.3.nupkg 180555153 B). verify exit=0 'OK: ai-raccoon.1.49.3.nupkg ships the verified bundled model'. install: 'Tool 'ai-raccoon' (version '1.49.3') was successfully installed.' --version -> '1.49.3+ed5c4010016c9ecef009df25ac731bd4f748ffce'. Installed and publish AiRaccoon.dll both sha256 b28688ea4e8ecd0e7b5161e4e2a9f86cd6a0cb8b58564eebfdb1edf42526cc30; installed and publish host both 86d3fee11755c3ae6b89b1fd97bcdcf7a4cd6dfa6f5ca9993a1283a368673ed3. (Pre-install the global tool was 1.49.3+87363458, a docs-only descendant; `dotnet tool update` reported 'already installed' and did not replace it, so uninstall+install was used.)",
+      "observed-result": "The pack guard fails the pack before the weights exist and the pack succeeds once they do; the installed tool is byte-identical to this commit's build and reports the derived version.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Version and binary match the tree, and the 1.49.1 finding (a weights-less pack exiting 0) is now a hard failure naming the remedy."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "curl -X POST :7721/mcp (before) ; ai-raccoon --data-root /tmp/airchk1493/dr serve --port 0 --idle-timeout 0 ; read the port from serve1.log ; ai-raccoon --data-root /tmp/airchk1493/dr serve --port 59529 --restart --idle-timeout 0 ; ps -p 51771 ; curl :7721/mcp (after)",
+      "evidence": "7721 before: 401. serve1.log: 'Now listening on: http://127.0.0.1:59529'. restart.log: 'ai-raccoon: asking the server on port 59529 to stop (pid 51771, 1.49.3+ed5c4010016c9ecef009df25ac731bd4f748ffce)' / 'ai-raccoon: the server on port 59529 (pid 51771) stopped and the port is free' / 'Now listening on: http://127.0.0.1:59529'. Old pid 51771 gone, new pid 52718 listening on the same port. 7721 after: 401.",
+      "observed-result": "Binds an ephemeral port and reports it; --restart stops the old server by pid and rebinds the same port; 7721 was never touched.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0022."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "tools/call memory_write {astrolabe sentence, sourceFile /notes/observatory.md, section brass-instruments} ; tools/call memory_write {'[IMPORTANT: Background process 12345 finished with exit 0 after 12s]'}",
+      "evidence": "clean -> {\"hash\":\"55241e7e0a9d5ffe98b2739c2a502fde2b2982c3ecae784a92246cffd0f0a08a\",\"path\":\"5598b326...\",\"context\":\"project:01a0d176-...\",\"stored\":true}. rejected -> {\"hash\":\"\",\"path\":\"\",\"context\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}.",
+      "observed-result": "The stored write returns a real hash; the rejected write reports stored=false with its reason and an empty hash.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0032."
+    },
+    {
+      "item": "memory-engine-unconfigured-warning",
+      "expected-result": "On a bank with no memory embedding engine, memory_search carries the 'memory engine not configured' warning naming the remedy — activation of the bundled model, not a download (1.49.2 fix)",
+      "command": "ai-raccoon --data-root /tmp/airchk1493/dr settings model show on the fresh bank ; tools/call memory_search {'astrolabe observatory', kind memory}",
+      "evidence": "'provider: (none — FTS5-only search)' / 'codeModel: (none — FTS5-only code search)'. search warning: 'memory engine not configured — the memory section is FTS5-only; run 'ai-raccoon model embedding set local' to activate the bundled memory embedding model code engine not configured — the code section is FTS5-only; run 'ai-raccoon model code set default' to activate the bundled code embedding model'.",
+      "observed-result": "Both warnings name activating the bundled model; the pre-1.49.2 'download' wording is gone. The 1.49.1 run accepted that wording as cosmetic; it has since been fixed.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Wording matches ADR-0108 (the model ships in the package)."
+    },
+    {
+      "item": "bundled-engine-on-gpu",
+      "expected-result": "ADR-0108: `model embedding set local` activates the bundled granite fp16 engine with no download; the session tries the GPU first and logs the provider it got. #712: the GPU session disables ORT intra-op spinning",
+      "command": "ai-raccoon --data-root /tmp/airchk1493/dr --port 59529 model embedding set local ; tools/call memory_embed_pending ; tools/call memory_stats ; read restart.log ; ai-raccoon ... model code set default ; read src/AiRaccoon.Infrastructure/Embedding/OnnxEmbeddingGenerator.cs:160",
+      "evidence": "'embedding engine set to local (bundled ONNX model); re-embedding in the background'. restart.log: 'Embedding session created: intra-op threads 5 (halved-core default), execution provider WebGPU'. embed_pending -> {\"processed\":1,\"pending\":0}; stats -> entries 1, pending 0. 'code embedding engine set to local (bundled); the code-reindex maintenance job will re-embed pending rows'. OnnxEmbeddingGenerator.cs:160: new Dictionary<string, string> { [\"session.intra_op.allow_spinning\"] = \"0\" } applied to the WebGPU session.",
+      "observed-result": "Both corpora run on the bundled engine; the memory session got WebGPU on this M-series Mac. The spinning change is present on the GPU session path (source-verified; it is not externally observable in the log).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0108 decisions 1, 2, 4 and 5; #712's config entry is on the GPU path."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking, on a query whose content words appear in no stored note, so the vector leg has to carry it",
+      "command": "memory_write four unrelated filler notes ; memory_embed_pending ; tools/call memory_search {'a handheld sighting device once used to measure the height of stars above the horizon', kind memory, scope project}",
+      "evidence": "rank 1 55241e7e (the astrolabe note) legs [fts:3, vector:1] cosine 0.830; truncation absoluteRelevance 0.79 dropped 5. The query shares no content word with the stored note; the FTS leg ranked it third behind filler notes matching common words, while the vector leg ranked it first.",
+      "observed-result": "The vector leg alone puts the astrolabe first; a dead vector leg would leave it at fts:3 or drop it. (The 1.49.1 probe's query shared 'evening' with the note; this probe does not.)",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The per-leg evidence shows the vector leg's rank 1 independently of FTS."
+    },
+    {
+      "item": "absolute-relevance-floor-keeps-exact-matches",
+      "expected-result": "The absolute-relevance floor (granite's 0.79) drops irrelevant rows but never an exact keyword match, including one whose content cosine is below the floor",
+      "command": "memory_write short notes containing 'AIR-4471' and 'QZX7K2P' ; memory_write a long village-green note with 'Invoice reference vk83jq' buried at the end ; memory_search {'AIR-4471'}, {'QZX7K2P'}, {'vk83jq'}, {'invoice vk83jq'}",
+      "evidence": "AIR-4471 -> fd084168 rank 1 [fts:1, vector:1] cosine 0.822. QZX7K2P -> d753e243 rank 1 [fts:1, vector:1] cosine 0.892. vk83jq -> 8f7db8b1 rank 1 [fts:1, vector:6] cosine 0.767 (below the 0.79 floor), truncation dropped 7 — kept only by the keyword exemption. 'invoice vk83jq' -> 8f7db8b1 [fts:1, vector:1] cosine 0.793.",
+      "observed-result": "The floor still drops the seven unrelated rows, and a keyword match whose content cosine is below the floor (0.767 < 0.79) is kept. The first two probes are above the floor and could not have failed; vk83jq is the probe that exercises the exemption.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The exemption is exercised by a probe the floor alone would have dropped (the 1.49.1 run's own finding about its weak probes)."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "tools/call memory_get {hash 55241e7e...} ; tools/call memory_get {hash 000...0}",
+      "evidence": "value 'The observatory keeps a brass astrolabe on the west sill, its ring catching the lamplight while the dome tracks the evening sky.', context project:01a0d176-.... unknown -> isError=true, 'unknown-hash: No entry with hash '0000000000000000000000000000000000000000000000000000000000000000' in project '01a0d176-...'.'",
+      "observed-result": "Returns content by hash; the unknown hash is refused.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0035."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk first, with two sections of the same file written",
+      "command": "memory_write /notes/observatory.md section coastal-duties (brass-instruments already written) ; memory_search {'/notes/observatory.md#coastal-duties'}, {'observatory.md#Coastal duties'}, {'/notes/observatory.md#brass-instruments'}",
+      "evidence": "slug -> rank 1 feb6ec6f (coastal duties) [fts:1, vector:1]; rank 2 706a8171 (tide tables, vector only). spaced -> rank 1 feb6ec6f [fts:1, vector:1]. brass -> 55241e7e alone. The sibling section never ranks above the named one.",
+      "observed-result": "Both the slug and the spaced spelling resolve the named section first, and the other anchor returns the other section.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The named chunk is first in each spelling with a sibling section present that could have outranked it."
+    },
+    {
+      "item": "full-recall-ranking-order",
+      "expected-result": "With minRelativeScore 0 (ADR-0096 full-recall hatch) the all-terms keyword match that wins fusion is not outranked by single-leg sibling chunks under the neighbour boost (the 1.49.1 failure, fixed in 1.49.2)",
+      "command": "memory_search {'vk83jq', minRelativeScore 0, limit 8} with defaults ; settings retrieval list ; memory_search {'vk83jq', minRelativeScore 0, limit 3, sourceLambda 0}",
+      "evidence": "default: 1 8f7db8b1 [fts:1, vector:6] fusionStrength 0.962; 2 6773bfe2 [vector:3] sibling chunk of the same file; 3 55241e7e [vector:1]. sourceLambda 0: 1 8f7db8b1. Settings: sourceLambda 0.1 (default), consolidationThreshold 0.1 (default).",
+      "observed-result": "The keyword match that wins fusion stays first ahead of the sibling boost; the 1.49.1 failure (the leader at rank 3) is fixed by the widened FusionLeader (bc5c06f1).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The 1.49.1 fail is fixed; the leader is pinned against the neighbour boost with defaults on."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, clean content passes, and rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "read src/AiRaccoon/Setup/AppRegistrations.cs:332 and src/AiRaccoon.Core/Memory/Filtering/Policies/HermesProcessNoisePolicy.cs ; memory_write '[IMPORTANT: Background process 12345 ...]', '[ASYNC DELEGATION BATCH 7 of 9 completed]', 'received signal 15' ; near-miss controls 'The keeper received signal flags from passing ships at dawn.', 'Notes on the [IMPORTANT: Background process] wording we removed from the log.', 'received signal 15 but the process restarted.' ; ai-raccoon ... noise entries",
+      "evidence": "AppRegistrations.cs:332 is the only INoiseFilterPolicy registration: HermesProcessNoisePolicy, whose three shapes are '[IMPORTANT: Background process' prefix, '[ASYNC DELEGATION BATCH' prefix, and an exact 'received signal <digits>[.]' body. All three shapes -> stored=false, reason 'rejected by noise policy 'HermesBackgroundProcessLog''. All three controls -> stored=true (hashes 1e6a45b0, d7ba4513, 2c65487e). noise entries -> 'total: 3 / HermesBackgroundProcessLog: 3'.",
+      "observed-result": "The only registered policy rejects all three shapes it declares, all three near misses are stored, and the noise store records each rejection.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Rejection, negative controls and noise-store retrieval all behave; the registered set was read from source this run (the 1.49.1 item did not)."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "ai-raccoon ... settings queryguard list ; memory_search with the verbatim RealHermesProcessNotification and RealStackTracePaste fixtures from tests/AiRaccoon.Tests/Unit/Memory/QueryGuard/QueryGuardPolicyTests.cs ; control memory_search {'bank write lock timeout'}",
+      "evidence": "'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'. Hermes -> isError=true, 'invalid-params: This looks like tool output rather than a question. ... Refused query: [IMPORTANT: Background proces'. stack trace -> 2 results plus warning 'This query contains what looks like log or stack-trace output. ...'. control -> results, no warning key.",
+      "observed-result": "Refuse tier refuses, annotate tier returns results with the warning, and a clean query gets neither; structural is off.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0040 and ADR-0041."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state, and the watched content is searchable",
+      "command": "memory_watch_add before enabling ; settings ingest scope add <projectId> /tmp/airchk1493/probe ; settings watch enable <projectId> true ; memory_watch_add ; memory_watch_status ; memory_search {'fog bell harbor mouth rings in thick weather'}",
+      "evidence": "before enable -> isError=true, 'watching-disabled: Watching is disabled for project '01a0d176-...'. Run 'ai-raccoon settings watch enable <projectId|*> true' to enable it.' status -> [{path '/tmp/airchk1493/probe', state 'Healthy', lastSync '2026-09-24T03:34:43.639488+00:00'}]. search -> rank 1 c8685ba3 /tmp/airchk1493/probe/harbor.md [fts:1, vector:1].",
+      "observed-result": "The registration shows with its state and last sync, and the watched file is searchable.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Status reflects the live registration."
+    },
+    {
+      "item": "watch-ingests-new-file-types",
+      "expected-result": "shell and Gherkin files are indexed into the code corpus; a binary file with a code extension is skipped",
+      "command": "probe/deploy.sh (shell function), probe/beacon.feature (Gherkin), probe/blob.sh (4 KB urandom with NULs) under the watch ; sqlite3 ?mode=ro on watch_files and code_entries ; memory_search {'swap the lamp bulb and count rotations', kind code} ; code_get {full hash}",
+      "evidence": "watch_files: beacon.feature, blob.sh, deploy.sh, harbor.md. code_entries: beacon.feature (lines 1-6) and deploy.sh (lines 1-4, identifiers 'rotate lighthouse lamp'); no row for blob.sh. code search -> rank 1 deploy.sh, rank 2 beacon.feature. code_get -> '#!/bin/sh\nrotate_lighthouse_lamp() {\n  echo \"swap the lamp bulb and count rotations\"\n}', lineStart 1, lineEnd 4.",
+      "observed-result": "Shell and Gherkin are indexed and searchable, with identifiers extracted from the shell function name; the binary .sh is tracked as seen but not indexed.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both new types are indexed, and the binary negative control is skipped."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately; an already-shared entry is not re-queued",
+      "command": "memory_share {55241e7e...} ; memory_share_extract {projectIds [01a0d176...], mode propose, limit 5} ; memory_promotion_list ; compare hashes, scores and reasons",
+      "evidence": "share -> {shared:true, context:'shared'}. extract -> 5 candidates (6773bfe2 score 2.82 reasons organic-note/durable-fact-language; 8791cc34 1.41 organic-note; feb6ec6f; 8f7db8b1; 1e6a45b0). list -> the same five with the same scores and reasons; extract set == list set True; shared 55241e7e in queue False.",
+      "observed-result": "The queue holds exactly what was proposed, with matching scores and reasons, and excludes the already-shared entry.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Content, scores and reasons match; the shared entry is excluded."
+    },
+    {
+      "item": "categorized-exit-codes",
+      "expected-result": "ADR-0107: removed flag -> 11 Usage.Unparseable; settings verb on a data root with no bank -> 31 Bank.NoBank and creates nothing; --port 0 on a dialling verb -> 13 Usage.UndialablePort; --transport stdio -> 14 Usage.RemovedTransport. Follow-up PC.0-PC.4: doctor names both SQLITE_NOTADB causes (32); a bad base-url -> 78 Model.BadBaseUrl before persisting the key; a rejected key -> 77 naming the key; serve names the identity-proof refusal reason (50); a non-owner-only token -> 51 with the chmod remedy",
+      "command": "ai-raccoon --attach settings model show ; ai-raccoon serve --attach --port 0 ; ai-raccoon --data-root /tmp/airchk1493/dr-typo --port 59529 settings model show ; ls /tmp/airchk1493/dr-typo ; ai-raccoon --data-root /tmp/airchk1493/dr --port 0 settings model show ; ai-raccoon --transport stdio serve ; ai-raccoon serve --transport stdio ; ai-raccoon --transport https ; ai-raccoon --data-root /tmp/airchk1493/dr-corrupt doctor (4096 random bytes as memory.db) ; ai-raccoon --port 59529 model embedding set openai --base-url not-a-url --api-key sk-test ; ai-raccoon --port 59529 model embedding set openai --base-url http://127.0.0.1:59701/v1 --api-key sk-bad (local 401 server) ; chmod 644 /tmp/airchk1493/dr/mcp-token ; ai-raccoon --port 59529 settings model show ; serve and restart against a 200-answering squatter on 59700",
+      "evidence": "exit 11 'Unrecognized command or argument '--attach'.' (root and post-verb). exit 31 'ai-raccoon: no bank exists at '/tmp/airchk1493/dr-typo/memory.db' — create it with ...'; ls dr-typo: No such file or directory. exit 13 'cannot dial --port 0: expected 1-65535 ...'. '--transport stdio serve' exit 14; 'serve --transport stdio' exit 11 + 'Hint: --transport stdio was removed; ...'. '--transport https' exit 14. doctor corrupt -> exit 32 'exists but is not a SQLite database (SQLite error 26); wrong key or corrupt bank — check the encryption key source if this data root was working before, or restore the bank from a backup if the file itself is damaged'. bad base-url -> exit 78 ''not-a-url' is not a usable absolute http(s) URL; ... Nothing has been changed.' and settings show apiKey unset, engine still local bundled. rejected key -> exit 77 'The embedding endpoint for '--base-url' rejected the API key (HTTP 401). Check the --api-key value and re-run; nothing has been changed.' chmod 644 token -> exit 51 'the backend at http://127.0.0.1:59529/mcp is listening but has no usable token for this data root (''/tmp/airchk1493/dr/mcp-token' is not owner-only and may hold a secret — remove it, or run 'chmod 600 \"/tmp/airchk1493/dr/mcp-token\"' and start again)'.",
+      "observed-result": "Every documented case exits with its ADR-0107 code, and the PC.0-PC.4 messages name the real cause (both SQLITE_NOTADB causes, the bad URL, the rejected key, the token's permission remedy).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "All documented cases match ADR-0107 including the 1.49.2 exit-message follow-up."
+    },
+    {
+      "item": "bm25-hash-tiebreak",
+      "expected-result": "#702: an exact bm25 tie breaks by row hash ascending, not insertion/rowid order, in both entries FTS and code FTS — including under a LIMIT that cuts inside the tie",
+      "command": "sqlite3 insert of three tied rows into the scratch bank (id 9001 hash ccc, 9002 aaa, 9003 bbb; identical value/source_file/section, so bm25 ties exactly; insertion order is the reverse of hash order) ; memory_search {'zephyr', minRelativeScore 0, limit 20} ; ./AiRaccoon.Tests --filter-class AiRaccoon.Tests.Integration.Storage.FtsBm25HashTiebreakTests ; ./AiRaccoon.Tests --filter-class AiRaccoon.Tests.Integration.Storage.SqliteCodeSearchServiceTests",
+      "evidence": "live FTS leg: aaa00000 rank 1 [fts:1] although ccc was inserted first (id 9001) — hash order, not rowid order (the other two tied rows do not survive the pipeline's own window/dedup, so the live probe can only show the rank-1 row). FtsBm25HashTiebreakTests: total 1, failed 0, succeeded 1. SqliteCodeSearchServiceTests: total 18, failed 0, succeeded 18 (includes SearchAsync_OnExactBm25Ties_OrdersByHash_NotInsertionOrder).",
+      "observed-result": "The tie-break is hash-ascending in the live FTS leg; the LIMIT-cuts-inside-the-tie membership is pinned by the two integration test classes run against this build.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Live evidence covers the order; the cut-inside-the-tie half cannot be driven through memory_search's own window and is checked by the two integration test classes named in the command."
+    },
+    {
+      "item": "attach-or-start-identity-proof",
+      "expected-result": "ADR-0106: a proven listener is attached (nothing spawned); an unproven listener gets zero secret bytes and `serve`/`serve --restart` refuse with the reason named on stderr (PC.3); a settings verb falls back to a private backend with the 690 disclosure",
+      "command": "python squatter on 59700 answering 200 and logging every request ; ai-raccoon --data-root /tmp/airchk1493/dr serve --port 59700 ; ai-raccoon --data-root /tmp/airchk1493/dr --port 59700 settings model show ; ai-raccoon --data-root /tmp/airchk1493/dr serve --port 59700 --restart ; scan squat.log for auth headers and the token bytes",
+      "evidence": "serve: exit=50, stderr 'ai-raccoon: port 59700 is in use by a listener that did not prove it serves this data root (its answer was not a valid identity proof) — stop the listener yourself, or serve on another port (--port 0)'; log 603 'port 59700 is in use — pass --port 0 for a random port, or free the port'. settings: exit=0, '[690] the listener on port 59700 did not prove it serves this data root (Malformed); starting a private backend on an ephemeral port instead', '[631] starting a private backend on an ephemeral port', output 'provider: local'. restart: exit=50, 'ai-raccoon: cannot restart the server on port 59700: the listener did not prove it serves this data root — stop the listener yourself, then run serve again, or serve on another port (--port 0)'; 657 '(Malformed); nothing is asked to stop'. Squatter saw 8 requests, every one 'auth=no xtok=no'; occurrences of the token bytes in squat.log: 0.",
+      "observed-result": "The unproven listener is refused with the specific reason, never receives a secret, and a settings verb falls back to a private backend; a proven listener was attached and cycled by --restart in server-lifecycle.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0106; F70 stays closed and the PC.3 refusal reason is surfaced."
+    },
+    {
+      "item": "f49-secret-layout",
+      "expected-result": "ADR-0106 D1/D7: identity-key and mcp-token are 0600 in the bank state directory (0700): the data root for user scope, <root>/.ai-raccoon for project scope; nothing 0600 at a project root's top level",
+      "command": "stat /tmp/airchk1493/dr{,/identity-key,/mcp-token} ; ai-raccoon --data-root /tmp/airchk1493/repo --install-scope project serve --port 0 ; find /tmp/airchk1493/repo -maxdepth 2 ; stat repo/.ai-raccoon* ; pre-create dr-692 with mode 755 and serve to observe the tightening",
+      "evidence": "user scope: dr drwx------, identity-key -rw-------, mcp-token -rw-------. project scope: repo/ drwxr-xr-x holds only .ai-raccoon/ (drwx------) with identity-key and mcp-token -rw-------; nothing 0600 at repo's top level. dr-692 pre-created 755 -> '[692] the state directory /tmp/airchk1493/dr-692 was readable by other users and was tightened to owner-only (0700)' and stat dr-692 drwx------, secrets -rw-------.",
+      "observed-result": "Layout and permissions match D7 in both scopes; the 0755→0700 tightening is logged once.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0106 D1/D7."
+    },
+    {
+      "item": "busy-bank-refusal-and-best-effort-bump",
+      "expected-result": "with another writer holding the write lock: memory_search returns results and logs one Warning (897/964, no exception); a write is refused as bank-busy at Warning (911), never 912",
+      "command": "python3 sqlite3 BEGIN IMMEDIATE on /tmp/airchk1493/dr/memory.db held 30 s ; memory_search ; memory_write ; count the event ids in restart.log",
+      "evidence": "search -> results returned (2, first 55241e7e), no error. write -> isError=true, 'bank-busy: the bank is busy (another writer holds the lock); retry the call'. Log counts: SqliteMemoryStore[897] 1, SqliteSearchQualityService[964] 1, ToolRefusals[911] 3, [912] 0, Exception lines 0.",
+      "observed-result": "Search returns results and logs one Warning; the write is refused as bank-busy at Warning (911), never 912, with no exception.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches #637/#639."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "tools/list ; prompts/list ; tools/call across the run",
+      "evidence": "tools/list 29; prompts/list 2 (workspace-consolidation-guide, memory-usage-guide). Called this run: project_id_token_get, memory_write, memory_embed_pending, memory_stats, memory_search, memory_get, memory_watch_add, memory_watch_status, memory_share, memory_share_extract, memory_promotion_list, code_get, memory_record_grade, memory_record_followthrough, memory_list, memory_performance (16 of 29).",
+      "observed-result": "The listed counts equal the derived 29 and 2; 16 tools were called and the remaining 13 are listed, not called.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Counts match the tree. Listing, not calling, is the check for the remaining 13."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "extract 'AiRaccoon.*[id]' from serve1.log, restart.log, repo-serve.log, serve-692.log, doctor-corrupt.log, token-refusal.log, reject-key.log, serve-squat.log and restart-squat.log ; resolve each against the reference's exact rows and ranges at ed5c4010",
+      "evidence": "16 distinct ids: 603 (601-609 NodeRunner), 692 (OwnerOnlyFile), 650/651/657 (650-657 ServerRestart), 1003 (1002-1013 EmbedDrainReporter), 428 (426-428 EmbeddingService), 510/525 (510-524 BankMaintenanceHostedService), 897/899 (897-900 SqliteMemoryStore), 964 (964-965 SqliteSearchQualityService), 687 (CliSettingsBackend), 1016 (1014-1016 DoctorCommands), 910/911 (910-913 ToolRefusals).",
+      "observed-result": "Every emitted id resolves against the reference.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "No unresolved id."
+    }
+  ]
+}

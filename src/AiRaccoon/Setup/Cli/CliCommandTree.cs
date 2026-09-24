@@ -238,9 +238,11 @@ internal static class CliCommandTree
 
         model.Add(new Command("device",
             "Where local embedding sessions run: auto (default: the bundled model on the GPU, other models on the CPU), " +
-            "gpu (every local model on the GPU where the platform has one), or cpu. Takes effect on the next server restart.")
+            "gpu (every local model on the GPU where the platform has one), cpu, or mlx (the bundled engine only, " +
+            "through the onnxruntime MLX plugin on osx-arm64; falls back to gpu then cpu when unavailable, ADR-0110). " +
+            "Takes effect on the next server restart.")
         {
-            new Argument<string>("device") { HelpName = "auto|gpu|cpu" }
+            new Argument<string>("device") { HelpName = "auto|gpu|cpu|mlx" }
         });
 
         return model;
