@@ -495,6 +495,23 @@ def test_pinned_revision_mismatch_fails_loud():
     ingest.check_pinned_revision(ingest.PINNED_MODEL_REVISION)  # must not raise
 
 
+def test_create_embedding_model_passes_model_name_and_max_length(monkeypatch):
+    # No weights load here: HuggingFaceEmbedding itself is replaced with a
+    # recording fake, so the only thing under test is the kwargs ingest hands
+    # it (a typo'd or dropped max_length would silently stop mirroring
+    # EmbeddingService.ResolveChunkBudgetFor's token cap).
+    captured = {}
+
+    class _FakeHuggingFaceEmbedding:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(ingest, "HuggingFaceEmbedding", _FakeHuggingFaceEmbedding)
+    ingest.create_embedding_model()
+    assert captured["model_name"] == ingest.MODEL_NAME
+    assert captured["max_length"] == ingest.EMBED_MAX_SEQ_LENGTH
+
+
 def _dupe_copy(path: Path, second_value: str | None = None):
     """Two-bucket fixture plus the same hash in a third bucket (multi-homed row)."""
     _fixture_copy(path)
