@@ -153,6 +153,12 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         return new InferenceSession(modelPath, options);
     }
 
+    /// <summary>GPU intra-op workers spin-wait between kernels by default, which burns CPU on a
+    /// WebGPU session for no latency benefit; CPU-only sessions keep spinning because it helps
+    /// CPU-bound runs. Applied only to <see cref="CreateGpuSessionOrNull" />'s options.</summary>
+    internal static readonly IReadOnlyDictionary<string, string> GpuSessionConfigEntries =
+        new Dictionary<string, string> { ["session.intra_op.allow_spinning"] = "0" };
+
     /// <summary>A session with the WebGPU provider appended (ORT keeps what the GPU cannot run on the
     /// CPU), or null when ORT refuses it — the caller falls back to a CPU session.</summary>
     private InferenceSession? CreateGpuSessionOrNull(string modelPath, int intraOpThreads)
@@ -163,6 +169,11 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
             if (intraOpThreads > 0)
             {
                 options.IntraOpNumThreads = intraOpThreads;
+            }
+
+            foreach (var (key, value) in GpuSessionConfigEntries)
+            {
+                options.AddSessionConfigEntry(key, value);
             }
 
             options.AppendExecutionProvider(WebGpuProvider, new Dictionary<string, string>());
