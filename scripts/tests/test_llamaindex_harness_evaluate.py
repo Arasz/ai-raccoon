@@ -498,6 +498,62 @@ def test_gap_counts_sum_to_paired():
     assert tax["unknownShare"] == pytest.approx(1 / 5)
 
 
+def test_score_side_persists_the_package_d_rank_columns():
+    # Additive schema (package D): fts_rank/vector_rank/fused_rank/floor_rank/
+    # min_relative_score ride along beside the existing fts_hit/vector_hit
+    # booleans whenever the harness leg reports them.
+    outcome = {"hashes": ["h1"], "fts_hit": 1, "vector_hit": 0, "fts_rank": 3,
+               "vector_rank": None, "fused_rank": 5, "floor_rank": None,
+               "min_relative_score": 0.6, "error": None}
+    scored = evaluate._score_side("h1", outcome)
+    for key in ("fts_rank", "vector_rank", "fused_rank", "floor_rank",
+               "min_relative_score"):
+        assert scored[key] == outcome[key]
+
+
+def test_score_side_omits_rank_columns_when_absent():
+    # The bank leg (and any legacy harness outcome) never carries these keys;
+    # _score_side must not invent them.
+    outcome = {"hashes": ["h1"], "error": None}
+    scored = evaluate._score_side("h1", outcome)
+    for key in ("fts_rank", "vector_rank", "fused_rank", "floor_rank",
+               "min_relative_score"):
+        assert key not in scored
+
+
+def _fusion_row(qid, *, floor_rank=None, fused_rank=None, harness_hit=0, fts=1, vec=0):
+    row = _gap_row(qid, harness_hit=harness_hit, fts=fts, vec=vec)
+    row["harness"]["floor_rank"] = floor_rank
+    row["harness"]["fused_rank"] = fused_rank
+    return row
+
+
+def test_fusion_sublabel_distinguishes_take_from_floor():
+    # Package D: within the 'fusion' gap cell, floor_rank present means the
+    # anchor cleared the relative floor and only Take(limit) dropped it;
+    # fused_rank-without-floor_rank means the floor itself dropped it.
+    take_row = _fusion_row("A", floor_rank=3, fused_rank=3)
+    floor_row = _fusion_row("B", floor_rank=None, fused_rank=4)
+    unattributed_row = _fusion_row("C", floor_rank=None, fused_rank=None)
+    none_row = _gap_row("D", harness_hit=1, fts=1, vec=1)  # not a fusion row at all
+    assert evaluate.fusion_sublabel(take_row) == "fusion_take"
+    assert evaluate.fusion_sublabel(floor_row) == "fusion_floor"
+    assert evaluate.fusion_sublabel(unattributed_row) == "unattributed"
+    assert evaluate.fusion_sublabel(none_row) is None
+
+
+def test_fusion_subtaxonomy_counts_take_vs_floor_vs_unattributed():
+    rows = [
+        _fusion_row("A", floor_rank=3, fused_rank=3),
+        _fusion_row("B", floor_rank=None, fused_rank=4),
+        _fusion_row("C", floor_rank=None, fused_rank=None),
+        _gap_row("D", harness_hit=1, fts=1, vec=1),
+    ]
+    tax = evaluate.fusion_subtaxonomy(rows)
+    assert tax == {"n_fusion": 3, "cells": {"fusion_take": 1, "fusion_floor": 1,
+                                            "unattributed": 1}}
+
+
 def test_unknown_share_over_cap_fails_the_eval_gate():
     # Bar: unknown share <= 5%, else the classifier (or the data) failed, not
     # the retrieval. Pure function reports the share; the gate fails loud.
@@ -545,6 +601,18 @@ def test_leg_diagnostics_use_candidate_window_not_top8(monkeypatch, tmp_path):
         def retrieve(self, query, limit=None):
             return []
 
+        def leg_and_fusion_ranks(self, query, limit=None):
+            # package D: the real method derives these from the SAME fts_leg/
+            # vector_leg calls above, so the fake mirrors that composition
+            # rather than hand-rolling independent numbers.
+            fts_rows, _plan = self.fts_leg(query, limit)
+            vec_rows = self.vector_leg(query, limit)
+            return {
+                "fts_rank_of": {h: i for i, (h, _) in enumerate(fts_rows, start=1)},
+                "vector_rank_of": {h: i for i, (h, _) in enumerate(vec_rows, start=1)},
+                "fused_rank_of": {}, "floor_rank_of": {}, "min_relative_score": 0.6,
+            }
+
     monkeypatch.setattr(retrieve_mod, "FusionRetriever", _FakeRetriever)
     monkeypatch.setattr(ingest_mod, "open_store", lambda path: _FakeHandle())
     monkeypatch.setattr(ingest_mod, "create_embedding_model",
@@ -557,6 +625,10 @@ def test_leg_diagnostics_use_candidate_window_not_top8(monkeypatch, tmp_path):
         fn.close()
     assert out["fts_hit"] == 1
     assert out["vector_hit"] == 0
+    # Package D: the rank behind each boolean is persisted too.
+    assert out["fts_rank"] == 50
+    assert out["vector_rank"] is None
+    assert out["min_relative_score"] == pytest.approx(0.6)
 
 
 # --- P2 AC1: repeat-run spread + served-set stability (pure) ---

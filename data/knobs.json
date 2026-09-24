@@ -1,11 +1,12 @@
 {
-  "MODEL_NAME": "Salesforce/SFR-Embedding-Code-400M_R",
-  "PINNED_MODEL_REVISION": "cb950dc80d677c6fdc00f56c8ddd20ca2642c59e",
+  "MODEL_NAME": "ibm-granite/granite-embedding-small-english-r2",
+  "PINNED_MODEL_REVISION": "2ab6fa8ea2d674564defd37171ae19079b864b33",
   "EVAL_LIMIT": 8,
   "THRESHOLD_SEARCH_LIMIT": 8,
   "BM25_WEIGHTS": [1.0, 8.0, 4.0],
   "UPSERT_BATCH_SIZE": 4000,
   "EMBED_BATCH_SIZE": 32,
+  "EMBED_MAX_SEQ_LENGTH": 256,
   "PARAMS": {
     "rrfK": 60,
     "ftsWeight": 1,
@@ -20,7 +21,7 @@
     "fusionNoRegression": false,
     "scope": "project",
     "kind": "memory",
-    "model": "Salesforce/SFR-Embedding-Code-400M_R"
+    "model": "ibm-granite/granite-embedding-small-english-r2"
   },
   "KNOB_DEFAULTS": {
     "rrfK": 60,

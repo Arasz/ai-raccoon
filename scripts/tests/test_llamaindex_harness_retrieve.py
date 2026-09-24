@@ -145,6 +145,35 @@ def test_limit_is_respected(store):
     assert len(_retriever(store).retrieve("common token", limit=2)) == 2
 
 
+def test_leg_and_fusion_ranks_reports_positions_before_floor_and_take(store):
+    # Package D: f1/f2/f3 all clear the relative floor for "common token" (see
+    # test_limit_is_respected), so the one Take(2) drops must show a floor_rank
+    # beyond the cut, never an absent one — that is the fusion_take signature.
+    r = _retriever(store)
+    served = r.retrieve("common token", limit=2)
+    served_ids = {n.node.node_id for n in served}
+    assert served_ids <= {"f1", "f2", "f3"}
+    assert len(served_ids) == 2
+    dropped = ({"f1", "f2", "f3"} - served_ids).pop()
+
+    diag = r.leg_and_fusion_ranks("common token", limit=2)
+    assert diag["min_relative_score"] == pytest.approx(0.6)
+    assert dropped in diag["floor_rank_of"]  # cleared the floor...
+    assert diag["floor_rank_of"][dropped] > 2  # ...but ranks beyond Take(2)
+    for sid in served_ids:
+        assert diag["floor_rank_of"][sid] <= 2
+        assert sid in diag["fused_rank_of"]
+
+
+def test_leg_and_fusion_ranks_empty_when_no_candidate_matches(store):
+    # No leg holds anything for an unresolvable bucket: every rank map is
+    # empty, never an exception.
+    r = _retriever(store, project_id="no-such-project")
+    diag = r.leg_and_fusion_ranks("common token", limit=8)
+    assert diag == {"fts_rank_of": {}, "vector_rank_of": {}, "fused_rank_of": {},
+                    "floor_rank_of": {}, "min_relative_score": pytest.approx(0.6)}
+
+
 def test_no_match_query_serves_vector_only_without_error(store):
     # Unknown tokens: FTS leg empty, vector KNN still serves (same as the bank).
     r = _retriever(store)
