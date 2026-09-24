@@ -1,10 +1,18 @@
 {
- "lastUpdated": "2026-09-24T03:54:44+02:00",
+ "lastUpdated": "2026-09-24T04:00:00+02:00",
  "notesRef": ".ai-badger/status-notes.json",
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
-   "id": "air-symbol-path-header-chunk-eval",
+   "id": "air-full-recall-pack-guard-fixes",
+   "title": "1.49.1 checklist findings: full-recall leader for all-terms keyword matches, pack guard for missing model weights, bundled-engine warning wording (1.49.2)",
+   "pr": 694,
+   "merged": true,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "FusionLeader.Of widens the ADR-0005 leader: fused #1 that is the keyword top and in AllTermsMatched keeps rank 1 against the neighbour boost (red: vk83jq note ranked 3rd under minRelativeScore 0). Gates green: sweep, QueryConstruction, held-out, absolute floor. csproj RequireBundledModelWeights fails pack without model_fp16.onnx_data. Engine warnings/MCP instructions no longer promise a download. Post-verb --transport stdio exit 11 kept (pinned by design). Filed #695: chunker splits words mid-token."
+  },
+{"id": "air-symbol-path-header-chunk-eval",
    "title": "Path/symbol header on line chunks, measured on JSAA C#/TS and ai-badger Python whole repos (granite): not kept",
    "pr": 697,
    "merged": true,
