@@ -7,7 +7,7 @@ that holds its content, and code chunks tile the file's lines with no overlap.
 
 from __future__ import annotations
 
-from retrieval_tuning.chunk_window import (
+from retrieval_tuning.chunk_ports import (
     chunk_code,
     chunk_markdown,
     distinct_in_order,
