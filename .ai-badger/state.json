@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-wrong-key-no-legacy-source-710",
+   "title": "Wrong key under a key source with no legacy derivation reports key mismatch, not a raw SqliteException",
+   "pr": 721,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "Confirmed (#710): OpenBankWithResolvedKeyAsync only converted SQLITE_NOTADB when LegacyPassphrase was set, so env-style sources leaked a raw SqliteException. Now always a BankKeyMismatchException (NoLegacyDerivationToTry, both-causes hedge) -> exit 21 per ADR-0107. Four tests had pinned the bug (incl. EncryptionBitwardenIntegrationTests '...RethrowsTheOriginalSqliteException'); updated."
+  },
+  {
    "id": "air-restart-unproven-names-proof-reason-709",
    "title": "serve --restart Unproven refusal names the identity-proof reason",
    "pr": 719,
@@ -196,7 +205,6 @@
   "#705 key verifier outside the bank (ADR-0107 item 1)",
   "#706 fusion that trusts one confident leg (A9 / #367)",
   "#707 re-baseline the retrieval harness on granite (absorbs harness package D)",
-  "#710 wrong key under a no-legacy source surfaces raw SqliteException (hypothesis)",
   "#711 0.26% of non-blank lines covered by no code row (hypothesis: stale positions)"
  ],
  "research": [],
