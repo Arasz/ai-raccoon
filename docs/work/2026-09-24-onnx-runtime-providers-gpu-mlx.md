@@ -630,10 +630,62 @@ the dense-only 0.636 (F28) because the keyword leg and structure fusion add sign
 start loaded the engine and ran the evaluation. Output is in `memeval-{cpu,webgpu}.json`, with the
 provider taken from `memeval-<arm>/serve.log`.
 
+### F46 — The product's opt-in MLX device runs end to end (draft PR #722) [READ]
+
+PR #722 (branch `feat/mlx-embedding-provider`, ADR-0110 Proposed) adds `settings model device mlx`
+for the bundled engine. Its parts:
+- **Runtime:** the plugin is registered once per process, the MLX device is appended, and the
+  rewritten `model_fp16_mlx.onnx` is loaded. That file is 219 KB and references the unchanged
+  `model_fp16.onnx_data`. If MLX fails, the session falls back to WebGPU and then CPU.
+- **Packaging:** the MLX runtime is fetched sha-pinned from the 0.29.6 wheel and ships only in
+  `tools/net10.0/osx-arm64/mlx/`.
+- **Size:** the packed osx-arm64 1.49.3 package is 223.7 MB, measured before #714. That matches
+  F23's 223.6 MB simulation.
+- **Thread affinity:** the lane found that MLX sessions are thread-affine. The plugin aborts with
+  "this InferenceSession first ran on thread … but Run() was called from ThreadId(2). MLX eval is
+  thread-affine". So the generator runs every MLX session call on one dedicated thread
+  (`SingleThreadExecutor`).
+
+This file-and-harness research did not surface the thread-affinity constraint, because
+`bench.cs` runs a session on one thread.
+
+**Evidence:** PR #722 description and the lane's report, including the e2e transcript with
+`execution provider MLX` and a vector leg in `memory_search`. Graded READ: the implementation and
+pack were run by the delegated lane.
+
+### F47 — Through the product, MLX gives the same hybrid memory quality as CPU and WebGPU [MEASURED]
+
+This used the same procedure as F45, with the #722 build (`1.49.3+93745ad5`, scratch tool path) and
+`settings model device mlx`. The log shows `execution provider MLX`. The result was nDCG@10 0.6839
+and MRR@10 0.9109, against 0.6844/0.9170 for CPU and 0.6863/0.9178 for WebGPU. Against the CPU
+arm, top-1 is identical on 67/68 queries, top-5 on 62/68 and top-10 on 53/68. WebGPU matched CPU on
+46/68 at top-10.
+
+**Evidence:** `memeval_product.py <scratch> mlx mlx <scratchpad>/mlx-e2e/tool/ai-raccoon` →
+`memeval-mlx.json`, `memeval-mlx/serve.log`.
+
+### F48 — Through the product, MLX hybrid code search reproduces the F41 simulation exactly [MEASURED]
+
+`run_code_eval.py` with `device mlx` on the #722 build scored the same as the F41 simulation:
+nDCG@5 0.8225, hit@1 0.7711, hit@5 0.8855 and nDCG@10 0.8044. The log shows `execution provider
+MLX`. `compare_code_eval.py` against the CPU arm gives a held-out bootstrap mean of −0.0032, CI
+[−0.0141, 0.0033], which is the simulation's own figure. The difference from CPU is inside noise.
+The tool labels it "DROP" because its rule asks whether a candidate *improves* on the baseline; this
+question is whether it degrades it.
+
+Drain time for the 1,376 chunks was 78.3 s on MLX, 64.4 s on WebGPU and 423.5 s on CPU. Those are
+single runs on a loaded machine, and the WebGPU and CPU runs used the 1.49.1 binary (spinning on).
+They are not a throughput ranking.
+
+**Evidence:** `EVAL_DEVICE=mlx python3 hyb/drive.py --binary <scratchpad>/mlx-e2e/tool/ai-raccoon
+--corpus-root code-corpus/files --queries code-corpus/queries.json --arm mlx --out hyb/runs
+--save-hits --allow-busy` → `hyb/runs/results-mlx.json`, then
+`compare_code_eval.py --target-category behaviour-nl runs/results-cpu.json runs/results-mlx.json`.
+
 ## Still open
 
-- **Memory hybrid search on MLX.** F45 covers CPU and WebGPU; the MLX arm needs the product's
-  opt-in MLX device (in progress as a separate draft PR).
-- **The real MLX path in the product.** Everything MLX here goes through the scratch harness
-  (`bench.cs`) and a simulation (F40). An end-to-end server run needs product support for the
-  plugin, which doesn't exist yet.
+- **MLX throughput in the product, uncontended.** F48's drain times are single runs on a loaded
+  machine. Rerun the three arms back to back on the same binary (#712's spinning-off applies to
+  WebGPU from 1.49.3) before quoting a throughput gain.
+- **MLX under concurrent embedding load.** #722 serializes MLX calls on one thread. Whether that
+  caps throughput below WebGPU's gated path when memory and code drains overlap is unmeasured.
