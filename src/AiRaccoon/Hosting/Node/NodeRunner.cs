@@ -282,11 +282,15 @@ internal partial class NodeRunner(
             RestartOutcome.Unproven => new Refusal(
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the listener did not prove it serves this data root — stop the listener yourself, then run serve again, or serve on another port (--port 0)",
                 ErrorCode.Server.Unproven),
+            // ADR-0107 PC.4: reaching NoToken already proved the listener's identity (D5's proof
+            // comes before the token read), so "another data root" is never a live possibility —
+            // TokenFile.RefusalReason (e.g. a chmod-600 remedy) is the real, actionable cause when set.
+            // ADR-0107 PC.4: reaching NoToken already proved the listener's identity (D5's proof
+            // comes before the token read), so "another data root" is never a live possibility —
+            // TokenFile.RefusalReason (e.g. a chmod-600 remedy) is the real, actionable cause when set.
             RestartOutcome.NoToken => new Refusal(
-                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: {descriptor.TokenFile.Path} holds no token, so it cannot be asked to stop — it may serve another data root; stop it " +
-                $"yourself, or" +
-                $" serve on" +
-                $" another port",
+                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it proved this data root's identity but has no usable token " +
+                $"({descriptor.TokenFile.RefusalReason ?? $"{descriptor.TokenFile.Path} holds no token yet"}) — stop it yourself, or serve on another port",
                 ErrorCode.Server.NoToken),
             RestartOutcome.Refused => new Refusal(
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it refused the token in {descriptor.TokenFile.Path} — it serves another data root; stop it yourself, or serve on another port",

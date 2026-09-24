@@ -186,6 +186,46 @@ public sealed class ServeRestartTests : IDisposable
         // No token to present, so nothing was asked to stop: an unauthenticated shutdown is not attempted.
         fake.ShutdownRequests.ShouldBe(0);
         run.Stderr.ShouldContain(new McpTokenFile(_dataRoot).Path);
+        // ADR-0107 PC.4: the fake already proved this data root's identity (StartProvenFakeAsync),
+        // so "another data root" is never a live possibility by the time the token read fails.
+        run.Stderr.ShouldNotContain("another data root");
+    }
+
+    /// <summary>
+    ///     ADR-0107 PC.4: <see cref="McpTokenFile.RefusalReason" /> (set by <see cref="McpTokenFile.Read" />
+    ///     when the token file itself — not the directory — is not owner-only) is the real,
+    ///     actionable cause; it must be surfaced instead of the generic "holds no token" line. The
+    ///     directory and the identity key stay private, so the proof still succeeds and the restart
+    ///     reaches the token read.
+    /// </summary>
+    [RetryFact]
+    public async Task AServerWeHoldNoTokenFor_WhenTheTokenFileItselfIsNotOwnerOnly_SurfacesTheRefusalReason()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("UnixFileMode is POSIX-only");
+            return;
+        }
+
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
+        await using var fake = await StartProvenFakeAsync(port, HttpStatusCode.Accepted);
+        var tokenPath = new McpTokenFile(_dataRoot).Path;
+        await File.WriteAllTextAsync(tokenPath, "not-a-real-token", TestContext.Current.CancellationToken);
+        File.SetUnixFileMode(tokenPath,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite |
+            UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+        await using var run = Start(["--data-root", _dataRoot, "serve", "--port", port.ToString(), "--restart"]);
+
+        var exit = await run.Exit.WaitAsync(TestContext.Current.CancellationToken);
+
+        exit.ShouldBe(ErrorCode.Server.NoToken);
+        run.Stderr.ShouldContain("chmod 600");
+        run.Stderr.ShouldNotContain("another data root");
     }
 
     [RetryFact]

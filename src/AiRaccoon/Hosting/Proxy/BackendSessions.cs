@@ -170,10 +170,12 @@ public sealed partial class BackendSessions(
             }
         }
 
+        // ADR-0107 PC.4: acquired.Result.Url is only ever non-null once identity is already proven
+        // (attach) or this process spawned the backend itself, so "another data root" never applies
+        // here — RefusalReason (e.g. a chmod-700 remedy) is the real, actionable cause when set.
         var token = _tokenFile.Read() ?? throw new BackendUnavailableException(ErrorCode.Server.NoToken, Unavailable(
-            acquired.Fallback
-                ? $"the private backend at {acquired.Result.Url} is listening but {_tokenFile.Path} holds no token"
-                : $"the backend at {acquired.Result.Url} is listening but {_tokenFile.Path} holds no token — a serve on another data root may own port {config.Port}"));
+            $"the {(acquired.Fallback ? "private backend" : "backend")} at {acquired.Result.Url} is listening but has no usable token for this data root " +
+            $"({_tokenFile.RefusalReason ?? $"{_tokenFile.Path} holds no token yet"})"));
 
         Url = acquired.Result.Url;
         var session = await OpenSessionAsync(new Uri(acquired.Result.Url), token, revision, ctx);

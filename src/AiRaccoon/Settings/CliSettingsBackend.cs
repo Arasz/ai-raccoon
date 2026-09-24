@@ -75,10 +75,13 @@ internal static partial class CliSettingsBackend
                 (acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty));
         }
 
+        // ADR-0107 PC.4: acquired.Result.Url is only ever non-null once identity is already proven
+        // (attach) or this process spawned the backend itself, so "another data root" never applies
+        // here — RefusalReason (e.g. a chmod-700 remedy) is the real, actionable cause when set.
         var tokenFile = new McpTokenFile(config.Options);
         var token = tokenFile.Read() ?? throw new SettingsServerUnavailableException(ErrorCode.Server.NoToken,
-            $"ai-raccoon: the backend at {acquired.Result.Url} is listening but {tokenFile.Path} holds no token " +
-            $"— a serve on another data root may own port {config.Port}");
+            $"ai-raccoon: the backend at {acquired.Result.Url} is listening but has no usable token for this data root " +
+            $"({tokenFile.RefusalReason ?? $"{tokenFile.Path} holds no token yet"})");
 
         // F38 residual (owner ruling N1, 2026-09-22): the idle default stays intended, so this is
         // disclosure only — the backend survives this command; the line names the port that actually
