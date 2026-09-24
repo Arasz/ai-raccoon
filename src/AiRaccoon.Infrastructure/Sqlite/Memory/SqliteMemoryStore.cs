@@ -582,10 +582,7 @@ public sealed partial class SqliteMemoryStore(
         {
             VectorCandidates = vectorCandidates,
             FtsCandidates = ftsCandidates,
-            Leader = ftsCandidates is [var ftsTop, ..] && vectorCandidates is [var vectorTop, ..]
-                     && string.Equals(ftsTop.Hash, vectorTop.Hash, StringComparison.Ordinal)
-                ? ftsTop.Hash
-                : null,
+            Leader = FusionLeader.Of(results, ftsCandidates, vectorCandidates, searchResults.AllTermsMatched),
             EvidenceByHash = fused.EvidenceByHash,
             Stats = fused.Stats
         };

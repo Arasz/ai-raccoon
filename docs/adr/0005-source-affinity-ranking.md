@@ -9,6 +9,10 @@ and the vector leg ranked first (the flattened re-fusion puts ranks 2 and 3 at 0
 so +0.1 clears 1.0). The ranker now takes that row as a leader: it keeps rank 1 and the boost
 orders only what follows. This is narrower than the rejected "boost capped at the top raw
 score": nothing is capped when the legs disagree, so S2's siblings reorder as before.
+Widened 2026-09-24: the fused #1 is also the leader when it is the keyword leg's top and matched
+every query term, so a keyword-only identifier in a long note is not overtaken by two adjacent
+vector-only chunks. Setting λ = 0 or the threshold to 0 is not the fix: λ = 0 turns the whole ranker
+off, and a zero threshold makes the sibling floor maxRaw and so disables sibling boosting almost everywhere.
 Amended 2026-08-15 — **every number in this ADR is in-sample.** The λ / threshold / formula
 grid was scored over the same 11 queries that gate it. The out-of-sample figure is 0.285
 against 0.673 on the same path; see

@@ -39,7 +39,7 @@ public sealed record FusedSearchResult(IReadOnlyList<MemorySearchResult> Results
     public IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash { get; init; }
     public FusionStats? Stats { get; init; }
 
-    /// <summary>The hash both legs ranked first, or null when they disagree or one leg is empty.</summary>
+    /// <summary>The hash no source-affinity boost may overtake (see <see cref="FusionLeader" />), or null.</summary>
     public string? Leader { get; init; }
 }
 
