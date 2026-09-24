@@ -2,9 +2,11 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using AiRaccoon.Hosting.Common;
+using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
@@ -71,21 +73,58 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
     ///     The proxy's own data root holds a bank no key can open. It still answers, and the file is
     ///     untouched: the key resolve and decrypt probe the in-process server pays are never run.
     /// </summary>
+    /// <remarks>
+    ///     Quiesces the in-process BACKEND before overwriting the bank (#692): <see cref="IHost.StartAsync" />
+    ///     returns as soon as <see cref="BankMaintenanceHostedService" />'s startup pass is kicked off, not
+    ///     once it finishes (BackgroundService semantics) — an overwrite that races ahead of that pass's own
+    ///     checkpoint leaves the seed's still-open WAL frames sitting next to the garbage this test wrote,
+    ///     and when the checkpoint finally runs it merges those frames back into the file, "restoring" valid
+    ///     content and failing the byte comparison for a reason that has nothing to do with the proxy under
+    ///     test. Waiting for <see cref="BankMaintenanceHostedService.Ticks" /> to reach 1 is the direct
+    ///     evidence that pass (checkpoint, then jobs, then a second checkpoint if any job ran) is done; the
+    ///     WAL-empty assertion right after is the same evidence read from the file the checkpoint acts on.
+    ///     The only other window this could reopen in is the 15s on-demand poll
+    ///     (<see cref="BankMaintenanceHostedService.OnDemandPollInterval" />) — safe here because that loop
+    ///     never calls the checkpoint pragma at all (<c>RunOnDemandPollLoopAsync</c> only runs due jobs), so
+    ///     it cannot restore file content even if it wakes before this method returns.
+    /// </remarks>
     [RetryFact]
     public async Task BareLaunch_DoesNotOpenTheBank()
     {
         var bank = SqliteConnectionFactory.BankPathFor(
             new InfrastructureOptions { DataRoot = _root, Scope = InstallScope.User });
         Directory.CreateDirectory(Path.GetDirectoryName(bank)!);
+
+        var maintenance = _backend.Services.GetServices<IHostedService>()
+            .OfType<BankMaintenanceHostedService>().Single();
+        await maintenance.Ticks.WaitAsync(1, TestContext.Current.CancellationToken);
+        var walPath = bank + "-wal";
+        (File.Exists(walPath) ? new FileInfo(walPath).Length : 0)
+            .ShouldBe(0L, "the startup maintenance pass must have nothing left to checkpoint before the overwrite below races it");
+
         var garbage = RandomNumberGenerator.GetBytes(4096);
         await File.WriteAllBytesAsync(bank, garbage, TestContext.Current.CancellationToken);
 
-        await using var client = await AiRaccoonProcess.ConnectAsync(
-            ["--data-root", _root, "--port", _port.ToString()], TestContext.Current.CancellationToken);
-        var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+        // Byte check alone is blind to a read-only open that fails without writing anything
+        // (opening a garbage file throws before any write); the trace proves the proxy process
+        // never even tried.
+        var bankOpenTrace = Path.Combine(_root, "bank-open-trace.txt");
+        Environment.SetEnvironmentVariable(BankOpenObservation.TraceFileEnvVar, bankOpenTrace);
+        try
+        {
+            await using var client = await AiRaccoonProcess.ConnectAsync(
+                ["--data-root", _root, "--port", _port.ToString()], TestContext.Current.CancellationToken);
+            var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        tools.ShouldNotBeEmpty();
-        (await File.ReadAllBytesAsync(bank, TestContext.Current.CancellationToken)).ShouldBe(garbage);
+            tools.ShouldNotBeEmpty();
+            (await File.ReadAllBytesAsync(bank, TestContext.Current.CancellationToken)).ShouldBe(garbage);
+            File.Exists(bankOpenTrace).ShouldBeFalse(
+                "the proxy process must never open a SQLite connection to the bank (ADR-0020)");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(BankOpenObservation.TraceFileEnvVar, null);
+        }
     }
 
     /// <summary>The proxy relays the backend's surface and identity, never one of its own.</summary>
