@@ -147,6 +147,14 @@ jobs:
         # not a second opt-in. Those tests run on demand with
         # --filter "Performance=Benchmark"; no scheduled backstop runs them.
         run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Fast&Performance!=Benchmark" --no-build -v m
+      - name: Upload test stderr log
+        # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: build-fast-test-stderr
+          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          if-no-files-found: ignore
 
   build-bdd:
     # Separate job, not a second step: it runs beside build-fast rather than after
@@ -191,6 +199,14 @@ jobs:
         # nothing until this job existed. BddGateCoverageTests fails if a feature
         # file is ever added without the tag.
         run: dotnet test --project tests/AiRaccoon.Tests --filter "Category=bdd" --no-build -v m
+      - name: Upload test stderr log
+        # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: build-bdd-test-stderr
+          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          if-no-files-found: ignore
 
   build-slow:
     # The integration/E2E gate. Until 2026-08-08 nothing in the PR gate ran these:
@@ -266,6 +282,14 @@ jobs:
         # host-specific ONNX artifact, not a portable expectation.
         # Performance!=Benchmark: see the build-fast filter for why.
         run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Slow&Performance!=Benchmark" --no-build -v m
+      - name: Upload test stderr log
+        # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: build-slow-test-stderr
+          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          if-no-files-found: ignore
       - name: Triage crash dumps
         if: failure()
         # A test-host segfault reads as "Passed! 167" followed by a bare "exit code 1"; this
