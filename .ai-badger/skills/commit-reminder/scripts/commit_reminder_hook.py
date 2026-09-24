@@ -7,9 +7,12 @@ docs/changelog/0.33.0-no-third-party-tool-call-interception.md documents ripping
 
 The trigger is the live `git status --porcelain` count (via commit_reminder.uncommitted_files),
 debounced by a persisted marker so it fires once per threshold-crossing and re-arms after a
-commit (commit_reminder.should_remind). Silent whenever there is nothing to say: not an edit
-tool, no resolvable project root, below threshold, already reminded at this count, or any
-internal error.
+commit (commit_reminder.should_remind). The marker's read-modify-write goes through
+commit_reminder.update_entry, one atomic `kv_update` transaction: two concurrent hook
+invocations for the same project serialize on the write lock instead of racing the read-then-
+write gap a separate get/set pair would leave open (L4-8). Silent whenever there is nothing to
+say: not an edit tool, no resolvable project root, below threshold, already reminded at this
+count, or any internal error.
 """
 from __future__ import annotations
 
@@ -102,11 +105,10 @@ def main() -> int:
     files = commit_reminder.uncommitted_files(root)
     count = len(files)
     threshold = _threshold()
-    fires, at_risk, entry = commit_reminder.advance(
-        commit_reminder.get_entry(root), count, threshold, _escalate_after(),
+    fires, at_risk, entry = commit_reminder.update_entry(
+        root, count, threshold, _escalate_after(),
         now=_now_iso(), session=str(payload.get("session_id") or ""),
     )
-    commit_reminder.set_entry(root, entry)
     _debug("checked", project=root, count=count, threshold=threshold)
 
     if not fires:

@@ -118,20 +118,32 @@ opened again after upgrading and so never get a sidecar minted retroactively.
 read-only by construction, and inspecting a bank must not have the side effect of changing what a
 later confident diagnosis depends on.
 
-### D4a — Only SQLITE_NOTADB (26) is the ambiguous shape; anything else propagates as itself
+### D4a — Only SQLITE_NOTADB (26) *on a source that resolved a key* is the ambiguous shape
 
-Found in review (round 5, #729): `NoLegacyDerivationToTry`, `NotLegacyKeyed`, and
-`MigrateLegacyKeyAsync`'s own inline no-legacy-derivation branch each unconditionally wrapped
-*any* `SqliteException` reaching them into `BankKeyMismatchException` — not only SQLITE_NOTADB.
-`OpenBankWithKeyAsync`'s `?? openFailure` already got this right; these three did not.
-Reproduced deterministically (no timing race needed): pointing `BankPath` at an existing directory
-makes every open fail with SQLITE_CANTOPEN (14), not 26, and a resolved key with no legacy
-derivation (`env`, the common case) turned that into a confidently-wrong "wrong key or corrupt"
-verdict. `AmbiguousOrOriginal(openFailure, ambiguous)` centralizes the guard the three call sites
-lacked: only SQLITE_NOTADB is entitled to the ambiguous both-causes diagnosis; every other code
-(SQLITE_BUSY, SQLITE_CANTOPEN, …) propagates as the original, correctly-coded exception —
-`CliFailureErrorCode` already maps those to `Bank.Busy`/`Bank.OpenFailed`, distinct from
-`Key.WrongKey`, so this is a strictly more accurate diagnosis, not merely "less wrong."
+Found independently twice: in review (round 5, #729) and, separately, by #721 fixing the same
+class of bug for issue #710 straight on `main` (both branched from the same pre-ADR-0111 point, so
+neither saw the other's work until this merge). `NoLegacyDerivationToTry`, `NotLegacyKeyed`, and
+`MigrateLegacyKeyAsync`'s own inline no-legacy-derivation branch each unconditionally wrapped *any*
+`SqliteException` reaching them into `BankKeyMismatchException` — not only SQLITE_NOTADB, and not
+only when a key was actually resolved. `OpenBankWithKeyAsync`'s `?? openFailure` already got the
+first half right; #721 caught the second half this ADR's own round-5 fix missed — a genuinely
+corrupt *unencrypted* bank (`Passphrase` null) hitting SQLITE_NOTADB has no key to be wrong about,
+so it must not become `Key.WrongKey` either.
+
+`IsKeyMismatchShape(resolvedKey, openFailure)` — `resolvedKey.Passphrase is not null &&
+openFailure.SqliteErrorCode == NotADatabaseErrorCode` — is the one shared predicate every
+ambiguous-message builder in the file now consults (`NotLegacyKeyed`,
+`NoLegacyDerivationToFallBackTo`, `NoLegacyDerivationToTry`); anything else (SQLITE_BUSY,
+SQLITE_CANTOPEN, an unencrypted bank's own corruption, …) propagates as the original,
+correctly-coded exception — `CliFailureErrorCode` already maps those to
+`Bank.Busy`/`Bank.Corrupted`/`Bank.OpenFailed`, distinct from `Key.WrongKey`, so this is a strictly
+more accurate diagnosis, not merely "less wrong." `ClassifyNoLegacySourceFailure` (#721's name,
+kept, `internal` and tested directly) is the entry point `OpenBankWithResolvedKeyAsync`'s catch
+calls; it now also consults the ADR-0111 key-check sidecar first via `NoLegacyDerivationToTry`,
+folding #721's fix and this ADR's sidecar/rekey-marker diagnosis into the one mechanism. Reproduced
+deterministically (no timing race needed): pointing `BankPath` at an existing directory makes every
+open fail with SQLITE_CANTOPEN (14); a garbage-bytes unencrypted bank file fails with SQLITE_NOTADB
+(26) but no resolved key (#721's regression case).
 
 ### D5 — A crash mid-rekey self-heals; a concurrent *opener* mid-rekey does not, on its own
 

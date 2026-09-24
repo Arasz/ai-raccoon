@@ -51,9 +51,14 @@ public sealed partial class SqliteConnectionFactory(
         {
             if (resolvedKey.LegacyPassphrase is null || resolvedKey.Passphrase is null)
             {
-                throw TryDiagnoseWithKeyCheck(resolvedKey.Passphrase, openFailure) ?? AmbiguousOrOriginal(openFailure, () => new BankKeyMismatchException(
-                    $"the bank at '{BankPath}' did not open with the {resolvedKey.SourceName} encryption key, and that source has no earlier key derivation to fall back to",
-                    openFailure));
+                var classified = TryDiagnoseWithKeyCheck(resolvedKey.Passphrase, openFailure) ??
+                    NoLegacyDerivationToFallBackTo(resolvedKey, openFailure);
+                if (ReferenceEquals(classified, openFailure))
+                {
+                    throw;
+                }
+
+                throw classified;
             }
 
             if (!await LegacyKeyOpensHealthyBankAsync(resolvedKey.LegacyPassphrase, cancellationToken).ConfigureAwait(false))
@@ -89,9 +94,18 @@ public sealed partial class SqliteConnectionFactory(
         }
         catch (SqliteException openFailure)
         {
-            throw resolvedKey.LegacyPassphrase is not null
-                ? await DiagnoseAsync(resolvedKey, openFailure, cancellationToken).ConfigureAwait(false)
-                : NoLegacyDerivationToTry(resolvedKey, openFailure);
+            if (resolvedKey.LegacyPassphrase is not null)
+            {
+                throw await DiagnoseAsync(resolvedKey, openFailure, cancellationToken).ConfigureAwait(false);
+            }
+
+            var classified = ClassifyNoLegacySourceFailure(resolvedKey, openFailure);
+            if (ReferenceEquals(classified, openFailure))
+            {
+                throw;
+            }
+
+            throw classified;
         }
 
         // Post-open failures (extensions, vector load, schema DDL) are not key-related and
@@ -215,28 +229,57 @@ public sealed partial class SqliteConnectionFactory(
     }
 
     private Exception NotLegacyKeyed(ResolvedKey resolvedKey, SqliteException openFailure) =>
-        AmbiguousOrOriginal(openFailure, () => new BankKeyMismatchException(
-            $"the bank at '{BankPath}' opens under neither the current nor the pre-ADR-0012 {resolvedKey.SourceName} key derivation — "
-            + "it is corrupt, or keyed to a different secret. It has not been modified; restore it from a backup or check that the encryption source is right.",
-            openFailure));
+        IsKeyMismatchShape(resolvedKey, openFailure)
+            ? new BankKeyMismatchException(
+                $"the bank at '{BankPath}' opens under neither the current nor the pre-ADR-0012 {resolvedKey.SourceName} key derivation — {NoOtherKeyToTryRemedy}",
+                openFailure)
+            : openFailure;
+
+    /// <summary>
+    ///     The migrate verb's own no-legacy-source message — "fall back to" the migration it cannot
+    ///     attempt, not "try" the open already attempted — same classification rule as
+    ///     <see cref="NoLegacyDerivationToTry" />.
+    /// </summary>
+    private Exception NoLegacyDerivationToFallBackTo(ResolvedKey resolvedKey, SqliteException openFailure) =>
+        IsKeyMismatchShape(resolvedKey, openFailure)
+            ? new BankKeyMismatchException(
+                $"the bank at '{BankPath}' did not open with the {resolvedKey.SourceName} encryption key, and that source has no earlier key derivation to fall back to — {NoOtherKeyToTryRemedy}",
+                openFailure)
+            : openFailure;
 
     /// <summary>The resolved key's source has no earlier derivation to try, so a failed open can only be this bank's own key mismatch — unless the key-check sidecar (ADR-0111) already gives a confident verdict.</summary>
     private Exception NoLegacyDerivationToTry(ResolvedKey resolvedKey, SqliteException openFailure) =>
         TryDiagnoseWithKeyCheck(resolvedKey.Passphrase, openFailure) ??
-        AmbiguousOrOriginal(openFailure, () => new BankKeyMismatchException(
-            $"the bank at '{BankPath}' did not open with the {resolvedKey.SourceName} encryption key, and that source has no earlier key derivation to try — "
-            + "it is corrupt, or keyed to a different secret. It has not been modified; restore it from a backup or check that the encryption source is right.",
-            openFailure));
+        (IsKeyMismatchShape(resolvedKey, openFailure)
+            ? new BankKeyMismatchException(
+                $"the bank at '{BankPath}' did not open with the {resolvedKey.SourceName} encryption key, and that source has no earlier key derivation to try — {NoOtherKeyToTryRemedy}",
+                openFailure)
+            : openFailure);
 
     /// <summary>
-    ///     SQLITE_NOTADB (26) is the one failure shape a wrong key and a genuine corruption share
-    ///     (ADR-0107 PC.0) — the only case the ambiguous "wrong key or corrupt" fallback is entitled
-    ///     to name. Anything else (SQLITE_BUSY, SQLITE_CANTOPEN, ...) is not key-related and must
-    ///     propagate as itself, the same rule <see cref="OpenBankWithKeyAsync" /> already applies via
-    ///     its own <c>?? openFailure</c>.
+    ///     A source with no legacy derivation to try gets the specific key-mismatch diagnosis only
+    ///     for SQLITE_NOTADB on a source that actually resolved a key — SQLCipher's signature for a
+    ///     wrong key. Busy/locked, a genuinely corrupt unencrypted bank, and every other SQLite
+    ///     failure are not key problems and must propagate unchanged, or the CLI misreports
+    ///     Bank.Busy/Bank.Corrupted/Bank.OpenFailed as a key mismatch.
     /// </summary>
-    private static Exception AmbiguousOrOriginal(SqliteException openFailure, Func<Exception> ambiguous) =>
-        openFailure.SqliteErrorCode == NotADatabaseErrorCode ? ambiguous() : openFailure;
+    internal Exception ClassifyNoLegacySourceFailure(ResolvedKey resolvedKey, SqliteException openFailure) =>
+        NoLegacyDerivationToTry(resolvedKey, openFailure);
+
+    /// <summary>
+    ///     The one shape a wrong key and a genuine corruption share (ADR-0107 PC.0): SQLITE_NOTADB
+    ///     on a source that actually resolved a key. Anything else — a different SqliteErrorCode
+    ///     (SQLITE_BUSY, SQLITE_CANTOPEN, ...), or no key at all (an unencrypted bank has nothing to
+    ///     be wrong about) — is not a key problem and must propagate unchanged; every ambiguous-
+    ///     message builder above shares this one rule, the same one <see cref="OpenBankWithKeyAsync" />
+    ///     already applies via its own <c>?? openFailure</c>.
+    /// </summary>
+    private static bool IsKeyMismatchShape(ResolvedKey resolvedKey, SqliteException openFailure) =>
+        resolvedKey.Passphrase is not null && openFailure.SqliteErrorCode == NotADatabaseErrorCode;
+
+    /// <summary>The remedy shared by every "the resolved key does not open the bank, and there is nothing else to try" message.</summary>
+    private const string NoOtherKeyToTryRemedy =
+        "it is corrupt, or keyed to a different secret. It has not been modified; restore it from a backup or check that the encryption source is right.";
 
     /// <summary>
     ///     A confident verdict from the key-check sidecar (ADR-0111) for a SQLITE_NOTADB open
