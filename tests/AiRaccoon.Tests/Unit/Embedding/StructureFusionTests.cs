@@ -173,6 +173,20 @@ public sealed class StructureFusionTests
         ranked[0].Hash.ShouldBe("note");
     }
 
+    /// <summary>Rows the floor clamps to 0 keep their content-similarity order. A hash carries the
+    /// row's path, so ordering them by hash reorders the same bank under another directory.</summary>
+    [Fact]
+    public void Rank_RowsTheFloorClampsToZero_KeepTheirContentSimilarityOrder()
+    {
+        var ranked = StructureFusion.Rank(
+            [new VectorHit("aa", 0.72), new VectorHit("bb", 0.74)],
+            [new VectorHit("aa", 0.75)],
+            alpha: 0.5, limit: 10, similarityFloor: 0.79);
+
+        ranked.Select(r => r.Score).ShouldAllBe(score => score == 0.0, "premise: the floor clamps both rows to 0");
+        ranked.Select(r => r.Hash).ShouldBe(["bb", "aa"]);
+    }
+
     [Fact]
     public void Rank_WithoutAFloor_IsUnchanged()
     {
