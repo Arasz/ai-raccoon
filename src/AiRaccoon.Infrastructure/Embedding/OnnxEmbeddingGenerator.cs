@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using AiRaccoon.Core.Embedding;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -46,17 +47,36 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// <summary>ORT intra-op threads this session was built with (WP11-A/G16); 0 means ORT's own default.</summary>
     public int IntraOpThreads { get; }
 
-    /// <summary>The execution provider the session runs on: "WebGPU", "CPU", or "CPU (GPU refused: …)" after a fallback.</summary>
+    /// <summary>The execution provider the session runs on: "WebGPU", "CPU", "MLX", or one of those
+    /// with a parenthesized "(… refused: …)" suffix per fallback step actually taken.</summary>
     public string ExecutionProvider { get; private set; } = CpuProvider;
 
     private const string CpuProvider = "CPU";
     private const string WebGpuProvider = "WebGPU";
+    private const string MlxProvider = "MLX";
 
     /// <summary>WebGPU sessions share one process-wide GPU context, which concurrent runs corrupt.</summary>
     private static readonly Lock GpuGate = new();
 
+    /// <summary>True only for a session that actually landed on WebGPU (not a "(… refused: …)" fallback) — <see cref="Run" />'s gate check.</summary>
+    private readonly bool _needsGpuGateForRun;
+
+    /// <summary>Non-null only for an MLX session: the plugin is thread-affine (a session may run
+    /// only on the exact OS thread it first ran on), so every call this generator makes into it —
+    /// construction, Run, Dispose — is pinned to one dedicated thread (ADR-0110).</summary>
+    private SingleThreadExecutor? _mlxExecutor;
+
+    /// <summary>Guards <see cref="Dispose" /> against being called twice — the standard IDisposable
+    /// contract — since <see cref="_mlxExecutor" /> is itself single-use and throws on a second Run.</summary>
+    private bool _disposed;
+
+    /// <summary>What <see cref="Dispose" /> runs on the MLX thread to release <see cref="_session" />;
+    /// a field (not a direct call) only so a test can substitute a throwing action and prove the
+    /// executor is still disposed on that path. Always the real session's Dispose in production.</summary>
+    private Action _mlxSessionDisposeAction;
+
     internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
-        int intraOpThreads = 0, bool preferGpu = false)
+        int intraOpThreads = 0, bool preferGpu = false, bool preferMlx = false)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         _logger = logger;
@@ -66,8 +86,26 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         _normalization = descriptor.Normalization;
         _inputNames = descriptor.InputNames;
         IntraOpThreads = intraOpThreads;
-        _session = preferGpu && GpuAvailable() ? CreateGpuSessionOrNull(modelPath, intraOpThreads) ?? CreateCpuSession(modelPath, intraOpThreads)
-            : CreateCpuSession(modelPath, intraOpThreads);
+
+        string? mlxRefusalReason = null;
+        var mlxSession = preferMlx ? CreateMlxSessionOrNull(modelPath, intraOpThreads, out mlxRefusalReason) : null;
+        if (mlxSession is not null)
+        {
+            _session = mlxSession;
+            ExecutionProvider = MlxProvider;
+        }
+        else
+        {
+            _session = preferGpu && GpuAvailable() ? CreateGpuSessionOrNull(modelPath, intraOpThreads) ?? CreateCpuSession(modelPath, intraOpThreads)
+                : CreateCpuSession(modelPath, intraOpThreads);
+            _needsGpuGateForRun = ExecutionProvider == WebGpuProvider;
+            if (mlxRefusalReason is not null)
+            {
+                ExecutionProvider = $"{ExecutionProvider} (MLX refused: {mlxRefusalReason})";
+            }
+        }
+
+        _mlxSessionDisposeAction = () => _session.Dispose();
 
         ValidateInputNames(descriptor);
         if (_pooling == "model-output" && string.IsNullOrWhiteSpace(descriptor.EmbeddingOutput))
@@ -123,11 +161,51 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         return Task.Run(() => RunEachRow(items, embeddings, cancellationToken), cancellationToken);
     }
 
-    public void Dispose() => _session.Dispose();
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_mlxExecutor is { } executor)
+        {
+            try
+            {
+                executor.Run(() =>
+                {
+                    _mlxSessionDisposeAction();
+                    return true;
+                });
+            }
+            finally
+            {
+                executor.Dispose();
+            }
+
+            return;
+        }
+
+        _session.Dispose();
+    }
+
+    /// <summary>Attaches an executor to a normally-constructed (CPU) generator so Dispose's MLX
+    /// branch is exercisable without a real onnxruntime MLX plugin. Test seam.</summary>
+    internal void AttachMlxExecutorForTesting(SingleThreadExecutor executor) => _mlxExecutor = executor;
+
+    /// <summary>Substitutes what Dispose runs on the MLX thread instead of the real session's
+    /// Dispose, so a throwing disposal can be proven not to leak the executor. Test seam.</summary>
+    internal void SetMlxSessionDisposeActionForTesting(Action action) => _mlxSessionDisposeAction = action;
 
     private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Run(List<NamedOnnxValue> feed)
     {
-        if (ExecutionProvider != WebGpuProvider)
+        if (_mlxExecutor is { } executor)
+        {
+            return executor.Run(() => _session.Run(feed));
+        }
+
+        if (!_needsGpuGateForRun)
         {
             return _session.Run(feed);
         }
@@ -153,9 +231,10 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         return new InferenceSession(modelPath, options);
     }
 
-    /// <summary>GPU intra-op workers spin-wait between kernels by default, which burns CPU on a
-    /// WebGPU session for no latency benefit; CPU-only sessions keep spinning because it helps
-    /// CPU-bound runs. Applied only to <see cref="CreateGpuSessionOrNull" />'s options.</summary>
+    /// <summary>GPU/MLX intra-op workers spin-wait between kernels by default, which burns CPU on a
+    /// WebGPU or MLX session for no latency benefit; CPU-only sessions keep spinning because it helps
+    /// CPU-bound runs. Applied to <see cref="CreateGpuSessionOrNull" />'s and
+    /// <see cref="CreateMlxSessionOnCurrentThread" />'s options (ADR-0110).</summary>
     internal static readonly IReadOnlyDictionary<string, string> GpuSessionConfigEntries =
         new Dictionary<string, string> { ["session.intra_op.allow_spinning"] = "0" };
 
@@ -190,6 +269,147 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         {
             ExecutionProvider = $"{CpuProvider} (GPU refused: {ex.Message})";
             return null;
+        }
+    }
+
+    private const string MlxExecutionProviderName = "MLXExecutionProvider";
+    private const string MlxPluginDirectoryName = "mlx";
+    private const string MlxGraphFileName = "model_fp16_mlx.onnx";
+    private const string MlxPluginLibraryFileName = "libonnxruntime_mlx_ep.dylib";
+
+    private static readonly string[] MlxPluginFiles =
+        [MlxPluginLibraryFileName, "libmlx.dylib", "libmlxc.dylib", "mlx.metallib"];
+
+    private static readonly Lock MlxRegistrationGate = new();
+
+    /// <summary>One-way latch for the process-wide plugin registration: it never un-flips, so a
+    /// single observed true skips the lock forever (double-checked locking). Read outside the lock
+    /// at that fast-path check, so it must be volatile — same convention as ToolTelemetry's
+    /// migration latch (_migratedLatched).</summary>
+    private static volatile bool _mlxRegistered;
+
+    /// <summary>The onnxruntime MLX plugin EP (ADR-0110) is proven only on macOS/Apple Silicon.</summary>
+    private static bool MlxPlatformSupported() =>
+        OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
+
+    /// <summary>The plugin dylib ships beside the MLX runtime libraries it loads via @loader_path
+    /// (docs/work/2026-09-24-onnx-runtime-providers-gpu-mlx.md F7); null unless all four are present.</summary>
+    internal static string? ResolveMlxPluginDirectory(string baseDirectory)
+    {
+        var directory = Path.Combine(baseDirectory, MlxPluginDirectoryName);
+        return MlxPluginFiles.All(file => File.Exists(Path.Combine(directory, file))) ? directory : null;
+    }
+
+    /// <summary>The rewritten graph (ADR-0110) that runs attention on MLX; null unless it sits beside <paramref name="modelPath" />.</summary>
+    internal static string? ResolveMlxGraphPath(string modelPath)
+    {
+        var directory = Path.GetDirectoryName(modelPath);
+        if (string.IsNullOrEmpty(directory))
+        {
+            return null;
+        }
+
+        var candidate = Path.Combine(directory, MlxGraphFileName);
+        return File.Exists(candidate) ? candidate : null;
+    }
+
+    /// <summary>Registering the same name twice throws; a process-wide guard makes this call idempotent.</summary>
+    private static void EnsureMlxRegistered(OrtEnv env, string pluginDirectory)
+    {
+        if (_mlxRegistered)
+        {
+            return;
+        }
+
+        lock (MlxRegistrationGate)
+        {
+            if (_mlxRegistered)
+            {
+                return;
+            }
+
+            env.RegisterExecutionProviderLibrary(MlxExecutionProviderName, Path.Combine(pluginDirectory, MlxPluginLibraryFileName));
+            _mlxRegistered = true;
+        }
+    }
+
+    /// <summary>A session on the MLX plugin EP running the rewritten graph, or null (with
+    /// <paramref name="refusalReason" /> set) when the platform, the plugin files, the rewritten
+    /// graph, or ORT itself refuses — the caller falls back to the existing WebGPU-then-CPU path.
+    /// Construction runs on the dedicated <see cref="_mlxExecutor" /> thread, because the plugin is
+    /// thread-affine: everything it does for this session must happen on the one thread it starts
+    /// on. The executor is disposed here on any refusal; on success it is kept in
+    /// <see cref="_mlxExecutor" /> for every later Run and for Dispose.</summary>
+    private InferenceSession? CreateMlxSessionOrNull(string modelPath, int intraOpThreads, out string? refusalReason)
+    {
+        if (!MlxPlatformSupported())
+        {
+            refusalReason = "requires macOS on Apple Silicon";
+            return null;
+        }
+
+        var pluginDirectory = ResolveMlxPluginDirectory(AppContext.BaseDirectory);
+        if (pluginDirectory is null)
+        {
+            refusalReason = $"plugin files not found under {Path.Combine(AppContext.BaseDirectory, MlxPluginDirectoryName)}";
+            return null;
+        }
+
+        var mlxModelPath = ResolveMlxGraphPath(modelPath);
+        if (mlxModelPath is null)
+        {
+            refusalReason = $"no rewritten MLX graph ({MlxGraphFileName}) beside the model";
+            return null;
+        }
+
+        var executor = new SingleThreadExecutor("airaccoon-mlx-session");
+        var (session, error) = executor.Run(() => CreateMlxSessionOnCurrentThread(mlxModelPath, pluginDirectory, intraOpThreads));
+        if (session is null)
+        {
+            executor.Dispose();
+            refusalReason = error;
+            return null;
+        }
+
+        _mlxExecutor = executor;
+        refusalReason = null;
+        return session;
+    }
+
+    private static (InferenceSession? Session, string? Error) CreateMlxSessionOnCurrentThread(
+        string mlxModelPath, string pluginDirectory, int intraOpThreads)
+    {
+        try
+        {
+            var env = OrtEnv.Instance();
+            EnsureMlxRegistered(env, pluginDirectory);
+            var devices = env.GetEpDevices().Where(d => d.EpName == MlxExecutionProviderName).ToList();
+            if (devices.Count == 0)
+            {
+                return (null, "no MLX device exposed by the plugin after registration");
+            }
+
+            using var options = new SessionOptions();
+            if (intraOpThreads > 0)
+            {
+                options.IntraOpNumThreads = intraOpThreads;
+            }
+
+            foreach (var (key, value) in GpuSessionConfigEntries)
+            {
+                options.AddSessionConfigEntry(key, value);
+            }
+
+            options.AppendExecutionProvider(env, devices, new Dictionary<string, string>());
+            return (new InferenceSession(mlxModelPath, options), null);
+        }
+        catch (OnnxRuntimeException ex)
+        {
+            return (null, ex.Message);
+        }
+        catch (DllNotFoundException ex)
+        {
+            return (null, ex.Message);
         }
     }
 
