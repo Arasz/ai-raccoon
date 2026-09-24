@@ -122,7 +122,7 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
             {
                 foreach (var pruned in decision.Pruned)
                 {
-                                        await connection.ExecuteAsync(
+                    await connection.ExecuteAsync(
                             new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
                                 new { projectId, path = pruned.Path, subtreeLow = PathSubtree.Low(pruned.Path), subtreeHigh = PathSubtree.High(pruned.Path) }, cancellationToken: cancellationToken))
                         .ConfigureAwait(false);

@@ -1751,7 +1751,7 @@ internal static class MemorySchema
         {
             foreach (var (projectId, pruned) in toPrune)
             {
-                                await connection.ExecuteAsync(
+                await connection.ExecuteAsync(
                         new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
                             new { projectId, path = pruned.Path, subtreeLow = PathSubtree.Low(pruned.Path), subtreeHigh = PathSubtree.High(pruned.Path) }, cancellationToken: cancellationToken))
                     .ConfigureAwait(false);
