@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon
-> Scaffolded by ai-badger 0.177.0. Source of truth for this file: `.ai-badger/HERMES.md`.
+> Scaffolded by ai-badger 0.177.2. Source of truth for this file: `.ai-badger/HERMES.md`.
 
 ## Commands
 
@@ -91,12 +91,6 @@ A marker is expanded by a `UserPromptSubmit` hook, which fires only when a messa
 Grep/Glob/Read** — they cost fewer tokens and return structural context (callers, dependents,
 test coverage) that file scanning cannot. Start at `semantic_search_nodes_tool`; fall back to
 Grep/Glob/Read only where the graph doesn't reach. Each tool's own description covers the rest.
-
-<!-- Hermes MCP tools -->
-## MCP Tools: hermes
-
-Read operations use Hermes's session store and work without a running gateway; sending messages
-needs the gateway and its platform adapters. The server's own tool descriptions cover the rest.
 
 <!-- ai-raccoon MCP tools -->
 ## MCP Tools: ai-raccoon

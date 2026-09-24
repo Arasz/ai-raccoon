@@ -864,12 +864,10 @@ def _maybe_count_test_run(tool_name: str, args: Any, cwd: str, session_id: Any) 
         return
 
     project = _project_cwd(cwd)
-    entry = test_economy.get_entry(project)
-    fires, escalated, entry = test_economy.advance_session(
-        entry, str(session_id or "default"), run["kind"] == "full",
+    fires, escalated, entry = test_economy.update_entry(
+        project, str(session_id or "default"), run["kind"] == "full",
         now=_now_iso(),
     )
-    test_economy.set_entry(project, entry)
     if not fires:
         return
 
@@ -937,11 +935,9 @@ def _maybe_remind_commit(tool_name: str, cwd: str) -> None:
 
     # Same entry the Claude hook maintains: writing a bare marker here would drop the
     # unanswered count and silently clear an escalation raised on the other side.
-    fires, at_risk, entry = commit_reminder.advance(
-        commit_reminder.get_entry(project), count, threshold,
-        _commit_escalate_after(), now=_now_iso(),
+    fires, at_risk, entry = commit_reminder.update_entry(
+        project, count, threshold, _commit_escalate_after(), now=_now_iso(),
     )
-    commit_reminder.set_entry(project, entry)
     if not fires:
         return
 

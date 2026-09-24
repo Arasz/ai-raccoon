@@ -239,15 +239,55 @@ def _check_follow_through(result: Dict[str, Any]) -> None:
                 return  # first match wins
 
 
+def _unwrap_content_blocks(blocks: Any) -> Dict[str, Any]:
+    """The parsed JSON object inside a list of MCP content blocks (`{"type": "text", "text":
+    ...}`), or `{}` when none carries one.
+
+    Shared by two candidate shapes (L9-6's memory-grade counterpart): the `CallToolResult`
+    envelope (`{"content": [...]}`) and a bare block list with no wrapping dict at all. Claude
+    Code's own MCP `tool_response` shape is UNVERIFIED (hooks.md:2004); when it is captured it
+    becomes a third branch here and a fixture, never a new caller.
+    """
+    if not isinstance(blocks, list):
+        return {}
+    for block in blocks:
+        if not isinstance(block, dict) or block.get("type") != "text":
+            continue
+        text = block.get("text")
+        if not isinstance(text, str):
+            continue
+        try:
+            inner = json.loads(text)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(inner, dict):
+            return inner
+    return {}
+
+
 def _hook_result(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """The tool result document from the hook payload, {} when absent or unparsable."""
+    """The tool result document from the hook payload, {} when absent or unparsable.
+
+    Accepts three payload shapes for `result`/`response`: a plain dict (or a JSON string of
+    one), the MCP `CallToolResult` envelope (`{"content": [...]}`), and a bare content-block
+    list.
+    """
     result = payload.get("result") or payload.get("response") or {}
     if isinstance(result, str):
         try:
             result = json.loads(result)
         except (ValueError, TypeError):
             return {}
-    return result if isinstance(result, dict) else {}
+    if isinstance(result, list):
+        return _unwrap_content_blocks(result)
+    if not isinstance(result, dict):
+        return {}
+    content = result.get("content")
+    if isinstance(content, list):
+        unwrapped = _unwrap_content_blocks(content)
+        if unwrapped:
+            return unwrapped
+    return result
 
 
 def main(argv: Optional[list] = None) -> int:

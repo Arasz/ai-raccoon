@@ -65,9 +65,17 @@ def count_attribute_uses(source: str, attribute: str) -> int:
 
     Counts per occurrence, not per line: two attributes on one line are two uses. Only a line
     that *opens* as a comment is dropped, so an attribute following code on the same line counts.
+
+    Matched with a trailing ``\\b`` (L9-8), not a bare substring: a plain ``[McpServerTool``
+    substring also matches the C# SDK's class-level ``[McpServerToolType]`` (and
+    ``[McpServerPrompt`` matches ``[McpServerPromptType]``), inflating every count by one per
+    tool/prompt class. ``\\b`` already excludes that ``Type`` suffix on its own — both sides of
+    the boundary would have to be word characters for it to match there, so a further
+    ``(?!Type)`` lookahead would be redundant.
     """
-    token = f"[{attribute}"
-    return sum(line.count(token) for line in source.splitlines() if not is_comment_line(line))
+    pattern = re.compile(r"\[" + re.escape(attribute) + r"\b")
+    return sum(len(pattern.findall(line)) for line in source.splitlines()
+               if not is_comment_line(line))
 
 
 def count_in_tree(directory: Path, attribute: str) -> int:

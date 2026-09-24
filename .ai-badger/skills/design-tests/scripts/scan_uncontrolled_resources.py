@@ -59,6 +59,19 @@ MITIGATION_GROUPS = {
 }
 NEVER_MITIGABLE = {"wall-clock-assertion", "thread-sleep"}
 
+# `wall-clock-now` is file-wide-mitigable only for TS, the mirror of `sleep-or-delay` above: a
+# real fake-timers library (`vi`/`jest.useFakeTimers()`) does intercept `Date.now()`. On the C#
+# side a `FakeTimeProvider` field anywhere in the file intercepts none of `DateTime.Now/UtcNow/
+# Today`, `DateTimeOffset.Now/UtcNow` or `TimeProvider.System` — all of them read the real system
+# clock directly, bypassing any injected fake entirely — so for `.cs` files this category is
+# never mitigable, same as `thread-sleep` (L9-7).
+NEVER_MITIGABLE_FOR = {"wall-clock-now": frozenset(CS_EXTENSIONS)}
+
+
+def _is_never_mitigable(category: str, ext: str) -> bool:
+    """Whether *category* can never be downgraded to `mitigated` for a file of extension *ext*."""
+    return category in NEVER_MITIGABLE or ext in NEVER_MITIGABLE_FOR.get(category, frozenset())
+
 # A `Task.Delay` call is mitigated only when that same call passes a TimeProvider argument (the
 # .NET idiom for a delay the test controls), or the file drives a fake clock's `.Advance(...)` —
 # never by a bare `FakeTimeProvider` field sitting unused elsewhere in the file (W2-04).
@@ -242,12 +255,12 @@ def scan_text(text: str, filename: str) -> List[Finding]:
         if ext not in exts:
             continue
         file_wide_mitigated = (
-            category in mitigation_groups_present and category not in NEVER_MITIGABLE
+            category in mitigation_groups_present and not _is_never_mitigable(category, ext)
         )
         per_call_delay_check = category == "sleep-or-delay" and ext in CS_EXTENSIONS
         for lineno, stripped in enumerate(stripped_lines, start=1):
             if any(p.search(stripped) for p in patterns):
-                if category in NEVER_MITIGABLE:
+                if _is_never_mitigable(category, ext):
                     mitigated = False
                 elif per_call_delay_check:
                     mitigated = _task_delay_is_mitigated(stripped, text)

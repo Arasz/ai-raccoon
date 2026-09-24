@@ -1,6 +1,6 @@
 {
   "$schema": "../../schemas/model-groups.schema.json",
-  "frameworkVersion": "0.177.0",
+  "frameworkVersion": "0.177.2",
   "registryVersion": 1,
   "measuredAt": "2026-09-21",
   "source": "task-brief 2026-09-21 (medium tier rotates to deepseek-v4.1-flash, matching the 0.168.0 high rotation; deepseek-v4.1-flash pricing measured 2026-09-11 against pi models-store and the OpenRouter models API; earlier pins per task-brief 2026-09-05)",

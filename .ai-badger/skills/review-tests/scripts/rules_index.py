@@ -670,13 +670,57 @@ def _dump_json(data) -> str:
     return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
 
+def _primary_parent(rule: Rule) -> Optional[str]:
+    """The id *rule* nests under in a generated walk. `parent:` may name several ids at once
+    (§3.1, a stack rule specialising two L1/L2 rules); the first is the structural placement."""
+    if not rule.parent:
+        return None
+    return rule.parent.split(",")[0].strip()
+
+
+def _order_by_topology(rules: List[Rule]) -> List[Rule]:
+    """Order *rules* (already filtered to one pass or design step) so a child renders directly
+    after its parent, recursing for grandchildren, instead of wherever its own `order:` value
+    falls in a flat sort (L9-5): sorting the whole list by `(order, id)` alone put a child after
+    any sibling L1 rule whose own `order:` happened to be smaller — wrong for 21/78 real children.
+    A rule whose named parent is not itself in *rules* renders as a root, same as one with none.
+    """
+    by_id = {r.id: r for r in rules}
+    children: Dict[str, List[Rule]] = {}
+    roots: List[Rule] = []
+    for r in rules:
+        pid = _primary_parent(r)
+        if pid and pid in by_id:
+            children.setdefault(pid, []).append(r)
+        else:
+            roots.append(r)
+
+    def sort_key(r: Rule):
+        return (r.order or 0, r.id)
+
+    roots.sort(key=sort_key)
+    for kids in children.values():
+        kids.sort(key=sort_key)
+
+    ordered: List[Rule] = []
+
+    def visit(r: Rule) -> None:
+        ordered.append(r)
+        for kid in children.get(r.id, []):
+            visit(kid)
+
+    for r in roots:
+        visit(r)
+    return ordered
+
+
 def render_walk_review(rules: List[Rule]) -> str:
-    """Passes 0-8, steps ordered by (pass, order); a rule sharing its parent's (pass, order)
-    renders indented directly under it — "inserted at the parent's step number" (§5)."""
+    """Passes 0-8, steps ordered by (pass, order) with each child nested directly after its
+    parent (topologically, `_order_by_topology`) — "inserted at the parent's step number" (§5)."""
     lines = [GENERATED_BANNER, "", "# Review walk", ""]
     eligible = [r for r in rules if r.pass_ is not None and not r.is_retired]
     for p in PASSES:
-        in_pass = sorted((r for r in eligible if r.pass_ == p), key=lambda r: (r.order or 0, r.id))
+        in_pass = _order_by_topology([r for r in eligible if r.pass_ == p])
         if not in_pass:
             continue
         lines.append(f"## Pass {p}")

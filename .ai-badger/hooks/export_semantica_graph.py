@@ -86,6 +86,38 @@ def session_export_target(session_id, project_dir) -> Path:
     return project_dir / SEMANTICA_DIR / filename
 
 
+def _graph_from_content_blocks(blocks) -> dict | None:
+    """The graph dict inside a list of MCP content blocks (`{"type": "text", "text": ...}`),
+    or None when none carries one (including when one carries an error — `_error_payload_error`
+    parses the same blocks independently to report why).
+
+    Shared by two candidate shapes (L9-6): the `CallToolResult` envelope
+    (`{"content": [...]}`) and a bare block list with no wrapping dict at all. Both funnel
+    through this one extractor, so a third captured shape (the real Claude Code MCP
+    `tool_response` — UNVERIFIED, hooks.md:2004) is a fixture and a branch here, never a new
+    caller.
+    """
+    if not isinstance(blocks, list):
+        return None
+    for block in blocks:
+        if not isinstance(block, dict) or block.get("type") != "text":
+            continue
+        text = block.get("text")
+        if not isinstance(text, str):
+            continue
+        try:
+            inner = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(inner, dict):
+            continue
+        if inner.get("error") is not None or inner.get("isError"):
+            return None
+        if "nodes" in inner:
+            return inner
+    return None
+
+
 def extract_graph_json(result) -> dict | None:
     """Unwrap Hermes' double-encoded MCP result into the graph dict, or None."""
     if isinstance(result, str):
@@ -93,6 +125,9 @@ def extract_graph_json(result) -> dict | None:
             result = json.loads(result)
         except json.JSONDecodeError:
             return None
+    if isinstance(result, list):
+        # A bare content-block list, no wrapping dict at all.
+        return _graph_from_content_blocks(result)
     if not isinstance(result, dict):
         return None
     if result.get("error") is not None or result.get("isError"):
@@ -121,6 +156,10 @@ def extract_graph_json(result) -> dict | None:
                 return None
             return inner
         return None
+    content = result.get("content")
+    if isinstance(content, list):
+        # The standard MCP CallToolResult envelope.
+        return _graph_from_content_blocks(content)
     # Anything that matched no envelope used to fall through and be written as a
     # graph. Require the shape a graph actually has rather than enumerating the
     # envelopes that are not one.
