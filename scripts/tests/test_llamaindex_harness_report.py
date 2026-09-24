@@ -397,3 +397,27 @@ def test_frozen_golden_c_cell_is_fusion_with_shared_oracle_rows():
     assert shared, "frozen pair must carry shared-scope rows (C10 oracle)"
     for qid in shared:
         assert labels[qid] == "fusion"
+
+
+def test_granite_golden_fusion_subtaxonomy_conserves_against_the_fusion_cell():
+    # Package D oracle against the granite re-baseline golden (issue #707):
+    # every fusion_sublabel is one of the three known cells, and their total
+    # equals the taxonomy's 'fusion' count exactly (n_fusion == fusion cell) —
+    # the per-row rank columns must attribute every fusion-labelled row, not
+    # just some of them.
+    golden = (Path(__file__).resolve().parents[2] / "docs" / "work"
+              / "results-granite.json")
+    if not golden.exists():
+        pytest.skip("granite golden not present in this checkout")
+    results = json.loads(golden.read_text())
+    tax = evaluate.gap_taxonomy(results["rows"])
+    sub = evaluate.fusion_subtaxonomy(results["rows"])
+    assert sub["n_fusion"] == tax["cells"]["fusion"]
+    assert sum(sub["cells"].values()) == sub["n_fusion"]
+    text = report.render(results, {"date": "2026-09-24",
+                                   "corpus": "project-corpus-100.json",
+                                   "corpus_size": results["summary"]["n"]})
+    if sub["n_fusion"] > 0:
+        assert "Fusion-drop attribution" in text
+    else:
+        assert "Fusion-drop attribution" not in text
