@@ -7,7 +7,7 @@
 title: span-hit MRR@10 change, AST vs line chunker (95% CI low..mean..high)
 JSAA all (144): -0.064..-0.010..0.041
 JSAA C# (96): -0.063..-0.004..0.050
-JSAA TS+TSX (48): -0.086..-0.016..0.051
+JSAA TS (26): -0.086..-0.016..0.051
 ai-badger Python (96): -0.039..0.014..0.071
 ```
 
