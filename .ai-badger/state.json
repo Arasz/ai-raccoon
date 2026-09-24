@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-bank-key-verifier-sidecar-705",
+   "title": "Key-check sidecar tells a wrong key from a corrupt bank (ADR-0111)",
+   "pr": 729,
+   "merged": false,
+   "date": "2026-09-24",
+   "hasNotes": false,
+   "summary": "memory.db.keycheck: random bank-id + HMAC-SHA256(HKDF subkey, domain||bank-id), FixedTimeEquals, 0600 refuse-not-chmod, atomic writes; minted/rewritten on every successful keyed open (covers rekey/migrate). SQLITE_NOTADB: sidecar mismatch -> 21, sidecar verifies -> BankCorruptedException 32, absent -> both-causes 21; checked after the legacy-derivation probe (else migration breaks, ADR-0111 D4). doctor read-only three-way. EventIds 905/906. Stacked on #721; ADR README has a provisional 0110 row pending #722."
+  },
+  {
    "id": "air-fusion-trust-confident-leg-706",
    "title": "ADR-0078 no-regression reorder measured against the gates: does not fix A9, regresses S4/S5/S6",
    "pr": 727,
@@ -229,10 +238,10 @@
   "#519 TestData.CreateMemoryStore optional Null defaults (from #518)",
   "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable — 1.33.0 checklist)",
   "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement",
-  "#705 key verifier outside the bank (ADR-0107 item 1)",
   "#706 fusion that trusts one confident leg (A9 / #367)",
   "#724 watch catch-up leaves files stale for weeks after directory-entry replaces (git checkout)",
-  "#726 regenerate the granite harness golden (overnight full-volume run)"
+  "#726 regenerate the granite harness golden (overnight full-volume run)",
+  "#728 flaky MemorySearchRankingTests premise on x64 CI"
  ],
  "research": [],
  "stillTrue": [
