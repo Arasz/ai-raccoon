@@ -13,9 +13,9 @@ public sealed record KeyCheckRecord(byte[] BankId, byte[] Tag);
 /// <summary>
 ///     Tells a wrong key apart from a corrupt bank when SQLCipher answers SQLITE_NOTADB for both
 ///     (ADR-0111). <c>memory.db.keycheck</c> holds a random bank-id and
-///     HMAC-SHA256(subkey, domain ‖ bank-id); subkey = HKDF-SHA256(the raw bank key, domain) — the
-///     sidecar never carries the key itself. 0600, refuse-not-chmod like the state-directory
-///     secrets (IdentityKeyFile/McpTokenFile); writes are atomic (temp + rename).
+///     HKDF-SHA256(the raw bank key, info: domain ‖ bank-id) — the sidecar never carries the key
+///     itself. 0600, refuse-not-chmod like the state-directory secrets (IdentityKeyFile/McpTokenFile);
+///     writes are atomic (temp + rename).
 /// </summary>
 public sealed class KeyCheckSidecar
 {
@@ -23,7 +23,7 @@ public sealed class KeyCheckSidecar
 
     private const string Domain = "ai-raccoon-keycheck/v1";
     private const int BankIdLength = 16;
-    private const int TagLength = 32; // HMACSHA256 output size
+    private const int TagLength = 32; // SHA-256 output size
     private const int RecordLength = BankIdLength + TagLength;
 
     private static readonly byte[] DomainBytes = Encoding.UTF8.GetBytes(Domain);
@@ -122,11 +122,17 @@ public sealed class KeyCheckSidecar
         return [.. bankId, .. ComputeTag(bankId, key)];
     }
 
+    /// <summary>
+    ///     One platform-KDF call, not a hand-assembled derive-then-HMAC: HKDF's own construction is
+    ///     already HMAC-based, so folding the bank-id into <c>info</c> alongside the domain binds the
+    ///     tag to (key, domain, bank-id) in a single audited primitive — no raw <c>HMACSHA256</c> call
+    ///     needed on top (the no-hand-rolled-crypto gate reserves that shape for applying a key
+    ///     already produced by a separate HKDF step, e.g. <c>SyncBlobAuthenticator</c>).
+    /// </summary>
     private static byte[] ComputeTag(byte[] bankId, string key)
     {
-        var subkey = HKDF.DeriveKey(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(key), TagLength, info: DomainBytes);
-        byte[] data = [.. DomainBytes, .. bankId];
-        return HMACSHA256.HashData(subkey, data);
+        byte[] info = [.. DomainBytes, .. bankId];
+        return HKDF.DeriveKey(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(key), TagLength, info: info);
     }
 
     private static void WriteOwnerOnly(string path, byte[] content, FileMode mode)

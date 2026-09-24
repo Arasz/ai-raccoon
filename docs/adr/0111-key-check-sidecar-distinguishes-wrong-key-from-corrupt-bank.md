@@ -22,13 +22,19 @@ key last opened it successfully, independent of the bank's own (possibly corrupt
 ### D1 — Content: a bank-id and a keyed tag, never the key
 
 The sidecar holds two fixed-length fields, concatenated: a random 16-byte bank-id (minted once,
-alongside the tag) and a 32-byte `HMAC-SHA256(subkey, domain ‖ bank-id)` tag, where
-`subkey = HKDF-SHA256(the raw bank key, info: domain)` and `domain = "ai-raccoon-keycheck/v1"`. The
-subkey is a distinct HKDF output from the domain strings ADR-0012's `SshKeyDerivation` and
-`SyncBlobAuthenticator` already use for their own purposes — the same platform-primitive pattern,
-never a hand-rolled scheme (`KeyCheckSidecar.cs`). Verification recomputes the tag from a candidate
-key and compares with `CryptographicOperations.FixedTimeEquals`. The sidecar can prove a key wrong
-or right without ever being able to reveal or reconstruct that key.
+alongside the tag) and a 32-byte tag, `HKDF-SHA256(the raw bank key, info: domain ‖ bank-id)`,
+where `domain = "ai-raccoon-keycheck/v1"`. One platform-KDF call does the whole job — HKDF's own
+construction is already HMAC-based internally, so folding the bank-id into `info` alongside the
+domain binds the tag to (key, domain, bank-id) directly, with no separate hand-assembled
+derive-then-HMAC step on top (the repo's no-hand-rolled-crypto gate,
+`NoHandRolledCryptoTests.RawHashPrimitives_AppearOnlyOnDocumentedSites`, reserves that two-step
+shape for a site that *applies* a key a distinct earlier HKDF call already produced, such as
+`SyncBlobAuthenticator`, not for a fresh derivation like this one). The `info` string is a domain
+distinct from the ones ADR-0012's `SshKeyDerivation` and `SyncBlobAuthenticator` already use for
+their own purposes — the same platform-primitive pattern, never a hand-rolled scheme
+(`KeyCheckSidecar.cs`). Verification recomputes the tag from a candidate key and compares with
+`CryptographicOperations.FixedTimeEquals`. The sidecar can prove a key wrong or right without ever
+being able to reveal or reconstruct that key.
 
 ### D2 — File handling: 0600, refuse-not-chmod, atomic writes
 

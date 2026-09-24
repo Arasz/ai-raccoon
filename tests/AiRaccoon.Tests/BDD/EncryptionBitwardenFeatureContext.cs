@@ -193,8 +193,9 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     ///     gets a fresh, cold-cache resolver from DI on every start (.NET-F2 caches per resolver
     ///     instance, not globally), and the "Given" step's own fixture probe-open must not poison
     ///     what "the server opens the bank" observes. Returns null on success, else the error text
-    ///     the process would print (mismatch text only for an actual key mismatch, SQLCipher code
-    ///     26; other errors map generically).
+    ///     the process would print (mismatch text only for an actual key mismatch — a raw
+    ///     SqliteException, SQLCipher code 26, or the named BankKeyMismatchException a key-check
+    ///     sidecar can now raise, ADR-0111; other errors map generically).
     /// </summary>
     public async Task<string?> StartServerErrorAsync(CancellationToken cancellationToken = default)
     {
@@ -216,7 +217,11 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
             await using var probe = await Bank.OpenBankWithKeyAsync(resolved.Passphrase, cancellationToken);
             return null;
         }
-        catch (SqliteException ex) when (ex.SqliteErrorCode == 26)
+        // A key mismatch surfaces as a raw SqliteException (no key-check sidecar yet) or the named
+        // BankKeyMismatchException (ADR-0111, once a sidecar exists to give a confident verdict) —
+        // both are the same "wrong key" case this probe reports, just with a different exception
+        // shape depending on whether the bank has opened successfully before in this scenario.
+        catch (Exception ex) when (ex is BankKeyMismatchException || (ex is SqliteException { SqliteErrorCode: 26 }))
         {
             return $"Failed to open encrypted bank with {resolved.SourceName} encryption source key: {ex.Message}";
         }

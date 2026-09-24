@@ -288,12 +288,14 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         // The resolver now resolves the bitwarden source: fake bws → derived key opens the bank.
         await using var reopened = await Ctx.Bank.OpenBankAsync();
         reopened.State.ShouldBe(ConnectionState.Open);
-        // The env passphrase no longer opens it — the rekey landed.
-        var wrong = await Should.ThrowAsync<SqliteException>(async () =>
+        // The env passphrase no longer opens it — the rekey landed. ADR-0111's key-check sidecar
+        // (rewritten to the derived key by the rekey above) now gives a confident verdict, so this
+        // is the named BankKeyMismatchException rather than a raw SqliteException.
+        var wrong = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
         {
             await using var _ = await Ctx.Bank.OpenBankWithKeyAsync(EncryptionBitwardenFeatureContext.EnvPassphrase);
         });
-        wrong.SqliteErrorCode.ShouldBe(26);
+        wrong.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
     [Then("^the server errors with an encryption mismatch$")]
@@ -367,9 +369,11 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
                     new CommandDefinition("SELECT key, value FROM settings WHERE key LIKE 'encryption.%'"));
                 return rows.ToDictionary(r => r.Key, r => r.Value, StringComparer.Ordinal);
             }
-            catch (SqliteException)
+            // A wrong candidate now surfaces as a raw SqliteException (no key-check sidecar yet) or
+            // the named BankKeyMismatchException (ADR-0111, once one exists) — either way it just
+            // means "try the next candidate", not a real failure.
+            catch (Exception ex) when (ex is SqliteException or BankKeyMismatchException)
             {
-                // Wrong candidate — try the next.
             }
         }
 
