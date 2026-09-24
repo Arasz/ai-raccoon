@@ -4,7 +4,7 @@
 Usage:
     python3 run_chunk_window_eval.py --model-dir <granite dir with model_fp16.onnx_data> \\
         --out <dir> [--memory 128,254,510,1022] [--code 128,254,510,1022] [--threads N] \\
-        [--device cpu|mlx --mlx-dir <folder with libonnxruntime_mlx_ep.dylib>]
+        [--device cpu|mlx --mlx-dir <folder with libonnxruntime_mlx_ep.dylib>] [--pad-to N]
 
 Each arm runs in its own process so its peak RSS is its own. Results land in
 <out>/<corpus>-<tokens>.json; `--report` prints the comparison tables from those files.
@@ -32,7 +32,7 @@ def _sizes(value: str) -> list[int]:
 
 def _run_one(args: argparse.Namespace) -> None:
     result = chunk_window.run_arm(REPO, args.model_dir, args.one_corpus, args.one_tokens, args.threads,
-                                  args.out / "banks", args.device, args.mlx_dir)
+                                  args.out / "banks", args.device, args.mlx_dir, args.pad_to)
     (args.out / f"{args.one_corpus}-{args.one_tokens}.json").write_text(chunk_window.to_json(result))
     for bank in (args.out / "banks").glob(f"{args.one_corpus}-{args.one_tokens}.db*"):
         bank.unlink()
@@ -80,6 +80,7 @@ def main() -> None:
     parser.add_argument("--threads", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     parser.add_argument("--device", choices=("cpu", "mlx"), default="cpu")
     parser.add_argument("--mlx-dir", type=Path)
+    parser.add_argument("--pad-to", type=int, default=0, help="pad each row to a multiple of N tokens (0: no padding, as the product)")
     parser.add_argument("--report", action="store_true")
     parser.add_argument("--one-corpus", help=argparse.SUPPRESS)
     parser.add_argument("--one-tokens", type=int, help=argparse.SUPPRESS)
@@ -99,7 +100,7 @@ def main() -> None:
             print(f"arm {corpus}-{tokens}", flush=True)
             subprocess.run([sys.executable, __file__, "--model-dir", str(args.model_dir), "--out", str(args.out),
                             "--threads", str(args.threads), "--one-corpus", corpus, "--one-tokens", str(tokens),
-                            "--device", args.device, *(["--mlx-dir", str(args.mlx_dir)] if args.mlx_dir else [])],
+                            "--device", args.device, "--pad-to", str(args.pad_to), *(["--mlx-dir", str(args.mlx_dir)] if args.mlx_dir else [])],
                            check=True)
     _report(args.out)
 

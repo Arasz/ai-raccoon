@@ -23,10 +23,12 @@ import numpy as np
 
 from retrieval_tuning import scoring
 from retrieval_tuning.chunk_ports import chunk_code, chunk_markdown, distinct_in_order
+from retrieval_tuning.padding import pad_row
 from retrieval_tuning.process_memory import memory_kib
 
 SPECIAL_TOKEN_RESERVATION = 2
 LOCAL_ATTENTION = 128
+PAD_ID = 50283
 CODE_EXCLUDED_LANGUAGES = frozenset({"CSS", "HTML", "SQL"})
 LEG_DEPTH = 50
 RRF_K = 60
@@ -44,7 +46,8 @@ class Engine:
     mlx_dir and runs model_fp16_mlx.onnx on it, spinning off, as OnnxEmbeddingGenerator does.
     """
 
-    def __init__(self, model_dir: Path, threads: int, device: str = "cpu", mlx_dir: Path | None = None) -> None:
+    def __init__(self, model_dir: Path, threads: int, device: str = "cpu", mlx_dir: Path | None = None,
+                 pad_to: int = 0) -> None:
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
@@ -66,6 +69,7 @@ class Engine:
         else:
             raise ValueError(f"unknown device {device!r}")
         self.device = device
+        self.pad_to = pad_to
         self.seen_lengths: set[int] = set()
         manifest = json.loads((model_dir / "ai-raccoon.manifest.json").read_text())
         self.window = manifest["contextWindowTokens"]
@@ -77,14 +81,15 @@ class Engine:
     def embed(self, text: str) -> tuple[np.ndarray, int, float, float]:
         """(unit vector, tokens incl. specials, wall ms, process CPU ms) for one row; new_length says it was a first-seen shape."""
         ids = self.tokenizer.encode(text, add_special_tokens=True).ids[: self.window]
-        input_ids = np.asarray([ids], dtype=np.int64)
+        padded, mask = pad_row(ids, self.pad_to, PAD_ID)
+        input_ids = np.asarray([padded], dtype=np.int64)
         wall, cpu = time.perf_counter(), time.process_time()
         out = self.session.run(["sentence_embedding"],
-                               {"input_ids": input_ids, "attention_mask": np.ones_like(input_ids)})[0][0]
+                               {"input_ids": input_ids, "attention_mask": np.asarray([mask], dtype=np.int64)})[0][0]
         wall_ms = (time.perf_counter() - wall) * 1000
         cpu_ms = (time.process_time() - cpu) * 1000
-        self.new_length = len(ids) not in self.seen_lengths
-        self.seen_lengths.add(len(ids))
+        self.new_length = len(padded) not in self.seen_lengths
+        self.seen_lengths.add(len(padded))
         vector = out.astype(np.float32)
         return vector / np.linalg.norm(vector), len(ids), wall_ms, cpu_ms
 
@@ -225,6 +230,7 @@ class ArmResult:
     embed_ms_first_length: dict[str, float]
     embed_ms_repeat_length: dict[str, float]
     distinct_lengths: int
+    pad_to: int
     disk_bytes: int
     vector_bytes: int
     query_ms: dict[str, float]
@@ -238,10 +244,10 @@ class ArmResult:
 
 
 def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads: int,
-            work_dir: Path, device: str = "cpu", mlx_dir: Path | None = None) -> ArmResult:
+            work_dir: Path, device: str = "cpu", mlx_dir: Path | None = None, pad_to: int = 0) -> ArmResult:
     """Chunk, embed and index one corpus at one budget, then run every query twice (second pass timed)."""
     documents, queries = (memory_corpus if corpus == "memory" else code_corpus)(repo)
-    engine = Engine(model_dir, threads, device, mlx_dir)
+    engine = Engine(model_dir, threads, device, mlx_dir, pad_to)
     mem_load = memory_kib()
     work_dir.mkdir(parents=True, exist_ok=True)
     db_path = work_dir / f"{corpus}-{chunk_tokens}.db"
@@ -321,7 +327,7 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
         footprint_kib_peak_total=memory_kib().footprint_peak, device=device,
         embed_ms_first_length=_timing(first_ms) if first_ms else {},
         embed_ms_repeat_length=_timing(repeat_ms) if repeat_ms else {},
-        distinct_lengths=len(set(lengths)),
+        distinct_lengths=len(engine.seen_lengths), pad_to=pad_to,
         disk_bytes=db_path.stat().st_size, vector_bytes=int(vectors.nbytes),
         query_ms=_timing(q_ms), query_embed_ms=_timing(q_embed), query_cpu_ms=_timing(q_cpu),
         gpu=("MLX plugin EP (unified memory: GPU buffers count in footprint_kib_*)" if device == "mlx"
