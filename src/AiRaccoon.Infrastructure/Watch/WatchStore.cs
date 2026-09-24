@@ -36,6 +36,9 @@ public interface IWatchStore
 
     Task<string?> GetFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default);
 
+    /// <summary>True when the path, or any file under it, has a fingerprint — i.e. the digest stored something for it.</summary>
+    Task<bool> HasFingerprintAtOrUnderAsync(string projectId, string path, CancellationToken cancellationToken = default);
+
     Task UpsertFileHashAsync(string projectId, string path, string fileHash, long updatedAt,
         CancellationToken cancellationToken = default);
 
@@ -68,10 +71,9 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
             .ConfigureAwait(false);
         try
         {
-            var pathPrefix = LikePattern.Escape(path) + "/%";
             await connection.ExecuteAsync(
                     new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
-                        new { projectId, path, pathPrefix }, cancellationToken: cancellationToken))
+                        new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken: cancellationToken))
                 .ConfigureAwait(false);
             await connection.ExecuteAsync(
                     new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path },
@@ -120,10 +122,9 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
             {
                 foreach (var pruned in decision.Pruned)
                 {
-                    var pathPrefix = LikePattern.Escape(pruned.Path) + "/%";
                     await connection.ExecuteAsync(
                             new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
-                                new { projectId, path = pruned.Path, pathPrefix }, cancellationToken: cancellationToken))
+                                new { projectId, path = pruned.Path, subtreeLow = PathSubtree.Low(pruned.Path), subtreeHigh = PathSubtree.High(pruned.Path) }, cancellationToken: cancellationToken))
                         .ConfigureAwait(false);
                     await connection.ExecuteAsync(
                             new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
@@ -180,6 +181,17 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
         await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
         return await connection.QuerySingleOrDefaultAsync<string?>(
                 new CommandDefinition(MemorySql.SelectWatchFile, new { projectId, path },
+                    cancellationToken: cancellationToken))
+            .ConfigureAwait(false);
+    }
+
+    public async Task<bool> HasFingerprintAtOrUnderAsync(string projectId, string path,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.ExecuteScalarAsync<bool>(
+                new CommandDefinition(MemorySql.SelectWatchFileAtOrUnder,
+                    new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) },
                     cancellationToken: cancellationToken))
             .ConfigureAwait(false);
     }
