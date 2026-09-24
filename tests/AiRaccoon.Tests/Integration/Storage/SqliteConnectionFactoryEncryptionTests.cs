@@ -201,8 +201,13 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         Encoding.ASCII.GetString(header[..16]).ShouldNotStartWith("SQLite format 3");
     }
 
+    /// <summary>
+    ///     ADR-0111: the first successful open mints a key-check sidecar (AC3), so a later wrong-key
+    ///     open no longer has to guess — the verifier proves the key is wrong, and the message names
+    ///     the key, not corruption (AC1).
+    /// </summary>
     [RetryFact]
-    public async Task OpenBankWithKeyAsync_WrongKey_ThrowsSqliteException26()
+    public async Task OpenBankWithKeyAsync_WrongKeyWithVerifier_ThrowsKeyMismatch_NamingTheKeyNotCorruption()
     {
         var factory = Factory("correct-key");
         await using (var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -212,11 +217,136 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
             await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
+        File.Exists(KeyCheckSidecar.PathFor(factory.BankPath)).ShouldBeTrue("the successful open above must have minted the verifier");
+
+        var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
+        {
+            await using var conn = await factory.OpenBankWithKeyAsync("wrong-key", TestContext.Current.CancellationToken);
+        });
+        ex.Message.ShouldContain("key");
+        ex.Message.ShouldNotContain("corrupt");
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
+    }
+
+    /// <summary>Without a verifier (a pre-ADR-0111 bank, or one that never opened successfully), the ambiguous raw signal is unchanged.</summary>
+    [RetryFact]
+    public async Task OpenBankWithKeyAsync_WrongKeyNoVerifierYet_ThrowsRawSqliteException()
+    {
+        var factory = Factory("correct-key");
+        await using (var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        File.Delete(KeyCheckSidecar.PathFor(factory.BankPath));
+
         var ex = await Should.ThrowAsync<SqliteException>(async () =>
         {
             await using var conn = await factory.OpenBankWithKeyAsync("wrong-key", TestContext.Current.CancellationToken);
         });
         ex.SqliteErrorCode.ShouldBe(26);
+    }
+
+    /// <summary>AC2: the right key against a genuinely corrupted file — the verifier proves the key is
+    /// right, so this is <see cref="BankCorruptedException" /> (32), not a wrong-key verdict.</summary>
+    [RetryFact]
+    public async Task OpenBankWithKeyAsync_RightKeyCorruptedBank_ThrowsBankCorrupted_NamingCorruptionOnly()
+    {
+        var factory = Factory("correct-key");
+        await using (var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+            await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            // WAL keeps page 1 out of the main file until checkpointed — corrupt bytes below would
+            // otherwise be shadowed by the WAL's own copy and never read at all.
+            await using var checkpoint = connection.CreateCommand();
+            checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE)";
+            await checkpoint.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var pooledCsb = new SqliteConnectionStringBuilder
+        {
+            DataSource = factory.BankPath, Mode = SqliteOpenMode.ReadWriteCreate, DefaultTimeout = 5, Password = "correct-key"
+        };
+        SqliteConnection.ClearPool(new SqliteConnection(pooledCsb.ToString()));
+
+        // Overwrite bytes well past the (unencrypted) SQLCipher salt header: the correct key still
+        // derives fine, but the decrypted page fails validation — the same SQLITE_NOTADB a wrong key
+        // produces (ADR-0107 PC.0), except this bank's verifier proves the key is right.
+        await using (var stream = new FileStream(factory.BankPath, FileMode.Open, FileAccess.ReadWrite))
+        {
+            stream.Seek(100, SeekOrigin.Begin);
+            var garbage = new byte[200];
+            Random.Shared.NextBytes(garbage);
+            await stream.WriteAsync(garbage, TestContext.Current.CancellationToken);
+        }
+
+        var ex = await Should.ThrowAsync<BankCorruptedException>(async () =>
+        {
+            await using var conn = await factory.OpenBankWithKeyAsync("correct-key", TestContext.Current.CancellationToken);
+        });
+        ex.Message.ShouldContain("corrupt");
+        ex.Message.ShouldNotContain("wrong");
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
+    }
+
+    /// <summary>AC3: a bank without a verifier, opened successfully, mints one 0600; reopening with the same key verifies.</summary>
+    [RetryFact]
+    public async Task OpenBankAsync_NoVerifierYet_MintsOneOwnerOnly()
+    {
+        var factory = Factory("a-key");
+
+        await using (await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        var sidecarPath = KeyCheckSidecar.PathFor(factory.BankPath);
+        File.Exists(sidecarPath).ShouldBeTrue();
+        if (!OperatingSystem.IsWindows())
+        {
+            File.GetUnixFileMode(sidecarPath).ShouldBe(UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+
+        var record = new KeyCheckSidecar(factory.BankPath).Read();
+        KeyCheckSidecar.Verifies(record!, "a-key").ShouldBeTrue();
+
+        // Reopening with the same key must not disturb the minted verifier.
+        var before = await File.ReadAllBytesAsync(sidecarPath, TestContext.Current.CancellationToken);
+        await using (await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        (await File.ReadAllBytesAsync(sidecarPath, TestContext.Current.CancellationToken)).ShouldBe(before);
+    }
+
+    /// <summary>AC4: rekey rewrites the sidecar — the old key now reports wrong-key, the new key opens and verifies.</summary>
+    [RetryFact]
+    public async Task RekeyBankAsync_RewritesTheVerifier_OldKeyMismatches_NewKeyOpensAndVerifies()
+    {
+        var factory = Factory("old-key");
+        await using (await factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        await factory.RekeyBankAsync(DerivedRawKey, TestContext.Current.CancellationToken);
+
+        var record = new KeyCheckSidecar(factory.BankPath).Read();
+        KeyCheckSidecar.Verifies(record!, DerivedRawKey).ShouldBeTrue();
+        KeyCheckSidecar.Verifies(record!, "old-key").ShouldBeFalse();
+
+        var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
+        {
+            await using var conn = await factory.OpenBankWithKeyAsync("old-key", TestContext.Current.CancellationToken);
+        });
+        ex.Message.ShouldContain("key");
+
+        var newKeyFactory = new SqliteConnectionFactory(Options(), Resolver(Options(), new StubEncryptionKeyProvider(DerivedRawKey)));
+        await using var reopened = await newKeyFactory.OpenBankAsync(TestContext.Current.CancellationToken);
+        reopened.State.ShouldBe(ConnectionState.Open);
     }
 
     /// <summary>
@@ -292,10 +422,12 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         await factory.RekeyBankAsync(DerivedRawKey, TestContext.Current.CancellationToken);
 
         // No cached/offline key copy (docs/plans/encryption-bitwarden-implementation.md D4): the
-        // directory holds only the bank and SQLite's own journal artifacts, none containing the derived key material.
+        // directory holds only the bank, SQLite's own journal artifacts, and the ADR-0111 key-check
+        // sidecar (an HMAC tag, never the key material itself).
         var files = Directory.GetFiles(_dataRoot);
         files.ShouldAllBe(file =>
             file == factory.BankPath
+            || file == KeyCheckSidecar.PathFor(factory.BankPath)
             || file.EndsWith("-wal", StringComparison.Ordinal)
             || file.EndsWith("-shm", StringComparison.Ordinal));
         foreach (var file in files)

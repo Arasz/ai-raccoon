@@ -18,6 +18,9 @@ public sealed partial class SqliteConnectionFactory(
     IEncryptionKeyResolver keyResolver,
     ILogger<SqliteConnectionFactory>? logger = null) : ISqliteConnectionFactory
 {
+    /// <summary>SQLITE_NOTADB (26): the file exists but is not a database (or not this key's database).</summary>
+    private const int NotADatabaseErrorCode = 26;
+
     static SqliteConnectionFactory()
     {
         DefaultTypeMap.MatchNamesWithUnderscores = true;
@@ -48,14 +51,14 @@ public sealed partial class SqliteConnectionFactory(
         {
             if (resolvedKey.LegacyPassphrase is null || resolvedKey.Passphrase is null)
             {
-                throw new BankKeyMismatchException(
+                throw TryDiagnoseWithKeyCheck(resolvedKey.Passphrase, openFailure) ?? new BankKeyMismatchException(
                     $"the bank at '{BankPath}' did not open with the {resolvedKey.SourceName} encryption key, and that source has no earlier key derivation to fall back to",
                     openFailure);
             }
 
             if (!await LegacyKeyOpensHealthyBankAsync(resolvedKey.LegacyPassphrase, cancellationToken).ConfigureAwait(false))
             {
-                throw NotLegacyKeyed(resolvedKey, openFailure);
+                throw TryDiagnoseWithKeyCheck(resolvedKey.Passphrase, openFailure) ?? NotLegacyKeyed(resolvedKey, openFailure);
             }
 
             // Only reached with positive proof that the legacy key opens a healthy bank.
@@ -137,10 +140,24 @@ public sealed partial class SqliteConnectionFactory(
         await using var verify = await OpenBankWithKeyAsync(newKey, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Opens the bank with an explicit key (null = unencrypted): pragmas, vec0, schema.</summary>
+    /// <summary>
+    ///     Opens the bank with an explicit key (null = unencrypted): pragmas, vec0, schema. Unlike
+    ///     <see cref="OpenBankWithResolvedKeyAsync" />, this has no resolver context (no legacy
+    ///     derivation to try) — a failed open still gets the key-check sidecar's verdict when one
+    ///     is available (ADR-0111), else the raw <see cref="SqliteException" /> unchanged.
+    /// </summary>
     public async Task<SqliteConnection> OpenBankWithKeyAsync(string? key, CancellationToken cancellationToken = default)
     {
-        var connection = await OpenConnectionAsync(key, cancellationToken).ConfigureAwait(false);
+        SqliteConnection connection;
+        try
+        {
+            connection = await OpenConnectionAsync(key, cancellationToken).ConfigureAwait(false);
+        }
+        catch (SqliteException openFailure)
+        {
+            throw TryDiagnoseWithKeyCheck(key, openFailure) ?? openFailure;
+        }
+
         return await InitializeAsync(connection, cancellationToken, logger).ConfigureAwait(false);
     }
 
@@ -171,12 +188,12 @@ public sealed partial class SqliteConnectionFactory(
     public static string BankPathFor(InfrastructureOptions options) => Path.Combine(BankDirectoryFor(options), "memory.db");
 
     /// <summary>Turns a failed open into the specific reason, without ever writing to the bank.</summary>
-    private async Task<BankKeyMismatchException> DiagnoseAsync(ResolvedKey resolvedKey, SqliteException openFailure,
+    private async Task<Exception> DiagnoseAsync(ResolvedKey resolvedKey, SqliteException openFailure,
         CancellationToken cancellationToken)
     {
         if (!await LegacyKeyOpensHealthyBankAsync(resolvedKey.LegacyPassphrase!, cancellationToken).ConfigureAwait(false))
         {
-            return NotLegacyKeyed(resolvedKey, openFailure);
+            return TryDiagnoseWithKeyCheck(resolvedKey.Passphrase, openFailure) ?? NotLegacyKeyed(resolvedKey, openFailure);
         }
 
         return new BankKeyMismatchException(
@@ -189,11 +206,92 @@ public sealed partial class SqliteConnectionFactory(
             + "it is corrupt, or keyed to a different secret. It has not been modified; restore it from a backup or check that the encryption source is right.",
             openFailure);
 
-    /// <summary>The resolved key's source has no earlier derivation to try, so a failed open can only be this bank's own key mismatch.</summary>
-    private BankKeyMismatchException NoLegacyDerivationToTry(ResolvedKey resolvedKey, SqliteException openFailure) =>
-        new($"the bank at '{BankPath}' did not open with the {resolvedKey.SourceName} encryption key, and that source has no earlier key derivation to try — "
+    /// <summary>The resolved key's source has no earlier derivation to try, so a failed open can only be this bank's own key mismatch — unless the key-check sidecar (ADR-0111) already gives a confident verdict.</summary>
+    private Exception NoLegacyDerivationToTry(ResolvedKey resolvedKey, SqliteException openFailure) =>
+        TryDiagnoseWithKeyCheck(resolvedKey.Passphrase, openFailure) ??
+        new BankKeyMismatchException(
+            $"the bank at '{BankPath}' did not open with the {resolvedKey.SourceName} encryption key, and that source has no earlier key derivation to try — "
             + "it is corrupt, or keyed to a different secret. It has not been modified; restore it from a backup or check that the encryption source is right.",
             openFailure);
+
+    /// <summary>
+    ///     A confident verdict from the key-check sidecar (ADR-0111) for a SQLITE_NOTADB open
+    ///     failure, or null when the sidecar is absent or cannot be trusted — the caller then falls
+    ///     back to its own ambiguous, both-causes diagnosis. Never used to short-circuit the legacy-
+    ///     derivation check: a bank still under the pre-ADR-0012 key is not "wrong key", and that
+    ///     detection always runs first.
+    /// </summary>
+    private Exception? TryDiagnoseWithKeyCheck(string? key, SqliteException openFailure)
+    {
+        if (key is null || openFailure.SqliteErrorCode != NotADatabaseErrorCode)
+        {
+            return null;
+        }
+
+        KeyCheckRecord? record;
+        try
+        {
+            record = new KeyCheckSidecar(BankPath).Read();
+        }
+        catch (KeyCheckViolation)
+        {
+            return null; // cannot trust an unreadable/shared verifier — fall back to the ambiguous diagnosis
+        }
+
+        if (record is null)
+        {
+            return null;
+        }
+
+        return KeyCheckSidecar.Verifies(record, key)
+            ? new BankCorruptedException(
+                $"the bank at '{BankPath}' is corrupt — its key verifier confirms the encryption key is right, so the file itself is damaged; restore it from a backup",
+                openFailure)
+            : new BankKeyMismatchException(
+                $"the bank at '{BankPath}' does not open with the resolved encryption key — its key verifier confirms this key is wrong; check the encryption key source",
+                openFailure);
+    }
+
+    /// <summary>
+    ///     Verifies the key-check sidecar (ADR-0111) against the key that just opened the bank:
+    ///     mints one silently when absent, rewrites it when it no longer matches (the rekey/migrate
+    ///     path), and never fails the open itself — a diagnostic aid must not become an availability
+    ///     risk. Unencrypted banks (null key) have nothing to verify.
+    /// </summary>
+    private void EnsureKeyCheck(string? key)
+    {
+        if (key is null)
+        {
+            return;
+        }
+
+        var sidecar = new KeyCheckSidecar(BankPath);
+        try
+        {
+            var record = sidecar.Read();
+            if (record is null)
+            {
+                sidecar.MintIfMissing(key);
+                return;
+            }
+
+            if (!KeyCheckSidecar.Verifies(record, key))
+            {
+                sidecar.Rewrite(key);
+                if (logger is not null)
+                {
+                    Log.KeyCheckRewritten(logger, BankPath);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is KeyCheckViolation or IOException or UnauthorizedAccessException)
+        {
+            if (logger is not null)
+            {
+                Log.KeyCheckUnavailable(logger, BankPath, ex);
+            }
+        }
+    }
 
     /// <summary>
     ///     True only when the legacy key opens the bank <em>and</em> quick_check reports "ok" — the
@@ -240,6 +338,7 @@ public sealed partial class SqliteConnectionFactory(
 
         var connection = new SqliteConnection(BuildConnectionString(key));
         await OpenWithPragmasAsync(connection, cancellationToken).ConfigureAwait(false);
+        EnsureKeyCheck(key);
         return connection;
     }
 
@@ -372,5 +471,13 @@ public sealed partial class SqliteConnectionFactory(
         [LoggerMessage(EventId = 904, Level = LogLevel.Information,
             Message = "schema migration: removed {Count} entries row(s) with neither a scope nor a workspace_id — unreachable by every tier")]
         public static partial void ScopelessEntriesRemoved(ILogger logger, long count);
+
+        [LoggerMessage(EventId = 905, Level = LogLevel.Information,
+            Message = "key check: rewrote the sidecar for {BankPath} — it no longer matched the key that just opened it")]
+        public static partial void KeyCheckRewritten(ILogger logger, string bankPath);
+
+        [LoggerMessage(EventId = 906, Level = LogLevel.Warning,
+            Message = "key check: the sidecar for {BankPath} could not be written")]
+        public static partial void KeyCheckUnavailable(ILogger logger, string bankPath, Exception exception);
     }
 }

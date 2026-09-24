@@ -207,12 +207,14 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
             }
 
             // And no longer readable under the legacy key — without this half, a bank that was
-            // never encrypted at all would satisfy the assertion above.
-            var stale = await Should.ThrowAsync<SqliteException>(async () =>
+            // never encrypted at all would satisfy the assertion above. The migrate above rewrote
+            // the ADR-0111 key-check sidecar to the new key, so this is now a confident wrong-key
+            // verdict, not a raw SqliteException.
+            var stale = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
             {
                 await using var conn = await factory.OpenBankWithKeyAsync(LegacyDerivedRawKey, TestContext.Current.CancellationToken);
             });
-            stale.SqliteErrorCode.ShouldBe(26);
+            stale.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
         });
     }
 
@@ -535,19 +537,21 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     }
 
     /// <summary>
-    ///     serve semantics for a mismatched key (P2/ADR-0020): the decrypt probe fails SQLCipher
-    ///     code 26 before the bind — Bank.Corrupted (a wrong key and a corrupt file look the same),
-    ///     a stderr line naming the bank, nothing listening, and the bank still opens with the
-    ///     passphrase that keyed it (the failed probe writes nothing).
+    ///     ADR-0111: the env-keyed open below mints a key-check sidecar. serve's startup probe then
+    ///     resolves through the fake bws (a different derived key), so the verifier gives a
+    ///     confident verdict — Key.WrongKey, not the old ambiguous Bank.Corrupted — a stderr line
+    ///     naming the bank, nothing listening, and the bank still opens with the passphrase that
+    ///     keyed it (the failed probe writes nothing).
     /// </summary>
     [RetryFact]
-    public async Task Startup_WrongKey_ServeExitsCorruptedLeavingTheBankUntouched()
+    public async Task Startup_WrongKey_ServeExitsKeyMismatchLeavingTheBankUntouched()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the child launches a shell-based fake; the PATH override is unix-shaped");
 
         InstallFakeBws();
         // Bank keyed with a passphrase absent from the child's environment; the sidecar routes the child's
-        // resolve through the fake bws (a different derived key) → probe open fails SQLCipher code 26 → exit 2.
+        // resolve through the fake bws (a different derived key) → probe open fails SQLCipher code 26,
+        // and the key-check sidecar minted by this open proves the child's key is wrong.
         var envFactory = new SqliteConnectionFactory(Options(), new EncryptionKeyResolver(
             new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider("env-passphrase")]));
         await using (await envFactory.OpenBankAsync(TestContext.Current.CancellationToken))
@@ -560,7 +564,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         lease.ReleaseForBind();
         var (exit, stderr, stdout) = await RunServerProcessAsync(Path.GetDirectoryName(_fakeBws)!, port);
 
-        exit.ShouldBe(ErrorCode.Bank.Corrupted);
+        exit.ShouldBe(ErrorCode.Key.WrongKey);
         stdout.ShouldBeEmpty();
         stderr.ShouldContain("could not open the bank");
         (await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken))
