@@ -3,7 +3,9 @@
 
 Usage:
     python3 run_chunk_window_eval.py --model-dir <granite dir with model_fp16.onnx_data> \\
-        --out <dir> [--memory 128,254,510,1022] [--code 128,254,510,1022] [--threads N]
+        --out <dir> [--memory 128,254,510,1022] [--code 128,254,510,1022] [--threads N] \\
+        [--device cpu|mlx --mlx-dir <folder with libonnxruntime_mlx_ep.dylib>] [--pad-to N | --buckets a,b,..] \\
+        [--cache-limit-mib N]
 
 Each arm runs in its own process so its peak RSS is its own. Results land in
 <out>/<corpus>-<tokens>.json; `--report` prints the comparison tables from those files.
@@ -31,7 +33,8 @@ def _sizes(value: str) -> list[int]:
 
 def _run_one(args: argparse.Namespace) -> None:
     result = chunk_window.run_arm(REPO, args.model_dir, args.one_corpus, args.one_tokens, args.threads,
-                                  args.out / "banks")
+                                  args.out / "banks", args.device, args.mlx_dir, args.pad_to,
+                                  args.buckets, args.cache_limit_mib)
     (args.out / f"{args.one_corpus}-{args.one_tokens}.json").write_text(chunk_window.to_json(result))
     for bank in (args.out / "banks").glob(f"{args.one_corpus}-{args.one_tokens}.db*"):
         bank.unlink()
@@ -45,13 +48,14 @@ def _report(out: Path) -> None:
             continue
         print(f"\n## {corpus}")
         print("| tokens | chunks | >128 | file R@5 | file MRR@10 | span R@5 | hybrid file R@5 | "
-              "ingest s | embed ms/chunk | ms/1k tok | peak RSS MiB | disk KiB | query ms |")
+              "ingest s | ingest CPU s | embed ms/chunk | ms/1k tok | peak RSS MiB | peak footprint MiB | disk KiB | query ms |")
         for r in arms:
             v, h = r["vector"], r["hybrid"]
             print(f"| {r['chunk_tokens']} | {r['chunks']} | {r['chunks_over_local_window']:.0%} | "
                   f"{v['file_recall5']:.3f} | {v['file_mrr10']:.3f} | {v['span_recall5']:.3f} | "
-                  f"{h['file_recall5']:.3f} | {r['ingest_wall_s']:.0f} | {r['embed_ms']['mean']:.0f} | "
+                  f"{h['file_recall5']:.3f} | {r['ingest_wall_s']:.0f} | {r['ingest_cpu_s']:.0f} | {r['embed_ms']['mean']:.0f} | "
                   f"{r['embed_ms_per_1k_tokens']:.0f} | {r['rss_kib_peak_total'] / 1024:.0f} | "
+                  f"{r.get('footprint_kib_peak_total', r['rss_kib_peak_total']) / 1024:.0f} | "
                   f"{r['disk_bytes'] / 1024:.0f} | {r['query_ms']['mean']:.1f} |")
         base = rows.get(baseline)
         if base is None:
@@ -76,6 +80,11 @@ def main() -> None:
     parser.add_argument("--memory", type=_sizes, default=[128, 254, 510, 1022])
     parser.add_argument("--code", type=_sizes, default=[128, 254, 510, 1022])
     parser.add_argument("--threads", type=int, default=max(1, (os.cpu_count() or 2) // 2))
+    parser.add_argument("--device", choices=("cpu", "mlx"), default="cpu")
+    parser.add_argument("--mlx-dir", type=Path)
+    parser.add_argument("--buckets", type=_sizes, default=[], help="pad each row to the smallest listed length that fits")
+    parser.add_argument("--cache-limit-mib", type=int, help="MLX free-buffer cache limit (mlx_set_cache_limit)")
+    parser.add_argument("--pad-to", type=int, default=0, help="pad each row to a multiple of N tokens (0: no padding, as the product)")
     parser.add_argument("--report", action="store_true")
     parser.add_argument("--one-corpus", help=argparse.SUPPRESS)
     parser.add_argument("--one-tokens", type=int, help=argparse.SUPPRESS)
@@ -89,12 +98,18 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     if args.one_corpus:
         _run_one(args)
-        return
+        # MLX's static destructors can abort at interpreter teardown (recursive_mutex); the result is already written.
+        sys.stdout.flush()
+        os._exit(0)
     for corpus, sizes in (("memory", args.memory), ("code", args.code)):
         for tokens in sizes:
             print(f"arm {corpus}-{tokens}", flush=True)
             subprocess.run([sys.executable, __file__, "--model-dir", str(args.model_dir), "--out", str(args.out),
-                            "--threads", str(args.threads), "--one-corpus", corpus, "--one-tokens", str(tokens)],
+                            "--threads", str(args.threads), "--one-corpus", corpus, "--one-tokens", str(tokens),
+                            "--device", args.device, "--pad-to", str(args.pad_to),
+                            *(["--buckets", ",".join(map(str, args.buckets))] if args.buckets else []),
+                            *(["--cache-limit-mib", str(args.cache_limit_mib)] if args.cache_limit_mib is not None else []),
+                            *(["--mlx-dir", str(args.mlx_dir)] if args.mlx_dir else [])],
                            check=True)
     _report(args.out)
 
