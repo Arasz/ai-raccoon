@@ -14,7 +14,7 @@ watcher-lag / not-yet-re-ingested (H1, real): 3783..3783..3783
 
 ## Findings
 
-### F1 — Every remaining non-dedupe coverage gap is a file whose on-disk mtime is newer than its newest ingested row; zero exceptions once the measurement counts lines the way the chunker does [MEASURED]
+### F1: Every remaining non-dedupe coverage gap is a file whose on-disk mtime is newer than its newest ingested row; zero exceptions once the measurement counts lines the way the chunker does [MEASURED]
 
 Re-running the dedupe-independent gap scan from `docs/work/2026-09-24-followup-batch-measurements.md`
 against the same read-only backup copy of the owner's live bank, counting non-blank lines by
@@ -51,15 +51,15 @@ python3 scratchpad/pd/gap_examples.py scratchpad/pd/live-copy.db
   jsaa       gap_lines=24 newest_row_updated_at=2026-08-22T16:35:30Z file_mtime=2026-09-23T23:25:02Z lag_h=774.8  .../use-auth.ts
   ai-raccoon gap_lines=6  newest_row_updated_at=2026-08-22T14:25:45Z file_mtime=2026-09-23T21:07:04Z lag_h=774.7  .../scripts/src/bundle.py
 
-stat -f "mtime=%Sm ctime=%Sc" -t "%Y-%m-%dT%H:%M:%S" /Users/arasz/RiderProjects/ai-raccoon/scripts/src/bundle.py
+stat -f "mtime=%Sm ctime=%Sc" -t "%Y-%m-%dT%H:%M:%S" scripts/src/bundle.py
   mtime=2026-09-23T23:07:04 ctime=2026-09-23T23:07:04
-ls -la /Users/arasz/RiderProjects/ai-raccoon/scripts/src/ | head -3
+ls -la scripts/src/ | head -3
   drwxr-xr-x@ 17 arasz staff 544 Sep 23 23:07 .        (directory's own mtime matches the file's)
 ```
 Scripts live under `scratchpad/pd/` in this task's scratchpad directory. `live-copy.db` is the
 read-only backup copy of the owner's bank named in the task brief, not the live server.
 
-### F2 — The code-ingestion pipeline has no coverage-losing defect: an unchanged-hash chunk's position is refreshed correctly, and every non-blank line of a real edit is covered end to end through the actual watch pipeline, including an atomic-rename edit [MEASURED]
+### F2: The code-ingestion pipeline has no coverage-losing defect: an unchanged-hash chunk's position is refreshed correctly, and every non-blank line of a real edit is covered end to end through the actual watch pipeline, including an atomic-rename edit [MEASURED]
 
 Three separate proofs, all run against production code with no test-only shortcuts:
 
@@ -99,7 +99,7 @@ dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll \
 # revert -> both green again (git diff on CodeIngestor.cs is empty after revert)
 ```
 
-### F3 — The one concrete non-stale gap found earlier, `legacy_yaml_subset.py`, 2 lines each of 2 copies, was a measurement-script artifact, not a chunker defect: the file embeds literal U+2028/U+2029 characters as data, and Python's `str.splitlines()`, not `CodeChunker`, treats those as line breaks [MEASURED]
+### F3: The one concrete non-stale gap found earlier, `legacy_yaml_subset.py`, 2 lines each of 2 copies, was a measurement-script artifact, not a chunker defect: the file embeds literal U+2028/U+2029 characters as data, and Python's `str.splitlines()`, not `CodeChunker`, treats those as line breaks [MEASURED]
 
 `legacy_yaml_subset.py` has 339 real `\n`-terminated lines (`wc -l` reports 339, and
 `code_entries`'s last chunk covers up to `line_end=339` for both copies of the file). The file's
@@ -120,7 +120,7 @@ unterminated final line is still covered.
 **Evidence:**
 ```
 python3 scratchpad/pd/find_linebreaks.py \
-  /Users/arasz/RiderProjects/ai-badger/skills/mcp-index/scripts/legacy_yaml_subset.py
+  ~/RiderProjects/ai-badger/skills/mcp-index/scripts/legacy_yaml_subset.py
   '\u2028' found at 6435 context: '...return text\n\n\n_LINE_SEP = "\u2028"\n_PARA_S'
   '\u2029' found at 6451 context: '...text\n\n\n_LINE_SEP = "\u2028"\n_PARA_SEP = "\u2029"\n_DOUBLE'
   count \n: 339
@@ -138,7 +138,7 @@ dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll \
   (includes the new Chunk_FinalLineHasNoTrailingNewline_StillCoversIt)
 ```
 
-### F4 — The retry/backoff design that can leave a whole watch unchecked is deliberate and documented; its stated recovery is a restart's catch-up scan, not a periodic re-scan while the watch stays active [READ]
+### F4: The retry/backoff design that can leave a whole watch unchecked is deliberate and documented; its stated recovery is a restart's catch-up scan, not a periodic re-scan while the watch stays active [READ]
 
 `WatchRetryPolicy` keys its consecutive-failure counter per watch root
 (`src/AiRaccoon.Infrastructure/Watch/WatchRetryPolicy.cs:10-14`, doc comment: "per-watch
@@ -154,7 +154,7 @@ tested as such (`WatchRetryPolicyTests.RecordFailure_FifthFailure_StopsCheckingF
 `src/AiRaccoon.Infrastructure/Watch/WatchRetryPolicy.cs:10-14,34-40`;
 `src/AiRaccoon.Infrastructure/Watch/WatchHostedService.cs:161-177`.
 
-### F5 — `FileSystemWatcher` is a thin wrapper over the OS's own change-notification mechanism, which is known to under-report events during a burst of near-simultaneous filesystem changes, such as a `git checkout` or branch switch touching many files at once; nothing in this pipeline detects an event it never received [INFERRED]
+### F5: `FileSystemWatcher` is a thin wrapper over the OS's own change-notification mechanism, which is known to under-report events during a burst of near-simultaneous filesystem changes, such as a `git checkout` or branch switch touching many files at once; nothing in this pipeline detects an event it never received [INFERRED]
 
 F1's largest-lag examples (774+ hours, directory-entry-replace signature) are best explained by a
 burst filesystem operation (a branch switch, `git stash pop`, or similar) that replaced several

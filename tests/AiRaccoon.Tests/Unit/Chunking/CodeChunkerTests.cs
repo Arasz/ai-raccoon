@@ -235,7 +235,7 @@ public sealed class CodeChunkerTests
         }
     }
 
-    /// <summary>#711 H3: a file saved without a trailing newline must not lose its last line.</summary>
+    /// <summary>A file saved without a trailing newline must not lose its last line.</summary>
     [Fact]
     public void Chunk_FinalLineHasNoTrailingNewline_StillCoversIt()
     {

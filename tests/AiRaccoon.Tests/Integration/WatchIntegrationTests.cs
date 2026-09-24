@@ -544,7 +544,7 @@ public sealed class WatchIntegrationTests
     }
 
     /// <summary>
-    ///     #711: every non-blank line of a watched code file must be covered by some
+    ///     Every non-blank line of a watched code file must be covered by some
     ///     `code_entries` row after each of three ordinary edit shapes (insert at top, change in
     ///     the middle, append at the end), each delivered through the real FileSystemWatcher and
     ///     the production dedup-rediscovery path (<see cref="AiRaccoon.Infrastructure.Ingestion.CodeIngestor" />'s
@@ -600,7 +600,7 @@ public sealed class WatchIntegrationTests
     }
 
     /// <summary>
-    ///     #711 H3: an editor or `git checkout` replaces a file by writing a sibling temp file and
+    ///     An editor or `git checkout` replaces a file by writing a sibling temp file and
     ///     renaming it onto the target — a single atomic `rename(2)`, not a Changed event. The
     ///     digest must treat the incoming Renamed-onto-existing-path event exactly like an ordinary
     ///     edit: full coverage of the new content, no leftover row under the temp name.
@@ -626,11 +626,19 @@ public sealed class WatchIntegrationTests
             .ShouldBeTrue("initial code file was never ingested");
         await AssertFullCoverageAsync(stack, "Widget.cs", v1, TestContext.Current.CancellationToken);
 
-        // write-temp-then-rename: the idiom editors and git use for an atomic replace.
+        // write-temp-then-rename: the idiom editors and git use for an atomic replace. The temp
+        // name keeps a recognized code extension (unlike a bare `.tmp` suffix) so it is actually
+        // ingested under its own path before the rename fires — otherwise the zero-row assertion
+        // below would pass even with broken rename cleanup, because nothing was ever indexed there.
         var v2 = "class Alpha\n{\n}\n\nclass BetaZephyrRenamed\n{\n}\n\nclass GammaZephyrNew\n{\n}\n";
-        var tempPath = stack.File("Widget.cs.tmp");
+        var tempPath = stack.File("Widget.tmp.cs");
         await File.WriteAllTextAsync(tempPath, v2, TestContext.Current.CancellationToken);
         File.SetLastWriteTimeUtc(tempPath, stack.Time.GetUtcNow().UtcDateTime);
+        (await stack.StepUntilAsync(
+                async () => await stack.CodeEntryHasValueContainingAsync(tempPath, "GammaZephyrNew",
+                    TestContext.Current.CancellationToken), TestContext.Current.CancellationToken))
+            .ShouldBeTrue("temp file was never ingested under its own path before the rename");
+
         File.Move(tempPath, stack.File("Widget.cs"), true);
 
         (await stack.StepUntilAsync(
