@@ -829,7 +829,7 @@ ai-raccoon model embedding set openai {model-id} [base-url] [--api-key <key>]
 ai-raccoon settings model embedding reset
 ai-raccoon settings model embedding show
 ai-raccoon settings model threads {n}       # ORT intra-op thread cap; 0 = ORT default, unset = max(1, logicalCores/2)
-ai-raccoon settings model device {auto|gpu|cpu}   # auto (default) puts only the bundled model on the GPU (ADR-0108)
+ai-raccoon settings model device {auto|gpu|cpu|mlx}   # auto (default) puts only the bundled model on the GPU (ADR-0108); mlx is bundled-engine + osx-arm64 only (ADR-0110)
 
 # model code set: the code corpus's own engine — independent settings rows, any manifest
 # dimension accepted (vec_code is reconciled to it), no memory-bank re-embed
