@@ -115,6 +115,17 @@ the ceiling, and fp16 (97 MB) does not.
   `tests/AiRaccoon.Tests/TestData/Models/`. Engine-mechanics tests (golden vectors, legacy
   single-file path) use it too.
 
+## Amendment (2026-09-24): rows the floor clamps to 0 order by content similarity
+
+The rescale in decision 5 maps every similarity under the floor to exactly 0, so on a query that
+matches nothing, every vector candidate tied at 0 and fell back to the ordinal-hash tie-break. A
+row's hash covers its source path, so the same bank ranked those rows differently under another
+directory. `MemorySearchRankingTests.Search_AllTermsKeywordMatchThatWinsFusion_StaysFirstAboveBoostedNeighbours`
+went red about once in 27 CI runs for that reason: its temp directory is random, and a third of
+the resulting orders let consolidation fold both neighbours into the middle chunk.
+`StructureFusion.Rank` now breaks score ties by raw content similarity, then by hash. Scores are
+unchanged. Only the order of tied rows moves, and it now depends on the text, not the path.
+
 ## Alternatives rejected
 
 - **granite-small int8 as the bundled file** (50 MB, the smallest). It cannot use the GPU without
