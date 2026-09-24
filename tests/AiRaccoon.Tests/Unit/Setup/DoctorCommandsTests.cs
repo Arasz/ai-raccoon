@@ -823,6 +823,128 @@ public sealed class DoctorCommandsTests : IDisposable
         err.ShouldNotContain("Parameter");
     }
 
+    /// <summary>ADR-0111, AC2: a key-check sidecar that matches the resolved key proves the key is right — doctor names corruption only, never "wrong key".</summary>
+    [RetryFact]
+    public async Task Doctor_NotASqliteDatabase_VerifierMatches_ExitsBankCorrupted_NamingCorruptionOnly()
+    {
+        var encryptedFactory = new SqliteConnectionFactory(_options, FixedKeyResolver("correct-key"));
+        await using (var connection = await encryptedFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            // WAL keeps page 1 out of the main file until checkpointed — corrupt bytes below would
+            // otherwise be shadowed by the WAL's own copy and never read at all.
+            await using var checkpoint = connection.CreateCommand();
+            checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE)";
+            await checkpoint.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var pooledCsb = new SqliteConnectionStringBuilder
+        {
+            DataSource = encryptedFactory.BankPath, Mode = SqliteOpenMode.ReadWriteCreate, DefaultTimeout = 5, Password = "correct-key"
+        };
+        SqliteConnection.ClearPool(new SqliteConnection(pooledCsb.ToString()));
+
+        await using (var stream = new FileStream(encryptedFactory.BankPath, FileMode.Open, FileAccess.ReadWrite))
+        {
+            stream.Seek(100, SeekOrigin.Begin);
+            var garbage = new byte[200];
+            Random.Shared.NextBytes(garbage);
+            await stream.WriteAsync(garbage, TestContext.Current.CancellationToken);
+        }
+
+        var (exit, outp, err) = await Run(CreateDoctor(FixedKeyResolver("correct-key")), ["doctor"]);
+
+        exit.ShouldBe(ErrorCode.Bank.Corrupted);
+        outp.ShouldBeEmpty();
+        err.ShouldContain("corrupt");
+        err.ShouldNotContain("wrong");
+    }
+
+    /// <summary>
+    ///     Issue #705 follow-up: mid-rekey (a <see cref="RekeyMarker" /> present), the sidecar may
+    ///     still be describing the key rekey is replacing, not the on-disk reality this open just
+    ///     hit — doctor must not confidently claim corruption from that stale verdict either, the
+    ///     same guard <see cref="SqliteConnectionFactory.TryDiagnoseWithKeyCheck" /> applies.
+    /// </summary>
+    [RetryFact]
+    public async Task Doctor_NotASqliteDatabase_VerifierMatchesButRekeyMarkerPresent_ExitsAmbiguous()
+    {
+        var encryptedFactory = new SqliteConnectionFactory(_options, FixedKeyResolver("old-key"));
+        await using (await encryptedFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        // Simulate the exact rekey-window gap: the bank is rekeyed on disk, but the sidecar has
+        // not been rewritten yet, so it still verifies "old-key".
+        SqliteConnection.ClearAllPools();
+        await using (var rekeyConnection = new SqliteConnection($"Data Source={encryptedFactory.BankPath};Password=old-key;Pooling=false"))
+        {
+            await rekeyConnection.OpenAsync(TestContext.Current.CancellationToken);
+            await using var journal = rekeyConnection.CreateCommand();
+            journal.CommandText = "PRAGMA journal_mode=DELETE";
+            await journal.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            await using var rekey = rekeyConnection.CreateCommand();
+            rekey.CommandText = "PRAGMA rekey = 'new-key'";
+            await rekey.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var marker = new RekeyMarker(encryptedFactory.BankPath);
+        marker.Mark();
+        try
+        {
+            var (exit, outp, err) = await Run(CreateDoctor(FixedKeyResolver("old-key")), ["doctor"]);
+
+            outp.ShouldBeEmpty();
+            err.ShouldContain("wrong key or corrupt bank");
+            exit.ShouldBe(ErrorCode.Bank.Corrupted); // doctor's pre-ADR-0111 ambiguous default exit code
+        }
+        finally
+        {
+            marker.Clear();
+        }
+    }
+
+    /// <summary>ADR-0111, AC1: a key-check sidecar that mismatches the resolved key proves the key is wrong — doctor exits 21, naming the key.</summary>
+    [RetryFact]
+    public async Task Doctor_NotASqliteDatabase_VerifierMismatches_ExitsWrongKey_NamingTheKeyOnly()
+    {
+        var encryptedFactory = new SqliteConnectionFactory(_options, FixedKeyResolver("correct-key"));
+        await using (await encryptedFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        var (exit, outp, err) = await Run(CreateDoctor(FixedKeyResolver("a-different-key")), ["doctor"]);
+
+        exit.ShouldBe(ErrorCode.Key.WrongKey);
+        outp.ShouldBeEmpty();
+        err.ShouldContain("key");
+        err.ShouldNotContain("corrupt");
+    }
+
+    /// <summary>Doctor is read-only: it diagnoses with the verifier but never mints, rewrites, or otherwise touches it.</summary>
+    [RetryFact]
+    public async Task Doctor_NeverWritesTheKeyCheckSidecar()
+    {
+        var encryptedFactory = new SqliteConnectionFactory(_options, FixedKeyResolver("correct-key"));
+        await using (await encryptedFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        var sidecarPath = KeyCheckSidecar.PathFor(encryptedFactory.BankPath);
+        var before = await File.ReadAllBytesAsync(sidecarPath, TestContext.Current.CancellationToken);
+
+        await Run(CreateDoctor(FixedKeyResolver("correct-key")), ["doctor"]);
+        await Run(CreateDoctor(FixedKeyResolver("wrong-key")), ["doctor"]);
+
+        (await File.ReadAllBytesAsync(sidecarPath, TestContext.Current.CancellationToken)).ShouldBe(before);
+
+        File.Delete(sidecarPath);
+        await Run(CreateDoctor(FixedKeyResolver("correct-key")), ["doctor"]);
+        File.Exists(sidecarPath).ShouldBeFalse();
+    }
+
+    private static IEncryptionKeyResolver FixedKeyResolver(string passphrase) => new PinnedKeyResolver(passphrase);
+
     /// <summary>
     ///     F7: milliseconds in the seconds column is a real open outbox row (the server still refuses
     ///     every tool call), but FromUnixTimeSeconds threw on the value and the raw .NET parameter
@@ -987,5 +1109,11 @@ public sealed class DoctorCommandsTests : IDisposable
     private sealed class ThrowingKeyResolver(Exception failure) : IEncryptionKeyResolver
     {
         public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) => throw failure;
+    }
+
+    private sealed class PinnedKeyResolver(string passphrase) : IEncryptionKeyResolver
+    {
+        public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ResolvedKey(passphrase, "test"));
     }
 }

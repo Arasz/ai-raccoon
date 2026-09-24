@@ -47,8 +47,17 @@ public sealed class NoHandRolledCryptoTests
     private static readonly Regex RawPrimitive =
         new(@"\b(MD5|SHA1|SHA256|SHA384|SHA512|HMAC(MD5|SHA\d+)?|TripleDES|DES|RC2)\s*\.", RegexOptions.Compiled);
 
+    /// <summary>
+    ///     Bans <c>PasswordDeriveBytes</c> outright and the obsolete <c>Rfc2898DeriveBytes</c>
+    ///     instance constructor (its pre-.NET8 overloads default to SHA-1). The modern static
+    ///     <c>Rfc2898DeriveBytes.Pbkdf2(...)</c> one-shot method — explicit hash algorithm, explicit
+    ///     iteration count, no instance to misuse — is not obsolete and is not matched here;
+    ///     <c>KeyCheckSidecar</c> (ADR-0111) is its one caller, pre-stretching a human-typed
+    ///     passphrase before folding it into HKDF, which is a password KDF's actual job and not one
+    ///     HKDF (fast by design, meant for already-high-entropy key material) can do.
+    /// </summary>
     private static readonly Regex BannedKdf =
-        new(@"\b(Rfc2898DeriveBytes|PasswordDeriveBytes)\b", RegexOptions.Compiled);
+        new(@"\bPasswordDeriveBytes\b|\bnew\s+Rfc2898DeriveBytes\s*\(", RegexOptions.Compiled);
 
     [Fact]
     public void RawHashPrimitives_AppearOnlyOnDocumentedSites()
@@ -114,6 +123,19 @@ public sealed class NoHandRolledCryptoTests
         throw new InvalidOperationException($"{methodName}'s closing brace not found — unbalanced braces?");
     }
 
+    /// <summary>The obsolete instance shape stays banned even though the modern static one-shot method is now allowed.</summary>
+    [Theory]
+    [InlineData("new Rfc2898DeriveBytes(password, salt, 1000)")]
+    [InlineData("new  Rfc2898DeriveBytes(password, salt, 1000, HashAlgorithmName.SHA1)")]
+    [InlineData("var pdb = new PasswordDeriveBytes(password, salt);")]
+    public void BannedKdf_StillMatchesTheObsoleteConstructorShape(string offendingLine) =>
+        BannedKdf.IsMatch(offendingLine).ShouldBeTrue();
+
+    /// <summary>The modern, explicit, non-obsolete static method is the one exemption this gate grants (ADR-0111).</summary>
+    [Fact]
+    public void BannedKdf_DoesNotMatchTheModernStaticPbkdf2Method() =>
+        BannedKdf.IsMatch("Rfc2898DeriveBytes.Pbkdf2(keyBytes, salt, iterations, HashAlgorithmName.SHA256, TagLength)").ShouldBeFalse();
+
     [Fact]
     public void ObsoletePasswordKdfs_AreNotUsed()
     {
@@ -122,7 +144,8 @@ public sealed class NoHandRolledCryptoTests
             .Select(f => f.Relative)
             .ToList();
 
-        offenders.ShouldBeEmpty("Use System.Security.Cryptography.HKDF for key derivation.");
+        offenders.ShouldBeEmpty("Use System.Security.Cryptography.HKDF for key derivation, or the modern static "
+            + "Rfc2898DeriveBytes.Pbkdf2 one-shot method to pre-stretch a human-typed passphrase before it (ADR-0111).");
     }
 
     private static IEnumerable<(string FullPath, string Relative)> ProductionSources()

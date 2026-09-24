@@ -43,6 +43,13 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         {
             connection = await OpenBankReadOnlyAsync(bankPath, resolvedKey.Passphrase, cancellationToken);
         }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == NotADatabaseErrorCode)
+        {
+            // Microsoft.Data.Sqlite's "file is not a database" verdict can surface here (a probe
+            // inside the read-only open itself) or, for a bank that opens but fails its first real
+            // statement, from DiagnoseAsync below — both catch sites report the same way.
+            return await ReportNotADatabaseAsync(bankPath, resolvedKey, ex, streams);
+        }
         catch (SqliteException ex)
         {
             Log.FailedToOpenBank(logger, bankPath, ex);
@@ -59,17 +66,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             }
             catch (SqliteException ex) when (ex.SqliteErrorCode == NotADatabaseErrorCode)
             {
-                // Microsoft.Data.Sqlite defers the "file is not a database" verdict to the first
-                // statement, which is inside DiagnoseAsync — OpenBankReadOnlyAsync above cannot see
-                // it. Mapped here so the operator gets the corrupt-bank line, not the catch-all's raw
-                // message. SQLITE_NOTADB is what a wrong encryption key looks like too (ADR-0107
-                // PC.0) — doctor cannot tell them apart, so the message names both and both remedies.
-                Log.BankIsNotADatabase(logger, bankPath, ex);
-                await streams.WriteErrorLineAsync(
-                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
-                    "wrong key or corrupt bank — check the encryption key source if this data root was working before, " +
-                    "or restore the bank from a backup if the file itself is damaged");
-                return ErrorCode.Bank.Corrupted;
+                return await ReportNotADatabaseAsync(bankPath, resolvedKey, ex, streams);
             }
 
             var engines = new Dictionary<CorpusEngineProbe, CorpusEngineState>();
@@ -81,6 +78,65 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             var threads = await ReadEmbeddingThreadsStateAsync(connection, cancellationToken);
             var migration = await ReadModelMigrationStateAsync(connection, cancellationToken);
             return await ReportAsync(bankPath, report, engines, threads, migration, streams);
+        }
+    }
+
+    /// <summary>
+    ///     SQLITE_NOTADB is what a wrong encryption key looks like too (ADR-0107 PC.0). When the
+    ///     ADR-0111 key-check sidecar exists and can be trusted, doctor reports the confident
+    ///     verdict it proves — right key means the bank file itself is corrupt; wrong key means the
+    ///     resolved key is wrong. A missing or unusable sidecar keeps naming both causes and both
+    ///     remedies, as before — so does a verifier that confirms the key while a rekey marker
+    ///     (ADR-0111 D6) is present, since the sidecar may not have caught up with an in-progress
+    ///     rekey yet. Read-only throughout — doctor never mints, rewrites, or clears either file.
+    /// </summary>
+    private async Task<int> ReportNotADatabaseAsync(string bankPath, ResolvedKey resolvedKey, SqliteException ex,
+        StandardStreams streams)
+    {
+        Log.BankIsNotADatabase(logger, bankPath, ex);
+
+        var verifier = TryReadKeyCheck(bankPath);
+        if (verifier is not null && resolvedKey.Passphrase is not null)
+        {
+            if (!KeyCheckSidecar.Verifies(verifier, resolvedKey.Passphrase))
+            {
+                await streams.WriteErrorLineAsync(
+                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
+                    "its key verifier confirms the resolved encryption key is wrong — check the encryption key source");
+                return ErrorCode.Key.WrongKey;
+            }
+
+            // The verifier confirms this key, which normally proves the bank itself is damaged.
+            // But a rekey in progress (ADR-0111 D6, issue #705) may not have rewritten it for its
+            // new key yet — this could be exactly that window, not a truly corrupt file — so fall
+            // through to the ambiguous, both-causes verdict below instead of confidently naming
+            // corruption. Read-only: doctor never mints, rewrites, or clears the marker itself.
+            if (!new RekeyMarker(bankPath).IsPresent)
+            {
+                await streams.WriteErrorLineAsync(
+                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
+                    "its key verifier confirms the encryption key is right, so the bank file itself is corrupt — restore it from a backup");
+                return ErrorCode.Bank.Corrupted;
+            }
+        }
+
+        await streams.WriteErrorLineAsync(
+            $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
+            "wrong key or corrupt bank — check the encryption key source if this data root was working before, " +
+            "or restore the bank from a backup if the file itself is damaged");
+        return ErrorCode.Bank.Corrupted;
+    }
+
+    /// <summary>Read-only, never a mint or a rewrite; an unreadable or shared sidecar is treated as absent.</summary>
+    private static KeyCheckRecord? TryReadKeyCheck(string bankPath)
+    {
+        try
+        {
+            return new KeyCheckSidecar(bankPath).Read();
+        }
+        catch (KeyCheckViolation)
+        {
+            return null;
         }
     }
 
