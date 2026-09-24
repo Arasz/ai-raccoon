@@ -1,7 +1,7 @@
 # Research: a path or symbol header on each line chunk, on two whole repositories
 
 **Date:** 2026-09-24
-**Question:** The AST chunking study on whole repositories (same date) found that cleaner chunk boundaries don't move code retrieval. Its closing suggestion was to leave the boundaries alone and give each line chunk a header instead: the file path, plus the enclosing symbol. On the granite engine, does that header improve retrieval on job-search-ai-assistant (C#/TS/TSX) and ai-badger (Python)?
+**Question:** The AST chunking study on whole repositories ([`2026-09-24-ast-chunking-on-whole-repos.md`](2026-09-24-ast-chunking-on-whole-repos.md)) found that cleaner chunk boundaries don't move code retrieval. Its closing suggestion was to leave the boundaries alone and give each line chunk a header instead: the file path, plus the enclosing symbol. On the granite engine, does that header improve retrieval on job-search-ai-assistant (C#/TS/TSX) and ai-badger (Python)?
 
 **Answer:** No, not by the keep rule fixed before the runs. The header helps JSAA by about +0.04 span MRR in every variant, and one variant's interval clears zero. On ai-badger it costs about −0.04 in both nDCG@5 and file MRR. The effect depends on the repository, and it comes almost entirely from the path. The symbol adds nothing measurable.
 
@@ -44,7 +44,7 @@ The other repository's span MRR must also be ≥ −0.01. The other arms are att
 
 The control arm reset every tested chunk to pending and let the server re-embed it without any change: 6,137 rows on ai-badger and 14,903 on JSAA. Every metric matched the original arm to four decimals: nDCG@5 0.4805 and 0.6626, spanHit@5 0.5729 and 0.7847, hit@1 identical. The paired comparison shows 0 changed ranks in both repositories.
 
-This answers an open question from the AST study, which asked whether its 69 changed JSAA ranks were WebGPU nondeterminism. They were not. The churn in that record is caused by chunking, so its per-query stories (F5 there) are real.
+This answers an open question from the AST study (its "Still open" list), which asked whether its 69 changed JSAA ranks were WebGPU nondeterminism. They were not. The churn in that record is caused by chunking, so its per-query stories (its F5) are real.
 
 **Evidence:** arms `q-none-ai-badger` (drain 185 s) and `q-none-job-search-ai-assistant` (drain 601 s), compared with the AST study's `q-main-*` arms. `compare2.py` reports control against control-re-embedded as `+0.000 [+0.000, +0.000]`, `0: 0↑ 0↓`.
 
@@ -70,7 +70,7 @@ All four arms agree to within 0.007, so they are not four independent chances. T
 | path only, header in value | −0.047 [−0.091, −0.007] | −0.005 [−0.051, +0.040] | −0.040 [−0.082, +0.001] |
 | path only, vector only | −0.041 [−0.082, −0.002] | −0.002 [−0.048, +0.042] | −0.040 [−0.081, +0.001] |
 
-File MRR is copy-aware, so the loss is not an artefact of the 241 duplicated `.py` files (AST study F4). By file rank, 12 queries got worse and 6 better. Small files lose the most span MRR (−0.072 [−0.150, −0.005]), which is the opposite of JSAA, where small files gained the most.
+File MRR is copy-aware, so the loss is not an artefact of the 241 duplicated `.py` files (AST study F4, `2026-09-24-ast-chunking-on-whole-repos.md`). By file rank, 12 queries got worse and 6 better. Small files lose the most span MRR (−0.072 [−0.150, −0.005]), which is the opposite of JSAA, where small files gained the most.
 
 **Evidence:** `cmp-*-ai-badger.md`; prep logs show all 6,137 chunks headered and 513 without a symbol; restore sha `bedeb6c1…` equals the main bank's.
 
@@ -97,7 +97,7 @@ Path+symbol and path alone differ by at most 0.008 on any headline metric in eit
 
 ### F6 — With the 2026-09-23 P4 result, a chunk header has now missed the keep rule on two engines and three corpora [INFERRED]
 
-P4 (`2026-09-23-code-retrieval-eval-results.md` F8) tried a path header and a path + declaration header on the 116-file eval corpus with the old code-daemon engine. There the header fitted only under a 510-token cap and was dropped from about 20% of chunks. Both forms were dropped. This run removes that coverage limit: granite truncates at 8,190 tokens (`OnnxEmbeddingGenerator.cs:393-399`), so every chunk got its full header. It also uses whole repositories, the target engine, and a zero noise floor.
+P4 (`2026-09-23-code-retrieval-eval-results.md` F8) tried a path header and a path + declaration header on the 116-file eval corpus with the old code-daemon engine. There the header was added only where it fit under a 510-token cap. That record's F6 measured the room at 80–90% of chunks for the path alone and 64–80% with the declaration line, by size band. Both forms were dropped. This run removes that coverage limit: granite truncates at 8,190 tokens (`OnnxEmbeddingGenerator.cs:393-399`), so every chunk got its full header. It also uses whole repositories, the target engine, and a zero noise floor.
 
 The result is the same shape as P4. There is a small positive lean on C#/TS that does not clear the rule, and on this Python repository the lean is negative. Neither boundary quality (the AST study) nor chunk context (this record) is the lever. On repositories like ai-badger the header does measurable harm, so it should not ship as a default.
 
