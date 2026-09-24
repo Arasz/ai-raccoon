@@ -153,8 +153,13 @@ existing `EmbeddingSessionCreated` log line records; this ADR adds no `EventId` 
 - Linux needs the system Vulkan loader, `libvulkan.so.1`, to actually get a WebGPU device. ONNX
   Runtime does not fall back to the CPU when that loader is missing: the plugin registers fine and
   only fails later, silently, unless something checks for a device. This code is that something —
-  a missing loader surfaces as `"CPU (GPU refused: no WebGPU GPU device after registration …)"`
-  rather than a crash, or a silent CPU fallback the caller cannot tell apart from success.
+  the failure surfaces as a `"CPU (GPU refused: …)"` suffix rather than a crash, or a silent CPU
+  fallback the caller cannot tell apart from success. Measured on the GitHub ubuntu runner (loader
+  present, no Vulkan driver): ONNX Runtime reports the Hyper-V display as a GPU device, so the
+  hardware-type filter passes it, and session creation fails with `"CPU (GPU refused: … Failed to
+  get a WebGPU adapter: No supported adapters)"`. The filter is not what contains this; the catch is.
+  A host with no loader at all is expected to give the same or the "no WebGPU GPU device" refusal
+  (not observed).
 - CUDA is not bundled, and cannot be: its native provider is 272 MB, over the nuget.org package
   ceiling on its own. Whether it registers as a plugin against the unmodified CPU core, rather than
   needing a matching CUDA-flavoured core, is unverified — inferred from the shared plugin entry

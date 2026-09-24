@@ -124,8 +124,9 @@ on (`CUDA`, `WebGPU`, `MLX` or `CPU`), with the landing provider's own refusal r
 had one — for example WebGPU's own `"CPU (GPU refused: …)"` — followed by a suffix for each opt-in
 candidate (MLX, then CUDA) it tried and lost, in that fixed order regardless of what it landed on:
 `"WebGPU (CUDA refused: provider library not found: <path>)"`, or, on a Linux host with no Vulkan
-loader, `"CPU (GPU refused: no WebGPU GPU device after registration (Linux needs libvulkan.so.1))
-(CUDA refused: …)"`. A session never throws because a GPU attempt failed — it always finishes on
+driver, `"CPU (GPU refused: … Failed to get a WebGPU adapter: No supported adapters) (CUDA refused:
+…)"`. When no GPU device is reported at all the WebGPU reason reads `"no WebGPU GPU device after
+registration (Linux needs libvulkan.so.1)"`. A session never throws because a GPU attempt failed — it always finishes on
 some provider, and the log line says which one and why the others were skipped. Force the CPU
 outright with `ai-raccoon settings model device cpu`.
 

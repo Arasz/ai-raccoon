@@ -40,8 +40,8 @@ public sealed class BundledEngineGpuSessionTests
 
     /// <summary>
     ///     Off macOS the WebGPU plugin shipped under webgpu/ runs the session, or the session falls back
-    ///     to the CPU with the reason. On a RID the plugin ships for, the only honest refusal is no GPU
-    ///     device found after registration — never a missing library, since the build copies it in.
+    ///     to the CPU with the reason. On a RID the plugin ships for, the plugin must load and reach
+    ///     adapter discovery: no GPU device, or a device Dawn has no driver for (CI's Hyper-V display).
     /// </summary>
     [RetryFact]
     public async Task PreferGpu_OffMacOs_RunsOnThePluginWebGpu_OrFallsBackWithAReason()
@@ -66,7 +66,8 @@ public sealed class BundledEngineGpuSessionTests
         gpu.ExecutionProvider.ShouldStartWith("CPU (GPU refused: ");
         if (PluginRids.Contains(RuntimeInformation.RuntimeIdentifier))
         {
-            gpu.ExecutionProvider.ShouldStartWith("CPU (GPU refused: no WebGPU GPU device");
+            gpu.ExecutionProvider.ShouldMatch(
+                @"^CPU \(GPU refused: (no WebGPU GPU device|.*Failed to get a WebGPU adapter)");
         }
     }
 

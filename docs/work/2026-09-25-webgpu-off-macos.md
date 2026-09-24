@@ -111,6 +111,18 @@ Windows licensing adds to the NC hourly rate; Azure has no arm64 GPU size I know
 Graviton + T4G, would be the arm64 option). Free notebook GPUs (Colab, Kaggle T4) run Linux x64 only.
 None of these prices was read.
 
+### F14 — On a GPU-less ubuntu runner the plugin loads, then refuses at adapter discovery, and the session falls back to the CPU [MEASURED]
+
+On GitHub's `ubuntu-latest` x64 runner the plugin registered, ONNX Runtime reported the Hyper-V
+display (`MSFT1000`) as a GPU device, so the `HardwareDevice.Type == GPU` filter passed it. Dawn then
+logged `vkCreateInstance: Found no drivers!` and session creation threw
+`Failed to get a WebGPU adapter: No supported adapters`. The generator caught it and built the CPU
+session: `CPU (GPU refused: [ErrorCode:Fail] … Failed to get a WebGPU adapter: No supported adapters)`.
+No crash, and the Slow lane took 3m32s (the previous head 4m24s). The device filter does not keep out
+a virtual adapter; the catch is the containment.
+
+**Evidence:** PR #740 CI run 36072932297, job `build-slow` 107877792069, test `BundledEngineGpuSessionTests.PreferGpu_OffMacOs_RunsOnThePluginWebGpu_OrFallsBackWithAReason` failure text and stderr, 2026-09-24T23:30Z.
+
 ## Still open
 
 - Numeric parity (F6) and latency (F7) on a real Windows D3D12 and a Linux Vulkan GPU. Settle them by running the golden-vector and bench gates there.
