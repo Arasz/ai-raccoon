@@ -98,7 +98,9 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     if args.one_corpus:
         _run_one(args)
-        return
+        # MLX's static destructors can abort at interpreter teardown (recursive_mutex); the result is already written.
+        sys.stdout.flush()
+        os._exit(0)
     for corpus, sizes in (("memory", args.memory), ("code", args.code)):
         for tokens in sizes:
             print(f"arm {corpus}-{tokens}", flush=True)
