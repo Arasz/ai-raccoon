@@ -12,10 +12,15 @@ GITIGNORE_BEGIN = "# BEGIN ai-badger managed block — do not edit; regenerated 
 GITIGNORE_END = "# END ai-badger managed block"
 # The task tracker's SQLite database and its WAL/SHM sidecars, scoped to the task-tracking
 # dir so the patterns anchor at the repo root (user-scope ~/.ai-badger is outside any repo).
+# `.ai-badger.bckp/` is den-refresh's backup of `.ai-badger/` (L3-8): the backup itself
+# excludes those SQLite files (refresh.py), but the whole directory is ignored too, so a
+# backup taken before that fix — or any other file a future backup picks up — never shows
+# up as untracked either.
 GITIGNORE_ARTIFACTS = (
     ".ai-badger/task-tracking/tracking.db",
     ".ai-badger/task-tracking/*.db-wal",
     ".ai-badger/task-tracking/*.db-shm",
+    ".ai-badger.bckp/",
 )
 
 
@@ -63,5 +68,6 @@ def write_gitignore_block(ctx: Any) -> None:
         return
     if merged != text:
         path.write_text(merged, encoding="utf-8")
-        ctx.notes.append("merged managed gitignore block (task-tracking SQLite artifacts)")
+        ctx.notes.append("merged managed gitignore block (task-tracking SQLite artifacts, "
+                         "den-refresh backup dir)")
         ctx.record_generated_config(path, ".gitignore")

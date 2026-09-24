@@ -10,7 +10,10 @@ file is never mutated — the file is reverted in a `finally` so a normal failur
 it, and on start an existing journal is restored from and the run refuses to proceed — so a
 process killed mid-proof (e.g. `SIGKILL`, which no `finally` can catch) leaves recoverable
 evidence instead of a silently mutated production file, and the next invocation heals it rather
-than piling a second mutation on top.
+than piling a second mutation on top. The journal records the sha256 of both the original and
+the mutated content, and a restore writes only a file inside the repo that still holds one of
+the two — never over edits made since the crash, and never from a journal without the mutated
+hash.
 
 Python 3 stdlib only (ADR-0005) — this script ships to every scaffolded consumer project.
 
@@ -19,7 +22,10 @@ Usage:
 
 Preconditions (refused with a message, exit 4, before any file is touched):
   - a journal already exists at <repo>/.design-tests/red-proof.journal.json — restored from and
-    left in place; delete it once you have looked at what it restored, then re-run (exit 3)
+    left in place; delete it once you have looked at what it restored, then re-run (exit 3).
+    The restore is itself refused, writing nothing, when the journal's path is outside the
+    repo, the file is neither the mutated nor the original content, or the journal has no
+    `mutated_sha256`
   - F resolves outside the repo root, or under .git
   - `git status --porcelain -- F` is non-empty (F must be clean before this tool touches it)
   - N is out of range for F, or `--replace` does not occur on line N of F
@@ -29,7 +35,8 @@ Exit codes:
   1  stayed green — the mutation did not redden the check; this is the finding
   2  red for the wrong reason (the run looks like a build break) or did not return to green
      after the revert
-  3  a stale journal was found and restored on start; nothing else ran
+  3  a stale journal was found on start and restored, or its restore was refused; nothing
+     else ran
   4  a precondition was refused before any mutation was attempted
 
 The mutated file is restored in every case except an uncaught kill signal, which no user-space
@@ -89,7 +96,12 @@ def journal_path(repo_root: Path) -> Path:
     return repo_root / JOURNAL_RELPATH
 
 
-def write_journal(repo_root: Path, target: Path, original_content: str) -> None:
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def write_journal(repo_root: Path, target: Path, original_content: str,
+                  mutated_content: str) -> None:
     """Write the pre-mutation journal and fsync it before returning, so a crash immediately
     after this call still leaves the journal durable on disk — never after `target` is mutated
     (W2-03: call this before any write to `target`, never after)."""
@@ -98,7 +110,8 @@ def write_journal(repo_root: Path, target: Path, original_content: str) -> None:
     payload = {
         "path": str(target.resolve()),
         "original_content": original_content,
-        "sha256": hashlib.sha256(original_content.encode("utf-8")).hexdigest(),
+        "sha256": _sha256(original_content),
+        "mutated_sha256": _sha256(mutated_content),
         "written_at": datetime.now(timezone.utc).isoformat(),
     }
     with open(jp, "w", encoding="utf-8") as f:
@@ -114,8 +127,31 @@ def read_journal(repo_root: Path) -> Optional[dict]:
     return json.loads(jp.read_text(encoding="utf-8"))
 
 
-def restore_from_journal(journal: dict) -> None:
-    Path(journal["path"]).write_text(journal["original_content"], encoding="utf-8")
+def restore_from_journal(repo_root: Path, journal: dict) -> Optional[str]:
+    """Write the journal's original content back, or return why not and write nothing.
+
+    Restores only a file inside `repo_root` whose current content is the recorded mutation
+    or already the original — never over edits made since, and never outside the repo.
+    """
+    missing = [key for key in ("path", "original_content", "sha256", "mutated_sha256")
+               if key not in journal]
+    if missing:
+        return (f"the journal has no {', '.join(missing)} — it was written by an older "
+                f"red_proof.py and cannot tell whether the file still holds the mutation. "
+                f"Compare the file with the journal's original_content by hand")
+    target = Path(journal["path"])
+    err = validate_target(repo_root, target)
+    if err:
+        return err
+    try:
+        current = _sha256(target.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as exc:
+        return f"could not read {target}: {exc}"
+    if current not in (journal["mutated_sha256"], journal["sha256"]):
+        return (f"{target} changed after the mutation (it is neither the mutated nor the "
+                f"original content), so restoring would overwrite that work")
+    target.write_text(journal["original_content"], encoding="utf-8")
+    return None
 
 
 GIT_LOCATION_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
@@ -210,7 +246,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     stale = read_journal(repo_root)
     if stale is not None:
-        restore_from_journal(stale)
+        refusal = restore_from_journal(repo_root, stale)
+        if refusal:
+            print(f"REFUSED to restore the stale journal at {journal_path(repo_root)}: "
+                  f"{refusal}. Nothing was written. Restore the file by hand if it needs it, "
+                  f"then delete the journal and re-run.")
+            return 3
         print(f"RESTORED a stale journal at {journal_path(repo_root)} — a previous run of this "
               f"tool did not complete. {stale['path']} has been restored to its original "
               f"content. Delete the journal and re-run.")
@@ -242,7 +283,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Journal first, mutation second (W2-03): if the journal cannot be written, the target is
     # never touched, so there is nothing to restore.
     try:
-        write_journal(repo_root, resolved_target, original)
+        write_journal(repo_root, resolved_target, original, mutated_text)
     except OSError as exc:
         print(f"ERROR: could not write the red-proof journal at {journal_path(repo_root)} — "
               f"refusing to mutate {resolved_target} without one: {exc}")

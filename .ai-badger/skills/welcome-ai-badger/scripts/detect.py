@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Dict, List
 
@@ -302,6 +303,22 @@ def detect_agents(target: Path) -> List[str]:
     return agents or ["claude"]
 
 
+def _strip_userinfo(url: str) -> str:
+    """Drop any `user` or `user:pass` embedded in a scheme:// URL's authority (L3-3).
+
+    A remote carrying an embedded token (CI checkouts, PAT-based clones) must never reach the
+    committed config.json. No-op for a URL with no scheme, which normalization upstream of
+    this call has already turned into one.
+    """
+    if "://" not in url:
+        return url
+    parsed = urllib.parse.urlsplit(url)
+    if "@" not in parsed.netloc:
+        return url
+    netloc = parsed.netloc.rsplit("@", 1)[-1]
+    return urllib.parse.urlunsplit(parsed._replace(netloc=netloc))
+
+
 def detect_source_control(target: Path) -> Dict:
     """Detect the git remote's hosting platform and normalize its URL."""
     sc: Dict = {"platform": "none", "repoUrl": None, "projectUrl": None}
@@ -327,7 +344,7 @@ def detect_source_control(target: Path) -> Dict:
         web = "https://" + web[4:].replace(":", "/", 1)
     if web.endswith(".git"):
         web = web[:-4]
-    sc["repoUrl"] = web
+    sc["repoUrl"] = _strip_userinfo(web)
     return sc
 
 

@@ -94,8 +94,20 @@ def remove_with_backup(path: Path) -> Path:
 
 
 def _backup_path(path: Path) -> Path:
-    """The ``<name>.bak-<ts>`` sibling every destructive operation here copies to first."""
-    return path.with_name(f"{path.name}.bak-{time.strftime('%Y%m%d-%H%M%S')}")
+    """The ``<name>.bak-<ts>`` sibling every destructive operation here copies to first.
+
+    One scaffold run can back up the same file several times inside one second (statusline
+    wiring, hook wiring, an agent's own adjustment all touch settings.json). The plain stamp
+    is left for the first backup of the run; each one after it gets a `-<n>` counter, so an
+    intermediate write never overwrites the original a later backup would otherwise clobber.
+    """
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    candidate = path.with_name(f"{path.name}.bak-{stamp}")
+    suffix = 1
+    while candidate.exists():
+        candidate = path.with_name(f"{path.name}.bak-{stamp}-{suffix}")
+        suffix += 1
+    return candidate
 
 
 def write_json_with_backup(path: Path, data: Dict[str, Any]) -> bool:
@@ -110,14 +122,22 @@ def _reads_as(path: Path, text: str) -> bool:
         return False
 
 
+def _default_new_file_mode() -> int:
+    """``0o666 & ~umask`` — what the OS would give a plain ``open(..., "w")``, read without a
+    race. Same contract as ``badger_lib.atomic_write_text``, duplicated here because this
+    module must load without ``badger_lib`` on the path (ADR-0009)."""
+    current = os.umask(0)
+    os.umask(current)
+    return 0o666 & ~current
+
+
 def _atomic_write(path: Path, text: str) -> None:
-    mode = path.stat().st_mode & 0o7777 if path.exists() else None
+    mode = path.stat().st_mode & 0o7777 if path.exists() else _default_new_file_mode()
     handle, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as fh:
             fh.write(text)
-        if mode is not None:
-            os.chmod(tmp, mode)
+        os.chmod(tmp, mode)
         os.replace(tmp, str(path))
     finally:
         if os.path.exists(tmp):

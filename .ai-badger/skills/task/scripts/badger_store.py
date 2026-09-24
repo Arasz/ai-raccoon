@@ -302,52 +302,28 @@ _DDL = (
         updated_at TEXT NOT NULL
     )
     """,
+    # Born in SQLite with no legacy source. It lands here, not through an upgrade hook and
+    # a SCHEMA_VERSION bump: the user DB is machine-wide, and a bump would fail every older
+    # copy on the machine closed, while an extra table is invisible to them.
+    """
+    CREATE TABLE IF NOT EXISTS test_economy (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
+    """,
 )
 
 
-#: Where vendored copies of this module live or will land, repo-relative (D16). The running
-#: module is the byte-equality reference; entries whose file is absent have not landed yet
-#: (vendorin happens with the P0.5 re-scaffold and P2.2's mirror sync, which reuse this list).
-VENDORED_PATHS: tuple[dict[str, str], ...] = (
-    {"consumer": "hooks", "lands_in": "features/common/hooks/badger_store.py"},
-    {"consumer": "task", "lands_in": "features/common/skills/task/scripts/badger_store.py"},
-    {"consumer": "prompt-markers",
-     "lands_in": "features/common/skills/prompt-markers/scripts/badger_store.py"},
-    {"consumer": "welcome-ai-badger",
-     "lands_in": "features/common/skills/welcome-ai-badger/scripts/badger_store.py"},
-    {"consumer": "commit-reminder",
-     "lands_in": "features/common/skills/commit-reminder/scripts/badger_store.py"},
-    {"consumer": "test-economy",
-     "lands_in": "features/common/skills/test-economy/scripts/badger_store.py"},
-    {"consumer": "test-economy",
-     "lands_in": "skills/test-economy/scripts/badger_store.py"},
-    {"consumer": "mcp-index",
-     "lands_in": "features/common/skills/mcp-index/scripts/badger_store.py"},
-    {"consumer": "ai-raccoon-memory",
-     "lands_in": "features/common/skills/ai-raccoon-memory/scripts/badger_store.py"},
-    {"consumer": "ai-raccoon-memory",
-     "lands_in": "skills/ai-raccoon-memory/scripts/badger_store.py"},
-    {"consumer": "worktree-agent-isolation",
-     "lands_in": "features/common/skills/worktree-agent-isolation/scripts/badger_store.py"},
-    {"consumer": "worktree-agent-isolation",
-     "lands_in": ".ai-badger/skills/worktree-agent-isolation/scripts/badger_store.py"},
-    {"consumer": "auto-wm", "lands_in": "features/claude/skills/auto-wm/scripts/badger_store.py"},
-    {"consumer": "auto-wm", "lands_in": "skills/auto-wm/scripts/badger_store.py"},
-    {"consumer": "mcp-index", "lands_in": "skills/mcp-index/scripts/badger_store.py"},
-    {"consumer": "call-behaviorist",
-     "lands_in": "features/common/skills/call-behaviorist/scripts/badger_store.py"},
-    {"consumer": "call-behaviorist",
-     "lands_in": "skills/call-behaviorist/scripts/badger_store.py"},
-    {"consumer": "send-message",
-     "lands_in": "features/common/skills/send-message/scripts/badger_store.py"},
-)
+#: Where vendored copies of this module sit, as working-tree globs under the repo root (D16).
+_VENDORED_GLOBS = ("features/**/badger_store.py", "skills/**/badger_store.py")
 
 
 def vendored_copies_report(repo_root: Optional[Path] = None) -> list[str]:
-    """Skew findings for landed vendored copies; empty means every landed copy is byte-identical.
+    """Skew findings for every vendored copy on disk; empty means all are byte-identical.
 
-    Copies not yet landed are named by the manifest but unchecked; a landed copy that differs
-    from the running module is the failure the manifest exists to catch (D16).
+    Copies are found by globbing the working tree, never from git or a list, so a non-git
+    root (a tmp dir, the plugin cache) is checked the same way as a checkout.
     """
     root = repo_root if repo_root is not None else _default_badger_root().parent
     canonical = Path(__file__).resolve()
@@ -356,15 +332,14 @@ def vendored_copies_report(repo_root: Optional[Path] = None) -> list[str]:
     except OSError as exc:
         return [f"canonical {canonical} unreadable: {exc}"]
     findings = []
-    for entry in VENDORED_PATHS:
-        landed = root / entry["lands_in"]
-        if not landed.exists():
-            continue
+    copies = sorted({path for pattern in _VENDORED_GLOBS for path in root.glob(pattern)})
+    for landed in copies:
+        name = landed.relative_to(root).as_posix()
         try:
             if landed.read_bytes() != expected:
-                findings.append(f"{entry['lands_in']} differs from {canonical.name}")
+                findings.append(f"{name} differs from {canonical.name}")
         except OSError as exc:
-            findings.append(f"{entry['lands_in']} unreadable: {exc}")
+            findings.append(f"{name} unreadable: {exc}")
     return findings
 
 
@@ -374,7 +349,14 @@ def _now() -> str:
 
 
 def _default_badger_root() -> Path:
-    """The nearest existing ``.ai-badger`` directory above this module file (hook convention)."""
+    """The nearest existing ``.ai-badger`` directory above this module file (hook convention).
+
+    A scaffolded copy finds ``<project>/.ai-badger``. A copy installed under ``$HOME`` (the
+    plugin cache) finds ``~/.ai-badger``, the user root, so its tracking.db is machine-wide
+    unless ``AI_BADGER_TRACKING_ROOT`` is set. The Hermes plugin dir carries its own
+    ``.ai-badger/manifest.json``, so that copy lands in
+    ``~/.hermes/plugins/ai-badger/.ai-badger``; no Hermes sibling opens tracking.
+    """
     for ancestor in Path(__file__).resolve().parents:
         if (ancestor / ".ai-badger").is_dir():
             return ancestor / ".ai-badger"
@@ -397,11 +379,15 @@ def user_db_path() -> Path:
     return _DEFAULT_HOME / ".ai-badger" / "ai-badger.db"
 
 
+def _debug_dir() -> Path:
+    """The audit sink's directory: ``AI_BADGER_DEBUG_DIR`` when set, else the real home's."""
+    env = os.environ.get(DEBUG_DIR_ENV)
+    return Path(env) if env else _DEFAULT_HOME / ".ai-badger" / "debug"
+
+
 def audit_db_path() -> Path:
     """The audit sink's own DB file — the ``AI_BADGER_DEBUG_DIR`` contract moves it whole (D21)."""
-    env = os.environ.get(DEBUG_DIR_ENV)
-    debug_dir = Path(env) if env else _DEFAULT_HOME / ".ai-badger" / "debug"
-    return debug_dir / "audit.db"
+    return _debug_dir() / "audit.db"
 
 
 def _ensure_root(db_path: Path) -> None:
@@ -505,7 +491,7 @@ class Family(NamedTuple):
     ``usage`` are ``{"tasks": [...]}`` row lists keyed on ``taskId`` (executed-tasks.json,
     token-usage.json); ``sessions`` is ``{"sessions": {id: info}}`` keyed on the session id
     (current-session.json); ``awm`` is the away-mode document whose per-project entries sit
-    under ``projects`` (or the pre-#296 single-project shape) keyed by project path;
+    under ``projects`` (or the older single-project shape) keyed by project path;
     ``jsonl`` is one JSON object per line written by the legacy appender (decisions.jsonl)
     with no natural key — imported with its ``ts_field`` (default "ts") normalised through
     iso_row_ts and deduped on exact (ts, payload) content so a re-import adds nothing. The
@@ -516,7 +502,7 @@ class Family(NamedTuple):
     """
 
     table: str
-    db: str  # "tracking" or "user"
+    db: str  # "tracking", "user" or "audit"
     legacy_path: Optional[Callable[[], Path]] = None  # None: born in SQLite, no source
     legacy_kind: str = "store"  # "store" | "map" | "kvdoc" | "tasks" | "usage" | ... (see above)
     row_key: str = ""  # kvdoc only: the KV row key this file's document becomes
@@ -627,25 +613,37 @@ USER_FAMILIES: dict[str, Family] = {
         legacy_path=lambda: _user_root() / "blast-radius-guard",
         legacy_kind="stem_denials",  # <session>.<project-hash>.denials: the stem is the key
     ),
-    "hook_audit": Family(
-        table="hook_audit",
-        db="user",
-        legacy_path=lambda: _user_root() / "debug" / "audit.jsonl",
-        legacy_kind="jsonl",
-        ts_field="t",  # audit lines carry their timestamp in "t", not "ts"
-    ),
-    "hook_state": Family(
-        table="hook_state",
-        db="user",
-        legacy_path=lambda: _user_root() / "debug" / "state.json",
-        legacy_kind="kvdoc",  # one whole state document (D26), the pending-feedback pattern
-        row_key="debug",
-    ),
     # Message-bus families (P1, D2): born in SQLite — no legacy_path, no import wiring.
     # Their DDL arrives through UPGRADE_HOOKS[1], not the v1 base _DDL.
     "messages": Family(table="messages", db="user", legacy_kind="store"),
     "cursors": Family(table="cursors", db="user", legacy_kind="store"),
+    # Born in SQLite too; its DDL is in the base _DDL (see there).
+    "test_economy": Family(table="test_economy", db="user", legacy_kind="store"),
 }
+
+
+def _audit_families(debug_dir: Callable[[], Path]) -> dict[str, Family]:
+    """The audit families with their legacy seams under *debug_dir*()."""
+    return {
+        "hook_audit": Family(
+            table="hook_audit",
+            db="audit",
+            legacy_path=lambda: debug_dir() / "audit.jsonl",
+            legacy_kind="jsonl",
+            ts_field="t",  # audit lines carry their timestamp in "t", not "ts"
+        ),
+        "hook_state": Family(
+            table="hook_state",
+            db="audit",
+            legacy_path=lambda: debug_dir() / "state.json",
+            legacy_kind="kvdoc",  # one whole state document (D26), the pending-feedback pattern
+            row_key="debug",
+        ),
+    }
+
+
+#: The audit-DB families: their DB and legacy seams all follow ``AI_BADGER_DEBUG_DIR`` (D21).
+AUDIT_FAMILIES: dict[str, Family] = _audit_families(_debug_dir)
 
 # -- task-family shapes: legacy entry key <-> row column -----------------------------
 # Direct text columns; read back only when the column is non-NULL, so an entry never grows
@@ -775,8 +773,8 @@ def _sweep_key(name: str) -> str:
 def _awm_projects(data: dict) -> dict:
     """An away-mode state document's per-project entries, keyed by project path.
 
-    Both on-disk shapes: the #296 per-project form ({"projects": {path: entry}}) and the
-    pre-#296 single-project form whose top level IS the entry (it names its own "project").
+    Both on-disk shapes: the per-project form ({"projects": {path: entry}}) and the older
+    single-project form whose top level IS the entry (it names its own "project").
     """
     projects = data.get("projects")
     if isinstance(projects, dict):
@@ -784,6 +782,14 @@ def _awm_projects(data: dict) -> dict:
     if data.get("project"):
         return {data["project"]: data}
     return {}
+
+
+def _read_count(path: Path) -> Optional[int]:
+    """A legacy file's bare integer, or None when it is unreadable or not an integer."""
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
 
 
 def _stamp_key(table: str) -> str:
@@ -860,11 +866,19 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
     def _contained_error(self, name: str) -> sqlite3.OperationalError:
         """The refusal for a contained family — the resurrection error, upgrade pointer
         included: the condition surfaces on every access, never silently (D5c)."""
+        return self._resurrection_error(self._contained[name])
+
+    def _resurrection_error(self, path: Path) -> sqlite3.OperationalError:
+        """The refusal for a legacy file newer than its migration stamp (D5c). It names
+        ``doctor --repair`` only for the user and audit stores: the doctor never reaches
+        a tracking store's task families."""
+        remedy = "restore the *.migrated name or den-refresh the stale surface"
+        if self.kind != "tracking":
+            remedy = ("restore the *.migrated name, den-refresh the stale surface, or run "
+                      "badger_store.py doctor --repair")
         return sqlite3.OperationalError(
-            f"legacy {self._contained[name]} reappeared after its migration (a stale "
-            f"surface is writing behind the store); restore the *.migrated.json name, "
-            f"den-refresh the stale surface, or run badger_store.py doctor --repair — "
-            f"the store refuses to diverge")
+            f"legacy {path} reappeared after its migration (a stale surface is writing "
+            f"behind the store); {remedy} — the store refuses to diverge")
 
     def _refuse_contained_table(self, table: str) -> None:
         """Refuse a whole-table access while any of its families is contained (D5c):
@@ -969,12 +983,7 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
         """A legacy file newer than its migration stamp fails closed: never diverge (D5c)."""
         stamp = self._migration_stamp(table)
         if stamp is not None and path.stat().st_mtime > stamp:
-            raise sqlite3.OperationalError(
-                f"legacy {path} reappeared after its migration (a stale surface is writing "
-                f"behind the store); restore the *.migrated.json name, den-refresh the "
-                f"stale surface, or run badger_store.py doctor --repair — the store "
-                f"refuses to diverge"
-            )
+            raise self._resurrection_error(path)
 
     def _legacy_rows(self, table: str) -> dict:
         """Legacy KV rows still mergeable for *table*; a resurrected legacy file fails closed."""
@@ -1051,11 +1060,7 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
             return
         for path in self._file_set_files(family):
             if path.stat().st_mtime > stamp:
-                raise sqlite3.OperationalError(
-                    f"legacy {path} reappeared after its migration (a stale surface is writing "
-                    f"behind the store); den-refresh the stale surface or run "
-                    f"badger_store.py doctor --repair — the store refuses to diverge"
-                )
+                raise self._resurrection_error(path)
 
     # -- task-family rows (caller-managed transactions; see tracking_transaction there) ---
 
@@ -1273,27 +1278,21 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
         The per-table ``pruned_at.<table>`` meta stamp throttles: a second call inside the
         window deletes nothing (returns 0) even when rows expired since — the next window
         catches them. Stamp check, DELETE, and stamp rewrite share one BEGIN IMMEDIATE, so
-        the throttle has no check-then-act window; every sqlite failure fails open as 0 (D9).
+        the throttle has no check-then-act window; a throttled call skips the write lock
+        with a cheap read first. Every sqlite failure fails open as 0 (D9).
         """
         _check_table_name(table)
         stamp_key = f"pruned_at.{table}"
         try:
-            row = self.conn.execute(
-                "SELECT value FROM meta WHERE key = ?", (stamp_key,)
-            ).fetchone()
-        except sqlite3.Error:
-            return 0
-        if row is not None:
-            try:
-                last = float(json.loads(row[0]))
-            except (TypeError, ValueError):
-                last = None
-            if last is not None and time.time() - last < _PRUNE_THROTTLE_SECONDS:
+            if self._prune_throttled(stamp_key):
                 return 0
-        try:
             cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
             self.conn.execute("BEGIN IMMEDIATE")
             try:
+                if self._prune_throttled(stamp_key):  # another prune committed meanwhile
+                    self.conn.rollback()
+                    return 0
+                _hold_at(f"prune.after_check.{table}")
                 cursor = self.conn.execute(f"DELETE FROM {table} WHERE ts < ?", (cutoff,))
                 pruned = cursor.rowcount + self._sweep_unparseable_ts(table)
                 self.conn.execute(
@@ -1307,6 +1306,17 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
         except sqlite3.Error:
             return 0  # a broken store never blocks a caller on maintenance (D31)
         return pruned
+
+    def _prune_throttled(self, stamp_key: str) -> bool:
+        """True while the table's last prune stamp is inside the throttle window."""
+        row = self.conn.execute("SELECT value FROM meta WHERE key = ?", (stamp_key,)).fetchone()
+        if row is None:
+            return False
+        try:
+            last = float(json.loads(row[0]))
+        except (TypeError, ValueError):
+            return False
+        return time.time() - last < _PRUNE_THROTTLE_SECONDS
 
     def _sweep_unparseable_ts(self, table: str) -> int:
         """Delete rows whose ts never parses; return the count. Caller holds the write txn.
@@ -1769,9 +1779,12 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
         sessions: dict[str, dict] = {}
         for path in files:
             if path.name.endswith(".denials"):
+                denials = _read_count(path)
+                if denials is None:
+                    continue  # torn sidecar: quarantined by the rename, siblings import
                 session = path.name[: -len(".denials")]
                 entry = sessions.setdefault(session, {"consulted": False, "denials": 0})
-                entry["denials"] = int(path.read_text(encoding="utf-8").strip())
+                entry["denials"] = denials
             else:
                 entry = sessions.setdefault(path.name, {"consulted": False, "denials": 0})
                 entry["consulted"] = True
@@ -1803,8 +1816,12 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
         stamp = _now()
         expected = []
         for path in files:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, ValueError):
+                continue  # unreadable lane file: quarantined by the rename (D31)
             entries = []
-            for line in path.read_text(encoding="utf-8").splitlines():
+            for line in text.splitlines():
                 line = line.strip()
                 if not line:
                     continue
@@ -1841,15 +1858,18 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
         stamp = _now()
         expected = []
         for path in files:
+            denials = _read_count(path)
+            if denials is None:
+                continue  # torn count file: quarantined by the rename, siblings import
             self.conn.execute(
                 "INSERT OR IGNORE INTO blast_radius_denials(key, denials, updated_at) "
                 "VALUES (?, ?, ?)",
-                (path.stem, int(path.read_text(encoding="utf-8").strip()), stamp),
+                (path.stem, denials, stamp),
             )
             expected.append(path.stem)
         return expected
 
-    # -- message bus (P1): send, deliver, cursor lifecycle --------------------------------
+    # -- message bus (P1): send and deliver; cursors die by the 4-day prune ---------------
 
     def send_message(self, *, sender_session: str, sender_project: str, content: str,
                      target_session: Optional[str] = None,
@@ -1947,16 +1967,19 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
                     next_cursor = self.conn.execute(
                         "SELECT COALESCE(MAX(id), 0) FROM messages").fetchone()[0]
                 else:
-                    # D7 fail-open ran the 1:1 leg only: land past what THAT leg
-                    # delivered within the window (L1/R1a) — a global landing would
-                    # sweep in-window project/broadcast mail before any later session
-                    # whose project resolves could read it. The leg's own overflow past
-                    # the cap is still never revisited (its max covers it), and older
-                    # leg rows cannot sit above the cursor (ids grow with ts).
+                    # D7 fail-open ran the 1:1 leg only (D2): land past what THAT leg
+                    # delivered within the window (L1/R1a) and past everything older
+                    # than the window. A global landing would sweep in-window
+                    # project/broadcast mail before a later read whose project resolves
+                    # could see it; a leg-only landing would let that read replay the
+                    # whole 4-day backlog behind the gate. In-window project rows below
+                    # a delivered 1:1 id stay skipped — the accepted residual.
                     next_cursor = self.conn.execute(
-                        "SELECT COALESCE(MAX(id), 0) FROM messages "
-                        "WHERE target_session = ? AND sender_session <> ? AND ts >= ?",
-                        (session_id, session_id, cutoff)).fetchone()[0]
+                        "SELECT MAX("
+                        "(SELECT COALESCE(MAX(id), 0) FROM messages "
+                        " WHERE target_session = ? AND sender_session <> ? AND ts >= ?), "
+                        "(SELECT COALESCE(MAX(id), 0) FROM messages WHERE ts < ?))",
+                        (session_id, session_id, cutoff, cutoff)).fetchone()[0]
             else:
                 rows = self._read_addressed(session_id, project_id,
                                             after_id=row[0], since_ts=None)
@@ -2025,21 +2048,6 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
             f"target_project FROM messages WHERE {' AND '.join(clauses)} ORDER BY id ASC",
             tuple(params),
         ).fetchall()
-
-    def delete_cursor(self, session_id: str) -> bool:
-        """Remove one session's cursor row — the close-event cleanup (R6); True if it existed."""
-        self.conn.execute("BEGIN IMMEDIATE")
-        try:
-            cursor = self.conn.execute(
-                "DELETE FROM cursors WHERE session_id = ?", (session_id,))
-            deleted = cursor.rowcount
-            self.conn.commit()
-        except BaseException:
-            self.conn.rollback()
-            raise
-        _assert_file_perms(self.db_path)
-        notify_write(self.db_path)
-        return deleted > 0
 
 
 # -- project identity (P2): the cwd → projectId resolver (D4) -------------------------
@@ -2199,6 +2207,18 @@ def open_user(families: Optional[dict] = None) -> Store:
     return store
 
 
+def open_audit(debug_dir: Optional[Path] = None) -> Store:
+    """Open (creating when absent) the audit store with AUDIT_FAMILIES.
+
+    Its DB and legacy seams sit under *debug_dir*, default ``AI_BADGER_DEBUG_DIR`` or the
+    real home's debug dir; debug_log passes its own redirectable directory.
+    """
+    if debug_dir is None:
+        return _open(audit_db_path(), "audit", AUDIT_FAMILIES)
+    root = Path(debug_dir)
+    return _open(root / "audit.db", "audit", _audit_families(lambda: root))
+
+
 # -- CLI: `prune --status`, the retention scope's read-only inspection surface ---------
 
 def _render_stamp(conn: sqlite3.Connection, table: str) -> str:
@@ -2289,6 +2309,14 @@ def doctor_target(project: Optional[Path] = None) -> tuple[Path, dict]:
                 ts_field=family.ts_field)
         return project / ".ai-badger" / "task-tracking" / "tracking.db", rebased
     return user_db_path(), USER_FAMILIES
+
+
+def doctor_targets(project: Optional[Path] = None) -> list[tuple[str, Path, dict]]:
+    """Every store a doctor run covers, as (kind, DB path, family registry): the project's
+    tracking store when *project* is given, else the machine's user and audit stores."""
+    if project is not None:
+        return [("tracking", *doctor_target(project))]
+    return [("user", *doctor_target()), ("audit", audit_db_path(), AUDIT_FAMILIES)]
 
 
 def _doctor_content_diff(conn: Optional[sqlite3.Connection], family: Family,
@@ -2392,16 +2420,18 @@ def doctor_status_lines(project: Optional[Path] = None) -> list[str]:
     Names every family with a legacy source — state, stamp, file mtime, and for the doc
     kinds a content diff against the DB rows (newer file vs stale rows, reviewer S3).
     """
-    db_path, families = doctor_target(project)
-    lines = [f"db={db_path}" + ("" if db_path.exists() else " status=no-database")]
-    for row in doctor_scan(db_path, families):
-        line = (f"  family={row['family']} table={row['table']} kind={row['kind']} "
-                f"state={row['state']} stamp={_doctor_stamp_or_dash(row['stamp'])} "
-                f"mtime={_doctor_stamp_or_dash(row['mtime'])}")
-        diff = row.get("diff")
-        if diff:
-            line += (f" diff=+{diff['added']} ~{diff['changed']} -{diff['removed']}")
-        lines.append(line)
+    lines: list[str] = []
+    for kind, db_path, families in doctor_targets(project):
+        lines.append(f"db={kind} path={db_path}"
+                     + ("" if db_path.exists() else " status=no-database"))
+        for row in doctor_scan(db_path, families):
+            line = (f"  family={row['family']} table={row['table']} kind={row['kind']} "
+                    f"state={row['state']} stamp={_doctor_stamp_or_dash(row['stamp'])} "
+                    f"mtime={_doctor_stamp_or_dash(row['mtime'])}")
+            diff = row.get("diff")
+            if diff:
+                line += (f" diff=+{diff['added']} ~{diff['changed']} -{diff['removed']}")
+            lines.append(line)
     return lines
 
 
@@ -2414,36 +2444,36 @@ def doctor_repair_lines(project: Optional[Path] = None) -> list[str]:
     than the DB; merging them is an owner decision, so repair prints guidance and leaves
     them byte-identical (research-b: OR IGNORE would silently drop the newer values).
     """
-    db_path, families = doctor_target(project)
-    kind = next(iter(families.values())).db
-    lines = [f"db={db_path}"]
-    resurrected = [row for row in doctor_scan(db_path, families)
-                   if row["state"] == "resurrected"]
-    if not resurrected:
-        lines.append("  state=clean — nothing to repair")
-        return lines
-    store = _open(db_path, kind, families)
-    try:
-        for row in resurrected:
-            name = row["family"]
-            family = families[name]
-            if family.legacy_kind in DOCTOR_INSPECT_ONLY_KINDS:
-                lines.append(
-                    f"  family={name} kind={family.legacy_kind} state=resurrected "
-                    f"inspect-only: the file may be newer than the DB — compare the "
-                    f"doctor --status diff and reconcile by hand, then restore the "
-                    f"*.migrated.json name; the store never merges it for you")
-                continue
-            if family.legacy_kind in FILE_SET_KINDS:
-                store._migrate_file_set(family, force=True)  # pylint: disable=protected-access
-            else:
-                store._migrate_family(family, force=True)  # pylint: disable=protected-access
-            lines.append(
-                f"  family={name} kind={family.legacy_kind} state=resurrected "
-                f"action=re-imported idempotently and renamed (*.migrated)")
-    finally:
-        store.close()
+    lines: list[str] = []
+    for kind, db_path, families in doctor_targets(project):
+        lines.append(f"db={kind} path={db_path}")
+        resurrected = [row for row in doctor_scan(db_path, families)
+                       if row["state"] == "resurrected"]
+        if not resurrected:
+            lines.append("  state=clean — nothing to repair")
+            continue
+        store = _open(db_path, kind, families)
+        try:
+            for row in resurrected:
+                lines.append(_doctor_repair_one(store, row["family"], families[row["family"]]))
+        finally:
+            store.close()
     return lines
+
+
+def _doctor_repair_one(store: Store, name: str, family: Family) -> str:
+    """Repair one resurrected family and return its report line."""
+    if family.legacy_kind in DOCTOR_INSPECT_ONLY_KINDS:
+        return (f"  family={name} kind={family.legacy_kind} state=resurrected "
+                f"inspect-only: the file may be newer than the DB — compare the "
+                f"doctor --status diff and reconcile by hand, then restore the "
+                f"*.migrated.json name; the store never merges it for you")
+    if family.legacy_kind in FILE_SET_KINDS:
+        store._migrate_file_set(family, force=True)  # pylint: disable=protected-access
+    else:
+        store._migrate_family(family, force=True)  # pylint: disable=protected-access
+    return (f"  family={name} kind={family.legacy_kind} state=resurrected "
+            f"action=re-imported idempotently and renamed (*.migrated)")
 
 
 def main(argv: Optional[list] = None) -> int:
@@ -2462,7 +2492,7 @@ def main(argv: Optional[list] = None) -> int:
                         help="re-import additive kinds idempotently (then rename); "
                              "map/kvdoc/awm are inspect-only")
     doctor.add_argument("--user", action="store_true",
-                        help="the machine user root (the default target)")
+                        help="the machine user and audit stores (the default target)")
     doctor.add_argument("--project", type=Path, default=None, metavar="PATH",
                         help="a project root: scan its .ai-badger/task-tracking store")
     args = parser.parse_args(argv)

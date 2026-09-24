@@ -32,16 +32,32 @@ STOPWORDS = frozenset({
 
 
 def _fold(token: str) -> str:
-    """ies -> y, then strip ing|ed|es|s only when the remainder is >= 3 chars."""
+    """ies -> y; a token ending in 'ss' is left alone; otherwise strip the first of
+    ing|ed|es|s that leaves >= 3 chars, then strip one trailing 'e' from that base
+    when >= 3 chars remain.
+
+    The 'ss' exception and the trailing-'e' strip are what let singular/plural and
+    base/past-tense pairs fold to the same token (class/classes, issue/issues,
+    update/updated) without splitting a plain '-ss' word (class, pass, process).
+    """
     if token.endswith("ies"):
         remainder = token[:-3]
         return remainder + "y" if len(remainder) >= _FOLD_MIN_REMAINDER else token
+    if token.endswith("ss"):
+        return token
+    base = token
     for suffix in _FOLD_SUFFIXES:
         if not token.endswith(suffix):
             continue
         remainder = token[: -len(suffix)]
-        return remainder if len(remainder) >= _FOLD_MIN_REMAINDER else token
-    return token
+        if len(remainder) >= _FOLD_MIN_REMAINDER:
+            base = remainder
+            break
+    if base.endswith("e"):
+        remainder = base[:-1]
+        if len(remainder) >= _FOLD_MIN_REMAINDER:
+            base = remainder
+    return base
 
 
 def tokenize(text: str) -> list[str]:

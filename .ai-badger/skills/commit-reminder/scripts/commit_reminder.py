@@ -133,18 +133,41 @@ def git_env(env=None) -> dict:
     return out
 
 
-def uncommitted_files(root: str, timeout: float = 5.0) -> List[str]:
-    """Run `git status --porcelain` in ``root``; `[]` on any failure, never raises."""
+class _GitUnknown:  # pylint: disable=too-few-public-methods
+    """Sentinel: `git status` could not be determined (it failed, timed out, or is missing)."""
+
+    def __repr__(self) -> str:
+        return "GIT_UNKNOWN"
+
+
+#: A project whose git status is genuinely unknown must never look identical to a clean one
+#: (L9-3) — `git_status` returns this instead of `[]` so a caller can tell the two apart.
+GIT_UNKNOWN = _GitUnknown()
+
+
+def git_status(root: str, timeout: float = 5.0):
+    """`git status --porcelain` in ``root``: the file list, or `GIT_UNKNOWN` on failure/timeout."""
     try:
         result = subprocess.run(
             ["git", "-C", root, "status", "--porcelain"],
             capture_output=True, text=True, timeout=timeout, check=False, env=git_env(),
         )
     except (subprocess.TimeoutExpired, OSError):
-        return []
+        return GIT_UNKNOWN
     if result.returncode != 0:
-        return []
+        return GIT_UNKNOWN
     return parse_porcelain(result.stdout)
+
+
+def uncommitted_files(root: str, timeout: float = 5.0) -> List[str]:
+    """Run `git status --porcelain` in ``root``; `[]` on any failure, never raises.
+
+    The fail-open view atop `git_status` for a caller (the hook) that only wants a live count
+    and treats "could not tell" the same as "found nothing" — `ensure_committed`'s report is
+    the one caller that must not, and calls `git_status` directly instead.
+    """
+    status = git_status(root, timeout)
+    return [] if status is GIT_UNKNOWN else status
 
 
 def open_store():
@@ -171,18 +194,29 @@ def _legacy_state() -> Dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def load_state() -> Dict[str, Any]:
+def _load_from_store() -> Dict[str, Any]:
+    store = open_store()
+    try:
+        return store.kv_all("commit_reminder")
+    finally:
+        store.close()
+
+
+def load_state(strict: bool = False) -> Dict[str, Any]:
     """Per-project entries: store rows merged with the legacy file (D5a); ``{}`` fail-open.
 
     A store that cannot be opened fails open to the legacy file — the same contract as the
     missing-file case; the legacy file is only renamed by a write, never a read.
+
+    ``strict=True`` propagates instead: only `ensure_committed`'s report reads state this way,
+    so "nothing is at risk" is never confused with "the state could not be read" (L9-3, R26).
+    Every other reader — this function's own default, `get_entry`, the Hermes hook — keeps the
+    fail-open contract; a report is worth failing loudly over, a live nudge is not.
     """
+    if strict:
+        return _load_from_store()
     try:
-        store = open_store()
-        try:
-            return store.kv_all("commit_reminder")
-        finally:
-            store.close()
+        return _load_from_store()
     except Exception:  # pylint: disable=broad-exception-caught
         return _legacy_state()
 
@@ -201,14 +235,13 @@ def save_state(state: Dict[str, Any]) -> None:
         store.close()
 
 
-def get_entry(root: str) -> Dict:
-    """Return the persisted entry for ``root``, normalising the old marker-only form.
+def _normalize_entry(value: Any) -> Dict:
+    """A raw stored value as a normalised entry.
 
     Every machine that ran the pre-store hook has ``{root: <int>}`` on disk (now in its
-    migrated row), so a bare integer
-    reads as a marker with no unanswered commands rather than as corrupt state.
+    migrated row), so a bare integer reads as a marker with no unanswered commands rather
+    than as corrupt state.
     """
-    value = load_state().get(str(Path(root).resolve()), 0)
     if isinstance(value, int):
         return {"marker": value, "fires": 0}
     if not isinstance(value, dict):
@@ -217,6 +250,11 @@ def get_entry(root: str) -> Dict:
     entry.setdefault("marker", 0)
     entry.setdefault("fires", 0)
     return entry
+
+
+def get_entry(root: str) -> Dict:
+    """Return the persisted entry for ``root``, normalising the old marker-only form."""
+    return _normalize_entry(load_state().get(str(Path(root).resolve()), 0))
 
 
 def set_entry(root: str, entry: Dict) -> None:
@@ -228,13 +266,43 @@ def set_entry(root: str, entry: Dict) -> None:
         store.close()
 
 
-def at_risk_entries() -> Dict[str, Dict]:
+def update_entry(root: str, count: int, threshold: int = 5,
+                  escalate_after: int = ESCALATE_AFTER, now: str = "",
+                  session: str = "") -> Tuple[bool, bool, Dict]:
+    """Atomically advance ``root``'s entry through the store's own `kv_update` (L4-8, R5).
+
+    `get_entry` then `advance` then `set_entry`, as the hook used to run it, is three separate
+    store round trips: a second invocation between the read and the write computes from the
+    same stale entry, so one of the two increments is lost. `kv_update` runs the read, the
+    advance, and the write inside one transaction, so a concurrent call blocks on the write
+    lock and sees this call's result before it computes its own. `commit_reminder_hook` is the
+    only caller; other readers (`get_entry`/`set_entry`, the report, the Hermes hook) are
+    unaffected.
+    """
+    outcome: Dict[str, Any] = {}
+
+    def _advance(current: Any) -> Dict:
+        fires, at_risk, updated = advance(
+            _normalize_entry(current), count, threshold, escalate_after, now, session)
+        outcome["fires"], outcome["at_risk"] = fires, at_risk
+        return updated
+
+    store = open_store()
+    try:
+        entry = store.kv_update("commit_reminder", str(Path(root).resolve()), _advance, 0)
+    finally:
+        store.close()
+    return outcome["fires"], outcome["at_risk"], entry
+
+
+def at_risk_entries(strict: bool = False) -> Dict[str, Dict]:
     """Every project whose unanswered-command count has reached the escalation bar.
 
     The read side of the hook's state: what `ensure-work-is-committed` reports to a parent.
+    ``strict=True`` propagates a broken store instead of reading it as empty (L9-3).
     """
     found = {}
-    for root, value in load_state().items():
+    for root, value in load_state(strict=strict).items():
         fires = value.get("fires") if isinstance(value, dict) else None
         if isinstance(fires, int) and not isinstance(fires, bool) and fires >= ESCALATE_AFTER:
             found[root] = value

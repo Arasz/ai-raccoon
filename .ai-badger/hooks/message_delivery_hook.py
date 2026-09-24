@@ -15,7 +15,9 @@ cursor-less per-turn read applies that gate once too (D5). Stop is Claude's turn
 event: its ``additionalContext`` continues the turn (host loop-capped), so mail that
 arrived mid-work surfaces without another user prompt — and exactly-once keeps that
 continuation loop-safe (a second firing finds nothing new). Close events (SessionEnd)
-drop the session's cursor (R6). Everything else is a no-op.
+are a no-op (D3): a reused session id (a host's --resume) after a close-time cursor
+delete looked like a brand-new session and replayed already-delivered mail (L2-6), so
+the cursor now dies only via the 4-day prune. Everything else is a no-op too.
 
 Residual: a fully idle session fires no hook until its next prompt — hooks cannot wake
 Claude (no timer surface exists; FileChanged/Notification discard context output per
@@ -141,12 +143,10 @@ def _deliver(event_name: Optional[str], session_id: str, payload: Dict[str, Any]
 
 
 def _close(event_name: Optional[str], session_id: str) -> dict:
-    """The close event's cleanup: drop the cursor (R6); a second close is harmless."""
-    store = badger_store.open_user()
-    try:
-        store.delete_cursor(session_id)
-    finally:
-        store.close()
+    """The close event is a no-op (D3): it used to delete the session's cursor here, so
+    a host reusing the same session id (--resume) looked like a brand-new session and
+    replayed already-delivered mail (L2-6). Rule 6's cursor death is the 4-day prune
+    only — Store.open_user()'s own retention sweep reaps it, no close-time delete."""
     return {}
 
 

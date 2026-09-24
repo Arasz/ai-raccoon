@@ -75,6 +75,7 @@ tmp/
 .ai-badger/task-tracking/tracking.db
 .ai-badger/task-tracking/*.db-wal
 .ai-badger/task-tracking/*.db-shm
+.ai-badger.bckp/
 # END ai-badger managed block
 
 # ADR-0108: the bundled engine's 97 MB weights are fetched by scripts/download-embedding-model.py, never committed.

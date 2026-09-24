@@ -7,6 +7,8 @@ tools:
 user-invocable: true
 ---
 
+<!-- Managed by ai-badger. Source of truth: .ai-badger/agents/dotnet-engineer. Do not edit this copy by hand; edit the source and re-run welcome-ai-badger. -->
+
 # .NET Engineer
 
 A persona blending idiomatic-C# instincts, SOLID/clean-code discipline, and

@@ -233,6 +233,7 @@ from project_id import mint_project_id  # noqa: E402
 from local_invariants import append_rendered  # noqa: E402
 from model_registry import deliver as deliver_model_registry  # noqa: E402
 from gitignore_block import gitignore_managed_block, merge_gitignore, write_gitignore_block  # noqa
+from record_provenance import provenance_hashes  # noqa: E402
 
 
 def _ctx_property(name: str) -> property:
@@ -316,8 +317,10 @@ class Scaffolder:
 
         An exclusion naming a catalog item the framework has since dropped goes inert rather
         than fatal — refresh refuses on an invalid config, so a fatal one would turn an
-        upstream deletion into a broken upgrade (research §4.2).
+        upstream deletion into a broken upgrade (research §4.2); groups (D9) are one note.
         """
+        group_notes, grouped = bl.exclusion_group_notes(self.config)
+        self.notes.extend(group_notes)
         for feature in bl.EXCLUDABLE_FEATURES:
             declined = self.excluded[feature]
             if not declined:
@@ -325,12 +328,12 @@ class Scaffolder:
             known = {i.get("name") for stack in self.stacks
                      for i in bl.feature_items(self.index, stack, feature)}
             singular = feature[:-1]
-            for name in sorted(declined - known):
+            covered = grouped if feature == "skills" else set()
+            for name in sorted(declined - known - covered):
                 self.notes.append(
                     f"exclusion '{name}' matches no catalog {singular} — safe to remove "
-                    f"from config.json"
-                )
-            for name in sorted(declined & known):
+                    f"from config.json")
+            for name in sorted((declined & known) - covered):
                 self.notes.append(f"declined {singular} '{name}' (config.exclude.{feature})")
         for name in sorted(self.excluded["skills"]):
             if (self.aib / "skills" / name).is_dir():
@@ -351,9 +354,8 @@ class Scaffolder:
                **extra: Any) -> None:
         """Append a manifest entry recording where a scaffolded item came from and went.
 
-        Feature types the registry marks `hashes_source` record the framework source's hash
-        rather than the written file's, because drift.compare re-hashes the source for file
-        entries and any other choice can never match (ADR-0006). `extra` is merged in verbatim.
+        Hash fields are `record_provenance.provenance_hashes` (#194 keeps them out of this
+        module's line budget). `extra` is merged in verbatim.
         """
         entry = {
             "feature": feature, "stack": stack, "name": name,
@@ -361,32 +363,7 @@ class Scaffolder:
             "target": target.relative_to(self.target).as_posix(),
             "frameworkVersion": self.index["frameworkVersion"],
         }
-        if source.is_dir():
-            # Directory entry (skills): two hashes, two questions (#110). `hash` covers the
-            # TARGET dir and answers "did this project edit its copy?"; `sourceHash` covers the
-            # framework SOURCE and is the only one that can answer "has the framework moved
-            # ahead?", because the target is rendered output the source is not comparable to.
-            # Both exclude extensions/ (config-gated per project, with entries of their own);
-            # `hash` also drops `projectOwned`, which the project edits and this run preserved.
-            fingerprint = bl.dir_content_hash(
-                target, exclude=bl.SKILL_EXCLUDE_PATTERNS + ["extensions"],
-                exclude_rel=extra.get("projectOwned"))
-            entry["hash"] = fingerprint["content_hash"]
-            entry["dirMeta"] = {
-                "file_count": fingerprint["file_count"],
-                "dir_count": fingerprint["dir_count"],
-            }
-            source_print = bl.dir_content_hash(
-                source, exclude=bl.SKILL_EXCLUDE_PATTERNS + ["extensions"]
-            )
-            entry["sourceHash"] = source_print["content_hash"]
-            entry["sourceMeta"] = {
-                "file_count": source_print["file_count"],
-                "dir_count": source_print["dir_count"],
-            }
-        else:
-            hash_from = source if bl.feature_type(feature).hashes_source else target
-            entry["hash"] = bl.sha256_file(hash_from)
+        entry.update(provenance_hashes(bl, feature, source, target, extra))
         self.entries.append({**entry, **extra})
 
     def copy_file(self, feature: str, stack: str, item: Dict[str, Any], dest_dir: Path) -> Path:
@@ -422,16 +399,20 @@ class Scaffolder:
     # -- seed-once (framework writes once, project owns thereafter; see #15) --------
     def _seed_once_copy(self, src: Path, dest: Path, label: str) -> None:
         """Copy src to dest only on first scaffold. If dest already exists, it is project-owned
-        and left untouched (--reset-seed-files overrides this and reseeds from src)."""
-        if src.exists():
-            self.record_template(src, dest, seed_once=True)
+        and left untouched (--reset-seed-files overrides this and reseeds from src).
+
+        Recorded only once dest is settled — copied just now, or already there — so `record`
+        (`outputHash`, D11) always sees a real file and never depends on which run this is.
+        """
+        if not src.exists():
+            return
         if dest.exists() and not self.reset_seed_files:
             self.notes.append(f"preserved seed-once {label} (already exists; not re-seeded; "
                               "pass --reset-seed-files to reset)")
-            return
-        if src.exists():
+        else:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dest)
+        self.record_template(src, dest, seed_once=True)
 
     # -- features -------------------------------------------------------------------
     def scaffold_personas(self) -> None:
