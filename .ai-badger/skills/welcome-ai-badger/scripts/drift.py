@@ -254,11 +254,13 @@ def detect_new_stacks(target: Path, root: Path,
     return [s for s in detected if s in known and s not in current and s not in ignored]
 
 
-def project_exclusions(target: Optional[Path]) -> Dict[str, Any]:
+def project_exclusions(root: Path, target: Optional[Path]) -> Dict[str, Any]:
     """What a scaffolded project's own config.json declines; empty when there is none to read.
 
     Read from the target rather than passed in, so every caller of `compare` reports the
-    project's declarations without having to know they exist.
+    project's declarations without having to know they exist. `root`'s gateway aliases keep
+    this the mirror of `Scaffolder`'s own exclusion resolution — a stale member name declines
+    the gateway that absorbed it, here as everywhere else.
     """
     if target is None:
         return {}
@@ -266,7 +268,7 @@ def project_exclusions(target: Optional[Path]) -> Dict[str, Any]:
     if not config_path.is_file():
         return {}
     try:
-        return bl.exclusions(bl.load_json(config_path))
+        return bl.exclusions(bl.load_json(config_path), bl.gateway_aliases(root))
     except (ValueError, OSError):
         return {}
 
@@ -536,7 +538,7 @@ def compare(root: Path, manifest: Dict[str, Any],
     }
     if stacks is not None:
         result["newItems"] = detect_new_items(root, manifest, stacks,
-                                              exclude=project_exclusions(target))
+                                              exclude=project_exclusions(root, target))
     return result
 
 

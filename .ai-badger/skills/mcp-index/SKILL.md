@@ -193,8 +193,8 @@ hermes answers `error: unrecognized arguments: --json` (measured 2026-07, issue 
 | 3 | `hermes mcp list` | server names and an enabled flag, from the text table; no tools |
 
 `--host hermes` or `--host claude` restricts the chain to one CLI — use it when the other is slow,
-noisy, or listing the wrong project's servers. `--from-json <document>` skips the hosts entirely and
-reads a saved `hermes mcp list --json` document.
+noisy, or listing the wrong project's servers. `--from-json '<json text>'` skips the hosts entirely
+and takes the JSON text of a `hermes mcp list --json` document directly — not a file path.
 
 ### `--discover` — ask each server for its own tools
 

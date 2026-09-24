@@ -86,7 +86,7 @@ def read_version(root: Path) -> Optional[str]:
     """The VERSION a tree reports, or None when it has none or cannot be read."""
     try:
         return (root / "VERSION").read_text(encoding="utf-8").strip() or None
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None
 
 

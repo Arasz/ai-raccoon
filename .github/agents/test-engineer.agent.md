@@ -5,10 +5,12 @@ name: test-engineer
 tools:
 - read
 - search
-- list_files
-- run_command
+- edit
+- execute
 user-invocable: true
 ---
+
+<!-- Managed by ai-badger. Source of truth: .ai-badger/agents/test-engineer. Do not edit this copy by hand; edit the source and re-run welcome-ai-badger. -->
 
 # Test Engineer
 

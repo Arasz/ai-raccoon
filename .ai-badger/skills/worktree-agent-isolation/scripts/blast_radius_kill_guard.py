@@ -10,7 +10,6 @@ import importlib.util
 import json
 import os
 import re
-import shlex
 import sqlite3
 import sys
 import time
@@ -81,61 +80,28 @@ def _load_badger_store():
 
 badger_store = _load_badger_store()
 
-_SHELLS = frozenset(("sh", "bash", "zsh", "dash", "ksh"))
-_SKIPPABLE = frozenset(("sudo", "command", "env", "nohup", "exec", "time"))
-_OPERATORS = frozenset((";", "|", "||", "&", "&&", "(", ")", "<", ">", ">>"))
-_ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+def _load_shell_parser():
+    """The shell_parser.py copy delivered beside this script, or None (the guard allows)."""
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "shell_parser", Path(__file__).resolve().parent / "shell_parser.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except (OSError, ImportError, AttributeError):
+        return None
+    return module
+
+
+shell_parser = _load_shell_parser()
+
 _KILLALL = re.compile(r"^killall\d*$")
 _SIGNAL_FLAG = re.compile(r"^-(?:\d+|[A-Za-z]+)$")
 _PID = re.compile(r"^\d+$")
 _SIGNAL_OPTION = frozenset(("-s", "--signal", "-n"))
-# The lexer is superlinear; past this a payload-sized command would outrun the hook timeout.
+# The lexer is linear, but a payload-sized command would still outrun the hook timeout.
 _MAX_COMMAND = 100_000
 _RECURSIVE_RM = re.compile(r"^-(?!-)[a-zA-Z]*[rR]|^--recursive$")
-
-
-def _dash_c_index(args: List[str]) -> Optional[int]:
-    """Index of the shell's command-string flag, spelled `-c` or combined as `-lc`/`-ec`."""
-    for index, token in enumerate(args):
-        if token.startswith("-") and not token.startswith("--") and "c" in token[1:]:
-            return index
-    return None
-
-
-def _tokenize(text: str) -> List[str]:
-    """Shell tokens with operators kept separate; [] when the text does not lex."""
-    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    try:
-        return list(lexer)
-    except ValueError:
-        return []
-
-
-def _segments(command: str) -> List[List[str]]:
-    """The command split into pipeline/list segments, each a token list."""
-    out: List[List[str]] = []
-    for line in command.splitlines():
-        current: List[str] = []
-        for token in _tokenize(line):
-            if token in _OPERATORS:
-                if current:
-                    out.append(current)
-                current = []
-                continue
-            current.append(token)
-        if current:
-            out.append(current)
-    return out
-
-
-def _split_command(tokens: List[str]) -> Optional[Tuple[str, List[str]]]:
-    """(program, args) for a segment, past env assignments, `sudo`-likes and any path prefix."""
-    for index, token in enumerate(tokens):
-        if _ENV_ASSIGN.match(token) or token in _SKIPPABLE:
-            continue
-        return token.rsplit("/", 1)[-1], tokens[index + 1:]
-    return None
 
 
 def _kill_hazard(args: List[str]) -> Optional[str]:
@@ -177,34 +143,28 @@ def _reap_hazard(program: str, args: List[str]) -> Optional[str]:
     return None
 
 
-def _segment_hazard(tokens: List[str], depth: int) -> Optional[str]:
-    """The reason this segment is a blast-radius hazard, or None — see STACK_HAZARDS on why an
-    unlisted command is allowed through."""
-    split = _split_command(tokens)
-    if split is None:
-        return None
-    program, args = split
+def _segment_hazard(program: str, args: List[str]) -> Optional[str]:
+    """The reason this simple command is a blast-radius hazard, or None — see STACK_HAZARDS on
+    why an unlisted command is allowed through."""
     if program == "pkill":
         return "pkill matches processes by name/pattern, never by PID"
     if _KILLALL.match(program):
         return "killall matches processes by name, never by PID"
     if program == "kill":
         return _kill_hazard(args)
-    if program in _SHELLS and depth > 0:
-        index = _dash_c_index(args)
-        if index is not None and index + 1 < len(args):
-            return find_hazard(args[index + 1], depth - 1)
     return _reap_hazard(program, args)
 
 
-def find_hazard(command: str, depth: int = 3) -> Optional[str]:
-    """The reason *command* is a blast-radius hazard, or None when it looks scoped."""
-    if len(command) > _MAX_COMMAND:
+def find_hazard(command: str) -> Optional[str]:
+    """The reason *command* is a blast-radius hazard, or None when it looks scoped. Every
+    simple command counts, nested ones included (`$(...)`, backticks, `sh -c`)."""
+    if len(command) > _MAX_COMMAND or shell_parser is None:
         return None
-    for tokens in _segments(command):
-        reason = _segment_hazard(tokens, depth)
-        if reason:
-            return reason
+    for simple in shell_parser.parse(command):
+        if simple.program:
+            reason = _segment_hazard(simple.program, list(simple.args))
+            if reason:
+                return reason
     return None
 
 

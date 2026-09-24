@@ -8,6 +8,10 @@ guard, not proof, and it never redacts: a match refuses the move and reports *wh
 The reporting contract is what makes a finding safe to print, log, or put in a PR body:
 a finding is `{file, pattern}` where `pattern` is always a label from UNSAFE_LITERAL_LABELS.
 No scanned byte ever reaches a caller (see CodeQL py/clear-text-logging).
+
+A file over LITERAL_SCAN_MAX_BYTES is skipped and yields no finding, so a caller that must not
+move unscanned content refuses it itself: feed-badger's open_pr.py does. The inbound
+learned_skills_sync.py (`sync_skill`) does not, and is the one remaining fail-open caller.
 """
 from __future__ import annotations
 

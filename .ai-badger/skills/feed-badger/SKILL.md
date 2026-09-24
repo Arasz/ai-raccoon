@@ -82,7 +82,8 @@ back to `ai-badger` as a **draft PR** for human review.
 
 - **Draft PR, always.** A human reviews and merges; never auto-merge.
 - **`--path` is required and repeatable.** Only declared paths are staged, so an unrelated dirty
-  file cannot ride along in the PR.
+  file cannot ride along in the PR. Paths are literal (no globs), the index must be clean
+  before the run, and a file over the scan's 1 MB cap is refused.
 - **The credential scan is a guard, not proof.** It checks known literal shapes; a clean run is
   not a certificate.
 - **The agnostic bar is high.** When unsure, keep it in the project, not the framework.
