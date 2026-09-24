@@ -49,18 +49,8 @@
   "skillScope": "default",
   "include": {
     "skills": [
-      "debug-issue",
-      "evidence-first-research",
-      "complete-project-scope-code-review",
-      "explore-codebase",
-      "migrate-documentation",
-      "scaffold-documentation",
-      "update-documentation",
-      "documentation-drift-audit",
-      "worktree-agent-isolation",
       "sqlite-bank-space-diagnosis",
-      "sqlite-schema-review",
-      "scripts-tooling-refactor"
+      "sqlite-schema-review"
     ]
   },
   "docs": {},

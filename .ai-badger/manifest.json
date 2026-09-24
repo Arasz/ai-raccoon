@@ -13,7 +13,7 @@
   ],
   "skillScope": "default",
   "pluginScope": "default",
-  "configHash": "4f7a081c11409d8a8dd5aba7289f4c3df45571fe6811834ae5618734178bbc42",
+  "configHash": "2d902b76a7e1a377268cdd84886d3fc9a3c663abf81be854d0c8dc89ea15a6f7",
   "generatedConfig": [
     {
       "path": ".claude/settings.json",
