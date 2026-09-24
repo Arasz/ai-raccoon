@@ -279,8 +279,12 @@ internal partial class NodeRunner(
             RestartOutcome.Foreign => new Refusal(
                 $"ai-raccoon: port {descriptor.Port} is held by a listener that does not identify as an ai-raccoon server — stop it yourself, or serve on another port",
                 ErrorCode.Port.ForeignListener),
+            // ADR-0107 PC.3: names the actual cause on stderr, the same way RefuseExistingServerAsync
+            // does for the attach path — never the log line (EventId 657 stays unchanged).
             RestartOutcome.Unproven => new Refusal(
-                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the listener did not prove it serves this data root — stop the listener yourself, then run serve again, or serve on another port (--port 0)",
+                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the listener did not prove it serves this data root " +
+                $"({IdentityProof.RefusalText(result.Reason ?? ThrowHelper.ThrowArgumentException<IdentityProofFailure>("Unproven without a reason"))}) " +
+                "— stop the listener yourself, then run serve again, or serve on another port (--port 0)",
                 ErrorCode.Server.Unproven),
             // ADR-0107 PC.4: reaching NoToken already proved the listener's identity (D5's proof
             // comes before the token read), so "another data root" is never a live possibility —

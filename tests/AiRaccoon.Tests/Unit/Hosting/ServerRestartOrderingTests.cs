@@ -35,6 +35,9 @@ public sealed class ServerRestartOrderingTests
             var result = await restart.CycleAsync(1, tokenFile, TestContext.Current.CancellationToken);
 
             result.Outcome.ShouldBe(RestartOutcome.Unproven);
+            // #709: the refusal names the reason the same way the attach path does, so the outcome
+            // must carry it rather than dropping it once the cycle decides to refuse.
+            result.Reason.ShouldBe(IdentityProofFailure.NoKey);
         }
         finally
         {
