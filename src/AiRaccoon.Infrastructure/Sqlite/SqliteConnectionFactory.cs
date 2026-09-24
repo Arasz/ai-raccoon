@@ -227,6 +227,7 @@ public sealed partial class SqliteConnectionFactory(
     /// </summary>
     private async Task<SqliteConnection> OpenConnectionAsync(string? key, CancellationToken cancellationToken)
     {
+        BankOpenObservation.RecordOpenAttempt(BankPath);
         BankPaths.CreateDirectory(BankDirectoryFor(options));
 
         var connection = new SqliteConnection(BuildConnectionString(key));
