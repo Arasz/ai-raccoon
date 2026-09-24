@@ -165,5 +165,5 @@ for the keys and how (not yet) to change them.
   writer is a capped buffer, not a channel
 - [ADR-0080](../adr/0080-the-phases-close-against-search-total-not-the-tool-total.md) — why the
   phases close against `search.total`, not `memory_search`
-- [docs/reference/agent-memory-server.md](../reference/agent-memory-server.md#tools-27) — the full
+- [docs/reference/agent-memory-server.md](../reference/agent-memory-server.md#tools-29) — the full
   `memory_performance` tool contract

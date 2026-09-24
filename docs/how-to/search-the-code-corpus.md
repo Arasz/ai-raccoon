@@ -10,8 +10,11 @@ A code-corpus embedding engine must be active. If you have not set one up yet:
 ai-raccoon model code set default
 ```
 
-This activates the embedding model bundled with the tool (granite-embedding-small-english-r2,
-384-dim, ADR-0108); nothing is downloaded. See [Configure embedding engines](configure-embedding-engines.md#recipe-5-activate-the-code-corpuss-embedding-engine)
+This activates the bundled `granite-embedding-small-english-r2` model (fp16, 384-dim, the
+same one memory uses) for the code corpus. Nothing is downloaded. (Before 1.47.0
+this command downloaded the separate `faxenoff/code-daemon-embed-v1` model; a corpus
+still on that model keeps it until you run the command again.) See
+[Configure embedding engines](configure-embedding-engines.md#recipe-5-activate-the-code-corpuss-embedding-engine)
 for details.
 
 Without a code engine, `kind=code` and `kind=both` searches degrade to FTS5-only
@@ -35,7 +38,18 @@ had.
 Memory-owned extensions (`.md`, `.txt`, `.json`, etc.) are never ingested into the
 code corpus. The two corpora are disjoint by design.
 
+Any manifest dimension works for the code engine: `model code set local <dir>` reconciles
+`vec_code` to whatever dimension the manifest declares, in the same transaction as
+activation. There is no configure-time dimension gate (`ADR-0093`); the chunk-budget gate
+(window at least 510 content tokens) is the only refusal left.
+
 ## Searching
+
+Keyword matching splits identifiers, not just words: a query for `overlap` also matches a
+chunk defining `WatchOverlapResolver`, because `camelCase`/`PascalCase`/`snake_case`/
+`kebab-case` identifiers are split into a derived keyword column at ingest time and searched
+alongside the raw text ([ADR-0109](../adr/0109-code-fts-carries-a-derived-identifiers-column.md)).
+This applies to every kind=code/both search; there is no separate flag to enable it.
 
 ### Code only
 

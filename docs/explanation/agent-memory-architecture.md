@@ -39,9 +39,10 @@ virtual tables and triggers ourselves gives us:
 - **Cloud sync** instead of SQLite Cloud. No managed database dependency — sync
   pushes VACUUM snapshots to a cloud object store (S3-compatible or Azure Blob) with If-Match conflict
   detection, 3-retry loop, and tombstones.
-- **Engine-agnostic embeddings.** The bundled `all-MiniLM-L6-v2` (ONNX, int8, ~23 MB)
-  runs in-process with zero network calls. An OpenAI-compatible provider routes through
-  any endpoint — the extension hardcoded vectors.space.
+- **Engine-agnostic embeddings.** The bundled `granite-embedding-small-english-r2` (ONNX,
+  fp16, ~97 MB, GPU-first, ADR-0108) runs in-process and serves both the memory and code
+  corpora from one engine. An OpenAI-compatible provider routes through any endpoint — the
+  extension hardcoded vectors.space.
 
 ## Why writes land in the project by default
 
@@ -99,11 +100,12 @@ removed as unused (docs/adr/0016-remove-the-extension-host.md).
   projects independent.
 - Deferred embeddings (`embed_state = 'pending'` by default) mean writes work before any
   model is configured; search only returns embedded content, so a fresh bank needs an
-  engine configured via the CLI (`ai-raccoon model set local` or `model set openai …`)
-  plus `memory_embed_pending` to become searchable. When an engine is
-  already configured, writes embed synchronously.
-- Embedding engine changes (`ai-raccoon model set …` with a different provider/model/base-url)
-  re-embed the entire bank, and since ADR-0076 they do it as an **outbox** rather than inline.
+  engine configured via the CLI (`ai-raccoon model embedding set local` or
+  `model embedding set openai …`) plus `memory_embed_pending` to become searchable. When an
+  engine is already configured, writes embed synchronously.
+- Embedding engine changes (`ai-raccoon model embedding set …` with a different
+  provider/model/base-url) re-embed the entire bank, and since ADR-0076 they do it as an
+  **outbox** rather than inline.
   One transaction commits the new engine settings, a durable migration record, and marks every
   embedded row pending; a relay drains it afterwards and marks the record finished. The command
   itself returns as soon as that transaction commits.

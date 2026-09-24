@@ -13,6 +13,12 @@ Feature: Encryption key sources
     #   shells out to `bws secret get <secret-id>`; SDK is NOT used.
     # - Secret VALUE = unencrypted ed25519 SSH private key; derived to the SQLCipher raw
     #   key: SHA-256("ai-raccoon-db-key/v1" || seed) -> x'<64hex>' (no KDF; measured).
+    #   SUPERSEDED by ADR-0012 (2026-08-07): the derivation is now HKDF-SHA-256 over the
+    #   seed with the same label as the HKDF info parameter. The plain SHA-256 concat is
+    #   kept as SshKeyDerivation.DeriveLegacyRawKey, used only to open and then rekey a
+    #   bank still on the old derivation — see the Rule below and
+    #   docs/how-to/rekey-an-encrypted-bank.md for the `ai-raccoon encryption migrate`
+    #   CLI verb this shipped as.
     # - Offline behavior: refuse to start, loudly.
     # - Rotation in the Bitwarden UI without PRAGMA rekey bricks the bank — config warns.
     # - Raw-key-file option REMOVED; keychain/cloud sources documented but not implemented.
@@ -54,10 +60,14 @@ Feature: Encryption key sources
             And no encryption source is changed
 
     Rule: The secret value is an unencrypted ed25519 SSH private key, derived to the raw SQLCipher key
+        # ADR-0012 (2026-08-07): the SHA-256(Label || seed) construction below was replaced
+        # by HKDF-SHA-256 before this shipped to production; DeriveLegacyRawKey keeps the
+        # old construction only to open and then migrate a pre-ADR-0012 bank (see the
+        # "legacy derivation" Rule further down).
         Scenario: An ed25519 key derives the raw key deterministically
             Given an unencrypted ed25519 private key with seed <seed>
             When the raw key is derived
-            Then it equals SHA-256("ai-raccoon-db-key/v1" || seed) formatted as x'<64hex>'
+            Then it equals HKDF-SHA-256(seed, salt: none, info: "ai-raccoon-db-key/v1") formatted as x'<64hex>'
 
         Scenario: A passphrase-protected SSH key is rejected
             Given an encrypted ed25519 private key

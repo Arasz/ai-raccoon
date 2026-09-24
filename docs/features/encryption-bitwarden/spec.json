@@ -15,7 +15,7 @@
     "cards": [
         { "id": "D1", "card": "Env var fate", "ruling": "AIRACCOON_DB_PASSPHRASE STAYS as the default key source (zero-setup path; the single-channel ruling's documented exception)." },
         { "id": "D2", "card": "Bitwarden integration surface", "ruling": "bws CLI, not the SDK: provider shells out to 'bws secret get <id>' at bank open; SDK caveats (beta, sync API, custom license, 7MB native binary) are moot." },
-        { "id": "D3", "card": "Secret value semantics", "ruling": "The secret's VALUE is an unencrypted ed25519 SSH private key; derived with SHA-256(\"ai-raccoon-db-key/v1\" || seed) -> x'<64hex>' raw SQLCipher key (no KDF, measured). RSA and passphrase-protected keys rejected." },
+        { "id": "D3", "card": "Secret value semantics", "ruling": "The secret's VALUE is an unencrypted ed25519 SSH private key; derived with SHA-256(\"ai-raccoon-db-key/v1\" || seed) -> x'<64hex>' raw SQLCipher key (no KDF, measured). RSA and passphrase-protected keys rejected. SUPERSEDED by ADR-0012 (2026-08-07): production derives HKDF-SHA-256(seed, info: label) instead; the SHA-256-concat construction survives only as SshKeyDerivation.DeriveLegacyRawKey, to open and then rekey a pre-ADR-0012 bank via the 'ai-raccoon encryption migrate' CLI verb (docs/how-to/rekey-an-encrypted-bank.md)." },
         { "id": "D4", "card": "Offline behavior", "ruling": "Refuse to start, loudly; no cached key copy." },
         { "id": "D5", "card": "Rotation", "ruling": "Rotating the secret in the Bitwarden UI without PRAGMA rekey bricks the bank — the config command warns." },
         { "id": "D6", "card": "Config flow", "ruling": "encryption bitwarden: (a) bws presence check with install guidance error; (b) collect project id + secret id (defaults from AIRACCOON_BITWARDEN_PROJECT_ID / AIRACCOON_BITWARDEN_SECRET_ID; absent those, an obviously-fake placeholder id); (c) optional -t <token> for runs without BWS_ACCESS_TOKEN — passed for that run only, never persisted." },
@@ -26,7 +26,8 @@
     "scope": {
         "in": [
             "IEncryptionKeyProvider source family: env (default, kept) + bitwarden (bws CLI)",
-            "BitwardenEncryptionKeyProvider: runs 'bws secret get <secret-id>' (optionally with -t token), parses the ed25519 private key, derives SHA-256(\"ai-raccoon-db-key/v1\" || seed) -> x'<64hex>', returns it through the existing Password channel",
+            "BitwardenEncryptionKeyProvider: runs 'bws secret get <secret-id>' (optionally with -t token), parses the ed25519 private key, derives HKDF-SHA-256(seed, info: \"ai-raccoon-db-key/v1\") -> x'<64hex>' (ADR-0012; superseded the original SHA-256 concat, kept as DeriveLegacyRawKey for migration), returns it through the existing Password channel",
+            "'ai-raccoon encryption migrate' (ADR-0012 follow-through, shipped in #99): rekeys a bank still on the pre-ADR-0012 legacy derivation to the current HKDF key, no-ops when already on the current derivation, and refuses without modifying the file when neither key opens it",
             "Reject RSA and passphrase-protected (encrypted) private keys with clear errors",
             "ai-raccoon encryption bitwarden: bws presence check (actionable install/token error when missing), interactive collection of project id + secret id (owner defaults), optional -t <token> never persisted, reachability validation, rotation-trap warning",
             "ai-raccoon encryption show: prints the current source + bitwarden secret id when active",

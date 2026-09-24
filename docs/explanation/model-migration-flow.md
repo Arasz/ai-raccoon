@@ -1,10 +1,17 @@
 # How a model migration works, start to finish
 
-Changing the embedding engine makes every stored vector stale. ADR-0076 handles that as a
+Changing the memory embedding engine makes every stored vector stale. ADR-0076 handles that as a
 **transactional outbox**: one transaction commits the new settings *and* the durable record of the
-work they owe, and a relay drains it afterwards. This document traces that flow through the code as
-it stands in 1.21.1, and answers the question the design keeps provoking — *why does every tool call
-open the bank?*
+work they owe, and a relay drains it afterwards. This document traces that flow through the code —
+verified current as of 1.49.1 — and answers the question the design keeps provoking — *why does
+every tool call open the bank?* It covers the **memory** engine only (`ai-raccoon model embedding
+set ...`); `model code set` invalidates the code corpus in one plain transaction with no outbox, no
+lock, and no `ToolGate` involvement (see [Configure embedding
+engines](../how-to/configure-embedding-engines.md#recipe-5-activate-the-code-corpuss-embedding-engine)).
+
+The command name below changed after this flow was first written: it was `model set` before the
+memory/code split, and is `model embedding set` today. The mechanics — the outbox, `ToolGate`, the
+relay — are unchanged by that rename.
 
 For the decisions themselves see [ADR-0076](../adr/0076-model-set-is-an-outbox-drained-by-an-on-demand-relay.md)
 and its parent [ADR-0075](../adr/0075-only-the-server-writes-to-the-bank.md).
@@ -50,7 +57,7 @@ examined and rejected:
   same path, so an unconditional refusal would stop the relay from opening the connection it needs
   to end the migration it exists to end.
 
-> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.ModelMigration.cs`,
+> **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.ModelMigration.cs`,
 > `MemorySchema.EnsureCheapAsync`, and ADR-0076's *"ToolGate's migration check cost"* amendment.
 
 ## The flow
@@ -65,7 +72,7 @@ sequenceDiagram
     participant G as ToolGate
     participant R as Relay (ModelMigrationJob)
 
-    U->>CLI: model set local /path/model.onnx
+    U->>CLI: model embedding set local /path/model.onnx
     Note over CLI: CliWriteOptOuts: only `encryption` writes<br/>directly, so this routes to the server
     CLI->>S: acquire server (BackendLauncher auto-starts it if down)
 
@@ -124,23 +131,33 @@ pass for checkpoint and vacuum. Those are two responsibilities that had been sha
 
 ## What will surprise you
 
-**`model set` with the engine you are already on does nothing** — and neither does the first-ever
-`model set` on a bank that never had one. Both report success, and neither opens a migration, locks
-the bank, or re-embeds anything. That is correct (nothing was made stale), but **the CLI output is
-indistinguishable from a real migration**, so it is also a trap: re-running `model set local` twice
-looks exactly like a passing test even if the migration machinery were entirely broken. To force a
-real migration, change to a genuinely different engine fingerprint — the same model by an explicit
-path counts.
+**`model embedding set` with the engine you are already on does nothing** — and neither does the
+first-ever `model embedding set` on a bank that never had one. Both report success, and neither
+opens a migration, locks the bank, or re-embeds anything. That is correct (nothing was made
+stale), but **the CLI output is indistinguishable from a real migration**, so it is also a trap:
+re-running `model embedding set local` twice looks exactly like a passing test even if the
+migration machinery were entirely broken. To force a real migration, change to a genuinely
+different engine fingerprint — the same model by an explicit path counts.
+
+**Upgrading the tool itself can open a migration with no command run at all.** Since ADR-0108, the
+bundled engine's fingerprint is part of the manifest that ships with the tool, and
+`ModelMigrationJob.HasWorkAsync` reconciles it against the stored settings on every pass — the same
+mechanism `code-reindex` already used for the code corpus. A bank embedded by the old bundled
+`all-MiniLM-L6-v2` therefore migrates to the new bundled model on the first server start after an
+upgrade, through this exact flow, with nobody having typed `model embedding set` at all.
 
 **A migration is minutes, not seconds — and hours for a big model.** On a 25,917-entry bank the
 drain took **~6 minutes** with the bundled MiniLM, and the bank refused every read and write for all
 of it. A larger engine changes the order of magnitude: bge-m3 (1024-d, fp32, 2.27 GB) measured
 **~1.85 entries/s on 23,520 entries — about 3.4 hours**. Plan it as a maintenance window sized to the
-model, not to the row count.
+model, not to the row count. (These figures predate the granite-embedding-small-english-r2 switch;
+granite is heavier per row on the CPU and lighter on the GPU than MiniLM was — see
+[ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md) — and no full-bank drain
+has been re-measured on it.)
 
 **When the dimension changes, the vector index is rebuilt first** — by the drain, and (since
-#432) also once at server open, so a `model set` run with no server up does not leave vec0 at
-the old width. A matching dimension performs no DDL. `vec_entries` and
+#432) also once at server open, so a `model embedding set` run with no server up does not leave
+vec0 at the old width. A matching dimension performs no DDL. `vec_entries` and
 `vec_structure` are dropped and recreated at the new width in one `BEGIN IMMEDIATE` transaction
 before the first row is embedded, then refilled through the existing triggers as the drain runs —
 they are never repopulated from the stored blobs, which still hold old-dimension vectors at that
