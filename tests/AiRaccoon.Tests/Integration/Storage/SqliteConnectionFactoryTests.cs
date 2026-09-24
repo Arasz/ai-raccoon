@@ -238,4 +238,58 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
         command.CommandText = sql;
         return (long)(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
     }
+
+    /// <summary>
+    ///     The reconcile loop opens the bank about 30 times a second. A pooled native handle this
+    ///     process already initialised (vec0 loaded, schema ensured) must not redo that work: the
+    ///     re-open runs only the per-open pragmas.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_OnAPooledHandleAlreadyInitialised_RunsNoSchemaStatements()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var factory = Factory();
+        SQLitePCL.sqlite3 handle;
+        await using (var first = await factory.OpenBankAsync(ct))
+        {
+            handle = first.Handle!;
+        }
+
+        var statements = new List<string>();
+        SQLitePCL.raw.sqlite3_trace(handle, (SQLitePCL.strdelegate_trace)((_, sql) => statements.Add(sql)), null);
+        try
+        {
+            await using var second = await factory.OpenBankAsync(ct);
+
+            second.Handle.ShouldBeSameAs(handle, "the pool must hand the same native handle back");
+            statements.ShouldAllBe(sql => sql.StartsWith("PRAGMA foreign_keys", StringComparison.Ordinal) ||
+                                          sql.StartsWith("PRAGMA journal_mode", StringComparison.Ordinal) ||
+                                          sql.StartsWith("PRAGMA busy_timeout", StringComparison.Ordinal),
+                string.Join(" | ", statements));
+        }
+        finally
+        {
+            SQLitePCL.raw.sqlite3_trace(handle, (SQLitePCL.strdelegate_trace?)null, null);
+        }
+    }
+
+    /// <summary>
+    ///     Negative control for the handle cache: a new native handle (the pool cleared, as a rekey
+    ///     does) is initialised afresh — vec0 is loaded on it, not assumed from the old one.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_OnAFreshHandleAfterThePoolIsCleared_LoadsVec0Again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var factory = Factory();
+        await using (await factory.OpenBankAsync(ct))
+        {
+        }
+
+        SqliteConnection.ClearAllPools();
+        await using var connection = await factory.OpenBankAsync(ct);
+
+        (await connection.ExecuteScalarAsync<string>(new CommandDefinition("SELECT vec_version()", cancellationToken: ct)))
+            .ShouldNotBeNullOrWhiteSpace();
+    }
 }

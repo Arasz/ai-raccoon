@@ -5,6 +5,8 @@ using CommunityToolkit.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using SQLitePCL;
+using System.Runtime.CompilerServices;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
@@ -18,6 +20,15 @@ public sealed partial class SqliteConnectionFactory(
     IEncryptionKeyResolver keyResolver,
     ILogger<SqliteConnectionFactory>? logger = null) : ISqliteConnectionFactory
 {
+    /// <summary>
+    ///     Native handles this process has initialised (vec0 loaded, schema ensured). The pool hands a
+    ///     handle back on every open, and redoing that work — a dlopen plus the schema pass — dominated
+    ///     the idle reconcile loop's CPU. Weak keys: a handle the pool closes drops out on its own.
+    /// </summary>
+    private static readonly ConditionalWeakTable<sqlite3, object> InitializedHandles = new();
+
+    private static readonly object InitializedMarker = new();
+
     /// <summary>SQLITE_NOTADB (26): the file exists but is not a database (or not this key's database).</summary>
     private const int NotADatabaseErrorCode = 26;
 
@@ -431,6 +442,11 @@ public sealed partial class SqliteConnectionFactory(
     internal static async Task<SqliteConnection> InitializeAsync(SqliteConnection connection,
         CancellationToken cancellationToken, ILogger<SqliteConnectionFactory>? logger = null)
     {
+        if (connection.Handle is { } pooled && InitializedHandles.TryGetValue(pooled, out _))
+        {
+            return connection;
+        }
+
         try
         {
             connection.EnableExtensions();
@@ -460,6 +476,7 @@ public sealed partial class SqliteConnectionFactory(
                 }
             }
 
+            InitializedHandles.AddOrUpdate(connection.Handle!, InitializedMarker);
             return connection;
         }
         catch
