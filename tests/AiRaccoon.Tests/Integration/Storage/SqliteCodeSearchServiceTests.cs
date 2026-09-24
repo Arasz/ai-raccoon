@@ -110,6 +110,31 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         results.Results.ShouldHaveSingleItem().Hash.ShouldBe("hash-1");
     }
 
+    /// <summary>
+    ///     Hash tie-break (owner ruling; matches the Python harness's <c>ORDER BY bm25(...), e.hash</c>
+    ///     port in scripts/retrieval_tuning/llamaindex_harness/ingest.py's <c>_bank_fts_order</c>):
+    ///     three rows share identical value/source_file, so code_fts.bm25 ties exactly across all of
+    ///     them. With no vector leg contributing (engine unconfigured), the RRF-fused final order
+    ///     comes straight from the FTS SQL's positional rank, so this also proves the raw query's tie
+    ///     order — insertion (id) order is deliberately the reverse of hash order.
+    /// </summary>
+    [RetryFact]
+    public async Task SearchAsync_OnExactBm25Ties_OrdersByHash_NotInsertionOrder()
+    {
+        await SeedAsync(id: 1, projectId: "acme", path: "src/Zephyr.cs", value: "class ZephyrTracker { }",
+            lineStart: 1, lineEnd: 1, hash: "ccc");
+        await SeedAsync(id: 2, projectId: "acme", path: "src/Zephyr.cs", value: "class ZephyrTracker { }",
+            lineStart: 1, lineEnd: 1, hash: "aaa");
+        await SeedAsync(id: 3, projectId: "acme", path: "src/Zephyr.cs", value: "class ZephyrTracker { }",
+            lineStart: 1, lineEnd: 1, hash: "bbb");
+
+        var results = await _service.SearchAsync(new CodeSearchQuery("acme", "ZephyrTracker", 2, 0.0),
+            TestContext.Current.CancellationToken);
+
+        results.Results.Select(r => r.Hash).ShouldBe(["aaa", "bbb"],
+            "an exact bm25 tie must break by hash ascending, keeping the two lexicographically smallest rows under a limit that cuts inside the tie");
+    }
+
     [RetryFact]
     public async Task SearchAsync_NeverLeaksAcrossProjects()
     {
@@ -345,7 +370,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
     }
 
     private async Task SeedAsync(long id, string projectId, string path, string value, int lineStart, int lineEnd,
-        string identifiers = "")
+        string identifiers = "", string? hash = null)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
@@ -353,7 +378,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
             INSERT INTO code_entries (id, hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at, identifiers)
             VALUES (@id, @hash, @path, @value, @path, @lineStart, @lineEnd, @projectId, 1, 1, @identifiers)
             """,
-            new { id, hash = $"hash-{id}", path, value, lineStart, lineEnd, projectId, identifiers },
+            new { id, hash = hash ?? $"hash-{id}", path, value, lineStart, lineEnd, projectId, identifiers },
             cancellationToken: TestContext.Current.CancellationToken));
     }
 }
