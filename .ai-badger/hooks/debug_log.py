@@ -244,28 +244,14 @@ def project_name(project):
     return name
 
 
-def _families():
-    """The two families this module owns, pointed at the legacy seams beside DEBUG_DIR."""
-    return {
-        "hook_audit": _store_module.Family(
-            table="hook_audit", db="user",
-            legacy_path=lambda: AUDIT_FILE, legacy_kind="jsonl", ts_field=KEY_TS,
-        ),
-        "hook_state": _store_module.Family(
-            table="hook_state", db="user",
-            legacy_path=lambda: STATE_FILE, legacy_kind="kvdoc", row_key=STATE_ROW_KEY,
-        ),
-    }
-
-
 def _store():
     """The audit store over its own DB, or None when unavailable (legacy file mode, D31)."""
     if _store_module is None:
         return None
     try:
-        # _open is the module's single store constructor; the audit sink gets its own DB
-        # file and only the two families this module writes (a narrower view than open_user).
-        store = _store_module._open(audit_db(), "user", _families())  # pylint: disable=protected-access
+        # The store's audit registry, rooted at DEBUG_DIR: the DB and both legacy seams
+        # (audit.jsonl, state.json) sit beside each other there.
+        store = _store_module.open_audit(DEBUG_DIR)
         _own_only(audit_db().parent)  # a pre-existing parent may be group-readable
         return store
     except Exception:  # pylint: disable=broad-except

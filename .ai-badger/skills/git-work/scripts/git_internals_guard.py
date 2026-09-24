@@ -20,11 +20,12 @@ MAX_COMMAND bound on every Hermes path exists for that reason, not only for lexe
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
-import shlex
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
@@ -38,20 +39,30 @@ GIT_DIR_MARKERS = ("HEAD", "objects", "refs")
 # 9 directories above the git dir (test_b26 pins this), so lowering it opens a silent blind spot.
 MAX_ANCESTORS = 12
 
-# The lexer below duplicates blast_radius_kill_guard.py's idioms on purpose: the scaffold copies
-# each skill directory independently, so a shared import would not survive delivery.
-SHELLS = frozenset(("sh", "bash", "zsh", "dash", "ksh"))
-SKIPPABLE = frozenset(("sudo", "command", "env", "nohup", "exec", "time"))
-REDIRECTS = frozenset((">", ">>", ">|", "&>", "&>>", ">&"))
-CONTROL = frozenset((";", "|", "||", "&", "&&", "(", ")", "<", "<<", "<<<", "|&"))
 ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-# The lexer is superlinear; past this a payload-sized command would outrun the hook timeout.
+# The lexer is linear, but a payload-sized command would still outrun the hook timeout.
 MAX_COMMAND = 100_000
-MAX_DEPTH = 3
+
+
+def _load_shell_parser() -> Optional[Any]:
+    """The shell_parser.py copy delivered beside this file; None leaves only the Bash half
+    inert, never the Edit half."""
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "shell_parser", Path(__file__).resolve().parent / "shell_parser.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except (OSError, ImportError, AttributeError):
+        return None
+    return module
+
+
+shell_parser = _load_shell_parser()
 
 # Programs that write a file named in their arguments, mapped to the flags that make them do so
 # (an empty tuple: always). Completeness is an explicit non-goal — an unlisted command is
-# allowed, so add rows as incidents teach us new ones.
+# allowed, so add rows as incidents teach us new ones. A short flag counts anywhere in a
+# combined cluster (`-pi`, `-Ei`) up to the first letter that takes a value (VALUE_LETTERS).
 # `chmod`/`chown`/`touch` are deliberately absent: none can lose the config's contents, and each
 # refused an ordinary command (`chmod -R 700 .git`) for no protective gain.
 MUTATORS: Dict[str, Tuple[str, ...]] = {
@@ -59,10 +70,13 @@ MUTATORS: Dict[str, Tuple[str, ...]] = {
     "cp": (), "mv": (), "ln": (), "install": (),
     "sed": ("-i", "--in-place"), "perl": ("-i",),
 }
-# Programs whose write lands in the LAST non-flag argument; every earlier path is a source to be
-# read. Scanning their sources refused `cp .git/config /tmp/backup` — the backup a human takes
-# before a repair — and called the source a write target in the message.
+# Short options whose value follows in the same cluster: `perl -Mstrict` is not `-i`.
+VALUE_LETTERS = {"sed": "efl", "perl": "0CdDFiIlmMVxeE"}
+# Programs whose write lands in the LAST non-flag argument, or in the `-t DIR` they name; every
+# other path is a source to be read. Scanning their sources refused `cp .git/config
+# /tmp/backup` — the backup a human takes before a repair — and called it a write target.
 DEST_ONLY = frozenset(("cp", "mv", "ln", "install"))
+TARGET_DIRECTORY = "--target-directory"
 # Interpreters whose write hides inside a code string, where no argv path ever appears.
 INTERPRETERS = frozenset(("python", "python3", "perl", "ruby", "node", "awk"))
 CODE_FLAG_LETTERS = frozenset("ce")
@@ -123,10 +137,20 @@ def git_dir_above(path: str) -> bool:
 
 
 def is_protected(path: str, cwd: Optional[str] = None) -> bool:
-    """True when writing *path* would be a hand write into a git dir or a user git config."""
+    """True when writing *path* would be a hand write into a git dir or a user git config,
+    judged both as written and after symlinks resolve (`ln -s .git/config cfg` makes `cfg`
+    the config)."""
     if not isinstance(path, str) or not path.strip():
         return False
     target = normalized(path, cwd)
+    if _protected_target(target):
+        return True
+    real = os.path.realpath(target)
+    return real != target and _protected_target(real)
+
+
+def _protected_target(target: str) -> bool:
+    """is_protected for an absolute, normalised path, with no symlink resolution."""
     parts = target.split(os.sep)
     if ".git" in parts[:-1]:
         return True
@@ -144,90 +168,38 @@ def is_protected(path: str, cwd: Optional[str] = None) -> bool:
 # Bash: what the command would write.
 # --------------------------------------------------------------------------------------------
 
-def tokenize(text: str) -> List[str]:
-    """Shell tokens with operators kept separate; [] when the text does not lex."""
-    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    try:
-        return list(lexer)
-    except ValueError:
-        return []
-
-
-def scan(tokens: List[str]) -> List[Tuple[str, Any]]:
-    """One line as ordered events: ("write", redirect target), ("group", "(" or ")") and
-    ("run", segment tokens).
-
-    Ordered rather than grouped because a `cd` earlier in the line moves where a later
-    relative write lands.
-    """
-    events: List[Tuple[str, Any]] = []
-    current: List[str] = []
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token in REDIRECTS:
-            if index + 1 < len(tokens):
-                events.append(("write", tokens[index + 1]))
-            index += 2
-            continue
-        if token in ("(", ")"):
-            # A subshell boundary, not a segment separator: find_violation saves and
-            # restores the cd cursor across it.
-            if current:
-                events.append(("run", current))
-                current = []
-            events.append(("group", token))
-            index += 1
-            continue
-        if token in CONTROL:
-            if current:
-                events.append(("run", current))
-                current = []
-            index += 1
-            continue
-        current.append(token)
-        index += 1
-    if current:
-        events.append(("run", current))
-    return events
-
-
-def split_command(tokens: List[str]) -> Optional[Tuple[str, List[str]]]:
-    """(program, args) for a segment, past env assignments, `sudo`-likes and any path prefix.
-
-    While inside a skippable prefix, the wrapper's own flags (`sudo -n`, `command -p`) are
-    consumed too: returning one as the program made `sudo -n rm .git/config` a bypass.
-    `env -u NAME` and `env NAME=v` each take a following word, which is consumed with them.
-    """
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if ENV_ASSIGN.match(token):
-            index += 1
-            continue
-        if token not in SKIPPABLE:
-            return token.rsplit("/", 1)[-1], tokens[index + 1:]
-        index += 1
-        if token == "env" and index < len(tokens) and tokens[index] == "-u":
-            index += 2  # `env -u NAME` takes a following word
-        while index < len(tokens) and tokens[index].startswith("-"):
-            index += 1  # the wrapper's own flags (`sudo -n`, `command -p`) are not the program
-    return None
-
-
-def dash_c_index(args: List[str]) -> Optional[int]:
-    """Index of the shell's command-string flag, spelled `-c` or combined as `-lc`/`-ec`."""
-    for index, token in enumerate(args):
-        if token.startswith("-") and not token.startswith("--") and "c" in token[1:]:
-            return index
-    return None
-
-
 def has_code_flag(args: List[str]) -> bool:
     """True when an interpreter is being handed a program on the command line (`-c`/`-e`)."""
     return any(a.startswith("-") and not a.startswith("--") and
                CODE_FLAG_LETTERS & set(a[1:]) for a in args)
+
+
+def has_mutating_flag(program: str, args: List[str], flags: Tuple[str, ...]) -> bool:
+    """True when *args* carry one of *flags*: a long form (`--in-place`, `--in-place=.bak`)
+    or a short letter anywhere in a cluster (`-i`, `-i.bak`, `-pi`, `-Ei`)."""
+    letters = shell_parser.short_flags(args, stop=VALUE_LETTERS.get(program, ""))
+    return any(flag[1:] in letters if not flag.startswith("--")
+               else any(arg == flag or arg.startswith(flag + "=") for arg in args)
+               for flag in flags)
+
+
+def destinations(args: List[str]) -> List[str]:
+    """Where `cp`/`mv`/`ln`/`install` write: each source's name inside a `-t DIR` /
+    `--target-directory=DIR`, else the last non-flag argument."""
+    directory = None
+    sources: List[str] = []
+    words = iter(args)
+    for arg in words:
+        if arg.startswith(TARGET_DIRECTORY):
+            directory = arg.partition("=")[2] or next(words, None)
+        elif arg.startswith("-") and not arg.startswith("--") and "t" in arg[1:]:
+            directory = arg[arg.index("t", 1) + 1:] or next(words, None)
+        elif not arg.startswith("-"):
+            sources.append(arg)
+    if directory is None:
+        return sources[-1:]
+    return [os.path.join(directory, os.path.basename(s.rstrip("/"))) for s in sources] or \
+        [directory]
 
 
 def mutator_target(program: str, args: List[str], cwd: Optional[str]) -> Optional[str]:
@@ -235,20 +207,9 @@ def mutator_target(program: str, args: List[str], cwd: Optional[str]) -> Optiona
     flags = MUTATORS.get(program)
     if flags is None:
         return None
-    # Long forms count: `--in-place` must match like `-i`, else `sed --in-place ...` is
-    # allowed while `sed -i ...` denies. `-i.bak` (attached suffix) matches the same way.
-    if flags and not any(arg == flag or arg.startswith(flag)
-                         for arg in args for flag in flags):
+    if flags and not has_mutating_flag(program, args, flags):
         return None
-    arguments = args
-    if program in DEST_ONLY:
-        # The write lands in the LAST non-flag argument; every earlier path is a source to
-        # be read. Scanning sources refused `cp .git/config /tmp/backup` and called the
-        # source a write target in the message.
-        tail = [arg for arg in args if not arg.startswith("-")]
-        if not tail:
-            return None
-        arguments = [tail[-1]]
+    arguments = destinations(args) if program in DEST_ONLY else args
     for arg in arguments:
         candidate = arg.split("=", 1)[1] if ENV_ASSIGN.match(arg) else arg  # dd's `of=<path>`
         if is_protected(candidate, cwd):
@@ -273,21 +234,17 @@ def code_target(args: List[str], cwd: Optional[str]) -> Optional[str]:
     return None
 
 
-def chdir_target(tokens: List[str], cwd: Optional[str]) -> Optional[str]:
+def chdir_target(command: Any, cwd: Optional[str]) -> Optional[str]:
     """Where a bare `cd <dir>` moves the shell, so a later relative write resolves there."""
-    split = split_command(tokens)
-    if split is None or split[0] != "cd":
+    if command.program != "cd":
         return None
-    args = [a for a in split[1] if not a.startswith("-")]
+    args = [a for a in command.args if not a.startswith("-")]
     return normalized(args[0], cwd) if len(args) == 1 else None
 
 
-def segment_violation(tokens: List[str], cwd: Optional[str], depth: int) -> Optional[str]:
-    """Why this segment writes a git dir, or None — an unlisted program is allowed through."""
-    split = split_command(tokens)
-    if split is None:
-        return None
-    program, args = split
+def segment_violation(command: Any, cwd: Optional[str]) -> Optional[str]:
+    """Why this simple command writes a git dir, or None — an unlisted program is allowed."""
+    program, args = command.program, list(command.args)
     if program == "git":
         if args and args[0] == "config" and any(a in ("--edit", "-e") for a in args[1:]):
             # `git config --edit` opens the raw config file in an editor -- the same
@@ -295,12 +252,6 @@ def segment_violation(tokens: List[str], cwd: Optional[str], depth: int) -> Opti
             # Every other git invocation stays allowed: git's own writes are the repair route.
             return "git config --edit opens the raw config file in an editor"
         return None  # git's own writes are atomic and intentional; they are the repair route
-    if program in SHELLS and depth > 0:
-        index = dash_c_index(args)
-        if index is not None and index + 1 < len(args):
-            nested = find_violation(args[index + 1], cwd, depth - 1)
-            if nested:
-                return nested
     target = mutator_target(program, args, cwd)
     if target is not None:
         return f"`{program}` would write {target}"
@@ -311,33 +262,32 @@ def segment_violation(tokens: List[str], cwd: Optional[str], depth: int) -> Opti
     return None
 
 
-def find_violation(command: str, cwd: Optional[str] = None,
-                   depth: int = MAX_DEPTH) -> Optional[str]:
-    """Why *command* hand-writes a git dir, or None when it does not."""
-    if not isinstance(command, str) or len(command) > MAX_COMMAND:
+def find_violation(command: str, cwd: Optional[str] = None) -> Optional[str]:
+    """Why *command* hand-writes a git dir, or None when it does not.
+
+    Each simple command resolves relative paths against the directory its scope has `cd`-ed
+    to: a subshell or substitution starts where its parent stood, and its own `cd` ends with it.
+    """
+    if not isinstance(command, str) or len(command) > MAX_COMMAND or shell_parser is None:
         return None
-    for line in command.splitlines():
-        cursor = cwd
-        subshell: List[Optional[str]] = []  # saved cursors for open `( ` groups
-        for kind, value in scan(tokenize(line)):
-            if kind == "write":
-                if is_protected(value, cursor):
-                    return f"a shell redirect would overwrite {value}"
-                continue
-            if kind == "group" and value == "(":
-                subshell.append(cursor)
-                continue
-            if kind == "group" and value == ")":
-                # A subshell's `cd` ends with the subshell: restore the cursor saved at `(`.
-                cursor = subshell.pop() if subshell else cursor
-                continue
-            moved = chdir_target(value, cursor)
-            if moved is not None:
-                cursor = moved
-                continue
-            reason = segment_violation(value, cursor, depth)
-            if reason:
-                return reason
+    cursors: Dict[Tuple[int, ...], Optional[str]] = {(): cwd}
+    for simple in shell_parser.parse(command):
+        if simple.scope not in cursors:
+            parent = simple.scope[:-1]
+            while parent not in cursors:
+                parent = parent[:-1]
+            cursors[simple.scope] = cursors[parent]
+        cursor = cursors[simple.scope]
+        for op, target in simple.redirects:
+            if ">" in op and is_protected(target, cursor):
+                return f"a shell redirect would overwrite {target}"
+        moved = chdir_target(simple, cursor)
+        if moved is not None:
+            cursors[simple.scope] = moved
+            continue
+        reason = segment_violation(simple, cursor)
+        if reason:
+            return reason
     return None
 
 

@@ -84,8 +84,9 @@ def parse_claude_listing(stdout: str) -> List[Server]:
 
 
 # `  ✓ Tools discovered: 12`, then a blank line, then `    <name>   <description>` per tool.
-_TEST_HEADER = re.compile(r"^\s*✓\s*Tools discovered:\s*\d+\s*$")
+_TEST_HEADER = re.compile(r"^\s*✓\s*Tools discovered:\s*(?P<count>\d+)\s*$")
 _TEST_TOOL = re.compile(r"^\s{3,}(?P<name>\S+)\s{2,}(?P<description>\S.*)$")
+_TEST_TOOL_NAME_ONLY = re.compile(r"^\s{3,}(?P<name>\S+)\s*$")
 
 
 def parse_hermes_test_tools(stdout: str) -> Optional[List[Server]]:
@@ -95,21 +96,34 @@ def parse_hermes_test_tools(stdout: str) -> Optional[List[Server]]:
     exits 0 whether it connected or printed `✗ Server '<name>' not found in config`, so only
     the `Tools discovered` header distinguishes "enumerated nothing" from "never enumerated".
     Descriptions arrive truncated with an ellipsis; the catalog outranks them anyway.
+
+    A tool line with no description at all — hermes prints a bare name when it has none — is
+    still a tool line (L6-4): `_TEST_TOOL` alone required a description, so a description-less
+    entry ended the scan there and the partial list was returned as if it were complete. The
+    header's own count is the one honest signal that the block is whole; a block that ends up
+    shorter or longer than the count it declared is not trusted (None), same as no answer.
     """
     lines = stdout.splitlines()
     for position, line in enumerate(lines):
-        if not _TEST_HEADER.match(line):
+        header = _TEST_HEADER.match(line)
+        if not header:
             continue
+        expected = int(header.group("count"))
         tools = []
         for entry in lines[position + 1:]:
             if not entry.strip():
                 continue
             match = _TEST_TOOL.match(entry)
-            if not match:
-                break
-            tools.append({"name": match.group("name"),
-                          "description": match.group("description").strip()})
-        return tools
+            if match:
+                tools.append({"name": match.group("name"),
+                              "description": match.group("description").strip()})
+                continue
+            match = _TEST_TOOL_NAME_ONLY.match(entry)
+            if match:
+                tools.append({"name": match.group("name"), "description": ""})
+                continue
+            break
+        return tools if len(tools) == expected else None
     return None
 
 

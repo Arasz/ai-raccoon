@@ -214,19 +214,28 @@ def _fetch_mcp_tools(from_json: Optional[str] = None,
                      host: Optional[str] = None) -> list[dict[str, Any]]:
     """The servers a host CLI reports, or a refusal naming every source that was asked.
 
-    `from_json` reads a saved `hermes mcp list --json` document instead of asking anyone.
-    Otherwise `host_listings.discover` walks the source chain; if none of them answers there is
-    nothing to index, and saying which ones were tried is the whole remedy (issue #188).
+    `from_json` takes the JSON *text* of a `hermes mcp list --json` document directly, not a
+    file path, instead of asking anyone. Otherwise `host_listings.discover` walks the source
+    chain; if none answers, naming who was tried is the whole remedy (issue #188).
     """
     if from_json is not None:
-        return hl.parse_hermes_json_listing(from_json)
+        try:
+            return hl.parse_hermes_json_listing(from_json)
+        except json.JSONDecodeError as exc:
+            print(f"ERROR: --from-json is not valid JSON ({exc}) — it takes the JSON text "
+                  "directly, not a file path.", file=sys.stderr)
+            sys.exit(2)
+        except AttributeError:
+            print("ERROR: --from-json must be a JSON object with a top-level \"servers\" "
+                  "key, not a JSON list or scalar.", file=sys.stderr)
+            sys.exit(2)
 
     listing = hl.discover(host)
     if not listing.servers:
         tried = "".join(f"\n  - {note}" for note in listing.notes)
         print(f"ERROR: no host CLI listed any MCP server.{tried}\n"
               "  Install or fix one of the above, pass --host to pick one, or pass "
-              "--from-json <listing> to index a saved `hermes mcp list --json` document.",
+              "--from-json '<json text>' to index a `hermes mcp list --json` document.",
               file=sys.stderr)
         sys.exit(1)
     print(f"Listed {len(listing.servers)} server(s) via `{listing.label}`.", file=sys.stderr)
@@ -355,8 +364,8 @@ def _write_index(target: str, data: dict[str, Any], *, require_validation: bool)
         jsonschema at all; a missing framework root or jsonschema degrades to a printed note
         rather than stranding a curation edit that has nowhere else to happen.
 
-    Local copy of `badger_lib.atomic_write_text`: this script is scaffolded into projects
-    that need not have the framework on sys.path.
+    Local copy of `badger_lib.atomic_write_text` (no framework on sys.path required), same
+    mode contract: an existing file keeps its mode; a new one gets `0o666 & ~umask`.
     """
     errors = _validate_against_schema(data)
     if errors is None:
@@ -371,11 +380,18 @@ def _write_index(target: str, data: dict[str, Any], *, require_validation: bool)
 
     path = _index_path(target)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        mode = path.stat().st_mode & 0o7777
+    else:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
     text = json.dumps(data, indent=2, sort_keys=False, ensure_ascii=False) + "\n"
     handle, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as fh:
             fh.write(text)
+        os.chmod(tmp, mode)
         os.replace(tmp, str(path))
     finally:
         if os.path.exists(tmp):
@@ -537,7 +553,7 @@ def _mark_removed(tools: dict[str, dict[str, Any]], names: list[str]) -> int:
 
 def _sync_tools(source: dict[str, Any], server: Optional[dict[str, Any]],
                 catalog: dict[str, dict[str, dict[str, Any]]]) -> int:
-    """Add newly listed tools and mark vanished ones; return the change count.
+    """Add newly listed tools, mark vanished ones, and un-remove reappeared ones.
 
     A server the host listed without tool detail (`tools_known` False — the text-table
     fallback) is left alone entirely: "not asked" must not be read as "exposes nothing",
@@ -550,6 +566,10 @@ def _sync_tools(source: dict[str, Any], server: Optional[dict[str, Any]],
         return 0
     current = {t["name"]: t.get("description", "") for t in server.get("tools", [])}
     changes = _mark_removed(tools, sorted(set(tools) - set(current)))
+    for name in sorted(set(tools) & set(current)):  # reappeared: un-remove, keep curation
+        if tools[name].get("status") == "removed":
+            tools[name]["status"] = "active"
+            changes += 1
     for name in sorted(set(current) - set(tools)):
         tools[name] = describe_tool(source["name"], name, current[name], catalog)
         changes += 1

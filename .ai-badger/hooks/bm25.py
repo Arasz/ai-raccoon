@@ -55,7 +55,8 @@ class Bm25Corpus:
                 self._df[term] += 1
 
     def idf(self, term: str) -> float:
-        """log(1 + (N - df + 0.5) / (df + 0.5)) — 0 for a term absent from the corpus."""
+        """log(1 + (N - df + 0.5) / (df + 0.5)) — the *maximum* idf, not 0, for a term
+        absent from the corpus (df=0): see docs/changelog/0.50.0 for the measured values."""
         df = self._df.get(term, 0)
         return math.log(1 + (self._n - df + 0.5) / (df + 0.5))
 

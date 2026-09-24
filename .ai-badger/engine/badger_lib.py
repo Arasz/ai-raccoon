@@ -93,6 +93,8 @@ def exclusions(config: Dict[str, Any], aliases: Optional[Dict[str, str]] = None)
 
     Tolerant of a malformed block on purpose: drift reads configs this library did not
     validate, and a refusal there would convert a bad edit into a broken refresh.
+    Skill groups expand here too (D9): naming one member declines the whole group rather
+    than refusing the config, since neither member works with the other absent from disk.
     `aliases` (from `gateway_aliases`) keeps exclude the mirror of include: a stale member
     name declines the gateway that absorbed it.
     """
@@ -103,6 +105,7 @@ def exclusions(config: Dict[str, Any], aliases: Optional[Dict[str, str]] = None)
         feature: {n for n in declared.get(feature) or [] if isinstance(n, str)}
         for feature in EXCLUDABLE_FEATURES
     }
+    declined["skills"] = expand_skill_groups(declined["skills"])
     if aliases:
         skills = declined["skills"]
         skills.update(aliases[name] for name in list(skills) if name in aliases)
@@ -138,6 +141,33 @@ def expand_skill_groups(names: Iterable[str]) -> Set[str]:
             if name in members:
                 wanted.update(members)
     return wanted
+
+
+def skill_group_for(name: str) -> Optional[str]:
+    """The `SKILL_GROUPS` key `name` names or belongs to, or None."""
+    if name in SKILL_GROUPS:
+        return name
+    for group, members in SKILL_GROUPS.items():
+        if name in members:
+            return group
+    return None
+
+
+def exclusion_group_notes(config: Dict[str, Any]) -> Tuple[List[str], Set[str]]:
+    """One note per skill group `config.exclude.skills` names or touches, plus its members.
+
+    A caller reporting exclusions per name must skip a group's members here (D9): they are
+    already covered by one grouped note, not one "declined skill" line each.
+    """
+    declared = (config.get("exclude") or {}).get("skills") or []
+    groups = {g for g in (skill_group_for(n) for n in declared if isinstance(n, str)) if g}
+    notes = [
+        f"declined skill group '{g}' (config.exclude.skills) — excludes "
+        f"{', '.join(SKILL_GROUPS[g])} (they read each other's references/ and cannot work "
+        f"alone)"
+        for g in sorted(groups)
+    ]
+    return notes, {m for g in groups for m in SKILL_GROUPS[g]}
 
 
 def gateway_aliases(root: Path) -> Dict[str, str]:
@@ -213,17 +243,17 @@ def _parse_semver(v: str) -> tuple:
 
 
 def is_breaking_transition(from_version: str, to_version: str, root: Path) -> bool:
-    """Check if the version transition crosses a breaking version boundary.
+    """Check if the version transition crosses a breaking version boundary, either direction.
 
-    A transition from_version -> to_version is breaking if any version in
-    BREAKING_VERSIONS satisfies from_version < breaking <= to_version.
+    Direction-agnostic (R28): a downgrade across a boundary is as dangerous as an upgrade, so
+    the two versions are ordered first and a breaking version between them (low < breaking <=
+    high) trips the check whichever version is "from" and which is "to".
     """
     breaking = read_breaking_versions(root)
     if not breaking:
         return False
     try:
-        from_v = _parse_semver(from_version)
-        to_v = _parse_semver(to_version)
+        low, high = sorted((_parse_semver(from_version), _parse_semver(to_version)))
     except (ValueError, IndexError):
         return False
     for bv in breaking:
@@ -231,7 +261,7 @@ def is_breaking_transition(from_version: str, to_version: str, root: Path) -> bo
             bv_v = _parse_semver(bv)
         except (ValueError, IndexError):
             continue
-        if from_v < bv_v <= to_v:
+        if low < bv_v <= high:
             return True
     return False
 
@@ -325,7 +355,7 @@ def recorded_root(start: Path) -> Optional[Path]:
             continue
         try:
             recorded = load_json(manifest).get(MANIFEST_ROOT_KEY)
-        except (OSError, ValueError):
+        except (OSError, ValueError, AttributeError):
             continue
         if not recorded:
             continue
@@ -557,21 +587,28 @@ def load_json(path: Path) -> Any:
         return json.load(fh)
 
 
+def _default_new_file_mode() -> int:
+    """`0o666 & ~umask` — what the OS would give a plain `open(..., "w")`, read without a race."""
+    current = os.umask(0)
+    os.umask(current)
+    return 0o666 & ~current
+
+
 def atomic_write_text(path: Path, text: str) -> None:
     """Write `text` via a temp file in the same directory + os.replace, preserving mode.
 
-    An interrupted write leaves the previous content intact and no temp file behind.
-    `config_guard._atomic_write` is the same contract for scripts that must load without
-    badger_lib on the path.
+    An interrupted write leaves the previous content intact and no temp file behind. A new
+    file gets the umask-adjusted default mode, not mkstemp's restrictive 0600 — it never
+    existed to preserve. `config_guard._atomic_write` is the same contract for scripts that
+    must load without badger_lib on the path.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    mode = path.stat().st_mode & 0o7777 if path.exists() else None
+    mode = path.stat().st_mode & 0o7777 if path.exists() else _default_new_file_mode()
     handle, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as fh:
             fh.write(text)
-        if mode is not None:
-            os.chmod(tmp, mode)
+        os.chmod(tmp, mode)
         os.replace(tmp, str(path))
     finally:
         if os.path.exists(tmp):
@@ -612,14 +649,33 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+# A rendered template's own body carries this line (CLAUDE.md.tmpl and its siblings), so a
+# raw byte hash of the output churns on every version bump alone — the same class of noise
+# `gates/scaffold_freshness_guard.py`'s own STAMP_LINE_RE normalizes away for its comparison.
+_VERSION_STAMP_LINE_RE = re.compile(r"(Scaffolded by ai-badger )\S+")
+
+
+def content_hash_ignoring_version_stamp(path: Path) -> str:
+    """sha256 of *path*'s content with the "Scaffolded by ai-badger <version>" line
+    normalized away, so a version bump alone does not change the digest of a template output
+    whose rendered body embeds it (used for `outputHash`, D11). Falls back to a plain byte
+    hash for content that will not decode as UTF-8 text."""
+    raw = path.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return hashlib.sha256(raw).hexdigest()
+    return sha256_text(_VERSION_STAMP_LINE_RE.sub(r"\1<version>", text))
+
+
 # Build artefacts and OS droppings: never authored, never a contribution, wherever they appear.
 # `.DS_Store` is here because an OS dropping is not an edit, and a skill that hashed one
-# would report as locally modified until someone deleted a file they cannot see (#224).
+# would report as locally modified until someone deleted a file they cannot see.
 ARTEFACT_EXCLUDE_PATTERNS = ["__pycache__", "*.pyc", ".DS_Store"]
 
 # Adds the skill-authoring conventions, matching scaffold.py's _test_ignore — tests and evals
 # sit beside a skill and are not shipped. Those names are ordinary content anywhere else, so
-# only skill trees may exclude them (#224).
+# only skill trees may exclude them.
 SKILL_EXCLUDE_PATTERNS = ["tests", "test_*.py", "*_test.py",
                           "evals"] + ARTEFACT_EXCLUDE_PATTERNS
 
@@ -640,7 +696,7 @@ def nested_entry_targets(entries: List[Dict[str, Any]], target: str) -> List[str
 
     A directory entry must be hashed over the files it owns, not over everything that ends
     up in its directory: adjustments write into a skill's own tree and carry their own
-    entries, so counting them makes the recorded hash unmatchable forever (#224).
+    entries, so counting them makes the recorded hash unmatchable forever.
     """
     prefix = target.rstrip("/") + "/"
     nested = {t[len(prefix):] for t in (e.get("target") for e in entries)
@@ -658,10 +714,10 @@ def dir_content_hash(path: Path, exclude: Optional[List[str]] = None,
 
     Files/dirs matching `exclude` glob patterns are skipped entirely. `exclude_rel` skips
     exact relative paths and their subtrees, for the cases where a name is not enough —
-    one file another manifest entry owns, not every file that shares its name (#224).
+    one file another manifest entry owns, not every file that shares its name.
     `dir_count` still counts every surviving directory: once another entry owns part of the
     tree the number describes a different tree than the recorded one, so the caller stops
-    comparing it rather than this trying to reconstruct it (#230).
+    comparing it rather than this trying to reconstruct it.
 
     Returns:
         {"file_count": int, "dir_count": int, "content_hash": str}
@@ -791,8 +847,8 @@ def opt_in_skills_in(skills_dir: Path) -> List[str]:
 
 def include_derived_skill_names(config: Dict[str, Any], aliases: Dict[str, str],
                                 addable: Set[str]) -> List[str]:
-    """Config-include skills a scaffold appends after the argv block: groups expanded first
-    (#266), then gateway-alias mapped (a stale member name resolves to the gateway that
+    """Config-include skills a scaffold appends after the argv block: groups expanded first,
+    then gateway-alias mapped (a stale member name resolves to the gateway that
     absorbed it, ADR-0021), sorted, intersected with the addable opt-in catalog.
 
     NOT exclusion-filtered here: the Scaffolder filters at ctx construction, and
@@ -866,21 +922,21 @@ def inclusion_notes(included: Iterable[str], excluded: Iterable[str],
     Never fatal, for the reason exclusions are not: refresh refuses on an invalid config, so a
     fatal note would turn an upstream deletion or a scope change into a broken upgrade.
     `aliases` (from `gateway_aliases`) reports a stale member name as resolved instead of
-    telling the reader to delete config that still works (#275).
+    telling the reader to delete config that still works.
     """
     declined, offerable, ships = set(excluded), set(addable), set(defaults)
     aliases = aliases or {}
     notes = []
     for name in sorted(set(included)):
-        if name in SKILL_GROUPS:
+        if name in declined:
+            notes.append(f"inclusion '{name}' is also in config.exclude.skills — "
+                         f"exclude wins; not delivered")
+        elif name in SKILL_GROUPS:
             members = ", ".join(SKILL_GROUPS[name])
             notes.append(f"included skill group '{name}' — delivered {members} "
                          f"(they read each other's references/ and cannot work alone)")
         elif name in aliases:
             notes.append(f"included '{name}' — resolved to gateway '{aliases[name]}'")
-        elif name in declined:
-            notes.append(f"inclusion '{name}' is also in config.exclude.skills — "
-                         f"exclude wins; not delivered")
         elif name in offerable:
             notes.append(f"included optIn skill '{name}' (config.include.skills)")
         elif name in ships:
@@ -961,7 +1017,7 @@ def catalog_skills_for_stack(root: Path, stack: str) -> List[str]:
     question when deciding what to deliver. It is the wrong question when deciding which
     already-delivered skills belong to an agent: an `optIn` skill a project asked for is in
     the delivered set and not in that answer, so filtering through it dropped the skill on the
-    floor — delivered to `.ai-badger/skills/` and linked into no discovery directory (#261).
+    floor — delivered to `.ai-badger/skills/` and linked into no discovery directory.
 
     Membership here is the directory, not the scope, because that is what "this stack owns it"
     actually means.
@@ -1033,7 +1089,7 @@ def discovery_stacks_for_agent(config: Dict[str, Any], agent: str) -> List[str]:
     Every stack the project draws from, minus the stacks that *are* the other agents: a
     dotnet or ai-raccoon skill is this agent's to discover, a copilot skill is not. Naming
     the qualifying stacks in a literal instead left every non-common stack's skills
-    delivered to `.ai-badger/skills/` and linked nowhere (#261 one stack over).
+    delivered to `.ai-badger/skills/` and linked nowhere.
     """
     others = {a for a in config.get("agents", []) if a != agent}
     return [s for s in delivering_stacks(config) if s not in others]
@@ -1044,7 +1100,7 @@ def applicable_feature_items(index: Dict[str, Any], config: Dict[str, Any],
     """(stack, item) pairs the resolved stacks deliver for `feature`, minus `config.exclude`.
 
     The one stack-filtering rule — `scaffold_personas` and the Copilot agent delivery both
-    read it, so the two hosts cannot disagree about which personas a project gets (#210).
+    read it, so the two hosts cannot disagree about which personas a project gets.
     """
     declined = exclusions(config).get(feature, set())
     return [(stack, item)
@@ -1057,10 +1113,21 @@ def is_orphaned(entry: Dict[str, Any], delivering: List[str]) -> bool:
     """True when a manifest entry's stack is no longer one this project draws from.
 
     The one place that decides it, so drift and the re-scaffold cannot disagree about what a
-    dropped stack leaves behind (#116). `delivering` is `delivering_stacks(config)` — passing
+    dropped stack leaves behind. `delivering` is `delivering_stacks(config)` — passing
     `resolve_stacks(config)` instead silently condemns every agent-delivered entry.
     """
     return entry.get("stack") not in delivering
+
+
+def is_vendored_packet(path: Path) -> bool:
+    """True when a `vendor.json` in `path`'s ancestry marks it part of a vendored packet.
+
+    A vendored packet's own files (schemas, examples, brand marks, the packaging metadata)
+    are the upstream vendor's contract, shipped byte-identical (ADR-0030); the marker is the
+    packet's own provenance file, not a hardcoded skill name, so the next vendored skill is
+    covered without touching every caller.
+    """
+    return any((parent / "vendor.json").is_file() for parent in path.parents)
 
 
 def iter_feature_dirs(root: Path) -> List[Tuple[str, str, Path]]:

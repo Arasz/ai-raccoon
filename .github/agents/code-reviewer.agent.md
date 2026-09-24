@@ -5,10 +5,10 @@ name: code-reviewer
 tools:
 - read
 - search
-- list_files
-- get_diff
 user-invocable: true
 ---
+
+<!-- Managed by ai-badger. Source of truth: .ai-badger/agents/code-reviewer. Do not edit this copy by hand; edit the source and re-run welcome-ai-badger. -->
 
 # Code Reviewer
 
