@@ -98,7 +98,7 @@ In an `ubuntu:24.04` arm64 container with lavapipe installed, `vulkaninfo` lists
 session is refused with `no WebGPU GPU device after registration`. ONNX Runtime's device discovery
 reads PCI/sysfs, not Vulkan, and the VM has no display device.
 
-**Evidence:** `scripts/gpu-host-probe.sh` in Docker `--platform linux/arm64 ubuntu:24.04` on an Apple M4, 2026-09-25, commit c9b644d.
+**Evidence:** `scripts/gpu-host-probe.sh` (since replaced by `gpu-host-probe.py`) in Docker `--platform linux/arm64 ubuntu:24.04` on an Apple M4, 2026-09-25, commit c9b644d.
 
 ### F13 — onnxruntime-node's core runs built-in WebGPU on Linux x64 without aborting [MEASURED]
 

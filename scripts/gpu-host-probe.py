@@ -9,18 +9,23 @@ the end; paste it into the release checklist. AIRACCOON_REPO_URL, AIRACCOON_REF 
 AIRACCOON_PROBE_DIR override the clone source, branch and working directory.
 """
 
+import hashlib
+import json
 import os
 import platform
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
 ORT_VERSION = "1.30.0"
+# SHA-256 of Microsoft.ML.OnnxRuntime.Gpu.Linux 1.30.0 from nuget.org (its SHA-512 matches the catalog).
+ORT_GPU_NUPKG_SHA256 = "77ca23682fc164789e67cd0fa4ce022b1b1c94e1978046c6446eee5fb0a3a3d6"
 CUDA_WHEELS = ("nvidia-cuda-runtime==13.*", "nvidia-cublas==13.*", "nvidia-curand==10.*", "nvidia-cudnn-cu13==9.*")
 CUDA_SONAMES = ("libcudart.so.13", "libcublas.so.13", "libcublasLt.so.13", "libcurand.so.10", "libcudnn.so.9")
 TESTS_DLL = "tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll"
@@ -48,6 +53,15 @@ def vulkan_devices(summary: str) -> list[str]:
     types = re.findall(r"deviceType\s*=\s*PHYSICAL_DEVICE_TYPE_(\w+)", summary)
     names = re.findall(r"deviceName\s*=\s*(.+)", summary)
     return ["%s (%s)" % (name.strip(), kind) for name, kind in zip(names, types)]
+
+
+def sha256_of(path: Path) -> str:
+    """The file's SHA-256 as lowercase hex."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def library_dirs(root: Path, sonames: list[str] | tuple[str, ...]) -> list[Path]:
@@ -110,10 +124,10 @@ NVIDIA_VULKAN_LIBRARY = "libGLX_nvidia.so.0"
 
 def nvidia_icd_manifest(library: str = NVIDIA_VULKAN_LIBRARY) -> str:
     """A Vulkan ICD manifest for NVIDIA's driver, for containers that mount the library but not its JSON."""
-    return '{ "file_format_version": "1.0.1", "ICD": { "library_path": "%s", "api_version": "1.4.312" } }\n' % library
+    return json.dumps({"file_format_version": "1.0.1", "ICD": {"library_path": library, "api_version": "1.4.312"}}) + "\n"
 
 
-def probe_vulkan(found: Probe, env: dict[str, str], work: Path) -> None:
+def probe_vulkan(found: Probe, env: dict[str, str]) -> None:
     section("vulkan")
     if shutil.which("apt-get") is not None:
         sudo = ["sudo"] if os.geteuid() != 0 and shutil.which("sudo") else []
@@ -131,7 +145,7 @@ def probe_vulkan(found: Probe, env: dict[str, str], work: Path) -> None:
     devices = vulkan_devices(summary)
     if not devices and NVIDIA_VULKAN_LIBRARY in run(["ldconfig", "-p"]).stdout:
         # NVIDIA containers often mount the Vulkan driver without its ICD manifest; supply one.
-        manifest = work.parent / "nvidia_icd.json"
+        manifest = Path(tempfile.mkdtemp(prefix="airaccoon-vulkan-")) / "nvidia_icd.json"
         manifest.write_text(nvidia_icd_manifest())
         env["VK_DRIVER_FILES"] = str(manifest)
         print("no Vulkan device; %s is present, retrying with VK_DRIVER_FILES=%s" % (NVIDIA_VULKAN_LIBRARY, manifest))
@@ -156,18 +170,28 @@ def ensure_dotnet(env: dict[str, str]) -> None:
     print(run(["dotnet", "--version"], env=env).stdout.strip())
 
 
-def prepare_source(work: Path, env: dict[str, str], found: Probe) -> None:
+def prepare_source(work: Path, env: dict[str, str], found: Probe) -> bool:
+    """Clones and builds the tests; False, with the failure in found.commit, when either step fails."""
     section("source")
     if not (work / ".git").is_dir():
         repo = env.get("AIRACCOON_REPO_URL", "https://github.com/Arasz/ai-raccoon.git")
         ref = env.get("AIRACCOON_REF", "main")
-        run(["git", "clone", "-q", "--depth", "1", "--branch", ref, repo, str(work)])
+        clone = run(["git", "clone", "-q", "--depth", "1", "--branch", ref, repo, str(work)])
+        if clone.returncode != 0:
+            found.commit = "clone failed: %s" % tail(clone.stdout, 1)
+            print(clone.stdout.rstrip())
+            return False
     found.commit = run(["git", "log", "--format=%h %s", "-1"], cwd=work).stdout.strip()
     print(found.commit)
     for script in ("download-embedding-model.py", "download-webgpu-core.py"):
         print(tail(run([sys.executable, "scripts/" + script], cwd=work).stdout, 1))
     (work / ".nupkg-local").mkdir(exist_ok=True)
-    print(tail(run(["dotnet", "build", "tests/AiRaccoon.Tests", "--nologo", "-v", "q"], env=env, cwd=work).stdout, 2))
+    build = run(["dotnet", "build", "tests/AiRaccoon.Tests", "--nologo", "-v", "q"], env=env, cwd=work)
+    print(tail(build.stdout, 2))
+    if build.returncode != 0:
+        found.commit += " (build failed)"
+        return False
+    return True
 
 
 def prepare_cuda(work: Path, env: dict[str, str]) -> Path | None:
@@ -184,6 +208,11 @@ def prepare_cuda(work: Path, env: dict[str, str]) -> Path | None:
     nupkg = work / ".ort-gpu.nupkg"
     url = "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.Gpu.Linux/%s" % ORT_VERSION
     urllib.request.urlretrieve(url, nupkg)
+    actual = sha256_of(nupkg)
+    if actual != ORT_GPU_NUPKG_SHA256:
+        nupkg.unlink()
+        print("%s: sha256 %s, expected %s; CUDA skipped" % (url, actual, ORT_GPU_NUPKG_SHA256))
+        return None
     native = "runtimes/linux-x64/native/"
     with zipfile.ZipFile(nupkg) as archive:
         archive.extractall(work / ".ort-gpu", [n for n in archive.namelist() if n.startswith(native)])
@@ -206,19 +235,21 @@ def main() -> int:
 
     probe_host(found)
     work.parent.mkdir(parents=True, exist_ok=True)
-    probe_vulkan(found, env, work)
+    probe_vulkan(found, env)
     ensure_dotnet(env)
-    prepare_source(work, env, found)
-    cuda_provider = prepare_cuda(work, env)
+    if prepare_source(work, env, found):
+        cuda_provider = prepare_cuda(work, env)
 
-    section("WebGPU session")
-    output = run_tests(work, env, GPU_TESTS)
-    reason = refusal_reason(output)
-    found.webgpu = test_summary(output) + (", reason: %s" % reason if reason else "")
+        section("WebGPU session")
+        output = run_tests(work, env, GPU_TESTS)
+        reason = refusal_reason(output)
+        found.webgpu = test_summary(output) + (", reason: %s" % reason if reason else "")
 
-    if cuda_provider is not None:
-        section("CUDA session")
-        found.cuda = test_summary(run_tests(work, dict(env, AIRACCOON_TEST_CUDA_LIBRARY=str(cuda_provider)), CUDA_TESTS))
+        if cuda_provider is not None:
+            section("CUDA session")
+            found.cuda = test_summary(run_tests(work, dict(env, AIRACCOON_TEST_CUDA_LIBRARY=str(cuda_provider)), CUDA_TESTS))
+    else:
+        found.cuda = "not run"
 
     section("PROBE SUMMARY")
     print("host:    %s" % found.host)

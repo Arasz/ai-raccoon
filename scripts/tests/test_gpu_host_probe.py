@@ -84,3 +84,26 @@ def test_nvidia_icd_manifest_names_the_library_and_parses_as_json():
     manifest = json.loads(probe.nvidia_icd_manifest())
     assert manifest["ICD"]["library_path"] == "libGLX_nvidia.so.0"
     assert manifest["file_format_version"] == "1.0.1"
+
+
+def test_nvidia_icd_manifest_escapes_a_library_path_json_would_reject():
+    import json
+
+    manifest = json.loads(probe.nvidia_icd_manifest('/odd "quoted" path/libGLX_nvidia.so.0'))
+    assert manifest["ICD"]["library_path"] == '/odd "quoted" path/libGLX_nvidia.so.0'
+
+
+def test_sha256_of_hashes_the_file_contents(tmp_path):
+    payload = tmp_path / "payload.bin"
+    payload.write_bytes(b"abc")
+    assert probe.sha256_of(payload) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+
+
+def test_prepare_source_records_a_failed_clone_instead_of_raising(tmp_path):
+    env = dict(probe.os.environ, AIRACCOON_REPO_URL=str(tmp_path / "no-such-repo"))
+    found = probe.Probe()
+
+    ready = probe.prepare_source(tmp_path / "work", env, found)
+
+    assert ready is False
+    assert found.commit.startswith("clone failed")
