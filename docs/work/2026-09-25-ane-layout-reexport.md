@@ -92,6 +92,19 @@ The Neural Engine rail goes from 29 mW to 1276 mW only while the export runs, an
 
 The CPU column can't be compared across windows. The machine sat at 9.8 W idle because other sessions were building in parallel, so background load swamps the difference between the windows.
 
+### F7: the ANE graph can reuse the shipped weights file and adds 5.7 MB, not 98 MB [MEASURED]
+
+`export_ane_encoder.py --share-weights-with <product dir>` (#764) writes an ANE graph with no weights of its own. Every one of its 74 fp16 weights is matched by value to a tensor in the shipped `model_fp16.onnx`. Each match is exact as stored, transposed, or transposed plus rotate_half's row permutation and sign flips. The graph then rebuilds the ANE weights from the product's own initializers, read from `model_fp16.onnx_data` at the product's offsets, using constant Transpose/Gather/Mul/Concat/Reshape nodes.
+
+- **Size:** the graph file is 5.68 MB. It stores no weights; the inline constants are the band mask (2 MB) and four RoPE tables (786 KB each). The product data file is byte-unchanged (same sha256).
+- **Folding:** ORT's basic optimizations fold every rebuild node before partitioning. The optimized graph has the same 2582 nodes as the standalone export's. One detail: the CPU EP has no fp16 `Mul` kernel to fold with, so the sign flip is written as Cast to fp32, Mul, then Cast back, which is exact.
+- **Parity:** outputs are bit-identical to the standalone ANE export on the CPU EP (max abs difference 0.0, including the 1000-token row). Against the shipped graph, CLS cosine is at least 0.9999998.
+- **CoreML:** 1 partition, 1407/1407 nodes, and 1401 (bucket 512) or 1405 (bucket 1024) ops on the Neural Engine, the same as the standalone export. The CoreML-vs-CPU CLS cosine is at least 0.999999. The compiled cache is the same size (about 200-206 MiB per bucket).
+
+The compiled model is the same, so the F3 A/B numbers carry over, and no second A/B was run. Shipping the ANE path therefore costs a 5.7 MB file next to the existing graph, plus the per-bucket compile cache (F5), and no second weights asset.
+
+Two constraints for the product. ORT refuses external data reached through a symlink out of the model directory, and `onnx.load` refuses a hard-linked data file. The shared graph therefore has to sit in the same directory as the real `model_fp16.onnx_data`, under its own name (e.g. `model_fp16_ane.onnx`).
+
 ## Method
 
 Machine: Apple M4, 24 GB. ONNX Runtime 1.30.0, torch 2.13.0, transformers 5.17.0, and the legacy TorchScript exporter at opset 17 (the dynamo exporter needs `onnxscript`, which is not installed). Weights come from `ibm-granite/granite-embedding-small-english-r2`, loaded offline.
@@ -117,4 +130,4 @@ Each config's `model_dir` points it at its own graph, which lets MLX run the shi
 
 ## Still open
 
-Tracked in #764, in order: a shared-weights export that reuses the bundled `model_fp16.onnx_data` (so no second 98 MB asset), a second-chip run (M1/M2 or M3), a direct comparison against the current macOS default (WebGPU). The `powermetrics` capture is done (F6). Only then an ADR on making `coreml` the Apple Silicon default, and the product device path.
+Tracked in #764. Done: the `powermetrics` capture (F6) and the shared-weights export (F7). Still open: a second-chip run (M1/M2 or M3), and a direct comparison against the current macOS default, WebGPU. The Python harness has no WebGPU EP. The MLX research record's F26 measured WebGPU with spinning off at 5.2-8.3 ms of CPU per 512-token embed. This export's smoke run measured about 0.8 ms per row at bucket 512. Those numbers come from different harnesses, so the gap is INFERRED; the direct A/B belongs in the product once a CoreML device exists. Only then an ADR on making `coreml` the Apple Silicon default, and the product device path.

@@ -9,8 +9,8 @@ granite-small re-exported in fp16 in the `ml-ane-transformers` layout (#760) run
 partition with about 1405 of 1407 ops on the Neural Engine. With 256-token buckets it clears all
 three gates below. It costs 6-8% of MLX's CPU-seconds, every repeat under every MLX repeat. Peak
 phys+neural is 0.49-0.57 GiB, and the compiled cache is 808 MiB. Recall is unchanged. The decision
-below still stands for the shipped graph: nothing ships until a new ADR weighs the extra 98 MB fp16
-asset, a first-use compile of 18-28 s per bucket, and the cache. `powermetrics` confirms dispatch: the
+below still stands for the shipped graph: nothing ships until a new ADR weighs the extra graph
+file (5.7 MB, since the ANE graph can read the shipped weights file, F7), a first-use compile of 18-28 s per bucket, and the cache. `powermetrics` confirms dispatch: the
 Neural Engine rail draws 1276 mW while the export runs, against 29 mW idle. Evidence: `docs/work/2026-09-25-ane-layout-reexport.md`.
 
 Research: `docs/work/2026-09-25-coreml-ane-buckets-and-residency.md`
