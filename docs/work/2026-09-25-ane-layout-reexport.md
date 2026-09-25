@@ -5,7 +5,7 @@
 **Follows:** `docs/work/2026-09-25-coreml-ane-buckets-and-residency.md` and ADR-0117.
 **Question:** ADR-0117 named one lever that could flip its verdict, an `apple/ml-ane-transformers`-style re-export of the bundled encoder. Does that re-export, run through the ONNX Runtime CoreML EP, clear ADR-0117's three re-open gates?
 
-**Answer:** Yes, at 256-token buckets, and by a wide margin on CPU. The fp16 re-export in the Neural Engine layout loads as one CoreML partition, and CoreML places 1401 to 1405 of its roughly 1407 ops on the Neural Engine. Against the MLX reference (64-token buckets, 512 MiB cache cap, 3 threads) it costs 6% to 8% of MLX's CPU-seconds on the same 200 rows. Every repeat was cheaper than every MLX repeat. Its peak phys+neural footprint is 0.49 to 0.57 GiB, and its compiled cache is 808 MiB on disk. Recall matches the CPU baseline to the third decimal on all four eval arms. Two things are still open. The first is a `powermetrics` confirmation of dispatch, which needs `sudo`. The second is whether the product should ship it: that is a decision for the owner, and it carries real costs, listed under F5.
+**Answer:** Yes, at 256-token buckets, and by a wide margin on CPU. The fp16 re-export in the Neural Engine layout loads as one CoreML partition, and CoreML places 1401 to 1405 of its roughly 1407 ops on the Neural Engine. Against the MLX reference (64-token buckets, 512 MiB cache cap, 3 threads) it costs 6% to 8% of MLX's CPU-seconds on the same 200 rows. Every repeat was cheaper than every MLX repeat. Its peak phys+neural footprint is 0.49 to 0.57 GiB, and its compiled cache is 808 MiB on disk. Recall matches the CPU baseline to the third decimal on all four eval arms. `powermetrics` confirms the dispatch: Neural Engine power is 1276 mW while the export runs, against 29 mW idle (F6). What remains open is whether the product should ship it. That is a decision for the owner, and it carries real costs, listed under F5.
 
 ```chart:bars
 title: CPU-seconds per 200 rows (100 long + 100 short), mean of 3 repeats
@@ -77,7 +77,20 @@ The CPU baseline ran on 4 threads and CoreML on 1. The CoreML arm reused the com
 - **Disk.** At step256 the compiled cache adds 808 MiB for four buckets. The re-exported weights add 97.6 MB, since the MLX and CPU paths still need the shipped graph, so a second fp16 graph would ship next to it.
 - **Tail latency.** p95 is about 57 ms, flat across steps, against MLX's 76-91 ms under the same load. Rows past 768 tokens pay the full 1024 bucket.
 - **A known fp16 overflow.** On a 1000-token row, the ANE layer norm's centered squares reach about 3.2e6, well past fp16's 65504. The exporter computes the norm's statistics on x/64, and a torch-half test on the 1000-token row goes red without that scaling. CoreML ran the unscaled graph without overflowing (cosine 0.999977), which suggests it does not square in fp16 literally [INFERRED]. The ORT CPU EP can't catch this class of bug either, because it upcasts fp16 graphs.
-- **Dispatch is not confirmed by `powermetrics`** [UNVERIFIED]. The evidence for Neural Engine execution is the compute plan (1401-1405 ops on the Neural Engine), a neural footprint of 371 MiB and up, and host CPU per row under 1 ms. `powermetrics` needs `sudo`, which this session did not have.
+
+### F6: powermetrics confirms the work runs on the Neural Engine [MEASURED]
+
+This is `scripts/retrieval_tuning/ane_powermetrics.py`, run by the owner with `sudo` on 2026-09-25. It samples every 500 ms over three windows, with every bucket compiled before sampling starts. Raw data: `docs/work/coreml-ab/powermetrics/`.
+
+| window | rows embedded | ANE power | CPU power | GPU power |
+|---|---|---|---|---|
+| idle, 10 s | 0 | 29 mW | 9808 mW | 65 mW |
+| ANE export on CoreML (`CPUAndNeuralEngine`), 30 s | 887 | **1276 mW** | 7709 mW | 88 mW |
+| shipped graph on the CPU EP, 1 thread, 30 s | 46 | 1 mW | 8365 mW | 88 mW |
+
+The Neural Engine rail goes from 29 mW to 1276 mW only while the export runs, and it stays dark on the CPU path. That settles dispatch. The CoreML window also embedded 19x the rows of the CPU window in the same time.
+
+The CPU column can't be compared across windows. The machine sat at 9.8 W idle because other sessions were building in parallel, so background load swamps the difference between the windows.
 
 ## Method
 
@@ -104,4 +117,4 @@ Each config's `model_dir` points it at its own graph, which lets MLX run the shi
 
 ## Still open
 
-Tracked in #764, in order: a shared-weights export that reuses the bundled `model_fp16.onnx_data` (so no second 98 MB asset), a second-chip run (M1/M2 or M3), a direct comparison against the current macOS default (WebGPU), and a `powermetrics` capture (`scripts/retrieval_tuning/ane_powermetrics.py`, which asks for `sudo` only for `powermetrics` and writes its samples to `/tmp/ai-raccoon-powermetrics/`). Only then an ADR on making `coreml` the Apple Silicon default, and the product device path.
+Tracked in #764, in order: a shared-weights export that reuses the bundled `model_fp16.onnx_data` (so no second 98 MB asset), a second-chip run (M1/M2 or M3), a direct comparison against the current macOS default (WebGPU). The `powermetrics` capture is done (F6). Only then an ADR on making `coreml` the Apple Silicon default, and the product device path.
