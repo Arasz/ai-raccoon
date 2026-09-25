@@ -71,8 +71,8 @@ dispatcher is not the last word on this.
   small a fraction of the graph to be worth measuring further.
 - **Coarser buckets or an LRU cap on live sessions**, to bring CoreML's memory and disk cost down.
   Measured in F3: the cheapest combination found, 128-token buckets with every session kept live,
-  still costs 7.1x-8.5x MLX's CPU-seconds and its own compiled cache alone exceeds the 1 GB disk
-  ceiling. An LRU cap lowers memory further but raises CPU cost, since an evicted session has to
+  still costs 7.3x-7.7x MLX's CPU-seconds and its own compiled cache alone exceeds the 1 GB disk
+  ceiling. An LRU cap lowers memory further but raises CPU cost and latency, since an evicted session has to
   recompile or reload on its next row. Neither tuning direction clears the bar even at its best
   setting.
 - **A native `coremltools` plus Objective-C++ shim**, bypassing ONNX Runtime's CoreML EP entirely.

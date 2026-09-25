@@ -4,15 +4,15 @@
 **Follows:** `docs/work/2026-09-25-mlx-cache-limit-and-buckets.md` (ADR-0114) and the CoreML EP harness merged in #756.
 **Questions:** (1) Can the CoreML execution provider run the bundled model at all, and what had to be fixed first? (2) How does it perform against MLX across memory combinations, bucket step times session residency, on CPU, latency, memory and disk? (3) Does it actually use the Neural Engine? (4) Could we use an NPU anywhere else?
 
-**Answer:** CoreML stays out. The Neural Engine only runs through Core ML, and Core ML's `CPUAndNeuralEngine` path does compile and answer once two CoreML-specific bugs and one ORT-wide setting are fixed: a missing free-dimension override on the attention mask, a compiled-model cache shared across bucket shapes, and ORT's own thread spinning, which doubles CPU per row on every device, not CoreML alone. Fixed, it works. It also loses, badly. Across every memory-residency combination measured, CoreML costs 7.1x to 17.8x MLX's CPU-seconds per hundred rows and at least 2.3x its memory footprint, worse again once the compiled-cache disk cost is counted. The pre-registered E0 rule, written into the plan before a single row ran, called this outcome without ambiguity: every CoreML repeat used more CPU-seconds than every MLX repeat, at both thread counts tried. The residency sweep adds a second reason to stay out. The Neural Engine's own memory footprint climbs to about 288 MiB by 640 tokens, then collapses to about 8 MiB once chunks pass 704 tokens, while the process's physical footprint keeps climbing past 6 GiB at the top bucket. Something is still running those long shapes, and it looks like CPU, not ANE. Windows and Linux NPUs stay unmeasured here; OpenVINO's fp16 NPU path is the one candidate this record has not already ruled out on cosine grounds.
+**Answer:** CoreML stays out. The Neural Engine only runs through Core ML, and Core ML's `CPUAndNeuralEngine` path does compile and answer once two CoreML-specific bugs and one ORT-wide setting are fixed: a missing free-dimension override on the attention mask, a compiled-model cache shared across bucket shapes, and ORT's own thread spinning, which doubles CPU per row on every device, not CoreML alone. Fixed, it works. It also loses, badly. Across every memory-residency combination measured, CoreML costs 7.3x to 16.1x MLX's CPU-seconds per hundred rows and at least 2.2x its memory footprint, worse again once the compiled-cache disk cost is counted. The pre-registered E0 rule, written into the plan before a single row ran, called this outcome without ambiguity: every CoreML repeat used more CPU-seconds than every MLX repeat, at both thread counts tried. The residency sweep adds a second reason to stay out. The Neural Engine's own memory footprint climbs to about 288 MiB by 640 tokens, then collapses to about 8 MiB once chunks pass 704 tokens, while the process's physical footprint keeps climbing past 6 GiB at the top bucket. Something is still running those long shapes, and it looks like CPU, not ANE. Windows and Linux NPUs stay unmeasured here; OpenVINO's fp16 NPU path is the one candidate this record has not already ruled out on cosine grounds.
 
 ```chart:bars
 title: CPU-seconds per 100 long rows, memory-residency configs
-MLX x64 cap512 (ref): 1.5
-CoreML step128 all-live: 11.9
-CoreML step128 LRU4: 16.7
-CoreML step64 all-live: 16.2
-CoreML step64 LRU4: 24.7
+MLX x64 cap512 (ref): 1.6
+CoreML step128 all-live: 12.2
+CoreML step128 LRU4: 20.7
+CoreML step64 all-live: 16.7
+CoreML step64 LRU4: 26.4
 ```
 
 ## Findings
@@ -44,26 +44,21 @@ The plan wrote its stop rule before this table existed: if every CoreML repeat's
 
 ### F3: Every memory-residency combination costs more, not less [MEASURED]
 
-| config | CPU-s / 100 rows | p50 ms | peak phys+neural |
-|---|---|---|---|
-| MLX x64 cap512 t3 (ref) | 1.42-1.65 | 47.6-47.7 | 1.09-1.11 GiB |
-| CoreML step64 all-live | 15.77-16.63 | 169-175 | 5.85-6.07 GiB |
-| CoreML step64 LRU4 | 24.23-25.25 | 140-143† | 2.78-2.92 GiB |
-| CoreML step128 all-live | 11.68-12.12 | 134-137 | 2.72-2.86 GiB |
-| CoreML step128 LRU4 | 15.87-17.52 | 132-145† | 2.58-2.60 GiB |
+| config | CPU-s / 100 rows | p50 ms | p95 ms | peak phys+neural |
+|---|---|---|---|---|
+| MLX x64 cap512 t3 (ref) | 1.46-1.81 | 41-65 | 54-126 | 1.11-1.13 GiB |
+| CoreML step64 all-live | 15.71-17.63 | 168-184 | 251-326 | 5.88-6.12 GiB |
+| CoreML step64 LRU4 | 23.62-29.24 | 277-335 | 457-615 | 2.98-3.09 GiB |
+| CoreML step128 all-live | 11.22-13.23 | 129-145 | 173-244 | 2.70-2.86 GiB |
+| CoreML step128 LRU4 | 16.06-25.32 | 164-246 | 405-632 | 2.56-2.63 GiB |
 
-<!-- RERUN-LRU -->
-† The two LRU rows' p50 (and p95, in the underlying JSON) exclude time spent rebuilding an evicted
-session: `Engine.embed`'s timer started after the session lookup, so a mid-pass rebuild's wall time
-fell outside the window it measured. That timer-order bug is fixed in this PR; CPU-s is unaffected
-(it wraps the whole timed loop, not one row), but these two latency ranges are optimistic pending a
-re-run of this sweep.
+Per-row latency here includes any session rebuild the row triggers. An earlier run of this sweep started the timer after the session lookup, which left rebuilds out and made the two LRU rows look faster than keeping every session live; that harness bug was fixed and the whole sweep re-run. With rebuilds counted, an LRU cap is slower as well as more CPU-hungry: the step-64 LRU median is 277-335 ms against 168-184 ms with every session live.
 
-None of the four CoreML configurations beats the MLX reference on CPU cost; the JSON's own `beats_reference` field says so for all four. Paired against the same rotation, the cheapest option (128-token buckets, all sessions kept live) still costs 7.1x-8.5x MLX's CPU-seconds; the most expensive (64-token buckets under a 4-session LRU cap) costs 14.6x-17.8x.
+None of the four CoreML configurations beats the MLX reference on CPU cost; the JSON's own `beats_reference` field says so for all four. Paired against the same rotation, the cheapest option (128-token buckets, all sessions kept live) still costs 7.3x-7.7x MLX's CPU-seconds; the most expensive (64-token buckets under a 4-session LRU cap) costs 16.1x-16.1x.
 
-Coarsening the bucket step from 64 to 128 tokens is the biggest single lever measured here, and its size depends on residency mode. Under all-live residency it roughly halves memory (5.96 GiB to 2.79 GiB) while cutting CPU cost by about a quarter (16.2 to 11.9 CPU-seconds). The memory win shrinks once a session cap is in place: step64-LRU4 to step128-LRU4 only saves memory from 2.85 GiB to 2.59 GiB, because capping live sessions at four already bounds most of step64's excess before the coarser step gets a chance to help. An LRU cap makes CPU cost worse, not better, at either step, because evicting a session means recompiling it, or at minimum reloading its compiled cache, on the next row that needs it (114 evictions at step 64, 41 at step 128, across 200 embeds - the untimed warm-up plus the timed pass - and 12 or 6 distinct buckets touched).
+Coarsening the bucket step from 64 to 128 tokens is the biggest single lever measured here, and its size depends on residency mode. Under all-live residency it roughly halves memory (6.00 GiB to 2.78 GiB) while cutting CPU cost by about a quarter (16.7 to 12.2 CPU-seconds). The memory win shrinks once a session cap is in place: step64-LRU4 to step128-LRU4 only saves memory from 3.04 GiB to 2.60 GiB, because capping live sessions at four already bounds most of step64's excess before the coarser step gets a chance to help. An LRU cap makes CPU cost and latency worse, not better, at either step, because evicting a session means recompiling it, or at minimum reloading its compiled cache, on the next row that needs it (114 evictions at step 64, 46 at step 128, across 200 embeds - the untimed warm-up plus the timed pass - and 12 or 6 distinct buckets touched).
 
-Memory tells the same story from a different angle. Even the cheapest config costs at least 2.3x the MLX reference's footprint, and touching all 12 buckets in the step-64 all-live run leaves about 2.20 GiB of compiled models on disk, over twice the 1 GB ceiling the plan set for a shipped config. Step-128's own disk cost, 1.10 GiB, already exceeds that same ceiling too, but by the smallest margin of anything measured in this record: about 10% over, against CPU cost missing by 7-9x and footprint by more than 2x. Of the three go/no-go gates, disk is the one that came closest to clearing, and it still didn't.
+Memory tells the same story from a different angle. Even the cheapest config costs at least 2.2x the MLX reference's footprint, and touching all 12 buckets in the step-64 all-live run leaves about 2.20 GiB of compiled models on disk, over twice the 1 GB ceiling the plan set for a shipped config. Step-128's own disk cost, 1.10 GiB, already exceeds that same ceiling too, but by the smallest margin of anything measured in this record: about 10% over, against CPU cost missing by 7-9x and footprint by more than 2x. Of the three go/no-go gates, disk is the one that came closest to clearing, and it still didn't.
 
 **Evidence:** `docs/work/coreml-ab/memory-combinations.json` (`summary.beats_reference`, `summary.paired_ratio_over_reference`, `sessions_live_peak`, `evictions`, `cache_disk_kib`).
 
