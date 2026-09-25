@@ -42,3 +42,20 @@ MLX_WHEEL_URL = (
 )
 MLX_WHEEL_SHA256 = "6ce838e9c39b799a122a6cf022c93dfb6c6f74540825acf49ece913621a7fda3"
 MLX_RUNTIME_FILES = ("libonnxruntime_mlx_ep.dylib", "libmlx.dylib", "libmlxc.dylib", "mlx.metallib")
+
+# ADR-0115: ONNX Runtime's own onnxruntime-node build of the core, which has WebGPU compiled in for
+# Windows and glibc Linux x64 (the NuGet core does not). Same ORT release and commit as the managed
+# package; only the native core and Dawn's DirectX shader compiler are taken, never the Node binding.
+WEBGPU_CORE_TARBALL_NAME = "onnxruntime-node-1.30.0.tgz"
+WEBGPU_CORE_TARBALL_URL = "https://registry.npmjs.org/onnxruntime-node/-/" + WEBGPU_CORE_TARBALL_NAME
+WEBGPU_CORE_TARBALL_SHA256 = "6e3390d6b783e7be946fad629292799da28d0b42f84856e50d2c1b0383291e75"
+# RID -> (directory inside the tarball, ((member, file name the tool loads), ...)).
+WEBGPU_CORE_FILES = {
+    "linux-x64": ("package/bin/napi-v6/linux/x64", (("libonnxruntime.so.1", "libonnxruntime.so"),)),
+    "win-x64": ("package/bin/napi-v6/win32/x64", (("onnxruntime.dll", "onnxruntime.dll"),
+                                                   ("dxcompiler.dll", "dxcompiler.dll"),
+                                                   ("dxil.dll", "dxil.dll"))),
+    "win-arm64": ("package/bin/napi-v6/win32/arm64", (("onnxruntime.dll", "onnxruntime.dll"),
+                                                       ("dxcompiler.dll", "dxcompiler.dll"),
+                                                       ("dxil.dll", "dxil.dll"))),
+}

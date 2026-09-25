@@ -1,0 +1,44 @@
+<Project>
+
+    <!-- ADR-0115: on win-x64, win-arm64 and linux-x64 the build ships ONNX Runtime's WebGPU-enabled core
+         (fetched by scripts/download-webgpu-core.py) in place of the NuGet core: same file name, same
+         destination, so the plain `onnxruntime` import finds it under JIT probing, Native AOT's lazy
+         binding or a DirectPInvoke alike, with no runtime resolver. On Windows Dawn's shader compiler
+         (dxcompiler.dll, dxil.dll) goes beside it. RIDs without a fetched core keep the NuGet core. -->
+    <PropertyGroup>
+        <WebGpuCoreRoot>$(MSBuildThisFileDirectory)src/AiRaccoon/webgpu-core</WebGpuCoreRoot>
+    </PropertyGroup>
+
+    <Target Name="UseWebGpuCore" AfterTargets="ResolvePackageAssets" Condition="Exists('$(WebGpuCoreRoot)')">
+        <ItemGroup>
+            <!-- A RID-specific build: the core is copied to the output root. -->
+            <_NuGetOrtCore Include="@(NativeCopyLocalItems)"
+                           Condition="'%(NativeCopyLocalItems.NuGetPackageId)' == 'Microsoft.ML.OnnxRuntime'
+                                      And ('%(Filename)%(Extension)' == 'libonnxruntime.so' Or '%(Filename)%(Extension)' == 'onnxruntime.dll')
+                                      And Exists('$(WebGpuCoreRoot)/$(RuntimeIdentifier)/%(Filename)%(Extension)')"/>
+            <NativeCopyLocalItems Remove="@(_NuGetOrtCore)"/>
+            <NativeCopyLocalItems Include="@(_NuGetOrtCore->'$(WebGpuCoreRoot)/$(RuntimeIdentifier)/%(Filename)%(Extension)')"/>
+            <NativeCopyLocalItems Include="@(_NuGetOrtCore->'$(WebGpuCoreRoot)/$(RuntimeIdentifier)/dxcompiler.dll')"
+                                  DestinationSubPath="dxcompiler.dll" Condition="'%(Extension)' == '.dll'"/>
+            <NativeCopyLocalItems Include="@(_NuGetOrtCore->'$(WebGpuCoreRoot)/$(RuntimeIdentifier)/dxil.dll')"
+                                  DestinationSubPath="dxil.dll" Condition="'%(Extension)' == '.dll'"/>
+
+            <!-- ORT's props also copy the NuGet win-x64 onnxruntime.dll to the output root for any x64 build
+                 (a .NET Framework convenience); on a Windows RID that copy would overwrite the core above. -->
+            <None Remove="@(None)" Condition="'%(None.Link)' == 'onnxruntime.dll' And Exists('$(WebGpuCoreRoot)/$(RuntimeIdentifier)/onnxruntime.dll')"/>
+
+            <!-- A RID-less build (tests, dev): each RID's core goes under runtimes/<rid>/native/. -->
+            <_NuGetOrtRuntimeCore Include="@(RuntimeTargetsCopyLocalItems)"
+                                  Condition="'%(RuntimeTargetsCopyLocalItems.NuGetPackageId)' == 'Microsoft.ML.OnnxRuntime'
+                                             And ('%(Filename)%(Extension)' == 'libonnxruntime.so' Or '%(Filename)%(Extension)' == 'onnxruntime.dll')
+                                             And Exists('$(WebGpuCoreRoot)/%(RuntimeIdentifier)/%(Filename)%(Extension)')"/>
+            <RuntimeTargetsCopyLocalItems Remove="@(_NuGetOrtRuntimeCore)"/>
+            <RuntimeTargetsCopyLocalItems Include="@(_NuGetOrtRuntimeCore->'$(WebGpuCoreRoot)/%(RuntimeIdentifier)/%(Filename)%(Extension)')"/>
+            <RuntimeTargetsCopyLocalItems Include="@(_NuGetOrtRuntimeCore->'$(WebGpuCoreRoot)/%(RuntimeIdentifier)/dxcompiler.dll')"
+                                          DestinationSubPath="runtimes/%(RuntimeIdentifier)/native/dxcompiler.dll" Condition="'%(Extension)' == '.dll'"/>
+            <RuntimeTargetsCopyLocalItems Include="@(_NuGetOrtRuntimeCore->'$(WebGpuCoreRoot)/%(RuntimeIdentifier)/dxil.dll')"
+                                          DestinationSubPath="runtimes/%(RuntimeIdentifier)/native/dxil.dll" Condition="'%(Extension)' == '.dll'"/>
+        </ItemGroup>
+    </Target>
+
+</Project>

@@ -84,3 +84,7 @@ src/AiRaccoon/Models/granite-embedding-small-english-r2/model_fp16.onnx_data
 # ADR-0110: the opt-in MLX execution provider's native runtime is fetched by
 # scripts/download-mlx-runtime.py, never committed (osx-arm64 pack only).
 src/AiRaccoon/mlx-runtime/
+
+# ADR-0115: the WebGPU-enabled ONNX Runtime core is fetched by scripts/download-webgpu-core.py,
+# never committed (win-x64, win-arm64, linux-x64 packs).
+src/AiRaccoon/webgpu-core/
