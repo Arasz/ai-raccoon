@@ -212,7 +212,7 @@ curl -fsSL https://raw.githubusercontent.com/Arasz/ai-raccoon/main/scripts/gpu-h
 ```
 
 It prints the GPU, driver and Vulkan devices, builds the tests, installs the CUDA 13 runtime
-wheels and the `1.30.0` CUDA provider, then runs the WebGPU session test and the CUDA session test with `AIRACCOON_TEST_CUDA_LIBRARY` set. The
+wheels and the `1.30.0` CUDA provider, then runs the WebGPU session test (which, with the plugin off, confirms the refusal) and the CUDA session test with `AIRACCOON_TEST_CUDA_LIBRARY` set. The
 closing `PROBE SUMMARY` block says which paths ran and, for a WebGPU fallback, why.
 
 ### Recipe 2: Configure OpenAI embeddings
