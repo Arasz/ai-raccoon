@@ -195,3 +195,10 @@ def test_re_export_into_the_same_dir_does_not_grow_the_weights_file(exported) ->
     _load_cli().export_model_dir(layout, out, MAX_LEN, dtype)
 
     assert data.stat().st_size == size_before
+
+
+def test_manifest_context_window_is_clamped_to_the_export_max_len(exported) -> None:
+    _, _, out = exported
+    manifest = json.loads((out / "ai-raccoon.manifest.json").read_text())
+
+    assert manifest["contextWindowTokens"] == MAX_LEN
