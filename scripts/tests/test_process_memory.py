@@ -31,3 +31,21 @@ def test_rusage_struct_matches_the_sdk_size() -> None:
     from retrieval_tuning.process_memory import _RusageInfoV4
 
     assert ctypes.sizeof(_RusageInfoV4) == 296
+
+
+def test_v6_rusage_struct_matches_the_sdk_size() -> None:
+    # sizeof(struct rusage_info_v6): v4's 296 + 15 new fields + 6 reserved, all uint64.
+    from retrieval_tuning.process_memory import _RusageInfoV6
+
+    assert ctypes.sizeof(_RusageInfoV6) == 464
+
+
+def test_neural_footprint_and_energy_are_populated_on_darwin() -> None:
+    import sys
+
+    sample = memory_kib()
+
+    if sys.platform != "darwin":
+        return
+    assert sample.neural_footprint_peak >= sample.neural_footprint >= 0
+    assert sample.energy_nj >= 0

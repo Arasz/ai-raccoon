@@ -1,0 +1,40 @@
+2026-09-25 15:05:16.545 python[79991:2301494] Operation: ios18.gather, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.936996
+2026-09-25 15:05:16.545 python[79991:2301494] Operation: ios18.layer_norm, Device Usage: <MLNeuralEngineComputeDevice: 0x7bc3db07f0>, Estimated Cost: 0.006002
+2026-09-25 15:05:16.545 python[79991:2301494] Operation: ios18.matmul, Device Usage: <MLNeuralEngineComputeDevice: 0x7bc3db07f0>, Estimated Cost: 0.008252
+2026-09-25 15:05:16.545 python[79991:2301494] Operation: ios18.reshape, Device Usage: <MLNeuralEngineComputeDevice: 0x7bc3db07f0>, Estimated Cost: 0.006002
+2026-09-25 15:05:16.545 python[79991:2301494] Operation: split, Device Usage: <MLNeuralEngineComputeDevice: 0x7bc3db07f0>, Estimated Cost: 0.004501
+2026-09-25 15:05:16.545 python[79991:2301494] Operation: ios18.mul, Device Usage: <MLNeuralEngineComputeDevice: 0x7bc3db07f0>, Estimated Cost: 0.005520
+2026-09-25 15:05:16.545 python[79991:2301494] Operation: ios18.matmul, Device Usage: <MLNeuralEngineComputeDevice: 0x7bc3db07f0>, Estimated Cost: 0.008252
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: ios18.reshape, Device Usage: <MLNeuralEngineComputeDevice: 0x7bc3db07f0>, Estimated Cost: 0.006002
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: split, Device Usage: <MLNeuralEngineComputeDevice: 0x7bc3db07f0>, Estimated Cost: 0.004501
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: ios18.mul, Device Usage: <MLNeuralEngineComputeDevice: 0x7bc3db07f0>, Estimated Cost: 0.005520
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: ios18.matmul, Device Usage: <MLNeuralEngineComputeDevice: 0x7bc3db07f0>, Estimated Cost: 0.008252
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: ios18.expand_dims, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.000038
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: ios18.cast, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.000023
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: select, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.000014
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: ios18.cast, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.000028
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: ios18.sub, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.000027
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: ios18.mul, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.000050
+2026-09-25 15:05:16.546 python[79991:2301494] Operation: ios18.expand_dims, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.000019
+2026-09-25 15:05:16.677 python[79991:2301432] 2026-09-25 15:05:16.677771 [V:onnxruntime:, base_op_builder.cc:22 AddToModelBuilder] Operator name: [/model/layers.0/attn/k_rotary/rotated_input] type: [Concat] was added
+2026-09-25 15:05:16.677 python[79991:2301432] 2026-09-25 15:05:16.677802 [V:onnxruntime:, base_op_builder.cc:22 AddToModelBuilder] Operator name: [/model/layers.0/attn/k_rotary/term2_mul] type: [Mul] was added
+2026-09-25 15:05:16.677 python[79991:2301432] 2026-09-25 15:05:16.677840 [V:onnxruntime:, base_op_builder.cc:22 AddToModelBuilder] Operator name: [/model/layers.0/attn/k_rotary/rotated_output] type: [Add] was added
+2026-09-25 15:05:16.677 python[79991:2301432] 2026-09-25 15:05:16.677862 [V:onnxruntime:, base_op_builder.cc:22 AddToModelBuilder] Operator name: [/model/layers.0/attn/k_rotary/final_reshape] type: [Reshape] was added
+2026-09-25 15:05:16.677 python[79991:2301432] 2026-09-25 15:05:16.677876 [V:onnxruntime:, base_op_builder.cc:22 AddToModelBuilder] Operator name: [/model/layers.0/attn/q_rotary/rotated_input] type: [Concat] was added
+2026-09-25 15:05:16.677 python[79991:2301432] 2026-09-25 15:05:16.677887 [V:onnxruntime:, base_op_builder.cc:22 AddToModelBuilder] Operator name: [/model/layers.0/attn/q_rotary/term2_mul] type: [Mul] was added
+2026-09-25 15:05:16.677 python[79991:2301432] 2026-09-25 15:05:16.677896 [V:onnxruntime:, base_op_builder.cc:22 AddToModelBuilder] Operator name: [/model/layers.0/attn/q_rotary/rotated_output] type: [Add] was added
+2026-09-25 15:05:16.677 python[79991:2301432] 2026-09-25 15:05:16.677908 [V:onnxruntime:, base_op_builder.cc:22 AddToModelBuilder] Operator name: [/model/layers.0/attn/q_rotary/final_reshape] type: [Reshape] was added
+2026-09-25 15:05:16.677 python[79991:2301432] 2026-09-25 15:05:16.677919 [V:onnxruntime:, base_op_builder.cc:22 AddToModelBuilder] Operator name: [/model/global_attn_mask/Tile] type: [Tile] was added
+2026-09-25 15:05:16.677 python[79991:2301432] 2026-09-25 15:05:16.677928 [V:onnxruntime:, base_op_builder.cc:22 AddToModelBuilder] Operator name: [/model/local_attn_mask/where_combined] type: [Where] was added
+2026-09-25 15:05:16.678 python[79991:2301432] 2026-09-25 15:05:16.678142 [I:onnxruntime:, model_builder.cc:1127 SaveModel] Writing CoreML Model to /var/folders/k9/gxjyv0q50tn0_sngj8zg30140000gn/T/onnxruntime-73CA0635-8858-4A44-AB46-C59C871FC4CB-79991-000001D2176B8062/Data/com.microsoft.OnnxRuntime/model.mlmodel
+2026-09-25 15:05:16.799 python[79991:2301500] profile function : main
+2026-09-25 15:05:16.799 python[79991:2301500] Operation: ios18.concat, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.060412
+2026-09-25 15:05:16.799 python[79991:2301500] Operation: ios18.mul, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.065446
+2026-09-25 15:05:16.799 python[79991:2301500] Operation: ios18.add, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.065795
+2026-09-25 15:05:16.799 python[79991:2301500] Operation: ios18.reshape, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.022841
+2026-09-25 15:05:16.799 python[79991:2301500] Operation: ios18.concat, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.060412
+2026-09-25 15:05:16.799 python[79991:2301500] Operation: ios18.mul, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.065446
+2026-09-25 15:05:16.799 python[79991:2301500] Operation: ios18.add, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.065795
+2026-09-25 15:05:16.799 python[79991:2301500] Operation: ios18.reshape, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.022841
+2026-09-25 15:05:16.799 python[79991:2301500] Operation: tile, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.197951
+2026-09-25 15:05:16.799 python[79991:2301500] Operation: select, Device Usage: <MLCPUComputeDevice: 0x7bc3db0af0>, Estimated Cost: 0.373061
