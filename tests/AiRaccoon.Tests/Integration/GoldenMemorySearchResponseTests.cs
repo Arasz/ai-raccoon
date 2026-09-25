@@ -102,9 +102,9 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
         var response = await tools.Search("acme", "quick fox", sessionId: "sess-test", kind: "memory",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        var captured = NormalizeCorrelationId(JsonSerializer.SerializeToNode(response, JsonOptions)!.AsObject());
-        var golden = JsonNode.Parse(await File.ReadAllTextAsync(TestData.RepoFile(GoldenRelativePath),
-            TestContext.Current.CancellationToken))!.AsObject();
+        var captured = RoundCosines(NormalizeCorrelationId(JsonSerializer.SerializeToNode(response, JsonOptions)!.AsObject()));
+        var golden = RoundCosines(JsonNode.Parse(await File.ReadAllTextAsync(TestData.RepoFile(GoldenRelativePath),
+            TestContext.Current.CancellationToken))!.AsObject());
 
         captured.ToJsonString(JsonOptions).ShouldBe(golden.ToJsonString(JsonOptions),
             "the pre-kind memory_search envelope must still match the committed golden file (modulo Meta.CorrelationId) — " +
@@ -131,6 +131,41 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
         // the thing doing the work.
         json.ShouldNotContain("\"warning\"");
         json.ShouldNotContain("\"code\"");
+    }
+
+    /// <summary>Rounds every <c>cosine</c> to 6 decimals: its last bits differ between CPU architectures' vector kernels.</summary>
+    private static JsonObject RoundCosines(JsonObject envelope)
+    {
+        Round(envelope);
+        return envelope;
+
+        static void Round(JsonNode? node)
+        {
+            switch (node)
+            {
+                case JsonObject obj:
+                    foreach (var (key, child) in obj.ToList())
+                    {
+                        if (key == "cosine" && child is JsonValue value && value.TryGetValue<double>(out var cosine))
+                        {
+                            obj[key] = Math.Round(cosine, 6);
+                        }
+                        else
+                        {
+                            Round(child);
+                        }
+                    }
+
+                    break;
+                case JsonArray array:
+                    foreach (var child in array)
+                    {
+                        Round(child);
+                    }
+
+                    break;
+            }
+        }
     }
 
     private static JsonObject NormalizeCorrelationId(JsonObject envelope)

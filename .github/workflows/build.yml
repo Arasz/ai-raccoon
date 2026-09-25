@@ -322,6 +322,62 @@ jobs:
           path: dumps/
           if-no-files-found: ignore
 
+  build-arm64:
+    # linux-arm64 is a shipped RID that no other job runs on. GitHub's arm64 runners are free for
+    # public repositories and have no GPU. Not a required check: a red here reports an arm64
+    # difference without blocking merges while the lane earns trust.
+    needs: changes
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      MSBUILDDISABLENODEREUSE: 1
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
+    steps:
+      - name: Skip (doc-only change)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code-relevant paths changed; skipping build and tests."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: needs.changes.outputs.code == 'true'
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: needs.changes.outputs.code == 'true'
+        with:
+          global-json-file: global.json
+      - name: Cache the bundled model weights (ADR-0108)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/Models/granite-embedding-small-english-r2/model_fp16.onnx_data
+          key: bundled-granite-small-fp16-28d16e29cd623f25
+      - name: Fetch and verify the bundled model
+        if: needs.changes.outputs.code == 'true'
+        run: python3 scripts/download-embedding-model.py
+      - name: Cache the MLX runtime (ADR-0110)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/mlx-runtime
+          key: mlx-runtime-onnxruntime-ep-mlx-0.29.6-6ce838e9c39b799a
+      - name: Fetch and verify the MLX runtime
+        if: needs.changes.outputs.code == 'true'
+        run: python3 scripts/download-mlx-runtime.py
+      - name: Build
+        if: needs.changes.outputs.code == 'true'
+        run: mkdir -p .nupkg-local && dotnet build --nologo
+      - name: Fast tests
+        if: needs.changes.outputs.code == 'true'
+        run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Fast&Performance!=Benchmark" --no-build -v m
+      - name: Slow tests (integration + E2E)
+        if: needs.changes.outputs.code == 'true'
+        run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Slow&Performance!=Benchmark" --no-build -v m
+      - name: Upload test stderr log
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: build-arm64-test-stderr
+          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          if-no-files-found: ignore
+
   scripts-harness:
     # The only CI coverage for scripts/tests: the `changes.code` filter above
     # matches dotnet/docs paths only, so the dotnet lanes skip scripts-only

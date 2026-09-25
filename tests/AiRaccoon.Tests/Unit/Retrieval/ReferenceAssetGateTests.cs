@@ -7,7 +7,7 @@ namespace AiRaccoon.Tests.Unit.Retrieval;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ReferenceAssetManifestTests
 {
-    private static readonly string[] SupportedPlatforms = ["osx-arm64", "linux-x64"];
+    private static readonly string[] SupportedPlatforms = ["osx-arm64", "linux-x64", "linux-arm64"];
 
     [Fact]
     public void Manifest_PinsTheReferenceExtensionVersionsForEverySupportedPlatform()
@@ -57,6 +57,7 @@ public sealed class ReferenceAssetManifestTests
         {
             "osx-arm64" => "macos-arm64",
             "linux-x64" => "linux-x86_64",
+            "linux-arm64" => "linux-arm64",
             _ => throw new ArgumentOutOfRangeException(nameof(platform))
         };
 }
@@ -66,7 +67,7 @@ public sealed class ReferenceAssetManifestTests
 public sealed class ReferenceAssetsPlatformTests
 {
     [Fact]
-    public void CurrentPlatform_ResolvesToASupportedPlatform() => ReferenceAssets.CurrentPlatform.ShouldBeOneOf("osx-arm64", "linux-x64");
+    public void CurrentPlatform_ResolvesToASupportedPlatform() => ReferenceAssets.CurrentPlatform.ShouldBeOneOf("osx-arm64", "linux-x64", "linux-arm64");
 
     [Fact]
     public void ActiveAssets_ContainCurrentPlatformModulesAndTheModel()

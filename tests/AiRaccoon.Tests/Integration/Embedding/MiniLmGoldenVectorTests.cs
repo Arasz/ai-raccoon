@@ -90,8 +90,10 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
         golden.Entries.Count.ShouldBe(100, "eval-set-100 has exactly 100 queries");
 
         // The capture records its architecture so this comparison can be made; see the loop below.
+        // Same OS too: macOS and Linux on Arm64 run different ONNX Runtime kernels, so their bits differ.
         var sameArchitecture = string.Equals(golden.Provenance.ProcessArchitecture,
-            RuntimeInformation.ProcessArchitecture.ToString(), StringComparison.Ordinal);
+                RuntimeInformation.ProcessArchitecture.ToString(), StringComparison.Ordinal)
+            && OperatingSystem.IsMacOS() == golden.Provenance.OsDescription.StartsWith("macOS", StringComparison.Ordinal);
 
         var service = TestData.CreateEmbeddingService();
         using var generator = service.CreateGenerator(new EmbeddingSettings("local", TestData.MiniLmModelPath(), null, null));

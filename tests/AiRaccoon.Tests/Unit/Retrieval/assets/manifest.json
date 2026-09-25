@@ -24,6 +24,17 @@
             "localSource": "~/.ai-raccoon/extensions/linux-x64/memory.so"
         },
         {
+            "name": "memory.so",
+            "kind": "extension",
+            "platform": "linux-arm64",
+            "repo": "sqlite-memory",
+            "version": "1.3.5",
+            "assetFile": "memory-linux-arm64-full-1.3.5.tar.gz",
+            "url": "https://github.com/sqliteai/sqlite-memory/releases/download/1.3.5/memory-linux-arm64-full-1.3.5.tar.gz",
+            "sha256": "4c7c115833de7d323e410ee7a3a64b0f929dcde659e5a299598b4175d5b43a79",
+            "localSource": "~/.ai-raccoon/extensions/linux-arm64/memory.so"
+        },
+        {
             "name": "vector.dylib",
             "kind": "extension",
             "platform": "osx-arm64",
@@ -44,6 +55,17 @@
             "url": "https://github.com/sqliteai/sqlite-vector/releases/download/1.0.0/vector-linux-x86_64-1.0.0.tar.gz",
             "sha256": "2e4d4781fb439ddafff59977fd88178afdf628f71dec84d51d3d2ce41e8ce345",
             "localSource": "~/.ai-raccoon/extensions/linux-x64/vector.so"
+        },
+        {
+            "name": "vector.so",
+            "kind": "extension",
+            "platform": "linux-arm64",
+            "repo": "sqlite-vector",
+            "version": "1.0.0",
+            "assetFile": "vector-linux-arm64-1.0.0.tar.gz",
+            "url": "https://github.com/sqliteai/sqlite-vector/releases/download/1.0.0/vector-linux-arm64-1.0.0.tar.gz",
+            "sha256": "01f65c1d882c97f739aeb193a032f818e5b2a3476b14c84afdfff0733fa97492",
+            "localSource": "~/.ai-raccoon/extensions/linux-arm64/vector.so"
         },
         {
             "name": "all-MiniLM-L6-v2.Q5_K_M.gguf",
