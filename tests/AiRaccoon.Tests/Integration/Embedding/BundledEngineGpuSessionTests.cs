@@ -38,6 +38,9 @@ public sealed class BundledEngineGpuSessionTests
     /// <summary>The RIDs the WebGPU plugin package ships a native library for, off macOS (ADR-0112).</summary>
     private static readonly string[] PluginRids = ["win-x64", "win-arm64", "linux-x64", "linux-arm64"];
 
+    /// <summary>Set to 1 on a host with a known Vulkan driver (CI's lavapipe step) to fail instead of falling back.</summary>
+    private const string RequireWebGpu = "AIRACCOON_REQUIRE_WEBGPU";
+
     /// <summary>
     ///     Off macOS the WebGPU plugin shipped under webgpu/ runs the session, or the session falls back
     ///     to the CPU with the reason. On a RID the plugin ships for, the plugin must load and reach
@@ -52,6 +55,10 @@ public sealed class BundledEngineGpuSessionTests
         }
 
         using var gpu = Generator(preferGpu: true);
+        if (Environment.GetEnvironmentVariable(RequireWebGpu) == "1")
+        {
+            gpu.ExecutionProvider.ShouldBe("WebGPU");
+        }
 
         if (gpu.ExecutionProvider == "WebGPU")
         {
