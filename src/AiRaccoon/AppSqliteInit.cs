@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon;
@@ -6,5 +7,9 @@ namespace AiRaccoon;
 internal static class AppSqliteInit
 {
     [ModuleInitializer]
-    public static void Initialize() => SqliteEncryptionInit.EnsureInitialized();
+    public static void Initialize()
+    {
+        SqliteEncryptionInit.EnsureInitialized();
+        OnnxRuntimeCore.EnsureWebGpuCore();
+    }
 }

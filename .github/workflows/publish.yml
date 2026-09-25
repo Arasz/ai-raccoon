@@ -64,6 +64,10 @@ jobs:
         # the plugin's native files are not committed, same reason as the embedding model above.
         if: matrix.rid == 'osx-arm64'
         run: python3 scripts/download-mlx-runtime.py
+      - name: Fetch and verify the WebGPU core (win-x64, win-arm64, linux-x64)
+        # Those packs' RequireWebGpuCoreFiles guard (ADR-0115) fails without this.
+        if: matrix.rid == 'win-x64' || matrix.rid == 'win-arm64' || matrix.rid == 'linux-x64'
+        run: python3 scripts/download-webgpu-core.py
       - name: Pack (${{ matrix.rid }})
         # nuget.config references the gitignored local feed .nupkg-local/; make it
         # exist on the fresh runner or restore fails with NU1301.

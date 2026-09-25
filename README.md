@@ -28,6 +28,7 @@ What to do when you upgrade past each version. A version not listed here needs n
 
 ## What's new
 
+- On Windows and Linux x64 the bundled engine runs on the GPU through WebGPU again, from ONNX Runtime's own WebGPU-enabled core that now ships inside the package; linux-arm64 stays on the CPU. (1.52.0) [ADR-0115](docs/adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md) · [how-to](docs/how-to/configure-embedding-engines.md)
 - On Windows and Linux x64 the bundled engine can run on CUDA, opt-in with `ai-raccoon settings model device cuda <path>`, unmeasured; the WebGPU plugin shipped in 1.51.0 is off again in 1.51.2. (1.51.0) [ADR-0112](docs/adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md) · [how-to](docs/how-to/configure-embedding-engines.md)
 - An encrypted bank tells a wrong key (exit `21`) from a corrupt file (exit `32`), using a key-check file next to the bank that never holds the key. (1.50.0) [ADR-0111](docs/adr/0111-key-check-sidecar-distinguishes-wrong-key-from-corrupt-bank.md)
 - On Apple silicon the bundled engine can run through the MLX execution provider, opt-in with `ai-raccoon settings model device mlx`. (1.50.0) [ADR-0110](docs/adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md) · [how-to](docs/how-to/configure-embedding-engines.md)
@@ -37,7 +38,6 @@ What to do when you upgrade past each version. A version not listed here needs n
 - `model download` accepts any model that ships a `tokenizer.json` (granite-embedding r2, gte-modernbert, jina-code, Qwen3-Embedding, EmbeddingGemma), and embeds with the model's query and document prompts. (1.46.0) [survey](docs/work/2026-09-23-embedding-model-survey.md)
 - Every failure has its own two-digit exit code, grouped by category (`ErrorCode.Bank.NoBank` = `31`). (1.45.0) [ADR-0107](docs/adr/0107-categorized-two-digit-exit-codes.md)
 - The proxy and settings commands attach only to a server that proves it holds this data root's identity key. (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md)
-- The MCP token and identity key live in the bank state directory, and `serve` tightens a readable state directory to owner-only. (1.44.0) [ADR-0106](docs/adr/0106-attach-or-start-with-backend-identity-proof.md) · [SECURITY.md](SECURITY.md)
 
 Older releases: [What's new history](docs/reference/whats-new-history.md). A release tag is not proof of a nuget.org package, see [Releases and publishing](docs/reference/releases-and-publishing.md).
 

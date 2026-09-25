@@ -50,19 +50,18 @@
         <None Include="Mlx/THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" Link="mlx/THIRD_PARTY_NOTICES.md"/>
     </ItemGroup>
 
-    <!-- The WebGPU plugin execution provider for Windows and glibc Linux, whose standard ORT build has
-         no WebGPU. ExcludeAssets="all": only its native files are wanted, copied like the MLX runtime
-         into this RID's own tools/net10.0/<rid>/webgpu/. A RID-less build (tests, dev) takes the SDK's
-         RID. osx-arm64 keeps ORT's built-in WebGPU; linux-musl-x64 has no plugin build. -->
+    <!-- ADR-0115: the WebGPU-enabled ONNX Runtime core for Windows and glibc Linux x64, whose NuGet core
+         has no WebGPU. Fetched by scripts/download-webgpu-core.py into the git-ignored webgpu-core/ and
+         copied into this RID's own tools/net10.0/<rid>/webgpu/, where OnnxRuntimeCore points ORT's native
+         import at it. A RID-less build (tests, dev) takes the SDK's RID. osx-arm64 keeps the NuGet core's
+         built-in WebGPU; linux-arm64 and linux-musl-x64 have no WebGPU build and run on the CPU. -->
     <PropertyGroup>
-        <WebGpuPluginRid>$(RuntimeIdentifier)</WebGpuPluginRid>
-        <WebGpuPluginRid Condition="'$(WebGpuPluginRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</WebGpuPluginRid>
+        <WebGpuCoreRid>$(RuntimeIdentifier)</WebGpuCoreRid>
+        <WebGpuCoreRid Condition="'$(WebGpuCoreRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</WebGpuCoreRid>
+        <ShipsWebGpuCore Condition="'$(WebGpuCoreRid)' == 'win-x64' Or '$(WebGpuCoreRid)' == 'win-arm64' Or '$(WebGpuCoreRid)' == 'linux-x64'">true</ShipsWebGpuCore>
     </PropertyGroup>
-    <ItemGroup>
-        <PackageReference Include="Microsoft.ML.OnnxRuntime.EP.WebGpu" ExcludeAssets="all" GeneratePathProperty="true"/>
-    </ItemGroup>
-    <ItemGroup Condition="'$(WebGpuPluginRid)' == 'win-x64' Or '$(WebGpuPluginRid)' == 'win-arm64' Or '$(WebGpuPluginRid)' == 'linux-x64' Or '$(WebGpuPluginRid)' == 'linux-arm64'">
-        <None Include="$(PkgMicrosoft_ML_OnnxRuntime_EP_WebGpu)/runtimes/$(WebGpuPluginRid)/native/*" CopyToOutputDirectory="PreserveNewest" Link="webgpu/%(Filename)%(Extension)"/>
+    <ItemGroup Condition="'$(ShipsWebGpuCore)' == 'true'">
+        <None Include="webgpu-core/$(WebGpuCoreRid)/*" CopyToOutputDirectory="PreserveNewest" Link="webgpu/%(Filename)%(Extension)"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -106,6 +105,13 @@
     <Target Name="RequireMlxRuntimeFiles" BeforeTargets="_GetPackageFiles" Condition="'$(RuntimeIdentifier)' == 'osx-arm64'">
         <Error Condition="!Exists('$(MSBuildProjectDirectory)/mlx-runtime/libonnxruntime_mlx_ep.dylib')"
                Text="The MLX plugin runtime (mlx-runtime/*.dylib, mlx-runtime/mlx.metallib) is missing for an osx-arm64 pack, so 'settings model device mlx' could not load (ADR-0110). Run 'python3 scripts/download-mlx-runtime.py' first."/>
+    </Target>
+
+    <!-- The WebGPU core is fetched, not committed (ADR-0115); a pack without it would silently put these
+         RIDs back on the CPU. -->
+    <Target Name="RequireWebGpuCoreFiles" BeforeTargets="_GetPackageFiles" Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64' Or '$(RuntimeIdentifier)' == 'linux-x64'">
+        <Error Condition="!Exists('$(MSBuildProjectDirectory)/webgpu-core/$(RuntimeIdentifier)')"
+               Text="The WebGPU-enabled ONNX Runtime core (webgpu-core/$(RuntimeIdentifier)/) is missing for a $(RuntimeIdentifier) pack, so the bundled engine could not use the GPU there (ADR-0115). Run 'python3 scripts/download-webgpu-core.py' first."/>
     </Target>
 
     <Target Name="GenerateMcpServerJson" BeforeTargets="_GetPackageFiles">

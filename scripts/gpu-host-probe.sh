@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Probes a Linux GPU host (Kaggle, Colab, Lightning AI, any NVIDIA VM) for the bundled engine's
-# GPU paths: WebGPU through the plugin (needs Vulkan) and opt-in CUDA (needs CUDA 13 libraries).
+# GPU paths: WebGPU through the bundled core (needs Vulkan) and opt-in CUDA (needs CUDA 13 libraries).
 #
 #   curl -fsSL https://raw.githubusercontent.com/Arasz/ai-raccoon/main/scripts/gpu-host-probe.sh | bash
 #
@@ -44,6 +44,7 @@ if [ ! -d "$WORK/.git" ]; then git clone -q --depth 1 --branch "$REF" "$REPO_URL
 cd "$WORK" || exit 1
 git log --oneline -1
 python3 scripts/download-embedding-model.py
+python3 scripts/download-webgpu-core.py | tail -1
 mkdir -p .nupkg-local
 dotnet build tests/AiRaccoon.Tests --nologo -v q 2>&1 | tail -2
 TESTS=tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll

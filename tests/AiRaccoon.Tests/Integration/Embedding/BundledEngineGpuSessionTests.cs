@@ -1,5 +1,7 @@
+using System.Runtime.InteropServices;
 using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.ML.OnnxRuntime;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
@@ -7,8 +9,8 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Embedding;
 
 /// <summary>
-///     ADR-0108: a session that prefers the GPU runs the bundled engine on WebGPU where the platform's
-///     ORT build has it (macOS), and its vectors match the CPU session's. Elsewhere it runs on the CPU.
+///     ADR-0108/0115: a session that prefers the GPU runs the bundled engine on WebGPU where the loaded
+///     core has it (macOS's NuGet core, the bundled core on Windows and Linux x64), with the CPU session's vectors.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -34,21 +36,58 @@ public sealed class BundledEngineGpuSessionTests
         TestData.Cosine(onGpu[0].Vector, onCpu[0].Vector).ShouldBeGreaterThan(0.999);
     }
 
+    /// <summary>The RIDs whose package ships the WebGPU-enabled ONNX Runtime core under webgpu/ (ADR-0115).</summary>
+    private static readonly string[] WebGpuCoreRids = ["win-x64", "win-arm64", "linux-x64"];
+
+    /// <summary>Set to 1 on a host with a known WebGPU adapter (CI's lavapipe step) to fail instead of falling back.</summary>
+    private const string RequireWebGpuVariable = "AIRACCOON_REQUIRE_WEBGPU";
+
+    [RetryFact]
+    public void ShippedWebGpuCore_IsTheLoadedCore_AndHasWebGpu()
+    {
+        if (!WebGpuCoreRids.Contains(RuntimeInformation.RuntimeIdentifier))
+        {
+            Assert.Skip("only win-x64, win-arm64 and linux-x64 ship the WebGPU core");
+        }
+
+        OnnxRuntimeCore.LoadedWebGpuCore.ShouldNotBeNull("run scripts/download-webgpu-core.py before building");
+        OrtEnv.Instance().GetAvailableProviders().ShouldContain("WebGpuExecutionProvider");
+    }
+
     /// <summary>
-    ///     On Windows and Linux the WebGPU plugin is never tried, because it aborts the process on its first
-    ///     run once it finds an adapter; the session runs on the CPU and says why.
+    ///     Off macOS, a session that prefers the GPU runs on the bundled core's WebGPU with the CPU session's
+    ///     vectors, or falls back to the CPU with the reason (no adapter, or no WebGPU in this RID's core).
     /// </summary>
     [RetryFact]
-    public void PreferGpu_OnWindowsOrLinux_RefusesThePluginWebGpu_AndRunsOnTheCpu()
+    public async Task PreferGpu_OffMacOs_RunsOnWebGpu_OrFallsBackWithAReason()
     {
-        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+        if (OperatingSystem.IsMacOS())
         {
-            Assert.Skip("the WebGPU plugin is only used on Windows and Linux");
+            Assert.Skip("covered by the macOS test above");
         }
 
         using var gpu = Generator(preferGpu: true);
+        if (Environment.GetEnvironmentVariable(RequireWebGpuVariable) == "1")
+        {
+            gpu.ExecutionProvider.ShouldBe("WebGPU");
+        }
 
-        gpu.ExecutionProvider.ShouldBe($"CPU (GPU refused: {OnnxEmbeddingGenerator.WebGpuPluginDisabledReason})");
+        if (gpu.ExecutionProvider != "WebGPU")
+        {
+            gpu.ExecutionProvider.ShouldStartWith("CPU (GPU refused: ");
+            if (!WebGpuCoreRids.Contains(RuntimeInformation.RuntimeIdentifier))
+            {
+                gpu.ExecutionProvider.ShouldBe($"CPU (GPU refused: {OnnxEmbeddingGenerator.NoWebGpuInCoreReason})");
+            }
+
+            return;
+        }
+
+        using var cpu = Generator(preferGpu: false);
+        const string text = "The drain embeds pending rows one at a time on the GPU.";
+        var onGpu = await gpu.GenerateAsync([text], cancellationToken: TestContext.Current.CancellationToken);
+        var onCpu = await cpu.GenerateAsync([text], cancellationToken: TestContext.Current.CancellationToken);
+        TestData.Cosine(onGpu[0].Vector, onCpu[0].Vector).ShouldBeGreaterThan(0.999);
     }
 
     [RetryFact]

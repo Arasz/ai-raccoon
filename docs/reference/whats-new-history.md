@@ -1,11 +1,12 @@
 # What's new — history
 
-Older release highlights, archived from the README: 1.6.0 through 1.43.0. Newest at the top.
+Older release highlights, archived from the README: 1.6.0 through 1.44.0. Newest at the top.
 
 For current highlights, see [README.md](../../README.md#whats-new).
 
 ---
 
+- The MCP token and identity key live in the bank state directory, and `serve` tightens a readable state directory to owner-only. (1.44.0) [ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md) · [SECURITY.md](../../SECURITY.md)
 - `memory_search` reports the content cosine as evidence, applies an absolute relevance floor, and names the floor when it truncates. (1.43.0)
 - `memory_delete` removes the whole write, and sync tombstones are label-aware. (1.43.0)
 - Refusals name their remedy, and refused queries are redacted from logs and spans. (1.43.0)

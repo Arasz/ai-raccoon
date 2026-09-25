@@ -2,7 +2,7 @@
 
 Date: 2026-09-25
 
-Status: Accepted, amended 2026-09-25 (WebGPU plugin disabled; see Amendment)
+Status: Accepted, amended 2026-09-25 (WebGPU plugin disabled; see Amendment); the WebGPU part is superseded by [ADR-0115](0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md), the CUDA part stands
 
 Research: `docs/work/2026-09-25-webgpu-off-macos.md`
 
