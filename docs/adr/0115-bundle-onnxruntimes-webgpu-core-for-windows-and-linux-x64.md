@@ -33,16 +33,21 @@ packages, and load it instead of the NuGet core.** `scripts/download-webgpu-core
 npm tarball (sha256-pinned in `scripts/src/bundle.py`) and unpacks each RID's core into the
 git-ignored `src/AiRaccoon/webgpu-core/<rid>/`. On Windows it also takes `dxcompiler.dll` and
 `dxil.dll`, the shader compiler Dawn's D3D12 backend loads, which the plugin also shipped. It never
-takes the Node binding or `DirectML.dll`: nothing imports them. The build copies the files into
-`webgpu/`, as it did the plugin's, and the pack refuses a RID whose core is missing
-(`RequireWebGpuCoreFiles`).
+takes the Node binding or `DirectML.dll`: nothing imports them. The pack refuses a RID whose core is
+missing (`RequireWebGpuCoreFiles`).
 
-**`OnnxRuntimeCore.EnsureWebGpuCore()` points ORT's native import at that core.** It registers a
-`DllImportResolver` on the ORT managed assembly that loads `webgpu/onnxruntime.dll` or
-`webgpu/libonnxruntime.so` for the `onnxruntime` import. The server's and the test host's module
-initializers call it before any ORT API runs. ORT's own resolver steps aside when one is already
-registered (`NativeMethods` static constructor, 1.30.0). A package without `webgpu/` keeps the NuGet
-core.
+**The swap happens at build time, in place of the NuGet core, with no runtime code.** A
+`Directory.Build.targets` hook after `ResolvePackageAssets` repoints ORT's own native asset items
+(`NativeCopyLocalItems` for a RID build, `RuntimeTargetsCopyLocalItems` for a RID-less one) at the
+fetched core, keeping their file name and destination, and adds DXC beside it on Windows. The plain
+`onnxruntime` import then finds the WebGPU core wherever it would have found the NuGet one: under JIT
+probing, under Native AOT's lazily bound P/Invokes, or through a `DirectPInvoke` resolved by the OS
+loader ([Native AOT interop](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/interop)).
+The NuGet core stops shipping on those RIDs. A first draft registered a `DllImportResolver` instead.
+That needed a module initializer in every entry point, raced ORT's own resolver registration, and
+turned a bad core file into an exception on every ORT call. The build-time swap has none of those
+problems. The same hook drops the `None` item ORT's `.props` adds to copy the NuGet `win-x64` core
+to the output root (a .NET Framework convenience), because it targets the same destination.
 
 **The generator asks the loaded core, not the OS.** `CreateGpuSessionOrNull` appends the built-in
 WebGPU provider wherever `GetAvailableProviders()` lists it: macOS's NuGet core and the bundled core
@@ -58,7 +63,10 @@ for CUDA and MLX.
   are unmeasured.
 - Package size roughly nets out against the plugin. linux-x64: core 45.8 MB instead of 29.0 MB, minus
   the 16 MB plugin. win-x64: core 28.8 MB instead of 16.5 MB, the same DXC files, minus the 11.3 MB
-  plugin DLL. The NuGet core still ships beside it, unused on those RIDs.
+  plugin DLL. The NuGet core no longer ships on those RIDs.
+- Nothing in the process chooses between cores at run time, so a core file that cannot load fails
+  every ORT call, just as a bad NuGet core would. `VersionContractPackedTests` checks each packed
+  core against the fetched one, byte length for byte length.
 - The managed package and the npm core must move together. A bump of `Microsoft.ML.OnnxRuntime`
   needs the matching `onnxruntime-node` tarball and hash in `bundle.py`.
 - The opt-in CUDA plugin now registers against the bundled core. It still goes through the plugin
@@ -70,8 +78,7 @@ for CUDA and MLX.
 
 `docs/work/2026-09-25-free-gpu-linux-test-hosts.md`: F11 (the plugin's abort on CI run 36078566359),
 F13 (the node core's WebGPU run on CI run 36081136475, PR #748, and the `strings` reading of its
-build info and per-RID Dawn content). `NativeMethods.shared.cs` at ONNX Runtime `v1.30.0` (the
-resolver's registration and its fallback when one exists). `objdump -p` on the win-x64/arm64
+build info and per-RID Dawn content). `objdump -p` on the win-x64/arm64
 `onnxruntime.dll` (no static import of DirectML or DXC).
 
 ## Related decisions

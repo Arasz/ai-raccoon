@@ -36,22 +36,22 @@ public sealed class BundledEngineGpuSessionTests
         TestData.Cosine(onGpu[0].Vector, onCpu[0].Vector).ShouldBeGreaterThan(0.999);
     }
 
-    /// <summary>The RIDs whose package ships the WebGPU-enabled ONNX Runtime core under webgpu/ (ADR-0115).</summary>
+    /// <summary>The RIDs whose package ships the WebGPU-enabled ONNX Runtime core in place of the NuGet one (ADR-0115).</summary>
     private static readonly string[] WebGpuCoreRids = ["win-x64", "win-arm64", "linux-x64"];
 
     /// <summary>Set to 1 on a host with a known WebGPU adapter (CI's lavapipe step) to fail instead of falling back.</summary>
     private const string RequireWebGpuVariable = "AIRACCOON_REQUIRE_WEBGPU";
 
     [RetryFact]
-    public void ShippedWebGpuCore_IsTheLoadedCore_AndHasWebGpu()
+    public void ShippedCore_OnWebGpuCoreRids_HasWebGpu()
     {
         if (!WebGpuCoreRids.Contains(RuntimeInformation.RuntimeIdentifier))
         {
             Assert.Skip("only win-x64, win-arm64 and linux-x64 ship the WebGPU core");
         }
 
-        OnnxRuntimeCore.LoadedWebGpuCore.ShouldNotBeNull("run scripts/download-webgpu-core.py before building");
-        OrtEnv.Instance().GetAvailableProviders().ShouldContain("WebGpuExecutionProvider");
+        OrtEnv.Instance().GetAvailableProviders().ShouldContain("WebGpuExecutionProvider",
+            "the NuGet core is loaded; run scripts/download-webgpu-core.py before building");
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ public sealed class BundledEngineGpuSessionTests
         using var first = Generator(preferGpu: true);
         if (first.ExecutionProvider != "WebGPU")
         {
-            Assert.Skip("no WebGPU device is available on this host (built-in on macOS, plugin elsewhere)");
+            Assert.Skip("no WebGPU device is available on this host, or its ONNX Runtime core has no WebGPU");
         }
 
         using var second = Generator(preferGpu: true);

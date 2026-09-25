@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Tests;
@@ -11,7 +10,6 @@ internal static class TestSqliteInit
     public static void Initialize()
     {
         SqliteEncryptionInit.EnsureInitialized();
-        OnnxRuntimeCore.EnsureWebGpuCore();
 
         try
         {

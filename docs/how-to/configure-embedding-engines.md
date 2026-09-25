@@ -108,9 +108,8 @@ depends on the RID ([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16
 **Windows and Linux x64 run WebGPU from a bundled core.** ONNX Runtime's NuGet core has no WebGPU on
 those platforms. The separate WebGPU plugin that 1.51.0 used aborted the process on its first run
 ([onnxruntime#28329](https://github.com/microsoft/onnxruntime/issues/28329)), so 1.51.2 turned it
-off. Since 1.52.0 the package ships the core ONNX Runtime publishes for Node.js instead, under
-`webgpu/`: the same 1.30.0 release and commit, with WebGPU compiled in. The tool loads that core
-instead of the NuGet one ([ADR-0115](../adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md)).
+off. Since 1.52.0 the package ships the core ONNX Runtime publishes for Node.js in place of the
+NuGet one: the same 1.30.0 release and commit, with WebGPU compiled in ([ADR-0115](../adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md)).
 The opt-in `cuda` device still loads through the plugin mechanism the upstream issue was reported
 against. It is available, but expect the same abort until that issue is fixed; if the server dies on
 the first embed after you set it, run `ai-raccoon settings model device auto`.

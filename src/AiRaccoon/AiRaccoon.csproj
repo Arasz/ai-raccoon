@@ -50,19 +50,6 @@
         <None Include="Mlx/THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" Link="mlx/THIRD_PARTY_NOTICES.md"/>
     </ItemGroup>
 
-    <!-- ADR-0115: the WebGPU-enabled ONNX Runtime core for Windows and glibc Linux x64, whose NuGet core
-         has no WebGPU. Fetched by scripts/download-webgpu-core.py into the git-ignored webgpu-core/ and
-         copied into this RID's own tools/net10.0/<rid>/webgpu/, where OnnxRuntimeCore points ORT's native
-         import at it. A RID-less build (tests, dev) takes the SDK's RID. osx-arm64 keeps the NuGet core's
-         built-in WebGPU; linux-arm64 and linux-musl-x64 have no WebGPU build and run on the CPU. -->
-    <PropertyGroup>
-        <WebGpuCoreRid>$(RuntimeIdentifier)</WebGpuCoreRid>
-        <WebGpuCoreRid Condition="'$(WebGpuCoreRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</WebGpuCoreRid>
-        <ShipsWebGpuCore Condition="'$(WebGpuCoreRid)' == 'win-x64' Or '$(WebGpuCoreRid)' == 'win-arm64' Or '$(WebGpuCoreRid)' == 'linux-x64'">true</ShipsWebGpuCore>
-    </PropertyGroup>
-    <ItemGroup Condition="'$(ShipsWebGpuCore)' == 'true'">
-        <None Include="webgpu-core/$(WebGpuCoreRid)/*" CopyToOutputDirectory="PreserveNewest" Link="webgpu/%(Filename)%(Extension)"/>
-    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Diagnostics"/>

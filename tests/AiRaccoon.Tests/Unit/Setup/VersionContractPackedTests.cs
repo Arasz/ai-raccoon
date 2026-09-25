@@ -53,10 +53,10 @@ public class VersionContractPackedTests
             root.GetProperty("version").GetString().ShouldBe(expected);
             root.GetProperty("packages")[0].GetProperty("version").GetString().ShouldBe(expected);
 
-            zip.Entries.Select(e => e.FullName).ShouldNotContain(e => e.Contains("providers_webgpu", StringComparison.Ordinal),
-                "the RID-agnostic nupkg must not carry the WebGPU plugin");
+            zip.Entries.Select(e => e.FullName).ShouldNotContain(e => e.Contains("onnxruntime", StringComparison.Ordinal),
+                "the RID-agnostic nupkg must not carry an ONNX Runtime core");
 
-            AssertWebGpuPluginPlacement(outDir, expected);
+            AssertWebGpuCorePlacement(outDir, expected);
         }
         finally
         {
@@ -65,43 +65,48 @@ public class VersionContractPackedTests
     }
 
     /// <summary>
-    ///     The WebGPU plugin rides in the Windows and glibc-Linux packages under webgpu/ only; the macOS
-    ///     package uses ORT's built-in WebGPU and musl has no plugin build. Checked in the same pack run.
+    ///     ADR-0115: the win-x64, win-arm64 and linux-x64 packages carry the fetched WebGPU core in place of
+    ///     the NuGet core (same size, byte for byte where it lands), plus Dawn's DXC beside it on Windows;
+    ///     the other RIDs keep the NuGet core and never carry the retired plugin. Checked in the same pack run.
     /// </summary>
-    private static void AssertWebGpuPluginPlacement(string outDir, string version)
+    private static void AssertWebGpuCorePlacement(string outDir, string version)
     {
-        string[] Entries(string rid)
+        Dictionary<string, long> Entries(string rid)
         {
             var nupkg = Path.Combine(outDir, $"ai-raccoon.{rid}.{version}.nupkg");
             File.Exists(nupkg).ShouldBeTrue($"expected {nupkg}. Found: {string.Join(", ", Directory.GetFiles(outDir))}");
             using var zip = ZipFile.OpenRead(nupkg);
-            return [.. zip.Entries.Select(e => e.FullName)];
+            return zip.Entries.ToDictionary(e => e.FullName, e => e.Length);
         }
 
-        foreach (var rid in new[] { "win-x64", "win-arm64" })
+        long FetchedLength(string rid, string file) =>
+            new FileInfo(TestData.RepoFile($"src/AiRaccoon/webgpu-core/{rid}/{file}")).Length;
+
+        foreach (var (rid, files) in new[]
+                 {
+                     ("win-x64", new[] { "onnxruntime.dll", "dxcompiler.dll", "dxil.dll" }),
+                     ("win-arm64", new[] { "onnxruntime.dll", "dxcompiler.dll", "dxil.dll" }),
+                     ("linux-x64", new[] { "libonnxruntime.so" }),
+                 })
         {
             var entries = Entries(rid);
-            foreach (var file in new[] { "onnxruntime_providers_webgpu.dll", "dxcompiler.dll", "dxil.dll" })
+            foreach (var file in files)
             {
-                entries.ShouldContain($"tools/net10.0/{rid}/webgpu/{file}", $"{rid} package lacks webgpu/{file}");
+                var path = $"tools/net10.0/{rid}/{file}";
+                entries.ShouldContainKey(path, $"{rid} package lacks {file}");
+                entries[path].ShouldBe(FetchedLength(rid, file), $"{rid} package's {file} is not the fetched WebGPU core's");
             }
         }
 
-        foreach (var rid in new[] { "linux-x64", "linux-arm64" })
-        {
-            Entries(rid).ShouldContain($"tools/net10.0/{rid}/webgpu/libonnxruntime_providers_webgpu.so",
-                $"{rid} package lacks webgpu/libonnxruntime_providers_webgpu.so");
-        }
-
-        foreach (var rid in new[] { "linux-musl-x64", "osx-arm64" })
+        foreach (var rid in new[] { "win-x64", "win-arm64", "linux-x64", "linux-arm64", "linux-musl-x64", "osx-arm64" })
         {
             if (!File.Exists(Path.Combine(outDir, $"ai-raccoon.{rid}.{version}.nupkg")))
             {
                 continue;
             }
 
-            Entries(rid).ShouldNotContain(e => e.Contains("providers_webgpu", StringComparison.Ordinal),
-                $"{rid} package must not carry the WebGPU plugin");
+            Entries(rid).Keys.ShouldNotContain(e => e.Contains("providers_webgpu", StringComparison.Ordinal),
+                $"{rid} package must not carry the retired WebGPU plugin");
         }
     }
 }
