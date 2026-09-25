@@ -96,6 +96,111 @@ class PlainEncoder(torch.nn.Module):
 
 
 # ---------------------------------------------------------------------------------------------
+# ANE layout: (B, C, 1, S) tensors, 1x1 convs, channel-dim norms, per-head attention
+
+
+def _conv(weight: torch.Tensor) -> torch.nn.Conv2d:
+    """A bias-free 1x1 Conv2d carrying a Linear's [out, in] weight."""
+    conv = torch.nn.Conv2d(weight.shape[1], weight.shape[0], kernel_size=1, bias=False)
+    conv.weight = torch.nn.Parameter(weight.detach().clone()[:, :, None, None], requires_grad=False)
+    return conv
+
+
+def rotate_half_matrix(heads: int, head_dim: int) -> torch.Tensor:
+    """R with R @ x == HF rotate_half(x) applied per head over a heads*head_dim channel vector."""
+    half = head_dim // 2
+    block = torch.zeros(head_dim, head_dim)
+    block[torch.arange(half), torch.arange(half) + half] = -1.0
+    block[torch.arange(half) + half, torch.arange(half)] = 1.0
+    return torch.block_diag(*[block] * heads)
+
+
+class ChannelNorm(torch.nn.Module):
+    """Bias-free LayerNorm over dim 1 of a (B, C, 1, S) tensor, as explicit mean/variance ops."""
+
+    def __init__(self, weight: torch.Tensor, eps: float) -> None:
+        super().__init__()
+        self.weight = torch.nn.Parameter(weight.detach().clone().view(1, -1, 1, 1), requires_grad=False)
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        centered = x - x.mean(dim=1, keepdim=True)
+        var = (centered * centered).mean(dim=1, keepdim=True)
+        return centered * torch.rsqrt(var + self.eps) * self.weight
+
+
+class AneLayer(torch.nn.Module):
+    """One ModernBERT encoder layer on (B, C, 1, S); rotate_half lives in extra Wqkv output channels."""
+
+    def __init__(self, hf_layer, heads: int, eps: float) -> None:
+        super().__init__()
+        hidden = hf_layer.attn.Wo.weight.shape[0]
+        self.heads = heads
+        self.head_dim = hidden // heads
+        self.scale = self.head_dim ** -0.5
+        self.hidden = hidden
+        self.attn_norm = (ChannelNorm(hf_layer.attn_norm.weight, eps)
+                          if isinstance(hf_layer.attn_norm, torch.nn.LayerNorm) else torch.nn.Identity())
+        wq, wk, wv = hf_layer.attn.Wqkv.weight.split(hidden, dim=0)
+        rotate = rotate_half_matrix(heads, self.head_dim)
+        self.Wqkv = _conv(torch.cat([wq, wk, wv, rotate @ wq, rotate @ wk], dim=0))
+        self.Wo = _conv(hf_layer.attn.Wo.weight)
+        self.mlp_norm = ChannelNorm(hf_layer.mlp_norm.weight, eps)
+        self.Wi = _conv(hf_layer.mlp.Wi.weight)
+        self.mlp_Wo = _conv(hf_layer.mlp.Wo.weight)
+
+    def forward(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        q, k, v, q_rot, k_rot = self.Wqkv(self.attn_norm(x)).split(self.hidden, dim=1)
+        q = q * cos + q_rot * sin
+        k = k * cos + k_rot * sin
+        heads_q = q.split(self.head_dim, dim=1)                   # (B, d, 1, Sq) each
+        heads_k = k.transpose(1, 3).split(self.head_dim, dim=3)   # (B, Sk, 1, d) each
+        heads_v = v.split(self.head_dim, dim=1)                   # (B, d, 1, Sk) each
+        outputs = []
+        for qh, kh, vh in zip(heads_q, heads_k, heads_v):
+            weights = torch.einsum("bchq,bkhc->bkhq", qh, kh) * self.scale + mask  # (B, Sk, 1, Sq)
+            outputs.append(torch.einsum("bkhq,bchk->bchq", weights.softmax(dim=1), vh))
+        x = x + self.Wo(torch.cat(outputs, dim=1))
+        gate_in, gate = self.Wi(self.mlp_norm(x)).chunk(2, dim=1)
+        return x + self.mlp_Wo(torch.nn.functional.gelu(gate_in) * gate)
+
+
+class AneEncoder(torch.nn.Module):
+    """ModernBERT in the ml-ane-transformers layout, loaded from an HF ModernBertModel."""
+
+    def __init__(self, hf_model, max_len: int) -> None:
+        super().__init__()
+        config = hf_model.config
+        heads = config.num_attention_heads
+        head_dim = config.hidden_size // heads
+        self.embeddings = hf_model.embeddings
+        self.layers = torch.nn.ModuleList(AneLayer(layer, heads, config.norm_eps) for layer in hf_model.layers)
+        self.layer_types = list(config.layer_types)
+        self.final_norm = ChannelNorm(hf_model.final_norm.weight, config.norm_eps)
+        for layer_type in sorted(set(self.layer_types)):
+            cos, sin = rope_tables(config.rope_parameters[layer_type]["rope_theta"], max_len, head_dim)
+            for name, table in (("cos", cos), ("sin", sin)):
+                channels = np.tile(table, (1, heads)).T[None, :, None, :]  # [1, heads*head_dim, 1, L]
+                self.register_buffer(f"{layer_type}_{name}", torch.from_numpy(np.ascontiguousarray(channels)),
+                                     persistent=False)
+        band = band_mask(max_len, config.sliding_window)
+        self.register_buffer("band", torch.from_numpy(band)[None, :, None, :], persistent=False)  # [1, Lk, 1, Lq]
+
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        seq = input_ids.shape[1]
+        hidden = self.embeddings(input_ids=input_ids)             # (B, S, C)
+        x = hidden.transpose(1, 2).unsqueeze(2)                   # (B, C, 1, S)
+        padding = ((1.0 - attention_mask.to(x.dtype)) * MASKED)[:, :, None, None]  # (B, Sk, 1, 1)
+        masks = {"full_attention": padding, "sliding_attention": padding + self.band[:, :seq, :, :seq]}
+        rope = {t: (getattr(self, f"{t}_cos")[..., :seq], getattr(self, f"{t}_sin")[..., :seq])
+                for t in set(self.layer_types)}
+        for layer, layer_type in zip(self.layers, self.layer_types):
+            x = layer(x, *rope[layer_type], masks[layer_type])
+        last = self.final_norm(x).squeeze(2).transpose(1, 2)      # (B, S, C)
+        return last, last[:, 0]
+
+
+# ---------------------------------------------------------------------------------------------
 # Parity helpers shared by the tests and the export CLI's self-check
 
 
