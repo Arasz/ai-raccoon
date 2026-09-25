@@ -17,7 +17,7 @@ independently (Recipe 5); a fresh bank starts with neither configured.
 graph LR
     subgraph Local ["Local ONNX Engine (recommended)"]
         ONNX["Bundled granite-embedding-small-english-r2\n(fp16, 384-dim, ~97MB)"]
-        L_Prop["• 100% Offline\n• GPU first (WebGPU; CUDA opt-in)\n• Zero API cost"]
+        L_Prop["• 100% Offline\n• GPU first on macOS (WebGPU/MLX); CUDA opt-in on x64\n• Zero API cost"]
     end
 
     subgraph LocalOther ["Any other local ONNX model"]
@@ -64,7 +64,7 @@ retrieval eval measured, and runs faster on the GPU than they ran on the CPU
 
 | Engine | Model | Where it runs | Memory nDCG@10 |
 |---|---|---|---:|
-| Local, bundled (current default) | `granite-embedding-small-english-r2` (fp16) | GPU (WebGPU, measured on macOS; WebGPU/CUDA on Windows and Linux per ADR-0112, unmeasured), else CPU | 0.632 |
+| Local, bundled (current default) | `granite-embedding-small-english-r2` (fp16) | GPU on macOS (WebGPU, measured); CPU on Windows and Linux unless `cuda` is opted into (unmeasured) | 0.632 |
 | Local, bundled (default before 1.47.0) | `all-MiniLM-L6-v2` (int8) | CPU only | 0.605 |
 
 Full quality and latency numbers for every engine measured, including the remote OpenAI/Ollama
@@ -89,8 +89,9 @@ the code corpus uses the same one (Recipe 5). It replaced all-MiniLM-L6-v2 in 1.
 embedded with the old model re-embeds once on its own after the upgrade
 ([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)).
 
-On every platform a local session tries a GPU execution provider before falling back to the CPU.
-Which provider it tries, and what the host needs for that provider to actually find a device,
+On macOS a local session tries a GPU execution provider before falling back to the CPU. On Windows and
+Linux it runs on the CPU unless `cuda` is opted into (x64 only), because the WebGPU plugin is off there
+(see below). Which provider it tries, and what the host needs for that provider to actually find a device,
 depends on the RID ([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md),
 [ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md),
 [ADR-0112](../adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md)):

@@ -28,7 +28,7 @@ What to do when you upgrade past each version. A version not listed here needs n
 
 ## What's new
 
-- On Windows and Linux the bundled engine tries the GPU through the WebGPU plugin execution provider before the CPU, and CUDA is opt-in with `ai-raccoon settings model device cuda <path>`; speed and vector parity there are not measured yet. (1.51.0) [ADR-0112](docs/adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md) · [how-to](docs/how-to/configure-embedding-engines.md)
+- On Windows and Linux x64 the bundled engine can run on CUDA, opt-in with `ai-raccoon settings model device cuda <path>`, unmeasured; the WebGPU plugin shipped in 1.51.0 is off again in 1.51.2. (1.51.0) [ADR-0112](docs/adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md) · [how-to](docs/how-to/configure-embedding-engines.md)
 - An encrypted bank tells a wrong key (exit `21`) from a corrupt file (exit `32`), using a key-check file next to the bank that never holds the key. (1.50.0) [ADR-0111](docs/adr/0111-key-check-sidecar-distinguishes-wrong-key-from-corrupt-bank.md)
 - On Apple silicon the bundled engine can run through the MLX execution provider, opt-in with `ai-raccoon settings model device mlx`. (1.50.0) [ADR-0110](docs/adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md) · [how-to](docs/how-to/configure-embedding-engines.md)
 - Code search indexes `.mjs`/`.cjs`, Vue, shell, Terraform/HCL and Gherkin `.feature` files, and ingest skips binary files whatever their extension. (1.49.0) [how-to](docs/how-to/search-the-code-corpus.md#what-gets-indexed) · [research](docs/work/2026-09-23-ast-chunking-on-granite-and-magika.md)
