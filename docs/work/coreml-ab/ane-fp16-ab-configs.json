@@ -1,0 +1,7 @@
+[
+ {"name": "mlx-x64-cap512-t3", "device": "mlx", "step": 64, "threads": 3, "cache_limit_mib": 512,
+  "mlx_dir": "/Users/arasz/.dotnet/tools/.store/ai-raccoon/1.52.3/ai-raccoon.osx-arm64/1.52.3/tools/net10.0/osx-arm64/mlx"},
+ {"name": "ane-fp16-step64-ne", "device": "coreml", "units": "CPUAndNeuralEngine", "step": 64, "threads": 1, "max_sessions": 0, "model_dir": "<export-dir>/ane-fp16"},
+ {"name": "ane-fp16-step128-ne", "device": "coreml", "units": "CPUAndNeuralEngine", "step": 128, "threads": 1, "max_sessions": 0, "model_dir": "<export-dir>/ane-fp16"},
+ {"name": "ane-fp16-step256-ne", "device": "coreml", "units": "CPUAndNeuralEngine", "step": 256, "threads": 1, "max_sessions": 0, "model_dir": "<export-dir>/ane-fp16"}
+]

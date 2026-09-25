@@ -125,6 +125,6 @@ reads a binary (1024-byte) KiB value as if it were decimal and undercounts the t
 
 ## Still open
 
-- The `apple/ml-ane-transformers` conv-layout re-export: rewriting this graph's attention to the layout the Neural Engine prefers, then re-measuring E0. Not attempted; needs a new ONNX export, not a harness change.
+- The `apple/ml-ane-transformers` conv-layout re-export: done in #760, and it clears every gate at 256-token buckets. See `docs/work/2026-09-25-ane-layout-reexport.md`.
 - `powermetrics` confirmation that the Neural Engine is doing anything at all past bucket 640. Needs `sudo` and was out of scope for this pass.
 - OpenVINO's NPU execution provider on Intel Windows or Linux hardware. Not built; no hardware on hand to validate against.
