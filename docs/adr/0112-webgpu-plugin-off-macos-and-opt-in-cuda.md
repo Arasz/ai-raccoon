@@ -2,7 +2,7 @@
 
 Date: 2026-09-25
 
-Status: Accepted
+Status: Accepted, amended 2026-09-25 (WebGPU plugin disabled; see Amendment)
 
 Research: `docs/work/2026-09-25-webgpu-off-macos.md`
 
@@ -199,6 +199,25 @@ comfortably under 5 EUR either way. New subscriptions typically start with zero 
 a quota request has to come first. Windows GPU pricing and an arm64 GPU size were not looked up;
 Azure appears to have no arm64 GPU size at all, and AWS's `g5g` (Graviton plus T4G) would be the
 option there if it is ever worth pricing.
+
+## Amendment (2026-09-25): the WebGPU plugin is disabled
+
+The first run with a real adapter showed the plugin cannot ship yet. With Mesa's lavapipe driver
+installed on the GitHub `ubuntu-latest` runner, the plugin registered, Dawn accepted the adapter
+and the session was built. The first run then aborted the test host from inside ONNX Runtime:
+`ortdevice.h:77 … Invalid memory type: -1`, SIGABRT, exit 134. That is
+[onnxruntime#28329](https://github.com/microsoft/onnxruntime/issues/28329). A plugin EP's factory
+hands ONNX Runtime a legacy `OrtMemTypeCPUOutput` (-1) memory type, which the core rejects with a
+C++ exception. The issue is open, and a comment on it confirms the WebGPU plugin is affected. An
+abort is not an exception the generator can catch, so "try the plugin, fall back to the CPU" does
+not hold. The plugin is never tried on Windows or Linux; `WebGpuPluginDisabledReason` names why in
+the execution provider line, and setting it to null re-enables the path. CUDA stays opt-in behind
+an explicit library path. It shares the plugin mechanism, so it probably shares the abort, but that
+is unverified.
+
+`build-slow` now installs lavapipe after the main suites and runs the GPU session tests with an
+adapter present. The first run of that step aborted (CI run 36078566359). It stays as the gate that
+goes red if the plugin is re-enabled before ONNX Runtime fixes the issue.
 
 ## Evidence
 

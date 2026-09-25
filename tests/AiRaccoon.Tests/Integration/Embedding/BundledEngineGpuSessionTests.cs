@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using AiRaccoon.Infrastructure.Embedding;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
@@ -35,40 +34,21 @@ public sealed class BundledEngineGpuSessionTests
         TestData.Cosine(onGpu[0].Vector, onCpu[0].Vector).ShouldBeGreaterThan(0.999);
     }
 
-    /// <summary>The RIDs the WebGPU plugin package ships a native library for, off macOS (ADR-0112).</summary>
-    private static readonly string[] PluginRids = ["win-x64", "win-arm64", "linux-x64", "linux-arm64"];
-
     /// <summary>
-    ///     Off macOS the WebGPU plugin shipped under webgpu/ runs the session, or the session falls back
-    ///     to the CPU with the reason. On a RID the plugin ships for, the plugin must load and reach
-    ///     adapter discovery: no GPU device, or a device Dawn has no driver for (CI's Hyper-V display).
+    ///     On Windows and Linux the WebGPU plugin is never tried, because it aborts the process on its first
+    ///     run once it finds an adapter; the session runs on the CPU and says why.
     /// </summary>
     [RetryFact]
-    public async Task PreferGpu_OffMacOs_RunsOnThePluginWebGpu_OrFallsBackWithAReason()
+    public void PreferGpu_OnWindowsOrLinux_RefusesThePluginWebGpu_AndRunsOnTheCpu()
     {
-        if (OperatingSystem.IsMacOS())
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
         {
-            Assert.Skip("macOS uses the built-in WebGPU provider, not the plugin");
+            Assert.Skip("the WebGPU plugin is only used on Windows and Linux");
         }
 
         using var gpu = Generator(preferGpu: true);
 
-        if (gpu.ExecutionProvider == "WebGPU")
-        {
-            using var cpu = Generator(preferGpu: false);
-            const string text = "The drain embeds pending rows one at a time on the GPU.";
-            var onGpu = await gpu.GenerateAsync([text], cancellationToken: TestContext.Current.CancellationToken);
-            var onCpu = await cpu.GenerateAsync([text], cancellationToken: TestContext.Current.CancellationToken);
-            TestData.Cosine(onGpu[0].Vector, onCpu[0].Vector).ShouldBeGreaterThan(0.999);
-            return;
-        }
-
-        gpu.ExecutionProvider.ShouldStartWith("CPU (GPU refused: ");
-        if (PluginRids.Contains(RuntimeInformation.RuntimeIdentifier))
-        {
-            gpu.ExecutionProvider.ShouldMatch(
-                @"^CPU \(GPU refused: (no WebGPU GPU device|.*Failed to get a WebGPU adapter)");
-        }
+        gpu.ExecutionProvider.ShouldBe($"CPU (GPU refused: {OnnxEmbeddingGenerator.WebGpuPluginDisabledReason})");
     }
 
     [RetryFact]

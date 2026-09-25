@@ -318,6 +318,11 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     private const string WebGpuExecutionProviderName = "WebGpuExecutionProvider";
     private const string WebGpuPluginDirectoryName = "webgpu";
 
+    /// <summary>Why the WebGPU plugin is never tried: it registers and builds a session, then aborts the
+    /// whole process on the first run, which no catch can turn into a fallback. Null re-enables it.</summary>
+    internal static readonly string? WebGpuPluginDisabledReason =
+        "the WebGPU plugin aborts the process on its first run under ONNX Runtime 1.30 (onnxruntime issue 28329)";
+
     /// <summary>The first WebGPU plugin refusal that is not about one model — a missing library, a failed
     /// registration, no GPU device — so later sessions skip straight to the CPU with the same reason.</summary>
     private static volatile string? _webGpuPluginRefusal;
@@ -389,6 +394,12 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// Takes <see cref="GpuGate" /> like the built-in provider: both share one GPU context per process.</summary>
     private InferenceSession? CreatePluginWebGpuSessionOrNull(string modelPath, int intraOpThreads)
     {
+        if (WebGpuPluginDisabledReason is { } disabled)
+        {
+            ExecutionProvider = $"{CpuProvider} (GPU refused: {disabled})";
+            return null;
+        }
+
         var (devices, refusal) = WebGpuPluginDevicesOrCachedRefusal(() =>
         {
             var library = ResolveWebGpuPluginLibrary(AppContext.BaseDirectory);
