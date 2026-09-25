@@ -281,6 +281,51 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         return null;
     }
 
+    private static int _nvidiaVulkanIcdChecked;
+
+    /// <summary>
+    ///     Once per process on Linux: when NVIDIA's Vulkan driver is mounted without an ICD manifest (common in GPU
+    ///     containers), writes one to a temp file and adds it with <c>VK_ADD_DRIVER_FILES</c> so Dawn finds the GPU.
+    ///     Any failure leaves the loader as it was, and the session falls back as before.
+    /// </summary>
+    private static void SupplyNvidiaVulkanIcdOnce()
+    {
+        if (!OperatingSystem.IsLinux() || Interlocked.Exchange(ref _nvidiaVulkanIcdChecked, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var anyManifest = NvidiaVulkanIcd.ManifestDirectories(home, Environment.GetEnvironmentVariable)
+                .Any(dir => Directory.Exists(dir) && Directory.EnumerateFiles(dir, "*.json").Any());
+            var driver = NvidiaVulkanIcd.DriverDirectories
+                .Select(dir => Path.Combine(dir, NvidiaVulkanIcd.DriverLibrary))
+                .FirstOrDefault(File.Exists);
+            var variableSet = NvidiaVulkanIcd.DriverVariables
+                .Any(name => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name)));
+            if (!NvidiaVulkanIcd.NeedsManifest(anyManifest, driver, variableSet))
+            {
+                return;
+            }
+
+            var manifest = Path.Combine(Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "ai-raccoon")).FullName,
+                "nvidia_icd.json");
+            File.WriteAllText(manifest, NvidiaVulkanIcd.Manifest(driver!));
+            _ = SetNativeEnvironmentVariable("VK_ADD_DRIVER_FILES", manifest, 0);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The loader keeps its own view; WebGPU then refuses and the session runs on the CPU with the reason.
+        }
+    }
+
+    /// <summary>libc's setenv: the Vulkan loader reads the native environment, which .NET's own setter does not change on Unix.</summary>
+    [DllImport("libc", EntryPoint = "setenv")]
+    private static extern int SetNativeEnvironmentVariable(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string value, int overwrite);
+
     /// <summary>Why a session that prefers the GPU runs on the CPU where the loaded core has no WebGPU.</summary>
     internal const string NoWebGpuInCoreReason = "this platform's ONNX Runtime core has no WebGPU";
 
@@ -288,6 +333,7 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// on the CPU), or null when ORT refuses it.</summary>
     private InferenceSession? CreateBuiltInWebGpuSessionOrNull(string modelPath, int intraOpThreads)
     {
+        SupplyNvidiaVulkanIcdOnce();
         try
         {
             using var options = new SessionOptions();
