@@ -231,3 +231,8 @@ def test_harness_engine_embeds_a_row_from_the_shared_dir(shared) -> None:
 def test_sharing_refuses_to_write_into_the_product_dir() -> None:
     with pytest.raises(ValueError):
         _load_cli().export_model_dir("ane", PRODUCT_DIR, MAX_LEN, "fp16", share_weights_with=PRODUCT_DIR)
+
+
+def test_sharing_refuses_the_plain_layout(tmp_path) -> None:
+    with pytest.raises(ValueError, match="ane"):
+        _load_cli().export_model_dir("plain", tmp_path, MAX_LEN, "fp16", share_weights_with=PRODUCT_DIR)

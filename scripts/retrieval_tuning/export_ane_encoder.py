@@ -119,6 +119,8 @@ def export_model_dir(layout: str, out: Path, max_len: int = 1024, dtype: str = "
     if out == models_root or models_root in out.parents:
         raise ValueError(f"refusing to write under the product models root {models_root}")
     if share_weights_with is not None:
+        if layout != "ane":
+            raise ValueError("--share-weights-with needs --layout ane: the plain layout gains nothing from it")
         if dtype != "fp16":
             raise ValueError("--share-weights-with needs --dtype fp16: the product weights file is fp16")
         if out == Path(share_weights_with).resolve():
