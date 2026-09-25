@@ -169,3 +169,40 @@ def beats(a: Sequence[float], b: Sequence[float]) -> bool:
 def paired_ratios(a: Sequence[float], b: Sequence[float]) -> list[float]:
     """a/b per rotation, paired by position (same repeat index for both configs)."""
     return [x / y for x, y in zip(a, b)]
+
+
+def summarize_ab(names: Sequence[str], per_config: Mapping[str, Sequence[Mapping[str, float]]],
+                  reference: str) -> dict[str, object]:
+    """Per-config min/max/mean of cpu_s, p50_ms, p95_ms and peak phys+neural footprint over every
+    name in `names` (not just the first two), plus `beats`/paired within-rotation ratio of every
+    other config against `reference`.
+    """
+    if reference not in per_config:
+        raise ValueError(f"reference config {reference!r} not among configs {list(per_config)}")
+
+    metric_series = {
+        "cpu_s": {name: [rep["cpu_s"] for rep in per_config[name]] for name in names},
+        "p50_ms": {name: [rep["p50_ms"] for rep in per_config[name]] for name in names},
+        "p95_ms": {name: [rep["p95_ms"] for rep in per_config[name]] for name in names},
+        "footprint_kib_peak": {name: [rep["phys_kib_peak"] + rep["neural_kib_peak"] for rep in per_config[name]]
+                               for name in names},
+    }
+    result: dict[str, object] = {metric: summarize(series) for metric, series in metric_series.items()}
+
+    reference_cpu = metric_series["cpu_s"][reference]
+    beats_reference: dict[str, bool] = {}
+    reference_beats: dict[str, bool] = {}
+    paired_ratio_over_reference: dict[str, list[float]] = {}
+    for name in names:
+        if name == reference:
+            continue
+        cpu = metric_series["cpu_s"][name]
+        beats_reference[name] = beats(cpu, reference_cpu)
+        reference_beats[name] = beats(reference_cpu, cpu)
+        paired_ratio_over_reference[name] = paired_ratios(cpu, reference_cpu)
+
+    result["reference"] = reference
+    result["beats_reference"] = beats_reference
+    result["reference_beats"] = reference_beats
+    result["paired_ratio_over_reference"] = paired_ratio_over_reference
+    return result

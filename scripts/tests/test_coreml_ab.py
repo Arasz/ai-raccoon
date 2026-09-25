@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from retrieval_tuning.coreml import beats, interleave, paired_ratios, seeded_sample, summarize
+import pytest
+
+from retrieval_tuning.coreml import (
+    beats,
+    interleave,
+    paired_ratios,
+    seeded_sample,
+    summarize,
+    summarize_ab,
+)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -79,3 +88,65 @@ def test_paired_ratios_divides_by_matching_rotation_index() -> None:
     b = [5.0, 10.0, 10.0]
 
     assert paired_ratios(a, b) == [2.0, 2.0, 3.0]
+
+
+# ---------------------------------------------------------------------------------------------
+# summarize_ab: N-config summary + beats/paired-ratio against a named reference
+
+
+def _reps(cpu_s: list[float], p50_ms: list[float], p95_ms: list[float],
+          phys_kib_peak: list[int], neural_kib_peak: list[int]) -> list[dict]:
+    return [{"cpu_s": c, "p50_ms": p50, "p95_ms": p95, "phys_kib_peak": phys, "neural_kib_peak": neural}
+            for c, p50, p95, phys, neural in zip(cpu_s, p50_ms, p95_ms, phys_kib_peak, neural_kib_peak)]
+
+
+def _three_config_per_config() -> dict[str, list[dict]]:
+    return {
+        "mlx": _reps([1.0, 1.1], [10.0, 11.0], [20.0, 21.0], [1000, 1010], [0, 0]),
+        "ane-t1": _reps([5.0, 5.5], [50.0, 55.0], [90.0, 95.0], [2000, 2010], [500, 510]),
+        "ane-t3": _reps([6.0, 6.5], [60.0, 65.0], [100.0, 105.0], [2100, 2110], [520, 530]),
+    }
+
+
+def test_summarize_ab_covers_every_config_not_just_the_first_two() -> None:
+    per_config = _three_config_per_config()
+
+    result = summarize_ab(list(per_config), per_config, reference="mlx")
+
+    assert set(result["cpu_s"]) == {"mlx", "ane-t1", "ane-t3"}
+    assert set(result["p50_ms"]) == {"mlx", "ane-t1", "ane-t3"}
+    assert set(result["p95_ms"]) == {"mlx", "ane-t1", "ane-t3"}
+    assert set(result["footprint_kib_peak"]) == {"mlx", "ane-t1", "ane-t3"}
+
+
+def test_summarize_ab_reports_beats_and_paired_ratio_for_every_non_reference_config() -> None:
+    per_config = _three_config_per_config()
+
+    result = summarize_ab(list(per_config), per_config, reference="mlx")
+
+    # mlx is cheapest (range separation holds against both), reference itself is excluded.
+    assert result["reference"] == "mlx"
+    assert set(result["beats_reference"]) == {"ane-t1", "ane-t3"}
+    assert set(result["reference_beats"]) == {"ane-t1", "ane-t3"}
+    assert result["reference_beats"]["ane-t1"] is True
+    assert result["reference_beats"]["ane-t3"] is True
+    assert result["beats_reference"]["ane-t1"] is False
+    assert set(result["paired_ratio_over_reference"]) == {"ane-t1", "ane-t3"}
+    assert result["paired_ratio_over_reference"]["ane-t1"] == paired_ratios(
+        [5.0, 5.5], [1.0, 1.1])
+
+
+def test_summarize_ab_footprint_is_phys_plus_neural_per_repeat() -> None:
+    per_config = _three_config_per_config()
+
+    result = summarize_ab(list(per_config), per_config, reference="mlx")
+
+    assert result["footprint_kib_peak"]["ane-t1"]["min"] == 2000 + 500
+    assert result["footprint_kib_peak"]["ane-t1"]["max"] == 2010 + 510
+
+
+def test_summarize_ab_rejects_a_reference_not_among_the_configs() -> None:
+    per_config = _three_config_per_config()
+
+    with pytest.raises(ValueError):
+        summarize_ab(list(per_config), per_config, reference="not-a-config")

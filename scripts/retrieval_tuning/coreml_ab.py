@@ -6,12 +6,15 @@ writes them to <out>-rows.json so every config sees the identical rows, then tim
 --configs for --repeats fresh subprocesses each, in a rotated interleave (coreml.interleave). Each
 subprocess does one untimed warm-up pass over every row (compiling every CoreML bucket it touches)
 before the timed pass. Writes one JSON: per-repeat row p50/p95, CPU-s, peak phys+neural footprint,
-per-slot loadavg/competing-process counts, and the coreml.py range-separation summary.
+per-slot loadavg/competing-process counts and ANE compiler CPU-s delta (aned + ANECompilerService,
+sampled around the slot's subprocess), and the coreml.py N-config range-separation summary
+(min/max/mean of cpu_s/p50/p95/footprint, plus beats and paired within-rotation ratio of every
+config against --reference).
 
 Usage:
     python3 coreml_ab.py --model-dir <granite dir> --configs configs.json --out out/ab.json \\
-        [--repeats 3] [--long-n 400] [--short-n 400] [--seed N] [--dry-run 20] \\
-        [--coreml-cache-dir <dir>]
+        [--repeats 3] [--long-n 400] [--short-n 400] [--seed N] [--reference NAME] \\
+        [--dry-run 20] [--coreml-cache-dir <dir>]
 
 configs.json: [{"name": str, "device": "cpu"|"mlx"|"coreml", "units": str|null, "step": int,
                 "threads": int, "max_sessions": int, "cache_limit_mib": int|null,
@@ -140,23 +143,20 @@ def _orchestrate(args: argparse.Namespace) -> None:
         slot = {"loadavg": os.getloadavg()[0], "competing": competing_processes()}
         slot_out = args.out.parent / f"{args.out.stem}-{name}-r{repeat}.json"
         print(f"slot repeat={repeat} config={name}", flush=True)
+        compiler_before = chunk_window.ane_compiler_cpu_s()
         subprocess.run([sys.executable, __file__, "--model-dir", str(args.model_dir),
                         "--out", str(slot_out), "--configs", str(args.configs),
                         "--one-config", name, "--one-repeat", str(repeat), "--rows", str(rows_path),
                         *(["--coreml-cache-dir", str(args.coreml_cache_dir)] if args.coreml_cache_dir else [])],
                        check=True)
+        slot["compiler_cpu_s"] = chunk_window.ane_compiler_cpu_s() - compiler_before
         slot_result = json.loads(slot_out.read_text())
         slot_result.update(slot)
         per_config[name].append(slot_result)
 
-    cpu_series = {name: [r["cpu_s"] for r in reps] for name, reps in per_config.items()}
-    summary: dict[str, object] = {"cpu_s": coreml.summarize(cpu_series)}
-    names = list(cpu_series)
-    if len(names) == 2:
-        a, b = names
-        summary["beats"] = {f"{a}_beats_{b}": coreml.beats(cpu_series[a], cpu_series[b]),
-                            f"{b}_beats_{a}": coreml.beats(cpu_series[b], cpu_series[a])}
-        summary["paired_ratio"] = {"a": a, "b": b, "a_over_b": coreml.paired_ratios(cpu_series[a], cpu_series[b])}
+    names = [c["name"] for c in configs]
+    reference = args.reference or names[0]
+    summary = coreml.summarize_ab(names, per_config, reference)
 
     args.out.write_text(json.dumps({
         "configs": configs, "repeats": args.repeats, "seed": args.seed,
@@ -176,6 +176,7 @@ def main() -> None:
     parser.add_argument("--long-n", type=int, default=DEFAULT_SET_SIZE)
     parser.add_argument("--short-n", type=int, default=DEFAULT_SET_SIZE)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument("--reference", help="reference config name for beats/paired-ratio (default: first --configs entry)")
     parser.add_argument("--dry-run", type=int, help="override long/short set size to N/2 rows each")
     parser.add_argument("--one-config", help=argparse.SUPPRESS)
     parser.add_argument("--one-repeat", type=int, help=argparse.SUPPRESS)
