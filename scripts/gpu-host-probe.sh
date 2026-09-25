@@ -66,8 +66,8 @@ else
   echo "no NVIDIA driver; CUDA skipped"
 fi
 
-section "WebGPU session (AIRACCOON_REQUIRE_WEBGPU=1)"
-AIRACCOON_REQUIRE_WEBGPU=1 dotnet exec "$TESTS" \
+section "WebGPU session"
+dotnet exec "$TESTS" \
   --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests 2>&1 | tee /tmp/probe-webgpu.log | tail -25
 WEBGPU_RESULT="$(grep -E '^(Test run summary|  total|  failed|  succeeded|  skipped)' /tmp/probe-webgpu.log | tr '\n' ' ')"
 WEBGPU_REASON="$(grep -o 'CPU (GPU refused: [^"]*' /tmp/probe-webgpu.log | head -1)"

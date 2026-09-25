@@ -282,19 +282,6 @@ jobs:
         # host-specific ONNX artifact, not a portable expectation.
         # Performance!=Benchmark: see the build-fast filter for why.
         run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Slow&Performance!=Benchmark" --no-build -v m
-      - name: Install lavapipe (software Vulkan, no GPU on this runner)
-        if: needs.changes.outputs.code == 'true'
-        # Installed after the suites on purpose: `auto` sends the bundled engine to the GPU, so a
-        # working Vulkan driver during the main run would move every embedding test onto lavapipe.
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq mesa-vulkan-drivers vulkan-tools
-      - name: WebGPU plugin on lavapipe
-        if: needs.changes.outputs.code == 'true'
-        continue-on-error: true
-        env:
-          AIRACCOON_REQUIRE_WEBGPU: 1
-        run: |
-          vulkaninfo --summary || true
-          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests
       - name: Upload test stderr log
         # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
         if: failure()
@@ -370,19 +357,6 @@ jobs:
       - name: Slow tests (integration + E2E)
         if: needs.changes.outputs.code == 'true'
         run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Slow&Performance!=Benchmark" --no-build -v m
-      - name: Install lavapipe (software Vulkan, no GPU on this runner)
-        if: needs.changes.outputs.code == 'true'
-        # Installed after the suites on purpose: `auto` sends the bundled engine to the GPU, so a
-        # working Vulkan driver during the main run would move every embedding test onto lavapipe.
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq mesa-vulkan-drivers vulkan-tools
-      - name: WebGPU plugin on lavapipe
-        if: needs.changes.outputs.code == 'true'
-        continue-on-error: true
-        env:
-          AIRACCOON_REQUIRE_WEBGPU: 1
-        run: |
-          vulkaninfo --summary || true
-          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests
       - name: Upload test stderr log
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

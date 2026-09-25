@@ -46,7 +46,7 @@ public sealed class ReferenceAssets
 
     public static string ManifestPath => Path.Combine(AssetsDirectory, ManifestFileName);
 
-    /// <summary>The platform the current process runs on: "osx-arm64" or "linux-x64".</summary>
+    /// <summary>The platform the current process runs on: "osx-arm64", "linux-x64" or "linux-arm64".</summary>
     public static string CurrentPlatform { get; } = ResolveCurrentPlatform();
 
     public static string MemoryModuleName => MemoryModuleAsset.Name;
