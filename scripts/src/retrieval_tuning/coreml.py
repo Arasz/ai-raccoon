@@ -54,13 +54,15 @@ def free_dim_overrides(input_shapes: Mapping[str, Sequence[object]], n: int) -> 
     return overrides
 
 
-def cache_dir_for(root: Path, model_sha: str, ort_version: str, units: str, bucket: int) -> Path:
-    """Compiled-model cache dir, one per (model, ORT version, compute units, bucket).
+def cache_dir_for(root: Path, model_sha: str, ort_version: str, units: str, bucket: int,
+                   specialization: str | None = None) -> Path:
+    """Compiled-model cache dir, one per (model, ORT version, compute units, bucket, specialization).
 
-    A cache dir shared across buckets serves a compiled artifact built for the wrong shape and
-    CoreML crashes at Run, so bucket must be its own path segment, not folded into a combined key.
+    A cache dir shared across buckets, or across specialization strategies, serves a compiled
+    artifact built for the wrong shape or strategy and CoreML crashes at Run, so both must be their
+    own path segments, not folded into a combined key.
     """
-    return Path(root) / model_sha[:12] / ort_version / units / f"bucket-{bucket}"
+    return Path(root) / model_sha[:12] / ort_version / units / f"bucket-{bucket}" / (specialization or "default")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -97,7 +99,6 @@ class BucketSessions:
         self._live: "OrderedDict[int, object]" = OrderedDict()
         self.builds = 0
         self.evictions = 0
-        self.disposed = 0
         self.peak_live = 0
 
     def get(self, bucket: int) -> object:
@@ -108,26 +109,54 @@ class BucketSessions:
         self.builds += 1
         self._live[bucket] = session
         if self._max_live and len(self._live) > self._max_live:
-            _, evicted = self._live.popitem(last=False)
-            self._dispose(evicted)
+            self._live.popitem(last=False)  # no close() on InferenceSession: drop the reference, let GC collect
             self.evictions += 1
         self.peak_live = max(self.peak_live, len(self._live))
         return session
-
-    def _dispose(self, session: object) -> None:
-        close = getattr(session, "close", None)
-        if close is not None:
-            close()
-        self.disposed += 1
 
     @property
     def live_count(self) -> int:
         return len(self._live)
 
-    def dispose_all(self) -> None:
-        while self._live:
-            _, session = self._live.popitem()
-            self._dispose(session)
+
+# ---------------------------------------------------------------------------------------------
+# ANE compiler CPU: ps parsing and per-pid delta
+
+
+def parse_ps_time(value: str) -> float:
+    """ps's colon-separated `TIME` field (`MM:SS.ss` or `HH:MM:SS`) as seconds."""
+    seconds = 0.0
+    for part in value.split(":"):
+        seconds = seconds * 60 + float(part)
+    return seconds
+
+
+def parse_ps_pids(text: str, names: Sequence[str]) -> dict[int, float]:
+    """pid -> CPU seconds, for every `ps -A -o pid=,time=,comm=` line whose comm basename matches."""
+    pids: dict[int, float] = {}
+    for line in text.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) != 3:
+            continue
+        pid_str, time_str, comm = parts
+        if not pid_str.isdigit():
+            continue
+        if comm.strip().rsplit("/", 1)[-1] in names:
+            pids[int(pid_str)] = parse_ps_time(time_str)
+    return pids
+
+
+def compiler_cpu_delta(before: Mapping[int, float], after: Mapping[int, float]) -> tuple[float, list[int]]:
+    """Sum of after[pid]-before.get(pid, 0) over pids present in `after`, plus the pids present in
+    `before` but gone from `after`.
+
+    A lower bound, not an exact delta: a pid that exited between the two samples did CPU work this
+    sum cannot see (its own before-value has nowhere to be subtracted from), so its vanishing is
+    reported instead of silently making the total go negative.
+    """
+    total = sum(after[pid] - before.get(pid, 0.0) for pid in after)
+    vanished = sorted(set(before) - set(after))
+    return total, vanished
 
 
 # ---------------------------------------------------------------------------------------------
@@ -168,7 +197,7 @@ def beats(a: Sequence[float], b: Sequence[float]) -> bool:
 
 def paired_ratios(a: Sequence[float], b: Sequence[float]) -> list[float]:
     """a/b per rotation, paired by position (same repeat index for both configs)."""
-    return [x / y for x, y in zip(a, b)]
+    return [x / y for x, y in zip(a, b, strict=True)]
 
 
 def summarize_ab(names: Sequence[str], per_config: Mapping[str, Sequence[Mapping[str, float]]],

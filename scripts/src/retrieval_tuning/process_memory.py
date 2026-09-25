@@ -65,6 +65,13 @@ _RUSAGE_INFO_V4 = 4
 _RUSAGE_INFO_V6 = 6
 
 
+def _sample_from_v6(info: "_RusageInfoV6", peak_rss_kib: int) -> MemorySample:
+    return MemorySample(info.resident_size // 1024, max(peak_rss_kib, info.resident_size // 1024),
+                        info.phys_footprint // 1024, info.lifetime_max_phys_footprint // 1024,
+                        info.neural_footprint // 1024, info.lifetime_max_neural_footprint // 1024,
+                        info.energy_nj)
+
+
 def memory_kib() -> MemorySample:
     if sys.platform == "darwin":
         libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
@@ -72,10 +79,7 @@ def memory_kib() -> MemorySample:
 
         info6 = _RusageInfoV6()
         if libproc.proc_pid_rusage(os.getpid(), _RUSAGE_INFO_V6, ctypes.byref(info6)) == 0:
-            return MemorySample(info6.resident_size // 1024, max(peak_rss, info6.resident_size // 1024),
-                                info6.phys_footprint // 1024, info6.lifetime_max_phys_footprint // 1024,
-                                info6.neural_footprint // 1024, info6.lifetime_max_neural_footprint // 1024,
-                                info6.energy_nj)
+            return _sample_from_v6(info6, peak_rss)
 
         info4 = _RusageInfoV4()
         if libproc.proc_pid_rusage(os.getpid(), _RUSAGE_INFO_V4, ctypes.byref(info4)) != 0:
