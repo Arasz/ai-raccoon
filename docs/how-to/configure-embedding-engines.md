@@ -110,6 +110,9 @@ those platforms. The separate WebGPU plugin that 1.51.0 used aborted the process
 ([onnxruntime#28329](https://github.com/microsoft/onnxruntime/issues/28329)), so 1.51.2 turned it
 off. Since 1.52.0 the package ships the core ONNX Runtime publishes for Node.js in place of the
 NuGet one: the same 1.30.0 release and commit, with WebGPU compiled in ([ADR-0115](../adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md)).
+Some NVIDIA GPU containers mount the Vulkan driver (`libGLX_nvidia.so.0`) without the manifest the
+Vulkan loader needs to find it. Since 1.52.1 the tool supplies one for its own process when that is the
+case, under `$TMPDIR/ai-raccoon/`, so WebGPU still finds the GPU.
 The opt-in `cuda` device still loads through the plugin mechanism the upstream issue was reported
 against. It is available, but expect the same abort until that issue is fixed; if the server dies on
 the first embed after you set it, run `ai-raccoon settings model device auto`.
