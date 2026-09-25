@@ -46,9 +46,38 @@ public sealed class BundledEngineGpuSessionTests
             Assert.Skip("the WebGPU plugin is only used on Windows and Linux");
         }
 
+        if (Environment.GetEnvironmentVariable(BuiltInWebGpuVariable) == "1")
+        {
+            Assert.Skip("a WebGPU-enabled core runs the built-in provider, not the plugin");
+        }
+
         using var gpu = Generator(preferGpu: true);
 
         gpu.ExecutionProvider.ShouldBe($"CPU (GPU refused: {OnnxEmbeddingGenerator.WebGpuPluginDisabledReason})");
+    }
+
+    private const string BuiltInWebGpuVariable = "AIRACCOON_TEST_BUILTIN_WEBGPU";
+
+    /// <summary>
+    ///     With a core that has WebGPU compiled in (onnxruntime-node's build on Windows and Linux), the session
+    ///     runs on the built-in provider and matches the CPU session's vectors. Set the variable to opt in.
+    /// </summary>
+    [RetryFact]
+    public async Task BuiltInWebGpu_WhenTheCoreHasIt_RunsTheSession_WithTheCpuSessionsVectors()
+    {
+        if (Environment.GetEnvironmentVariable(BuiltInWebGpuVariable) != "1")
+        {
+            Assert.Skip($"set {BuiltInWebGpuVariable}=1 with a WebGPU-enabled onnxruntime core in place");
+        }
+
+        using var gpu = Generator(preferGpu: true);
+        using var cpu = Generator(preferGpu: false);
+        const string text = "The drain embeds pending rows one at a time on the GPU.";
+
+        gpu.ExecutionProvider.ShouldBe("WebGPU");
+        var onGpu = await gpu.GenerateAsync([text], cancellationToken: TestContext.Current.CancellationToken);
+        var onCpu = await cpu.GenerateAsync([text], cancellationToken: TestContext.Current.CancellationToken);
+        TestData.Cosine(onGpu[0].Vector, onCpu[0].Vector).ShouldBeGreaterThan(0.999);
     }
 
     [RetryFact]

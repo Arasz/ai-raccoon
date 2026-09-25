@@ -295,6 +295,18 @@ jobs:
         run: |
           vulkaninfo --summary | grep -E 'deviceName|driverName' || true
           dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests
+      - name: Built-in WebGPU with onnxruntime-node's core (experiment)
+        if: needs.changes.outputs.code == 'true'
+        continue-on-error: true
+        env:
+          AIRACCOON_TEST_BUILTIN_WEBGPU: 1
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/ortnode.tgz https://registry.npmjs.org/onnxruntime-node/-/onnxruntime-node-1.30.0.tgz
+          echo "b7086cd42d82fc1164cf5c9ce4e634288536194aba0d444eee10f86f1e50d90cb79c0309c115d6f31537355733136f5503d96894b3987a9a03f1f8d318e7c8ab  /tmp/ortnode.tgz" | sha512sum -c -
+          tar xzf /tmp/ortnode.tgz -C /tmp package/bin/napi-v6/linux/x64/libonnxruntime.so.1
+          cp /tmp/package/bin/napi-v6/linux/x64/libonnxruntime.so.1 tests/AiRaccoon.Tests/bin/Debug/net10.0/runtimes/linux-x64/native/libonnxruntime.so
+          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests
       - name: Upload test stderr log
         # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
         if: failure()

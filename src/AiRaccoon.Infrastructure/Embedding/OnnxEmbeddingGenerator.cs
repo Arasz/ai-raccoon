@@ -267,13 +267,13 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     internal static readonly IReadOnlyDictionary<string, string> GpuSessionConfigEntries =
         new Dictionary<string, string> { ["session.intra_op.allow_spinning"] = "0" };
 
-    /// <summary>A WebGPU session — ORT's built-in provider on macOS, the plugin on Windows and Linux — or
+    /// <summary>A WebGPU session — ORT's built-in provider wherever the core has it, else the plugin on Windows and Linux — or
     /// null, the caller then building a CPU session; <see cref="ExecutionProvider" /> records any refusal.</summary>
     private InferenceSession? CreateGpuSessionOrNull(string modelPath, int intraOpThreads)
     {
-        if (OperatingSystem.IsMacOS())
+        if (BuiltInWebGpuAvailable())
         {
-            return BuiltInWebGpuAvailable() ? CreateBuiltInWebGpuSessionOrNull(modelPath, intraOpThreads) : null;
+            return CreateBuiltInWebGpuSessionOrNull(modelPath, intraOpThreads);
         }
 
         return OperatingSystem.IsWindows() || OperatingSystem.IsLinux()
