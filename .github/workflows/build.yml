@@ -356,8 +356,10 @@ jobs:
   build-arm64:
     # linux-arm64 is a shipped RID that no other job runs on. GitHub's arm64 runners are free for
     # public repositories and have no GPU. Not a required check: a red here reports an arm64
-    # difference without blocking merges while the lane earns trust.
+    # difference without blocking merges while the lane earns trust. Runs on pushes to main (and
+    # manual dispatch) only, so a PR waits on x64 alone and arm64 is checked on the merge commit.
     needs: changes
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
     env:
