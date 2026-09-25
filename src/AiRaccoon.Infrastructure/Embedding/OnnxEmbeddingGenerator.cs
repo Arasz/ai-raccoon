@@ -281,20 +281,36 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         return null;
     }
 
-    private static int _nvidiaVulkanIcdChecked;
+    private static readonly Lock NvidiaVulkanIcdGate = new();
+    private static bool _nvidiaVulkanIcdChecked;
 
     /// <summary>
     ///     Once per process on Linux: when NVIDIA's Vulkan driver is mounted without an ICD manifest (common in GPU
     ///     containers), writes one to a temp file and adds it with <c>VK_ADD_DRIVER_FILES</c> so Dawn finds the GPU.
-    ///     Any failure leaves the loader as it was, and the session falls back as before.
+    ///     Any failure leaves the loader as it was, and the session falls back as before. Concurrent callers wait
+    ///     for the first to finish, so no engine builds its WebGPU session before the variable is set.
     /// </summary>
     private static void SupplyNvidiaVulkanIcdOnce()
     {
-        if (!OperatingSystem.IsLinux() || Interlocked.Exchange(ref _nvidiaVulkanIcdChecked, 1) == 1)
+        if (!OperatingSystem.IsLinux())
         {
             return;
         }
 
+        lock (NvidiaVulkanIcdGate)
+        {
+            if (_nvidiaVulkanIcdChecked)
+            {
+                return;
+            }
+
+            _nvidiaVulkanIcdChecked = true;
+            SupplyNvidiaVulkanIcd();
+        }
+    }
+
+    private static void SupplyNvidiaVulkanIcd()
+    {
         try
         {
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

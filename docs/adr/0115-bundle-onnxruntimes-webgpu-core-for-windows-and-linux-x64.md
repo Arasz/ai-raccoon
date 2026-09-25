@@ -78,7 +78,10 @@ for CUDA and MLX.
 
 On a Lightning AI Tesla T4 the WebGPU core runs through Dawn's Vulkan backend (`libvulkan.so.1` →
 `libGLX_nvidia.so.0`), but the container mounts the driver without its ICD manifest, so the loader finds
-no driver and every session fell back to the CPU (research record F17). On Linux, the first WebGPU
+no driver and every session fell back to the CPU. The loader trace (`LD_DEBUG=files` on that T4,
+2026-09-25) shows `libonnxruntime.so` loading `libvulkan.so.1`, which loads `libGLX_nvidia.so.0` only
+once a manifest names it; without one, `vulkaninfo` reports `Found no drivers!` and
+`BundledEngineGpuSessionTests` skips its WebGPU-only case. On Linux, the first WebGPU
 session now checks the loader's manifest directories (`NvidiaVulkanIcd.ManifestDirectories`). If none
 holds a manifest, no `VK_DRIVER_FILES`/`VK_ICD_FILENAMES`/`VK_ADD_DRIVER_FILES` is set, and
 `libGLX_nvidia.so.0` exists, it writes a manifest to `$TMPDIR/ai-raccoon/nvidia_icd.json` and sets
