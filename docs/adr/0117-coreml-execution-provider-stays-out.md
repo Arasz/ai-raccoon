@@ -11,17 +11,17 @@ Research: `docs/work/2026-09-25-coreml-ane-buckets-and-residency.md`
 The CoreML execution provider ships inside the pinned `Microsoft.ML.OnnxRuntime` osx-arm64 native
 package already; nothing needs to be added to reach it, only a session that asks for it. ADR-0108
 had already looked at it once, in passing, and rejected it on a dynamic-shape probe (305 of 401
-nodes, about 3x slower than plain CPU). The owner asked for a real evaluation, on its own, as a
+nodes, roughly 2x slower than plain CPU). The owner asked for a real evaluation, on its own, as a
 possible `embedding.device coreml` option alongside MLX.
 
-Getting there needed three fixes the earlier probe never found: static shapes require a
-free-dimension override on the attention mask's own dimension name, not just batch and sequence,
-or the model refuses to build at all; a compiled-model cache shared across bucket shapes serves the
-wrong compiled model back and crashes on the next differently-sized row; and ONNX Runtime's own
-thread spinning roughly doubles CPU per row on every device, CoreML included, unless it is turned
-off. Fixed, the graph loads, routes 338 of 376 nodes into Core ML across 25 partitions, and answers
-at cosine 0.999988-0.999997 against the CPU path. It runs. The question this ADR answers is whether
-it is worth running.
+Getting there needed two CoreML-specific fixes and one ORT-wide setting the earlier probe never
+found: static shapes require a free-dimension override on the attention mask's own dimension name,
+not just batch and sequence, or the model refuses to build at all; a compiled-model cache shared
+across bucket shapes serves the wrong compiled model back and crashes on the next differently-sized
+row; and ONNX Runtime's own thread spinning roughly doubles CPU per row on every device, CoreML
+included, unless it is turned off. Fixed, the graph loads, routes 338 of 376 nodes into Core ML
+across 25 partitions, and answers at cosine 0.999988-0.999997 against the CPU path. It runs. The
+question this ADR answers is whether it is worth running.
 
 ## Decision
 
@@ -39,7 +39,9 @@ measured against: CoreML's CPU-seconds per row must fall below MLX's ×64-bucket
 reference by range separation (every CoreML repeat faster than every MLX repeat), not overlap;
 peak phys+neural footprint must be at most 1.2 GB under the cheapest residency mode that still
 clears the recall and latency gates; the compiled cache on disk must stay at or under 1 GB for the
-chosen config. None of the five configurations measured here comes close on any of the three.
+chosen config. None of the four CoreML configurations measured here comes close on any of the three,
+though the closest of the three gates to clearing was disk, not CPU cost or footprint (research
+record F3).
 Concrete triggers worth re-measuring against: an ANE-friendly layout re-export in the style of
 `apple/ml-ane-transformers`, or a future ONNX Runtime CoreML EP release that changes how it
 dispatches long shapes, since the neural-footprint collapse past 704 tokens (F5) suggests today's
