@@ -133,10 +133,9 @@ a model whose bank you are happy to have embedded on the GPU from the start.
 on (`CUDA`, `WebGPU`, `MLX` or `CPU`), with the landing provider's own refusal reason first when it
 had one — for example WebGPU's own `"CPU (GPU refused: …)"` — followed by a suffix for each opt-in
 candidate (MLX, then CUDA) it tried and lost, in that fixed order regardless of what it landed on:
-`"WebGPU (CUDA refused: provider library not found: <path>)"`, or, on a Linux host with no Vulkan
-driver, `"CPU (GPU refused: … Failed to get a WebGPU adapter: No supported adapters) (CUDA refused:
-…)"`. When no GPU device is reported at all the WebGPU reason reads `"no WebGPU GPU device after
-registration (Linux needs libvulkan.so.1)"`. A session never throws because a GPU attempt failed — it always finishes on
+`"WebGPU (MLX refused: …)"` on macOS, or, on Windows and Linux with the WebGPU plugin off,
+`"CPU (GPU refused: the WebGPU plugin aborts the process on its first run …) (CUDA refused: provider
+library not found: <path>)"`. A session never throws because a GPU attempt failed — it always finishes on
 some provider, and the log line says which one and why the others were skipped. Force the CPU
 outright with `ai-raccoon settings model device cpu`.
 
@@ -145,7 +144,7 @@ it runs the bundled engine through the onnxruntime MLX plugin execution provider
 WebGPU, on a rewritten copy of the graph that lets the plugin claim the whole thing as one fused
 subgraph. It needs macOS on Apple Silicon and the plugin's native runtime, which only the
 osx-arm64 package carries (about 43 MB compressed) — a build that never fetched that runtime, or a
-non-Apple-Silicon machine, falls straight through to the existing WebGPU-then-CPU path and says so
+non-Apple-Silicon machine, falls straight through to the existing WebGPU-then-CPU path on macOS (the CPU elsewhere) and says so
 in the "execution provider" line (`WebGPU (MLX refused: …)` or `CPU (MLX refused: …)`). Setting it
 for a downloaded (non-bundled) model is a no-op: no rewritten graph exists for it, so that model
 keeps running wherever `auto`/`gpu`/`cpu` already put it.
@@ -176,7 +175,8 @@ model, not only the bundled one.
    ai-raccoon settings model device cuda C:\path\to\onnxruntime_providers_cuda.dll        # Windows
    ```
 
-3. Restart the server. A session now tries CUDA first, falls back to WebGPU, then the CPU, and the
+3. Restart the server. A session now tries CUDA first, then falls back to the CPU (the WebGPU plugin
+   is off on Windows and Linux in 1.51.2), and the
    "execution provider" log line says which one it landed on.
 
 The path is refused up front, with nothing written, when it does not exist, when `cuda` is given
@@ -192,12 +192,14 @@ expected requirement by that pattern, but it is unverified for 1.30 specifically
 Nobody has run this on real NVIDIA hardware. Registering the provider as a plugin against the
 tool's unmodified CPU core is expected to work, on the strength of the shared plugin entry points
 the WebGPU and MLX providers already use, but that expectation is unverified. If it does not work,
-the session falls back to WebGPU or the CPU and the log line names the refusal reason. Report
+the session falls back to the CPU and the log line names the refusal reason. It may also abort the
+process on the first embed, like the WebGPU plugin (see above); switch back with
+`ai-raccoon settings model device auto` if it does. Report
 anything unexpected on the repository.
 
 `win-arm64` and `linux-arm64` have no CUDA provider build; `settings model device cuda <path>`
-still stores the setting there, but the session refuses the CUDA attempt and falls through to
-WebGPU, then the CPU. `linux-musl-x64` has neither CUDA nor the WebGPU plugin and stays CPU-only
+still stores the setting there, but the session refuses the CUDA attempt and falls through to the
+CPU. `linux-musl-x64` has neither CUDA nor the WebGPU plugin and stays CPU-only
 regardless of this setting.
 
 ### Recipe 2: Configure OpenAI embeddings
