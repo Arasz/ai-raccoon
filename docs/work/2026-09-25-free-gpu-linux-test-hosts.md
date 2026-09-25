@@ -146,7 +146,7 @@ their own pages' summaries; prices were not read from a primary source.
 
 - Does Kaggle's T4 container have a Vulkan ICD? Settle with `!vulkaninfo --summary` in a GPU notebook.
 - Kaggle, Colab and Lightning were not run: no browser session or credentials were available to the
-  agent. `scripts/gpu-host-probe.sh` does the whole check in one cell; the owner runs it once per host.
+  agent. `scripts/gpu-host-probe.py` does the whole check in one cell; the owner runs it once per host.
 - Whether Windows D3D12 aborts like Linux under the plugin (inferred, same ORT code path), and whether
   the node core's Windows build needs `DirectML.dll` at load time.
 - Kaggle's current driver (595.x / CUDA 13.2) is from a secondary source; `!nvidia-smi` settles it.

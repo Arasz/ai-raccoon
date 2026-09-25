@@ -206,15 +206,16 @@ regardless of this setting.
 
 #### Checking a Linux GPU host
 
-`scripts/gpu-host-probe.sh` checks both GPU paths on any Linux machine with a shell, such as a
-Kaggle or Colab notebook (prefix it with `!`) or a Lightning AI Studio:
+`scripts/gpu-host-probe.py` checks both GPU paths on any Linux machine with a shell, such as a
+Kaggle or Colab notebook (prefix it with `!`) or a Lightning AI Studio. It needs only `python3`, `git`
+and network access:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Arasz/ai-raccoon/main/scripts/gpu-host-probe.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Arasz/ai-raccoon/main/scripts/gpu-host-probe.py | python3 -
 ```
 
 It prints the GPU, driver and Vulkan devices, builds the tests, installs the CUDA 13 runtime
-wheels and the `1.30.0` CUDA provider, fetches the bundled WebGPU core, then runs the WebGPU session test (it lands on WebGPU only when the
+wheels into its own folder (not the notebook's environment) and the `1.30.0` CUDA provider, fetches the bundled WebGPU core, then runs the WebGPU session test (it lands on WebGPU only when the
 host exposes a Vulkan driver) and the CUDA session test with `AIRACCOON_TEST_CUDA_LIBRARY` set. The
 closing `PROBE SUMMARY` block says which paths ran and, for a WebGPU fallback, why.
 
