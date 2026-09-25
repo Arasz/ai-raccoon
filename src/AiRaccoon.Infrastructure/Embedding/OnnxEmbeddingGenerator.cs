@@ -59,6 +59,21 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     /// <summary>WebGPU sessions share one process-wide GPU context, which concurrent runs corrupt.</summary>
     private static readonly Lock GpuGate = new();
 
+    /// <summary>Test hook: whether no thread holds <see cref="GpuGate" /> right now.</summary>
+    internal static bool GpuGateIsFree()
+    {
+        if (!GpuGate.TryEnter())
+        {
+            return false;
+        }
+
+        GpuGate.Exit();
+        return true;
+    }
+
+    /// <summary>Test hook: whether this generator's MLX thread is still running; false when it never had one.</summary>
+    internal bool MlxThreadAlive => _mlxExecutor?.IsThreadAlive ?? false;
+
     /// <summary>Records a device this session was asked for but refused, as another "(… refused: …)" suffix.</summary>
     internal void AppendRefusal(string device, string reason) => ExecutionProvider = $"{ExecutionProvider} ({device} refused: {reason})";
 

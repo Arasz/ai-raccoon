@@ -17,6 +17,9 @@ internal sealed class SingleThreadExecutor : IDisposable
     /// <summary>Test hook: whether <see cref="Dispose" /> has run.</summary>
     internal bool IsDisposed => _disposed;
 
+    /// <summary>Test hook: whether the dedicated thread is still running.</summary>
+    internal bool IsThreadAlive => _thread.IsAlive;
+
     public SingleThreadExecutor(string name)
     {
         _thread = new Thread(Loop) { IsBackground = true, Name = name };

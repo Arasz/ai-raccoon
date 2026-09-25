@@ -21,6 +21,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
+[Collection(NeuralEngineCollection.Name)]
 public sealed class BundledEngineCoreMlSessionTests(ITestOutputHelper output) : IDisposable
 {
     private const int NeuralEngineServingEventId = 437;

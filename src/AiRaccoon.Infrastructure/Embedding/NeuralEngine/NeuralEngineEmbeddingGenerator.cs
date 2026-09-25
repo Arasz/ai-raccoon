@@ -33,6 +33,7 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
     private readonly Lock _serving = new();
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _settled;
+    private Task _compile = Task.CompletedTask;
     private Loaded? _neuralEngine;
     private ILocalEmbeddingGenerator? _overflow;
     private bool _disposed;
@@ -86,6 +87,9 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
         await _settled.WaitAsync(cancellationToken).ConfigureAwait(false);
         return Switch.State;
     }
+
+    /// <summary>The background session load, which can outlive <see cref="Dispose" /> by one bucket compile. Test hook.</summary>
+    internal Task Compile => Volatile.Read(ref _compile);
 
     public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(IEnumerable<string> values,
         EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
@@ -167,6 +171,7 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
         var reference = GenerateAsync(probes.Select(p => p.Text), cancellationToken: _stop.Token);
         var compile = Task.Factory.StartNew(() => Load(probes, _stop.Token), CancellationToken.None,
             TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        Volatile.Write(ref _compile, compile);
         Loaded loaded;
         try
         {
