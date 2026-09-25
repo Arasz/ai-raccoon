@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Hosting.Common;
 
@@ -8,7 +9,7 @@ namespace AiRaccoon.Hosting.Common;
 ///     (the proxy, or a CLI settings command, ADR-0075 §5.1) precede the verb. The private-spawn
 ///     arguments pin <c>--port 0</c>; the attach arguments carry the configured port.
 /// </summary>
-internal static class BackendLaunchArguments
+internal static partial class BackendLaunchArguments
 {
     /// <summary>The dotnet host's own file name: what `Environment.ProcessPath` names under `dotnet run`,
     /// `dotnet exec`, or a dotnet-tool published without an apphost (a `dotnet &lt;dll&gt;` shim).</summary>
@@ -85,5 +86,74 @@ internal static class BackendLaunchArguments
 
         arguments.AddRange(["serve", "--port", port.ToString(CultureInfo.InvariantCulture)]);
         return [.. arguments];
+    }
+
+    /// <summary>This binary's own filename on the dotnet global-tool shim and on PATH (".exe" on Windows).</summary>
+    internal static string ExecutableFileName => OperatingSystem.IsWindows() ? "ai-raccoon.exe" : "ai-raccoon";
+
+    /// <summary>
+    ///     The dotnet global-tool shim's own path (<c>~/.dotnet/tools/ai-raccoon[.exe]</c>), or null
+    ///     when <paramref name="userProfileDirectory" /> is unknown.
+    /// </summary>
+    internal static string? GlobalToolShimPath(string? userProfileDirectory) =>
+        string.IsNullOrEmpty(userProfileDirectory) ? null : Path.Combine(userProfileDirectory, ".dotnet", "tools", ExecutableFileName);
+
+    /// <summary>The first directory on <paramref name="pathVariable" /> whose <see cref="ExecutableFileName" /> <paramref name="fileExists" />, or null when none does.</summary>
+    internal static string? PathExecutable(string? pathVariable, Func<string, bool> fileExists)
+    {
+        if (string.IsNullOrEmpty(pathVariable))
+        {
+            return null;
+        }
+
+        foreach (var directory in pathVariable.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var candidate = Path.Combine(directory, ExecutableFileName);
+            if (fileExists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     <paramref name="own" /> when it still exists; otherwise the ADR-0116 follow-up fallback —
+    ///     the dotnet global-tool shim, then <c>PATH</c> — for a proxy whose resolved
+    ///     <c>Environment.ProcessPath</c> was deleted from under it by <c>dotnet tool update</c>.
+    ///     Neither found, <paramref name="own" /> is returned unchanged so the launcher's existing
+    ///     refusal applies exactly as before. A fallback in use is logged once.
+    /// </summary>
+    internal static string ResolveExecutable(
+        string own, ILogger logger, Func<string, bool> fileExists, string? userProfileDirectory, string? pathVariable)
+    {
+        if (fileExists(own))
+        {
+            return own;
+        }
+
+        var shim = GlobalToolShimPath(userProfileDirectory);
+        if (shim is not null && fileExists(shim))
+        {
+            Log.ExecutableFallback(logger, own, shim);
+            return shim;
+        }
+
+        var onPath = PathExecutable(pathVariable, fileExists);
+        if (onPath is not null)
+        {
+            Log.ExecutableFallback(logger, own, onPath);
+            return onPath;
+        }
+
+        return own;
+    }
+
+    internal static partial class Log
+    {
+        [LoggerMessage(EventId = 693, Level = LogLevel.Information,
+            Message = "ai-raccoon: this process's own executable at '{OwnPath}' is gone, most likely replaced by 'dotnet tool update'; spawning '{Fallback}' instead")]
+        public static partial void ExecutableFallback(ILogger logger, string ownPath, string fallback);
     }
 }

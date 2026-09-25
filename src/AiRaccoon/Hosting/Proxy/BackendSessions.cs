@@ -19,7 +19,11 @@ namespace AiRaccoon.Hosting.Proxy;
 ///     a proven shared server is never touched. A fallback child that fails its own proof is sent
 ///     nothing and stopped through its process at once.
 ///     processPath is this process's own path (Environment.ProcessPath in production): the backend
-///     is another ai-raccoon started as `serve`, so an unpackaged host cannot be it.
+///     is another ai-raccoon started as `serve`, so an unpackaged host cannot be it. When that
+///     resolved path no longer exists (ADR-0116: `dotnet tool update` deleted it out from under a
+///     still-running proxy), <see cref="BackendLaunchArguments.ResolveExecutable" /> falls back to
+///     the dotnet global-tool shim, then PATH — fileExists/userProfileDirectory/pathVariable are its
+///     injectable seams so a test never touches the real machine.
 /// </summary>
 public sealed partial class BackendSessions(
     IBackendLauncher backendLauncher,
@@ -28,7 +32,10 @@ public sealed partial class BackendSessions(
     IHttpClientFactory httpClientFactory,
     ILoggerFactory loggerFactory,
     string? processPath,
-    ServerConfig config) : IBackendSessions
+    ServerConfig config,
+    Func<string, bool> fileExists,
+    string? userProfileDirectory,
+    string? pathVariable) : IBackendSessions
 {
     private const string BackendName = "ai-raccoon-backend";
 
@@ -286,8 +293,9 @@ public sealed partial class BackendSessions(
 
     private async Task<AcquireOutcome> AcquireBackend(CancellationToken ctx)
     {
-        var executable = BackendLaunchArguments.Executable(processPath) ?? throw new BackendUnavailableException(
+        var own = BackendLaunchArguments.Executable(processPath) ?? throw new BackendUnavailableException(
             ErrorCode.Reach.AutoStartUnsupported, Unavailable(BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)));
+        var executable = BackendLaunchArguments.ResolveExecutable(own, _logger, fileExists, userProfileDirectory, pathVariable);
 
         BankPresenceGuard.EnsureExists(config.Options);
 

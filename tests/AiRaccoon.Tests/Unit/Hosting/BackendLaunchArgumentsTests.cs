@@ -1,6 +1,7 @@
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Setup;
+using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 
@@ -90,4 +91,91 @@ public sealed class BackendLaunchArgumentsTests
 
     private static ServerConfig Config(int port, string dataRoot) =>
         new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User });
+
+    // ── Executable fallback: the own process path was deleted by `dotnet tool update` (ADR-0116) ──
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void GlobalToolShimPath_ForAnUnknownUserProfile_ReturnsNull(string? userProfileDirectory) =>
+        BackendLaunchArguments.GlobalToolShimPath(userProfileDirectory).ShouldBeNull();
+
+    [Fact]
+    public void GlobalToolShimPath_JoinsTheUserProfileDotnetToolsAndTheExecutableFileName() =>
+        BackendLaunchArguments.GlobalToolShimPath("/Users/rafal").ShouldBe(
+            Path.Combine("/Users/rafal", ".dotnet", "tools", BackendLaunchArguments.ExecutableFileName));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void PathExecutable_ForAnUnknownPathVariable_ReturnsNull(string? pathVariable) =>
+        BackendLaunchArguments.PathExecutable(pathVariable, _ => true).ShouldBeNull();
+
+    [Fact]
+    public void PathExecutable_ReturnsTheFirstDirectoryThatHoldsIt()
+    {
+        var pathVariable = string.Join(Path.PathSeparator, "/usr/bin", "/usr/local/bin");
+        var expected = Path.Combine("/usr/local/bin", BackendLaunchArguments.ExecutableFileName);
+
+        BackendLaunchArguments.PathExecutable(pathVariable, path => path == expected).ShouldBe(expected);
+    }
+
+    [Fact]
+    public void PathExecutable_WhenNoDirectoryHoldsIt_ReturnsNull()
+    {
+        var pathVariable = string.Join(Path.PathSeparator, "/usr/bin", "/usr/local/bin");
+
+        BackendLaunchArguments.PathExecutable(pathVariable, _ => false).ShouldBeNull();
+    }
+
+    [Fact]
+    public void ResolveExecutable_WhenTheOwnPathExists_ReturnsItUnchanged_WithoutLogging()
+    {
+        var logger = new FakeLogger();
+
+        var resolved = BackendLaunchArguments.ResolveExecutable("/opt/ai-raccoon/ai-raccoon", logger, _ => true, "/home/rafal", "/usr/bin");
+
+        resolved.ShouldBe("/opt/ai-raccoon/ai-raccoon");
+        logger.Collector.GetSnapshot().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void ResolveExecutable_WhenTheOwnPathIsMissingButTheGlobalToolShimExists_FallsBackToTheShim_AndLogsOnce()
+    {
+        const string own = "/opt/ai-raccoon/.store/ai-raccoon/1.52.0/ai-raccoon/ai-raccoon";
+        var shim = BackendLaunchArguments.GlobalToolShimPath("/home/rafal")!;
+        var logger = new FakeLogger();
+
+        var resolved = BackendLaunchArguments.ResolveExecutable(own, logger, path => path == shim, "/home/rafal", "/usr/bin");
+
+        resolved.ShouldBe(shim);
+        var record = logger.Collector.GetSnapshot().Single(r => r.Id == 693);
+        record.Message.ShouldContain(own);
+        record.Message.ShouldContain(shim);
+    }
+
+    [Fact]
+    public void ResolveExecutable_WhenTheOwnPathIsMissingAndNoShimButFoundOnPath_FallsBackToThePathHit_AndLogsOnce()
+    {
+        const string own = "/opt/ai-raccoon/.store/ai-raccoon/1.52.0/ai-raccoon/ai-raccoon";
+        var onPath = Path.Combine("/usr/local/bin", BackendLaunchArguments.ExecutableFileName);
+        var logger = new FakeLogger();
+
+        var resolved = BackendLaunchArguments.ResolveExecutable(own, logger, path => path == onPath, "/home/rafal", "/usr/local/bin");
+
+        resolved.ShouldBe(onPath);
+        logger.Collector.GetSnapshot().Single(r => r.Id == 693).Message.ShouldContain(own);
+    }
+
+    [Fact]
+    public void ResolveExecutable_WhenNothingIsFound_ReturnsTheOwnPathUnchanged_WithoutLogging()
+    {
+        const string own = "/opt/ai-raccoon/.store/ai-raccoon/1.52.0/ai-raccoon/ai-raccoon";
+        var logger = new FakeLogger();
+
+        var resolved = BackendLaunchArguments.ResolveExecutable(own, logger, _ => false, "/home/rafal", "/usr/bin");
+
+        resolved.ShouldBe(own);
+        logger.Collector.GetSnapshot().ShouldBeEmpty();
+    }
 }
