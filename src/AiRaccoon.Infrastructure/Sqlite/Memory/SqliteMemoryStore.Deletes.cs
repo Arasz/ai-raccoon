@@ -82,12 +82,12 @@ public sealed partial class SqliteMemoryStore
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
-        var pathPrefix = LikePattern.Escape(path) + "/%";
         var parameters = new
         {
             projectId,
             path,
-            pathPrefix,
+            subtreeLow = PathSubtree.Low(path),
+            subtreeHigh = PathSubtree.High(path),
             deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
         };
         return await InTransactionAsync(connection, async () =>

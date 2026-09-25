@@ -238,4 +238,97 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
         command.CommandText = sql;
         return (long)(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
     }
+
+    /// <summary>
+    ///     The reconcile loop opens the bank about 30 times a second. A pooled native handle this
+    ///     process already initialised must not repeat the version and digest checks while no other
+    ///     connection has committed; only the every-open steps run.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_OnAPooledHandleAlreadyInitialised_SkipsTheVersionAndDigestChecks()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var factory = Factory();
+        SQLitePCL.sqlite3 handle;
+        await using (var first = await factory.OpenBankAsync(ct))
+        {
+            handle = first.Handle!;
+        }
+
+        var statements = new List<string>();
+        SQLitePCL.raw.sqlite3_trace(handle, (SQLitePCL.strdelegate_trace)((_, sql) => statements.Add(sql)), null);
+        try
+        {
+            await using var second = await factory.OpenBankAsync(ct);
+
+            second.Handle.ShouldBeSameAs(handle, "the pool must hand the same native handle back");
+            statements.ShouldNotContain(sql => sql == "PRAGMA user_version" || sql == "PRAGMA application_id",
+                string.Join(" | ", statements));
+            statements.ShouldContain(sql => sql.Contains("FROM watches", StringComparison.Ordinal),
+                "the watch-overlap prune runs on every open: " + string.Join(" | ", statements));
+        }
+        finally
+        {
+            SQLitePCL.raw.sqlite3_trace(handle, (SQLitePCL.strdelegate_trace?)null, null);
+        }
+    }
+
+    /// <summary>
+    ///     Negative control for the handle cache: a new native handle (the pool cleared, as a rekey
+    ///     does) is initialised afresh — vec0 is loaded on it, not assumed from the old one.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_OnAFreshHandleAfterThePoolIsCleared_LoadsVec0Again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var factory = Factory();
+        await using (await factory.OpenBankAsync(ct))
+        {
+        }
+
+        SqliteConnection.ClearAllPools();
+        await using var connection = await factory.OpenBankAsync(ct);
+
+        (await connection.ExecuteScalarAsync<string>(new CommandDefinition("SELECT vec_version()", cancellationToken: ct)))
+            .ShouldNotBeNullOrWhiteSpace();
+    }
+
+    /// <summary>
+    ///     The other half of the cache's contract: once another connection commits (an older binary
+    ///     writing legacy keys, a migration in another process), the next open of a pooled handle
+    ///     runs the schema pass again.
+    /// </summary>
+    [RetryFact]
+    public async Task OpenBankAsync_OnAPooledHandle_AfterAnotherConnectionCommits_RunsTheSchemaPassAgain()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var factory = Factory();
+        SQLitePCL.sqlite3 handle;
+        await using (var first = await factory.OpenBankAsync(ct))
+        {
+            handle = first.Handle!;
+        }
+
+        await using (var other = new SqliteConnection($"Data Source={factory.BankPath};Pooling=False"))
+        {
+            await other.OpenAsync(ct);
+            await other.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO settings (key, value) VALUES ('probe', '1')", cancellationToken: ct));
+        }
+
+        var statements = new List<string>();
+        SQLitePCL.raw.sqlite3_trace(handle, (SQLitePCL.strdelegate_trace)((_, sql) => statements.Add(sql)), null);
+        try
+        {
+            await using var second = await factory.OpenBankAsync(ct);
+
+            second.Handle.ShouldBeSameAs(handle);
+            statements.ShouldContain(sql => sql.StartsWith("PRAGMA application_id", StringComparison.Ordinal),
+                string.Join(" | ", statements));
+        }
+        finally
+        {
+            SQLitePCL.raw.sqlite3_trace(handle, (SQLitePCL.strdelegate_trace?)null, null);
+        }
+    }
 }

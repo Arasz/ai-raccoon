@@ -17,7 +17,7 @@ independently (Recipe 5); a fresh bank starts with neither configured.
 graph LR
     subgraph Local ["Local ONNX Engine (recommended)"]
         ONNX["Bundled granite-embedding-small-english-r2\n(fp16, 384-dim, ~97MB)"]
-        L_Prop["• 100% Offline\n• GPU first (WebGPU on macOS)\n• Zero API cost"]
+        L_Prop["• 100% Offline\n• GPU first (WebGPU; CUDA opt-in)\n• Zero API cost"]
     end
 
     subgraph LocalOther ["Any other local ONNX model"]
@@ -64,7 +64,7 @@ retrieval eval measured, and runs faster on the GPU than they ran on the CPU
 
 | Engine | Model | Where it runs | Memory nDCG@10 |
 |---|---|---|---:|
-| Local, bundled (current default) | `granite-embedding-small-english-r2` (fp16) | GPU (WebGPU on macOS), else CPU | 0.632 |
+| Local, bundled (current default) | `granite-embedding-small-english-r2` (fp16) | GPU (WebGPU, measured on macOS; WebGPU/CUDA on Windows and Linux per ADR-0112, unmeasured), else CPU | 0.632 |
 | Local, bundled (default before 1.47.0) | `all-MiniLM-L6-v2` (int8) | CPU only | 0.605 |
 
 Full quality and latency numbers for every engine measured, including the remote OpenAI/Ollama
@@ -89,20 +89,46 @@ the code corpus uses the same one (Recipe 5). It replaced all-MiniLM-L6-v2 in 1.
 embedded with the old model re-embeds once on its own after the upgrade
 ([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)).
 
-On macOS the session runs on the GPU through ONNX Runtime's WebGPU provider, which takes far less
-CPU per embed. Other platforms run on the CPU. `settings model device` changes where local sessions
-run, taking effect on the next server restart:
+On every platform a local session tries a GPU execution provider before falling back to the CPU.
+Which provider it tries, and what the host needs for that provider to actually find a device,
+depends on the RID ([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md),
+[ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md),
+[ADR-0112](../adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md)):
+
+| RID | GPU providers tried, in order | Host dependencies |
+|---|---|---|
+| `osx-arm64` | `mlx` (opt-in) → WebGPU (built in) → CPU | None for WebGPU. MLX needs Apple Silicon and the plugin's native runtime, bundled only in this RID's package. |
+| `win-x64` | `cuda` (opt-in) → WebGPU (packaged plugin) → CPU | WebGPU needs a GPU driver with D3D12 support. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
+| `win-arm64` | `cuda` (opt-in, but see below) → WebGPU (packaged plugin) → CPU | Same as win-x64. The CUDA provider only ships for x64, so `cuda` here refuses and falls through. |
+| `linux-x64` | `cuda` (opt-in) → WebGPU (packaged plugin) → CPU | WebGPU needs the Vulkan loader, `libvulkan.so.1` (`apt install libvulkan1` or the distro equivalent), plus the vendor's own Vulkan driver. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
+| `linux-arm64` | `cuda` (opt-in, but see below) → WebGPU (packaged plugin) → CPU | Same Vulkan loader as linux-x64. No CUDA provider ships for arm64; `cuda` refuses and falls through. |
+| `linux-musl-x64` | CPU only | None — the WebGPU plugin has no musl build. |
+
+`settings model device` changes which of these an operator opts into, taking effect on the next
+server restart:
 
 ```bash
-ai-raccoon settings model device auto   # default: the bundled model on the GPU, other models on the CPU
-ai-raccoon settings model device gpu    # every local model on the GPU where the platform has one
-ai-raccoon settings model device cpu    # never the GPU
-ai-raccoon settings model device mlx    # bundled model only, osx-arm64 only — see below
+ai-raccoon settings model device auto            # default: the bundled model on the GPU, other models on the CPU
+ai-raccoon settings model device gpu             # every local model on the GPU where the platform has one
+ai-raccoon settings model device cpu             # never the GPU
+ai-raccoon settings model device mlx             # bundled model only, osx-arm64 only — see below
+ai-raccoon settings model device cuda <path>      # every local model, opt-in, needs a provider library — see below
 ```
 
 `auto` keeps downloaded models on the CPU because a quantized (int8) model produces slightly
 different vectors on the GPU than the ones already stored from the CPU. Switch to `gpu` only for
 a model whose bank you are happy to have embedded on the GPU from the start.
+
+**Reading the "execution provider" line.** Every embedding session logs which provider it landed
+on (`CUDA`, `WebGPU`, `MLX` or `CPU`), with the landing provider's own refusal reason first when it
+had one — for example WebGPU's own `"CPU (GPU refused: …)"` — followed by a suffix for each opt-in
+candidate (MLX, then CUDA) it tried and lost, in that fixed order regardless of what it landed on:
+`"WebGPU (CUDA refused: provider library not found: <path>)"`, or, on a Linux host with no Vulkan
+driver, `"CPU (GPU refused: … Failed to get a WebGPU adapter: No supported adapters) (CUDA refused:
+…)"`. When no GPU device is reported at all the WebGPU reason reads `"no WebGPU GPU device after
+registration (Linux needs libvulkan.so.1)"`. A session never throws because a GPU attempt failed — it always finishes on
+some provider, and the log line says which one and why the others were skipped. Force the CPU
+outright with `ai-raccoon settings model device cpu`.
 
 **`mlx` is opt-in and bundled-engine-only** ([ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md)):
 it runs the bundled engine through the onnxruntime MLX plugin execution provider instead of
@@ -113,6 +139,49 @@ non-Apple-Silicon machine, falls straight through to the existing WebGPU-then-CP
 in the "execution provider" line (`WebGPU (MLX refused: …)` or `CPU (MLX refused: …)`). Setting it
 for a downloaded (non-bundled) model is a no-op: no rewritten graph exists for it, so that model
 keeps running wherever `auto`/`gpu`/`cpu` already put it.
+
+#### CUDA (opt-in, x64 only, untested on real hardware)
+
+CUDA is never bundled — its native provider is over 270 MB, past the size nuget.org allows for a
+package — so it is a library you install yourself and point the tool at
+([ADR-0112](../adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md)). It applies to every local
+model, not only the bundled one.
+
+1. Install the CUDA execution provider, matching the tool's ONNX Runtime core **exactly**:
+   `Microsoft.ML.OnnxRuntime.Gpu.Linux` or `Microsoft.ML.OnnxRuntime.Gpu.Windows`, version
+   `1.30.0`. A different version will not register against this build's core. The provider also
+   needs `onnxruntime_providers_shared`, which the tool already ships beside itself — no separate
+   install for that part — and refuses to load if the two do not match.
+2. Point the tool at the provider library:
+
+   ```bash
+   ai-raccoon settings model device cuda /abs/path/to/libonnxruntime_providers_cuda.so   # Linux
+   ai-raccoon settings model device cuda C:\path\to\onnxruntime_providers_cuda.dll        # Windows
+   ```
+
+3. Restart the server. A session now tries CUDA first, falls back to WebGPU, then the CPU, and the
+   "execution provider" log line says which one it landed on.
+
+The path is refused up front, with nothing written, when it does not exist, when `cuda` is given
+with no path, or when a path is given for any other device. A session also refuses a stored path
+that is not absolute — the CLI always writes one, so this only matters for a hand-edited settings
+file — with "provider library path must be absolute: `<path>`". `cuda` needs an NVIDIA driver and
+CUDA 13 on the host. The cuDNN version ONNX Runtime 1.30 needs against CUDA 13 is not published
+yet on its own — [ONNX Runtime's CUDA execution provider requirements
+table](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html) lists 1.27.x
+through 1.29.x against CUDA 13.0 and cuDNN 9.x, and does not yet list 1.30 — so cuDNN 9 is the
+expected requirement by that pattern, but it is unverified for 1.30 specifically.
+
+Nobody has run this on real NVIDIA hardware. Registering the provider as a plugin against the
+tool's unmodified CPU core is expected to work, on the strength of the shared plugin entry points
+the WebGPU and MLX providers already use, but that expectation is unverified. If it does not work,
+the session falls back to WebGPU or the CPU and the log line names the refusal reason. Report
+anything unexpected on the repository.
+
+`win-arm64` and `linux-arm64` have no CUDA provider build; `settings model device cuda <path>`
+still stores the setting there, but the session refuses the CUDA attempt and falls through to
+WebGPU, then the CPU. `linux-musl-x64` has neither CUDA nor the WebGPU plugin and stays CPU-only
+regardless of this setting.
 
 ### Recipe 2: Configure OpenAI embeddings
 

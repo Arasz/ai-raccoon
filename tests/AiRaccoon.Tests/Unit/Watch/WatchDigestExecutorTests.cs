@@ -320,7 +320,7 @@ public sealed class WatchDigestExecutorTests
     }
 
     [Fact]
-    public async Task Digest_IgnoredFile_NotIngested_NotFingerprinted_UpdatesLastChangeOnly()
+    public async Task Digest_IgnoredFile_NeverFingerprinted_TouchesNothing()
     {
         using var dir = TempDir.New("digest-ignored");
         var file = dir.File("secret.md");
@@ -333,8 +333,9 @@ public sealed class WatchDigestExecutorTests
             TestContext.Current.CancellationToken);
 
         stack.Memory.Ingested.ShouldBeEmpty();
+        stack.Memory.DeletedPaths.ShouldBeEmpty("nothing of an ignored, never-fingerprinted file is stored, so there is nothing to delete");
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
-        stack.Store.Watches[new WatchKey(Project, dir.Path)].LastChangeTs.ShouldBe(WatchTestStack.FixedNow.ToUnixTimeSeconds());
+        stack.Store.Watches[new WatchKey(Project, dir.Path)].LastChangeTs.ShouldBe(0);
     }
 
     [Fact]
@@ -453,9 +454,53 @@ public sealed class WatchDigestExecutorTests
             TestContext.Current.CancellationToken);
 
         stack.Memory.Ingested.ShouldBeEmpty();
-        stack.Memory.DeletedPaths.ShouldContain((Project, file));
+        stack.Memory.DeletedPaths.ShouldBeEmpty("an excluded path that was never fingerprinted has nothing stored to delete");
         (await stack.Store.GetFileHashAsync(Project, file, TestContext.Current.CancellationToken)).ShouldBeNull();
-        stack.Store.Watches[new WatchKey(Project, dir.Path)].LastChangeTs.ShouldBe(WatchTestStack.FixedNow.ToUnixTimeSeconds());
+        stack.Store.Watches[new WatchKey(Project, dir.Path)].LastChangeTs.ShouldBe(0);
+    }
+
+    /// <summary>
+    ///     A `.git` or `.ai-badger` write that has already vanished (a lock or -shm file) is still
+    ///     excluded: with no fingerprint at or under it, it must not run the delete cascade, whose
+    ///     cost scales with the whole project's rows.
+    /// </summary>
+    [Theory]
+    [InlineData(".git/index.lock")]
+    [InlineData(".ai-badger/task-tracking/tracking.db-shm")]
+    [InlineData("obj/Debug/x.cache")]
+    public async Task Digest_VanishedExcludedPath_NeverFingerprinted_SkipsTheDeleteCascade(string relative)
+    {
+        using var dir = TempDir.New("digest-excluded-vanished");
+        var file = Path.Combine(dir.Path, relative.Replace('/', Path.DirectorySeparatorChar));
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Deleted, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Memory.DeletedPaths.ShouldBeEmpty();
+        stack.Store.Watches[new WatchKey(Project, dir.Path)].LastChangeTs.ShouldBe(0);
+    }
+
+    /// <summary>
+    ///     Negative control for the skip: a vanished excluded directory whose subtree still holds a
+    ///     leaked fingerprint takes the cascade, so the leak is cleaned.
+    /// </summary>
+    [Fact]
+    public async Task Digest_VanishedExcludedDirectory_WithAFingerprintUnderIt_TakesTheDeleteCascade()
+    {
+        using var dir = TempDir.New("digest-excluded-dir-leak");
+        var worktree = Path.Combine(dir.Path, ".claude", "worktrees", "z");
+        var leaked = Path.Combine(worktree, "doc.md");
+        var stack = new WatchTestStack();
+        stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, leaked, "stale-hash", 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, worktree, WatchEventKind.Deleted, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Memory.DeletedPaths.ShouldContain((Project, worktree));
     }
 
     /// <summary>Negative control for the exclusion gate: an ordinary sibling still ingests.</summary>

@@ -141,10 +141,10 @@ public sealed partial class SqliteMemoryStore
         await connection.ExecuteAsync(Def(MemorySql.CreateQueueRestoreTable, null, cancellationToken));
         await connection.ExecuteAsync(
                 Def(MemorySql.CaptureQueueRowsForSourcePath,
-                    new { projectId, path, pathPrefix = LikePattern.Escape(path) + "/%" }, cancellationToken));
+                    new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken));
         await connection.ExecuteAsync(
                 Def(MemorySql.DeleteDiscardedQueueRowsForSourcePath,
-                    new { projectId, path, pathPrefix = LikePattern.Escape(path) + "/%" }, cancellationToken));
+                    new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken));
 
         var deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         if (keep.Count == 0)
@@ -170,7 +170,8 @@ public sealed partial class SqliteMemoryStore
             {
                 projectId,
                 path,
-                pathPrefix = LikePattern.Escape(path) + "/%",
+                subtreeLow = PathSubtree.Low(path),
+                subtreeHigh = PathSubtree.High(path),
                 keep = keepCode
             };
             await connection.ExecuteAsync(keepCode.Count == 0

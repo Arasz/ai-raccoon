@@ -381,6 +381,7 @@ internal static class MemorySchema
 
                                           CREATE INDEX IF NOT EXISTS idx_entries_scope_project ON entries(scope, project_id);
                                           CREATE INDEX IF NOT EXISTS idx_entries_hash ON entries(hash);
+                                          CREATE INDEX IF NOT EXISTS idx_entries_project_path ON entries(project_id, path);
                                           CREATE INDEX IF NOT EXISTS idx_entries_workspace ON entries(workspace_id);
                                           CREATE INDEX IF NOT EXISTS idx_entries_embed_state ON entries(embed_state, project_id);
                                           CREATE INDEX IF NOT EXISTS idx_watches_project ON watches(project_id);
@@ -632,6 +633,30 @@ internal static class MemorySchema
     }
 
     /// <summary>
+    ///     The steps that run on every open, version or digest current or not. The connection
+    ///     factory runs these alone on a pooled handle whose bank state has not moved since its
+    ///     last full pass (<see cref="SqliteConnectionFactory" />).
+    /// </summary>
+    internal static async Task<WatchOverlapPruneResult> RunEveryOpenStepsAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        // Runs on every open, version or not: it is a data move guarding a deny-by-default gate,
+        // it costs one indexed count, and a bank that was stamped by a newer build and then
+        // written by an older one would otherwise keep an unreachable scope forever.
+        await MigrateIngestScopeKeysAsync(connection, cancellationToken);
+
+        // Runs on every open, version or not, same shape as above: one indexed sqlite_master read,
+        // write only when the stored trigger body still needs the H4 scope guard.
+        await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken);
+
+        // Runs on every open, version or not (orchestrator ruling, S7): no-overlapping-watches was
+        // originally a one-time v11 ladder step; demoted to an unconditional, ungated step in the
+        // same "runs regardless" family as the two calls above — it must reach a fresh bank too
+        // (harmlessly no-ops: no watches rows yet) and a bank already at CurrentVersion.
+        return await PruneOverlappingWatchesAsync(connection, cancellationToken);
+    }
+
+    /// <summary>
     ///     Returns the unconditional no-overlapping-watches prune step's outcome for THIS call
     ///     (pruned list empty on a fresh bank or when nothing overlapped; warnings non-empty only
     ///     when a project's rows could not be resolved) — <see cref="SqliteConnectionFactory.InitializeAsync" />
@@ -696,20 +721,7 @@ internal static class MemorySchema
             }
         }
 
-        // Runs on every open, version or not: it is a data move guarding a deny-by-default gate,
-        // it costs one indexed count, and a bank that was stamped by a newer build and then
-        // written by an older one would otherwise keep an unreachable scope forever.
-        await MigrateIngestScopeKeysAsync(connection, cancellationToken);
-
-        // Runs on every open, version or not, same shape as above: one indexed sqlite_master read,
-        // write only when the stored trigger body still needs the H4 scope guard.
-        await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken);
-
-        // Runs on every open, version or not (orchestrator ruling, S7): no-overlapping-watches was
-        // originally a one-time v11 ladder step; demoted to an unconditional, ungated step in the
-        // same "runs regardless" family as the two calls above — it must reach a fresh bank too
-        // (harmlessly no-ops: no watches rows yet) and a bank already at CurrentVersion.
-        var overlapResult = await PruneOverlappingWatchesAsync(connection, cancellationToken);
+        var overlapResult = await RunEveryOpenStepsAsync(connection, cancellationToken);
 
         if (fresh)
         {
@@ -1570,6 +1582,7 @@ internal static class MemorySchema
                         """
                         CREATE INDEX idx_entries_scope_project ON entries(scope, project_id);
                         CREATE INDEX idx_entries_hash ON entries(hash);
+                        CREATE INDEX idx_entries_project_path ON entries(project_id, path);
                         CREATE INDEX idx_entries_workspace ON entries(workspace_id);
                         CREATE INDEX idx_entries_embed_state ON entries(embed_state, project_id);
                         CREATE INDEX idx_entries_source_id ON entries(source_id);
@@ -1672,10 +1685,9 @@ internal static class MemorySchema
         {
             foreach (var (projectId, pruned) in toPrune)
             {
-                var pathPrefix = LikePattern.Escape(pruned.Path) + "/%";
                 await connection.ExecuteAsync(
                         new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
-                            new { projectId, path = pruned.Path, pathPrefix }, cancellationToken: cancellationToken));
+                            new { projectId, path = pruned.Path, subtreeLow = PathSubtree.Low(pruned.Path), subtreeHigh = PathSubtree.High(pruned.Path) }, cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
                         new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
                             cancellationToken: cancellationToken));

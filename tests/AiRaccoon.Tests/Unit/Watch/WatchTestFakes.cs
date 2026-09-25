@@ -193,6 +193,15 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
     public Task<string?> GetFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
         Task.FromResult(FileHashes.TryGetValue(Key(projectId, path), out var file) ? file.Hash : null);
 
+    public Task<bool> HasFingerprintAtOrUnderAsync(string projectId, string path,
+        CancellationToken cancellationToken = default)
+    {
+        var prefix = $"{projectId}\u0000";
+        return Task.FromResult(FileHashes.Keys.Any(k =>
+            k.StartsWith(prefix, StringComparison.Ordinal) &&
+            IngestPath.IsWithinScope(k[prefix.Length..], path)));
+    }
+
     public Task UpsertFileHashAsync(string projectId, string path, string fileHash, long updatedAt,
         CancellationToken cancellationToken = default)
     {

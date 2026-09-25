@@ -52,10 +52,56 @@ public class VersionContractPackedTests
 
             root.GetProperty("version").GetString().ShouldBe(expected);
             root.GetProperty("packages")[0].GetProperty("version").GetString().ShouldBe(expected);
+
+            zip.Entries.Select(e => e.FullName).ShouldNotContain(e => e.Contains("providers_webgpu", StringComparison.Ordinal),
+                "the RID-agnostic nupkg must not carry the WebGPU plugin");
+
+            AssertWebGpuPluginPlacement(outDir, expected);
         }
         finally
         {
             TestData.DeleteTempRoot(outDir);
+        }
+    }
+
+    /// <summary>
+    ///     The WebGPU plugin rides in the Windows and glibc-Linux packages under webgpu/ only; the macOS
+    ///     package uses ORT's built-in WebGPU and musl has no plugin build. Checked in the same pack run.
+    /// </summary>
+    private static void AssertWebGpuPluginPlacement(string outDir, string version)
+    {
+        string[] Entries(string rid)
+        {
+            var nupkg = Path.Combine(outDir, $"ai-raccoon.{rid}.{version}.nupkg");
+            File.Exists(nupkg).ShouldBeTrue($"expected {nupkg}. Found: {string.Join(", ", Directory.GetFiles(outDir))}");
+            using var zip = ZipFile.OpenRead(nupkg);
+            return [.. zip.Entries.Select(e => e.FullName)];
+        }
+
+        foreach (var rid in new[] { "win-x64", "win-arm64" })
+        {
+            var entries = Entries(rid);
+            foreach (var file in new[] { "onnxruntime_providers_webgpu.dll", "dxcompiler.dll", "dxil.dll" })
+            {
+                entries.ShouldContain($"tools/net10.0/{rid}/webgpu/{file}", $"{rid} package lacks webgpu/{file}");
+            }
+        }
+
+        foreach (var rid in new[] { "linux-x64", "linux-arm64" })
+        {
+            Entries(rid).ShouldContain($"tools/net10.0/{rid}/webgpu/libonnxruntime_providers_webgpu.so",
+                $"{rid} package lacks webgpu/libonnxruntime_providers_webgpu.so");
+        }
+
+        foreach (var rid in new[] { "linux-musl-x64", "osx-arm64" })
+        {
+            if (!File.Exists(Path.Combine(outDir, $"ai-raccoon.{rid}.{version}.nupkg")))
+            {
+                continue;
+            }
+
+            Entries(rid).ShouldNotContain(e => e.Contains("providers_webgpu", StringComparison.Ordinal),
+                $"{rid} package must not carry the WebGPU plugin");
         }
     }
 }
