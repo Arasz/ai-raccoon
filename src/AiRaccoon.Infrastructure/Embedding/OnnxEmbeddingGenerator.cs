@@ -67,6 +67,16 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// construction, Run, Dispose — is pinned to one dedicated thread (ADR-0110).</summary>
     private SingleThreadExecutor? _mlxExecutor;
 
+    /// <summary>True for an MLX session: rows pad to <see cref="LengthBuckets" /> so MLX compiles and
+    /// caches a handful of shapes instead of one per row length (ADR-0114).</summary>
+    private bool _bucketRows;
+
+    /// <summary>True when this MLX session capped MLX's free-buffer cache (ADR-0114).</summary>
+    public bool MlxCacheLimitApplied { get; private set; }
+
+    /// <summary>Sequence length of the most recent session run, padding included.</summary>
+    internal int LastSequenceLength { get; private set; }
+
     /// <summary>Guards <see cref="Dispose" /> against being called twice — the standard IDisposable
     /// contract — since <see cref="_mlxExecutor" /> is itself single-use and throws on a second Run.</summary>
     private bool _disposed;
@@ -207,7 +217,11 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
     /// <summary>Attaches an executor to a normally-constructed (CPU) generator so Dispose's MLX
     /// branch is exercisable without a real onnxruntime MLX plugin. Test seam.</summary>
-    internal void AttachMlxExecutorForTesting(SingleThreadExecutor executor) => _mlxExecutor = executor;
+    internal void AttachMlxExecutorForTesting(SingleThreadExecutor executor)
+    {
+        _mlxExecutor = executor;
+        _bucketRows = true;
+    }
 
     /// <summary>Substitutes what Dispose runs on the MLX thread instead of the real session's
     /// Dispose, so a throwing disposal can be proven not to leak the executor. Test seam.</summary>
@@ -583,6 +597,8 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
         }
 
         _mlxExecutor = executor;
+        _bucketRows = true;
+        MlxCacheLimitApplied = executor.Run(() => new MlxCacheLimit(_logger).TryApply(pluginDirectory, MlxCacheLimit.DefaultBytes));
         refusalReason = null;
         return session;
     }
@@ -651,6 +667,12 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     {
         cancellationToken.ThrowIfCancellationRequested();
         var maxLen = Math.Min(_window, items.Max(i => i.Ids.Length));
+        if (_bucketRows)
+        {
+            maxLen = LengthBuckets.PaddedLength(maxLen, _window);
+        }
+
+        LastSequenceLength = maxLen;
         var batch = items.Count;
 
         var inputIds = new long[batch * maxLen];
