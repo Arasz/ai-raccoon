@@ -97,8 +97,13 @@
     <!-- The WebGPU core is fetched, not committed (ADR-0115); a pack without it would silently put these
          RIDs back on the CPU. -->
     <Target Name="RequireWebGpuCoreFiles" BeforeTargets="_GetPackageFiles" Condition="'$(RuntimeIdentifier)' == 'win-x64' Or '$(RuntimeIdentifier)' == 'win-arm64' Or '$(RuntimeIdentifier)' == 'linux-x64'">
-        <Error Condition="!Exists('$(MSBuildProjectDirectory)/webgpu-core/$(RuntimeIdentifier)')"
-               Text="The WebGPU-enabled ONNX Runtime core (webgpu-core/$(RuntimeIdentifier)/) is missing for a $(RuntimeIdentifier) pack, so the bundled engine could not use the GPU there (ADR-0115). Run 'python3 scripts/download-webgpu-core.py' first."/>
+        <PropertyGroup>
+            <_WebGpuCoreDir>$(MSBuildProjectDirectory)/webgpu-core/$(RuntimeIdentifier)</_WebGpuCoreDir>
+        </PropertyGroup>
+        <Error Condition="!Exists('$(_WebGpuCoreDir)/libonnxruntime.so') And !Exists('$(_WebGpuCoreDir)/onnxruntime.dll')"
+               Text="The WebGPU-enabled ONNX Runtime core (webgpu-core/$(RuntimeIdentifier)/onnxruntime.dll or libonnxruntime.so) is missing for a $(RuntimeIdentifier) pack, so the bundled engine could not use the GPU there (ADR-0115). Run 'python3 scripts/download-webgpu-core.py' first."/>
+        <Error Condition="$(RuntimeIdentifier.StartsWith('win')) And (!Exists('$(_WebGpuCoreDir)/dxcompiler.dll') Or !Exists('$(_WebGpuCoreDir)/dxil.dll'))"
+               Text="Dawn's shader compiler (webgpu-core/$(RuntimeIdentifier)/dxcompiler.dll, dxil.dll) is missing for a $(RuntimeIdentifier) pack, so WebGPU could not compile shaders there (ADR-0115). Run 'python3 scripts/download-webgpu-core.py' first."/>
     </Target>
 
     <Target Name="GenerateMcpServerJson" BeforeTargets="_GetPackageFiles">

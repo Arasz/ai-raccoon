@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Downloads and verifies the WebGPU-enabled ONNX Runtime core for win-x64, win-arm64 and linux-x64
 (ADR-0115): a pinned, sha256-verified fetch of the onnxruntime-node tarball, unpacked per RID into
-the git-ignored webgpu-core/ folder the build copies into webgpu/. Never committed."""
+the git-ignored webgpu-core/ folder. Directory.Build.targets swaps each core in place of the NuGet
+core at build time. Never committed."""
 
 import shutil
 import sys
@@ -31,8 +32,10 @@ def extract_core_files(tarball: Path, target_dir: Path) -> None:
             for member, name in files:
                 source = archive.extractfile("%s/%s" % (directory, member))
                 destination = rid_dir / name
-                with source, open(destination, "wb") as sink:
+                partial = destination.with_name(destination.name + ".partial")
+                with source, open(partial, "wb") as sink:
                     shutil.copyfileobj(source, sink)
+                partial.replace(destination)
                 print("extracted: %s" % destination)
 
 
