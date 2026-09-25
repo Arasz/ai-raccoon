@@ -17,6 +17,8 @@ public sealed class EmbeddingDeviceSettingTests
     [InlineData("cpu", EmbeddingDevice.Cpu)]
     [InlineData(" MLX ", EmbeddingDevice.Mlx)]
     [InlineData("Cuda", EmbeddingDevice.Cuda)]
+    [InlineData("coreml", EmbeddingDevice.CoreMl)]
+    [InlineData(" CoreML ", EmbeddingDevice.CoreMl)]
     [InlineData("tpu", EmbeddingDevice.Auto)]
     public void Parse_ReadsTheStoredValue_UnknownIsAuto(string? raw, EmbeddingDevice expected) =>
         EmbeddingDeviceSetting.Parse(raw).ShouldBe(expected);
@@ -30,6 +32,8 @@ public sealed class EmbeddingDeviceSettingTests
     [InlineData(EmbeddingDevice.Mlx, false, false)]
     [InlineData(EmbeddingDevice.Cuda, true, true)]
     [InlineData(EmbeddingDevice.Cuda, false, true)]
+    [InlineData(EmbeddingDevice.CoreMl, true, true)]
+    [InlineData(EmbeddingDevice.CoreMl, false, false)]
     public void PrefersGpu_AutoMeansTheBundledEngineOnly(EmbeddingDevice device, bool bundled, bool expected) =>
         EmbeddingDeviceSetting.PrefersGpu(device, bundled).ShouldBe(expected);
 
@@ -40,8 +44,22 @@ public sealed class EmbeddingDeviceSettingTests
     [InlineData(EmbeddingDevice.Gpu, true, false)]
     [InlineData(EmbeddingDevice.Cpu, true, false)]
     [InlineData(EmbeddingDevice.Cuda, true, false)]
+    [InlineData(EmbeddingDevice.CoreMl, true, false)]
+    [InlineData(EmbeddingDevice.CoreMl, false, false)]
     public void PrefersMlx_OnlyWhenExplicitlySetAndBundled(EmbeddingDevice device, bool bundled, bool expected) =>
         EmbeddingDeviceSetting.PrefersMlx(device, bundled).ShouldBe(expected);
+
+    [Theory]
+    [InlineData(EmbeddingDevice.CoreMl, true, true)]
+    [InlineData(EmbeddingDevice.CoreMl, false, false)]
+    [InlineData(EmbeddingDevice.Auto, true, false)]
+    [InlineData(EmbeddingDevice.Auto, false, false)]
+    [InlineData(EmbeddingDevice.Gpu, true, false)]
+    [InlineData(EmbeddingDevice.Cpu, true, false)]
+    [InlineData(EmbeddingDevice.Mlx, true, false)]
+    [InlineData(EmbeddingDevice.Cuda, true, false)]
+    public void PrefersCoreMl_OnlyWhenExplicitlySetAndBundled(EmbeddingDevice device, bool bundled, bool expected) =>
+        EmbeddingDeviceSetting.PrefersCoreMl(device, bundled).ShouldBe(expected);
 
     [Theory]
     [InlineData(EmbeddingDevice.Cuda, "/opt/ort/libonnxruntime_providers_cuda.so", "/opt/ort/libonnxruntime_providers_cuda.so")]

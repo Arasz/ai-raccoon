@@ -187,6 +187,7 @@ public class SettingsCommandsTests
     [InlineData("CPU", "cpu")]
     [InlineData("auto", "auto")]
     [InlineData("mlx", "mlx")]
+    [InlineData("coreml", "coreml")]
     public async Task ModelDeviceSet_StoresTheDevice(string argument, string stored)
     {
         var store = new FakeConfigStore();
@@ -266,6 +267,7 @@ public class SettingsCommandsTests
     [InlineData("auto")]
     [InlineData("cpu")]
     [InlineData("mlx")]
+    [InlineData("coreml")]
     public async Task ModelDeviceSet_PathWithAnotherDevice_IsRefused_AndNothingIsWritten(string device)
     {
         var store = new FakeConfigStore();
