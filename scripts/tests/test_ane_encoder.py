@@ -20,7 +20,7 @@ if not ane_encoder.BUNDLED_DIR.joinpath("tokenizer.json").exists():
 if not ane_encoder.hf_weights_cached():
     pytest.skip("granite HF weights not cached", allow_module_level=True)
 
-MAX_LEN = 512
+MAX_LEN = 1024
 
 
 @pytest.fixture(scope="module")
@@ -63,3 +63,18 @@ def test_ane_encoder_keeps_the_channel_first_layout_inside_the_layers(ane, batch
     hook.remove()
 
     assert shapes == [(1, 384, 1, ids.shape[1])]
+
+
+def test_half_precision_ane_encoder_stays_finite_and_close_on_a_1000_token_row(hf_model, batches) -> None:
+    # The ONNX CPU EP runs fp16 graphs through inserted fp32 casts, so an fp16 overflow only shows
+    # in real half arithmetic: torch's, or CoreML's on the Neural Engine.
+    ids, mask = (torch.from_numpy(a) for a in batches["long_1000"])
+    half = ane_encoder.Fp32Outputs(ane_encoder.AneEncoder(hf_model, MAX_LEN)).eval()
+
+    with torch.no_grad():
+        want = hf_model(input_ids=ids, attention_mask=mask).last_hidden_state.numpy()
+        got_last, got_cls = (t.numpy() for t in half(ids, mask))
+
+    assert np.isfinite(got_last).all()
+    assert ane_encoder.min_token_cosine(got_last, want, mask.numpy()) >= 0.999
+    assert ane_encoder.min_row_cosine(got_cls, want[:, 0]) >= 0.999

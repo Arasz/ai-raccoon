@@ -14,6 +14,7 @@ Needs torch; transformers and tokenizers are imported only where used.
 
 from __future__ import annotations
 
+import copy
 import os
 from pathlib import Path
 
@@ -26,7 +27,8 @@ HF_CACHE_DIR = Path.home() / ".cache" / "huggingface" / "hub" / "models--ibm-gra
 
 MASKED = -1e4  # fp16-representable, unlike finfo.min; exp(-1e4) is exactly 0 in fp16 and fp32
 PAD_ID = 50283
-SAMPLE_NAMES = ("short", "padded_pair", "long_300")
+SAMPLE_NAMES = ("short", "padded_pair", "long_300", "long_1000")
+NORM_SCALE = 64.0  # ChannelNorm squares x/64, not x: residual channels reach ~1800, so x*x overflows fp16
 
 
 def hf_weights_cached() -> bool:
@@ -124,9 +126,10 @@ class ChannelNorm(torch.nn.Module):
         self.eps = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        centered = x - x.mean(dim=1, keepdim=True)
-        var = (centered * centered).mean(dim=1, keepdim=True)
-        return centered * torch.rsqrt(var + self.eps) * self.weight
+        # x/sqrt(var+eps) == (x/s)/sqrt(var/s^2 + eps/s^2): same result, squares stay inside fp16 range.
+        scaled = (x - x.mean(dim=1, keepdim=True)) * (1.0 / NORM_SCALE)
+        var = (scaled * scaled).mean(dim=1, keepdim=True)
+        return scaled * torch.rsqrt(var + self.eps / NORM_SCALE**2) * self.weight
 
 
 class AneLayer(torch.nn.Module):
@@ -177,7 +180,7 @@ class AneEncoder(torch.nn.Module):
         config = hf_model.config
         heads = config.num_attention_heads
         head_dim = config.hidden_size // heads
-        self.embeddings = hf_model.embeddings
+        self.embeddings = copy.deepcopy(hf_model.embeddings)  # a later .half() must not touch hf_model
         self.layers = torch.nn.ModuleList(AneLayer(layer, heads, config.norm_eps) for layer in hf_model.layers)
         self.layer_types = list(config.layer_types)
         self.final_norm = ChannelNorm(hf_model.final_norm.weight, config.norm_eps)
@@ -204,6 +207,18 @@ class AneEncoder(torch.nn.Module):
         return last, last[:, 0]
 
 
+class Fp32Outputs(torch.nn.Module):
+    """Runs an encoder in half precision but returns float32, like the product's model_fp16.onnx."""
+
+    def __init__(self, encoder: torch.nn.Module) -> None:
+        super().__init__()
+        self.encoder = encoder.half()
+
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        last, cls = self.encoder(input_ids, attention_mask)
+        return last.float(), cls.float()
+
+
 # ---------------------------------------------------------------------------------------------
 # Parity helpers shared by the tests and the export CLI's self-check
 
@@ -224,6 +239,7 @@ def sample_batches(tokenizer_json: Path) -> dict[str, tuple[np.ndarray, np.ndarr
     paragraph = ("The server keeps project-scoped memory in SQLite. Each row carries its source path, "
                  "a timestamp, and an embedding computed by the bundled encoder. ")
     long = ids(paragraph * 40, limit=300)
+    assert len(ids(paragraph * 150)) > 1000
 
     def batch(rows: list[list[int]]) -> tuple[np.ndarray, np.ndarray]:
         width = max(len(r) for r in rows)
@@ -234,7 +250,8 @@ def sample_batches(tokenizer_json: Path) -> dict[str, tuple[np.ndarray, np.ndarr
             mask[i, : len(r)] = 1
         return input_ids, mask
 
-    return {"short": batch([short]), "padded_pair": batch([short, other]), "long_300": batch([long])}
+    return {"short": batch([short]), "padded_pair": batch([short, other]), "long_300": batch([long]),
+            "long_1000": batch([ids(paragraph * 150, limit=1000)])}
 
 
 def _cosine(a: np.ndarray, b: np.ndarray) -> np.ndarray:
