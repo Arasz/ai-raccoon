@@ -2,7 +2,7 @@
 
 Date: 2026-09-25
 
-Status: Accepted
+Status: Accepted, amended 2026-09-25 (NVIDIA containers without an ICD manifest)
 
 Research: `docs/work/2026-09-25-free-gpu-linux-test-hosts.md` (F11, F13)
 
@@ -73,6 +73,21 @@ for CUDA and MLX.
   path of onnxruntime#28329 and may abort the same way; it stays opt-in and untested.
 - `build-slow` installs lavapipe after the main suites and runs the GPU session tests with
   `AIRACCOON_REQUIRE_WEBGPU=1`, so a core that loses WebGPU, or a session that falls back, fails CI.
+
+## Amendment (2026-09-25): NVIDIA containers without an ICD manifest
+
+On a Lightning AI Tesla T4 the WebGPU core runs through Dawn's Vulkan backend (`libvulkan.so.1` →
+`libGLX_nvidia.so.0`), but the container mounts the driver without its ICD manifest, so the loader finds
+no driver and every session fell back to the CPU. The loader trace (`LD_DEBUG=files` on that T4,
+2026-09-25) shows `libonnxruntime.so` loading `libvulkan.so.1`, which loads `libGLX_nvidia.so.0` only
+once a manifest names it; without one, `vulkaninfo` reports `Found no drivers!` and
+`BundledEngineGpuSessionTests` skips its WebGPU-only case. On Linux, the first WebGPU
+session now checks the loader's manifest directories (`NvidiaVulkanIcd.ManifestDirectories`). If none
+holds a manifest, no `VK_DRIVER_FILES`/`VK_ICD_FILENAMES`/`VK_ADD_DRIVER_FILES` is set, and
+`libGLX_nvidia.so.0` exists, it writes a manifest to `$TMPDIR/ai-raccoon/nvidia_icd.json` and sets
+`VK_ADD_DRIVER_FILES` through libc's `setenv`, because .NET's own setter does not reach the native
+environment on Unix. The change is process-local: nothing under the user's home or `/etc` is written.
+On the T4 the GPU session tests then pass with `AIRACCOON_REQUIRE_WEBGPU=1`.
 
 ## Evidence
 

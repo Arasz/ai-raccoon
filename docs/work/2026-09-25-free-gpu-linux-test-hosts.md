@@ -98,7 +98,7 @@ In an `ubuntu:24.04` arm64 container with lavapipe installed, `vulkaninfo` lists
 session is refused with `no WebGPU GPU device after registration`. ONNX Runtime's device discovery
 reads PCI/sysfs, not Vulkan, and the VM has no display device.
 
-**Evidence:** `scripts/gpu-host-probe.sh` in Docker `--platform linux/arm64 ubuntu:24.04` on an Apple M4, 2026-09-25, commit c9b644d.
+**Evidence:** `scripts/gpu-host-probe.sh` (since replaced by `gpu-host-probe.py`) in Docker `--platform linux/arm64 ubuntu:24.04` on an Apple M4, 2026-09-25, commit c9b644d.
 
 ### F13 — onnxruntime-node's core runs built-in WebGPU on Linux x64 without aborting [MEASURED]
 
@@ -119,6 +119,50 @@ last bit (`0.71177268…` vs `0.71177273…`). All three are fixed in #746. The 
 and Slow suites passed on arm64.
 
 **Evidence:** PR #746 CI, job `build-arm64`, 2026-09-25.
+
+### F15 — On a Lightning AI Tesla T4, the bundled WebGPU core and the opt-in CUDA provider both run [MEASURED]
+
+Lightning AI free Studio: x86_64, Ubuntu 24.04, Tesla T4, driver 580.178.04 (CUDA 13.0). The probe at
+main 567e92e (1.52.0) ran `BundledEngineGpuSessionTests` (4 passed, only the macOS test skipped, no
+`GPU refused` anywhere) and `BundledEngineCudaSessionTests` (5 passed, including
+`CudaLibraryConfigured_RunsOnCuda_WithTheCpuSessionsVectors`: provider `CUDA`, cosine ≥ 0.999 against
+the CPU). So on this host the CUDA plugin did **not** hit the onnxruntime#28329 abort. The container
+mounts NVIDIA's Vulkan driver (`libGLX_nvidia.so.0`) but not its ICD manifest, so `vulkaninfo` finds
+no driver. WebGPU needs that manifest (F17). The run above passed only because a manifest had already
+been written to `~/.config/vulkan/icd.d/`, which the Vulkan loader reads by default, before its tests
+started.
+
+**Evidence:** `scripts/gpu-host-probe.py` over SSH on the Studio, 2026-09-25; PROBE SUMMARY `webgpu: Passed! total 5, failed 0, succeeded 4, skipped 1`, `cuda: Passed! total 6, failed 0, succeeded 5, skipped 1`. With a user-level `nvidia_icd.json` in `VK_DRIVER_FILES`, `vulkaninfo --summary` lists `Tesla T4 (DISCRETE_GPU)`, driver NVIDIA 580.178.04.
+
+### F16 — The installed 1.52.0 tool embeds on WebGPU and about 4× faster than 1.51.2 on the same T4 [MEASURED]
+
+Same Studio and workload for both: `serve --idle-timeout 0` on a fresh bank, `model embedding set
+local`, then over the stdio MCP proxy 300 `memory_write` calls (each note is about 6× a 60-word
+sentence), one `memory_embed_pending`, and one `memory_search`. 1.51.2 from nuget.org logged `execution
+provider CPU (GPU refused: the WebGPU plugin aborts …)`, with the GPU at 0 % / 0 MiB. 1.52.0, packed
+from main 567e92e because it was not on nuget.org yet, logged `execution provider WebGPU`, with the GPU
+at 50–56 % / 169 MiB. The NVIDIA ICD manifest was in `~/.config/vulkan/icd.d/` at the time (F17). There were no errors or aborts.
+
+```chart:bars
+title: seconds for 300 writes on a T4 (one run each)
+1.51.2 CPU: 111.2
+1.52.0 WebGPU: 26.4
+```
+
+**Evidence:** `mcp_drive.py` (session scratchpad) against ports 7731 (1.51.2) and 7732 (1.52.0) on the Studio, 2026-09-25, one run each. The drain afterwards took 14.4 s for 61 rows on 1.51.2 and 2.5 s for 101 rows on 1.52.0. `nvidia-smi --query-gpu=utilization.gpu,memory.used -l 1` sampled during each run.
+
+### F17 — WebGPU on the T4 is Dawn's Vulkan backend, and without the ICD manifest it falls back to the CPU [MEASURED]
+
+With the manifest present, the loader trace shows `libonnxruntime.so` → `libvulkan.so.1` →
+`libGLX_nvidia.so.0` (NVIDIA's Vulkan ICD). `libEGL_nvidia.so.0` is loaded by `libGLX_nvidia.so.0`
+itself, not by Dawn, so this is the Vulkan backend, not OpenGL ES. With the manifest moved out of
+`~/.config/vulkan/icd.d/` (`vulkaninfo`: `Found no drivers!`), `libvulkan.so.1` loads but finds no ICD.
+`BundledEngineGpuSessionTests` then passes 3 and skips 2: `TwoGpuSessions` skips because no session
+lands on WebGPU, and the fallback is the CPU with no abort. F16's 1.52.0 run also had the manifest in
+place. On NVIDIA containers that omit it, `auto` therefore runs on the CPU until the manifest is
+supplied, which `gpu-host-probe.py` now does.
+
+**Evidence:** `LD_DEBUG=files dotnet exec AiRaccoon.Tests.dll --filter-class …BundledEngineGpuSessionTests` on the Lightning Studio, 2026-09-25, with and without `~/.config/vulkan/icd.d/nvidia_icd.json`. `dynamically loaded by` lines for `libvulkan.so.1`, `libGLX_nvidia.so.0`, `libEGL*`.
 
 ### F9 — Kaggle/Colab/Lightning containers expose Vulkan [UNVERIFIED]
 
@@ -146,7 +190,7 @@ their own pages' summaries; prices were not read from a primary source.
 
 - Does Kaggle's T4 container have a Vulkan ICD? Settle with `!vulkaninfo --summary` in a GPU notebook.
 - Kaggle, Colab and Lightning were not run: no browser session or credentials were available to the
-  agent. `scripts/gpu-host-probe.sh` does the whole check in one cell; the owner runs it once per host.
+  agent. `scripts/gpu-host-probe.py` does the whole check in one cell; the owner runs it once per host.
 - Whether Windows D3D12 aborts like Linux under the plugin (inferred, same ORT code path), and whether
   the node core's Windows build needs `DirectML.dll` at load time.
 - Kaggle's current driver (595.x / CUDA 13.2) is from a secondary source; `!nvidia-smi` settles it.
