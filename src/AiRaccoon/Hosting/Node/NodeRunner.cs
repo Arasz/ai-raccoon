@@ -4,6 +4,7 @@ using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
@@ -170,7 +171,9 @@ internal partial class NodeRunner(
         var boundUrl = $"{serverHost.Urls.First().TrimEnd('/')}/mcp";
         var boundPort = new Uri(boundUrl).Port;
 
-        Log.ServeListening(logger, boundUrl);
+        // The install directory is here so this line can be matched against InstallWatchdog's
+        // shutdown warning (ADR-0116), which names the same AppContext.BaseDirectory.
+        Log.ServeListening(logger, ServerInfo.BinaryVersion, boundPort, AppContext.BaseDirectory, boundUrl);
 
         await streams.RenderUrlForInput(boundUrl, boundPort, descriptor.Source.McpEntry, descriptor.Source.Format);
     }
@@ -355,8 +358,9 @@ internal partial class NodeRunner(
 
     internal static partial class Log
     {
-        [LoggerMessage(EventId = 601, Level = LogLevel.Debug, Message = "ai-raccoon: serve listening on {Url}")]
-        public static partial void ServeListening(ILogger logger, string url);
+        [LoggerMessage(EventId = 601, Level = LogLevel.Information,
+            Message = "ai-raccoon: {Version} serving on port {Port} from '{InstallDirectory}' ({Url})")]
+        public static partial void ServeListening(ILogger logger, string version, int port, string installDirectory, string url);
 
         [LoggerMessage(EventId = 602, Level = LogLevel.Warning, Message = "ai-raccoon: serve ignoring --transport {Transport}; serve always uses http")]
         public static partial void IgnoringTransport(ILogger logger, McpTransport transport);
