@@ -128,6 +128,16 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         # The 97 MB weights are not committed (ADR-0108); the script is a no-op on a verified cache hit.
         run: python3 scripts/download-embedding-model.py
+      - name: Cache the WebGPU core (ADR-0115)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/webgpu-core
+          key: webgpu-core-onnxruntime-node-1.30.0-6e3390d6b783e7be
+      - name: Fetch and verify the WebGPU core
+        if: needs.changes.outputs.code == 'true'
+        # linux-x64 tests load the same WebGPU-enabled ORT core the package ships (ADR-0115).
+        run: python3 scripts/download-webgpu-core.py
       - name: Build
         if: needs.changes.outputs.code == 'true'
         # nuget.config references the gitignored local feed .nupkg-local/; make it
@@ -189,6 +199,16 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         # The 97 MB weights are not committed (ADR-0108); the script is a no-op on a verified cache hit.
         run: python3 scripts/download-embedding-model.py
+      - name: Cache the WebGPU core (ADR-0115)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/webgpu-core
+          key: webgpu-core-onnxruntime-node-1.30.0-6e3390d6b783e7be
+      - name: Fetch and verify the WebGPU core
+        if: needs.changes.outputs.code == 'true'
+        # linux-x64 tests load the same WebGPU-enabled ORT core the package ships (ADR-0115).
+        run: python3 scripts/download-webgpu-core.py
       - name: Build
         if: needs.changes.outputs.code == 'true'
         run: mkdir -p .nupkg-local && dotnet build --nologo
@@ -258,6 +278,16 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         # The 97 MB weights are not committed (ADR-0108); the script is a no-op on a verified cache hit.
         run: python3 scripts/download-embedding-model.py
+      - name: Cache the WebGPU core (ADR-0115)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/webgpu-core
+          key: webgpu-core-onnxruntime-node-1.30.0-6e3390d6b783e7be
+      - name: Fetch and verify the WebGPU core
+        if: needs.changes.outputs.code == 'true'
+        # linux-x64 tests load the same WebGPU-enabled ORT core the package ships (ADR-0115).
+        run: python3 scripts/download-webgpu-core.py
       - name: Cache the MLX runtime (ADR-0110)
         if: needs.changes.outputs.code == 'true'
         # VersionContractPackedTests runs a bare `dotnet pack`, which packs every RID the csproj
@@ -289,9 +319,10 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq mesa-vulkan-drivers vulkan-tools
       - name: GPU session tests with a Vulkan adapter present
         if: needs.changes.outputs.code == 'true'
-        # With lavapipe installed the WebGPU plugin gets an adapter; ONNX Runtime 1.30's plugin EP then
-        # aborts the test host on the first run (SIGABRT, exit 134). This step goes red if the plugin
-        # path is ever re-enabled while that is still true.
+        # With lavapipe installed the bundled WebGPU core gets an adapter, so the session must land on
+        # WebGPU and match the CPU's vectors (ADR-0115). The retired plugin path aborted here instead.
+        env:
+          AIRACCOON_REQUIRE_WEBGPU: 1
         run: |
           vulkaninfo --summary | grep -E 'deviceName|driverName' || true
           dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests
@@ -352,6 +383,16 @@ jobs:
       - name: Fetch and verify the bundled model
         if: needs.changes.outputs.code == 'true'
         run: python3 scripts/download-embedding-model.py
+      - name: Cache the WebGPU core (ADR-0115)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/webgpu-core
+          key: webgpu-core-onnxruntime-node-1.30.0-6e3390d6b783e7be
+      - name: Fetch and verify the WebGPU core
+        if: needs.changes.outputs.code == 'true'
+        # VersionContractPackedTests packs every RID, and the win/linux-x64 packs need the core.
+        run: python3 scripts/download-webgpu-core.py
       - name: Cache the MLX runtime (ADR-0110)
         if: needs.changes.outputs.code == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -441,6 +482,14 @@ jobs:
       - name: Fetch and verify the bundled model
         # The 97 MB weights are not committed (ADR-0108); the script is a no-op on a verified cache hit.
         run: python3 scripts/download-embedding-model.py
+      - name: Cache the WebGPU core (ADR-0115)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/webgpu-core
+          key: webgpu-core-onnxruntime-node-1.30.0-6e3390d6b783e7be
+      - name: Fetch and verify the WebGPU core
+        # linux-x64 tests load the same WebGPU-enabled ORT core the package ships (ADR-0115).
+        run: python3 scripts/download-webgpu-core.py
       - name: Build
         run: mkdir -p .nupkg-local && dotnet build --nologo
       - name: Nightly-tagged tests
