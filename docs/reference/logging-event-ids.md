@@ -9,10 +9,21 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **196** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **199** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
+
+(Remeasured 2026-09-25, task/air-server-exits-when-install-replaced: **199** —
+`InstallWatchdog` 613-614, ADR-0116: 613 warns once, then stops the host, when this
+process's own install directory (`AppContext.BaseDirectory`) has disappeared — most likely
+`dotnet tool update -g ai-raccoon` replacing it out from under a still-running backend; 614
+records a failed check without stopping, the same convention as `IdleWatchdog`'s 612. A new
+owner's block in the clean 613-619 gap between `IdleWatchdog`'s 610-612 and
+`ObservabilityRunner`'s 620-623. `MaintenanceJobRunner` also grows in place to 529: a
+due-check failing with `BundledModelInstallReplacedException` logs quietly at Debug instead
+of repeating 527's Warning every ~15s poll while the install watchdog above is already
+shutting the process down. +3 over the 196 below.)
 
 (Remeasured 2026-09-25, task/air-mlx-bucket-padding-cache-cap: **196** —
 `MlxCacheLimit` 434-435, ADR-0114: 434 records the MLX free-buffer cache cap and the limit it
@@ -104,11 +115,12 @@ One block per source file that owns a `Log` class or equivalent:
 | 433 | `src/AiRaccoon/Projects/ProjectRegistrationGuard.cs` (added 2026-08-23, WP6-6c, ADR-0089 decision 3): `LegacyProjectIdAccepted` at Warning — a raw-text project id has no registry row but the bank already holds rows for it, so the write proceeds instead of being refused; the message points at `project id convert`. A clean non-interleaving gap after 429-432 (`ManifestPoolingRepair`) and before 497 (`ExtractionHostedService`) |
 | 434-435 | `src/AiRaccoon.Infrastructure/Embedding/MlxCacheLimit.cs` (added 2026-09-25, ADR-0114): 434 `Applied` at Information — MLX's free-buffer cache capped for the MLX session, with the previous limit; 435 `NotApplied` at Warning — `libmlxc.dylib` could not be loaded, lacks the export, or refused the call, so the session runs with MLX's default cache (up to its memory limit) |
 | 497-506, 508 | `src/AiRaccoon.Infrastructure/Extraction/ExtractionHostedService.cs` (507/509 removed 2026-08-11: per-element candidate/failure logs de-noised; 497-499 added 2026-09-11: a transient SQLITE_BUSY/LOCKED — the WP12 write-lock convoy — logs one concise line with no stack trace instead of 503/505/506: 497 the interval read, 498 the run-level read, 499 a per-project deferral. The exception-carrying events stay for genuine failures, and a deferred project still counts toward the pass's `failures` tag) |
-| 525-528 | `src/AiRaccoon.Infrastructure/Maintenance/MaintenanceJobRunner.cs` (added 2026-08-15: one line per maintenance job that ran or failed, ADR-0070 — 530+ was taken by SweepHostedService and the uniqueness gate caught it; 527 added 2026-08-22, delta-review D6: the lastRun-ledger SELECT and `HasWorkAsync` used to run before the per-job try/catch, so either throwing escaped `RunDueAsync` and stopped every job registered after it — moved inside the same guard, logged distinctly from a run failure; 528 added 2026-08-23, WP3/#477: a job's `IReportsOutstandingRows.CountOutstandingRowsAsync` failing after the job itself already ran and is already ledger-stamped — only that pass's `job.<name>.rows` gauge is missing, logged distinctly from a run failure so it is not confused with one) |
+| 525-529 | `src/AiRaccoon.Infrastructure/Maintenance/MaintenanceJobRunner.cs` (added 2026-08-15: one line per maintenance job that ran or failed, ADR-0070 — 530+ was taken by SweepHostedService and the uniqueness gate caught it; 527 added 2026-08-22, delta-review D6: the lastRun-ledger SELECT and `HasWorkAsync` used to run before the per-job try/catch, so either throwing escaped `RunDueAsync` and stopped every job registered after it — moved inside the same guard, logged distinctly from a run failure; 528 added 2026-08-23, WP3/#477: a job's `IReportsOutstandingRows.CountOutstandingRowsAsync` failing after the job itself already ran and is already ledger-stamped — only that pass's `job.<name>.rows` gauge is missing, logged distinctly from a run failure so it is not confused with one; 529 added 2026-09-25, ADR-0116: a due-check failing with `BundledModelInstallReplacedException` — the install watchdog is already shutting the process down — logs quietly at Debug instead of repeating 527's Warning every ~15s poll until then, grown in place since 530 is SweepHostedService's) |
 | 510-524 | `src/AiRaccoon.Infrastructure/Maintenance/BankMaintenanceHostedService.cs` (517-519 added 2026-08-14: the pending-embed retry sweep, .NET-F1 — a watch-driven embedding failure used to leave a row permanently pending; 520-521 added 2026-08-14: the noise-entry retention purge, ADR-0039; 522-524 added 2026-08-15: the promotion-discard and search-quality retention purges, ADR-0055. **512 and 516 are retired**: both are still declared here but have had no call site since ADR-0070 moved vacuuming into `MaintenanceJobRunner`, which logs 525 instead — they cannot fire. Retired rather than deleted so the numbers are not reused; found by the 2026-08-16 checklist run. ADR-0076's on-demand poll loop deliberately reuses `RunFailed` (513) instead of minting a new id — a second near-duplicate would have interleaved with `MaintenanceJobRunner`'s adjacent 525-526 block) |
 | 530-537 | `src/AiRaccoon.Infrastructure/Degradation/SweepHostedService.cs` (537 is H6: skipped for access mode; moved from 520-527 on 2026-08-14 so the maintenance owner could stay contiguous when the noise purge extended it) |
 | 601-609 | `src/AiRaccoon/Hosting/Node/NodeRunner.cs` (606-607 are the loopback token, ADR-0020; 608 is the lost-the-port restart, ADR-0022; 604 and 609 are the unanswered probe, ADR-0043) |
 | 610-612 | `src/AiRaccoon/Hosting/Watchdog/IdleWatchdog.cs` |
+| 613-614 | `src/AiRaccoon/Hosting/Watchdog/InstallWatchdog.cs` (added 2026-09-25, ADR-0116: shuts the serve host down cleanly once its own install directory has been removed, most likely by `dotnet tool update -g ai-raccoon` replacing it out from under a still-running backend — automates ADR-0022's manual `serve --restart`; 613 is the one warning logged before stopping, 614 a failed check that leaves the loop to retry) |
 | 620-623 | `src/AiRaccoon/Hosting/Node/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
 | 630 | `src/AiRaccoon/Hosting/Proxy/ProxyRunner.cs` (ADR-0020) |
 | 631-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs` (ADR-0020; path corrected 2026-08-22 — moved from `Setup/Serve/`. 635's message extended with the captured stderr, delta-review plan C1. 631/632 added 2026-09-22, PSR P1.3/K1 — 631 is the private-spawn start line, 632 the private backend that never reported a URL; 633-635 are the attach path unchanged) |
