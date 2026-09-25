@@ -15,7 +15,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     bundled all-MiniLM-L6-v2 path — wordpiece tokenizer, mean-pool + L2, 256 window — is the
 ///     default descriptor and is behavior-preserved (G3 golden vectors).
 /// </summary>
-internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
+internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
 {
     /// <summary>
     ///     Real-content token budget of the BUNDLED engine: the 256-token window minus the
@@ -58,6 +58,9 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
 
     /// <summary>WebGPU sessions share one process-wide GPU context, which concurrent runs corrupt.</summary>
     private static readonly Lock GpuGate = new();
+
+    /// <summary>Records a device this session was asked for but refused, as another "(… refused: …)" suffix.</summary>
+    internal void AppendRefusal(string device, string reason) => ExecutionProvider = $"{ExecutionProvider} ({device} refused: {reason})";
 
     /// <summary>True only for a session that actually landed on WebGPU (not a "(… refused: …)" fallback) — <see cref="Run" />'s gate check.</summary>
     private readonly bool _needsGpuGateForRun;

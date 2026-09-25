@@ -25,7 +25,7 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
     private static EmbeddingService CreateService(FakeLogger<EmbeddingService> logger, InMemorySettings settings) =>
         new(logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-            NoOpMeasurementRecorder.Instance, TimeProvider.System, settings);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestData.EmbeddingOptions(), settings);
 
     private string CopyBundledModel()
     {

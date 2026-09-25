@@ -12,7 +12,7 @@ internal sealed class FakeConfigStore : FakeMemoryStore, ICodeEngineStore
     private static EmbeddingService Fingerprint() =>
         new(NullLogger<EmbeddingService>.Instance, new LocalTokenizer(), new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-            NoOpMeasurementRecorder.Instance, TimeProvider.System);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestData.EmbeddingOptions());
 
     public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
 

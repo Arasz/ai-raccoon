@@ -218,7 +218,7 @@ public sealed class VecDimensionReconcileWorkTests : IDisposable
     private static EmbeddingService RealEmbeddingService() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-            NoOpMeasurementRecorder.Instance, TimeProvider.System);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestData.EmbeddingOptions());
 
     private static async Task ConfigureManifestEngineAsync(string dataRoot, string manifestDir)
     {

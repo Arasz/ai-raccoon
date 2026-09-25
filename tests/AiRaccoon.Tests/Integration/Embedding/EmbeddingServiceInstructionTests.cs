@@ -70,7 +70,7 @@ public sealed class EmbeddingServiceInstructionTests
     private static EmbeddingService Service() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-            NoOpMeasurementRecorder.Instance, TimeProvider.System);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestData.EmbeddingOptions());
 
     private static EmbeddingSettings ManifestSettings(string? queryInstruction, string? documentInstruction)
     {

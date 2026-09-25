@@ -31,7 +31,7 @@ public sealed class CodeManifestBudgetGuardTests
         var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(),
             new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-            NoOpMeasurementRecorder.Instance, TimeProvider.System);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestData.EmbeddingOptions());
 
         var budget = service.ResolveChunkBudgetFor(new EmbeddingSettings("local", dir, null, null));
 
@@ -53,7 +53,7 @@ public sealed class CodeManifestBudgetGuardTests
         var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(),
             new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-            NoOpMeasurementRecorder.Instance, TimeProvider.System);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestData.EmbeddingOptions());
 
         var derived = service.ResolveChunkBudgetFor(new EmbeddingSettings("local", dir, null, null));
 

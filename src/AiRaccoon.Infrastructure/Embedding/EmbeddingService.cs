@@ -2,12 +2,16 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
+using AiRaccoon.Infrastructure.Embedding.NeuralEngine;
+using AiRaccoon.Infrastructure.Options;
 using System.ClientModel;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using Microsoft.ML.OnnxRuntime;
 using OpenAI;
 using OpenAI.Embeddings;
 
@@ -27,6 +31,7 @@ public sealed partial class EmbeddingService(
     IEmbeddingManifestLoader manifestDescriptor,
     IMeasurementRecorder measurements,
     TimeProvider timeProvider,
+    InfrastructureOptions options,
     ISettingsStore? settingsStore = null)
     : IEmbeddingService
 {
@@ -47,6 +52,9 @@ public sealed partial class EmbeddingService(
     ///     from <see cref="EngineDescriptor.DefaultSpecialTokenReservation" />, never a magic literal.
     /// </summary>
     public const int MaxManifestChunkTokens = 512 - EngineDescriptor.DefaultSpecialTokenReservation;
+
+    /// <summary>The directory under the data root that holds the compiled CoreML models (ADR-0118).</summary>
+    public const string CoreMlCacheDirectoryName = "coreml-cache";
 
     private readonly ILogger<EmbeddingService> _logger = logger;
 
@@ -374,6 +382,7 @@ public sealed partial class EmbeddingService(
         var isBundledEngine = BundledModel.IsBundled(settings.Model);
         var preferGpu = EmbeddingDeviceSetting.PrefersGpu(device, isBundledEngine);
         var preferMlx = EmbeddingDeviceSetting.PrefersMlx(device, isBundledEngine);
+        var preferCoreMl = EmbeddingDeviceSetting.PrefersCoreMl(device, isBundledEngine);
         var storedCudaLibrary = device == EmbeddingDevice.Cuda
             ? settingsStore?.GetSettingAsync(EmbeddingSettingsKeys.CudaLibrary, CancellationToken.None).GetAwaiter().GetResult()
             : null;
@@ -381,7 +390,7 @@ public sealed partial class EmbeddingService(
 
         var modelPath = LocalModelPath(settings.Model);
 
-        OnnxEmbeddingGenerator generator;
+        ILocalEmbeddingGenerator generator;
         if (Directory.Exists(modelPath))
         {
             // Directory activation (M3): a directory REQUIRES a manifest — only the legacy
@@ -389,7 +398,8 @@ public sealed partial class EmbeddingService(
             // drain reconciles vec0 to the engine's dimension before writing (WP4/D3).
             var descriptor = manifestDescriptor.Load(modelPath);
             var tokenizer = ResolveManifestTokenizer(modelPath)!;
-            generator = new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads, preferGpu, preferMlx, cudaLibrary);
+            var onnx = new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads, preferGpu, preferMlx, cudaLibrary);
+            generator = preferCoreMl ? WithNeuralEngine(onnx, modelPath, descriptor, tokenizer, threads) : onnx;
         }
         else
         {
@@ -410,6 +420,32 @@ public sealed partial class EmbeddingService(
         Log.EmbeddingSessionCreated(_logger, generator.IntraOpThreads, ThreadCountDisplay(generator.IntraOpThreads),
             ThreadCountSource(rawThreads), generator.ExecutionProvider);
         return generator;
+    }
+
+    /// <summary>
+    ///     The bundled engine under <c>device coreml</c>: the WebGPU chain wrapped so it moves to the
+    ///     Neural Engine once the bucket sessions compile, or the chain alone with the refusal recorded.
+    /// </summary>
+    private ILocalEmbeddingGenerator WithNeuralEngine(OnnxEmbeddingGenerator webGpu, string modelDirectory,
+        EngineDescriptor descriptor, IEmbeddingTokenizer tokenizer, int threads)
+    {
+        var graphPath = Path.Combine(modelDirectory, CoreMlGraph.FileName);
+        var refusal = NeuralEngineEmbeddingGenerator.RefusalReason(
+            OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64, File.Exists(graphPath));
+        if (refusal is not null)
+        {
+            webGpu.AppendRefusal("CoreML", refusal);
+            return webGpu;
+        }
+
+        var weightsSha = descriptor.Files.Single(f => f.Path == CoreMlGraph.WeightsFileName).Sha256;
+        var key = CoreMlCache.KeyFor(new FileHasher().Sha256OfFile(graphPath), weightsSha);
+        var cache = new CoreMlCache(Path.Combine(options.DataRoot, CoreMlCacheDirectoryName), key,
+            OrtEnv.Instance().GetVersionString(), _logger);
+        var factory = new CoreMlSessionFactory(graphPath, Path.Combine(modelDirectory, descriptor.OnnxModelFile), tokenizer,
+            descriptor, threads, _logger);
+        return new NeuralEngineEmbeddingGenerator(webGpu, tokenizer, descriptor.Normalization == "l2", factory, cache,
+            timeProvider, NeuralEngineEmbeddingGenerator.CompileDeadline, _logger);
     }
 
     private IEmbeddingTokenizer? ResolveManifestTokenizer(string? model)

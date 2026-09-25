@@ -42,7 +42,7 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
         var embeddings = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(),
             new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-            NoOpMeasurementRecorder.Instance, TimeProvider.System);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestData.EmbeddingOptions());
         var clock = new FakeTimeProvider(FixedNow);
         _store = TestData.CreateMemoryStore(factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), clock,

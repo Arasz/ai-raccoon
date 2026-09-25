@@ -67,7 +67,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     private static EmbeddingService Service() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-            NoOpMeasurementRecorder.Instance, TimeProvider.System);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestData.EmbeddingOptions());
 
     [RetryFact]
     public void ResolveChunkBudgetFor_BundledLocal_IsItsManifestsChunkTokens()
@@ -110,7 +110,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
         var hasher = new CountingFileHasher();
         var service = new EmbeddingService(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(),
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator(), hasher),
-            NoOpMeasurementRecorder.Instance, TimeProvider.System);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestData.EmbeddingOptions());
         var settings = new EmbeddingSettings("local", dir, null, null);
 
         for (var i = 0; i < 5; i++)
