@@ -21,7 +21,8 @@ public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLaunche
         // The verifier is bound to this launch's resolved root, exactly like the token reader below:
         // reading it from a DI singleton would tie the proof to whichever root registered first.
         var prover = new IdentityProver(serverConfig.Options, httpClientFactory);
-        await using var backendSessions = new BackendSessions(backendLauncher, prover, serverProbe, httpClientFactory, loggerFactory, processPath, serverConfig);
+        await using var backendSessions = new BackendSessions(backendLauncher, prover, serverProbe, httpClientFactory, loggerFactory, processPath, serverConfig,
+            File.Exists, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable("PATH"));
 
         McpClient backend;
         try

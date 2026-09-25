@@ -31,9 +31,11 @@ public sealed class BackendSessionsTests
         new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User });
 
     private static BackendSessions Subject(IBackendLauncher launcher, string? processPath, ServerConfig config,
-        IIdentityProver? prover = null, IServerProbe? probe = null) =>
+        IIdentityProver? prover = null, IServerProbe? probe = null, ILoggerFactory? loggerFactory = null,
+        Func<string, bool>? fileExists = null, string? userProfileDirectory = null, string? pathVariable = null) =>
         new(launcher, prover ?? new FakeIdentityProver(), probe ?? new FakeServerProbe(ProbeVerdict.NotListening),
-            new PlainHttpClientFactory(), NullLoggerFactory.Instance, processPath, config);
+            new PlainHttpClientFactory(), loggerFactory ?? NullLoggerFactory.Instance, processPath, config,
+            fileExists ?? (_ => true), userProfileDirectory, pathVariable);
 
     private static Task<BackendSessions.AcquireOutcome> AcquireAsync(IServerProbe probe, IIdentityProver prover,
         IBackendLauncher launcher, ServerConfig config, ILogger? logger = null, TimeSpan? fallbackIdle = null) =>
@@ -399,6 +401,110 @@ public sealed class BackendSessionsTests
         }
     }
 
+    // ── Executable fallback: the own process path was deleted by `dotnet tool update` (ADR-0116) ──
+
+    private static (ILoggerFactory Factory, FakeLoggerProvider Provider) FallbackLogging()
+    {
+        var provider = new FakeLoggerProvider();
+        return (LoggerFactory.Create(builder => builder.AddProvider(provider)), provider);
+    }
+
+    [Fact]
+    public async Task OpenAsync_WhenTheOwnExecutableExists_SpawnsItUnchanged_WithoutLogging()
+    {
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-fallback-unchanged", TestContext.Current.CancellationToken);
+        var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "boom"));
+        var (loggerFactory, logs) = FallbackLogging();
+        try
+        {
+            await using var sessions = Subject(launcher, AppHost, Config(54280, dataRoot), loggerFactory: loggerFactory);
+
+            await Should.ThrowAsync<BackendUnavailableException>(() => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+
+            launcher.FileName.ShouldBe(AppHost);
+            logs.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 693);
+        }
+        finally
+        {
+            loggerFactory.Dispose();
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    [Fact]
+    public async Task OpenAsync_WhenTheOwnExecutableIsMissingButTheGlobalToolShimExists_SpawnsTheShim()
+    {
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-fallback-shim", TestContext.Current.CancellationToken);
+        var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "boom"));
+        var shim = BackendLaunchArguments.GlobalToolShimPath("/home/rafal")!;
+        var (loggerFactory, logs) = FallbackLogging();
+        try
+        {
+            await using var sessions = Subject(launcher, AppHost, Config(54281, dataRoot), loggerFactory: loggerFactory,
+                fileExists: path => path == shim, userProfileDirectory: "/home/rafal");
+
+            await Should.ThrowAsync<BackendUnavailableException>(() => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+
+            launcher.FileName.ShouldBe(shim);
+            var record = logs.Collector.GetSnapshot().Single(r => r.Id.Id == 693);
+            record.Message.ShouldContain(AppHost);
+            record.Message.ShouldContain(shim);
+        }
+        finally
+        {
+            loggerFactory.Dispose();
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    [Fact]
+    public async Task OpenAsync_WhenTheOwnExecutableIsMissingAndNoShimButFoundOnPath_SpawnsThePathHit()
+    {
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-fallback-path", TestContext.Current.CancellationToken);
+        var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "boom"));
+        var pathHit = Path.Combine("/usr/local/bin", BackendLaunchArguments.ExecutableFileName);
+        var (loggerFactory, logs) = FallbackLogging();
+        try
+        {
+            await using var sessions = Subject(launcher, AppHost, Config(54282, dataRoot), loggerFactory: loggerFactory,
+                fileExists: path => path == pathHit, userProfileDirectory: "/home/rafal",
+                pathVariable: string.Join(Path.PathSeparator, "/usr/bin", "/usr/local/bin"));
+
+            await Should.ThrowAsync<BackendUnavailableException>(() => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+
+            launcher.FileName.ShouldBe(pathHit);
+            logs.Collector.GetSnapshot().Single(r => r.Id.Id == 693).Message.ShouldContain(AppHost);
+        }
+        finally
+        {
+            loggerFactory.Dispose();
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    [Fact]
+    public async Task OpenAsync_WhenTheOwnExecutableIsMissingWithNoFallback_KeepsTheOwnPath_WithoutLogging()
+    {
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-fallback-none", TestContext.Current.CancellationToken);
+        var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "boom"));
+        var (loggerFactory, logs) = FallbackLogging();
+        try
+        {
+            await using var sessions = Subject(launcher, AppHost, Config(54283, dataRoot), loggerFactory: loggerFactory,
+                fileExists: _ => false, userProfileDirectory: "/home/rafal", pathVariable: "/usr/bin");
+
+            await Should.ThrowAsync<BackendUnavailableException>(() => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+
+            launcher.FileName.ShouldBe(AppHost, "no fallback was found, so today's refusal path is unchanged");
+            logs.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 693);
+        }
+        finally
+        {
+            loggerFactory.Dispose();
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
     // ── Proof before every token-bearing request ──
 
     /// <summary>
@@ -421,7 +527,7 @@ public sealed class BackendSessionsTests
             var config = Config(54260, dataRoot);
             await using var sessions = new BackendSessions(launcher, prover,
                 new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
-                NullLoggerFactory.Instance, AppHost, config);
+                NullLoggerFactory.Instance, AppHost, config, _ => true, null, null);
 
             // The session cannot open against the unreachable fake URL; the acquire has already run.
             await Should.ThrowAsync<BackendUnavailableException>(() =>
@@ -462,7 +568,7 @@ public sealed class BackendSessionsTests
             var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54261/mcp", null));
             await using var sessions = new BackendSessions(launcher, prover,
                 new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
-                NullLoggerFactory.Instance, AppHost, Config(54261, dataRoot));
+                NullLoggerFactory.Instance, AppHost, Config(54261, dataRoot), _ => true, null, null);
 
             try
             {
@@ -501,7 +607,7 @@ public sealed class BackendSessionsTests
                 privateResult: new BackendResult("http://127.0.0.1:54295/mcp", null));
             await using var sessions = new BackendSessions(launcher, prover,
                 new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
-                NullLoggerFactory.Instance, AppHost, Config(54262, dataRoot));
+                NullLoggerFactory.Instance, AppHost, Config(54262, dataRoot), _ => true, null, null);
 
             for (var open = 0; open < 2; open++)
             {
