@@ -79,7 +79,7 @@ def _capture_stderr(build):
     return result, text
 
 
-def _dir_size_kib(root: Path) -> int:
+def dir_size_kib(root: Path) -> int:
     return sum(p.stat().st_size for p in root.rglob("*") if p.is_file()) // 1024 if root.exists() else 0
 
 
@@ -524,7 +524,7 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
         sessions_live_peak=engine.sessions.peak_live if device == "coreml" else 0,
         evictions=engine.sessions.evictions if device == "coreml" else 0,
         neural_kib_peak=mem_final.neural_footprint_peak,
-        cache_disk_kib=_dir_size_kib(engine.coreml_cache_root) if device == "coreml" else 0,
+        cache_disk_kib=dir_size_kib(engine.coreml_cache_root) if device == "coreml" else 0,
         compiler_cpu_s=compiler_cpu_s, energy_nj=mem_final.energy_nj, loadavg=os.getloadavg()[0],
         vector=mean_of("vector"), hybrid=mean_of("hybrid"), per_query=per_query, gold_position=gold_position,
     )

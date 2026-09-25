@@ -6,10 +6,11 @@ writes them to <out>-rows.json so every config sees the identical rows, then tim
 --configs for --repeats fresh subprocesses each, in a rotated interleave (coreml.interleave). Each
 subprocess does one untimed warm-up pass over every row (compiling every CoreML bucket it touches)
 before the timed pass. Writes one JSON: per-repeat row p50/p95, CPU-s, peak phys+neural footprint,
-per-slot loadavg/competing-process counts and ANE compiler CPU-s delta (aned + ANECompilerService,
-sampled around the slot's subprocess), and the coreml.py N-config range-separation summary
-(min/max/mean of cpu_s/p50/p95/footprint, plus beats and paired within-rotation ratio of every
-config against --reference).
+per-slot loadavg/competing-process counts, ANE compiler CPU-s delta (aned + ANECompilerService,
+sampled around the slot's subprocess), and (CoreML configs only) sessions_live_peak/evictions off
+the BucketSessions LRU and cache_disk_kib off the compiled-model cache dir. Plus the coreml.py
+N-config range-separation summary (min/max/mean of cpu_s/p50/p95/footprint, plus beats and paired
+within-rotation ratio of every config against --reference).
 
 Usage:
     python3 coreml_ab.py --model-dir <granite dir> --configs configs.json --out out/ab.json \\
@@ -112,11 +113,15 @@ def _run_one_config(args: argparse.Namespace) -> None:
         row_ms.append(wall_ms)
     cpu_s = time.process_time() - cpu0
     mem = memory_kib()
+    is_coreml = config["device"] == "coreml"
 
     args.out.write_text(json.dumps({
         "config": config["name"], "repeat": args.one_repeat, "rows": len(rows),
         "p50_ms": _percentile(row_ms, 50), "p95_ms": _percentile(row_ms, 95), "cpu_s": cpu_s,
         "phys_kib_peak": mem.footprint_peak, "neural_kib_peak": mem.neural_footprint_peak,
+        "sessions_live_peak": engine.sessions.peak_live if is_coreml else 0,
+        "evictions": engine.sessions.evictions if is_coreml else 0,
+        "cache_disk_kib": chunk_window.dir_size_kib(cache_dir) if is_coreml else 0,
     }))
     sys.stdout.flush()
     os._exit(0)  # mirrors run_chunk_window_eval.py: MLX/CoreML teardown can abort at interpreter exit
