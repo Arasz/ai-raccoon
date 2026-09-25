@@ -36,15 +36,15 @@ public sealed class FileIngestor(
     public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken)
     {
-        await RequireInScopeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
+        await RequireInScopeAsync(connection, projectId, path, cancellationToken);
 
         if (IsHidden(path))
         {
             return new FileIngestResult(0, true);
         }
 
-        var ignoreRoot = await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
-        var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken).ConfigureAwait(false);
+        var ignoreRoot = await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken);
+        var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken);
         if (IsIgnored(ignoreRules, ignoreRoot, path))
         {
             return new FileIngestResult(0, true);
@@ -52,13 +52,12 @@ public sealed class FileIngestor(
 
         if (!fileTypeMatcher.TryGetHandler(path, out var handler))
         {
-            return await IngestAsCodeAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
+            return await IngestAsCodeAsync(connection, projectId, path, cancellationToken);
         }
 
-        var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        var content = await File.ReadAllTextAsync(path, cancellationToken);
         var (rows, hashes) = await InsertChunksAsync(connection, projectId, path, content, handler, context,
-                cancellationToken)
-            .ConfigureAwait(false);
+                cancellationToken);
         return new FileIngestResult(rows, true, hashes);
     }
 
@@ -76,8 +75,7 @@ public sealed class FileIngestor(
             return new FileIngestResult(0, true);
         }
 
-        var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken)
-            .ConfigureAwait(false);
+        var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken);
         var codeChunkHashes = ResolveCodeChunkHashes(result);
         if (result.ChunkHashes is { Count: > 0 })
         {
@@ -109,7 +107,7 @@ public sealed class FileIngestor(
     {
         var normalized = IngestPath.Normalize(path);
 
-        var watches = await watchStore.ListWatchesAsync(cancellationToken).ConfigureAwait(false);
+        var watches = await watchStore.ListWatchesAsync(cancellationToken);
         var containingWatch = watches
             .Where(w => w.ProjectId == projectId && IngestPath.IsWithinScope(normalized, w.Path))
             .OrderByDescending(w => w.Path.Length)
@@ -119,7 +117,7 @@ public sealed class FileIngestor(
             return containingWatch.Path;
         }
 
-        var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
+        var scope = await ReadScopeAsync(connection, projectId, cancellationToken);
         var admittingScopeEntry = scope
             .Where(entry => IngestPath.IsWithinScope(normalized, entry))
             .OrderByDescending(entry => entry.Length)
@@ -135,7 +133,7 @@ public sealed class FileIngestor(
     public async Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId,
         string path, string? context, CancellationToken cancellationToken)
     {
-        var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
+        var scope = await ReadScopeAsync(connection, projectId, cancellationToken);
         RequireInScope(scope, path);
 
         // B1 (PR #532 review): RequireInScope above already guarantees a scope entry admits path,
@@ -144,8 +142,8 @@ public sealed class FileIngestor(
         // ai-raccoon.ignore silently stops applying whenever it differs from that ancestor.
         var ignoreRoot = File.Exists(Path.Combine(path, IgnoreRulesProvider.FileName))
             ? path
-            : await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken).ConfigureAwait(false);
-        var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken).ConfigureAwait(false);
+            : await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken);
+        var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken);
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
             .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, ignoreRoot, file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
@@ -161,8 +159,7 @@ public sealed class FileIngestor(
             {
                 if (codeFileTypeMatcher.IsCodeFile(file))
                 {
-                    var codeResult = await codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope)
-                        .ConfigureAwait(false);
+                    var codeResult = await codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope);
                     indexed += codeResult.Rows;
                     codeRowsWritten |= codeResult.Rows > 0;
                     walked.Add(new WalkedFile(file, [], ResolveCodeChunkHashes(codeResult)));
@@ -171,10 +168,9 @@ public sealed class FileIngestor(
                 continue;
             }
 
-            var content = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
+            var content = await File.ReadAllTextAsync(file, cancellationToken);
             var (rows, hashes) = await InsertChunksAsync(connection, projectId, file, content, handler, context,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                    cancellationToken);
             indexed += rows;
             memoryRowsWritten |= rows > 0;
             walked.Add(new WalkedFile(file, hashes, null));
@@ -206,8 +202,7 @@ public sealed class FileIngestor(
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        var (maxTokens, overlayTokens, countTokens) = await ChunkSizeForAsync(connection, cancellationToken)
-            .ConfigureAwait(false);
+        var (maxTokens, overlayTokens, countTokens) = await ChunkSizeForAsync(connection, cancellationToken);
         return IsIndexableFile("note.md", out var handler)
             ? handler.Chunker.Chunk(content, maxTokens, overlayTokens, countTokens)
             : [content];
@@ -227,8 +222,7 @@ public sealed class FileIngestor(
 
         var resolvedContext = context ?? ContextNaming.ProjectContext(projectId);
         var bucket = EntryBucket.For(resolvedContext, projectId);
-        var (chunkMaxTokens, chunkOverlayTokens, chunkCountTokens) = await ChunkSizeForAsync(connection, cancellationToken)
-            .ConfigureAwait(false);
+        var (chunkMaxTokens, chunkOverlayTokens, chunkCountTokens) = await ChunkSizeForAsync(connection, cancellationToken);
         var chunks = handler.Chunker.ChunkWithHeadings(content, chunkMaxTokens, chunkOverlayTokens, chunkCountTokens);
         if (chunks.Count == 0)
         {
@@ -239,7 +233,7 @@ public sealed class FileIngestor(
 
         // Resolve source once for all chunks from this file.
         var source = await sourceStore.ResolveOrCreateOnConnectionAsync(
-            connection, SourceType.File, path, null, null, cancellationToken).ConfigureAwait(false);
+            connection, SourceType.File, path, null, null, cancellationToken);
 
         // Document position is authoritative here (GH #371): the chunker just produced `chunks` in
         // document order, so every chunk's ordinal is written straight to chunk_index — for a
@@ -266,8 +260,7 @@ public sealed class FileIngestor(
                             projectId = bucket.ProjectId,
                             contextLabel = bucket.ContextLabel,
                             workspaceId = bucket.WorkspaceId
-                        }, cancellationToken))
-                .ConfigureAwait(false);
+                        }, cancellationToken));
 
             if (existingId is null)
             {
@@ -294,8 +287,7 @@ public sealed class FileIngestor(
                                 chunkIndex = ordinal,
                                 totalChunks = chunks.Count
                             },
-                            cancellationToken))
-                    .ConfigureAwait(false);
+                            cancellationToken));
                 if (affected > 0)
                 {
                     inserted++;
@@ -307,8 +299,7 @@ public sealed class FileIngestor(
             var chunkId = existingId.Value;
             await connection.ExecuteAsync(
                     Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = ordinal, totalChunks = chunks.Count, section },
-                        cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken));
         }
 
         return new InsertedChunks(inserted > 0 ? 1 : 0, hashes);
@@ -343,13 +334,11 @@ public sealed class FileIngestor(
     private async Task<ChunkSize> ChunkSizeForAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var configured = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken))
-            .ConfigureAwait(false);
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken));
         var provider = string.IsNullOrWhiteSpace(configured) ? BundledProvider : configured;
 
         var model = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken))
-            .ConfigureAwait(false);
+                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken));
         var settings = new EmbeddingSettings(provider, model, null, null);
         var maxTokens = embeddingService.ResolveChunkBudgetFor(settings);
         var overlayTokens = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, maxTokens - 1));
@@ -367,18 +356,16 @@ public sealed class FileIngestor(
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
     {
-        var scope = await ReadScopeAsync(connection, projectId, cancellationToken).ConfigureAwait(false);
+        var scope = await ReadScopeAsync(connection, projectId, cancellationToken);
         RequireInScope(scope, path);
     }
 
     private static async Task<IReadOnlyList<string>> ReadScopeAsync(SqliteConnection connection, string projectId,
         CancellationToken cancellationToken) =>
         IngestScopeKeys.Parse(
-            await ReadSettingAsync(connection, IngestScopeKeys.ScopeProject(projectId), cancellationToken)
-                .ConfigureAwait(false))
+            await ReadSettingAsync(connection, IngestScopeKeys.ScopeProject(projectId), cancellationToken))
         ?? IngestScopeKeys.Parse(
-            await ReadSettingAsync(connection, IngestScopeKeys.ScopeGlobal, cancellationToken)
-                .ConfigureAwait(false))
+            await ReadSettingAsync(connection, IngestScopeKeys.ScopeGlobal, cancellationToken))
         ?? [];
 
     private static void RequireInScope(IReadOnlyList<string> scope, string path)
@@ -395,8 +382,7 @@ public sealed class FileIngestor(
     private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
         CancellationToken cancellationToken) =>
         await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key }, cancellationToken))
-            .ConfigureAwait(false);
+                Def(MemorySql.SelectSetting, new { key }, cancellationToken));
 
     private bool IsIndexableFile(string path, [NotNullWhen(true)] out IFileTypeHandler? handler)
     {

@@ -79,38 +79,38 @@ public class McpEntryRendererTests
         switch (actual.ValueKind)
         {
             case JsonValueKind.Object:
-            {
-                var expectedProperties = expected.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
-                foreach (var property in actual.EnumerateObject())
                 {
-                    if (!expectedProperties.TryGetValue(property.Name, out var expectedValue) ||
-                        !NodesEqual(property.Value, expectedValue))
+                    var expectedProperties = expected.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+                    foreach (var property in actual.EnumerateObject())
                     {
-                        return false;
+                        if (!expectedProperties.TryGetValue(property.Name, out var expectedValue) ||
+                            !NodesEqual(property.Value, expectedValue))
+                        {
+                            return false;
+                        }
                     }
-                }
 
-                return actual.EnumerateObject().Count() == expected.EnumerateObject().Count();
-            }
+                    return actual.EnumerateObject().Count() == expected.EnumerateObject().Count();
+                }
             case JsonValueKind.Array:
-            {
-                var actualItems = actual.EnumerateArray().ToList();
-                var expectedItems = expected.EnumerateArray().ToList();
-                if (actualItems.Count != expectedItems.Count)
                 {
-                    return false;
-                }
-
-                for (var i = 0; i < actualItems.Count; i++)
-                {
-                    if (!NodesEqual(actualItems[i], expectedItems[i]))
+                    var actualItems = actual.EnumerateArray().ToList();
+                    var expectedItems = expected.EnumerateArray().ToList();
+                    if (actualItems.Count != expectedItems.Count)
                     {
                         return false;
                     }
-                }
 
-                return true;
-            }
+                    for (var i = 0; i < actualItems.Count; i++)
+                    {
+                        if (!NodesEqual(actualItems[i], expectedItems[i]))
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
             default:
                 return actual.GetRawText() == expected.GetRawText();
         }

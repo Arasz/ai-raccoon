@@ -55,39 +55,33 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
         CancellationToken cancellationToken = default)
     {
         AssertCanonical(projectId);
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(
                 new CommandDefinition(MemorySql.InsertWatchIfAbsent,
-                    new { projectId, path, createdAt, lastChangeTs }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    new { projectId, path, createdAt, lastChangeTs }, cancellationToken: cancellationToken));
     }
 
     public async Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             await connection.ExecuteAsync(
                     new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
-                        new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken: cancellationToken));
             await connection.ExecuteAsync(
                     new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path },
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                        cancellationToken: cancellationToken));
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -96,11 +90,10 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
         IWatchOverlapResolver overlapResolver, CancellationToken cancellationToken = default)
     {
         AssertCanonical(projectId);
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             // S4 TOCTOU close: read the project's CURRENT watches and resolve the candidate against
@@ -110,8 +103,7 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
             // it will see THIS decision once it gets its turn). Either way, no two callers can ever
             // resolve against the same stale snapshot.
             var rows = await connection.QueryAsync<WatchRegistration>(
-                    new CommandDefinition(MemorySql.SelectWatches, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition(MemorySql.SelectWatches, cancellationToken: cancellationToken));
             var existing = rows
                 .Where(w => w.ProjectId == projectId)
                 .Select(w => new WatchOverlapCandidate(w.Path, w.CreatedAt))
@@ -124,33 +116,31 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
                 {
                     await connection.ExecuteAsync(
                             new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
-                                new { projectId, path = pruned.Path, subtreeLow = PathSubtree.Low(pruned.Path), subtreeHigh = PathSubtree.High(pruned.Path) }, cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
+                                new { projectId, path = pruned.Path, subtreeLow = PathSubtree.Low(pruned.Path), subtreeHigh = PathSubtree.High(pruned.Path) }, cancellationToken: cancellationToken));
                     await connection.ExecuteAsync(
                             new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
-                                cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
+                                cancellationToken: cancellationToken));
                 }
 
                 await connection.ExecuteAsync(
                         new CommandDefinition(MemorySql.InsertWatchIfAbsent,
                             new
                             {
-                                projectId, path = candidate.Path, createdAt = candidate.CreatedAt, lastChangeTs = 0L
-                            }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                                projectId,
+                                path = candidate.Path,
+                                createdAt = candidate.CreatedAt,
+                                lastChangeTs = 0L
+                            }, cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
             return decision;
         }
         catch
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -158,62 +148,56 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
     public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         var rows = await connection.QueryAsync<WatchRegistration>(
-                new CommandDefinition(MemorySql.SelectWatches, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition(MemorySql.SelectWatches, cancellationToken: cancellationToken));
         return [.. rows];
     }
 
     public async Task UpdateLastChangeAsync(string projectId, string path, long lastChangeTs,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(
                 new CommandDefinition(MemorySql.UpdateWatchLastChange, new { projectId, path, lastChangeTs },
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
     }
 
     public async Task<string?> GetFileHashAsync(string projectId, string path,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection.QuerySingleOrDefaultAsync<string?>(
                 new CommandDefinition(MemorySql.SelectWatchFile, new { projectId, path },
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
     }
 
     public async Task<bool> HasFingerprintAtOrUnderAsync(string projectId, string path,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection.ExecuteScalarAsync<bool>(
                 new CommandDefinition(MemorySql.SelectWatchFileAtOrUnder,
                     new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) },
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
     }
 
     public async Task UpsertFileHashAsync(string projectId, string path, string fileHash, long updatedAt,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(
                 new CommandDefinition(MemorySql.UpsertWatchFile,
-                    new { projectId, path, fileHash, updatedAt }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    new { projectId, path, fileHash, updatedAt }, cancellationToken: cancellationToken));
     }
 
     public async Task<IReadOnlyList<string>> ListFilesAsync(string projectId,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         var rows = await connection.QueryAsync<string>(
                 new CommandDefinition(MemorySql.SelectWatchFilesByProject, new { projectId },
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         return [.. rows];
     }
 

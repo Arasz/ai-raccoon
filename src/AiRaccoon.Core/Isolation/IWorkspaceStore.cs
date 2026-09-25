@@ -29,7 +29,7 @@ public interface IWorkspaceStore
     async Task<bool> TryCloseAsync(string projectId, string workspaceId, WorkspaceStatus status,
         DateTimeOffset closedAt, CancellationToken cancellationToken = default)
     {
-        await CloseAsync(projectId, workspaceId, status, closedAt, cancellationToken).ConfigureAwait(false);
+        await CloseAsync(projectId, workspaceId, status, closedAt, cancellationToken);
         return true;
     }
 }

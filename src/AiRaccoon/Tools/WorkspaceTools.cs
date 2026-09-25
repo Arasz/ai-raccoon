@@ -46,7 +46,7 @@ public sealed class WorkspaceTools(
     [McpServerTool(Name = TnMemoryWorkspaceStatus)]
     [Description("Lists the entries currently in a workspace's outbox.")]
     public async Task<ApiEnvelope<WorkspaceStatusResult>> WorkspaceStatus(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
@@ -64,7 +64,7 @@ public sealed class WorkspaceTools(
     [Description(
         "Finishes a workspace: promotes the kept hashes (or ['all']) from the workspace outbox into the project's committed memory, then removes the workspace context.")]
     public async Task<ApiEnvelope<ConsolidationToolResult>> WorkspaceConsolidate(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The workspace id.")] string workspaceId,
         [Description("Hashes to promote, or ['all'] to promote everything.")]
         string[] keep,
@@ -83,7 +83,7 @@ public sealed class WorkspaceTools(
     [McpServerTool(Name = TnMemoryWorkspaceDiscard)]
     [Description("Discards a workspace without promoting anything: removes its outbox context and all its entries.")]
     public async Task<ApiEnvelope<WorkspaceDiscardResult>> WorkspaceDiscard(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {

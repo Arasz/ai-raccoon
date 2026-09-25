@@ -70,8 +70,7 @@ public sealed partial class SqliteMemoryStore
             var rows = (await connection.QueryAsync<SearchRow>(
                     new CommandDefinition(
                         MemorySql.SearchByFilter.Replace("{filter}", contextFilter.Filter), queryParameters,
-                        cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                        cancellationToken: cancellationToken))).ToList();
 
             foreach (var row in rows)
             {
@@ -103,8 +102,7 @@ public sealed partial class SqliteMemoryStore
         }
 
         var sourceFiles = await connection.QueryAsync<string?>(
-            new CommandDefinition(MemorySql.SelectAnchorSourceFiles, new { query = anchor.Expression }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+            new CommandDefinition(MemorySql.SelectAnchorSourceFiles, new { query = anchor.Expression }, cancellationToken: cancellationToken));
         return sourceFiles.Any(sourceFile => SourcePathQuery.NamesFile(anchorFile, sourceFile)) ? anchor : ordinary;
     }
 

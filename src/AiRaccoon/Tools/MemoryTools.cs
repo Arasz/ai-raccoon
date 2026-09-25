@@ -135,7 +135,7 @@ public sealed partial class MemoryTools(
         + "query comes back empty. A response short of "
         + "its requested limit reports the cuts as truncation:[{floor, threshold, dropped}].")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description(
             "The search query. Semantic matching only sees roughly the first N tokens — the active " +
             "memory embedding engine's own window (254 tokens for the bundled model; a manifest " +
@@ -469,7 +469,7 @@ public sealed partial class MemoryTools(
     [Description(
         "Deletes the whole memory behind a content hash: a multi-chunk memory_write's chunks share one write, so any of its chunk hashes deletes all of them, not just one. Idempotent: an unknown hash is not an error — it reports the true row count, 0 for an unknown hash.")]
     public async Task<ApiEnvelope<DeletedResult>> Delete(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The content hash to delete — any chunk of a multi-chunk write reaches the whole write.")]
         string hash,
         CancellationToken cancellationToken = default)
@@ -487,7 +487,7 @@ public sealed partial class MemoryTools(
     [Description(
         "Deletes every entry stored under a context label (e.g. a project or workspace context). Idempotent: an unknown context is not an error — it reports deleted=0.")]
     public async Task<ApiEnvelope<DeletedContextResult>> DeleteContext(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The context label to delete.")]
         string context,
         CancellationToken cancellationToken = default)
@@ -504,7 +504,7 @@ public sealed partial class MemoryTools(
     [McpServerTool(Name = TnMemoryIngestFile)]
     [Description("Indexes one file from disk into memory. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<IngestResult>> IngestFile(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("Path of the file to index.")]
         string path,
         [Description("Optional context label.")]
@@ -524,7 +524,7 @@ public sealed partial class MemoryTools(
     [Description(
         "Recursively indexes a directory tree into memory, skipping unchanged files. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<ScannedResult>> IngestDirectory(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("Path of the directory to index.")]
         string path,
         [Description("Optional context label applied to all files.")]

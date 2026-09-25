@@ -489,8 +489,12 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
                 """,
                 new
                 {
-                    hash = $"mid-drain-seed-{i:D6}", path = $"/mid-drain-seed-{i:D6}",
-                    value = $"mid-drain seeded row {i}", projectId = "acme", now, embedding = fakeEmbedding
+                    hash = $"mid-drain-seed-{i:D6}",
+                    path = $"/mid-drain-seed-{i:D6}",
+                    value = $"mid-drain seeded row {i}",
+                    projectId = "acme",
+                    now,
+                    embedding = fakeEmbedding
                 },
                 transaction, cancellationToken: TestContext.Current.CancellationToken));
         }

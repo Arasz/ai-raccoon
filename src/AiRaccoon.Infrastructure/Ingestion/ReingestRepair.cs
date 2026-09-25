@@ -47,8 +47,7 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(store);
 
-        var (maxTokens, overlayTokens, countTokens) = await scanner.BudgetAsync(connection, cancellationToken)
-            .ConfigureAwait(false);
+        var (maxTokens, overlayTokens, countTokens) = await scanner.BudgetAsync(connection, cancellationToken);
 
         // workspace_id IS NULL and path = source_file: exactly the rows ReplaceAsync's own
         // DeleteBySourcePath predicate would touch — the digest owns mirror rows, never workspace
@@ -58,8 +57,7 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
                 SELECT DISTINCT project_id AS ProjectId, source_file AS SourceFile
                 FROM entries
                 WHERE source_file IS NOT NULL AND workspace_id IS NULL AND path = source_file
-                """, cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).ToList();
+                """, cancellationToken: cancellationToken))).ToList();
 
         var filesToReingest = 0;
         var rowsAffected = 0;
@@ -76,8 +74,7 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
                     WHERE project_id = @projectId AND source_file = @sourceFile AND path = @sourceFile
                       AND workspace_id IS NULL
                     """, new { projectId = group.ProjectId, sourceFile = group.SourceFile },
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false)).ToList();
+                    cancellationToken: cancellationToken))).ToList();
 
             if (rows.Count == 0)
             {
@@ -101,8 +98,7 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
             if (apply)
             {
                 var fileHash = WatchDigestExecutor.ComputeHash(group.SourceFile, scan.Content);
-                await store.ReplaceAsync(group.ProjectId, group.SourceFile, fileHash, cancellationToken)
-                    .ConfigureAwait(false);
+                await store.ReplaceAsync(group.ProjectId, group.SourceFile, fileHash, cancellationToken);
             }
         }
 

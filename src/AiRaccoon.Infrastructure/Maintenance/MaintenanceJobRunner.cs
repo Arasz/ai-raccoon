@@ -42,18 +42,17 @@ public sealed partial class MaintenanceJobRunner(
                     // The only job whose cadence is user-configurable; read it before asking for
                     // Interval. Reads the same connection as the ledger SELECT below, so it shares
                     // the same guard: a broken settings read must not stop the pass either.
-                    await vacuum.RefreshIntervalAsync(connection, cancellationToken).ConfigureAwait(false);
+                    await vacuum.RefreshIntervalAsync(connection, cancellationToken);
                 }
 
                 var lastRun = await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
                         "SELECT last_run_at FROM maintenance_jobs WHERE name = @name",
-                        new { name = job.Name }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { name = job.Name }, cancellationToken: cancellationToken));
 
                 // On-demand due-ness (ADR-0076) is independent of the clock-gated IsDue check below —
                 // it exists precisely so a job like ModelMigrationJob isn't run-once by the ledger stamp
                 // every success writes. Checked first since it is the cheaper of the two most passes.
-                due = await job.HasWorkAsync(connection, cancellationToken).ConfigureAwait(false)
+                due = await job.HasWorkAsync(connection, cancellationToken)
                       || IsDue(job, lastRun, now);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -77,7 +76,7 @@ public sealed partial class MaintenanceJobRunner(
             bool createdWork;
             try
             {
-                createdWork = await job.RunAsync(connection, cancellationToken).ConfigureAwait(false);
+                createdWork = await job.RunAsync(connection, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -93,11 +92,10 @@ public sealed partial class MaintenanceJobRunner(
                     INSERT INTO maintenance_jobs (name, last_run_at, run_count) VALUES (@name, @now, 1)
                     ON CONFLICT(name) DO UPDATE SET last_run_at = @now, run_count = run_count + 1
                     """,
-                    new { name = job.Name, now = now.ToUnixTimeSeconds() }, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new { name = job.Name, now = now.ToUnixTimeSeconds() }, cancellationToken: cancellationToken));
             var elapsedMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             Log.JobRan(logger, job.DisplayName, job.Name, elapsedMs);
-            await RecordJobMetricsAsync(connection, job, elapsedMs, now, cancellationToken).ConfigureAwait(false);
+            await RecordJobMetricsAsync(connection, job, elapsedMs, now, cancellationToken);
             outcomes.Add(new MaintenanceJobOutcome(job.Name, true, null, createdWork));
         }
 
@@ -123,8 +121,7 @@ public sealed partial class MaintenanceJobRunner(
 
         try
         {
-            var outstanding = await counter.CountOutstandingRowsAsync(connection, cancellationToken)
-                .ConfigureAwait(false);
+            var outstanding = await counter.CountOutstandingRowsAsync(connection, cancellationToken);
             measurements.Record(new Measurement(MetricsConfigKeys.JobRowsMetricName(job.Name),
                 MeasurementKind.Gauge, outstanding, "count", now, MetricsConfigKeys.SelfMetricsProjectId));
         }

@@ -40,7 +40,7 @@ internal sealed class ModelDownloadCommands(
 
         var request = new ModelDownloadRequest(repoId, revision, targetDir, explicitFiles, dryRun, yes,
             message => PromptConfirm(streams, message));
-        return await ExecuteAsync(request, streams, true, cancellationToken).ConfigureAwait(false);
+        return await ExecuteAsync(request, streams, true, cancellationToken);
     }
 
     private async Task<int> ExecuteAsync(ModelDownloadRequest request, StandardStreams streams,
@@ -61,10 +61,10 @@ internal sealed class ModelDownloadCommands(
 
         try
         {
-            var result = await service.DownloadAsync(request, cancellationToken).ConfigureAwait(false);
+            var result = await service.DownloadAsync(request, cancellationToken);
             if (dryRun)
             {
-                await PrintPlanAsync(result.Plan, streams).ConfigureAwait(false);
+                await PrintPlanAsync(result.Plan, streams);
                 return ErrorCode.Ok.Success;
             }
 
@@ -78,7 +78,7 @@ internal sealed class ModelDownloadCommands(
                                        or HfApiException or OnnxProbeException or HttpRequestException
                                    || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}").ConfigureAwait(false);
+            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
             return FailureCode(ex);
         }
     }

@@ -22,7 +22,7 @@ public sealed class QualityTools(
         "servedRank is the 1-based rank the file was served at, when known; rank-only telemetry " +
         "is section-ambiguous under kind=both by design.")]
     public async Task<ApiEnvelope<FollowThroughResult>> RecordFollowThrough(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The correlationId returned by the preceding memory_search call.")]
         string correlationId,
         [Description("Absolute path of the file the agent read.")]
@@ -44,7 +44,7 @@ public sealed class QualityTools(
         "Records a human usefulness grade (1-5) for a prior memory_search call. " +
         "Updates the existing quality record keyed by correlationId.")]
     public async Task<ApiEnvelope<GradeResult>> RecordGrade(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The correlationId returned by the preceding memory_search call.")]
         string correlationId,
         [Description("Usefulness grade 1-5 (5=best).")]

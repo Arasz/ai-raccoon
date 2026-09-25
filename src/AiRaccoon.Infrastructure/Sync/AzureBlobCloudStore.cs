@@ -45,7 +45,7 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
         try
         {
             var blob = _blobs.GetBlobContainerClient(_container).GetBlobClient(objectKey);
-            var response = await blob.DownloadContentAsync(cancellationToken).ConfigureAwait(false);
+            var response = await blob.DownloadContentAsync(cancellationToken);
 
             // Azure returns the ETag quoted; strip quotes (matches the S3 storage format).
             var etag = response.Value.Details.ETag.ToString().Trim('"');
@@ -99,8 +99,7 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
                 };
             }
 
-            var response = await blob.UploadAsync(BinaryData.FromBytes(data), options, cancellationToken)
-                .ConfigureAwait(false);
+            var response = await blob.UploadAsync(BinaryData.FromBytes(data), options, cancellationToken);
 
             // Azure returns the ETag quoted; strip for storage compatibility.
             return response.Value.ETag.ToString().Trim('"');

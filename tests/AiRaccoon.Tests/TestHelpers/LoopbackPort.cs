@@ -101,7 +101,7 @@ public sealed class LoopbackPort : IDisposable
             lease.ReleaseForBind();
             try
             {
-                return await bind(port).ConfigureAwait(false);
+                return await bind(port);
             }
             catch (Exception ex) when (attempt < attempts && LostThePort(ex))
             {

@@ -134,7 +134,8 @@ public class ServerConfigTests
     {
         const string token = "loopback-secret-that-must-not-be-printed";
         var config = new ServerConfig(7721, McpTransport.Proxy,
-            new InfrastructureOptions { DataRoot = "/x", Scope = InstallScope.User }) { McpToken = token };
+            new InfrastructureOptions { DataRoot = "/x", Scope = InstallScope.User })
+        { McpToken = token };
 
         var printed = config.ToString();
 

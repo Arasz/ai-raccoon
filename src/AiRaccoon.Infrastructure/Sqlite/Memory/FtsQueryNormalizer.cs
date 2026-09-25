@@ -53,7 +53,8 @@ internal static partial class FtsQueryNormalizer
             return new FtsQueryPlan(
                 string.Join(" AND ", tokens),
                 string.Join(" OR ", rawTokens.Concat(bigrams)),
-                tokens.Count) { MatchesAllTerms = true };
+                tokens.Count)
+            { MatchesAllTerms = true };
         }
 
         return new FtsQueryPlan(string.Join(" OR ", rawTokens), null, tokens.Count);

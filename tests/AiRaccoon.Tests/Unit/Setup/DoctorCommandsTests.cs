@@ -408,7 +408,7 @@ public sealed class DoctorCommandsTests : IDisposable
         Directory.CreateDirectory(modelDir);
         Directory.CreateDirectory(Path.GetDirectoryName(_factory.BankPath)!);
         await using (var raw = new SqliteConnection(new SqliteConnectionStringBuilder
-                     { DataSource = _factory.BankPath, Mode = SqliteOpenMode.ReadWriteCreate }.ToString()))
+        { DataSource = _factory.BankPath, Mode = SqliteOpenMode.ReadWriteCreate }.ToString()))
         {
             await raw.OpenAsync(TestContext.Current.CancellationToken);
             await raw.ExecuteAsync(new CommandDefinition(

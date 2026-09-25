@@ -95,7 +95,7 @@ public sealed class ExtractionMetricsTests
         /// used to supply as a default, now stated where it is chosen (ADR-0054).</summary>
         public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
             CancellationToken cancellationToken = default) =>
-            (await DiscardAsync(projectId, hash, cancellationToken).ConfigureAwait(false)).SingleOrDefault();
+            (await DiscardAsync(projectId, hash, cancellationToken)).SingleOrDefault();
         private readonly HashSet<(string ProjectId, string Hash)> _discarded = [];
         private readonly List<PromotionQueueRow> _rows = [];
 

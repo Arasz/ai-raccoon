@@ -87,12 +87,12 @@ public sealed class McpTokenFile
         try
         {
             TightenedStateDirectory = OwnerOnlyFile.EnsureDirectory(StateDirectory);
-            await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await Gate.WaitAsync(cancellationToken);
             try
             {
                 await using var held = await OwnerOnlyFile
-                    .AcquireLockAsync(Path, _timeProvider, cancellationToken).ConfigureAwait(false);
-                var ensured = await EnsureLockedAsync(cancellationToken).ConfigureAwait(false);
+                    .AcquireLockAsync(Path, _timeProvider, cancellationToken);
+                var ensured = await EnsureLockedAsync(cancellationToken);
                 if (ensured is not null)
                 {
                     RefusalReason = null; // a refused read that a later mint healed is not a refusal anymore
@@ -190,7 +190,7 @@ public sealed class McpTokenFile
     internal async Task<string?> TryMintAsync(CancellationToken cancellationToken)
     {
         var minted = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(TokenBytes));
-        return await TryWriteNewAsync(minted, cancellationToken).ConfigureAwait(false) ? minted : null;
+        return await TryWriteNewAsync(minted, cancellationToken) ? minted : null;
     }
 
     private async Task<string?> EnsureLockedAsync(CancellationToken cancellationToken)
@@ -207,7 +207,7 @@ public sealed class McpTokenFile
                 return null;
             }
 
-            if (await MigrateLegacyAsync(cancellationToken).ConfigureAwait(false) is { } adopted)
+            if (await MigrateLegacyAsync(cancellationToken) is { } adopted)
             {
                 return adopted;
             }
@@ -218,7 +218,7 @@ public sealed class McpTokenFile
             }
         }
 
-        if (await AcquireAsync(cancellationToken).ConfigureAwait(false) is { } token)
+        if (await AcquireAsync(cancellationToken) is { } token)
         {
             return token;
         }
@@ -229,7 +229,7 @@ public sealed class McpTokenFile
             return ReadStateToken();
         }
 
-        return await AcquireAsync(cancellationToken).ConfigureAwait(false);
+        return await AcquireAsync(cancellationToken);
     }
 
     /// <summary>
@@ -259,7 +259,7 @@ public sealed class McpTokenFile
             return null;
         }
 
-        if (!await TryWriteNewAsync(legacyToken, cancellationToken).ConfigureAwait(false))
+        if (!await TryWriteNewAsync(legacyToken, cancellationToken))
         {
             return null; // the state path appeared first; it wins and the legacy file stays put
         }
@@ -283,13 +283,13 @@ public sealed class McpTokenFile
                     return existing;
                 }
 
-                if (await TryMintAsync(cancellationToken).ConfigureAwait(false) is { } minted)
+                if (await TryMintAsync(cancellationToken) is { } minted)
                 {
                     return minted;
                 }
             }
             // Lost the exclusive create, or the winner has not finished writing: re-read.
-            while (await timer.WaitForNextTickAsync(waiting.Token).ConfigureAwait(false));
+            while (await timer.WaitForNextTickAsync(waiting.Token));
         }
         catch (OperationCanceledException)
             when (waited.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
@@ -325,7 +325,7 @@ public sealed class McpTokenFile
         try
         {
             await using var stream = new FileStream(Path, options);
-            await stream.WriteAsync(Encoding.UTF8.GetBytes(content), cancellationToken).ConfigureAwait(false);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(content), cancellationToken);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

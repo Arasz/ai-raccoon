@@ -29,11 +29,11 @@ public sealed class WatchScheduler : IWatchScheduler
         foreach (var job in ordered)
         {
             var gate = GateFor(job.Event.ProjectId, concurrencyByProject);
-            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await gate.WaitAsync(cancellationToken);
             tasks.Add(Task.Run(() => RunGuardedAsync(job, gate, runJob, cancellationToken), cancellationToken));
         }
 
-        await Task.WhenAll(tasks).ConfigureAwait(false);
+        await Task.WhenAll(tasks);
     }
 
     /// <summary>Interleaves one job per watch per round (first-seen watch order).</summary>
@@ -79,7 +79,7 @@ public sealed class WatchScheduler : IWatchScheduler
     {
         try
         {
-            await runJob(job, cancellationToken).ConfigureAwait(false);
+            await runJob(job, cancellationToken);
         }
         finally
         {

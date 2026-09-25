@@ -41,15 +41,15 @@ public sealed partial class MetricsFlusher(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await ApplyBufferCapacitySafeAsync(stoppingToken).ConfigureAwait(false);
+        await ApplyBufferCapacitySafeAsync(stoppingToken);
 
-        using var timer = new PeriodicTimer(await ReadFlushIntervalSafeAsync(stoppingToken).ConfigureAwait(false),
+        using var timer = new PeriodicTimer(await ReadFlushIntervalSafeAsync(stoppingToken),
             timeProvider);
         TimerArmed.Increment();
-        while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
+        while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            await FlushOnceAsync(stoppingToken).ConfigureAwait(false);
-            timer.Period = await ReadFlushIntervalSafeAsync(stoppingToken).ConfigureAwait(false);
+            await FlushOnceAsync(stoppingToken);
+            timer.Period = await ReadFlushIntervalSafeAsync(stoppingToken);
         }
     }
 
@@ -65,7 +65,7 @@ public sealed partial class MetricsFlusher(
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
         try
         {
-            await FlushOnceAsync(linkedCts.Token).ConfigureAwait(false);
+            await FlushOnceAsync(linkedCts.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -80,7 +80,7 @@ public sealed partial class MetricsFlusher(
             Log.ShutdownFlushFailed(logger, ex);
         }
 
-        await base.StopAsync(cancellationToken).ConfigureAwait(false);
+        await base.StopAsync(cancellationToken);
     }
 
     /// <summary>One flush pass: drain the buffer, batch-write it, then record self-metrics directly. Test seam.</summary>
@@ -100,11 +100,11 @@ public sealed partial class MetricsFlusher(
             pass.NoteWork();
         }
 
-        var batchFailure = await TrySaveBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+        var batchFailure = await TrySaveBatchAsync(batch, cancellationToken);
         // F7 (owner ruling): self-metrics are worth a row under exactly the condition NoteWork()
         // already uses above — an empty run gets no self-metrics either, not just no span.
         var selfMetricsFailure = batch.Count > 0
-            ? await RecordSelfMetricsAsync(start, batch.Count, cancellationToken).ConfigureAwait(false)
+            ? await RecordSelfMetricsAsync(start, batch.Count, cancellationToken)
             : null;
         Flushes.Increment();
 
@@ -136,7 +136,7 @@ public sealed partial class MetricsFlusher(
         {
             try
             {
-                await store.SaveBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+                await store.SaveBatchAsync(batch, cancellationToken);
                 return null;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -147,7 +147,7 @@ public sealed partial class MetricsFlusher(
             {
                 // SQLITE_BUSY / SQLITE_LOCKED: the same write-lock convoy WP12 shortens elsewhere.
                 // Retried silently — only the final failure (below) is worth a log line.
-                await Task.Delay(SaveRetryDelay, timeProvider, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(SaveRetryDelay, timeProvider, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -181,7 +181,7 @@ public sealed partial class MetricsFlusher(
 
         try
         {
-            await store.SaveBatchAsync(selfMetrics, cancellationToken).ConfigureAwait(false);
+            await store.SaveBatchAsync(selfMetrics, cancellationToken);
             return null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -199,8 +199,7 @@ public sealed partial class MetricsFlusher(
     {
         try
         {
-            var raw = await settings.GetSettingAsync(MetricsConfigKeys.BufferCapacityGlobal, cancellationToken)
-                .ConfigureAwait(false);
+            var raw = await settings.GetSettingAsync(MetricsConfigKeys.BufferCapacityGlobal, cancellationToken);
             buffer.ApplyCapacity(MetricsConfigKeys.ParseBufferCapacity(raw));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -217,8 +216,7 @@ public sealed partial class MetricsFlusher(
     {
         try
         {
-            var raw = await settings.GetSettingAsync(MetricsConfigKeys.FlushIntervalSecondsGlobal, cancellationToken)
-                .ConfigureAwait(false);
+            var raw = await settings.GetSettingAsync(MetricsConfigKeys.FlushIntervalSecondsGlobal, cancellationToken);
             return TimeSpan.FromSeconds(MetricsConfigKeys.ParseFlushIntervalSeconds(raw));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

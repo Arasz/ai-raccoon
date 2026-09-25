@@ -135,7 +135,7 @@ public sealed class WorkspaceCloseRaceTests : IDisposable
     {
         try
         {
-            await action().ConfigureAwait(false);
+            await action();
             return true;
         }
         catch (UnknownWorkspaceException)

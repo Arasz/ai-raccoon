@@ -141,7 +141,7 @@ internal static partial class ToolRefusals
         {
             try
             {
-                return await next(request, cancellationToken).ConfigureAwait(false);
+                return await next(request, cancellationToken);
             }
             catch (McpProtocolException)
             {

@@ -35,12 +35,12 @@ public sealed partial class ProjectRegistrationGuard(
 
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
-        if (await registry.IsRegisteredAsync(projectId, cancellationToken).ConfigureAwait(false))
+        if (await registry.IsRegisteredAsync(projectId, cancellationToken))
         {
             return;
         }
 
-        var hasRows = await registry.HasRowsAsync(projectId, cancellationToken).ConfigureAwait(false);
+        var hasRows = await registry.HasRowsAsync(projectId, cancellationToken);
         if (!hasRows)
         {
             // Pre-migration compatibility: first-write auto-registers a verbatim id (a guid spelling
@@ -48,10 +48,10 @@ public sealed partial class ProjectRegistrationGuard(
             // P2 marker exists the repair has registered every winner, so an unregistered id with
             // no rows is a true typo (or a deleted drop-candidate): refuse it, guid or not, and
             // register nothing as a side effect.
-            if (!await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false)
+            if (!await migrationGate.IsMigratedAsync(cancellationToken)
                 && !Guid.TryParse(projectId, out _))
             {
-                await registry.RegisterAsync(projectId, projectId, cancellationToken).ConfigureAwait(false);
+                await registry.RegisterAsync(projectId, projectId, cancellationToken);
                 return;
             }
 

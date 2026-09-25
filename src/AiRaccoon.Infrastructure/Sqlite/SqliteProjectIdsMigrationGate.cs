@@ -14,12 +14,11 @@ public sealed class SqliteProjectIdsMigrationGate(ISqliteConnectionFactory facto
     /// <inheritdoc />
     public async Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken).ConfigureAwait(false);
-        await MemorySchema.EnsureCheapAsync(connection, cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
+        await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 MemorySql.HasFinishedRepairRequest,
                 new { kind = RepairKinds.ProjectIds },
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                cancellationToken: cancellationToken)) > 0;
     }
 }

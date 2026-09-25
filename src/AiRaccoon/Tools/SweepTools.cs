@@ -48,7 +48,7 @@ public sealed class SweepTools(
         + "Side effect: an entry carrying a TTL drops out of memory_share_extract's promotion candidates unless that call passes includeTtlRows. "
         + "Requires full access mode.")]
     public async Task<ApiEnvelope<TtlResult>> SetTtl(
-        [Description("The project id.")] [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The entry's content hash. A hash this project does not own is refused as unknown-hash.")]
         string hash,
         [Description("Days of age before the entry is sweepable, 1-36500. Null clears the TTL, so the entry never expires; 0 is rejected.")]

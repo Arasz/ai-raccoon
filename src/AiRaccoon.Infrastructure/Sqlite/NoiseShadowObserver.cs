@@ -42,7 +42,7 @@ public sealed partial class NoiseShadowObserver(
     {
         Guard.IsNotNull(connection);
 
-        if (!await IsShadowEnabledAsync(connection, cancellationToken).ConfigureAwait(false))
+        if (!await IsShadowEnabledAsync(connection, cancellationToken))
         {
             return NoiseFilterResult.Clean;
         }
@@ -58,7 +58,7 @@ public sealed partial class NoiseShadowObserver(
 
     private static async Task<bool> IsShadowEnabledAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         NoiseConfigKeys.ParseLearnerShadowEnabled(
-            await ReadSettingAsync(connection, NoiseConfigKeys.LearnerShadowEnabledGlobal, cancellationToken).ConfigureAwait(false));
+            await ReadSettingAsync(connection, NoiseConfigKeys.LearnerShadowEnabledGlobal, cancellationToken));
 
     private static Task<string?> ReadSettingAsync(SqliteConnection connection, string key, CancellationToken cancellationToken) =>
         connection.ExecuteScalarAsync<string?>(

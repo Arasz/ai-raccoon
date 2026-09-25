@@ -18,8 +18,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         // v7 (sortable, time-ordered) ids make workspace lists deterministic by creation order.
         var id = Guid.CreateVersion7().ToString("N");
         var workspace = new WorkspaceRecord(id, projectId, agentId: agentId, name: name);
-        await workspaceStore.BeginAsync(workspace, timeProvider.GetUtcNow(), cancellationToken)
-            .ConfigureAwait(false);
+        await workspaceStore.BeginAsync(workspace, timeProvider.GetUtcNow(), cancellationToken);
         return workspace;
     }
 
@@ -28,11 +27,10 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
-        var workspace = await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken)
-            .ConfigureAwait(false);
+        var workspace = await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
-        var entries = await store.ListContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+        var entries = await store.ListContextAsync(projectId, context, cancellationToken);
         return new WorkspaceOutbox(workspace, entries);
     }
 
@@ -43,11 +41,10 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
 
-        await ClaimAsync(projectId, workspaceId, true, cancellationToken).ConfigureAwait(false);
+        await ClaimAsync(projectId, workspaceId, true, cancellationToken);
 
         var workspaceContext = ContextNaming.WorkspaceContext(workspaceId);
-        var entries = await store.ListContextAsync(projectId, workspaceContext, cancellationToken)
-            .ConfigureAwait(false);
+        var entries = await store.ListContextAsync(projectId, workspaceContext, cancellationToken);
         var byHash = entries.ToDictionary(e => e.Hash, e => e, StringComparer.Ordinal);
 
         var keepAll = keep.Count == 1 && string.Equals(keep[0], "all", StringComparison.OrdinalIgnoreCase);
@@ -61,7 +58,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
             // (docs/work/features-agent-memory/spec-issue-1.md §3.2); add_content, not add_text, to skip the global content-hash dedup.
             await store.AddContentAsync(
                 projectId, entry.Path, entry.Value, ContextNaming.ProjectContext(projectId),
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken);
             // Consolidate counts per KEPT HASH, not per row created: the created/existing
             // distinction belongs to promotion accounting (PromoteAsync), not this loop.
             promoted++;
@@ -69,7 +66,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
 
         // Consolidating always clears the whole outbox, kept or not — deletedCount is that row
         // count, not a "dropped" count. Discarded is entries that were NOT kept.
-        await store.DeleteContextAsync(projectId, workspaceContext, cancellationToken).ConfigureAwait(false);
+        await store.DeleteContextAsync(projectId, workspaceContext, cancellationToken);
         return new ConsolidationResult(promoted, entries.Count - promoted);
     }
 
@@ -79,10 +76,10 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
-        await ClaimAsync(projectId, workspaceId, false, cancellationToken).ConfigureAwait(false);
+        await ClaimAsync(projectId, workspaceId, false, cancellationToken);
 
         var context = ContextNaming.WorkspaceContext(workspaceId);
-        return await store.DeleteContextAsync(projectId, context, cancellationToken).ConfigureAwait(false);
+        return await store.DeleteContextAsync(projectId, context, cancellationToken);
     }
 
     /// <summary>
@@ -95,12 +92,11 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
     private async Task ClaimAsync(string projectId, string workspaceId, bool consolidating,
         CancellationToken cancellationToken)
     {
-        var workspace = await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken)
-            .ConfigureAwait(false);
+        var workspace = await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken);
         var transitioned = consolidating ? workspace.Consolidate() : workspace.Discard();
 
         var claimed = await workspaceStore.TryCloseAsync(projectId, workspaceId, transitioned.Status,
-            timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+            timeProvider.GetUtcNow(), cancellationToken);
         if (!claimed)
         {
             throw new UnknownWorkspaceException(workspaceId, projectId);

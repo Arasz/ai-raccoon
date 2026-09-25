@@ -60,7 +60,7 @@ public sealed class QueueRenameTests : IDisposable
         await QueueAsync(connection, Loser, "q-share", 0.8, 8, 14, ct);
 
         var plan = ProjectIdsFoldPlan.FromCensus(
-            await ProjectIdCensus.CollectAsync(connection, ct).ConfigureAwait(false),
+            await ProjectIdCensus.CollectAsync(connection, ct),
             new ProjectIdAliasMap(
                 [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
                 ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],

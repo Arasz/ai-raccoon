@@ -143,7 +143,7 @@ public sealed class SyncServiceGateContentionTests : IDisposable
             if (cycle == 1)
             {
                 cycle1Entered.TrySetResult();
-                await releaseCycle1.Task.WaitAsync(ct).ConfigureAwait(false);
+                await releaseCycle1.Task.WaitAsync(ct);
             }
 
             return cloud;
@@ -152,19 +152,19 @@ public sealed class SyncServiceGateContentionTests : IDisposable
         async Task<SqliteConnection> OpenBankAsync(CancellationToken ct)
         {
             Record("openBank");
-            return await CreateAndOpenAsync(BankPath, ct).ConfigureAwait(false);
+            return await CreateAndOpenAsync(BankPath, ct);
         }
 
         async Task<SqliteConnection> OpenReadOnlyAsync(string path, CancellationToken ct)
         {
             Record("openReadOnly");
-            return await OpenPlainAsync(path, ct).ConfigureAwait(false);
+            return await OpenPlainAsync(path, ct);
         }
 
         async Task<SqliteConnection> OpenSnapshotAsync(string path, CancellationToken ct)
         {
             Record("openSnapshot");
-            return await OpenPlainAsync(path, ct).ConfigureAwait(false);
+            return await OpenPlainAsync(path, ct);
         }
 
         var service = new SyncService(ResolveCloudAsync, OpenBankAsync, OpenSnapshotAsync, OpenReadOnlyAsync,
@@ -174,14 +174,12 @@ public sealed class SyncServiceGateContentionTests : IDisposable
         var task1 = Task.Run(async () =>
         {
             start.SignalAndWait(Patience);
-            return await service.MemorySyncAsync("acme", "gate-race", TestContext.Current.CancellationToken)
-                .ConfigureAwait(false);
+            return await service.MemorySyncAsync("acme", "gate-race", TestContext.Current.CancellationToken);
         }, TestContext.Current.CancellationToken);
         var task2 = Task.Run(async () =>
         {
             start.SignalAndWait(Patience);
-            return await service.MemorySyncAsync("acme", "gate-race", TestContext.Current.CancellationToken)
-                .ConfigureAwait(false);
+            return await service.MemorySyncAsync("acme", "gate-race", TestContext.Current.CancellationToken);
         }, TestContext.Current.CancellationToken);
 
         await cycle1Entered.Task.WaitAsync(Patience, TestContext.Current.CancellationToken);
@@ -233,14 +231,12 @@ public sealed class SyncServiceGateContentionTests : IDisposable
             var task1 = Task.Run(async () =>
             {
                 start.SignalAndWait(Patience);
-                return await service.MemorySyncAsync("acme", $"gate-race-{run}", TestContext.Current.CancellationToken)
-                    .ConfigureAwait(false);
+                return await service.MemorySyncAsync("acme", $"gate-race-{run}", TestContext.Current.CancellationToken);
             }, TestContext.Current.CancellationToken);
             var task2 = Task.Run(async () =>
             {
                 start.SignalAndWait(Patience);
-                return await service.MemorySyncAsync("acme", $"gate-race-{run}", TestContext.Current.CancellationToken)
-                    .ConfigureAwait(false);
+                return await service.MemorySyncAsync("acme", $"gate-race-{run}", TestContext.Current.CancellationToken);
             }, TestContext.Current.CancellationToken);
 
             var results = await Task.WhenAll(task1, task2).WaitAsync(Patience, TestContext.Current.CancellationToken);
@@ -265,7 +261,7 @@ public sealed class SyncServiceGateContentionTests : IDisposable
         {
             try
             {
-                return await inner.PushAsync(objectKey, data, etag, cancellationToken).ConfigureAwait(false);
+                return await inner.PushAsync(objectKey, data, etag, cancellationToken);
             }
             finally
             {

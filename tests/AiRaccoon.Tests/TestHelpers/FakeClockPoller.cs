@@ -23,7 +23,7 @@ internal sealed class FakeClockPoller(FakeTimeProvider time)
     {
         var fakeStart = time.GetUtcNow();
         var steps = 0;
-        while (!await condition().WaitAsync(cancellationToken).ConfigureAwait(false))
+        while (!await condition().WaitAsync(cancellationToken))
         {
             var fakeSpent = time.GetUtcNow() - fakeStart;
             if (fakeSpent >= TimeSpan.FromSeconds(maxFakeSeconds))
@@ -36,8 +36,8 @@ internal sealed class FakeClockPoller(FakeTimeProvider time)
 
             steps++;
             time.Advance(TimeSpan.FromMilliseconds(100));
-            await tick(cancellationToken).WaitAsync(cancellationToken).ConfigureAwait(false);
-            await Task.Delay(EventDeliveryPause, cancellationToken).ConfigureAwait(false);
+            await tick(cancellationToken).WaitAsync(cancellationToken);
+            await Task.Delay(EventDeliveryPause, cancellationToken);
         }
 
         return true;

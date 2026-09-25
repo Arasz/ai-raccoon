@@ -37,14 +37,14 @@ public sealed partial class SweepHostedService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // No startup pass: nothing is due at process start, and the first tick is the first sweep.
-        using var timer = new PeriodicTimer(await ReadIntervalSafeAsync(stoppingToken).ConfigureAwait(false),
+        using var timer = new PeriodicTimer(await ReadIntervalSafeAsync(stoppingToken),
             timeProvider);
         TimerArmed.Increment();
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
             {
-                await RunOnceAsync(stoppingToken).ConfigureAwait(false);
+                await RunOnceAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -60,7 +60,7 @@ public sealed partial class SweepHostedService(
             }
 
             // Re-read the interval so config changes apply without a restart.
-            timer.Period = await ReadIntervalSafeAsync(stoppingToken).ConfigureAwait(false);
+            timer.Period = await ReadIntervalSafeAsync(stoppingToken);
             IntervalReReads.Increment();
         }
     }
@@ -71,7 +71,7 @@ public sealed partial class SweepHostedService(
         using var pass = telemetry.Begin(OperationName);
         try
         {
-            var failures = await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
+            var failures = await RunPassAsync(pass, cancellationToken);
             if (failures > 0)
             {
                 pass.PartiallyFailed(failures);
@@ -99,7 +99,7 @@ public sealed partial class SweepHostedService(
     private async Task<int> RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {
         var enabled = SweepConfigKeys.ParseEnabled(
-            await store.GetSettingAsync(SweepConfigKeys.EnabledGlobal, cancellationToken).ConfigureAwait(false));
+            await store.GetSettingAsync(SweepConfigKeys.EnabledGlobal, cancellationToken));
         if (!enabled)
         {
             Log.Skipped(logger);
@@ -110,9 +110,9 @@ public sealed partial class SweepHostedService(
         // per-project Destructive gate exists for the caller's *consent to change it*, not for
         // reading it) and a timer has no caller to gate in the first place.
         var threshold = SweepThreshold.Parse(
-            await store.GetSettingAsync(SweepThreshold.SettingKey, cancellationToken).ConfigureAwait(false));
+            await store.GetSettingAsync(SweepThreshold.SettingKey, cancellationToken));
 
-        var projects = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
+        var projects = await store.GetProjectIdsAsync(cancellationToken);
         if (projects.Count == 0)
         {
             Log.NoProjects(logger);
@@ -128,15 +128,14 @@ public sealed partial class SweepHostedService(
                 // H6: the same Destructive requirement memory_sweep enforces at the MCP boundary
                 // (full mode only) applies here — a project that has not consented to destructive
                 // operations does not lose that consent just because the caller is a timer.
-                var mode = await ResolveModeAsync(projectId, cancellationToken).ConfigureAwait(false);
+                var mode = await ResolveModeAsync(projectId, cancellationToken);
                 if (mode != AccessMode.Full)
                 {
                     Log.SkippedMode(logger, projectId, mode);
                     continue;
                 }
 
-                var outcome = await sweeper.SweepAsync(projectId, threshold, DryRun, cancellationToken)
-                    .ConfigureAwait(false);
+                var outcome = await sweeper.SweepAsync(projectId, threshold, DryRun, cancellationToken);
                 deletedTotal += LogDeletions(projectId, outcome);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -176,13 +175,11 @@ public sealed partial class SweepHostedService(
     private async Task<AccessMode> ResolveModeAsync(string projectId, CancellationToken cancellationToken)
     {
         var perProjectRaw = await store
-            .GetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), cancellationToken)
-            .ConfigureAwait(false);
+            .GetSettingAsync(AccessModePolicy.ProjectSettingKey(projectId), cancellationToken);
         if (perProjectRaw is null)
         {
             perProjectRaw = await store
-                .GetSettingAsync(AccessModePolicy.LegacyProjectSettingKey(projectId), cancellationToken)
-                .ConfigureAwait(false);
+                .GetSettingAsync(AccessModePolicy.LegacyProjectSettingKey(projectId), cancellationToken);
         }
 
         if (AccessModePolicy.Parse(perProjectRaw) is { } perProject)
@@ -190,8 +187,7 @@ public sealed partial class SweepHostedService(
             return perProject;
         }
 
-        var globalRaw = await store.GetSettingAsync(AccessModePolicy.GlobalSettingKey, cancellationToken)
-            .ConfigureAwait(false);
+        var globalRaw = await store.GetSettingAsync(AccessModePolicy.GlobalSettingKey, cancellationToken);
         return AccessModePolicy.Resolve(AccessModePolicy.Parse(globalRaw), null);
     }
 
@@ -213,8 +209,7 @@ public sealed partial class SweepHostedService(
         try
         {
             var hours = SweepConfigKeys.ParseIntervalHours(
-                await store.GetSettingAsync(SweepConfigKeys.IntervalHoursGlobal, cancellationToken)
-                    .ConfigureAwait(false));
+                await store.GetSettingAsync(SweepConfigKeys.IntervalHoursGlobal, cancellationToken));
             return TimeSpan.FromHours(hours);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

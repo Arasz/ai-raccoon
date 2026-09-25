@@ -163,11 +163,10 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         {
             foreach (var pruned in decision.Pruned)
             {
-                await RemoveWatchAsync(projectId, pruned.Path, cancellationToken).ConfigureAwait(false);
+                await RemoveWatchAsync(projectId, pruned.Path, cancellationToken);
             }
 
-            await AddWatchAsync(projectId, candidate.Path, candidate.CreatedAt, 0, cancellationToken)
-                .ConfigureAwait(false);
+            await AddWatchAsync(projectId, candidate.Path, candidate.CreatedAt, 0, cancellationToken);
         }
 
         return decision;

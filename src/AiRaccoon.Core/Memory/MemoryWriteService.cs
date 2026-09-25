@@ -59,7 +59,7 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
         // promotion request, so it never reaches the queue and never gets the shared rewrite.
         if (request.Context != ContextNaming.SharedContext || !string.IsNullOrWhiteSpace(request.WorkspaceId))
         {
-            return await store.WriteAsync(request, cancellationToken).ConfigureAwait(false);
+            return await store.WriteAsync(request, cancellationToken);
         }
 
         // Naming `shared` asks for promotion; it does not perform one. The row lands in the caller's
@@ -67,8 +67,7 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
         // shared tier exists to have.
         var entry = await store
             .WriteAsync(request with { Context = ContextNaming.ProjectContext(request.ProjectId) },
-                cancellationToken)
-            .ConfigureAwait(false);
+                cancellationToken);
         if (!entry.Stored)
         {
             return entry;
@@ -82,8 +81,7 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
                     new QueueCandidate(entry.Hash, entry.Path, entry.Value, request.SourceFile,
                         AgentRequestedScore, [PromotionReasons.AgentRequestedShare], PromotionScorer.Version)
                 ],
-                cancellationToken)
-            .ConfigureAwait(false);
+                cancellationToken);
 
         // F25: the upsert is refused for a remembered discard or an already-shared value twin, so
         // the queue — not the call — decides which reason is true here. Refused and NotQueued are
