@@ -17,6 +17,7 @@ import re
 import sqlite3
 import statistics
 import subprocess
+import tempfile
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -62,8 +63,6 @@ def _capture_stderr(build):
     ORT's CoreML EP logs partition/compute-plan info straight to C++ stderr, invisible to Python's
     own logging, so redirecting the fd is the only way to recover it from inside the process.
     """
-    import tempfile
-
     fd, path = tempfile.mkstemp(prefix="coreml-ep-log-")
     os.close(fd)
     saved = os.dup(2)
