@@ -101,7 +101,7 @@ depends on the RID ([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16
 | `osx-arm64` | `mlx` (opt-in) → WebGPU (built in) → CPU | None for WebGPU. MLX needs Apple Silicon and the plugin's native runtime, bundled only in this RID's package. |
 | `win-x64` | `cuda` (opt-in) → WebGPU (bundled core) → CPU | WebGPU needs a GPU driver with D3D12 support. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
 | `win-arm64` | WebGPU (bundled core) → CPU | Same as win-x64. The CUDA provider only ships for x64, so `cuda` here refuses and falls through. |
-| `linux-x64` | `cuda` (opt-in) → WebGPU (bundled core) → CPU | WebGPU needs the Vulkan loader, `libvulkan.so.1` (`apt install libvulkan1` or the distro equivalent), plus the vendor's own Vulkan driver. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
+| `linux-x64` | `cuda` (opt-in) → WebGPU (bundled core) → CPU | WebGPU needs the Vulkan loader, `libvulkan.so.1` (`apt install libvulkan1` or the distro equivalent), plus the vendor's own Vulkan driver and its ICD manifest. Some NVIDIA containers mount the driver (`libGLX_nvidia.so.0`) without the manifest; add `~/.config/vulkan/icd.d/nvidia_icd.json` (see *Checking a Linux GPU host*) or the session runs on the CPU. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
 | `linux-arm64` | CPU | ONNX Runtime publishes no WebGPU build for linux-arm64. No CUDA provider ships for arm64; `cuda` refuses and falls through. |
 | `linux-musl-x64` | CPU only | None — there is no WebGPU or CUDA build for musl. |
 
@@ -215,8 +215,8 @@ curl -fsSL https://raw.githubusercontent.com/Arasz/ai-raccoon/main/scripts/gpu-h
 ```
 
 It prints the GPU, driver and Vulkan devices, builds the tests, installs the CUDA 13 runtime
-wheels into its own folder (not the notebook's environment) and the `1.30.0` CUDA provider, fetches the bundled WebGPU core, then runs the WebGPU session test (on a Lightning AI T4 it landed on
-the GPU even though `vulkaninfo` found no driver) and the CUDA session test with `AIRACCOON_TEST_CUDA_LIBRARY` set. The
+wheels into its own folder (not the notebook's environment) and the `1.30.0` CUDA provider, fetches the bundled WebGPU core, then runs the WebGPU session test (it lands on the GPU only with a Vulkan driver; on NVIDIA
+containers that mount the driver but not its ICD manifest, the probe writes the manifest itself) and the CUDA session test with `AIRACCOON_TEST_CUDA_LIBRARY` set. The
 closing `PROBE SUMMARY` block says which paths ran and, for a WebGPU fallback, why.
 
 ### Recipe 2: Configure OpenAI embeddings
