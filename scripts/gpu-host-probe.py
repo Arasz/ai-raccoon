@@ -25,6 +25,8 @@ from pathlib import Path
 
 ORT_VERSION = "1.30.0"
 # SHA-256 of Microsoft.ML.OnnxRuntime.Gpu.Linux 1.30.0 from nuget.org (its SHA-512 matches the catalog).
+ORT_GPU_NUPKG_URL = "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.Gpu.Linux/%s" % ORT_VERSION
+DOTNET_INSTALL_URL = "https://dot.net/v1/dotnet-install.sh"
 ORT_GPU_NUPKG_SHA256 = "77ca23682fc164789e67cd0fa4ce022b1b1c94e1978046c6446eee5fb0a3a3d6"
 CUDA_WHEELS = ("nvidia-cuda-runtime==13.*", "nvidia-cublas==13.*", "nvidia-curand==10.*", "nvidia-cudnn-cu13==9.*")
 CUDA_SONAMES = ("libcudart.so.13", "libcublas.so.13", "libcublasLt.so.13", "libcurand.so.10", "libcudnn.so.9")
@@ -62,6 +64,26 @@ def sha256_of(path: Path) -> str:
         for block in iter(lambda: stream.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def download(url: str, path: Path) -> str | None:
+    """Downloads url to path; the failure as text instead of raising, or None on success."""
+    try:
+        urllib.request.urlretrieve(url, path)
+    except OSError as error:
+        return "download failed: %s" % error
+    return None
+
+
+def download_verified(url: str, path: Path, sha256: str) -> str | None:
+    """Downloads url to path and checks its SHA-256; the failure as text (file removed), or None on success."""
+    failure = download(url, path)
+    if failure is None:
+        actual = sha256_of(path)
+        if actual != sha256:
+            path.unlink()
+            failure = "sha256 %s, expected %s" % (actual, sha256)
+    return failure
 
 
 def library_dirs(root: Path, sonames: list[str] | tuple[str, ...]) -> list[Path]:
@@ -157,17 +179,23 @@ def probe_vulkan(found: Probe, env: dict[str, str]) -> None:
     print(found.vulkan)
 
 
-def ensure_dotnet(env: dict[str, str]) -> None:
+def ensure_dotnet(env: dict[str, str], found: Probe) -> bool:
+    """Installs .NET 10 when missing; False, with the failure in found.commit, when the installer download fails."""
     section("dotnet")
     sdks = run(["dotnet", "--list-sdks"], env=env).stdout if shutil.which("dotnet", path=env["PATH"]) else ""
     if not re.search(r"^10\.", sdks, re.MULTILINE):
         installer = Path("/tmp/dotnet-install.sh")
-        urllib.request.urlretrieve("https://dot.net/v1/dotnet-install.sh", installer)
+        failure = download(DOTNET_INSTALL_URL, installer)
+        if failure is not None:
+            found.commit = "dotnet install failed: %s" % failure
+            print(found.commit)
+            return False
         dotnet_root = Path.home() / ".dotnet"
         run(["bash", str(installer), "--channel", "10.0", "--install-dir", str(dotnet_root)])
         env["DOTNET_ROOT"] = str(dotnet_root)
         env["PATH"] = "%s:%s" % (dotnet_root, env["PATH"])
     print(run(["dotnet", "--version"], env=env).stdout.strip())
+    return True
 
 
 def prepare_source(work: Path, env: dict[str, str], found: Probe) -> bool:
@@ -194,25 +222,23 @@ def prepare_source(work: Path, env: dict[str, str], found: Probe) -> bool:
     return True
 
 
-def prepare_cuda(work: Path, env: dict[str, str]) -> Path | None:
-    """The ORT CUDA provider with its CUDA 13 wheels on LD_LIBRARY_PATH, or None without an NVIDIA driver."""
+def prepare_cuda(work: Path, env: dict[str, str], found: Probe) -> Path | None:
+    """The ORT CUDA provider with its CUDA 13 wheels on LD_LIBRARY_PATH; None, with the reason in found.cuda, when it can't be set up."""
     section("cuda provider")
     if nvidia_gpu() is None:
         print("no NVIDIA driver; CUDA skipped")
+        return None
+    nupkg = work / ".ort-gpu.nupkg"
+    failure = download_verified(ORT_GPU_NUPKG_URL, nupkg, ORT_GPU_NUPKG_SHA256)
+    if failure is not None:
+        found.cuda = "skipped (%s)" % failure
+        print("%s: %s; CUDA skipped" % (ORT_GPU_NUPKG_URL, failure))
         return None
     wheels = work / ".cuda-wheels"
     print(tail(run([sys.executable, "-m", "pip", "install", "-q", "--target", str(wheels), *CUDA_WHEELS]).stdout, 1))
     dirs = library_dirs(wheels, CUDA_SONAMES)
     env["LD_LIBRARY_PATH"] = ":".join([*map(str, dirs), env.get("LD_LIBRARY_PATH", "")]).rstrip(":")
 
-    nupkg = work / ".ort-gpu.nupkg"
-    url = "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.Gpu.Linux/%s" % ORT_VERSION
-    urllib.request.urlretrieve(url, nupkg)
-    actual = sha256_of(nupkg)
-    if actual != ORT_GPU_NUPKG_SHA256:
-        nupkg.unlink()
-        print("%s: sha256 %s, expected %s; CUDA skipped" % (url, actual, ORT_GPU_NUPKG_SHA256))
-        return None
     native = "runtimes/linux-x64/native/"
     with zipfile.ZipFile(nupkg) as archive:
         archive.extractall(work / ".ort-gpu", [n for n in archive.namelist() if n.startswith(native)])
@@ -236,9 +262,8 @@ def main() -> int:
     probe_host(found)
     work.parent.mkdir(parents=True, exist_ok=True)
     probe_vulkan(found, env)
-    ensure_dotnet(env)
-    if prepare_source(work, env, found):
-        cuda_provider = prepare_cuda(work, env)
+    if ensure_dotnet(env, found) and prepare_source(work, env, found):
+        cuda_provider = prepare_cuda(work, env, found)
 
         section("WebGPU session")
         output = run_tests(work, env, GPU_TESTS)

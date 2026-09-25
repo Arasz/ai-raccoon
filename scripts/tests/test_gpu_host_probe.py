@@ -107,3 +107,41 @@ def test_prepare_source_records_a_failed_clone_instead_of_raising(tmp_path):
 
     assert ready is False
     assert found.commit.startswith("clone failed")
+
+
+def test_download_verified_reports_a_hash_mismatch_and_removes_the_file(tmp_path):
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"tampered")
+    target = tmp_path / "target.bin"
+
+    failure = probe.download_verified(source.as_uri(), target, "0" * 64)
+
+    assert failure is not None and failure.startswith("sha256 ")
+    assert not target.exists()
+
+
+def test_download_verified_reports_a_failed_download_instead_of_raising(tmp_path):
+    failure = probe.download_verified((tmp_path / "missing.bin").as_uri(), tmp_path / "target.bin", "0" * 64)
+
+    assert failure is not None and failure.startswith("download failed")
+
+
+def test_prepare_cuda_records_why_it_skipped_when_a_driver_is_present(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "nvidia_gpu", lambda: "Tesla T4")
+    monkeypatch.setattr(probe, "ORT_GPU_NUPKG_URL", (tmp_path / "missing.nupkg").as_uri())
+    found = probe.Probe()
+
+    provider = probe.prepare_cuda(tmp_path, dict(probe.os.environ), found)
+
+    assert provider is None
+    assert found.cuda.startswith("skipped (download failed")
+
+
+def test_ensure_dotnet_records_a_failed_installer_download_instead_of_raising(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "DOTNET_INSTALL_URL", (tmp_path / "missing.sh").as_uri())
+    found = probe.Probe()
+
+    ready = probe.ensure_dotnet(dict(probe.os.environ, PATH=str(tmp_path)), found)
+
+    assert ready is False
+    assert found.commit.startswith("dotnet install failed")
