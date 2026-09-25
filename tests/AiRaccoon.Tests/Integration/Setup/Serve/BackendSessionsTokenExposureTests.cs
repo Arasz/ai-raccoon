@@ -186,7 +186,7 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
         return new BackendSessions(launcher, new IdentityProver(config.Options, new HttpClient()),
             TestData.CreateServerProbe(), new PlainHttpClientFactory(), NullLoggerFactory.Instance,
-            ServeExecutable, config);
+            ServeExecutable, config, File.Exists, null, null);
     }
 
     private static BackendLauncher RealLauncher() => new(TestData.CreateServerProbe(),

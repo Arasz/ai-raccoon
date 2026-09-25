@@ -68,12 +68,18 @@ shutdown mechanism.
   interval instead of running forever.
 - **Neutral — a second background poll.** Like `IdleWatchdog`, it costs one more timer tick every 20
   seconds; the check itself is a single `Directory.Exists` call.
-- **Not addressed here.** Whether a proxy that cached `Environment.ProcessPath` before the update can
-  still resolve the new install to respawn is a `BackendSessions`/proxy-spawn question, out of scope
-  for this ADR (it changes only the backend's own shutdown). Measured empirically for this ADR: on
-  macOS (osx-arm64, .NET 10), `Environment.ProcessPath` and `Process.MainModule.FileName` both report
-  the **symlink-resolved** target path for a process launched through a symlink, never the symlink
-  path itself — relevant to that follow-up, not acted on here.
+- **Addressed by a follow-up (2026-09-25).** The gap this ADR left open — whether a proxy that
+  resolved `Environment.ProcessPath` before the update can still respawn afterward — was real:
+  measured on macOS (osx-arm64, .NET 10), `Environment.ProcessPath` and `Process.MainModule.FileName`
+  both report the **symlink-resolved** target path for a process launched through the
+  `~/.dotnet/tools/ai-raccoon` symlink, never the symlink path itself, so a proxy started before the
+  update tries to spawn a deleted `.store/<old-version>/...` binary and fails. `BackendSessions.AcquireBackend`
+  now falls back, in order, to the dotnet global-tool shim
+  (`Path.Combine(<user profile>, ".dotnet", "tools", "ai-raccoon")`, `.exe` on Windows) and then to
+  `ai-raccoon` resolved on `PATH`; neither found keeps the pre-existing refusal.
+  `BackendLaunchArguments.ResolveExecutable` does the check and the fallback (file-existence,
+  home-directory and `PATH` lookups are injected, never touching the real machine in a test), and
+  logs once, naming the missing path and the fallback used.
 
 ## Non-Goals
 
@@ -100,4 +106,8 @@ shutdown mechanism.
 `src/AiRaccoon/Hosting/Watchdog/WatchdogRegistrations.cs`;
 `tests/AiRaccoon.Tests/Integration/Setup/McpServerSetupHostTests.cs`
 (`HttpHost_AlwaysRegistersTheInstallWatchdog`); `src/AiRaccoon.Infrastructure/Maintenance/MaintenanceJobRunner.cs`;
-`src/AiRaccoon.Infrastructure/Embedding/BundledModelInstallReplacedException.cs`.
+`src/AiRaccoon.Infrastructure/Embedding/BundledModelInstallReplacedException.cs`. The 2026-09-25
+executable-fallback follow-up: `src/AiRaccoon/Hosting/Common/BackendLaunchArguments.cs`
+(`ResolveExecutable`, `GlobalToolShimPath`, `PathExecutable`); `src/AiRaccoon/Hosting/Proxy/BackendSessions.cs`
+(`AcquireBackend`); `tests/AiRaccoon.Tests/Unit/Hosting/BackendLaunchArgumentsTests.cs`;
+`tests/AiRaccoon.Tests/Unit/Hosting/BackendSessionsTests.cs`.

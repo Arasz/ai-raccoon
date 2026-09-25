@@ -132,7 +132,8 @@ public sealed class ProxyPrivateBackendLifetimeTests : IDisposable
         var config = new ServerConfig(squatter.Port, McpTransport.Http,
             new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
         var sessions = new BackendSessions(launcher, new NeverProven(), TestData.CreateServerProbe(),
-            new PlainHttpClientFactory(), NullLoggerFactory.Instance, ServeExecutable, config);
+            new PlainHttpClientFactory(), NullLoggerFactory.Instance, ServeExecutable, config,
+            File.Exists, null, null);
         try
         {
             await Should.ThrowAsync<BackendUnavailableException>(
@@ -238,7 +239,7 @@ public sealed class ProxyPrivateBackendLifetimeTests : IDisposable
                 TimeProvider.System, NullLogger<BackendLauncher>.Instance),
             new IdentityProver(config.Options, new HttpClient()),
             TestData.CreateServerProbe(), new PlainHttpClientFactory(), NullLoggerFactory.Instance,
-            ServeExecutable, config);
+            ServeExecutable, config, File.Exists, null, null);
     }
 
     private static string ServeExecutable =>
