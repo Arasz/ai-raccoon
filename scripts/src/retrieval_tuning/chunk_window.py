@@ -17,6 +17,7 @@ import re
 import sqlite3
 import statistics
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import asdict, dataclass, field
@@ -61,47 +62,45 @@ def _capture_stderr(build):
     """Runs build() with process fd 2 redirected to a temp file; returns (result, captured text).
 
     ORT's CoreML EP logs partition/compute-plan info straight to C++ stderr, invisible to Python's
-    own logging, so redirecting the fd is the only way to recover it from inside the process.
+    own logging, so redirecting the fd is the only way to recover it from inside the process. On an
+    exception from build(), the captured text is re-emitted to the real stderr before re-raising,
+    so a build crash doesn't take its own diagnostic log down with it, and the temp file is always
+    cleaned up, success or failure.
     """
     fd, path = tempfile.mkstemp(prefix="coreml-ep-log-")
     os.close(fd)
     saved = os.dup(2)
     log_fd = os.open(path, os.O_WRONLY | os.O_TRUNC)
-    try:
-        os.dup2(log_fd, 2)
-        result = build()
-    finally:
+
+    def _finish() -> str:
         os.dup2(saved, 2)
         os.close(saved)
         os.close(log_fd)
-    text = Path(path).read_text(errors="replace")
-    Path(path).unlink(missing_ok=True)
-    return result, text
+        text = Path(path).read_text(errors="replace")
+        Path(path).unlink(missing_ok=True)
+        return text
+
+    os.dup2(log_fd, 2)
+    try:
+        result = build()
+    except Exception:
+        sys.stderr.write(_finish())
+        raise
+    return result, _finish()
 
 
 def dir_size_kib(root: Path) -> int:
     return sum(p.stat().st_size for p in root.rglob("*") if p.is_file()) // 1024 if root.exists() else 0
 
 
-def _ps_time_seconds(value: str) -> float:
-    seconds = 0.0
-    for part in value.split(":"):
-        seconds = seconds * 60 + float(part)
-    return seconds
+ANE_COMPILER_NAMES = ("aned", "ANECompilerService")
 
 
-def ane_compiler_cpu_s() -> float:
-    """Summed CPU time (seconds) of aned and ANECompilerService right now, from `ps -A`."""
-    out = subprocess.run(["ps", "-A", "-o", "time=,comm="], capture_output=True, text=True, check=False).stdout
-    total = 0.0
-    for line in out.splitlines():
-        parts = line.split(None, 1)
-        if len(parts) != 2:
-            continue
-        time_str, comm = parts
-        if comm.strip().rsplit("/", 1)[-1] in ("aned", "ANECompilerService"):
-            total += _ps_time_seconds(time_str)
-    return total
+def ane_compiler_pids() -> dict[int, float]:
+    """pid -> CPU time (seconds) right now, for every aned/ANECompilerService process."""
+    out = subprocess.run(["ps", "-A", "-o", "pid=,time=,comm="], capture_output=True, text=True,
+                         check=False).stdout
+    return coreml.parse_ps_pids(out, ANE_COMPILER_NAMES)
 
 
 class Engine:
@@ -133,6 +132,7 @@ class Engine:
         self.compute_plan: dict[str, int] = {}
         self.bucket_load_s: dict[int, float] = {}
         self.bucket_first_run_ms: dict[int, float] = {}
+        self.coreml_log_parse_error: str | None = None
 
         options = ort.SessionOptions()
         options.intra_op_num_threads = threads
@@ -184,7 +184,7 @@ class Engine:
         for name, value in coreml.free_dim_overrides(self._input_shapes, bucket).items():
             so.add_free_dimension_override_by_name(name, value)
         cache_dir = coreml.cache_dir_for(self.coreml_cache_root, self._model_sha, ort.__version__,
-                                         self._compute_units, bucket)
+                                         self._compute_units, bucket, self._specialization)
         cache_dir.mkdir(parents=True, exist_ok=True)
         provider_options = {"ModelFormat": "MLProgram", "MLComputeUnits": self._compute_units,
                             "RequireStaticInputShapes": "1", "ModelCacheDirectory": str(cache_dir)}
@@ -211,7 +211,8 @@ class Engine:
     def _read_coreml_log(self, text: str) -> None:
         try:
             info = coreml.parse_partition_log(text)
-        except ValueError:
+        except ValueError as exc:
+            self.coreml_log_parse_error = str(exc)
             return
         self.coreml_nodes = info["nodes_supported"]
         self.coreml_partitions = info["partitions"]
@@ -239,8 +240,8 @@ class Engine:
             raise ValueError(f"row of {len(ids)} tokens exceeds the top bucket ({self.buckets[-1]})")
         padded, mask = pad_row(ids, self.pad_to, PAD_ID, self.buckets)
         input_ids = np.asarray([padded], dtype=np.int64)
-        session = self.sessions.get(len(padded)) if self.device == "coreml" else self.session
         wall, cpu = time.perf_counter(), time.process_time()
+        session = self.sessions.get(len(padded)) if self.device == "coreml" else self.session
         out = session.run(["sentence_embedding"],
                           {"input_ids": input_ids, "attention_mask": np.asarray([mask], dtype=np.int64)})[0][0]
         wall_ms = (time.perf_counter() - wall) * 1000
@@ -403,6 +404,7 @@ class ArmResult:
     gpu: str
     coreml_nodes: int | None = None
     coreml_partitions: int | None = None
+    coreml_log_parse_error: str | None = None
     compute_units: str | None = None
     bucket_load_s: dict[int, float] = field(default_factory=dict)
     bucket_first_run_ms: dict[int, float] = field(default_factory=dict)
@@ -411,6 +413,7 @@ class ArmResult:
     neural_kib_peak: int = 0
     cache_disk_kib: int = 0
     compiler_cpu_s: float = 0.0
+    compiler_cpu_s_incomplete: bool = False
     energy_nj: int = 0
     loadavg: float = 0.0
     vector: dict[str, float] = field(default_factory=dict)
@@ -428,7 +431,7 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
     documents, queries = (memory_corpus if corpus == "memory" else code_corpus)(repo)
     engine = Engine(model_dir, threads, device, mlx_dir, pad_to, buckets, cache_limit_mib,
                     compute_units, max_sessions, coreml_cache_dir, profile_compute_plan, specialization)
-    compiler_cpu_before = ane_compiler_cpu_s() if device == "coreml" else 0.0
+    compiler_pids_before = ane_compiler_pids() if device == "coreml" else {}
     mem_load = memory_kib()
     work_dir.mkdir(parents=True, exist_ok=True)
     db_path = work_dir / f"{corpus}-{chunk_tokens}.db"
@@ -489,7 +492,10 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
     db.close()
     lengths_arr = np.asarray(lengths)
     mem_final = memory_kib()
-    compiler_cpu_s = ane_compiler_cpu_s() - compiler_cpu_before if device == "coreml" else 0.0
+    compiler_cpu_s, compiler_cpu_s_incomplete = 0.0, False
+    if device == "coreml":
+        compiler_cpu_s, vanished = coreml.compiler_cpu_delta(compiler_pids_before, ane_compiler_pids())
+        compiler_cpu_s_incomplete = bool(vanished)
 
     def mean_of(leg: str) -> dict[str, float]:
         keys = per_query[0][leg].keys()  # type: ignore[union-attr]
@@ -519,13 +525,15 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
              else "CoreML EP (ANE usage in neural_kib_peak)" if device == "coreml"
              else "not used: CPU provider"),
         coreml_nodes=engine.coreml_nodes, coreml_partitions=engine.coreml_partitions,
+        coreml_log_parse_error=engine.coreml_log_parse_error,
         compute_units=compute_units if device == "coreml" else None,
         bucket_load_s=dict(engine.bucket_load_s), bucket_first_run_ms=dict(engine.bucket_first_run_ms),
         sessions_live_peak=engine.sessions.peak_live if device == "coreml" else 0,
         evictions=engine.sessions.evictions if device == "coreml" else 0,
         neural_kib_peak=mem_final.neural_footprint_peak,
         cache_disk_kib=dir_size_kib(engine.coreml_cache_root) if device == "coreml" else 0,
-        compiler_cpu_s=compiler_cpu_s, energy_nj=mem_final.energy_nj, loadavg=os.getloadavg()[0],
+        compiler_cpu_s=compiler_cpu_s, compiler_cpu_s_incomplete=compiler_cpu_s_incomplete,
+        energy_nj=mem_final.energy_nj, loadavg=os.getloadavg()[0],
         vector=mean_of("vector"), hybrid=mean_of("hybrid"), per_query=per_query, gold_position=gold_position,
     )
 

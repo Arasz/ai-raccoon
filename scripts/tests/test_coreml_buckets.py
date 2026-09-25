@@ -10,9 +10,12 @@ from retrieval_tuning.coreml import (
     BucketSessions,
     bucket_lengths,
     cache_dir_for,
+    compiler_cpu_delta,
     free_dim_overrides,
     parse_compute_plan,
     parse_partition_log,
+    parse_ps_pids,
+    parse_ps_time,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "coreml"
@@ -47,6 +50,12 @@ def test_top_already_a_multiple_is_not_duplicated() -> None:
 
 def test_top_smaller_than_step_yields_a_single_bucket() -> None:
     assert bucket_lengths(128, 64) == [64]
+
+
+@pytest.mark.parametrize("step,top", [(0, 100), (-1, 100), (100, 0), (100, -1)])
+def test_non_positive_step_or_top_raises(step: int, top: int) -> None:
+    with pytest.raises(ValueError):
+        bucket_lengths(step, top)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -101,6 +110,22 @@ def test_cache_dir_is_under_root() -> None:
     root = Path("/tmp/coreml-cache")
 
     assert root in cache_dir_for(root, "sha-a", "1.30.0", "CPUOnly", 64).parents
+
+
+def test_cache_dir_leaf_names_the_bucket_and_the_default_specialization() -> None:
+    path = cache_dir_for(Path("/tmp/coreml-cache"), "sha-a", "1.30.0", "CPUAndNeuralEngine", 64)
+
+    assert path.parent.name == "bucket-64"
+    assert path.name == "default"
+
+
+def test_cache_dir_differs_per_specialization() -> None:
+    root = Path("/tmp/coreml-cache")
+    default = cache_dir_for(root, "sha-a", "1.30.0", "CPUAndNeuralEngine", 64)
+    fast = cache_dir_for(root, "sha-a", "1.30.0", "CPUAndNeuralEngine", 64, specialization="FastPrediction")
+
+    assert fast != default, "two specialization strategies sharing a cache dir serve the wrong compiled model"
+    assert fast.name == "FastPrediction"
 
 
 # ---------------------------------------------------------------------------------------------
@@ -162,21 +187,8 @@ def test_bucket_sessions_unbounded_when_max_live_is_zero() -> None:
 
 
 def test_bucket_sessions_lru_evicts_the_least_recently_used() -> None:
-    class Fake:
-        def __init__(self, bucket: int) -> None:
-            self.bucket = bucket
-            self.closed = False
-
-        def close(self) -> None:
-            self.closed = True
-
-    made: dict[int, Fake] = {}
-
-    def factory(bucket: int) -> Fake:
-        made[bucket] = Fake(bucket)
-        return made[bucket]
-
-    sessions = BucketSessions(factory=factory, max_live=2)
+    built: list[int] = []
+    sessions = BucketSessions(factory=lambda bucket: built.append(bucket) or bucket, max_live=2)
     sessions.get(64)
     sessions.get(128)
     sessions.get(64)  # touch 64 so 128 is the least-recently-used
@@ -184,9 +196,10 @@ def test_bucket_sessions_lru_evicts_the_least_recently_used() -> None:
 
     assert sessions.live_count == 2
     assert sessions.evictions == 1
-    assert sessions.disposed == 1
-    assert made[128].closed is True
-    assert made[64].closed is False
+    assert built == [64, 128, 192]
+
+    sessions.get(128)  # 128 was evicted: fetching it again rebuilds
+    assert built == [64, 128, 192, 128]
 
 
 def test_bucket_sessions_tracks_the_live_peak_across_evictions() -> None:
@@ -199,20 +212,76 @@ def test_bucket_sessions_tracks_the_live_peak_across_evictions() -> None:
     assert sessions.live_count == 2
 
 
-def test_bucket_sessions_eviction_disposes_before_forgetting() -> None:
-    disposed_order: list[int] = []
-
-    class Fake:
+def test_bucket_sessions_eviction_drops_the_reference_without_calling_close() -> None:
+    # onnxruntime.InferenceSession has no close() method; BucketSessions must not assume one.
+    class NoClose:
         def __init__(self, bucket: int) -> None:
             self.bucket = bucket
 
-        def close(self) -> None:
-            disposed_order.append(self.bucket)
-
-    sessions = BucketSessions(factory=Fake, max_live=1)
+    sessions = BucketSessions(factory=NoClose, max_live=1)
     sessions.get(64)
-    sessions.get(128)
+    sessions.get(128)  # evicts 64; must not raise looking for a close() that doesn't exist
 
-    assert disposed_order == [64]
     assert sessions.evictions == 1
-    assert sessions.disposed == 1
+    assert sessions.live_count == 1
+    assert not hasattr(sessions, "disposed")
+    assert not hasattr(sessions, "dispose_all")  # unused elsewhere in the harness; dropped, not tested-around
+
+
+# ---------------------------------------------------------------------------------------------
+# ANE compiler CPU: ps parsing and per-pid delta
+
+
+def test_parse_ps_time_reads_colon_separated_fields_base_60() -> None:
+    assert parse_ps_time("1:23.45") == 83.45
+    assert parse_ps_time("1:02:03") == 3723.0
+
+
+def test_parse_ps_pids_keeps_only_the_named_processes() -> None:
+    text = "  501   0:12.50 aned\n  502   1:00.00 python3\n  503   0:05.00 ANECompilerService\n"
+
+    pids = parse_ps_pids(text, ("aned", "ANECompilerService"))
+
+    assert pids == {501: 12.5, 503: 5.0}
+
+
+def test_parse_ps_pids_resolves_comm_by_basename() -> None:
+    text = "  501   0:01.00 /usr/libexec/aned\n"
+
+    assert parse_ps_pids(text, ("aned",)) == {501: 1.0}
+
+
+def test_parse_ps_pids_skips_unparsable_lines() -> None:
+    assert parse_ps_pids("garbage\n", ("aned",)) == {}
+
+
+def test_compiler_cpu_delta_sums_incremental_cpu_over_pids_present_after() -> None:
+    before = {501: 10.0, 502: 3.0}
+    after = {501: 12.0, 502: 3.0}
+
+    total, vanished = compiler_cpu_delta(before, after)
+
+    assert total == 2.0
+    assert vanished == []
+
+
+def test_compiler_cpu_delta_counts_a_new_pid_in_full() -> None:
+    before = {501: 10.0}
+    after = {501: 11.0, 777: 4.0}  # 777 started and ran entirely inside the sampled window
+
+    total, vanished = compiler_cpu_delta(before, after)
+
+    assert total == 5.0
+    assert vanished == []
+
+
+def test_compiler_cpu_delta_reports_vanished_pids_instead_of_going_negative() -> None:
+    # A pid present before but gone after did CPU work the after-only sum can't see: report it
+    # rather than let its now-missing before-value make the total go negative.
+    before = {501: 10.0, 999: 50.0}
+    after = {501: 11.0}
+
+    total, vanished = compiler_cpu_delta(before, after)
+
+    assert total == 1.0
+    assert vanished == [999]

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import ctypes
+import sys
 
-from retrieval_tuning.process_memory import memory_kib
+import pytest
+
+from retrieval_tuning.process_memory import _RusageInfoV4, _RusageInfoV6, _sample_from_v6, memory_kib
 
 
 def test_peak_is_at_least_current() -> None:
@@ -28,24 +31,71 @@ def test_allocation_raises_the_peak() -> None:
 
 def test_rusage_struct_matches_the_sdk_size() -> None:
     # sizeof(struct rusage_info_v4) in <sys/resource.h>; ri_flags only arrives in v5 (304).
-    from retrieval_tuning.process_memory import _RusageInfoV4
-
     assert ctypes.sizeof(_RusageInfoV4) == 296
 
 
 def test_v6_rusage_struct_matches_the_sdk_size() -> None:
     # sizeof(struct rusage_info_v6): v4's 296 + 15 new fields + 6 reserved, all uint64.
-    from retrieval_tuning.process_memory import _RusageInfoV6
-
     assert ctypes.sizeof(_RusageInfoV6) == 464
 
 
-def test_neural_footprint_and_energy_are_populated_on_darwin() -> None:
-    import sys
+def test_v6_field_offsets_match_the_macos_sdk() -> None:
+    # <sys/resource.h> struct rusage_info_v6, verified field-for-field against the SDK header:
+    # ri_uuid[16] then 35 v4 uint64 fields (offset 16..296), then the v6 extras in declaration order.
+    assert _RusageInfoV6.energy_nj.offset == 336
+    assert _RusageInfoV6.neural_footprint.offset == 368
+    assert _RusageInfoV6.lifetime_max_neural_footprint.offset == 376
 
+
+# ---------------------------------------------------------------------------------------------
+# _sample_from_v6: pure field extraction out of a filled RUSAGE_INFO_V6 struct
+
+
+def test_sample_from_v6_reads_every_field_from_its_own_offset() -> None:
+    info = _RusageInfoV6()
+    info.resident_size = 111 * 1024
+    info.phys_footprint = 222 * 1024
+    info.lifetime_max_phys_footprint = 333 * 1024
+    info.neural_footprint = 444 * 1024
+    info.lifetime_max_neural_footprint = 555 * 1024
+    info.energy_nj = 666
+
+    sample = _sample_from_v6(info, peak_rss_kib=50)
+
+    assert sample.rss == 111
+    assert sample.rss_peak == 111
+    assert sample.footprint == 222
+    assert sample.footprint_peak == 333
+    assert sample.neural_footprint == 444
+    assert sample.neural_footprint_peak == 555
+    assert sample.energy_nj == 666
+
+
+def test_sample_from_v6_rss_peak_is_the_larger_of_maxrss_and_resident() -> None:
+    info = _RusageInfoV6()
+    info.resident_size = 100 * 1024
+
+    sample = _sample_from_v6(info, peak_rss_kib=999)
+
+    assert sample.rss_peak == 999
+
+
+# ---------------------------------------------------------------------------------------------
+# darwin-only: real RUSAGE_INFO_V6 reads, not just the struct layout
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="RUSAGE_INFO_V6 is darwin-only")
+def test_energy_nj_is_positive_after_real_cpu_work() -> None:
+    total = 0
+    for i in range(50_000_000):
+        total += i
+
+    assert memory_kib().energy_nj > 0
+    assert total > 0  # keep the loop from being optimized away by a future refactor
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="RUSAGE_INFO_V6 neural_footprint is darwin-only")
+def test_neural_footprint_peak_is_at_least_current() -> None:
     sample = memory_kib()
 
-    if sys.platform != "darwin":
-        return
     assert sample.neural_footprint_peak >= sample.neural_footprint >= 0
-    assert sample.energy_nj >= 0

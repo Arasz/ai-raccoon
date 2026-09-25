@@ -34,6 +34,30 @@ def test_seeded_sample_never_exceeds_the_pool() -> None:
     assert sorted(seeded_sample([1, 2, 3], 10, seed=1)) == [1, 2, 3]
 
 
+def test_seeded_sample_length_matches_n_when_n_is_within_the_pool() -> None:
+    rows = list(range(100))
+
+    assert len(seeded_sample(rows, 10, seed=1)) == 10
+
+
+def test_seeded_sample_draws_distinct_items_without_replacement() -> None:
+    rows = list(range(100))
+
+    sample = seeded_sample(rows, 10, seed=1)
+
+    assert len(set(sample)) == 10
+    assert set(sample) <= set(rows)
+
+
+def test_seeded_sample_returns_the_whole_pool_shuffled_when_n_at_least_matches_it() -> None:
+    rows = list(range(5))
+
+    sample = seeded_sample(rows, 5, seed=1)
+
+    assert sorted(sample) == rows
+    assert sample != rows, "n >= len(pool) must shuffle, not return the pool in its original order"
+
+
 # ---------------------------------------------------------------------------------------------
 # interleave
 
@@ -72,6 +96,14 @@ def test_summarize_reports_min_max_and_mean() -> None:
     assert summary["cpu"]["mean"] == 11.0
 
 
+def test_summarize_mean_is_the_arithmetic_mean_not_the_median() -> None:
+    # [10, 11, 15]: median would be 11.0, the arithmetic mean is 12.0 - distinct enough to catch
+    # a stat.median/fmean mix-up.
+    summary = summarize({"cpu": [10.0, 11.0, 15.0]})
+
+    assert summary["cpu"]["mean"] == 12.0
+
+
 def test_beats_is_true_only_when_ranges_do_not_overlap() -> None:
     assert beats([1.0, 2.0, 3.0], [4.0, 5.0, 6.0]) is True
     assert beats([1.0, 2.0, 3.0], [3.0, 4.0, 5.0]) is False  # touching ranges: not decided
@@ -88,6 +120,15 @@ def test_paired_ratios_divides_by_matching_rotation_index() -> None:
     b = [5.0, 10.0, 10.0]
 
     assert paired_ratios(a, b) == [2.0, 2.0, 3.0]
+
+
+def test_paired_ratios_a_over_b_not_b_over_a() -> None:
+    assert paired_ratios([30.0, 10.0, 20.0], [10.0, 5.0, 10.0]) == [3.0, 2.0, 2.0]
+
+
+def test_paired_ratios_rejects_mismatched_lengths() -> None:
+    with pytest.raises(ValueError):
+        paired_ratios([1.0, 2.0], [1.0, 2.0, 3.0])
 
 
 # ---------------------------------------------------------------------------------------------
@@ -150,3 +191,40 @@ def test_summarize_ab_rejects_a_reference_not_among_the_configs() -> None:
 
     with pytest.raises(ValueError):
         summarize_ab(list(per_config), per_config, reference="not-a-config")
+
+
+# ---------------------------------------------------------------------------------------------
+# summarize_ab: exact per-metric values from a non-proportional fixture.
+#
+# _three_config_per_config's metrics all scale together (cpu_s, p50_ms, p95_ms, footprint all rise
+# and fall in lockstep across reps and configs), so a mutation that reads the wrong metric column
+# (e.g. p95_ms where p50_ms belongs) still produces plausible-looking numbers and no assertion
+# above catches it. These values are deliberately unrelated per metric.
+
+
+def _non_proportional_per_config() -> dict[str, list[dict]]:
+    return {
+        "mlx": [
+            {"cpu_s": 1.0, "p50_ms": 50.0, "p95_ms": 9.0, "phys_kib_peak": 300, "neural_kib_peak": 7},
+            {"cpu_s": 3.0, "p50_ms": 10.0, "p95_ms": 90.0, "phys_kib_peak": 100, "neural_kib_peak": 21},
+        ],
+        "ane": [
+            {"cpu_s": 5.0, "p50_ms": 2.0, "p95_ms": 400.0, "phys_kib_peak": 900, "neural_kib_peak": 3},
+            {"cpu_s": 7.0, "p50_ms": 40.0, "p95_ms": 40.0, "phys_kib_peak": 100, "neural_kib_peak": 33},
+        ],
+    }
+
+
+def test_summarize_ab_reads_each_metric_from_its_own_column() -> None:
+    per_config = _non_proportional_per_config()
+
+    result = summarize_ab(list(per_config), per_config, reference="mlx")
+
+    assert result["cpu_s"]["mlx"] == {"min": 1.0, "max": 3.0, "mean": 2.0}
+    assert result["cpu_s"]["ane"] == {"min": 5.0, "max": 7.0, "mean": 6.0}
+    assert result["p50_ms"]["mlx"] == {"min": 10.0, "max": 50.0, "mean": 30.0}
+    assert result["p50_ms"]["ane"] == {"min": 2.0, "max": 40.0, "mean": 21.0}
+    assert result["p95_ms"]["mlx"] == {"min": 9.0, "max": 90.0, "mean": 49.5}
+    assert result["p95_ms"]["ane"] == {"min": 40.0, "max": 400.0, "mean": 220.0}
+    assert result["footprint_kib_peak"]["mlx"] == {"min": 121, "max": 307, "mean": 214.0}
+    assert result["footprint_kib_peak"]["ane"] == {"min": 133, "max": 903, "mean": 518.0}

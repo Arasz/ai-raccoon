@@ -67,16 +67,29 @@ def build_row_set(corpus: str, chunk_tokens: int, tokenizer, min_tokens: int, ma
     return coreml.seeded_sample(rows, n, seed)
 
 
-def competing_processes() -> dict[str, int]:
-    """Other dotnet/python processes right now, from `ps -A` (this process's own python excluded)."""
-    out = subprocess.run(["ps", "-A", "-o", "comm="], capture_output=True, text=True, check=False).stdout
-    counts = {name: 0 for name in COMPETING_NAMES}
-    for line in out.splitlines():
-        name = line.strip().rsplit("/", 1)[-1]
+def _count_processes(text: str, names: tuple[str, ...], exclude_pid: int) -> dict[str, int]:
+    """Per-name process counts from `ps -A -o pid=,comm=` output, excluding one pid outright."""
+    counts = {name: 0 for name in names}
+    for line in text.splitlines():
+        parts = line.split(None, 1)
+        if len(parts) != 2 or not parts[0].isdigit() or int(parts[0]) == exclude_pid:
+            continue
+        name = parts[1].strip().rsplit("/", 1)[-1]
         if name in counts:
             counts[name] += 1
-    counts["python3"] = max(0, counts["python3"] - 1)  # this process
     return counts
+
+
+def competing_processes() -> dict[str, int]:
+    """Other dotnet/python processes right now, from `ps -A` (this process excluded by pid)."""
+    out = subprocess.run(["ps", "-A", "-o", "pid=,comm="], capture_output=True, text=True, check=False).stdout
+    return _count_processes(out, COMPETING_NAMES, os.getpid())
+
+
+def _require_coreml_cache_dir(configs: list[dict], coreml_cache_dir: Path | None) -> None:
+    """A coreml config with no --coreml-cache-dir fails later with a bare TypeError; catch it here."""
+    if coreml_cache_dir is None and any(c["device"] == "coreml" for c in configs):
+        raise SystemExit("--coreml-cache-dir is required: a config in --configs has device coreml")
 
 
 def _run_one_config(args: argparse.Namespace) -> None:
@@ -148,13 +161,16 @@ def _orchestrate(args: argparse.Namespace) -> None:
         slot = {"loadavg": os.getloadavg()[0], "competing": competing_processes()}
         slot_out = args.out.parent / f"{args.out.stem}-{name}-r{repeat}.json"
         print(f"slot repeat={repeat} config={name}", flush=True)
-        compiler_before = chunk_window.ane_compiler_cpu_s()
+        compiler_pids_before = chunk_window.ane_compiler_pids()
         subprocess.run([sys.executable, __file__, "--model-dir", str(args.model_dir),
                         "--out", str(slot_out), "--configs", str(args.configs),
                         "--one-config", name, "--one-repeat", str(repeat), "--rows", str(rows_path),
                         *(["--coreml-cache-dir", str(args.coreml_cache_dir)] if args.coreml_cache_dir else [])],
                        check=True)
-        slot["compiler_cpu_s"] = chunk_window.ane_compiler_cpu_s() - compiler_before
+        slot["compiler_cpu_s"], vanished = coreml.compiler_cpu_delta(
+            compiler_pids_before, chunk_window.ane_compiler_pids())
+        if vanished:
+            slot["compiler_cpu_s_incomplete"] = True
         slot_result = json.loads(slot_out.read_text())
         slot_result.update(slot)
         per_config[name].append(slot_result)
@@ -187,6 +203,7 @@ def main() -> None:
     parser.add_argument("--one-repeat", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--rows", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    _require_coreml_cache_dir(json.loads(args.configs.read_text()), args.coreml_cache_dir)
 
     if args.one_config:
         _run_one_config(args)
