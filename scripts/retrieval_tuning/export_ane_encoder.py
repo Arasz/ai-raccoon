@@ -8,8 +8,14 @@ ai-raccoon.manifest.json cloned from the bundled one with every listed sha256 re
 --dtype fp16 (default) keeps weights and compute in half with float32 outputs, like the product's
 model_fp16.onnx; inputs stay int64 either way.
 
+--share-weights-with <product model dir> (fp16 only) writes a graph that carries no weights of its
+own: model_fp16.onnx reads the product dir's model_fp16.onnx_data at the product graph's own
+offsets (see retrieval_tuning.shared_weights), and model_fp16.onnx_data in --out is a byte copy of
+that file. Shipped, the graph would sit next to the product's model_fp16.onnx.
+
 Usage:
     python3 export_ane_encoder.py --layout plain|ane --out <dir> [--max-len 1024] [--dtype fp16|fp32]
+        [--share-weights-with <product model dir>]
 """
 
 from __future__ import annotations
@@ -27,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import onnx  # noqa: E402
 import torch  # noqa: E402
 
-from retrieval_tuning import ane_encoder  # noqa: E402
+from retrieval_tuning import ane_encoder, shared_weights  # noqa: E402
 
 COPIED_FILES = ("tokenizer.json", "tokenizer_config.json", "config.json")
 MODEL_NAME = "model_fp16.onnx"
@@ -91,15 +97,39 @@ def _manifest(out: Path, layout: str, max_len: int, dtype: str) -> dict:
     return manifest
 
 
-def export_model_dir(layout: str, out: Path, max_len: int = 1024, dtype: str = "fp16") -> Path:
-    """Export one layout into out (created if missing) and return it."""
+def _export_shared(module: torch.nn.Module, out: Path, product_dir: Path) -> None:
+    heads = json.loads((product_dir / "config.json").read_text())["num_attention_heads"]
+    with tempfile.TemporaryDirectory() as tmp:
+        _export_onnx(module, Path(tmp))
+        plan = shared_weights.share_weights(Path(tmp) / MODEL_NAME, product_dir / MODEL_NAME, out / MODEL_NAME, heads)
+    data = out / f"{MODEL_NAME}_data"
+    data.unlink(missing_ok=True)
+    # A copy: ORT refuses a symlink that resolves outside the model dir, onnx a multiply-linked file.
+    shutil.copyfile(product_dir / f"{MODEL_NAME}_data", data)
+    print(f"shared {len(plan)} weights; inline constants >= 4 KiB:", file=sys.stderr)
+    for name, shape, size in shared_weights.inline_constants(out / MODEL_NAME):
+        print(f"  {size:>9} B  {shape}  {name}", file=sys.stderr)
+
+
+def export_model_dir(layout: str, out: Path, max_len: int = 1024, dtype: str = "fp16",
+                     share_weights_with: Path | None = None) -> Path:
+    """Export one layout into out (created if missing) and return it; share_weights_with reuses a product dir's weights."""
     out = Path(out).resolve()
     models_root = ane_encoder.BUNDLED_DIR.parent.resolve()
     if out == models_root or models_root in out.parents:
         raise ValueError(f"refusing to write under the product models root {models_root}")
+    if share_weights_with is not None:
+        if dtype != "fp16":
+            raise ValueError("--share-weights-with needs --dtype fp16: the product weights file is fp16")
+        if out == Path(share_weights_with).resolve():
+            raise ValueError(f"refusing to overwrite the product graph in {out}")
     out.mkdir(parents=True, exist_ok=True)
 
-    _export_onnx(build_module(layout, max_len, dtype), out)
+    module = build_module(layout, max_len, dtype)
+    if share_weights_with is None:
+        _export_onnx(module, out)
+    else:
+        _export_shared(module, out, Path(share_weights_with).resolve())
     for name in COPIED_FILES:
         shutil.copyfile(ane_encoder.BUNDLED_DIR / name, out / name)
     manifest = _manifest(out, layout, max_len, dtype)
@@ -113,8 +143,9 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--max-len", type=int, default=1024)
     parser.add_argument("--dtype", choices=["fp16", "fp32"], default="fp16")
+    parser.add_argument("--share-weights-with", type=Path, default=None)
     args = parser.parse_args()
-    print(export_model_dir(args.layout, args.out, args.max_len, args.dtype))
+    print(export_model_dir(args.layout, args.out, args.max_len, args.dtype, args.share_weights_with))
 
 
 if __name__ == "__main__":
