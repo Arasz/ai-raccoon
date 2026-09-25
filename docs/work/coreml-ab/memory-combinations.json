@@ -1,0 +1,401 @@
+{
+ "configs": [
+  {
+   "name": "coreml-step64-alllive",
+   "device": "coreml",
+   "units": "CPUAndNeuralEngine",
+   "step": 64,
+   "threads": 1,
+   "max_sessions": 0
+  },
+  {
+   "name": "coreml-step64-lru4",
+   "device": "coreml",
+   "units": "CPUAndNeuralEngine",
+   "step": 64,
+   "threads": 1,
+   "max_sessions": 4
+  },
+  {
+   "name": "coreml-step128-alllive",
+   "device": "coreml",
+   "units": "CPUAndNeuralEngine",
+   "step": 128,
+   "threads": 1,
+   "max_sessions": 0
+  },
+  {
+   "name": "coreml-step128-lru4",
+   "device": "coreml",
+   "units": "CPUAndNeuralEngine",
+   "step": 128,
+   "threads": 1,
+   "max_sessions": 4
+  },
+  {
+   "name": "mlx-x64-cap512-t3",
+   "device": "mlx",
+   "step": 64,
+   "threads": 3,
+   "cache_limit_mib": 512,
+   "mlx_dir": "/Users/arasz/.dotnet/tools/.store/ai-raccoon/1.52.3/ai-raccoon.osx-arm64/1.52.3/tools/net10.0/osx-arm64/mlx"
+  }
+ ],
+ "repeats": 2,
+ "seed": 20260925,
+ "long_n": 100,
+ "short_n": 0,
+ "per_config": {
+  "coreml-step64-alllive": [
+   {
+    "config": "coreml-step64-alllive",
+    "repeat": 0,
+    "rows": 100,
+    "p50_ms": 174.67662499984726,
+    "p95_ms": 282.3023750097491,
+    "cpu_s": 16.628242,
+    "phys_kib_peak": 5558870,
+    "neural_kib_peak": 804640,
+    "sessions_live_peak": 12,
+    "evictions": 0,
+    "cache_disk_kib": 2306450,
+    "loadavg": 3.54931640625,
+    "competing": {
+     "dotnet": 3,
+     "python": 11,
+     "python3": 0
+    },
+    "compiler_cpu_s": 56.029999999999916
+   },
+   {
+    "config": "coreml-step64-alllive",
+    "repeat": 1,
+    "rows": 100,
+    "p50_ms": 169.47216598782688,
+    "p95_ms": 239.62491599377245,
+    "cpu_s": 15.765743,
+    "phys_kib_peak": 5327446,
+    "neural_kib_peak": 804640,
+    "sessions_live_peak": 12,
+    "evictions": 0,
+    "cache_disk_kib": 2306450,
+    "loadavg": 5.8310546875,
+    "competing": {
+     "dotnet": 3,
+     "python": 11,
+     "python3": 0
+    },
+    "compiler_cpu_s": 18.72
+   }
+  ],
+  "coreml-step64-lru4": [
+   {
+    "config": "coreml-step64-lru4",
+    "repeat": 0,
+    "rows": 100,
+    "p50_ms": 139.74112500727642,
+    "p95_ms": 190.63733398797922,
+    "cpu_s": 24.233342,
+    "phys_kib_peak": 2433235,
+    "neural_kib_peak": 631888,
+    "sessions_live_peak": 4,
+    "evictions": 114,
+    "cache_disk_kib": 2306450,
+    "loadavg": 5.17578125,
+    "competing": {
+     "dotnet": 3,
+     "python": 11,
+     "python3": 0
+    },
+    "compiler_cpu_s": 27.870000000000005
+   },
+   {
+    "config": "coreml-step64-lru4",
+    "repeat": 1,
+    "rows": 100,
+    "p50_ms": 142.99179200315848,
+    "p95_ms": 200.65700000850484,
+    "cpu_s": 25.252266,
+    "phys_kib_peak": 2280355,
+    "neural_kib_peak": 631888,
+    "sessions_live_peak": 4,
+    "evictions": 114,
+    "cache_disk_kib": 2306450,
+    "loadavg": 3.09228515625,
+    "competing": {
+     "dotnet": 3,
+     "python": 11,
+     "python3": 0
+    },
+    "compiler_cpu_s": -0.5299999999999159
+   }
+  ],
+  "coreml-step128-alllive": [
+   {
+    "config": "coreml-step128-alllive",
+    "repeat": 0,
+    "rows": 100,
+    "p50_ms": 134.44083300419152,
+    "p95_ms": 189.40416700206697,
+    "cpu_s": 11.676740000000002,
+    "phys_kib_peak": 2301139,
+    "neural_kib_peak": 698768,
+    "sessions_live_peak": 6,
+    "evictions": 0,
+    "cache_disk_kib": 1155590,
+    "loadavg": 3.61181640625,
+    "competing": {
+     "dotnet": 3,
+     "python": 11,
+     "python3": 0
+    },
+    "compiler_cpu_s": 12.329999999999984
+   },
+   {
+    "config": "coreml-step128-alllive",
+    "repeat": 1,
+    "rows": 100,
+    "p50_ms": 136.53012498980388,
+    "p95_ms": 180.00912500428967,
+    "cpu_s": 12.119341,
+    "phys_kib_peak": 2158419,
+    "neural_kib_peak": 698768,
+    "sessions_live_peak": 6,
+    "evictions": 0,
+    "cache_disk_kib": 1155590,
+    "loadavg": 8.537109375,
+    "competing": {
+     "dotnet": 3,
+     "python": 11,
+     "python3": 0
+    },
+    "compiler_cpu_s": -467.64000000000004
+   }
+  ],
+  "coreml-step128-lru4": [
+   {
+    "config": "coreml-step128-lru4",
+    "repeat": 0,
+    "rows": 100,
+    "p50_ms": 132.06116699439008,
+    "p95_ms": 170.2662909956416,
+    "cpu_s": 15.870080999999999,
+    "phys_kib_peak": 2107458,
+    "neural_kib_peak": 594080,
+    "sessions_live_peak": 4,
+    "evictions": 41,
+    "cache_disk_kib": 1155590,
+    "loadavg": 3.51953125,
+    "competing": {
+     "dotnet": 3,
+     "python": 11,
+     "python3": 0
+    },
+    "compiler_cpu_s": 13.25
+   },
+   {
+    "config": "coreml-step128-lru4",
+    "repeat": 1,
+    "rows": 100,
+    "p50_ms": 145.31604200601578,
+    "p95_ms": 194.14199999300763,
+    "cpu_s": 17.521325,
+    "phys_kib_peak": 2136882,
+    "neural_kib_peak": 594080,
+    "sessions_live_peak": 4,
+    "evictions": 41,
+    "cache_disk_kib": 1155590,
+    "loadavg": 8.650390625,
+    "competing": {
+     "dotnet": 3,
+     "python": 11,
+     "python3": 0
+    },
+    "compiler_cpu_s": 1.3000000000000007
+   }
+  ],
+  "mlx-x64-cap512-t3": [
+   {
+    "config": "mlx-x64-cap512-t3",
+    "repeat": 0,
+    "rows": 100,
+    "p50_ms": 47.714458996779285,
+    "p95_ms": 65.99845799792092,
+    "cpu_s": 1.6548420000000001,
+    "phys_kib_peak": 1145169,
+    "neural_kib_peak": 0,
+    "sessions_live_peak": 0,
+    "evictions": 0,
+    "cache_disk_kib": 0,
+    "loadavg": 3.291015625,
+    "competing": {
+     "dotnet": 3,
+     "python": 11,
+     "python3": 0
+    },
+    "compiler_cpu_s": 0.009999999999990905
+   },
+   {
+    "config": "mlx-x64-cap512-t3",
+    "repeat": 1,
+    "rows": 100,
+    "p50_ms": 47.61220799991861,
+    "p95_ms": 63.395208009751514,
+    "cpu_s": 1.4222150000000002,
+    "phys_kib_peak": 1161729,
+    "neural_kib_peak": 0,
+    "sessions_live_peak": 0,
+    "evictions": 0,
+    "cache_disk_kib": 0,
+    "loadavg": 6.33837890625,
+    "competing": {
+     "dotnet": 3,
+     "python": 11,
+     "python3": 0
+    },
+    "compiler_cpu_s": 0.0
+   }
+  ]
+ },
+ "summary": {
+  "cpu_s": {
+   "coreml-step64-alllive": {
+    "min": 15.765743,
+    "max": 16.628242,
+    "mean": 16.1969925
+   },
+   "coreml-step64-lru4": {
+    "min": 24.233342,
+    "max": 25.252266,
+    "mean": 24.742804
+   },
+   "coreml-step128-alllive": {
+    "min": 11.676740000000002,
+    "max": 12.119341,
+    "mean": 11.8980405
+   },
+   "coreml-step128-lru4": {
+    "min": 15.870080999999999,
+    "max": 17.521325,
+    "mean": 16.695703
+   },
+   "mlx-x64-cap512-t3": {
+    "min": 1.4222150000000002,
+    "max": 1.6548420000000001,
+    "mean": 1.5385285000000002
+   }
+  },
+  "p50_ms": {
+   "coreml-step64-alllive": {
+    "min": 169.47216598782688,
+    "max": 174.67662499984726,
+    "mean": 172.07439549383707
+   },
+   "coreml-step64-lru4": {
+    "min": 139.74112500727642,
+    "max": 142.99179200315848,
+    "mean": 141.36645850521745
+   },
+   "coreml-step128-alllive": {
+    "min": 134.44083300419152,
+    "max": 136.53012498980388,
+    "mean": 135.4854789969977
+   },
+   "coreml-step128-lru4": {
+    "min": 132.06116699439008,
+    "max": 145.31604200601578,
+    "mean": 138.68860450020293
+   },
+   "mlx-x64-cap512-t3": {
+    "min": 47.61220799991861,
+    "max": 47.714458996779285,
+    "mean": 47.66333349834895
+   }
+  },
+  "p95_ms": {
+   "coreml-step64-alllive": {
+    "min": 239.62491599377245,
+    "max": 282.3023750097491,
+    "mean": 260.96364550176077
+   },
+   "coreml-step64-lru4": {
+    "min": 190.63733398797922,
+    "max": 200.65700000850484,
+    "mean": 195.64716699824203
+   },
+   "coreml-step128-alllive": {
+    "min": 180.00912500428967,
+    "max": 189.40416700206697,
+    "mean": 184.70664600317832
+   },
+   "coreml-step128-lru4": {
+    "min": 170.2662909956416,
+    "max": 194.14199999300763,
+    "mean": 182.20414549432462
+   },
+   "mlx-x64-cap512-t3": {
+    "min": 63.395208009751514,
+    "max": 65.99845799792092,
+    "mean": 64.69683300383622
+   }
+  },
+  "footprint_kib_peak": {
+   "coreml-step64-alllive": {
+    "min": 6132086,
+    "max": 6363510,
+    "mean": 6247798.0
+   },
+   "coreml-step64-lru4": {
+    "min": 2912243,
+    "max": 3065123,
+    "mean": 2988683.0
+   },
+   "coreml-step128-alllive": {
+    "min": 2857187,
+    "max": 2999907,
+    "mean": 2928547.0
+   },
+   "coreml-step128-lru4": {
+    "min": 2701538,
+    "max": 2730962,
+    "mean": 2716250.0
+   },
+   "mlx-x64-cap512-t3": {
+    "min": 1145169,
+    "max": 1161729,
+    "mean": 1153449.0
+   }
+  },
+  "reference": "mlx-x64-cap512-t3",
+  "beats_reference": {
+   "coreml-step64-alllive": false,
+   "coreml-step64-lru4": false,
+   "coreml-step128-alllive": false,
+   "coreml-step128-lru4": false
+  },
+  "reference_beats": {
+   "coreml-step64-alllive": true,
+   "coreml-step64-lru4": true,
+   "coreml-step128-alllive": true,
+   "coreml-step128-lru4": true
+  },
+  "paired_ratio_over_reference": {
+   "coreml-step64-alllive": [
+    10.048235420662516,
+    11.085344339639223
+   ],
+   "coreml-step64-lru4": [
+    14.643900747019956,
+    17.755589696353923
+   ],
+   "coreml-step128-alllive": [
+    7.056105658425397,
+    8.521454913638232
+   ],
+   "coreml-step128-lru4": [
+    9.590088358888641,
+    12.319744201826024
+   ]
+  }
+ }
+}
