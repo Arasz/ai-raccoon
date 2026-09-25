@@ -1,0 +1,23 @@
+{
+ "idle": {
+  "processor.ane_power": 29.14891210526316,
+  "processor.combined_power": 9902.323157894738,
+  "processor.cpu_power": 9808.338947368422,
+  "processor.gpu_power": 64.8304947368421,
+  "samples": 19
+ },
+ "ane-coreml": {
+  "processor.ane_power": 1276.094593220339,
+  "processor.combined_power": 9073.901694915254,
+  "processor.cpu_power": 7709.327627118644,
+  "processor.gpu_power": 88.47988813559321,
+  "samples": 59
+ },
+ "cpu-ep": {
+  "processor.ane_power": 1.3346381355932204,
+  "processor.combined_power": 8454.161355932203,
+  "processor.cpu_power": 8364.896949152542,
+  "processor.gpu_power": 87.92943220338984,
+  "samples": 59
+ }
+}
