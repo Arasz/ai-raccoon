@@ -380,15 +380,14 @@ public sealed partial class EmbeddingService(
         var device = EmbeddingDeviceSetting.Parse(settingsStore?.GetSettingAsync(EmbeddingSettingsKeys.Device, CancellationToken.None)
             .GetAwaiter().GetResult());
         var isBundledEngine = BundledModel.IsBundled(settings.Model);
-        var preferGpu = EmbeddingDeviceSetting.PrefersGpu(device, isBundledEngine);
-        var preferMlx = EmbeddingDeviceSetting.PrefersMlx(device, isBundledEngine);
-        var preferCoreMl = EmbeddingDeviceSetting.PrefersCoreMl(device, isBundledEngine);
+        var modelPath = LocalModelPath(settings.Model);
+        var plan = LocalSessionPlan.For(device, isBundledEngine,
+            OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64,
+            File.Exists(Path.Combine(modelPath, CoreMlGraph.FileName)));
         var storedCudaLibrary = device == EmbeddingDevice.Cuda
             ? settingsStore?.GetSettingAsync(EmbeddingSettingsKeys.CudaLibrary, CancellationToken.None).GetAwaiter().GetResult()
             : null;
         var cudaLibrary = EmbeddingDeviceSetting.CudaLibraryFor(device, storedCudaLibrary);
-
-        var modelPath = LocalModelPath(settings.Model);
 
         ILocalEmbeddingGenerator generator;
         if (Directory.Exists(modelPath))
@@ -398,8 +397,13 @@ public sealed partial class EmbeddingService(
             // drain reconciles vec0 to the engine's dimension before writing (WP4/D3).
             var descriptor = manifestDescriptor.Load(modelPath);
             var tokenizer = ResolveManifestTokenizer(modelPath)!;
-            var onnx = new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads, preferGpu, preferMlx, cudaLibrary);
-            generator = preferCoreMl ? WithNeuralEngine(onnx, modelPath, descriptor, tokenizer, threads) : onnx;
+            var onnx = new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads, plan.Gpu, plan.Mlx, cudaLibrary);
+            if (plan.CoreMlRefusal is { } refusal)
+            {
+                onnx.AppendRefusal("CoreML", refusal);
+            }
+
+            generator = plan.NeuralEngine ? WithNeuralEngine(onnx, modelPath, descriptor, tokenizer, threads) : onnx;
         }
         else
         {
@@ -413,7 +417,7 @@ public sealed partial class EmbeddingService(
 
             var bundledTokenizer = _tokenizers.GetOrAdd("bundled",
                 _ => WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()));
-            generator = new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger, threads, preferGpu, preferMlx, cudaLibrary);
+            generator = new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger, threads, plan.Gpu, plan.Mlx, cudaLibrary);
         }
 
         // #522: the live confirmation the resolved thread count took effect.
@@ -423,21 +427,13 @@ public sealed partial class EmbeddingService(
     }
 
     /// <summary>
-    ///     The bundled engine under <c>device coreml</c>: the WebGPU chain wrapped so it moves to the
-    ///     Neural Engine once the bucket sessions compile, or the chain alone with the refusal recorded.
+    ///     The bundled engine under <c>device coreml</c> where the platform can run it: the WebGPU chain
+    ///     wrapped so it moves to the Neural Engine once the bucket sessions compile.
     /// </summary>
-    private ILocalEmbeddingGenerator WithNeuralEngine(OnnxEmbeddingGenerator webGpu, string modelDirectory,
+    private NeuralEngineEmbeddingGenerator WithNeuralEngine(OnnxEmbeddingGenerator webGpu, string modelDirectory,
         EngineDescriptor descriptor, IEmbeddingTokenizer tokenizer, int threads)
     {
         var graphPath = Path.Combine(modelDirectory, CoreMlGraph.FileName);
-        var refusal = NeuralEngineEmbeddingGenerator.RefusalReason(
-            OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64, File.Exists(graphPath));
-        if (refusal is not null)
-        {
-            webGpu.AppendRefusal("CoreML", refusal);
-            return webGpu;
-        }
-
         var weightsSha = descriptor.Files.Single(f => f.Path == CoreMlGraph.WeightsFileName).Sha256;
         var key = CoreMlCache.KeyFor(new FileHasher().Sha256OfFile(graphPath), weightsSha);
         var cache = new CoreMlCache(Path.Combine(options.DataRoot, CoreMlCacheDirectoryName), key,
