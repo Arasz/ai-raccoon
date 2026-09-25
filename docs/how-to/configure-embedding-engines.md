@@ -98,11 +98,20 @@ depends on the RID ([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16
 | RID | GPU providers tried, in order | Host dependencies |
 |---|---|---|
 | `osx-arm64` | `mlx` (opt-in) → WebGPU (built in) → CPU | None for WebGPU. MLX needs Apple Silicon and the plugin's native runtime, bundled only in this RID's package. |
-| `win-x64` | `cuda` (opt-in) → WebGPU (packaged plugin) → CPU | WebGPU needs a GPU driver with D3D12 support. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
-| `win-arm64` | `cuda` (opt-in, but see below) → WebGPU (packaged plugin) → CPU | Same as win-x64. The CUDA provider only ships for x64, so `cuda` here refuses and falls through. |
-| `linux-x64` | `cuda` (opt-in) → WebGPU (packaged plugin) → CPU | WebGPU needs the Vulkan loader, `libvulkan.so.1` (`apt install libvulkan1` or the distro equivalent), plus the vendor's own Vulkan driver. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
-| `linux-arm64` | `cuda` (opt-in, but see below) → WebGPU (packaged plugin) → CPU | Same Vulkan loader as linux-x64. No CUDA provider ships for arm64; `cuda` refuses and falls through. |
+| `win-x64` | `cuda` (opt-in) → CPU | The packaged WebGPU plugin is off in 1.51.2 (see below). CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
+| `win-arm64` | CPU | The WebGPU plugin is off in 1.51.2. The CUDA provider only ships for x64, so `cuda` here refuses and falls through. |
+| `linux-x64` | `cuda` (opt-in) → CPU | The packaged WebGPU plugin is off in 1.51.2 (see below). CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
+| `linux-arm64` | CPU | The WebGPU plugin is off in 1.51.2. No CUDA provider ships for arm64; `cuda` refuses and falls through. |
 | `linux-musl-x64` | CPU only | None — the WebGPU plugin has no musl build. |
+
+**The WebGPU plugin is off on Windows and Linux in 1.51.2.** Under ONNX Runtime 1.30, once the
+plugin finds an adapter it builds a session and then aborts the whole process on its first run
+([onnxruntime#28329](https://github.com/microsoft/onnxruntime/issues/28329)). An abort cannot be
+caught, so no fallback is possible. Sessions there run on the CPU, and the execution provider line
+reads `CPU (GPU refused: the WebGPU plugin aborts the process on its first run …)`. The opt-in
+`cuda` device loads through the same plugin mechanism the upstream issue was first reported
+against. It is still available, but expect the same abort until that issue is fixed; if the server
+dies on the first embed after you set it, run `ai-raccoon settings model device auto`.
 
 `settings model device` changes which of these an operator opts into, taking effect on the next
 server restart:
