@@ -128,11 +128,38 @@ internal sealed partial class CoreMlCache
         }
     }
 
-    /// <summary>Total bytes of every file under the cache root; 0 when there is none.</summary>
-    public long SizeBytes() =>
-        Directory.Exists(_root)
-            ? new DirectoryInfo(_root).EnumerateFiles("*", SearchOption.AllDirectories).Sum(file => file.Length)
+    /// <summary>Total bytes of every file under the cache root <paramref name="root" />; 0 when there is none.</summary>
+    public static long SizeBytes(string root) =>
+        Directory.Exists(root)
+            ? new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories).Sum(file => file.Length)
             : 0;
+
+    /// <summary>The last status <see cref="WriteStatus" /> recorded under the cache root <paramref name="root" />, or null when there is none.</summary>
+    /// <exception cref="InvalidDataException">The file exists but is not a status this class wrote.</exception>
+    public static CoreMlStatus? ReadStatus(string root)
+    {
+        Guard.IsNotNullOrWhiteSpace(root);
+        var path = Path.Combine(root, StatusFileName);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllBytes(path));
+            var status = document.RootElement;
+            return new CoreMlStatus(Text(status, "state"), Text(status, "trigger"), Text(status, "reason"),
+                status.GetProperty("at").GetDateTimeOffset(), status.GetProperty("pid").GetInt32());
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
+        {
+            throw new InvalidDataException($"{path} is not a CoreML status file: {ex.Message}", ex);
+        }
+
+        static string Text(JsonElement status, string name) =>
+            status.GetProperty(name).GetString() ?? throw new InvalidDataException($"the status file's {name} is null");
+    }
 
     /// <summary>Replaces <c>status.json</c> with <paramref name="transition" />, atomically; a failed write is logged, never thrown.</summary>
     public void WriteStatus(NeuralEngineTransition transition)
@@ -257,6 +284,9 @@ internal sealed partial class CoreMlCache
         public static partial void WriteFailed(ILogger logger, string operation, string path, string reason);
     }
 }
+
+/// <summary>What <c>status.json</c> records: the switch's state and the move that entered it, when, and by which process.</summary>
+internal sealed record CoreMlStatus(string State, string Trigger, string Reason, DateTimeOffset At, int Pid);
 
 /// <summary>A held lock on one cache set; disposing it releases the lock.</summary>
 internal sealed class CoreMlCacheLease : IDisposable

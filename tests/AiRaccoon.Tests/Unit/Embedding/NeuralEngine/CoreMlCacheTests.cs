@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Embedding;
 using AiRaccoon.Infrastructure.Embedding.NeuralEngine;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
@@ -175,11 +176,36 @@ public sealed class CoreMlCacheTests : IDisposable
         Directory.CreateDirectory(cache.BucketDirectory(512));
         File.WriteAllBytes(Path.Combine(cache.BucketDirectory(512), "b.bin"), new byte[24]);
 
-        cache.SizeBytes().ShouldBe(1024);
+        CoreMlCache.SizeBytes(CacheRoot).ShouldBe(1024);
     }
 
     [Fact]
-    public void SizeBytes_IsZeroWithoutACache() => Cache().SizeBytes().ShouldBe(0);
+    public void SizeBytes_IsZeroWithoutACache() => CoreMlCache.SizeBytes(CacheRoot).ShouldBe(0);
+
+    [Fact]
+    public void ReadStatus_ReturnsWhatWriteStatusWrote()
+    {
+        var at = new DateTimeOffset(2026, 9, 26, 10, 0, 0, TimeSpan.Zero);
+        Cache().WriteStatus(new NeuralEngineTransition(NeuralEngineState.CompilingNeuralEngine, NeuralEngineState.Refused,
+            NeuralEngineTrigger.TimedOut, "did not load within 5 minutes", at));
+
+        CoreMlCache.ReadStatus(CacheRoot).ShouldBe(new CoreMlStatus("Refused", "TimedOut", "did not load within 5 minutes", at,
+            Environment.ProcessId));
+    }
+
+    [Fact]
+    public void ReadStatus_IsNullWithoutAStatusFile() => CoreMlCache.ReadStatus(CacheRoot).ShouldBeNull();
+
+    [Theory]
+    [InlineData("{ not json")]
+    [InlineData("{\"state\": \"Refused\"}")]
+    public void ReadStatus_ThrowsInvalidData_ForAMalformedFile(string content)
+    {
+        Directory.CreateDirectory(CacheRoot);
+        File.WriteAllText(Path.Combine(CacheRoot, CoreMlCache.StatusFileName), content);
+
+        Should.Throw<InvalidDataException>(() => CoreMlCache.ReadStatus(CacheRoot));
+    }
 
     private CoreMlCache Cache() => new(CacheRoot, Key, Ort, NullLogger.Instance);
 

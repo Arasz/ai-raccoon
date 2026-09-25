@@ -44,7 +44,7 @@ public sealed class DoctorCommandsTests : IDisposable
 
     private Task<(int Exit, string Out, string Err)> Run(DoctorCommands doctor, string[] args) => CliRun.RunAsync(args, TestData.CreateConfigCommands(new FakeConfigStore(), doctor: doctor));
 
-    private DoctorCommands CreateDoctor(IEncryptionKeyResolver? resolver = null) => new(_factory, resolver ?? NullKeyProvider.Resolver(_options), NullLogger<DoctorCommands>.Instance);
+    private DoctorCommands CreateDoctor(IEncryptionKeyResolver? resolver = null) => new(_factory, resolver ?? NullKeyProvider.Resolver(_options), _options, NullLogger<DoctorCommands>.Instance);
 
     /// <summary>
     ///     Delta review C3: a missing bank at the resolved path must not read as HEALTHY (0) — a
@@ -1087,6 +1087,93 @@ public sealed class DoctorCommandsTests : IDisposable
         Lines(outp).ShouldContain(
             $"model migration: open since {timestamp} (all MCP tool calls are refused until it finishes)");
         outp.ShouldNotContain(leaseOwner);
+    }
+
+    /// <summary>ADR-0118: the CoreML line reads the background compile's status.json and the cache size off disk.</summary>
+    [RetryFact]
+    public async Task Doctor_CoreMlStatusFile_PrintsStateTriggerReasonTimePidAndCacheSize()
+    {
+        await SeedBankAsync();
+        WriteCoreMlStatus("NeuralEngineServing", "SessionsLoadedAndProbePassed", "4 buckets loaded", Environment.ProcessId);
+        var bucket = Directory.CreateDirectory(Path.Combine(CoreMlCacheRoot, "abcdef012345", "1.30.0", "CPUAndNeuralEngine", "bucket-256"));
+        await File.WriteAllBytesAsync(Path.Combine(bucket.FullName, "model.bin"), new byte[2 * 1024 * 1024], TestContext.Current.CancellationToken);
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        Lines(outp).ShouldContain(
+            $"coreml: NeuralEngineServing (SessionsLoadedAndProbePassed: 4 buckets loaded) at 2026-09-26T10:00:00Z, pid {Environment.ProcessId}, cache 2 MiB");
+    }
+
+    [RetryFact]
+    public async Task Doctor_CoreMlStatusFromADeadProcess_SaysItIsNotRunning()
+    {
+        await SeedBankAsync();
+        WriteCoreMlStatus("CompilingNeuralEngine", "Started", "device coreml", int.MaxValue);
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        Lines(outp).ShouldContain(
+            $"coreml: CompilingNeuralEngine (Started: device coreml) at 2026-09-26T10:00:00Z, pid {int.MaxValue} (not running), cache 0 MiB");
+    }
+
+    [RetryFact]
+    public async Task Doctor_DeviceCoreMlWithoutACache_SaysNotStarted()
+    {
+        await SeedBankAsync((EmbeddingSettingsKeys.Device, "coreml"));
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        Lines(outp).ShouldContain("coreml: not started, cache 0 MiB");
+    }
+
+    [RetryFact]
+    public async Task Doctor_UnreadableCoreMlStatus_SaysSo_AndStillReports()
+    {
+        await SeedBankAsync();
+        Directory.CreateDirectory(CoreMlCacheRoot);
+        await File.WriteAllTextAsync(Path.Combine(CoreMlCacheRoot, "status.json"), "{ not json", TestContext.Current.CancellationToken);
+
+        var (exit, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        exit.ShouldBe(ErrorCode.Ok.Success);
+        Lines(outp).ShouldContain("coreml: status.json unreadable, cache 0 MiB");
+    }
+
+    [RetryFact]
+    public async Task Doctor_DeviceAutoWithoutACache_PrintsNoCoreMlLine()
+    {
+        await SeedBankAsync((EmbeddingSettingsKeys.Device, "auto"));
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        outp.ShouldNotContain("coreml:");
+    }
+
+    private string CoreMlCacheRoot => Path.Combine(_dataRoot, EmbeddingService.CoreMlCacheDirectoryName);
+
+    private void WriteCoreMlStatus(string state, string trigger, string reason, int pid)
+    {
+        Directory.CreateDirectory(CoreMlCacheRoot);
+        File.WriteAllText(Path.Combine(CoreMlCacheRoot, "status.json"),
+            $$"""
+              {
+                "state": "{{state}}",
+                "trigger": "{{trigger}}",
+                "reason": "{{reason}}",
+                "at": "2026-09-26T10:00:00+00:00",
+                "pid": {{pid}}
+              }
+              """);
+    }
+
+    private async Task SeedBankAsync(params (string Key, string Value)[] settings)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        foreach (var (key, value) in settings)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting, new { key, value },
+                cancellationToken: TestContext.Current.CancellationToken));
+        }
     }
 
     private async Task SeedMigrationAsync(long? finishedAt, SqliteConnection? connection = null, string? leaseOwner = null, long? leaseExpiresAt = null, long startedAt = 1787739481)
