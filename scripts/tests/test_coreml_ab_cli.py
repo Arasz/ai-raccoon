@@ -61,3 +61,19 @@ def test_require_coreml_cache_dir_allows_non_coreml_configs_without_one() -> Non
     configs = [{"name": "c", "device": "mlx"}]
 
     coreml_ab._require_coreml_cache_dir(configs, None)  # must not raise
+
+
+# ---------------------------------------------------------------------------------------------
+# Per-config model_dir: one A/B can compare a re-exported graph against the shipped one
+
+
+def test_config_model_dir_uses_the_configs_own_dir_when_set() -> None:
+    config = {"name": "c", "device": "coreml", "model_dir": "/tmp/ane-fp16"}
+
+    assert coreml_ab.config_model_dir(config, Path("/tmp/bundled")) == Path("/tmp/ane-fp16")
+
+
+def test_config_model_dir_falls_back_to_the_cli_model_dir() -> None:
+    config = {"name": "c", "device": "mlx"}
+
+    assert coreml_ab.config_model_dir(config, Path("/tmp/bundled")) == Path("/tmp/bundled")
