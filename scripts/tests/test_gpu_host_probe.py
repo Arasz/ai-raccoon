@@ -145,3 +145,15 @@ def test_ensure_dotnet_records_a_failed_installer_download_instead_of_raising(tm
 
     assert ready is False
     assert found.commit.startswith("dotnet install failed")
+
+
+def test_ensure_dotnet_records_a_failed_install_instead_of_raising(tmp_path, monkeypatch):
+    installer = tmp_path / "dotnet-install.sh"
+    installer.write_text("echo install broke; exit 3\n")
+    monkeypatch.setattr(probe, "DOTNET_INSTALL_URL", installer.as_uri())
+    found = probe.Probe()
+
+    ready = probe.ensure_dotnet(dict(probe.os.environ, PATH=str(tmp_path)), found)
+
+    assert ready is False
+    assert found.commit.startswith("dotnet install failed")

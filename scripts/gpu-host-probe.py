@@ -180,18 +180,21 @@ def probe_vulkan(found: Probe, env: dict[str, str]) -> None:
 
 
 def ensure_dotnet(env: dict[str, str], found: Probe) -> bool:
-    """Installs .NET 10 when missing; False, with the failure in found.commit, when the installer download fails."""
+    """Installs .NET 10 when missing; False, with the failure in found.commit, when the install fails."""
     section("dotnet")
     sdks = run(["dotnet", "--list-sdks"], env=env).stdout if shutil.which("dotnet", path=env["PATH"]) else ""
     if not re.search(r"^10\.", sdks, re.MULTILINE):
         installer = Path("/tmp/dotnet-install.sh")
+        dotnet_root = Path.home() / ".dotnet"
         failure = download(DOTNET_INSTALL_URL, installer)
+        if failure is None:
+            install = run(["bash", str(installer), "--channel", "10.0", "--install-dir", str(dotnet_root)])
+            if install.returncode != 0:
+                failure = "exit %d: %s" % (install.returncode, tail(install.stdout, 1))
         if failure is not None:
             found.commit = "dotnet install failed: %s" % failure
             print(found.commit)
             return False
-        dotnet_root = Path.home() / ".dotnet"
-        run(["bash", str(installer), "--channel", "10.0", "--install-dir", str(dotnet_root)])
         env["DOTNET_ROOT"] = str(dotnet_root)
         env["PATH"] = "%s:%s" % (dotnet_root, env["PATH"])
     print(run(["dotnet", "--version"], env=env).stdout.strip())
