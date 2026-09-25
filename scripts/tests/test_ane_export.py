@@ -24,7 +24,7 @@ from retrieval_tuning import ane_encoder  # noqa: E402
 
 CLI_PATH = Path(__file__).resolve().parent.parent / "retrieval_tuning" / "export_ane_encoder.py"
 MAX_LEN = 512
-LAYOUTS = ["plain"]
+LAYOUTS = ["plain", "ane"]
 
 if not ane_encoder.BUNDLED_DIR.joinpath("model.onnx").exists():
     pytest.skip(f"bundled model missing at {ane_encoder.BUNDLED_DIR}", allow_module_level=True)
@@ -136,3 +136,16 @@ def test_export_refuses_to_write_into_the_bundled_models_root(tmp_path) -> None:
     with pytest.raises(ValueError):
         _load_cli().export_model_dir("plain", ane_encoder.BUNDLED_DIR, MAX_LEN)
 
+
+
+def test_ane_graph_has_no_ops_the_coreml_ep_leaves_on_the_cpu(exported) -> None:
+    # Measured on ORT 1.30: the CoreML EP places Neg (HF rotate_half) and Einsum on the CPU EP,
+    # splitting the graph into one partition per run of claimed nodes.
+    layout, out = exported
+    if layout != "ane":
+        pytest.skip("the plain layout keeps HF's rotate_half Neg by design")
+    model = onnx.load(str(out / "model.onnx"), load_external_data=False)
+
+    ops = {node.op_type for node in model.graph.node}
+
+    assert not ops & {"Einsum", "Neg"}

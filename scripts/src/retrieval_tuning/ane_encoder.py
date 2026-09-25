@@ -153,14 +153,18 @@ class AneLayer(torch.nn.Module):
         q, k, v, q_rot, k_rot = self.Wqkv(self.attn_norm(x)).split(self.hidden, dim=1)
         q = q * cos + q_rot * sin
         k = k * cos + k_rot * sin
-        heads_q = q.split(self.head_dim, dim=1)                   # (B, d, 1, Sq) each
-        heads_k = k.transpose(1, 3).split(self.head_dim, dim=3)   # (B, Sk, 1, d) each
-        heads_v = v.split(self.head_dim, dim=1)                   # (B, d, 1, Sk) each
+        # ml-ane-transformers' per-head einsums as MatMul: the CoreML EP does not claim Einsum.
+        # (B, C, 1, S) -> (B, 1, C, S) is a free reshape; only K needs a real transpose.
+        batch, seq = x.shape[0], x.shape[3]
+        heads_q = q.reshape(batch, 1, self.hidden, seq).split(self.head_dim, dim=2)  # (B, 1, d, Sq)
+        heads_k = k.transpose(1, 3).split(self.head_dim, dim=3)                     # (B, Sk, 1, d)
+        heads_v = v.reshape(batch, 1, self.hidden, seq).split(self.head_dim, dim=2)  # (B, 1, d, Sk)
         outputs = []
         for qh, kh, vh in zip(heads_q, heads_k, heads_v):
-            weights = torch.einsum("bchq,bkhc->bkhq", qh, kh) * self.scale + mask  # (B, Sk, 1, Sq)
-            outputs.append(torch.einsum("bkhq,bchk->bchq", weights.softmax(dim=1), vh))
-        x = x + self.Wo(torch.cat(outputs, dim=1))
+            weights = torch.matmul(kh.transpose(1, 2), qh) * self.scale + mask     # (B, 1, Sk, Sq)
+            outputs.append(torch.matmul(vh, weights.softmax(dim=2)))                # (B, 1, d, Sq)
+        attn = torch.cat(outputs, dim=2).reshape(batch, self.hidden, 1, seq)
+        x = x + self.Wo(attn)
         gate_in, gate = self.Wi(self.mlp_norm(x)).chunk(2, dim=1)
         return x + self.mlp_Wo(torch.nn.functional.gelu(gate_in) * gate)
 
@@ -184,14 +188,14 @@ class AneEncoder(torch.nn.Module):
                 self.register_buffer(f"{layer_type}_{name}", torch.from_numpy(np.ascontiguousarray(channels)),
                                      persistent=False)
         band = band_mask(max_len, config.sliding_window)
-        self.register_buffer("band", torch.from_numpy(band)[None, :, None, :], persistent=False)  # [1, Lk, 1, Lq]
+        self.register_buffer("band", torch.from_numpy(band)[None, None], persistent=False)  # [1, 1, Lk, Lq]
 
     def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         seq = input_ids.shape[1]
         hidden = self.embeddings(input_ids=input_ids)             # (B, S, C)
         x = hidden.transpose(1, 2).unsqueeze(2)                   # (B, C, 1, S)
-        padding = ((1.0 - attention_mask.to(x.dtype)) * MASKED)[:, :, None, None]  # (B, Sk, 1, 1)
-        masks = {"full_attention": padding, "sliding_attention": padding + self.band[:, :seq, :, :seq]}
+        padding = ((1.0 - attention_mask.to(x.dtype)) * MASKED)[:, None, :, None]  # (B, 1, Sk, 1)
+        masks = {"full_attention": padding, "sliding_attention": padding + self.band[:, :, :seq, :seq]}
         rope = {t: (getattr(self, f"{t}_cos")[..., :seq], getattr(self, f"{t}_sin")[..., :seq])
                 for t in set(self.layer_types)}
         for layer, layer_type in zip(self.layers, self.layer_types):
