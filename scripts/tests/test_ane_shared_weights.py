@@ -186,10 +186,15 @@ def test_shared_graph_matches_the_product_graph(shared, batches, batch: str) -> 
 
 
 def _constant_only_nodes(model) -> list[str]:
+    """Foldable-op nodes computed from initializers and constants alone, through any chain of such nodes."""
     constants = {init.name for init in model.graph.initializer}
-    constants |= {out for node in model.graph.node if node.op_type == "Constant" for out in node.output}
-    return [f"{node.op_type}:{node.name}" for node in model.graph.node
-            if node.op_type in FOLDABLE_OPS and node.input and all(i in constants for i in node.input if i)]
+    found = []
+    for node in model.graph.node:  # saved graphs are topologically sorted
+        if node.op_type == "Constant" or (node.input and all(i in constants for i in node.input if i)):
+            constants.update(node.output)
+            if node.op_type in FOLDABLE_OPS:
+                found.append(f"{node.op_type}:{node.name}")
+    return found
 
 
 def test_basic_optimization_folds_every_weight_rebuild_subgraph(shared, tmp_path) -> None:
