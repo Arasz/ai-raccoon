@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
+using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -61,7 +62,19 @@ public sealed partial class MaintenanceJobRunner(
                 // run try/catch below, so an uncaught throw here used to skip every job
                 // registered after it. No ledger write happens either way, so it retries
                 // next pass — same semantics as a failed RunAsync.
-                Log.JobCheckFailed(logger, job.DisplayName, job.Name, ex);
+                //
+                // ADR-0116: this one cause is already being resolved on its own — InstallWatchdog
+                // is shutting the process down — so it stays quiet (Debug) instead of repeating the
+                // generic Warning every ~15s poll in the meantime.
+                if (ex is BundledModelInstallReplacedException)
+                {
+                    Log.JobCheckSkippedInstallReplaced(logger, job.DisplayName, job.Name);
+                }
+                else
+                {
+                    Log.JobCheckFailed(logger, job.DisplayName, job.Name, ex);
+                }
+
                 outcomes.Add(new MaintenanceJobOutcome(job.Name, false, ex.Message));
                 continue;
             }
@@ -155,6 +168,10 @@ public sealed partial class MaintenanceJobRunner(
         [LoggerMessage(EventId = 528, Level = LogLevel.Warning,
             Message = "ai-raccoon: maintenance job '{DisplayName}' ({JobName}) outstanding-rows count failed; the job itself already ran, only its rows gauge is missing this pass")]
         public static partial void JobRowsCountFailed(ILogger logger, string displayName, string jobName, Exception exception);
+
+        [LoggerMessage(EventId = 529, Level = LogLevel.Debug,
+            Message = "ai-raccoon: maintenance job '{DisplayName}' ({JobName}) due-check skipped: its install was replaced; the install watchdog is already shutting this server down")]
+        public static partial void JobCheckSkippedInstallReplaced(ILogger logger, string displayName, string jobName);
     }
 
     private static bool IsDue(IMaintenanceJob job, long? lastRunAt, DateTimeOffset now)

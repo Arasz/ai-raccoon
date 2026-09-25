@@ -227,6 +227,30 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
         record.Message.ShouldContain("broken-check");
     }
 
+    /// <summary>
+    ///     ADR-0116: this specific due-check failure is about to be resolved on its own — the install
+    ///     watchdog is already shutting the process down — so it logs quietly (529, Debug) instead of
+    ///     repeating the generic 527 Warning every ~15s poll until then.
+    /// </summary>
+    [RetryFact]
+    public async Task AJobWhoseHasWorkAsyncThrowsInstallReplaced_LogsQuietly_NotTheGeneric527Warning()
+    {
+        await using var connection = await OpenAsync();
+        var logger = new FakeLogger<MaintenanceJobRunner>();
+        var broken = new CountingJob("model-migration", interval: null) { ThrowInstallReplacedFromHasWorkAsync = true };
+
+        var outcomes = await new MaintenanceJobRunner(_time, new NoOpMeasurementRecorder(), logger)
+            .RunDueAsync(connection, [broken], TestContext.Current.CancellationToken);
+
+        outcomes.Single().Ran.ShouldBeFalse();
+        var record = logger.Collector.LatestRecord;
+        record.ShouldNotBeNull();
+        record.Id.Id.ShouldBe(529);
+        record.Level.ShouldBe(LogLevel.Debug);
+        record.Message.ShouldContain("model-migration");
+        logger.Collector.Count.ShouldBe(1, "never also logs the generic 527 warning for this cause");
+    }
+
     /// <summary>D6: the lastRun ledger SELECT shares the same guard, so a broken read is
     /// skipped and logged rather than escaping RunDueAsync.</summary>
     [RetryFact]
@@ -394,6 +418,8 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
 
         public bool ThrowOperationCanceledFromHasWorkAsync { get; init; }
 
+        public bool ThrowInstallReplacedFromHasWorkAsync { get; init; }
+
         private bool _thrown;
 
         public string Name => name;
@@ -407,6 +433,11 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
             if (ThrowOperationCanceledFromHasWorkAsync)
             {
                 throw new OperationCanceledException("shutting down");
+            }
+
+            if (ThrowInstallReplacedFromHasWorkAsync)
+            {
+                throw new BundledModelInstallReplacedException("engine", "model.onnx", "/fake/install/dir");
             }
 
             return ThrowFromHasWorkAsync

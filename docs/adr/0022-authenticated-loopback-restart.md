@@ -75,6 +75,13 @@ for the port to free, and then serves in its place. When nothing is listening it
 > fails to match instead of matching the wrong case. `ExitCodeTests` asserts the values stay
 > distinct and that 8 is not reused.
 
+> **Amended 2026-09-25 by [ADR 0116](0116-server-exits-when-its-install-is-replaced.md): the manual
+> half of this gap is now automatic.** `serve --restart` stays exactly as decided here — an
+> operator-triggered cycle over the same authenticated `/shutdown`. What changes is that the operator
+> no longer has to run it after a `dotnet tool update`: the backend now notices its own install
+> directory is gone and calls `StopApplication()` unprompted, over the same graceful-shutdown path
+> this ADR reused from `IdleWatchdog`. The next MCP call's proxy forward starts the new install.
+
 ### What each outcome does
 
 | Outcome | Trigger | Result |
