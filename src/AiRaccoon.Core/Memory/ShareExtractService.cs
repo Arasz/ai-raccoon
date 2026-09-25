@@ -19,7 +19,7 @@ public sealed class ShareExtractService(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        await Validator.ValidateAndThrowAsync(request, cancellationToken).ConfigureAwait(false);
+        await Validator.ValidateAndThrowAsync(request, cancellationToken);
 
         if (request.AutoPromote && !request.Confirm)
         {
@@ -30,16 +30,15 @@ public sealed class ShareExtractService(
         var limit = request.Limit ?? SharedExtractionService.DefaultCandidateLimit;
 
         return request.Promotes
-            ? await PromoteAsync(request, limit, cancellationToken).ConfigureAwait(false)
-            : await ProposeAsync(request, limit, cancellationToken).ConfigureAwait(false);
+            ? await PromoteAsync(request, limit, cancellationToken)
+            : await ProposeAsync(request, limit, cancellationToken);
     }
 
     private async Task<ShareExtractResult> PromoteAsync(ShareExtractRequest request, int limit,
         CancellationToken cancellationToken)
     {
         var outcome = await queue.PromoteAsync([.. request.ProjectIds], limit,
-            cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+            cancellationToken: cancellationToken);
         return new ShareExtractResult([], outcome.PromotedHashes)
         {
             SkippedDuplicates = outcome.SkippedDuplicates,
@@ -52,14 +51,13 @@ public sealed class ShareExtractService(
     private async Task<ShareExtractResult> ProposeAsync(ShareExtractRequest request, int limit,
         CancellationToken cancellationToken)
     {
-        var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
+        var sharedIndex = await store.GetSharedIndexAsync(cancellationToken);
         var candidates = new List<ShareCandidate>();
         foreach (var projectId in request.ProjectIds)
         {
             candidates.AddRange(await extraction
                 .ProposeAsync(projectId, sharedIndex, request.IncludeTtlRows, limit,
-                    cancellationToken: cancellationToken)
-                .ConfigureAwait(false));
+                    cancellationToken: cancellationToken));
         }
 
         return new ShareExtractResult(candidates, []);

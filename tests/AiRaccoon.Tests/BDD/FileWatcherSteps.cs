@@ -1578,7 +1578,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
             "INSERT INTO settings (key, value) VALUES (@k1, @scope), (@k2, @scope), (@k3, 'true')",
             new
             {
-                k1 = $"ingest.scope.{loser1}", scope,
+                k1 = $"ingest.scope.{loser1}",
+                scope,
                 k2 = $"ingest.scope.{loser2}",
                 k3 = $"watch.enabled.{loser2}"
             }));
@@ -1672,20 +1673,20 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
             // pre-repair hashes then would mistake re-ingest replacement for fold loss.
             if (!_mirrorsAssertedOnce)
             {
-            foreach (var (hash, path) in _nullKeysBefore[loser])
-            {
-                var winner = LoserToWinner[loser];
-                (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                        "SELECT count(*) FROM entries WHERE hash = @hash AND path = @path AND project_id = @loser AND scope IN ('project', 'custom')",
-                        new { hash, path, loser })))
-                    .ShouldBe(0,
-                        $"mirror {hash} ({path}) leaves no committed row under {loser} (shared/workspace legs pin by design)");
-                (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                        "SELECT count(*) FROM entries WHERE hash = @hash AND path = @path AND project_id = @winner",
-                        new { hash, path, winner })))
-                    .ShouldBeGreaterThanOrEqualTo(1,
-                        $"mirror {hash} ({path}) survives byte-identical under {winner} (dedup-collapse onto a winner twin counts)");
-            }
+                foreach (var (hash, path) in _nullKeysBefore[loser])
+                {
+                    var winner = LoserToWinner[loser];
+                    (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                            "SELECT count(*) FROM entries WHERE hash = @hash AND path = @path AND project_id = @loser AND scope IN ('project', 'custom')",
+                            new { hash, path, loser })))
+                        .ShouldBe(0,
+                            $"mirror {hash} ({path}) leaves no committed row under {loser} (shared/workspace legs pin by design)");
+                    (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                            "SELECT count(*) FROM entries WHERE hash = @hash AND path = @path AND project_id = @winner",
+                            new { hash, path, winner })))
+                        .ShouldBeGreaterThanOrEqualTo(1,
+                            $"mirror {hash} ({path}) survives byte-identical under {winner} (dedup-collapse onto a winner twin counts)");
+                }
             }
         }
         // Mirror-key asserts run only on the first invocation: post-repair file changes are
@@ -1693,23 +1694,23 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         // edits. The second invocation keeps the no-resurrection core (loser-zero everywhere).
         if (!_mirrorsAssertedOnce)
         {
-        // Winner NULL-mirrors are the pre-repair winner keys plus every folded mirror key:
-        // the committed bucket cannot hold two copies, so cross-loser duplicates fold once and
-        // pre-existing twins absorb their loser copy — either way the union is the exact set.
-        foreach (var winner in new[] { RenameWinner, RenameWinnerLower })
-        {
-            var expected = new HashSet<(string Hash, string Path)>(_nullWinnerKeysBefore[winner]);
-            foreach (var key in LoserToWinner.Where(kv => kv.Value == winner).SelectMany(kv => _nullKeysBefore[kv.Key]))
+            // Winner NULL-mirrors are the pre-repair winner keys plus every folded mirror key:
+            // the committed bucket cannot hold two copies, so cross-loser duplicates fold once and
+            // pre-existing twins absorb their loser copy — either way the union is the exact set.
+            foreach (var winner in new[] { RenameWinner, RenameWinnerLower })
             {
-                expected.Add(key);
+                var expected = new HashSet<(string Hash, string Path)>(_nullWinnerKeysBefore[winner]);
+                foreach (var key in LoserToWinner.Where(kv => kv.Value == winner).SelectMany(kv => _nullKeysBefore[kv.Key]))
+                {
+                    expected.Add(key);
+                }
+                var actual = (await connection.QueryAsync<(string Hash, string Path)>(new CommandDefinition(
+                    "SELECT hash AS Hash, path AS Path FROM entries WHERE project_id = @winner AND scope = 'project' AND context_label IS NULL",
+                    new { winner }))).ToHashSet();
+                actual.SetEquals(expected).ShouldBeTrue(
+                    $"folded mirrors land under {winner} with their content intact " +
+                    $"(expected {expected.Count} distinct keys, found {actual.Count})");
             }
-            var actual = (await connection.QueryAsync<(string Hash, string Path)>(new CommandDefinition(
-                "SELECT hash AS Hash, path AS Path FROM entries WHERE project_id = @winner AND scope = 'project' AND context_label IS NULL",
-                new { winner }))).ToHashSet();
-            actual.SetEquals(expected).ShouldBeTrue(
-                $"folded mirrors land under {winner} with their content intact " +
-                $"(expected {expected.Count} distinct keys, found {actual.Count})");
-        }
         }
         _mirrorsAssertedOnce = true;
 

@@ -31,24 +31,23 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
 
         var plan = FtsQueryNormalizer.BuildPlan(query.Query);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         var parameters = SearchParameters.FromSources(query,
-            await ReadRetrievalDefaultsAsync(connection, cancellationToken).ConfigureAwait(false));
+            await ReadRetrievalDefaultsAsync(connection, cancellationToken));
 
         // Embedded (and possibly trimmed) BEFORE the FTS/vector legs run: an unloadable engine
         // must refuse the whole search, not silently degrade to a partial FTS-only result.
-        var queryVector = await embedder.EmbedQueryAsync(connection, query.Query, cancellationToken)
-            .ConfigureAwait(false);
+        var queryVector = await embedder.EmbedQueryAsync(connection, query.Query, cancellationToken);
 
         var window = SqliteMemoryStore.CandidateWindowFor(query.Limit, parameters.CandidateWindow);
 
         var ftsRows = plan.Expression.Length == 0
             ? []
-            : await QueryFtsAsync(connection, query, plan, window, cancellationToken).ConfigureAwait(false);
+            : await QueryFtsAsync(connection, query, plan, window, cancellationToken);
         var vectorRows = queryVector.IsEmpty
             ? []
-            : await QueryVectorAsync(connection, query, queryVector, window, cancellationToken).ConfigureAwait(false);
+            : await QueryVectorAsync(connection, query, queryVector, window, cancellationToken);
 
         var fused = Fuse(ftsRows, vectorRows, parameters, query);
         var warning = queryVector.IsEmpty
@@ -65,7 +64,7 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
         Guard.IsNotNullOrWhiteSpace(projectId);
         Guard.IsNotNullOrWhiteSpace(hash);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<CodeEntryRow?>(new CommandDefinition(
             """
             SELECT hash AS Hash, value AS Value, path AS Path, line_start AS LineStart, line_end AS LineEnd
@@ -74,7 +73,7 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
             ORDER BY id
             LIMIT 1
             """,
-            new { projectId, hash }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            new { projectId, hash }, cancellationToken: cancellationToken));
 
         return row is null ? null : new CodeEntry(row.Hash, row.Value, row.Path, row.LineStart, row.LineEnd);
     }
@@ -95,7 +94,7 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
             LIMIT @limit
             """,
             new { match = plan.Expression, projectId = query.ProjectId, limit },
-            cancellationToken: cancellationToken)).ConfigureAwait(false)).ToList();
+            cancellationToken: cancellationToken))).ToList();
 
     /// <summary>vec0 KNN over the ctx (= project_id) partition — mirrors MemorySql.VectorSearchByFilter's shape.</summary>
     private static async Task<IReadOnlyList<CodeVectorRow>> QueryVectorAsync(SqliteConnection connection,
@@ -110,7 +109,7 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
             ORDER BY v.distance, e.path
             """,
             new { ctx = query.ProjectId, queryVector = queryVector.Data, limit },
-            cancellationToken: cancellationToken)).ConfigureAwait(false)).ToList();
+            cancellationToken: cancellationToken))).ToList();
 
     /// <summary>
     ///     Weighted RRF fusion: score = sum of weight / (k + rank) per contributing list,
@@ -175,8 +174,7 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
         CancellationToken cancellationToken)
     {
         var rows = (await connection.QueryAsync<SettingRow>(new CommandDefinition(
-                MemorySql.SelectSettingsByPrefix, new { prefix = "retrieval." }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
+                MemorySql.SelectSettingsByPrefix, new { prefix = "retrieval." }, cancellationToken: cancellationToken))).ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
         return new RetrievalSettingsSource(rows);
     }
 

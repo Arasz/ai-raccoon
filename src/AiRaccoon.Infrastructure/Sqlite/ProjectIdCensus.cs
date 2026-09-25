@@ -56,7 +56,7 @@ public static class ProjectIdCensus
             "SELECT project_id AS Id, scope AS Scope, COUNT(*) AS N, " +
             "SUM(CASE WHEN context_label IS NULL THEN 1 ELSE 0 END) AS NullCtx " +
             "FROM entries WHERE project_id IS NOT NULL GROUP BY project_id, scope",
-            cancellationToken: cancellationToken)).ConfigureAwait(false);
+            cancellationToken: cancellationToken));
         foreach (var group in entryGroups)
         {
             var row = For(group.Id);
@@ -71,45 +71,45 @@ public static class ProjectIdCensus
         }
 
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM code_entries GROUP BY project_id",
-            (row, n) => row.CodeEntries += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.CodeEntries += n, cancellationToken);
         await CountByIdAsync(connection,
             "SELECT ce.project_id AS Id, COUNT(*) AS N FROM code_fts f JOIN code_entries ce ON f.rowid = ce.id GROUP BY ce.project_id",
-            (row, n) => row.CodeFtsRows += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.CodeFtsRows += n, cancellationToken);
         await CountByIdAsync(connection, "SELECT ctx AS Id, COUNT(*) AS N FROM vec_code GROUP BY ctx",
-            (row, n) => row.VecCodeRows += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.VecCodeRows += n, cancellationToken);
         await CountByIdAsync(connection,
             "SELECT e.project_id AS Id, COUNT(*) AS N FROM entries_fts f JOIN entries e ON f.rowid = e.id " +
             "WHERE e.project_id IS NOT NULL GROUP BY e.project_id",
-            (row, n) => row.EntriesFtsRows += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.EntriesFtsRows += n, cancellationToken);
         await CountByIdAsync(connection, VecEntriesCountSql,
-            (row, n) => row.VecEntryRows += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.VecEntryRows += n, cancellationToken);
         await CountByIdAsync(connection, VecStructureCountSql,
-            (row, n) => row.VecStructureRows += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.VecStructureRows += n, cancellationToken);
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM promotion_queue GROUP BY project_id",
-            (row, n) => row.Queued += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.Queued += n, cancellationToken);
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM promotion_discards GROUP BY project_id",
-            (row, n) => row.Discards += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.Discards += n, cancellationToken);
         await CountByIdAsync(connection,
             "SELECT project_id AS Id, COUNT(*) AS N FROM search_quality WHERE project_id IS NOT NULL GROUP BY project_id",
-            (row, n) => row.QualityRows += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.QualityRows += n, cancellationToken);
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM watches GROUP BY project_id",
-            (row, n) => row.Watches += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.Watches += n, cancellationToken);
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM watch_files GROUP BY project_id",
-            (row, n) => row.WatchFiles += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.WatchFiles += n, cancellationToken);
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM watch_digest_claims GROUP BY project_id",
-            (row, n) => row.DigestClaims += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.DigestClaims += n, cancellationToken);
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM sync_tombstones GROUP BY project_id",
-            (row, n) => row.Tombstones += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.Tombstones += n, cancellationToken);
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM workspaces GROUP BY project_id",
-            (row, n) => row.Workspaces += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.Workspaces += n, cancellationToken);
         await CountByIdAsync(connection,
             "SELECT project_id AS Id, COUNT(*) AS N FROM metrics WHERE project_id IS NOT NULL GROUP BY project_id",
-            (row, n) => row.MetricsRows += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.MetricsRows += n, cancellationToken);
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM noise_entries GROUP BY project_id",
-            (row, n) => row.NoiseRows += n, cancellationToken).ConfigureAwait(false);
+            (row, n) => row.NoiseRows += n, cancellationToken);
 
         var registered = await connection.QueryAsync<ProjectRow>(new CommandDefinition(
-            "SELECT id AS Id, name AS Name FROM projects", cancellationToken: cancellationToken)).ConfigureAwait(false);
+            "SELECT id AS Id, name AS Name FROM projects", cancellationToken: cancellationToken));
         foreach (var project in registered)
         {
             var row = For(project.Id);
@@ -119,7 +119,7 @@ public static class ProjectIdCensus
 
         var unattributed = new List<string>();
         var keys = await connection.QueryAsync<string>(new CommandDefinition(
-            "SELECT key FROM settings", cancellationToken: cancellationToken)).ConfigureAwait(false);
+            "SELECT key FROM settings", cancellationToken: cancellationToken));
         foreach (var key in keys)
         {
             if (TryAttributeSetting(key, out var owner))
@@ -143,22 +143,22 @@ public static class ProjectIdCensus
         // outright on a bank that predates the v14 table.
         var durable = await ScalarAsync(connection,
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'project_id_aliases'",
-            cancellationToken).ConfigureAwait(false) > 0
-            ? await ProjectIdAliases.LoadAsync(connection, cancellationToken).ConfigureAwait(false)
+            cancellationToken) > 0
+            ? await ProjectIdAliases.LoadAsync(connection, cancellationToken)
             : ProjectIdAliasMap.Empty;
 
         return new ProjectIdCensusReport(rows,
-            await ScalarAsync(connection, "SELECT COUNT(*) FROM entries WHERE scope IS NULL", cancellationToken).ConfigureAwait(false),
-            await ScalarAsync(connection, "SELECT COUNT(*) FROM entries WHERE context_label IS NULL", cancellationToken).ConfigureAwait(false),
-            await ScalarAsync(connection, "SELECT COUNT(*) FROM entries WHERE project_id IS NULL", cancellationToken).ConfigureAwait(false),
-            await ScalarAsync(connection, "SELECT COUNT(*) FROM search_quality WHERE project_id IS NULL", cancellationToken).ConfigureAwait(false),
+            await ScalarAsync(connection, "SELECT COUNT(*) FROM entries WHERE scope IS NULL", cancellationToken),
+            await ScalarAsync(connection, "SELECT COUNT(*) FROM entries WHERE context_label IS NULL", cancellationToken),
+            await ScalarAsync(connection, "SELECT COUNT(*) FROM entries WHERE project_id IS NULL", cancellationToken),
+            await ScalarAsync(connection, "SELECT COUNT(*) FROM search_quality WHERE project_id IS NULL", cancellationToken),
             unattributed,
             durable.Aliases,
             durable.Dropped);
 
         async Task CountByIdAsync(SqliteConnection conn, string sql, Action<RowBuilder, long> add, CancellationToken ct)
         {
-            var groups = await conn.QueryAsync<IdCount>(new CommandDefinition(sql, cancellationToken: ct)).ConfigureAwait(false);
+            var groups = await conn.QueryAsync<IdCount>(new CommandDefinition(sql, cancellationToken: ct));
             foreach (var group in groups)
             {
                 add(For(group.Id), group.N);
@@ -166,7 +166,7 @@ public static class ProjectIdCensus
         }
 
         static async Task<long> ScalarAsync(SqliteConnection conn, string sql, CancellationToken ct) =>
-            await conn.ExecuteScalarAsync<long>(new CommandDefinition(sql, cancellationToken: ct)).ConfigureAwait(false);
+            await conn.ExecuteScalarAsync<long>(new CommandDefinition(sql, cancellationToken: ct));
     }
 
     /// <summary>Attributes an id-embedding settings key to its owner; false for global keys.</summary>

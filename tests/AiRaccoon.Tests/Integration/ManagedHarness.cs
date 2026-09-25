@@ -43,7 +43,7 @@ public sealed class ManagedHarness
 
     public static async Task<ManagedHarness> BuildAsync(CancellationToken cancellationToken = default)
     {
-        var ensured = await TestData.CreateBundledModel().EnsureAsync(cancellationToken).ConfigureAwait(false);
+        var ensured = await TestData.CreateBundledModel().EnsureAsync(cancellationToken);
         if (!ensured.AllPresent)
         {
             throw new InvalidOperationException(
@@ -59,7 +59,7 @@ public sealed class ManagedHarness
             clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
 
         await TestData.ConfigureAndDrainEmbeddingAsync(store, factory, TestData.CreateEmbeddingService(),
-            "local", null, null, cancellationToken, clock).ConfigureAwait(false);
+            "local", null, null, cancellationToken, clock);
 
         foreach (var doc in RealWorldCorpus.Documents)
         {
@@ -71,13 +71,13 @@ public sealed class ManagedHarness
             // SourceAffinityRanker's per-source grouping/consolidation logic entirely
             // (docs/reviews/2026-08-14-moe-codebase-review.md RAG-F8).
             await store.AddContentAsync(ProjectId, doc.Id, doc.Text, ContextNaming.ProjectContext(ProjectId),
-                sourceFile: doc.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
+                sourceFile: doc.Id, cancellationToken: cancellationToken);
         }
 
         var harness = new ManagedHarness(dataRoot, store)
         {
             DocumentCount = (await store.ListContextAsync(ProjectId, ContextNaming.ProjectContext(ProjectId),
-                cancellationToken).ConfigureAwait(false)).Count
+                cancellationToken)).Count
         };
         return harness;
     }
@@ -97,7 +97,7 @@ public sealed class ManagedHarness
                 MinRelativeScore: 0.0,
                 RrfK: point.K,
                 FtsWeight: point.FtsWeight,
-                VectorWeight: point.VectorWeight), cancellationToken).ConfigureAwait(false)).Results;
+                VectorWeight: point.VectorWeight), cancellationToken)).Results;
             return [.. results.Select(result => result.Path)];
         }
         finally
@@ -150,7 +150,7 @@ public sealed class ManagedHarnessFixture : IAsyncLifetime
             return _sweepOutcomes;
         }
 
-        await _sweepGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _sweepGate.WaitAsync(cancellationToken);
         try
         {
             if (_sweepOutcomes is not null)
@@ -160,7 +160,7 @@ public sealed class ManagedHarnessFixture : IAsyncLifetime
 
             var before = Harness.QueryLatenciesMs.Count;
             var outcomes = await SweepRunner.RunAsync(
-                RealWorldQueries.Queries, Harness.RankAsync, cancellationToken).ConfigureAwait(false);
+                RealWorldQueries.Queries, Harness.RankAsync, cancellationToken);
             SweepQueryLatenciesMs = [.. Harness.QueryLatenciesMs.Skip(before)];
             _sweepOutcomes = outcomes;
             return _sweepOutcomes;

@@ -61,10 +61,9 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
         var selfMetricNames = isSelfMetricsReport ? MetricsConfigKeys.SelfMetricNames : [];
         var from = now - effectiveWindow;
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
 
-        var internalMetricNames = await DiscoverInternalMetricNamesAsync(connection, projectId, from, now, cancellationToken)
-            .ConfigureAwait(false);
+        var internalMetricNames = await DiscoverInternalMetricNamesAsync(connection, projectId, from, now, cancellationToken);
 
         // toolNames + phaseNames can never be empty: SearchTimings.SeriesNames always holds at
         // least the phases plus the total, so this always goes through the query below — no
@@ -78,7 +77,7 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
             SeriesNames = seriesNames,
             FromUnix = from.ToUnixTimeSeconds(),
             ToUnix = now.ToUnixTimeSeconds()
-        }, cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }, cancellationToken: cancellationToken));
 
         var samples = rows
             .Select(r => new MetricSample(r.Name, r.Value, DateTimeOffset.FromUnixTimeSeconds(r.RecordedAt)))
@@ -100,7 +99,7 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
         }
 
         var names = await connection.QueryAsync<string>(new CommandDefinition(DiscoverInternalSeriesNamesSql,
-            parameters, cancellationToken: cancellationToken)).ConfigureAwait(false);
+            parameters, cancellationToken: cancellationToken));
         return [.. names];
     }
 

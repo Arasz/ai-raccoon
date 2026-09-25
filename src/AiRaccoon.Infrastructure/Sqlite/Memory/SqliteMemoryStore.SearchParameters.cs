@@ -17,12 +17,10 @@ public sealed partial class SqliteMemoryStore
         CancellationToken cancellationToken)
     {
         var rows = (await connection.QueryAsync<SettingRow>(
-                    Def(MemorySql.SelectSettingsByPrefix, new { prefix = "retrieval." }, cancellationToken))
-                .ConfigureAwait(false))
+                    Def(MemorySql.SelectSettingsByPrefix, new { prefix = "retrieval." }, cancellationToken)))
             .ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
         var fusionFlag = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = FusionConfigKeys.NoRegressionEnabledGlobal }, cancellationToken))
-            .ConfigureAwait(false);
+                Def(MemorySql.SelectSetting, new { key = FusionConfigKeys.NoRegressionEnabledGlobal }, cancellationToken));
         return new SettingsBackedSearchParameters(rows, fusionFlag);
     }
 

@@ -46,10 +46,10 @@ public sealed partial class S3CloudStore : ICloudStore
     {
         try
         {
-            var response = await _s3.GetObjectAsync(_bucket, objectKey, cancellationToken).ConfigureAwait(false);
+            var response = await _s3.GetObjectAsync(_bucket, objectKey, cancellationToken);
             await using var stream = response.ResponseStream;
             using var ms = new MemoryStream();
-            await stream.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
+            await stream.CopyToAsync(ms, cancellationToken);
             // ETag from S3 comes quoted; strip quotes.
             var etag = response.ETag?.Trim('"');
             return new CloudObject(ms.ToArray(), etag);
@@ -100,7 +100,7 @@ public sealed partial class S3CloudStore : ICloudStore
                 request.Headers["If-Match"] = $"\"{etag}\"";
             }
 
-            var response = await _s3.PutObjectAsync(request, cancellationToken).ConfigureAwait(false);
+            var response = await _s3.PutObjectAsync(request, cancellationToken);
 
             // S3 returns ETag quoted; strip for storage compatibility.
             return response.ETag?.Trim('"') ?? "";

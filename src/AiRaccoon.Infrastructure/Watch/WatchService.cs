@@ -23,8 +23,8 @@ public sealed class WatchService(
 {
     public async Task<WatchAddOutcome> AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
-        projectId = await FoldAsync(projectId, cancellationToken).ConfigureAwait(false);
-        var config = await ResolveConfigAsync(projectId, cancellationToken).ConfigureAwait(false);
+        projectId = await FoldAsync(projectId, cancellationToken);
+        var config = await ResolveConfigAsync(projectId, cancellationToken);
         if (!config.Enabled)
         {
             throw new WatchDisabledException(projectId);
@@ -49,7 +49,7 @@ public sealed class WatchService(
         // lock, so two concurrent AddAsync calls can never both decide "I win" against a stale
         // pre-transaction snapshot.
         var decision = await store.ResolveAndAddAsync(projectId, new WatchOverlapCandidate(normalized, now),
-            overlapResolver, cancellationToken).ConfigureAwait(false);
+            overlapResolver, cancellationToken);
 
         switch (decision.Outcome)
         {
@@ -79,17 +79,17 @@ public sealed class WatchService(
 
     public async Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
-        projectId = await FoldAsync(projectId, cancellationToken).ConfigureAwait(false);
+        projectId = await FoldAsync(projectId, cancellationToken);
         var normalized = IngestPath.Normalize(path);
-        await store.RemoveWatchAsync(projectId, normalized, cancellationToken).ConfigureAwait(false);
+        await store.RemoveWatchAsync(projectId, normalized, cancellationToken);
         pipeline.UnregisterWatch(projectId, normalized);
     }
 
     public async Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId,
         CancellationToken cancellationToken = default)
     {
-        projectId = await FoldAsync(projectId, cancellationToken).ConfigureAwait(false);
-        var registrations = (await store.ListWatchesAsync(cancellationToken).ConfigureAwait(false))
+        projectId = await FoldAsync(projectId, cancellationToken);
+        var registrations = (await store.ListWatchesAsync(cancellationToken))
             .Where(r => r.ProjectId == projectId)
             .OrderBy(r => r.Path, IngestPath.PathComparer)
             .ToArray();
@@ -106,7 +106,7 @@ public sealed class WatchService(
         return result;
     }
 
-    public async Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) => (await ResolveConfigAsync(projectId, cancellationToken).ConfigureAwait(false)).Enabled;
+    public async Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) => (await ResolveConfigAsync(projectId, cancellationToken)).Enabled;
 
     /// <summary>
     ///     d-425 MUST-1: the watch-create boundary folds through the same alias table as the
@@ -118,14 +118,14 @@ public sealed class WatchService(
     ///     construction already.
     /// </summary>
     private async Task<string> FoldAsync(string projectId, CancellationToken cancellationToken) =>
-        await migrationGate.IsMigratedAsync(cancellationToken).ConfigureAwait(false)
+        await migrationGate.IsMigratedAsync(cancellationToken)
             ? ProjectIdAliasMap.Default.Fold(projectId)
             : projectId;
 
     public async Task<bool> IsPathAllowedAsync(string projectId, string path,
         CancellationToken cancellationToken = default)
     {
-        var config = await ResolveConfigAsync(projectId, cancellationToken).ConfigureAwait(false);
+        var config = await ResolveConfigAsync(projectId, cancellationToken);
         var normalized = IngestPath.Normalize(path);
         return config.Scope.Any(entry => IngestPath.IsWithinScope(normalized, entry));
     }
@@ -141,7 +141,7 @@ public sealed class WatchService(
         var values = new Dictionary<string, string?>();
         foreach (var key in keys)
         {
-            values[key] = await memory.GetSettingAsync(key, cancellationToken).ConfigureAwait(false);
+            values[key] = await memory.GetSettingAsync(key, cancellationToken);
         }
 
         return WatchConfig.Resolve(projectId, key => values.GetValueOrDefault(key));

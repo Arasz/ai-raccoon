@@ -1,4 +1,4 @@
-# 0113 — MLX rows pad to 64-token buckets, and MLX's buffer cache is capped at 512 MiB
+# 0114 — MLX rows pad to 64-token buckets, and MLX's buffer cache is capped at 512 MiB
 
 Date: 2026-09-25
 

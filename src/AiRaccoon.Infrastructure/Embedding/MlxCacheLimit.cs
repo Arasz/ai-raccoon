@@ -5,7 +5,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 
 /// <summary>
 ///     Caps MLX's free-buffer cache through the <c>libmlxc.dylib</c> shipped beside the MLX plugin
-///     (ADR-0113). Uncapped, the cache keeps buffers for every row length it has run and grows to
+///     (ADR-0114). Uncapped, the cache keeps buffers for every row length it has run and grows to
 ///     MLX's memory limit. Best effort: a failure is logged and the session runs uncapped.
 /// </summary>
 internal sealed partial class MlxCacheLimit(ILogger logger)

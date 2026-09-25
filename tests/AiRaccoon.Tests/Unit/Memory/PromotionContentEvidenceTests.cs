@@ -138,8 +138,13 @@ public sealed class PromotionContentEvidenceTests
     {
         var saturated = NeutralFeatures with
         {
-            RuleDensity = 5.0, MeasureWords = 4, NumUnit = 4, NWords = 300, NChars = 2000,
-            ForeignSubject = true, TechBreadth = 5
+            RuleDensity = 5.0,
+            MeasureWords = 4,
+            NumUnit = 4,
+            NWords = 300,
+            NChars = 2000,
+            ForeignSubject = true,
+            TechBreadth = 5
         };
 
         var atCeiling = PromotionContentEvidence.Evaluate(saturated, ProvenanceArchetype.Adr);

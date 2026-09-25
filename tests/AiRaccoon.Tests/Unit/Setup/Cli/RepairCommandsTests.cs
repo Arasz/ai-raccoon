@@ -552,7 +552,8 @@ public sealed class RepairCommandsTests
         using var scope = new TempScope();
         var stdout = await RunProjectIdsAsync(apply: false, diagnose: false, ClusterReport(), scope.DataRoot, scope.WriteFixtureMap());
 
-        stdout.ShouldNotContain("re-running will not clear");    }
+        stdout.ShouldNotContain("re-running will not clear");
+    }
 
     /// <summary>
     ///     f: a dry run ended without a verdict line — a log grep could not tell converged

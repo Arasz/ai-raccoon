@@ -92,7 +92,7 @@ public sealed class FakeCodeEmbeddingService : IEmbeddingService
 
             if (onGenerateAsync() is { } hook)
             {
-                await hook().ConfigureAwait(false);
+                await hook();
             }
 
             var embeddings = new GeneratedEmbeddings<Embedding<float>>(items.Count);

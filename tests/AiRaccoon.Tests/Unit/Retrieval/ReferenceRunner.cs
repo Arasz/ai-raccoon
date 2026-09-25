@@ -64,7 +64,7 @@ public static class ReferenceRunner
         try
         {
             await using var connection = new SqliteConnection($"Data Source={dbPath}");
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await connection.OpenAsync(cancellationToken);
             connection.EnableExtensions();
             connection.LoadExtension(ReferenceAssets.VectorModulePath);
             connection.LoadExtension(ReferenceAssets.MemoryModulePath);

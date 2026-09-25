@@ -174,7 +174,7 @@ public sealed partial class ServerRestart : IServerRestart
                     continue;
                 }
 
-                await Task.Delay(PortSettleGrace, _timeProvider, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(PortSettleGrace, _timeProvider, cancellationToken);
                 return true;
             } while (await timer.WaitForNextTickAsync(waiting.Token));
         }

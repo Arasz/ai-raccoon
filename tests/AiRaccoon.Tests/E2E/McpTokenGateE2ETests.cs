@@ -180,8 +180,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
         private async Task WaitForListeningAsync()
         {
             var success = await WaitByPolling
-                .WaitForAsync(() => ValueTask.FromResult(_stdout.ToString().Contains("http://", StringComparison.Ordinal)), _timeProvider, TestContext.Current.CancellationToken)
-                .ConfigureAwait(false);
+                .WaitForAsync(() => ValueTask.FromResult(_stdout.ToString().Contains("http://", StringComparison.Ordinal)), _timeProvider, TestContext.Current.CancellationToken);
 
             if (!success)
             {

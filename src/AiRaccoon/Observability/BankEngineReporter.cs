@@ -16,11 +16,10 @@ public sealed partial class BankEngineReporter(ISqliteConnectionFactory factory,
     {
         try
         {
-            await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+            await using var connection = await factory.OpenBankAsync(cancellationToken);
             var engine = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
                     "SELECT value FROM settings WHERE key = @key",
-                    new { key = EmbeddingSettingsKeys.Engine }, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new { key = EmbeddingSettingsKeys.Engine }, cancellationToken: cancellationToken));
 
             // "unset" rather than an absent line: a bank whose engine was never configured is the
             // case that produced the drift (ADR-0063), and silence would read as nothing to report.

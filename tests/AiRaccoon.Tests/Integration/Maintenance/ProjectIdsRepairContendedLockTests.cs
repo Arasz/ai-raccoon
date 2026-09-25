@@ -73,8 +73,13 @@ public sealed class ProjectIdsRepairContendedLockTests : IDisposable
                 "('w1', 'w1', 'winner', 'seed.md', 'project', 'jsaa', 'ctx-a', 1, 1, 'pending')," +
                 "('l1', 'l1', 'loser', 'seed.md', 'project', 'job-search-ai-assistant', 'ctx-a', 2, 2, 'pending')");
             await seed.ExecuteAsync(MemorySql.RequestRepair,
-                new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = new ProjectIdAliasMap(
-                    [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa")], ["jsaa"], []).ToJson() });
+                new
+                {
+                    kind = RepairKinds.ProjectIds,
+                    requestedAt = FixedNow.ToUnixTimeSeconds(),
+                    mapJson = new ProjectIdAliasMap(
+                    [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa")], ["jsaa"], []).ToJson()
+                });
         }
 
         await using var jobConnection = await _factory.OpenBankAsync(ct);

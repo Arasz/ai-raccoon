@@ -43,7 +43,7 @@ public sealed class WatchScanGuard : IWatchScanGuard
         {
             try
             {
-                await scan(entry.Cts.Token).ConfigureAwait(false);
+                await scan(entry.Cts.Token);
             }
             catch (OperationCanceledException) when (entry.Cts.IsCancellationRequested)
             {

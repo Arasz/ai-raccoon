@@ -25,13 +25,13 @@ public sealed partial class ExtractionHostedService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(await ReadIntervalSafeAsync(stoppingToken).ConfigureAwait(false),
+        using var timer = new PeriodicTimer(await ReadIntervalSafeAsync(stoppingToken),
             timeProvider);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
             {
-                await RunOnceAsync(stoppingToken).ConfigureAwait(false);
+                await RunOnceAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -48,7 +48,7 @@ public sealed partial class ExtractionHostedService(
             }
 
             // Re-read the interval so config changes apply without a restart.
-            timer.Period = await ReadIntervalSafeAsync(stoppingToken).ConfigureAwait(false);
+            timer.Period = await ReadIntervalSafeAsync(stoppingToken);
         }
     }
 
@@ -57,7 +57,7 @@ public sealed partial class ExtractionHostedService(
     {
         try
         {
-            return await ReadIntervalAsync(cancellationToken).ConfigureAwait(false);
+            return await ReadIntervalAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -81,7 +81,7 @@ public sealed partial class ExtractionHostedService(
         using var pass = telemetry.Begin(OperationName);
         try
         {
-            var failures = await RunPassAsync(pass, cancellationToken).ConfigureAwait(false);
+            var failures = await RunPassAsync(pass, cancellationToken);
             if (failures > 0)
             {
                 pass.PartiallyFailed(failures);
@@ -112,8 +112,7 @@ public sealed partial class ExtractionHostedService(
         // pass costs nothing, so every pass is worth reading rather than distinguishing on candidates.
         pass.NoteWork();
         var enabled = ExtractionConfigKeys.ParseEnabled(
-            await store.GetSettingAsync(ExtractionConfigKeys.EnabledGlobal, cancellationToken)
-                .ConfigureAwait(false));
+            await store.GetSettingAsync(ExtractionConfigKeys.EnabledGlobal, cancellationToken));
         if (!enabled)
         {
             Log.Skipped(logger);
@@ -121,9 +120,8 @@ public sealed partial class ExtractionHostedService(
         }
 
         var mode = ExtractionConfigKeys.ParseMode(
-            await store.GetSettingAsync(ExtractionConfigKeys.ModeGlobal, cancellationToken)
-                .ConfigureAwait(false));
-        var projects = await store.GetProjectIdsAsync(cancellationToken).ConfigureAwait(false);
+            await store.GetSettingAsync(ExtractionConfigKeys.ModeGlobal, cancellationToken));
+        var projects = await store.GetProjectIdsAsync(cancellationToken);
         if (projects.Count == 0)
         {
             Log.NoProjects(logger);
@@ -137,11 +135,10 @@ public sealed partial class ExtractionHostedService(
             // failure here fails the whole pass closed via RunOnceAsync: nothing is shared on a
             // pass that could not read its own guard rail.
             threshold = ExtractionConfigKeys.ParseAutoPromoteThreshold(
-                await store.GetSettingAsync(ExtractionConfigKeys.AutoPromoteThresholdGlobal, cancellationToken)
-                    .ConfigureAwait(false));
+                await store.GetSettingAsync(ExtractionConfigKeys.AutoPromoteThresholdGlobal, cancellationToken));
         }
 
-        var sharedIndex = await store.GetSharedIndexAsync(cancellationToken).ConfigureAwait(false);
+        var sharedIndex = await store.GetSharedIndexAsync(cancellationToken);
         var promotedTotal = 0;
         var failures = 0;
         foreach (var projectId in projects)
@@ -157,15 +154,13 @@ public sealed partial class ExtractionHostedService(
                         // backlog accumulates; the manual MCP promote path stays unfiltered.
                         await extraction.ProposeAsync(projectId, sharedIndex,
                                 false, SharedExtractionService.DefaultCandidateLimit, threshold,
-                                cancellationToken: cancellationToken)
-                            .ConfigureAwait(false);
+                                cancellationToken: cancellationToken);
                     }
 
                     // Promote-from-queue: the propose tier is the source of truth.
                     var outcome = await queue
                         .PromoteAsync([projectId], SharedExtractionService.DefaultCandidateLimit, threshold,
-                            cancellationToken: cancellationToken)
-                        .ConfigureAwait(false);
+                            cancellationToken: cancellationToken);
                     promotedTotal += outcome.PromotedHashes.Count;
                     var candidateCount = outcome.PromotedHashes.Count + outcome.Absorbed
                                                                       + outcome.SkippedDuplicates + outcome.Failures.Count;
@@ -183,8 +178,7 @@ public sealed partial class ExtractionHostedService(
 
                 var candidates = await extraction.ProposeAsync(projectId, sharedIndex,
                         false, SharedExtractionService.DefaultCandidateLimit,
-                        cancellationToken: cancellationToken)
-                    .ConfigureAwait(false);
+                        cancellationToken: cancellationToken);
 
                 // Per-pass summary only; candidate counts are metered, not logged per row.
                 Log.Pass(logger, projectId, mode, candidates.Count, 0, 0);
@@ -216,8 +210,7 @@ public sealed partial class ExtractionHostedService(
     private async Task<TimeSpan> ReadIntervalAsync(CancellationToken cancellationToken)
     {
         var minutes = ExtractionConfigKeys.ParseIntervalMinutes(
-            await store.GetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, cancellationToken)
-                .ConfigureAwait(false));
+            await store.GetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, cancellationToken));
         return TimeSpan.FromMinutes(minutes);
     }
 

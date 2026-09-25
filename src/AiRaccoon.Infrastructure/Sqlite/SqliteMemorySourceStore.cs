@@ -19,9 +19,9 @@ public sealed class SqliteMemorySourceStore(ISqliteConnectionFactory factory) : 
     {
         ArgumentNullException.ThrowIfNull(sourceLocator);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await ResolveOrCreateOnConnectionAsync(connection, sourceType, sourceLocator, section, headingPath,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
     }
 
     /// <summary>
@@ -53,8 +53,7 @@ public sealed class SqliteMemorySourceStore(ISqliteConnectionFactory factory) : 
                     VALUES (@sourceType, @sourceLocator, @section, @headingPath);
                     """,
                     new { sourceType = sourceTypeText, sourceLocator, section, headingPath },
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
 
         var row = await connection.QueryFirstOrDefaultAsync<SourceRow>(
                 new CommandDefinition(
@@ -68,8 +67,7 @@ public sealed class SqliteMemorySourceStore(ISqliteConnectionFactory factory) : 
                     LIMIT 1;
                     """,
                     new { sourceType = sourceTypeText, sourceLocator, section },
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
 
         if (row is null)
         {

@@ -12,12 +12,11 @@ public sealed partial class SqliteMemoryStore : IProjectRegistry
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         var canonical = ProjectId.Canonicalize(projectId);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
                 MemorySql.InsertProject,
                 new { id = canonical, name, createdAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                cancellationToken: cancellationToken));
     }
 
     /// <inheritdoc />
@@ -26,13 +25,12 @@ public sealed partial class SqliteMemoryStore : IProjectRegistry
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         var canonical = ProjectId.Canonicalize(projectId);
 
-        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken).ConfigureAwait(false);
-        await MemorySchema.EnsureCheapAsync(connection, cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
+        await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 MemorySql.ProjectIsRegistered,
                 new { projectId = canonical },
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                cancellationToken: cancellationToken)) > 0;
     }
 
     /// <inheritdoc />
@@ -41,12 +39,11 @@ public sealed partial class SqliteMemoryStore : IProjectRegistry
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         var canonical = ProjectId.Canonicalize(projectId);
 
-        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken).ConfigureAwait(false);
-        await MemorySchema.EnsureCheapAsync(connection, cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
+        await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 MemorySql.ProjectHasRows,
                 new { projectId = canonical },
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                cancellationToken: cancellationToken)) > 0;
     }
 }

@@ -93,10 +93,10 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     /// </summary>
     public async Task ReconcileOnceAsync(CancellationToken cancellationToken = default)
     {
-        await Hosted.ReconcileAsync(cancellationToken).ConfigureAwait(false);
+        await Hosted.ReconcileAsync(cancellationToken);
         if (CatchUp.LastScan is { } scan)
         {
-            await scan.ConfigureAwait(false);
+            await scan;
         }
     }
 
@@ -104,7 +104,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     public async Task RunTickAsync(CancellationToken cancellationToken = default)
     {
         TimeProvider.Advance(WatchPipeline.TickInterval);
-        await Pipeline.TickOnceAsync(cancellationToken).ConfigureAwait(false);
+        await Pipeline.TickOnceAsync(cancellationToken);
     }
 
     /// <summary>
@@ -117,7 +117,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
     {
         var fakeStart = TimeProvider.GetUtcNow();
         var steps = 0;
-        while (!await condition().WaitAsync(cancellationToken).ConfigureAwait(false))
+        while (!await condition().WaitAsync(cancellationToken))
         {
             var fakeSpent = TimeProvider.GetUtcNow() - fakeStart;
             if (fakeSpent >= TimeSpan.FromSeconds(maxFakeSeconds))
@@ -130,8 +130,8 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
 
             steps++;
             TimeProvider.Advance(TimeSpan.FromMilliseconds(100));
-            await Pipeline.TickOnceAsync(cancellationToken).ConfigureAwait(false);
-            await Task.Delay(FakeClockPoller.EventDeliveryPause, cancellationToken).ConfigureAwait(false);
+            await Pipeline.TickOnceAsync(cancellationToken);
+            await Task.Delay(FakeClockPoller.EventDeliveryPause, cancellationToken);
         }
 
         return true;
@@ -189,7 +189,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
                      WatchConfigKeys.ConcurrencyProject(projectId), WatchConfigKeys.ConcurrencyGlobal
                  })
         {
-            values[key] = await Store.GetSettingAsync(key, cancellationToken).ConfigureAwait(false);
+            values[key] = await Store.GetSettingAsync(key, cancellationToken);
         }
 
         return WatchConfig.Resolve(projectId, key => values.GetValueOrDefault(key));

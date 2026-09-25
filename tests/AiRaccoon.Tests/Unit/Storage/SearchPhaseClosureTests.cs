@@ -115,7 +115,7 @@ public sealed class SearchPhaseClosureTests : IDisposable
         var store = SearchTimingsHarness.CreateStore(_factory, clock,
             new SearchTimingsHarness.VectorEmbedderStub(() => clock.Advance(EmbedCost)));
         var result = await store.SearchAsync(new SearchQuery("proj-1", "widgets"),
-            TestContext.Current.CancellationToken).ConfigureAwait(false);
+            TestContext.Current.CancellationToken);
         return result.Timings;
     }
 }

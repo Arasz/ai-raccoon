@@ -232,7 +232,9 @@ public sealed class Vec0PartitionKeyDemotionTests
                 """,
                 new
                 {
-                    hash = $"h{projectId}-{seed}", path = $"{projectId}-{seed}.md", projectId,
+                    hash = $"h{projectId}-{seed}",
+                    path = $"{projectId}-{seed}.md",
+                    projectId,
                     vec = EmbeddingBlob.ToBytes(Vector(seed, dimension))
                 },
                 cancellationToken: TestContext.Current.CancellationToken));

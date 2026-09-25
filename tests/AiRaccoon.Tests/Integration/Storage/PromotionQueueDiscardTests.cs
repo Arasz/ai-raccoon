@@ -57,11 +57,10 @@ public sealed class PromotionQueueDiscardTests : IDisposable
 
     private async Task<long> SharedRowCountAsync(CancellationToken cancellationToken)
     {
-        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _factory.OpenBankAsync(cancellationToken);
         return await connection.ExecuteScalarAsync<long>(
                 new CommandDefinition("SELECT count(*) FROM entries WHERE scope = 'shared'",
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
     }
 
     /// <summary>G3: after a discard is remembered, an upsert of the same hash is refused — the
@@ -262,13 +261,12 @@ public sealed class PromotionQueueDiscardTests : IDisposable
 
     private async Task<long> DiscardCountAsync(string projectId, CancellationToken cancellationToken)
     {
-        await using var connection = await _factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _factory.OpenBankAsync(cancellationToken);
         return await connection.ExecuteScalarAsync<long>(
                 new CommandDefinition(
                     "SELECT count(*) FROM promotion_discards WHERE project_id = @ProjectId",
                     new { ProjectId = projectId },
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
     }
 
     private async Task<string> SingleEntryHashAsync(string projectId, string sourceFile)

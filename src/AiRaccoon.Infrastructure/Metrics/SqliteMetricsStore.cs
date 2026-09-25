@@ -63,15 +63,15 @@ public sealed partial class SqliteMetricsStore(ISqliteConnectionFactory factory,
             return;
         }
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         foreach (var measurement in allowed)
         {
             await connection.ExecuteAsync(new CommandDefinition(InsertSql, ToParameters(measurement), transaction,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+                cancellationToken: cancellationToken));
         }
 
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private static object ToParameters(Measurement measurement) =>

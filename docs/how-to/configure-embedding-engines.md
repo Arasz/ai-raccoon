@@ -141,7 +141,7 @@ for a downloaded (non-bundled) model is a no-op: no rewritten graph exists for i
 keeps running wherever `auto`/`gpu`/`cpu` already put it.
 
 An MLX session pads each row to the next multiple of 64 tokens and caps MLX's buffer cache at
-512 MiB ([ADR-0113](../adr/0113-mlx-length-buckets-and-a-capped-buffer-cache.md)); vectors are
+512 MiB ([ADR-0114](../adr/0114-mlx-length-buckets-and-a-capped-buffer-cache.md)); vectors are
 unchanged. Without the cap, MLX keeps buffers for every row length it has run, and the process
 footprint (the Memory column in Activity Monitor, not RSS) can reach most of the machine's RAM
 during a re-embed. The server logs `MLX buffer cache capped at 512 MiB` once per MLX session, or a

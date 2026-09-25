@@ -287,9 +287,9 @@ public sealed class CommandFailureExitCodeTests
 
     private static ServerSettingsStore RespondingWith(HttpStatusCode status) =>
         new(new HttpClient(new StubHandler((_, _) => Task.FromResult(new HttpResponseMessage(status))))
-            {
-                BaseAddress = new Uri("http://127.0.0.1:1/")
-            },
+        {
+            BaseAddress = new Uri("http://127.0.0.1:1/")
+        },
             "test-token");
 
     private static Task<(int Exit, string Out, string Err)> RunWithStoreThrowing(Exception toThrow) =>

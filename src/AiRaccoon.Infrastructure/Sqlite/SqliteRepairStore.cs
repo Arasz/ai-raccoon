@@ -31,18 +31,18 @@ public sealed class SqliteRepairStore(
 {
     public async Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken).ConfigureAwait(false);
-        await MemorySchema.EnsureCheapAsync(connection, cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
+        await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
         return await new ReingestRepair(new ChunkPositionScanner(fileTypeMatcher, embeddingService))
-            .RunAsync(connection, store, false, cancellationToken).ConfigureAwait(false);
+            .RunAsync(connection, store, false, cancellationToken);
     }
 
     public async Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken).ConfigureAwait(false);
-        await MemorySchema.EnsureCheapAsync(connection, cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
+        await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
         return await new ChunkIndexRepair(fileTypeMatcher, embeddingService)
-            .RunAsync(connection, false, cancellationToken).ConfigureAwait(false);
+            .RunAsync(connection, false, cancellationToken);
     }
 
     /// <summary>
@@ -52,17 +52,16 @@ public sealed class SqliteRepairStore(
     /// </summary>
     public async Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken).ConfigureAwait(false);
-        await MemorySchema.EnsureCheapAsync(connection, cancellationToken).ConfigureAwait(false);
-        return await ProjectIdCensus.CollectAsync(connection, cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
+        await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
+        return await ProjectIdCensus.CollectAsync(connection, cancellationToken);
     }
 
     public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
                 new { kind = kind.ToKey(), requestedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds(), mapJson = projectIdsMapJson },
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                cancellationToken: cancellationToken));
     }
 }

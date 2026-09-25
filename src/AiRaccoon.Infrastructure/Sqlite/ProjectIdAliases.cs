@@ -66,16 +66,14 @@ public static partial class ProjectIdAliases
         {
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.InsertProjectIdAlias,
                     new { alias = entry.Alias, winner = (string?)entry.Canonical, kind = KindAlias, appliedAt },
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         }
 
         foreach (var dropped in map.Dropped)
         {
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.InsertProjectIdAlias,
                     new { alias = dropped, winner = (string?)null, kind = KindDrop, appliedAt },
-                    cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
         }
     }
 
@@ -89,8 +87,7 @@ public static partial class ProjectIdAliases
     {
         Guard.IsNotNull(connection);
         var rows = await connection.QueryAsync<AliasRow>(
-                new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken));
         var aliases = rows
             .Where(row => row.Kind == KindAlias && row.Winner is not null)
             .Select(row => new ProjectIdAliasEntry(row.Alias, row.Winner!))
@@ -114,15 +111,14 @@ public static partial class ProjectIdAliases
         Guard.IsNotNull(connection);
         Guard.IsNotNull(logger);
         var rows = (await connection.QueryAsync<AliasRow>(
-                new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken))
-            .ConfigureAwait(false)).ToList();
+                new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken))).ToList();
         var skipped = rows.Count(row => row.Kind == KindAlias && row.Winner is null);
         if (skipped > 0)
         {
             Log.SkippedNullWinnerAliasRows(logger, skipped);
         }
 
-        ProjectIdAliasMap.ReplaceDefault(await LoadAsync(connection, cancellationToken).ConfigureAwait(false));
+        ProjectIdAliasMap.ReplaceDefault(await LoadAsync(connection, cancellationToken));
     }
 
     private static partial class Log

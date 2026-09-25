@@ -149,7 +149,8 @@ public sealed class SingleProjectIdCensusTests : IDisposable
         (await ScalarAsync(connection, "SELECT count(*) FROM sync_tombstones WHERE project_id IN ('qa-noise-project', 'manual-sweep')", ct))
             .ShouldBe(2, "one tombstone per genuinely removed entry hash");
         (await ScalarAsync(connection, "SELECT count(*) FROM projects WHERE id IN ('qa-noise-project', 'manual-sweep', @retired)", ct, new { retired = RetiredGuid }))
-            .ShouldBe(0, "dropped and retired ids leave no registry rows");    }
+            .ShouldBe(0, "dropped and retired ids leave no registry rows");
+    }
 
     /// <summary>
     ///     D1 committed predicate: winner NULL-context bulk rows and NULL-scope workspace scratch survive

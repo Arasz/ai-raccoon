@@ -13,19 +13,18 @@ public sealed class SyncCloudStoreFactory(IMemoryStore store, ILoggerFactory log
 {
     public async Task<SyncOptions> ReadOptionsAsync(CancellationToken cancellationToken = default)
     {
-        var provider = await store.GetSettingAsync(SyncSettingsKeys.Provider, cancellationToken).ConfigureAwait(false);
-        var endpoint = await store.GetSettingAsync(SyncSettingsKeys.Endpoint, cancellationToken).ConfigureAwait(false);
-        var bucket = await store.GetSettingAsync(SyncSettingsKeys.Bucket, cancellationToken).ConfigureAwait(false);
-        var accessKey = await store.GetSettingAsync(SyncSettingsKeys.AccessKey, cancellationToken).ConfigureAwait(false);
-        var secretKey = await store.GetSettingAsync(SyncSettingsKeys.SecretKey, cancellationToken).ConfigureAwait(false);
-        var region = await store.GetSettingAsync(SyncSettingsKeys.Region, cancellationToken).ConfigureAwait(false);
-        var objectKey = await store.GetSettingAsync(SyncSettingsKeys.ObjectKey, cancellationToken).ConfigureAwait(false);
-        var connectionString = await store.GetSettingAsync(SyncSettingsKeys.ConnectionString, cancellationToken)
-            .ConfigureAwait(false);
-        var container = await store.GetSettingAsync(SyncSettingsKeys.Container, cancellationToken).ConfigureAwait(false);
-        var account = await store.GetSettingAsync(SyncSettingsKeys.AzureAccount, cancellationToken).ConfigureAwait(false);
+        var provider = await store.GetSettingAsync(SyncSettingsKeys.Provider, cancellationToken);
+        var endpoint = await store.GetSettingAsync(SyncSettingsKeys.Endpoint, cancellationToken);
+        var bucket = await store.GetSettingAsync(SyncSettingsKeys.Bucket, cancellationToken);
+        var accessKey = await store.GetSettingAsync(SyncSettingsKeys.AccessKey, cancellationToken);
+        var secretKey = await store.GetSettingAsync(SyncSettingsKeys.SecretKey, cancellationToken);
+        var region = await store.GetSettingAsync(SyncSettingsKeys.Region, cancellationToken);
+        var objectKey = await store.GetSettingAsync(SyncSettingsKeys.ObjectKey, cancellationToken);
+        var connectionString = await store.GetSettingAsync(SyncSettingsKeys.ConnectionString, cancellationToken);
+        var container = await store.GetSettingAsync(SyncSettingsKeys.Container, cancellationToken);
+        var account = await store.GetSettingAsync(SyncSettingsKeys.AzureAccount, cancellationToken);
         var s3Chain = bool.TryParse(
-            await store.GetSettingAsync(SyncSettingsKeys.S3Chain, cancellationToken).ConfigureAwait(false),
+            await store.GetSettingAsync(SyncSettingsKeys.S3Chain, cancellationToken),
             out _);
         return new SyncOptions
         {
@@ -45,7 +44,7 @@ public sealed class SyncCloudStoreFactory(IMemoryStore store, ILoggerFactory log
 
     public async Task<ICloudStore> CreateAsync(CancellationToken cancellationToken = default)
     {
-        var options = await ReadOptionsAsync(cancellationToken).ConfigureAwait(false);
+        var options = await ReadOptionsAsync(cancellationToken);
         if (!options.IsConfigured)
         {
             // Provider row present without its credential rows must not crash the ctor

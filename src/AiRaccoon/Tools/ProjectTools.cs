@@ -28,13 +28,13 @@ public sealed class ProjectTools(
         string? name = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireBankAvailableAsync(TnProjectIdTokenGet, cancellationToken).ConfigureAwait(false);
+        await gate.RequireBankAvailableAsync(TnProjectIdTokenGet, cancellationToken);
 
         var projectId = Guid.CreateVersion7().ToString("D");
-        await registry.RegisterAsync(projectId, name, cancellationToken).ConfigureAwait(false);
+        await registry.RegisterAsync(projectId, name, cancellationToken);
 
         var result = new ProjectIdTokenResult(projectId, Instructions);
-        return await gate.WrapAsync(projectId, result, cancellationToken).ConfigureAwait(false);
+        return await gate.WrapAsync(projectId, result, cancellationToken);
     }
 
     [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]

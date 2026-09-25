@@ -14,11 +14,10 @@ public sealed partial class SqliteMemoryStore
     /// <inheritdoc />
     public async Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken).ConfigureAwait(false);
-        await MemorySchema.EnsureCheapAsync(connection, cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
+        await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken)) > 0;
     }
 
     /// <inheritdoc />
@@ -31,9 +30,8 @@ public sealed partial class SqliteMemoryStore
             ArgumentException.ThrowIfNullOrWhiteSpace(model);
         }
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await embedder.StartMigrationAsync(connection, provider, model, baseUrl, timeProvider.GetUtcNow(),
-                cancellationToken)
-            .ConfigureAwait(false);
+                cancellationToken);
     }
 }

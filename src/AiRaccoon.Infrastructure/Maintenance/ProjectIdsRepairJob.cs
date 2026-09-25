@@ -53,23 +53,20 @@ public sealed partial class ProjectIdsRepairJob(
 
     public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(MemorySql.HasOpenRepairRequest,
-                new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken)) > 0;
 
     /// <summary>Folds with the request's stored one-shot map (null/empty means the empty map), re-derives chunk positions, then marks the request finished. No open request means no work: returns false without touching the bank. The plan is derived from a live census at apply time — never a replay of the CLI's dry-run plan (concurrent writes between diagnose and apply re-plan).</summary>
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var open = await connection.ExecuteScalarAsync<long>(new CommandDefinition(MemorySql.HasOpenRepairRequest,
-                    new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken))
-                .ConfigureAwait(false) > 0;
+                    new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken)) > 0;
         if (!open)
         {
             return false;
         }
 
         var mapJson = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(MemorySql.SelectOpenRepairMapJson,
-                    new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken));
         ProjectIdAliasMap map;
         try
         {
@@ -84,36 +81,35 @@ public sealed partial class ProjectIdsRepairJob(
         }
 
         var plan = ProjectIdsFoldPlan.FromCensus(
-            await ProjectIdCensus.CollectAsync(connection, cancellationToken).ConfigureAwait(false),
+            await ProjectIdCensus.CollectAsync(connection, cancellationToken),
             map);
         var createdWork = false;
         var moved = 0;
         if (!plan.IsEmpty)
         {
             var result = await new ProjectIdsRepair(timeProvider)
-                .ApplyAsync(connection, plan, cancellationToken).ConfigureAwait(false);
+                .ApplyAsync(connection, plan, cancellationToken);
             moved = result.TotalChanges;
             createdWork = moved > 0;
         }
 
         var chunks = await new ChunkIndexRepair(fileTypeMatcher, embeddingService)
-            .RunAsync(connection, true, cancellationToken).ConfigureAwait(false);
+            .RunAsync(connection, true, cancellationToken);
         createdWork = createdWork || chunks.RowsRepositioned > 0 || chunks.RowsSetToUnknown > 0;
         // Package D (D4 storage): persist the applied one-shot map on success — append-only,
         // alias-PK first-writer-wins, rows immutable thereafter (see ProjectIdAliases).
         await ProjectIdAliases.PersistAppliedAsync(connection, map,
-                timeProvider.GetUtcNow().ToUnixTimeSeconds(), cancellationToken).ConfigureAwait(false);
+                timeProvider.GetUtcNow().ToUnixTimeSeconds(), cancellationToken);
         // Package E1 (reload on map change): the same process's choke-point cache must see the
         // just-applied map — otherwise the post-apply probe (D6 iv) hits a stale Default and a
         // retired id is accepted until a restart. LoadAndCache reads the table we just wrote.
-        await ProjectIdAliases.LoadAndCacheAsync(connection, _logger, cancellationToken).ConfigureAwait(false);
+        await ProjectIdAliases.LoadAndCacheAsync(connection, _logger, cancellationToken);
         Log.PassApplied(_logger, plan.Folds.Count, plan.Dropped.Count, plan.RetiredProjects.Count,
             moved, chunks.RowsRepositioned + chunks.RowsSetToUnknown);
 
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
                 new { kind = RepairKinds.ProjectIds, finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                cancellationToken: cancellationToken));
 
         return createdWork;
     }

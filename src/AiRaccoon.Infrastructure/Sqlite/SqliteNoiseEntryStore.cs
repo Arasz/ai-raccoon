@@ -16,7 +16,7 @@ public sealed class SqliteNoiseEntryStore(ISqliteConnectionFactory factory) : IN
         Guard.IsNotNull(request);
         Guard.IsNotNullOrWhiteSpace(policyName);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(
                 new CommandDefinition(NoiseEntrySql.Insert,
                     new
@@ -27,16 +27,14 @@ public sealed class SqliteNoiseEntryStore(ISqliteConnectionFactory factory) : IN
                         DetectedByPolicy = policyName,
                         ExpiresAt = expiresAtUnixSeconds,
                         CreatedAt = nowUnixSeconds
-                    }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    }, cancellationToken: cancellationToken));
     }
 
     public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         var rows = await connection.QueryAsync<PolicyCount>(
-                new CommandDefinition(NoiseEntrySql.CountByPolicy, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition(NoiseEntrySql.CountByPolicy, cancellationToken: cancellationToken));
 
         var byPolicy = rows.ToDictionary(r => r.Policy, r => r.Count, StringComparer.Ordinal);
         return new NoiseEntrySummary(byPolicy.Values.Sum(), byPolicy);
@@ -44,19 +42,17 @@ public sealed class SqliteNoiseEntryStore(ISqliteConnectionFactory factory) : IN
 
     public async Task<IReadOnlyList<NoiseEntry>> ListRecentAsync(int limit, CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         var rows = await connection.QueryAsync<NoiseEntry>(
-                new CommandDefinition(NoiseEntrySql.SelectRecent, new { Limit = limit }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition(NoiseEntrySql.SelectRecent, new { Limit = limit }, cancellationToken: cancellationToken));
         return rows.ToList();
     }
 
     public async Task<int> PurgeExpiredAsync(long nowUnixSeconds, CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection.ExecuteAsync(
-                new CommandDefinition(NoiseEntrySql.DeleteExpired, new { Now = nowUnixSeconds }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                new CommandDefinition(NoiseEntrySql.DeleteExpired, new { Now = nowUnixSeconds }, cancellationToken: cancellationToken));
     }
 
     // A plain class, not a record: SQLite's count(*) comes back Int64, and Dapper's constructor

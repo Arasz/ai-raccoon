@@ -71,8 +71,8 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         Guard.IsNotNull(connection);
         Guard.IsNotNull(plan);
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        var vecInvalidated = await InvalidateVecAsync(connection, plan, cancellationToken).ConfigureAwait(false);
-        var codeVecInvalidated = await InvalidateCodeVecAsync(connection, plan, cancellationToken).ConfigureAwait(false);
+        var vecInvalidated = await InvalidateVecAsync(connection, plan, cancellationToken);
+        var codeVecInvalidated = await InvalidateCodeVecAsync(connection, plan, cancellationToken);
         // Queue BEFORE entries (review MUST-1, H5 under the broadened predicate): the entries-dedup
         // DELETE below fires promotion_queue_entries_ad, which eats queue rows still keyed by the
         // loser id — the normal production shape is a queue hash that IS an entries hash, so folding
@@ -82,20 +82,20 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         // the trigger fires every surviving candidate is winner-keyed and its OLD.project_id = loser
         // predicate matches nothing.
         var (queueMerged, queueMoved, queueRemoved) =
-            await FoldQueueAsync(connection, plan, cancellationToken).ConfigureAwait(false);
+            await FoldQueueAsync(connection, plan, cancellationToken);
         var (entriesMoved, entriesDeduped, entriesTombstoned) =
-            await FoldEntriesAsync(connection, plan, now, cancellationToken).ConfigureAwait(false);
-        var (codeMoved, codeDeduped) = await FoldCodeAsync(connection, plan, cancellationToken).ConfigureAwait(false);
-        var discardsMoved = await FoldDiscardsAsync(connection, plan, cancellationToken).ConfigureAwait(false);
-        var qualityMoved = await FoldQualityAsync(connection, plan, cancellationToken).ConfigureAwait(false);
+            await FoldEntriesAsync(connection, plan, now, cancellationToken);
+        var (codeMoved, codeDeduped) = await FoldCodeAsync(connection, plan, cancellationToken);
+        var discardsMoved = await FoldDiscardsAsync(connection, plan, cancellationToken);
+        var qualityMoved = await FoldQualityAsync(connection, plan, cancellationToken);
         var (metricsMoved, noiseMoved) =
-            await FoldTelemetryAsync(connection, plan, cancellationToken).ConfigureAwait(false);
-        var watchesMoved = await FoldWatchesAsync(connection, plan, cancellationToken).ConfigureAwait(false);
-        var settingsRenamed = await FoldSettingsAsync(connection, plan, cancellationToken).ConfigureAwait(false);
+            await FoldTelemetryAsync(connection, plan, cancellationToken);
+        var watchesMoved = await FoldWatchesAsync(connection, plan, cancellationToken);
+        var settingsRenamed = await FoldSettingsAsync(connection, plan, cancellationToken);
         var (projectsEnsured, projectsRemoved) =
-            await FoldProjectsAsync(connection, plan, now, cancellationToken).ConfigureAwait(false);
+            await FoldProjectsAsync(connection, plan, now, cancellationToken);
         var tombstonesRewritten =
-            await FoldTombstonesAsync(connection, plan, cancellationToken).ConfigureAwait(false);
+            await FoldTombstonesAsync(connection, plan, cancellationToken);
         return new ProjectIdsRepairResult(entriesMoved, entriesDeduped, codeMoved, codeDeduped,
             queueMerged, queueMoved, queueRemoved, discardsMoved, qualityMoved, watchesMoved, settingsRenamed,
             projectsEnsured, projectsRemoved, tombstonesRewritten, entriesTombstoned,
@@ -127,7 +127,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                           AND {ProjectRows.CommittedScope("", "loser")}
                         """,
                         new { loser = fold.Loser }, cancellationToken: cancellationToken)),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
         }
 
         return total;
@@ -147,7 +147,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                         WHERE embed_state = 'embedded' AND project_id = @loser
                         """,
                         new { loser = fold.Loser }, cancellationToken: cancellationToken)),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
         }
 
         return total;
@@ -183,14 +183,12 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                                 AND w.scope = entries.scope
                                 AND COALESCE(w.context_label, '') = COALESCE(entries.context_label, ''))
                         """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepDeleted = await connection.ExecuteAsync(new CommandDefinition(
                         "DELETE FROM entries WHERE " + ProjectRows.CommittedScope("", "loser"),
-                        new { loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
                 return (Moved: stepMoved, Deleted: stepDeleted);
-            }, cancellationToken).ConfigureAwait(false);
+            }, cancellationToken);
             moved += step.Moved;
             deduped += step.Deleted;
         }
@@ -205,14 +203,12 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                         SELECT project_id, hash, scope, context_label, @now FROM entries
                         WHERE project_id = @dropped AND scope IN ('project', 'custom', 'shared')
                         """,
-                        new { dropped, now }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { dropped, now }, cancellationToken: cancellationToken));
                 var stepDeleted = await connection.ExecuteAsync(new CommandDefinition(
                         "DELETE FROM entries WHERE project_id = @dropped AND scope IN ('project', 'custom', 'shared')",
-                        new { dropped }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { dropped }, cancellationToken: cancellationToken));
                 return (Tombstoned: stepTombstoned, Deleted: stepDeleted);
-            }, cancellationToken).ConfigureAwait(false);
+            }, cancellationToken);
             tombstoned += step.Tombstoned;
             deduped += step.Deleted;
         }
@@ -241,14 +237,12 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                               WHERE w.project_id = @winner
                                 AND w.path = code_entries.path AND w.hash = code_entries.hash)
                         """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepDeleted = await connection.ExecuteAsync(new CommandDefinition(
                         "DELETE FROM code_entries WHERE project_id = @loser",
-                        new { loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
                 return (Moved: stepMoved, Deduped: stepDeleted);
-            }, cancellationToken).ConfigureAwait(false);
+            }, cancellationToken);
             moved += step.Moved;
             deduped += step.Deduped;
         }
@@ -258,7 +252,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             deduped += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM code_entries WHERE project_id = @dropped",
                         new { dropped }, cancellationToken: cancellationToken)),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
         }
 
         return new CodeFold(moved, deduped);
@@ -292,8 +286,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                           AND EXISTS (SELECT 1 FROM promotion_queue l
                                       WHERE l.project_id = @loser AND l.hash = w.hash)
                         """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
                         """
                         UPDATE promotion_queue SET project_id = @winner
@@ -301,14 +294,12 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                           AND NOT EXISTS (SELECT 1 FROM promotion_queue w
                                           WHERE w.project_id = @winner AND w.hash = promotion_queue.hash)
                         """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepRemoved = await connection.ExecuteAsync(new CommandDefinition(
                         "DELETE FROM promotion_queue WHERE project_id = @loser",
-                        new { loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
                 return (Merged: stepMerged, Moved: stepMoved, Removed: stepRemoved);
-            }, cancellationToken).ConfigureAwait(false);
+            }, cancellationToken);
             merged += step.Merged;
             moved += step.Moved;
             removed += step.Removed;
@@ -319,7 +310,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             removed += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM promotion_queue WHERE project_id = @dropped",
                         new { dropped }, cancellationToken: cancellationToken)),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
         }
 
         return new QueueFold(merged, moved, removed);
@@ -343,13 +334,11 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                         INSERT OR IGNORE INTO promotion_discards (project_id, hash, discarded_at)
                         SELECT @winner, hash, discarded_at FROM promotion_discards WHERE project_id = @loser
                         """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 return await connection.ExecuteAsync(new CommandDefinition(
                         "DELETE FROM promotion_discards WHERE project_id = @loser",
-                        new { loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
-            }, cancellationToken).ConfigureAwait(false);
+                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
+            }, cancellationToken);
         }
 
         foreach (var dropped in plan.Dropped)
@@ -357,7 +346,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM promotion_discards WHERE project_id = @dropped",
                         new { dropped }, cancellationToken: cancellationToken)),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
         }
 
         return total;
@@ -372,7 +361,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
                     new CommandDefinition("UPDATE search_quality SET project_id = @winner WHERE project_id = @loser",
                         new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken)),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
         }
 
         // Dropped ids are test residue: their quality rows delete with them rather than floating
@@ -382,7 +371,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM search_quality WHERE project_id = @dropped",
                         new { dropped }, cancellationToken: cancellationToken)),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
         }
 
         return total;
@@ -406,14 +395,12 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             {
                 var stepMetrics = await connection.ExecuteAsync(new CommandDefinition(
                         "UPDATE metrics SET project_id = @winner WHERE project_id = @loser",
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepNoise = await connection.ExecuteAsync(new CommandDefinition(
                         "UPDATE noise_entries SET project_id = @winner WHERE project_id = @loser",
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 return (Metrics: stepMetrics, Noise: stepNoise);
-            }, cancellationToken).ConfigureAwait(false);
+            }, cancellationToken);
             metrics += step.Metrics;
             noise += step.Noise;
         }
@@ -445,14 +432,12 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                     var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
                             $"UPDATE {table} SET project_id = @winner WHERE project_id = @loser " +
                             $"AND NOT EXISTS (SELECT 1 FROM {table} w WHERE w.project_id = @winner AND w.path = {table}.path)",
-                            new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
+                            new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                     var stepRemoved = await connection.ExecuteAsync(new CommandDefinition(
                             $"DELETE FROM {table} WHERE project_id = @loser",
-                            new { loser = fold.Loser }, cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
+                            new { loser = fold.Loser }, cancellationToken: cancellationToken));
                     return stepMoved + stepRemoved;
-                }, cancellationToken).ConfigureAwait(false);
+                }, cancellationToken);
             }
 
             foreach (var dropped in plan.Dropped)
@@ -460,7 +445,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                 total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
                         new CommandDefinition($"DELETE FROM {table} WHERE project_id = @dropped",
                             new { dropped }, cancellationToken: cancellationToken)),
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken);
             }
         }
 
@@ -486,8 +471,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                 {
                     var loserExists = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                             "SELECT count(*) FROM settings WHERE key = @key",
-                            new { key = loserKey }, cancellationToken: cancellationToken))
-                        .ConfigureAwait(false) > 0;
+                            new { key = loserKey }, cancellationToken: cancellationToken)) > 0;
                     if (!loserExists)
                     {
                         continue;
@@ -495,26 +479,23 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
 
                     var winnerExists = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                             "SELECT count(*) FROM settings WHERE key = @key",
-                            new { key = winnerKey }, cancellationToken: cancellationToken))
-                        .ConfigureAwait(false) > 0;
+                            new { key = winnerKey }, cancellationToken: cancellationToken)) > 0;
                     if (winnerExists)
                     {
                         handled += await connection.ExecuteAsync(new CommandDefinition(
                                 "DELETE FROM settings WHERE key = @key",
-                                new { key = loserKey }, cancellationToken: cancellationToken))
-                            .ConfigureAwait(false);
+                                new { key = loserKey }, cancellationToken: cancellationToken));
                     }
                     else
                     {
                         handled += await connection.ExecuteAsync(new CommandDefinition(
                                 "UPDATE settings SET key = @winnerKey WHERE key = @loserKey",
-                                new { winnerKey, loserKey }, cancellationToken: cancellationToken))
-                            .ConfigureAwait(false);
+                                new { winnerKey, loserKey }, cancellationToken: cancellationToken));
                     }
                 }
 
                 return handled;
-            }, cancellationToken).ConfigureAwait(false);
+            }, cancellationToken);
         }
 
         foreach (var dropped in plan.Dropped)
@@ -523,7 +504,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM settings WHERE key IN @keys",
                         new { keys }, cancellationToken: cancellationToken)),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
         }
 
         return total;
@@ -564,12 +545,11 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                 {
                     count += await connection.ExecuteAsync(new CommandDefinition(
                             "INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (@winner, @winner, @now)",
-                            new { winner, now }, cancellationToken: cancellationToken))
-                        .ConfigureAwait(false);
+                            new { winner, now }, cancellationToken: cancellationToken));
                 }
 
                 return count;
-            }, cancellationToken).ConfigureAwait(false);
+            }, cancellationToken);
         }
 
         var removals = plan.Folds.Select(fold => fold.Loser)
@@ -582,7 +562,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             removed = await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM projects WHERE id IN @ids",
                         new { ids = removals }, cancellationToken: cancellationToken)),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
         }
 
         return new ProjectFold(ensured, removed);
@@ -613,8 +593,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                           AND EXISTS (SELECT 1 FROM sync_tombstones l
                                       WHERE l.project_id = @loser AND l.hash = w.hash AND l.scope = w.scope)
                         """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
                         """
                         UPDATE sync_tombstones SET project_id = @winner
@@ -624,14 +603,12 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
                               WHERE w.project_id = @winner
                                 AND w.hash = sync_tombstones.hash AND w.scope = sync_tombstones.scope)
                         """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepMerged = await connection.ExecuteAsync(new CommandDefinition(
                         "DELETE FROM sync_tombstones WHERE project_id = @loser",
-                        new { loser = fold.Loser }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
                 return stepMoved + stepMerged;
-            }, cancellationToken).ConfigureAwait(false);
+            }, cancellationToken);
         }
 
         // Created counts ride on the entries step (dropped deletes tombstone inline, next to the
@@ -643,19 +620,16 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     private static async Task<T> InWriteTransactionAsync<T>(SqliteConnection connection, Func<Task<T>> step,
         CancellationToken cancellationToken)
     {
-        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
-            var result = await step().ConfigureAwait(false);
-            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+            var result = await step();
+            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
             return result;
         }
         catch
         {
-            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }

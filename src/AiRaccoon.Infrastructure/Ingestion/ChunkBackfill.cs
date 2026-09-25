@@ -36,10 +36,9 @@ public sealed class ChunkBackfill(
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        var (budget, overlay, countTokens) = await BudgetAsync(connection, cancellationToken).ConfigureAwait(false);
+        var (budget, overlay, countTokens) = await BudgetAsync(connection, cancellationToken);
         var charsBefore = await connection.ExecuteScalarAsync<long?>(
-                new CommandDefinition("SELECT SUM(length(value)) FROM entries", cancellationToken: cancellationToken))
-            .ConfigureAwait(false) ?? 0;
+                new CommandDefinition("SELECT SUM(length(value)) FROM entries", cancellationToken: cancellationToken)) ?? 0;
 
         List<Row> rows =
         [
@@ -83,8 +82,7 @@ public sealed class ChunkBackfill(
                 .ToList();
 
             await TombstoneAndDeleteRowAsync(connection, row,
-                pieceHashes.Select(p => p.Hash).ToHashSet(StringComparer.Ordinal), now, cancellationToken)
-                .ConfigureAwait(false);
+                pieceHashes.Select(p => p.Hash).ToHashSet(StringComparer.Ordinal), now, cancellationToken);
 
             foreach (var (piece, hash) in pieceHashes)
             {
@@ -107,21 +105,18 @@ public sealed class ChunkBackfill(
                             // Position unknown here — the bank-wide recompute below fills it in.
                             chunkIndex = -1,
                             totalChunks = 0
-                        }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        }, cancellationToken: cancellationToken));
             }
         }
 
         if (!dryRun && replaced > 0)
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                    MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
         }
 
         var charsAfter = await connection.ExecuteScalarAsync<long?>(
-                new CommandDefinition("SELECT SUM(length(value)) FROM entries", cancellationToken: cancellationToken))
-            .ConfigureAwait(false) ?? 0;
+                new CommandDefinition("SELECT SUM(length(value)) FROM entries", cancellationToken: cancellationToken)) ?? 0;
         return new ChunkBackfillReport(rows.Count, replaced, pieces, charsBefore, charsAfter);
     }
 
@@ -135,29 +130,24 @@ public sealed class ChunkBackfill(
     private static async Task TombstoneAndDeleteRowAsync(SqliteConnection connection, Row row,
         IReadOnlySet<string> survivingHashes, long deletedAt, CancellationToken cancellationToken)
     {
-        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
             if (!survivingHashes.Contains(row.Hash))
             {
                 await connection.ExecuteAsync(new CommandDefinition(
                         MemorySql.TombstoneFromPredicate("id = @id"),
-                        new { id = row.Id, deletedAt }, cancellationToken: cancellationToken))
-                    .ConfigureAwait(false);
+                        new { id = row.Id, deletedAt }, cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(new CommandDefinition(
-                    "DELETE FROM entries WHERE id = @id", new { id = row.Id }, cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+                    "DELETE FROM entries WHERE id = @id", new { id = row.Id }, cancellationToken: cancellationToken));
 
-            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
         catch
         {
-            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken))
-                .ConfigureAwait(false);
+            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
             throw;
         }
     }
@@ -167,11 +157,9 @@ public sealed class ChunkBackfill(
     internal async Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var provider = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken));
         var model = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = 'embedding.model'", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                "SELECT value FROM settings WHERE key = 'embedding.model'", cancellationToken: cancellationToken));
         provider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
 
         var settings = new EmbeddingSettings(provider, model, null, null);

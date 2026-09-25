@@ -122,7 +122,7 @@ public sealed class EmbedSweepAfterJobsTests : IDisposable
                 VALUES (@hash, @path, @value, 'project', @projectId, 0, 0)
                 """,
                 new { hash = Guid.NewGuid().ToString("N"), path = "backfilled.md", value = "backfilled content", projectId },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+                cancellationToken: cancellationToken));
             return true;
         }
     }

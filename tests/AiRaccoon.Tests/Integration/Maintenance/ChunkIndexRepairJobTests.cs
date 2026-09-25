@@ -122,7 +122,12 @@ public sealed class ChunkIndexRepairJobTests : IDisposable
                 new
                 {
                     hash = ContentHash.Of(sourceFile, value),
-                    path = sourceFile, value, sourceFile, projectId = ProjectId, chunkIndex, totalChunks = rows.Length
+                    path = sourceFile,
+                    value,
+                    sourceFile,
+                    projectId = ProjectId,
+                    chunkIndex,
+                    totalChunks = rows.Length
                 });
         }
 

@@ -57,32 +57,31 @@ public sealed class SqliteCodeEngineStore(
 
         var fingerprint = embeddings.EngineFingerprint("local", fullPath, null);
 
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         try
         {
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
                 new { key = EmbeddingSettingsKeys.CodeModel, value = fullPath }, transaction,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+                cancellationToken: cancellationToken));
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
                 new { key = EmbeddingSettingsKeys.CodeEngine, value = fingerprint }, transaction,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+                cancellationToken: cancellationToken));
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
                 new { key = EmbeddingSettingsKeys.CodeDimensions, value = descriptor.Dimensions.ToString(CultureInfo.InvariantCulture) },
-                transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+                transaction, cancellationToken: cancellationToken));
 
-            await vecDimensions.ReconcileCodeAsync(connection, transaction, descriptor.Dimensions, cancellationToken).ConfigureAwait(false);
+            await vecDimensions.ReconcileCodeAsync(connection, transaction, descriptor.Dimensions, cancellationToken);
 
 
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.MarkAllCodeEmbeddedPending,
-                transaction: transaction, cancellationToken: cancellationToken)).ConfigureAwait(false);
+                transaction: transaction, cancellationToken: cancellationToken));
 
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken);
         }
         catch
         {
-            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            await transaction.RollbackAsync(CancellationToken.None);
             throw;
         }
 

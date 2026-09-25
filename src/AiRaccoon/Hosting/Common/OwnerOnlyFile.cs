@@ -168,7 +168,7 @@ internal static partial class OwnerOnlyFile
             catch (IOException)
             {
                 // Another process holds it; FileShare.None is enforced by the OS on Unix, not just in-process.
-                await Task.Delay(PollInterval, timeProvider, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(PollInterval, timeProvider, cancellationToken);
             }
         }
     }

@@ -28,7 +28,7 @@ public static class ProbeExtensions
             try
             {
                 return EncryptionKeyProbeResult.Success(
-                    await encryptionKeyResolver.ResolveAsync(cancellationToken).ConfigureAwait(false));
+                    await encryptionKeyResolver.ResolveAsync(cancellationToken));
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {

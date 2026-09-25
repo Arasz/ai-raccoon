@@ -33,7 +33,7 @@ public class FakeMemoryStore : IMemoryStore, ISettingsStore
     /// <summary>Forwards to <see cref="DeleteAsync" /> — see the remarks on this type.</summary>
     public virtual async Task<bool> DeleteInScopeAsync(string projectId, string hash, string scope,
         CancellationToken cancellationToken = default) =>
-        await DeleteAsync(projectId, hash, cancellationToken).ConfigureAwait(false) > 0;
+        await DeleteAsync(projectId, hash, cancellationToken) > 0;
 
     /// <summary>
     ///     Declared virtual here rather than left to IMemoryStore's default implementation: a

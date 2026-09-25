@@ -88,17 +88,17 @@ public sealed class DigestConvoyDoesNotStarveTheDrainTests : IDisposable
             {
                 try
                 {
-                    await using var connection = await _factory.OpenBankAsync(ct).ConfigureAwait(false);
+                    await using var connection = await _factory.OpenBankAsync(ct);
                     await connection.ExecuteAsync(new CommandDefinition(
-                        $"PRAGMA busy_timeout = {DrainBusyTimeoutMs}", cancellationToken: ct)).ConfigureAwait(false);
-                    await drainEmbedder.EmbedPendingBatchAsync(connection, 8, ct).ConfigureAwait(false);
+                        $"PRAGMA busy_timeout = {DrainBusyTimeoutMs}", cancellationToken: ct));
+                    await drainEmbedder.EmbedPendingBatchAsync(connection, 8, ct);
                 }
                 catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
                 {
                     busyErrors.Add(ex);
                 }
 
-                await Task.Delay(10, ct).ConfigureAwait(false);
+                await Task.Delay(10, ct);
             }
         }, ct);
 
@@ -119,8 +119,7 @@ public sealed class DigestConvoyDoesNotStarveTheDrainTests : IDisposable
     {
         try
         {
-            await store.ReplaceAsync("acme", file, $"hash-{Path.GetFileName(file)}", cancellationToken)
-                .ConfigureAwait(false);
+            await store.ReplaceAsync("acme", file, $"hash-{Path.GetFileName(file)}", cancellationToken);
         }
         catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
         {
@@ -157,9 +156,8 @@ public sealed class DigestConvoyDoesNotStarveTheDrainTests : IDisposable
         public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId,
             string path, string? context, CancellationToken cancellationToken)
         {
-            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-            return await inner.IngestFileAsync(connection, projectId, path, context, cancellationToken)
-                .ConfigureAwait(false);
+            await Task.Delay(delay, cancellationToken);
+            return await inner.IngestFileAsync(connection, projectId, path, context, cancellationToken);
         }
 
         public Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId,

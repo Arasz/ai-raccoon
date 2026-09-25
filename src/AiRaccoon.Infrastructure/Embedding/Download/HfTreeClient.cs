@@ -43,7 +43,7 @@ public sealed class HfTreeClient
         var url = $"{Endpoint}/api/models/{repoId}/tree/{revision}?recursive=true&expand=true";
         while (url is not null)
         {
-            using var response = await _http.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            using var response = await _http.GetAsync(url, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 throw new HfApiException(
@@ -51,7 +51,7 @@ public sealed class HfTreeClient
                     "Check the repo id and revision, then retry.", statusCode: response.StatusCode);
             }
 
-            var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
             entries.AddRange(ParseEntries(json, repoId, revision));
 
             url = NextLink(response);

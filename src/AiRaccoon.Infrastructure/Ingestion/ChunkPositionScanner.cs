@@ -72,11 +72,9 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
     public async Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var provider = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken));
         var model = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = 'embedding.model'", cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                "SELECT value FROM settings WHERE key = 'embedding.model'", cancellationToken: cancellationToken));
         provider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
 
         var settings = new EmbeddingSettings(provider, model, null, null);

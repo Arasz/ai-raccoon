@@ -147,8 +147,8 @@ public sealed class ModelDownloadService(
 
     public async Task<ModelDownloadResult> DownloadAsync(ModelDownloadRequest request, CancellationToken cancellationToken)
     {
-        var tree = await treeClient.GetTreeAsync(request.RepoId, request.Revision, cancellationToken).ConfigureAwait(false);
-        var rawFiles = await FetchProvenanceAsync(request, tree, cancellationToken).ConfigureAwait(false);
+        var tree = await treeClient.GetTreeAsync(request.RepoId, request.Revision, cancellationToken);
+        var rawFiles = await FetchProvenanceAsync(request, tree, cancellationToken);
 
         // Phase 1: glob-based plan (external data by filename pattern — nothing downloaded yet).
         var preliminary = planner.BuildPlan(request.RepoId, request.Revision, tree, rawFiles, null, request.ExplicitFiles);
@@ -170,7 +170,7 @@ public sealed class ModelDownloadService(
 
             // The ONNX stub must land before the protobuf probe can name its external data.
             var stub = preliminary.Files.Single(f => f.Path == preliminary.ModelFilePath);
-            await DownloadVerifiedAsync(request, stub, preliminary.ModelFilePath, targetDir, downloaded, cleanup, cancellationToken).ConfigureAwait(false);
+            await DownloadVerifiedAsync(request, stub, preliminary.ModelFilePath, targetDir, downloaded, cleanup, cancellationToken);
 
             var probe = probeReader.Read(File.ReadAllBytes(Path.Combine(targetDir, TargetPath(stub.Path, preliminary.ModelFilePath))));
             var plan = planner.BuildPlan(request.RepoId, request.Revision, tree, rawFiles, probe, request.ExplicitFiles);
@@ -183,7 +183,7 @@ public sealed class ModelDownloadService(
 
             foreach (var file in plan.Files.Where(f => f.Path != stub.Path))
             {
-                await DownloadVerifiedAsync(request, file, plan.ModelFilePath, targetDir, downloaded, cleanup, cancellationToken).ConfigureAwait(false);
+                await DownloadVerifiedAsync(request, file, plan.ModelFilePath, targetDir, downloaded, cleanup, cancellationToken);
             }
 
             if (plan.SpecialTokensPending)
@@ -205,7 +205,7 @@ public sealed class ModelDownloadService(
 
             plan = PoolingFromGraph(plan, outputRanks);
 
-            var manifestPath = await WriteManifestAsync(plan, targetDir, cancellationToken).ConfigureAwait(false);
+            var manifestPath = await WriteManifestAsync(plan, targetDir, cancellationToken);
             return new ModelDownloadResult(plan, targetDir, manifestPath, downloaded);
         }
         catch (Exception)
@@ -277,7 +277,7 @@ public sealed class ModelDownloadService(
             var candidate = TreeEntryAt(tree, modelDir, name);
             if (candidate is not null)
             {
-                rawFiles[candidate] = await FetchRawAsync(request, candidate, cancellationToken).ConfigureAwait(false);
+                rawFiles[candidate] = await FetchRawAsync(request, candidate, cancellationToken);
             }
         }
 
@@ -285,7 +285,7 @@ public sealed class ModelDownloadService(
         {
             if (tree.Any(e => e.Path == name))
             {
-                rawFiles[name] = await FetchRawAsync(request, name, cancellationToken).ConfigureAwait(false);
+                rawFiles[name] = await FetchRawAsync(request, name, cancellationToken);
             }
         }
 
@@ -307,7 +307,7 @@ public sealed class ModelDownloadService(
         byte[] bytes;
         try
         {
-            bytes = await downloader.GetAsync(ResolveUrl(request, path), cancellationToken).ConfigureAwait(false);
+            bytes = await downloader.GetAsync(ResolveUrl(request, path), cancellationToken);
         }
         catch (Exception ex) when (ex is HttpRequestException or EmptyDownloadException)
         {
@@ -339,7 +339,7 @@ public sealed class ModelDownloadService(
         var partPath = targetPath + ".part";
         try
         {
-            await DownloadToFileAsync(ResolveUrl(request, file.Path), partPath, cancellationToken).ConfigureAwait(false);
+            await DownloadToFileAsync(ResolveUrl(request, file.Path), partPath, cancellationToken);
             var actual = hasher.Sha256OfFile(partPath);
             if (expected is not null && !actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
             {
@@ -379,7 +379,7 @@ public sealed class ModelDownloadService(
         var pipeline = ResiliencePipelineFactory.CreateAssetDownloaderPipeline();
         await pipeline.ExecuteAsync(async ct =>
         {
-            using var response = await treeClient.Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            using var response = await treeClient.Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
             if (!response.IsSuccessStatusCode)
             {
                 throw new HttpRequestException(
@@ -388,16 +388,16 @@ public sealed class ModelDownloadService(
                     response.StatusCode);
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
             await using var file = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20);
-            await stream.CopyToAsync(file, ct).ConfigureAwait(false);
+            await stream.CopyToAsync(file, ct);
             if (file.Length == 0)
             {
                 throw new EmptyDownloadException($"{url} returned 0 bytes; nothing was downloaded to verify");
             }
 
             return response;
-        }, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken);
     }
 
     private void GuardSize(ModelDownloadPlan plan, ModelDownloadRequest request)
@@ -471,7 +471,7 @@ public sealed class ModelDownloadService(
         }
 
         var path = Path.Combine(targetDir, EmbeddingManifest.FileName);
-        await File.WriteAllTextAsync(path, manifestSerializer.Serialize(manifest), cancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(path, manifestSerializer.Serialize(manifest), cancellationToken);
         return path;
     }
 

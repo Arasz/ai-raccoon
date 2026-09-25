@@ -33,7 +33,7 @@ public sealed class QueryGuardService(ISettingsStore settings) : IQueryGuardServ
     public async Task<QueryGuardOutcome> EvaluateAsync(string projectId, string query,
         CancellationToken cancellationToken = default)
     {
-        var values = await settings.GetSettingsByPrefixAsync(SettingsPrefix, cancellationToken).ConfigureAwait(false);
+        var values = await settings.GetSettingsByPrefixAsync(SettingsPrefix, cancellationToken);
 
         var enabled = QueryGuardConfigKeys.ParseEnabled(values.GetValueOrDefault(QueryGuardConfigKeys.EnabledGlobal));
         if (!enabled)

@@ -27,8 +27,7 @@ internal static class WriteChunks
                         projectId = bucket.ProjectId,
                         contextLabel = bucket.ContextLabel,
                         workspaceId = bucket.WorkspaceId
-                    }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false) is not null;
+                    }, cancellationToken: cancellationToken)) is not null;
         if (exists)
         {
             return;
@@ -56,7 +55,6 @@ internal static class WriteChunks
                         chunkIndex = -1,
                         totalChunks = 0
                     },
-                    cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                    cancellationToken: cancellationToken));
     }
 }

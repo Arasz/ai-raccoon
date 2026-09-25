@@ -25,10 +25,9 @@ public sealed class ModelMigrationJob(IEntryEmbedder embedder) : IMaintenanceJob
 
     public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        await embedder.ReconcileFingerprintAsync(connection, cancellationToken).ConfigureAwait(false);
+        await embedder.ReconcileFingerprintAsync(connection, cancellationToken);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken)) > 0;
     }
 
     /// <summary>
@@ -38,7 +37,7 @@ public sealed class ModelMigrationJob(IEntryEmbedder embedder) : IMaintenanceJob
     /// </summary>
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        await embedder.DrainMigrationAsync(connection, cancellationToken).ConfigureAwait(false);
+        await embedder.DrainMigrationAsync(connection, cancellationToken);
 
         // Draining re-embeds everything itself; nothing is left pending for the general
         // memory_embed_pending sweep to pick up, so this never asks the pass to sweep again.

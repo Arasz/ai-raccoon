@@ -126,7 +126,7 @@ public static class TestData
             TestTelemetry.None, NullLogger<EmbedDrainService>.Instance);
         foreach (var request in pump.DrainUpTo(int.MaxValue))
         {
-            await service.DrainOnceAsync(request, cancellationToken).ConfigureAwait(false);
+            await service.DrainOnceAsync(request, cancellationToken);
         }
     }
 
@@ -146,12 +146,11 @@ public static class TestData
         ISqliteConnectionFactory factory, IEmbeddingService embeddings, string provider, string? model,
         string? baseUrl, CancellationToken cancellationToken, TimeProvider? clock = null)
     {
-        var config = await store.StartModelMigrationAsync(provider, model, baseUrl, cancellationToken)
-            .ConfigureAwait(false);
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        var config = await store.StartModelMigrationAsync(provider, model, baseUrl, cancellationToken);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
         var resolvedClock = clock ?? TimeProvider.System;
         var embedder = CreateEntryEmbedder(embeddings, new SqliteModelMigrationLease(resolvedClock), resolvedClock, new VecDimensionReconciler());
-        await embedder.DrainMigrationAsync(connection, cancellationToken).ConfigureAwait(false);
+        await embedder.DrainMigrationAsync(connection, cancellationToken);
         return config;
     }
 
@@ -271,7 +270,7 @@ public static class TestData
     public static async Task SeedBankAsync(InfrastructureOptions options, CancellationToken cancellationToken = default)
     {
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
     }
 
     /// <summary>A fresh <see cref="CreateTempRoot" /> with a real bank already seeded at it (User
@@ -279,7 +278,7 @@ public static class TestData
     public static async Task<string> CreateTempRootWithBankAsync(string prefix = "ai-raccoon-tests", CancellationToken cancellationToken = default)
     {
         var root = CreateTempRoot(prefix);
-        await SeedBankAsync(CreateInfrastructureOptions(root), cancellationToken).ConfigureAwait(false);
+        await SeedBankAsync(CreateInfrastructureOptions(root), cancellationToken);
         return root;
     }
 
@@ -290,7 +289,7 @@ public static class TestData
     public static void DeleteTempRoot(string path)
     {
         var delay = DeleteTempRootFirstDelay;
-        for (var attempt = 1;; attempt++)
+        for (var attempt = 1; ; attempt++)
         {
             try
             {
@@ -367,8 +366,7 @@ public static class TestData
         }
 
         Directory.CreateDirectory(scratchDir);
-        var bytes = await new AssetDownloader(new HttpClient()).GetAsync(SentencePieceFixtureUrl, cancellationToken)
-            .ConfigureAwait(false);
+        var bytes = await new AssetDownloader(new HttpClient()).GetAsync(SentencePieceFixtureUrl, cancellationToken);
         var actual = Convert.ToHexString(SHA256.HashData(bytes));
         if (!actual.Equals(SentencePieceFixtureSha256, StringComparison.OrdinalIgnoreCase))
         {
@@ -376,7 +374,7 @@ public static class TestData
                 $"sentencepiece fixture download failed sha verification: expected {SentencePieceFixtureSha256}, got {actual}");
         }
 
-        await File.WriteAllBytesAsync(target, bytes, cancellationToken).ConfigureAwait(false);
+        await File.WriteAllBytesAsync(target, bytes, cancellationToken);
         return target;
     }
 

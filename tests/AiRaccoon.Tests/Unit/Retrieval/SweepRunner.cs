@@ -41,7 +41,7 @@ public static class SweepRunner
 
             foreach (var query in queries)
             {
-                var ranked = await rankSource(point, query, cancellationToken).ConfigureAwait(false);
+                var ranked = await rankSource(point, query, cancellationToken);
                 var relevant = query.RelevantDocIds.ToHashSet(StringComparer.Ordinal);
                 ndcg10.Add(RetrievalMetrics.NdcgAtK(ranked, relevant, 10));
                 ndcg20.Add(RetrievalMetrics.NdcgAtK(ranked, relevant, 20));

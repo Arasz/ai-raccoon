@@ -76,7 +76,7 @@ public sealed class ReferenceAssets
         {
             cancellationToken.ThrowIfCancellationRequested();
             var target = TargetPath(asset);
-            var source = await EnsureAssetAsync(asset, target, http, cancellationToken).ConfigureAwait(false);
+            var source = await EnsureAssetAsync(asset, target, http, cancellationToken);
             if (source is not null && Sha256Of(target).Equals(asset.Sha256, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
@@ -114,14 +114,14 @@ public sealed class ReferenceAssets
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            var bytes = await new AssetDownloader(http).GetAsync(asset.Url, cancellationToken).ConfigureAwait(false);
+            var bytes = await new AssetDownloader(http).GetAsync(asset.Url, cancellationToken);
             if (asset.IsArchive)
             {
                 ExtractModule(bytes, asset, target);
             }
             else
             {
-                await File.WriteAllBytesAsync(target, bytes, cancellationToken).ConfigureAwait(false);
+                await File.WriteAllBytesAsync(target, bytes, cancellationToken);
             }
 
             return $"download:{asset.Url}";

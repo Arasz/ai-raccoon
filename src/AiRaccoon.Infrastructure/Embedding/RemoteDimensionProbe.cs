@@ -22,8 +22,7 @@ public sealed class RemoteDimensionProbe(IEmbeddingService embeddings) : IRemote
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(model);
         using var generator = embeddings.CreateGenerator(new EmbeddingSettings("openai", model, baseUrl, apiKey));
-        var result = await generator.GenerateAsync([ProbeText], cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        var result = await generator.GenerateAsync([ProbeText], cancellationToken: cancellationToken);
         return result[0].Vector.Length;
     }
 }

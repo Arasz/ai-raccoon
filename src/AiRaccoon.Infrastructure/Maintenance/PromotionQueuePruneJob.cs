@@ -25,20 +25,17 @@ public sealed class PromotionQueuePruneJob(TimeProvider timeProvider) : IMainten
 
     public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                MemorySql.HasOpenPromotionQueuePruneRequest, cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                MemorySql.HasOpenPromotionQueuePruneRequest, cancellationToken: cancellationToken)) > 0;
 
     /// <summary>Deletes the orphaned rows, then marks the request finished. Pure DELETE — never leaves anything pending for embedding.</summary>
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(new CommandDefinition(PromotionQueueSql.DeleteOrphans,
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                cancellationToken: cancellationToken));
 
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishPromotionQueuePruneRequest,
                 new { finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                cancellationToken: cancellationToken));
 
         return false;
     }

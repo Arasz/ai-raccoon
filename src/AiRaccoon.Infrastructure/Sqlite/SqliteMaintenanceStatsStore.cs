@@ -12,7 +12,7 @@ public sealed class SqliteMaintenanceStatsStore(ISqliteConnectionFactory factory
 {
     public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         long PageSize()
         {
@@ -46,8 +46,8 @@ public sealed class SqliteMaintenanceStatsStore(ISqliteConnectionFactory factory
         await using (var checkpoint = connection.CreateCommand())
         {
             checkpoint.CommandText = "PRAGMA wal_checkpoint(PASSIVE)";
-            await using var reader = await checkpoint.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            await using var reader = await checkpoint.ExecuteReaderAsync(cancellationToken);
+            await reader.ReadAsync(cancellationToken);
             uncheckpointedFrames = reader.GetInt64(1);
         }
 

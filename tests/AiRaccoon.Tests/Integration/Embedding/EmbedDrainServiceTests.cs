@@ -312,7 +312,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
 
             if (Gate is not null)
             {
-                await Gate().ConfigureAwait(false);
+                await Gate();
             }
 
             return RowsToReturn;
@@ -362,7 +362,7 @@ public sealed class EmbedDrainServiceTests : IDisposable
 
             if (Gate is not null)
             {
-                await Gate().ConfigureAwait(false);
+                await Gate();
             }
 
             return RowsToReturn;

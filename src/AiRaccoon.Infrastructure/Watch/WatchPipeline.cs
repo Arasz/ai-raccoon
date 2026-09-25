@@ -160,8 +160,8 @@ public sealed partial class WatchPipeline(
         {
             try
             {
-                await Task.Delay(TickInterval, timeProvider, cancellationToken).ConfigureAwait(false);
-                await TickOnceAsync(cancellationToken).ConfigureAwait(false);
+                await Task.Delay(TickInterval, timeProvider, cancellationToken);
+                await TickOnceAsync(cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -217,8 +217,8 @@ public sealed partial class WatchPipeline(
             return;
         }
 
-        var concurrency = await ResolveConcurrencyAsync(jobs, cancellationToken).ConfigureAwait(false);
-        await scheduler.RunBatchAsync(jobs, concurrency, RunJobAsync, cancellationToken).ConfigureAwait(false);
+        var concurrency = await ResolveConcurrencyAsync(jobs, cancellationToken);
+        await scheduler.RunBatchAsync(jobs, concurrency, RunJobAsync, cancellationToken);
     }
 
     private async Task RunJobAsync(WatchJob job, CancellationToken cancellationToken)
@@ -227,8 +227,7 @@ public sealed partial class WatchPipeline(
         try
         {
             await executor.DigestAsync(evt.ProjectId, job.WatchPath, evt.Path, evt.Kind, evt.OldPath,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                    cancellationToken);
             retryPolicy.RecordSuccess(evt.ProjectId, job.WatchPath);
             lock (_gate)
             {
@@ -289,11 +288,9 @@ public sealed partial class WatchPipeline(
             {
                 [WatchConfigKeys.ConcurrencyProject(projectId)] =
                     await memoryStore.GetSettingAsync(WatchConfigKeys.ConcurrencyProject(projectId),
-                            cancellationToken)
-                        .ConfigureAwait(false),
+                            cancellationToken),
                 [WatchConfigKeys.ConcurrencyGlobal] =
                     await memoryStore.GetSettingAsync(WatchConfigKeys.ConcurrencyGlobal, cancellationToken)
-                        .ConfigureAwait(false)
             };
             result[projectId] = WatchConfig.Resolve(projectId, key => settings.GetValueOrDefault(key)).Concurrency;
         }

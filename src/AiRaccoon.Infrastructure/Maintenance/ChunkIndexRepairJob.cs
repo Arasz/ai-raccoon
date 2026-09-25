@@ -31,19 +31,17 @@ public sealed class ChunkIndexRepairJob(IFileTypeMatcher fileTypeMatcher, IEmbed
 
     public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(MemorySql.HasOpenRepairRequest,
-                new { kind = RepairKinds.ChunkIndex }, cancellationToken: cancellationToken))
-            .ConfigureAwait(false) > 0;
+                new { kind = RepairKinds.ChunkIndex }, cancellationToken: cancellationToken)) > 0;
 
     /// <summary>Re-scans and applies, then marks the request finished. Pure UPDATE — never leaves anything newly pending for embedding.</summary>
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         await new ChunkIndexRepair(fileTypeMatcher, embeddingService)
-            .RunAsync(connection, true, cancellationToken).ConfigureAwait(false);
+            .RunAsync(connection, true, cancellationToken);
 
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
                 new { kind = RepairKinds.ChunkIndex, finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                cancellationToken: cancellationToken))
-            .ConfigureAwait(false);
+                cancellationToken: cancellationToken));
 
         return false;
     }
