@@ -98,7 +98,7 @@ depends on the RID ([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16
 
 | RID | GPU providers tried, in order | Host dependencies |
 |---|---|---|
-| `osx-arm64` | `mlx` (opt-in) → WebGPU (built in) → CPU | None for WebGPU. MLX needs Apple Silicon and the plugin's native runtime, bundled only in this RID's package. |
+| `osx-arm64` | `mlx`/`coreml` (opt-in) → WebGPU (built in) → CPU | None for WebGPU. MLX needs Apple Silicon and the plugin's native runtime, bundled only in this RID's package. CoreML needs Apple Silicon and applies to the bundled model only. |
 | `win-x64` | `cuda` (opt-in) → WebGPU (bundled core) → CPU | WebGPU needs a GPU driver with D3D12 support. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
 | `win-arm64` | WebGPU (bundled core) → CPU | Same as win-x64. The CUDA provider only ships for x64, so `cuda` here refuses and falls through. |
 | `linux-x64` | `cuda` (opt-in) → WebGPU (bundled core) → CPU | WebGPU needs the Vulkan loader, `libvulkan.so.1` (`apt install libvulkan1` or the distro equivalent), plus the vendor's own Vulkan driver and its ICD manifest. Some NVIDIA containers mount the driver (`libGLX_nvidia.so.0`) without the manifest; add `~/.config/vulkan/icd.d/nvidia_icd.json` (see *Checking a Linux GPU host*) or the session runs on the CPU. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
@@ -125,6 +125,7 @@ ai-raccoon settings model device auto            # default: the bundled model on
 ai-raccoon settings model device gpu             # every local model on the GPU where the platform has one
 ai-raccoon settings model device cpu             # never the GPU
 ai-raccoon settings model device mlx             # bundled model only, osx-arm64 only — see below
+ai-raccoon settings model device coreml          # bundled model only, osx-arm64 only, Neural Engine — see below
 ai-raccoon settings model device cuda <path>      # every local model, opt-in, needs a provider library — see below
 ```
 
@@ -158,6 +159,38 @@ unchanged. Without the cap, MLX keeps buffers for every row length it has run, a
 footprint (the Memory column in Activity Monitor, not RSS) can reach most of the machine's RAM
 during a re-embed. The server logs `MLX buffer cache capped at 512 MiB` once per MLX session, or a
 warning if the cap could not be set.
+
+#### CoreML (opt-in, osx-arm64 only, the Neural Engine)
+
+`ai-raccoon settings model device coreml` ([ADR-0118](../adr/0118-opt-in-coreml-device-on-the-neural-engine.md))
+runs the bundled engine through the CoreML execution provider, on a graph re-exported for the
+Neural Engine (`model_fp16_ane.onnx`, 5.7 MB, shipped next to the CPU and MLX graphs). It applies
+to the bundled model only. A downloaded model ignores it and keeps running on the CPU, the same way
+it ignores `mlx`. Off osx-arm64 the setting is refused and the WebGPU-then-CPU chain runs instead,
+with the refusal named in the "execution provider" line (`WebGPU (CoreML refused: …)` or `CPU
+(CoreML refused: …)`).
+
+Reach for `coreml` when you want embedding work off the CPU and off WebGPU's GPU rail, on the
+Neural Engine instead. Measured on an M4, it costs 6-8% of MLX's CPU-seconds, at 0.49-0.57 GiB of
+phys+neural memory, with recall unchanged.
+
+**First run after opting in.** Four CoreML sessions compile in the background, one per length
+bucket (256, 512, 768 and 1024 tokens); every shipped chunk budget falls inside one of them.
+WebGPU keeps serving while they build. A cold compile takes about 35 seconds on an M4 for all four
+buckets together; a warm one, with the cache already populated, takes about 0.7 seconds. Once every
+bucket loads and passes a parity probe (cosine at least 0.999 against WebGPU on a fixed row), the
+switch happens and the WebGPU session is disposed. A failed load, a timeout, or a probe miss falls
+back to WebGPU with a logged reason (event 438), and there is no retry until the next restart. Rows
+longer than 1024 tokens run on a plain CPU session, never on a bucket.
+
+**Cache.** The compiled sessions live under `<data-root>/coreml-cache/`, about 808 MiB across the
+four buckets, with their state in `coreml-cache/status.json`. `ai-raccoon doctor` reports the
+device state and cache size: `coreml: <state> ... cache <N> MiB`.
+
+**Switching back.** `ai-raccoon settings model device auto` (or `gpu`, `cpu`, `mlx`) restores the
+previous chain on the next restart. The cache stays in place, so switching back to `coreml` later
+skips the compile. No bank re-embeds either way: CoreML's vectors match the CPU's inside the same
+parity bar WebGPU and MLX already meet.
 
 #### CUDA (opt-in, x64 only, run once on a Tesla T4)
 
