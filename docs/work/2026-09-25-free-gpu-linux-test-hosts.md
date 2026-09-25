@@ -81,6 +81,45 @@ https://github.com/oneilltomhq/three-rs/issues/18. Whether Dawn in the ORT plugi
 CPU-type adapter by default, and whether ORT's device list reports it as `GPU` for our
 `HardwareDevice.Type` filter, was not checked — either could make it a no-op.
 
+### F11 — On x64 CI, lavapipe reaches Dawn, and the WebGPU plugin then aborts the process [MEASURED]
+
+With `mesa-vulkan-drivers` installed on `ubuntu-latest`, `vulkaninfo` lists `llvmpipe` (CPU type).
+The runner's Hyper-V display passes our `HardwareDevice.Type == GPU` filter, and Dawn accepts the
+lavapipe adapter. The plugin session is built, then the test host aborts on the first run:
+`ortdevice.h:77 … Invalid memory type: -1`, SIGABRT, exit 134. That is onnxruntime#28329. It
+answers F8's open part (the adapter and the filter both pass on x64) and led to the 1.51.2 hotfix
+(#747), which turns the plugin off on Windows and Linux.
+
+**Evidence:** CI run 36078566359, job `build-slow`, step "WebGPU plugin on lavapipe", 2026-09-25T00:46Z.
+
+### F12 — On linux-arm64, ORT reports no GPU device, so lavapipe never reaches Dawn [MEASURED]
+
+In an `ubuntu:24.04` arm64 container with lavapipe installed, `vulkaninfo` lists `llvmpipe`, but the
+session is refused with `no WebGPU GPU device after registration`. ONNX Runtime's device discovery
+reads PCI/sysfs, not Vulkan, and the VM has no display device.
+
+**Evidence:** `scripts/gpu-host-probe.sh` in Docker `--platform linux/arm64 ubuntu:24.04` on an Apple M4, 2026-09-25, commit c9b644d.
+
+### F13 — onnxruntime-node's core runs built-in WebGPU on Linux x64 without aborting [MEASURED]
+
+onnxruntime-node 1.30.0 ships `libonnxruntime` from the same ORT commit as our managed package
+(`f2c39fe2f`) with WebGPU compiled in for linux-x64, win-x64 and win-arm64, but not linux-arm64.
+Swapped into the test bin on x64 CI with lavapipe, the session runs on `WebGPU`, its vectors match the
+CPU session's at cosine > 0.999, and two concurrent WebGPU sessions succeed. This is the workaround
+suggested on onnxruntime#28329.
+
+**Evidence:** CI run 36081136475, job `build-slow`, step "Built-in WebGPU with onnxruntime-node's core (experiment)" (PR #748): total 5, succeeded 3, skipped 2. `strings` on the npm package's `bin/napi-v6/*/libonnxruntime*`/`onnxruntime.dll`.
+
+### F14 — The first linux-arm64 run found three test-only portability bugs, and no product bug [MEASURED]
+
+The retrieval harness manifest pinned reference extensions only for osx-arm64 and linux-x64. The
+MiniLM golden's bit-exact check compared only the CPU architecture, so macOS-captured Arm64 bits
+were held against Linux Arm64 (384/384 differ). The search-envelope golden compared a cosine to the
+last bit (`0.71177268…` vs `0.71177273…`). All three are fixed in #746. The rest of the Fast (4283)
+and Slow suites passed on arm64.
+
+**Evidence:** PR #746 CI, job `build-arm64`, 2026-09-25.
+
 ### F9 — Kaggle/Colab/Lightning containers expose Vulkan [UNVERIFIED]
 
 NVIDIA containers often ship only the compute driver capabilities, without the Vulkan ICD JSON.
@@ -106,8 +145,10 @@ their own pages' summaries; prices were not read from a primary source.
 ## Still open
 
 - Does Kaggle's T4 container have a Vulkan ICD? Settle with `!vulkaninfo --summary` in a GPU notebook.
-- Does the ORT WebGPU plugin pick lavapipe, and does our GPU-type filter let it through? Settle with a
-  one-off CI run with `mesa-vulkan-drivers` installed.
+- Kaggle, Colab and Lightning were not run: no browser session or credentials were available to the
+  agent. `scripts/gpu-host-probe.sh` does the whole check in one cell; the owner runs it once per host.
+- Whether Windows D3D12 aborts like Linux under the plugin (inferred, same ORT code path), and whether
+  the node core's Windows build needs `DirectML.dll` at load time.
 - Kaggle's current driver (595.x / CUDA 13.2) is from a secondary source; `!nvidia-smi` settles it.
 - Can a .NET 10 global tool install and run inside a Kaggle/Colab session (no root issues, internet on)?
   Likely yes via `dotnet-install.sh`, not tried.
