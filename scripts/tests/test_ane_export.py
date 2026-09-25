@@ -183,3 +183,15 @@ def test_ane_graph_has_no_ops_the_coreml_ep_leaves_on_the_cpu(exported) -> None:
     ops = {node.op_type for node in model.graph.node}
 
     assert not ops & {"Einsum", "Neg"}
+
+
+def test_re_export_into_the_same_dir_does_not_grow_the_weights_file(exported) -> None:
+    # onnx.save_model appends external data to an existing file: a second export into the same
+    # dir left the first run's bytes in front of the second's, doubling the file on disk.
+    layout, dtype, out = exported
+    data = out / f"{MODEL_NAME}_data"
+    size_before = data.stat().st_size
+
+    _load_cli().export_model_dir(layout, out, MAX_LEN, dtype)
+
+    assert data.stat().st_size == size_before

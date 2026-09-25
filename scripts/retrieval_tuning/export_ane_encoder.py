@@ -74,6 +74,7 @@ def _export_onnx(module: torch.nn.Module, out: Path) -> None:
                               output_names=["last_hidden_state", "sentence_embedding"],
                               dynamic_axes=DYNAMIC_AXES, do_constant_folding=True)
         model = onnx.load(str(raw))
+    (out / f"{MODEL_NAME}_data").unlink(missing_ok=True)  # save_model appends to an existing data file
     onnx.save_model(model, str(out / MODEL_NAME), save_as_external_data=True, all_tensors_to_one_file=True,
                     location=f"{MODEL_NAME}_data", size_threshold=1024)
 
