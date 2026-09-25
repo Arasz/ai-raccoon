@@ -76,3 +76,11 @@ def test_library_dirs_finds_each_soname_once(tmp_path):
     dirs = probe.library_dirs(tmp_path, ["libcudart.so.13", "libcublas.so.13", "libcudnn.so.9", "libcurand.so.10"])
 
     assert dirs == [tmp_path / "nvidia" / "cu13" / "lib", tmp_path / "nvidia" / "cudnn" / "lib"]
+
+
+def test_nvidia_icd_manifest_names_the_library_and_parses_as_json():
+    import json
+
+    manifest = json.loads(probe.nvidia_icd_manifest())
+    assert manifest["ICD"]["library_path"] == "libGLX_nvidia.so.0"
+    assert manifest["file_format_version"] == "1.0.1"

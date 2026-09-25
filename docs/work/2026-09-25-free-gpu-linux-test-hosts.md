@@ -120,6 +120,35 @@ and Slow suites passed on arm64.
 
 **Evidence:** PR #746 CI, job `build-arm64`, 2026-09-25.
 
+### F15 — On a Lightning AI Tesla T4, the bundled WebGPU core and the opt-in CUDA provider both run [MEASURED]
+
+Lightning AI free Studio: x86_64, Ubuntu 24.04, Tesla T4, driver 580.178.04 (CUDA 13.0). The probe at
+main 567e92e (1.52.0) ran `BundledEngineGpuSessionTests` (4 passed, only the macOS test skipped, no
+`GPU refused` anywhere) and `BundledEngineCudaSessionTests` (5 passed, including
+`CudaLibraryConfigured_RunsOnCuda_WithTheCpuSessionsVectors`: provider `CUDA`, cosine ≥ 0.999 against
+the CPU). So on this host the CUDA plugin did **not** hit the onnxruntime#28329 abort. `vulkaninfo`
+found no device there, because the container mounts `libGLX_nvidia.so.0` without its ICD manifest,
+yet WebGPU still landed on the GPU. Which Dawn backend it used was not checked.
+
+**Evidence:** `scripts/gpu-host-probe.py` over SSH on the Studio, 2026-09-25; PROBE SUMMARY `webgpu: Passed! total 5, failed 0, succeeded 4, skipped 1`, `cuda: Passed! total 6, failed 0, succeeded 5, skipped 1`. With a user-level `nvidia_icd.json` in `VK_DRIVER_FILES`, `vulkaninfo --summary` lists `Tesla T4 (DISCRETE_GPU)`, driver NVIDIA 580.178.04.
+
+### F16 — The installed 1.52.0 tool embeds on WebGPU and about 4× faster than 1.51.2 on the same T4 [MEASURED]
+
+Same Studio and workload for both: `serve --idle-timeout 0` on a fresh bank, `model embedding set
+local`, then over the stdio MCP proxy 300 `memory_write` calls (each note is about 6× a 60-word
+sentence), one `memory_embed_pending`, and one `memory_search`. 1.51.2 from nuget.org logged `execution
+provider CPU (GPU refused: the WebGPU plugin aborts …)`, with the GPU at 0 % / 0 MiB. 1.52.0, packed
+from main 567e92e because it was not on nuget.org yet, logged `execution provider WebGPU`, with the GPU
+at 50–56 % / 169 MiB. There were no errors or aborts.
+
+```chart:bars
+title: seconds for 300 writes on a T4 (one run each)
+1.51.2 CPU: 111.2
+1.52.0 WebGPU: 26.4
+```
+
+**Evidence:** `mcp_drive.py` (session scratchpad) against ports 7731 (1.51.2) and 7732 (1.52.0) on the Studio, 2026-09-25, one run each. The drain afterwards took 14.4 s for 61 rows on 1.51.2 and 2.5 s for 101 rows on 1.52.0. `nvidia-smi --query-gpu=utilization.gpu,memory.used -l 1` sampled during each run.
+
 ### F9 — Kaggle/Colab/Lightning containers expose Vulkan [UNVERIFIED]
 
 NVIDIA containers often ship only the compute driver capabilities, without the Vulkan ICD JSON.

@@ -105,7 +105,15 @@ def probe_host(found: Probe) -> None:
     found.host = "%s, %s" % (platform.machine(), gpu or "no NVIDIA GPU")
 
 
-def probe_vulkan(found: Probe) -> None:
+NVIDIA_VULKAN_LIBRARY = "libGLX_nvidia.so.0"
+
+
+def nvidia_icd_manifest(library: str = NVIDIA_VULKAN_LIBRARY) -> str:
+    """A Vulkan ICD manifest for NVIDIA's driver, for containers that mount the library but not its JSON."""
+    return '{ "file_format_version": "1.0.1", "ICD": { "library_path": "%s", "api_version": "1.4.312" } }\n' % library
+
+
+def probe_vulkan(found: Probe, env: dict[str, str], work: Path) -> None:
     section("vulkan")
     if shutil.which("apt-get") is not None:
         sudo = ["sudo"] if os.geteuid() != 0 and shutil.which("sudo") else []
@@ -119,9 +127,19 @@ def probe_vulkan(found: Probe) -> None:
         found.vulkan = "vulkaninfo not available"
         print(found.vulkan)
         return
-    summary = run(["vulkaninfo", "--summary"]).stdout
+    summary = run(["vulkaninfo", "--summary"], env=env).stdout
     devices = vulkan_devices(summary)
+    if not devices and NVIDIA_VULKAN_LIBRARY in run(["ldconfig", "-p"]).stdout:
+        # NVIDIA containers often mount the Vulkan driver without its ICD manifest; supply one.
+        manifest = work.parent / "nvidia_icd.json"
+        manifest.write_text(nvidia_icd_manifest())
+        env["VK_DRIVER_FILES"] = str(manifest)
+        print("no Vulkan device; %s is present, retrying with VK_DRIVER_FILES=%s" % (NVIDIA_VULKAN_LIBRARY, manifest))
+        summary = run(["vulkaninfo", "--summary"], env=env).stdout
+        devices = vulkan_devices(summary)
     found.vulkan = "; ".join(devices) if devices else "no device (%s)" % tail(summary, 1)
+    if "VK_DRIVER_FILES" in env and devices:
+        found.vulkan += " (via a supplied ICD manifest)"
     print(found.vulkan)
 
 
@@ -187,7 +205,8 @@ def main() -> int:
     found = Probe()
 
     probe_host(found)
-    probe_vulkan(found)
+    work.parent.mkdir(parents=True, exist_ok=True)
+    probe_vulkan(found, env, work)
     ensure_dotnet(env)
     prepare_source(work, env, found)
     cuda_provider = prepare_cuda(work, env)

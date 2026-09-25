@@ -114,8 +114,8 @@ Some NVIDIA GPU containers mount the Vulkan driver (`libGLX_nvidia.so.0`) withou
 Vulkan loader needs to find it. Since 1.52.3 the tool supplies one for its own process when that is the
 case, under `$TMPDIR/ai-raccoon/`, so WebGPU still finds the GPU.
 The opt-in `cuda` device still loads through the plugin mechanism the upstream issue was reported
-against. It is available, but expect the same abort until that issue is fixed; if the server dies on
-the first embed after you set it, run `ai-raccoon settings model device auto`.
+against. It ran without aborting on a Tesla T4 (see the CUDA section below), but that is one host; if
+the server dies on the first embed after you set it, run `ai-raccoon settings model device auto`.
 
 `settings model device` changes which of these an operator opts into, taking effect on the next
 server restart:
@@ -159,7 +159,7 @@ footprint (the Memory column in Activity Monitor, not RSS) can reach most of the
 during a re-embed. The server logs `MLX buffer cache capped at 512 MiB` once per MLX session, or a
 warning if the cap could not be set.
 
-#### CUDA (opt-in, x64 only, untested on real hardware)
+#### CUDA (opt-in, x64 only, run once on a Tesla T4)
 
 CUDA is never bundled — its native provider is over 270 MB, past the size nuget.org allows for a
 package — so it is a library you install yourself and point the tool at
@@ -191,13 +191,13 @@ table](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.ht
 through 1.29.x against CUDA 13.0 and cuDNN 9.x, and does not yet list 1.30 — so cuDNN 9 is the
 expected requirement by that pattern, but it is unverified for 1.30 specifically.
 
-Nobody has run this on real NVIDIA hardware. Registering the provider as a plugin against the
-tool's ONNX Runtime core is expected to work, on the strength of the shared plugin entry points
-the MLX provider already uses, but that expectation is unverified. If it does not work,
-the session falls back to WebGPU or the CPU and the log line names the refusal reason. It may also
-abort the process on the first embed, like the retired WebGPU plugin (see above); switch back with
-`ai-raccoon settings model device auto` if it does. Report
-anything unexpected on the repository.
+It has run once on real hardware: a Lightning AI Tesla T4 (driver 580.178.04, CUDA 13.0), with the
+CUDA 13 runtime, cuBLAS, cuRAND and cuDNN 9 from their NVIDIA wheels on `LD_LIBRARY_PATH` and the
+`1.30.0` provider library. The session landed on `CUDA` and its vectors matched the CPU's, with no
+abort. Other GPUs and drivers are untested. If it does not work, the session falls back to WebGPU or
+the CPU and the log line names the refusal reason; if the process dies on the first embed instead,
+switch back with `ai-raccoon settings model device auto`. Report anything unexpected on the
+repository.
 
 `win-arm64` and `linux-arm64` have no CUDA provider build; `settings model device cuda <path>`
 still stores the setting there, but the session refuses the CUDA attempt and falls through to
@@ -215,8 +215,8 @@ curl -fsSL https://raw.githubusercontent.com/Arasz/ai-raccoon/main/scripts/gpu-h
 ```
 
 It prints the GPU, driver and Vulkan devices, builds the tests, installs the CUDA 13 runtime
-wheels into its own folder (not the notebook's environment) and the `1.30.0` CUDA provider, fetches the bundled WebGPU core, then runs the WebGPU session test (it lands on WebGPU only when the
-host exposes a Vulkan driver) and the CUDA session test with `AIRACCOON_TEST_CUDA_LIBRARY` set. The
+wheels into its own folder (not the notebook's environment) and the `1.30.0` CUDA provider, fetches the bundled WebGPU core, then runs the WebGPU session test (on a Lightning AI T4 it landed on
+the GPU even though `vulkaninfo` found no driver) and the CUDA session test with `AIRACCOON_TEST_CUDA_LIBRARY` set. The
 closing `PROBE SUMMARY` block says which paths ran and, for a WebGPU fallback, why.
 
 ### Recipe 2: Configure OpenAI embeddings
