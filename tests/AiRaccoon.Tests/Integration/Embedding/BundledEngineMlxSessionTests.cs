@@ -40,6 +40,8 @@ public sealed class BundledEngineMlxSessionTests
         var onCpu = await cpu.GenerateAsync([text], cancellationToken: TestContext.Current.CancellationToken);
 
         mlx.ExecutionProvider.ShouldBe("MLX");
+        mlx.MlxCacheLimitApplied.ShouldBeTrue();
+        (mlx.LastSequenceLength % 64).ShouldBe(0);
         TestData.Cosine(onMlx[0].Vector, onCpu[0].Vector).ShouldBeGreaterThanOrEqualTo(0.9999);
     }
 
