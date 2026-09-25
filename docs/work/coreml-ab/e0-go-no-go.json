@@ -1,0 +1,289 @@
+{
+ "measurement": "E0 go/no-go: CoreML EP (ANE) vs MLX EP, 100 long rows (memory-1022 chunks, 300-1022 tokens), 3 interleaved repeats, fresh subprocess per config x repeat, ORT spinning off.",
+ "configs": [
+  {
+   "name": "mlx-x64-cap512-t3",
+   "device": "mlx",
+   "step": 64,
+   "threads": 3,
+   "cache_limit_mib": 512,
+   "mlx_dir": "/Users/arasz/.dotnet/tools/.store/ai-raccoon/1.52.3/ai-raccoon.osx-arm64/1.52.3/tools/net10.0/osx-arm64/mlx"
+  },
+  {
+   "name": "coreml-ane-x64-t1",
+   "device": "coreml",
+   "units": "CPUAndNeuralEngine",
+   "step": 64,
+   "threads": 1,
+   "max_sessions": 0
+  },
+  {
+   "name": "coreml-ane-x64-t3",
+   "device": "coreml",
+   "units": "CPUAndNeuralEngine",
+   "step": 64,
+   "threads": 3,
+   "max_sessions": 0
+  },
+  {
+   "name": "cpu-t3",
+   "device": "cpu",
+   "step": 64,
+   "threads": 3
+  }
+ ],
+ "seed": 20260925,
+ "long_n": 100,
+ "short_n": 0,
+ "max_token_len_with_specials": 1024,
+ "total_wall_elapsed_s": 598.9,
+ "per_config": {
+  "mlx-x64-cap512-t3": [
+   {
+    "repeat": 0,
+    "cpu_s": 1.4072610000000003,
+    "p50_ms": 41.86795798887033,
+    "p95_ms": 53.32454199378844,
+    "phys_kib_peak": 1166049,
+    "neural_kib_peak": 0,
+    "compiler_cpu_s": 0.0,
+    "loadavg": 3.08935546875,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 10.966
+   },
+   {
+    "repeat": 1,
+    "cpu_s": 1.3419000000000003,
+    "p50_ms": 42.39258400048129,
+    "p95_ms": 54.4205000041984,
+    "phys_kib_peak": 1154481,
+    "neural_kib_peak": 0,
+    "compiler_cpu_s": 0.0,
+    "loadavg": 4.45849609375,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 8.385
+   },
+   {
+    "repeat": 2,
+    "cpu_s": 1.527005,
+    "p50_ms": 43.24308400100563,
+    "p95_ms": 55.05962501047179,
+    "phys_kib_peak": 1151825,
+    "neural_kib_peak": 0,
+    "compiler_cpu_s": 0.0,
+    "loadavg": 5.095703125,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 8.478
+   }
+  ],
+  "coreml-ane-x64-t1": [
+   {
+    "repeat": 0,
+    "cpu_s": 15.178243000000002,
+    "p50_ms": 157.70316700218245,
+    "p95_ms": 246.79074999585282,
+    "phys_kib_peak": 5559110,
+    "neural_kib_peak": 804640,
+    "compiler_cpu_s": 43.96,
+    "loadavg": 2.85400390625,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 117.723
+   },
+   {
+    "repeat": 1,
+    "cpu_s": 14.555444999999999,
+    "p50_ms": 159.8154999956023,
+    "p95_ms": 217.64200000325218,
+    "phys_kib_peak": 5311798,
+    "neural_kib_peak": 804640,
+    "compiler_cpu_s": 12.1,
+    "loadavg": 3.98583984375,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 62.684
+   },
+   {
+    "repeat": 2,
+    "cpu_s": 14.137737000000001,
+    "p50_ms": 155.12520899937954,
+    "p95_ms": 204.04970800154842,
+    "phys_kib_peak": 5309318,
+    "neural_kib_peak": 804640,
+    "compiler_cpu_s": 11.37,
+    "loadavg": 4.93310546875,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 57.844
+   }
+  ],
+  "coreml-ane-x64-t3": [
+   {
+    "repeat": 0,
+    "cpu_s": 22.649373999999995,
+    "p50_ms": 123.88495799677912,
+    "p95_ms": 186.89495799480937,
+    "phys_kib_peak": 5545446,
+    "neural_kib_peak": 804640,
+    "compiler_cpu_s": 44.25,
+    "loadavg": 4.11865234375,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 110.852
+   },
+   {
+    "repeat": 1,
+    "cpu_s": 24.009945000000002,
+    "p50_ms": 129.8056249943329,
+    "p95_ms": 209.1013750032289,
+    "phys_kib_peak": 5368742,
+    "neural_kib_peak": 804640,
+    "compiler_cpu_s": 14.03,
+    "loadavg": 5.30615234375,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 55.091
+   },
+   {
+    "repeat": 2,
+    "cpu_s": 22.335300000000004,
+    "p50_ms": 120.8772499958286,
+    "p95_ms": 180.32775000028778,
+    "phys_kib_peak": 5364806,
+    "neural_kib_peak": 804640,
+    "compiler_cpu_s": 11.63,
+    "loadavg": 4.18115234375,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 52.928
+   }
+  ],
+  "cpu-t3": [
+   {
+    "repeat": 0,
+    "cpu_s": 48.673703,
+    "p50_ms": 183.6199170065811,
+    "p95_ms": 249.95399999897927,
+    "phys_kib_peak": 555713,
+    "neural_kib_peak": 0,
+    "compiler_cpu_s": 0.0,
+    "loadavg": 3.84619140625,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 35.47
+   },
+   {
+    "repeat": 1,
+    "cpu_s": 44.283758,
+    "p50_ms": 236.58412499935366,
+    "p95_ms": 313.60850000055507,
+    "phys_kib_peak": 555217,
+    "neural_kib_peak": 0,
+    "compiler_cpu_s": 2.91,
+    "loadavg": 5.9287109375,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 42.058
+   },
+   {
+    "repeat": 2,
+    "cpu_s": 48.489177999999995,
+    "p50_ms": 180.4444170120405,
+    "p95_ms": 248.46562500169966,
+    "phys_kib_peak": 555265,
+    "neural_kib_peak": 0,
+    "compiler_cpu_s": 0.0,
+    "loadavg": 4.82421875,
+    "competing": {
+     "dotnet": 3,
+     "python": 8,
+     "python3": 0
+    },
+    "wall_elapsed_s": 35.571
+   }
+  ]
+ },
+ "cpu_s_summary": {
+  "mlx-x64-cap512-t3": {
+   "min": 1.3419000000000003,
+   "max": 1.527005,
+   "mean": 1.4253886666666669
+  },
+  "coreml-ane-x64-t1": {
+   "min": 14.137737000000001,
+   "max": 15.178243000000002,
+   "mean": 14.623808333333335
+  },
+  "coreml-ane-x64-t3": {
+   "min": 22.335300000000004,
+   "max": 24.009945000000002,
+   "mean": 22.998206333333332
+  },
+  "cpu-t3": {
+   "min": 44.283758,
+   "max": 48.673703,
+   "mean": 47.148879666666666
+  }
+ },
+ "paired_within_rotation_ratio_coreml_over_mlx": {
+  "coreml-ane-x64-t1": [
+   10.785663071740068,
+   10.846892465906548,
+   9.258474595695496
+  ],
+  "coreml-ane-x64-t3": [
+   16.09465053035648,
+   17.892499441090987,
+   14.626867626497624
+  ]
+ },
+ "decision_rule": "if EVERY CoreML repeat's CPU-s (config 2 and config 3 separately) is greater than EVERY MLX repeat's CPU-s -> verdict RESEARCH-ONLY for that config; if both CoreML configs are research-only -> overall RESEARCH-ONLY. Otherwise CONTINUE. (plan.md, E0 early stop, applied verbatim)",
+ "verdict": {
+  "coreml-ane-x64-t1": {
+   "verdict": "RESEARCH-ONLY",
+   "arithmetic": "min(coreml)=14.138s max(coreml)=15.178s vs min(mlx)=1.342s max(mlx)=1.527s -> every coreml repeat > every mlx repeat = True"
+  },
+  "coreml-ane-x64-t3": {
+   "verdict": "RESEARCH-ONLY",
+   "arithmetic": "min(coreml)=22.335s max(coreml)=24.010s vs min(mlx)=1.342s max(mlx)=1.527s -> every coreml repeat > every mlx repeat = True"
+  },
+  "overall": "RESEARCH-ONLY",
+  "overall_rule": "RESEARCH-ONLY iff both coreml-ane-x64-t1 and coreml-ane-x64-t3 are RESEARCH-ONLY (pre-registered E0 early stop rule, plan.md)"
+ }
+}
