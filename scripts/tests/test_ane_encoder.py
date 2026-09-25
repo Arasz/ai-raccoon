@@ -78,3 +78,12 @@ def test_half_precision_ane_encoder_stays_finite_and_close_on_a_1000_token_row(h
     assert np.isfinite(got_last).all()
     assert ane_encoder.min_token_cosine(got_last, want, mask.numpy()) >= 0.999
     assert ane_encoder.min_row_cosine(got_cls, want[:, 0]) >= 0.999
+
+
+@pytest.mark.parametrize("encoder", [ane_encoder.PlainEncoder, ane_encoder.AneEncoder])
+def test_half_on_an_encoder_leaves_the_source_hf_model_in_fp32(encoder) -> None:
+    source = ane_encoder.load_hf_model()  # its own copy: a red run must not corrupt the shared fixture
+
+    encoder(source, MAX_LEN).half()
+
+    assert {p.dtype for p in source.parameters()} == {torch.float32}

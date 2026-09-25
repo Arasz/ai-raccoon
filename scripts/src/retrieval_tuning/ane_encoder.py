@@ -73,9 +73,9 @@ class PlainEncoder(torch.nn.Module):
     def __init__(self, hf_model, max_len: int) -> None:
         super().__init__()
         config = hf_model.config
-        self.embeddings = hf_model.embeddings
-        self.layers = hf_model.layers
-        self.final_norm = hf_model.final_norm
+        self.embeddings = copy.deepcopy(hf_model.embeddings)  # a later .half() must not touch hf_model
+        self.layers = copy.deepcopy(hf_model.layers)
+        self.final_norm = copy.deepcopy(hf_model.final_norm)
         self.layer_types = list(config.layer_types)
         head_dim = config.hidden_size // config.num_attention_heads
         for layer_type in sorted(set(self.layer_types)):
