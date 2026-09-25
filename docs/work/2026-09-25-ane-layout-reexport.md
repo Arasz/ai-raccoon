@@ -104,6 +104,4 @@ Each config's `model_dir` points it at its own graph, which lets MLX run the shi
 
 ## Still open
 
-- `powermetrics --samplers ane_power` during a step256 run, to confirm dispatch. It needs `sudo`.
-- The ship decision. The measurements answer ADR-0117's gates, but shipping means a second fp16 asset of about 98 MB, a compile of 18-28 s per bucket on first use, 808 MiB of cache, and a bucket policy of 256 and not MLX's 64. That trade belongs in its own ADR with the owner's go-ahead, not in this research PR.
-- Whether the MLX path would also gain from the Neg-free, per-head graph. Not measured.
+Tracked in #764, in order: a shared-weights export that reuses the bundled `model_fp16.onnx_data` (so no second 98 MB asset), a second-chip run (M1/M2 or M3), a direct comparison against the current macOS default (WebGPU), and a `powermetrics` capture (`scripts/retrieval_tuning/ane_powermetrics.py`, which asks for `sudo` only for `powermetrics` and writes its samples to `/tmp/ai-raccoon-powermetrics/`). Only then an ADR on making `coreml` the Apple Silicon default, and the product device path.
