@@ -2,7 +2,10 @@
 
 Date: 2026-09-23
 
-Status: Accepted
+Status: Accepted. The "Windows and Linux run on the CPU" consequence is superseded in part by
+[ADR-0112](0112-webgpu-plugin-off-macos-and-opt-in-cuda.md); the rest of this decision (the bundled
+engine choice, the fp16 export, the GPU-first session order on macOS, and the fingerprint) is
+unaffected.
 
 ## Context
 
@@ -110,6 +113,12 @@ the ceiling, and fp16 (97 MB) does not.
 - Windows and Linux run on the CPU with the standard package. There, fp16 costs roughly twice
   fp32's CPU time, because ONNX Runtime upcasts it. A DirectML (Windows) or CUDA (Linux) build is
   the follow-up that brings the GPU path to those hosts.
+
+  > **Amended 2026-09-25 by ADR-0112.** Windows and Linux now try the GPU first too, through the
+  > WebGPU plugin execution provider (D3D12 on Windows, Vulkan on Linux), before falling back to
+  > this CPU path; CUDA is a separate, opt-in path via `settings model device cuda <path>`. Speed
+  > and vector parity there are not measured yet. See
+  > [ADR-0112](0112-webgpu-plugin-off-macos-and-opt-in-cuda.md).
 - Committed fixtures that bake MiniLM vectors (ADR-0049/0050) keep them: the one gate that embedded
   its query live now points that bank at the MiniLM test asset, which moved to
   `tests/AiRaccoon.Tests/TestData/Models/`. Engine-mechanics tests (golden vectors, legacy

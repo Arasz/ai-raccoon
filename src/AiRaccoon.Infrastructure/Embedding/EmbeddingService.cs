@@ -374,6 +374,10 @@ public sealed partial class EmbeddingService(
         var isBundledEngine = BundledModel.IsBundled(settings.Model);
         var preferGpu = EmbeddingDeviceSetting.PrefersGpu(device, isBundledEngine);
         var preferMlx = EmbeddingDeviceSetting.PrefersMlx(device, isBundledEngine);
+        var storedCudaLibrary = device == EmbeddingDevice.Cuda
+            ? settingsStore?.GetSettingAsync(EmbeddingSettingsKeys.CudaLibrary, CancellationToken.None).GetAwaiter().GetResult()
+            : null;
+        var cudaLibrary = EmbeddingDeviceSetting.CudaLibraryFor(device, storedCudaLibrary);
 
         var modelPath = LocalModelPath(settings.Model);
 
@@ -385,7 +389,7 @@ public sealed partial class EmbeddingService(
             // drain reconciles vec0 to the engine's dimension before writing (WP4/D3).
             var descriptor = manifestDescriptor.Load(modelPath);
             var tokenizer = ResolveManifestTokenizer(modelPath)!;
-            generator = new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads, preferGpu, preferMlx);
+            generator = new OnnxEmbeddingGenerator(Path.Combine(modelPath, descriptor.OnnxModelFile), tokenizer, descriptor, _logger, threads, preferGpu, preferMlx, cudaLibrary);
         }
         else
         {
@@ -399,7 +403,7 @@ public sealed partial class EmbeddingService(
 
             var bundledTokenizer = _tokenizers.GetOrAdd("bundled",
                 _ => WordPieceEmbeddingTokenizer.Create(BundledModel.ResolveVocabPath()));
-            generator = new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger, threads, preferGpu, preferMlx);
+            generator = new OnnxEmbeddingGenerator(modelPath, bundledTokenizer, BundledDescriptor, _logger, threads, preferGpu, preferMlx, cudaLibrary);
         }
 
         // #522: the live confirmation the resolved thread count took effect.

@@ -211,6 +211,74 @@ public class SettingsCommandsTests
     }
 
     [Fact]
+    public async Task ModelDeviceSet_Cuda_StoresTheDeviceAndTheFullLibraryPath()
+    {
+        var store = new FakeConfigStore();
+        var library = Path.Combine(Path.GetTempPath(), $"cuda-provider-{Guid.NewGuid():N}.so");
+        await File.WriteAllTextAsync(library, "", TestContext.Current.CancellationToken);
+        try
+        {
+            var relative = Path.GetRelativePath(Environment.CurrentDirectory, library);
+
+            var (exit, stdout, _) = await Run(["settings", "model", "device", "cuda", relative], store);
+
+            exit.ShouldBe(0);
+            store.Settings["embedding.device"].ShouldBe("cuda");
+            store.Settings["embedding.cudaLibrary"].ShouldBe(Path.GetFullPath(library));
+            stdout.ShouldContain("next server restart");
+        }
+        finally
+        {
+            File.Delete(library);
+        }
+    }
+
+    [Fact]
+    public async Task ModelDeviceSet_CudaWithoutPath_IsRefused_AndNothingIsWritten()
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, stderr) = await Run(["settings", "model", "device", "cuda"], store);
+
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        stderr.ShouldContain("device cuda needs the path");
+        store.Settings.ShouldNotContainKey("embedding.device");
+        store.Settings.ShouldNotContainKey("embedding.cudaLibrary");
+    }
+
+    [Fact]
+    public async Task ModelDeviceSet_CudaWithMissingLibrary_IsRefused_AndNothingIsWritten()
+    {
+        var store = new FakeConfigStore();
+        var missing = Path.Combine(Path.GetTempPath(), $"no-such-cuda-{Guid.NewGuid():N}.so");
+
+        var (exit, _, stderr) = await Run(["settings", "model", "device", "cuda", missing], store);
+
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        stderr.ShouldContain("CUDA provider library not found");
+        stderr.ShouldContain(missing);
+        store.Settings.ShouldNotContainKey("embedding.device");
+        store.Settings.ShouldNotContainKey("embedding.cudaLibrary");
+    }
+
+    [Theory]
+    [InlineData("gpu")]
+    [InlineData("auto")]
+    [InlineData("cpu")]
+    [InlineData("mlx")]
+    public async Task ModelDeviceSet_PathWithAnotherDevice_IsRefused_AndNothingIsWritten(string device)
+    {
+        var store = new FakeConfigStore();
+
+        var (exit, _, stderr) = await Run(["settings", "model", "device", device, "/opt/ort/libonnxruntime_providers_cuda.so"], store);
+
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        stderr.ShouldContain("only device cuda takes a library path");
+        store.Settings.ShouldNotContainKey("embedding.device");
+        store.Settings.ShouldNotContainKey("embedding.cudaLibrary");
+    }
+
+    [Fact]
     public async Task ModelThreadsSet_RoundTripsThroughCliShow()
     {
         var store = new FakeConfigStore();

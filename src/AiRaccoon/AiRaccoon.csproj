@@ -50,6 +50,21 @@
         <None Include="Mlx/THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" Link="mlx/THIRD_PARTY_NOTICES.md"/>
     </ItemGroup>
 
+    <!-- The WebGPU plugin execution provider for Windows and glibc Linux, whose standard ORT build has
+         no WebGPU. ExcludeAssets="all": only its native files are wanted, copied like the MLX runtime
+         into this RID's own tools/net10.0/<rid>/webgpu/. A RID-less build (tests, dev) takes the SDK's
+         RID. osx-arm64 keeps ORT's built-in WebGPU; linux-musl-x64 has no plugin build. -->
+    <PropertyGroup>
+        <WebGpuPluginRid>$(RuntimeIdentifier)</WebGpuPluginRid>
+        <WebGpuPluginRid Condition="'$(WebGpuPluginRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</WebGpuPluginRid>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.ML.OnnxRuntime.EP.WebGpu" ExcludeAssets="all" GeneratePathProperty="true"/>
+    </ItemGroup>
+    <ItemGroup Condition="'$(WebGpuPluginRid)' == 'win-x64' Or '$(WebGpuPluginRid)' == 'win-arm64' Or '$(WebGpuPluginRid)' == 'linux-x64' Or '$(WebGpuPluginRid)' == 'linux-arm64'">
+        <None Include="$(PkgMicrosoft_ML_OnnxRuntime_EP_WebGpu)/runtimes/$(WebGpuPluginRid)/native/*" CopyToOutputDirectory="PreserveNewest" Link="webgpu/%(Filename)%(Extension)"/>
+    </ItemGroup>
+
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Diagnostics"/>
         <PackageReference Include="DotNext"/>
