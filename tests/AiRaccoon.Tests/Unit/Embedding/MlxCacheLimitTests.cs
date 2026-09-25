@@ -6,7 +6,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Embedding;
 
 /// <summary>
-///     ADR-0114: capping MLX's free-buffer cache is best effort. A plugin directory without a
+///     ADR-0113: capping MLX's free-buffer cache is best effort. A plugin directory without a
 ///     loadable <c>libmlxc.dylib</c> reports why and never throws, so the MLX session still runs.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]

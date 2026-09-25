@@ -5,7 +5,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Embedding;
 
 /// <summary>
-///     ADR-0114: an MLX row is padded up to the next multiple of 64 tokens, never past the model's
+///     ADR-0113: an MLX row is padded up to the next multiple of 64 tokens, never past the model's
 ///     window, so the many chunk lengths of a corpus collapse into a handful of compiled shapes.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]

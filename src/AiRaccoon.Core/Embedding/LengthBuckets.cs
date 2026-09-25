@@ -1,7 +1,7 @@
 namespace AiRaccoon.Core.Embedding;
 
 /// <summary>
-///     Length buckets for engines that compile per input shape (ADR-0114): a row pads up to the next
+///     Length buckets for engines that compile per input shape (ADR-0113): a row pads up to the next
 ///     multiple of <see cref="Step" /> tokens, never past the model's window.
 /// </summary>
 public static class LengthBuckets

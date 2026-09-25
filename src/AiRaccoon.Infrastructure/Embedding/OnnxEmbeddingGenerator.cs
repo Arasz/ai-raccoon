@@ -68,10 +68,10 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     private SingleThreadExecutor? _mlxExecutor;
 
     /// <summary>True for an MLX session: rows pad to <see cref="LengthBuckets" /> so MLX compiles and
-    /// caches a handful of shapes instead of one per row length (ADR-0114).</summary>
+    /// caches a handful of shapes instead of one per row length (ADR-0113).</summary>
     private bool _bucketRows;
 
-    /// <summary>True when this MLX session capped MLX's free-buffer cache (ADR-0114).</summary>
+    /// <summary>True when this MLX session capped MLX's free-buffer cache (ADR-0113).</summary>
     public bool MlxCacheLimitApplied { get; private set; }
 
     /// <summary>Sequence length of the most recent session run, padding included.</summary>

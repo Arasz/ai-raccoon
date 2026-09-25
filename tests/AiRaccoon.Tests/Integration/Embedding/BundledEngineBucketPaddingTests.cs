@@ -8,7 +8,7 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Embedding;
 
 /// <summary>
-///     ADR-0114: an MLX-backed generator pads each row to a 64-token bucket with a zero attention
+///     ADR-0113: an MLX-backed generator pads each row to a 64-token bucket with a zero attention
 ///     mask, and the bundled engine's vector does not change. The MLX branch is reached through the
 ///     generator's executor seam over a CPU session, so this runs without the MLX plugin.
 /// </summary>
