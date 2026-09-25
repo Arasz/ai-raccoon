@@ -1,0 +1,44 @@
+{
+ "measurement": "ProfileComputePlan=1 op-per-device counts at buckets 64/512/1024, CPUAndNeuralEngine; plus a CPUOnly control at bucket 512.",
+ "results": [
+  {
+   "units": "CPUAndNeuralEngine",
+   "bucket": 64,
+   "compute_plan": {
+    "CPU": 121,
+    "NeuralEngine": 219
+   },
+   "coreml_nodes": 338,
+   "coreml_partitions": 25
+  },
+  {
+   "units": "CPUAndNeuralEngine",
+   "bucket": 512,
+   "compute_plan": {
+    "CPU": 111,
+    "NeuralEngine": 229
+   },
+   "coreml_nodes": 338,
+   "coreml_partitions": 25
+  },
+  {
+   "units": "CPUAndNeuralEngine",
+   "bucket": 1024,
+   "compute_plan": {
+    "CPU": 13,
+    "NeuralEngine": 327
+   },
+   "coreml_nodes": 338,
+   "coreml_partitions": 25
+  },
+  {
+   "units": "CPUOnly",
+   "bucket": 512,
+   "compute_plan": {
+    "CPU": 340
+   },
+   "coreml_nodes": 338,
+   "coreml_partitions": 25
+  }
+ ]
+}
