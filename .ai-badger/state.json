@@ -1,8 +1,75 @@
 {
- "lastUpdated": "2026-09-24T05:45:00+02:00",
+ "lastUpdated": "2026-09-25",
  "notesRef": ".ai-badger/status-notes.json",
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
+  {
+   "id": "air-server-exits-when-install-replaced",
+   "title": "Server exits when its install is replaced; pre-update proxies respawn through the tool shim",
+   "pr": 754,
+   "merged": true,
+   "date": "2026-09-25",
+   "hasNotes": false,
+   "summary": "#752 (1.52.1, ADR-0116): InstallWatchdog stops serve within 20s once AppContext.BaseDirectory is deleted by dotnet tool update (warn 613), MaintenanceJobRunner demotes BundledModelInstallReplacedException to Debug 529, startup log names version + install dir. #754 (1.52.2): Environment.ProcessPath resolves the tool symlink on macOS, so a pre-update proxy falls back to ~/.dotnet/tools/ai-raccoon then PATH (event 693). Follow-up pending owner ruling: extract multi-platform tests to platform.yml with a Platform trait."
+  },
+  {
+   "id": "air-performance-report-cpu-memory-gpu",
+   "title": "Performance report (CPU, memory footprint, GPU) + README What's new line",
+   "pr": 751,
+   "merged": true,
+   "date": "2026-09-25",
+   "hasNotes": false,
+   "summary": "docs/work/2026-09-25-performance-cpu-memory-gpu.md: Mermaid charts + tables for 1.44.3-1.51.2 (CPU 24.8-117 -> 1.2-2.8 CPU-s/120s on live events; footprint 6.8 -> 1.75 GB; MLX 17.9 -> 1.1-1.2 GB; CPU/embed 253-261 -> 2.8-8.3 ms), tests + checklist, caveats; live 1.51.2 reading 2.55 CPU-s/2 min, 277-586 MB RSS. README What's new one line; 1.48.0-1.44.0 moved to whats-new-history."
+  },
+  {
+   "id": "air-mlx-bucket-padding-cache-cap",
+   "title": "MLX path: 64-token buckets + 512 MiB cache cap (ADR-0114), released 1.51.1",
+   "pr": 744,
+   "merged": true,
+   "date": "2026-09-25",
+   "hasNotes": false,
+   "summary": "MLX sessions pad rows to multiples of 64 (Core LengthBuckets, reuses RunBatch zero-mask padding) and cap MLX's free-buffer cache at 512 MiB via mlx_set_cache_limit from the shipped libmlxc.dylib (MlxCacheLimit, EventIds 434-435, best effort). Measured 17.9 GB -> ~1.2 GB, same latency, ~7 ms more CPU/row; vectors unchanged. ADR renumber churn: #742 took 0113 first. v1.51.1 released; publish run 36078822306 awaits production approval."
+  },
+  {
+   "id": "air-drop-configureawait-app-code-adr",
+   "pr": 742,
+   "merged": "de1ecbfe",
+   "summary": "Removed ConfigureAwait from src/tests/benchmarks; ADR-0113; NoConfigureAwaitTests gate; dotnet format pass"
+  },
+  {
+   "id": "air-webgpu-plugin-cuda-optin-offmacos",
+   "pr": 740,
+   "merged": "1fdd365e",
+   "version": "1.51.0",
+   "summary": "WebGPU plugin EP default on win/linux-glibc, opt-in CUDA via user provider library; ADR-0112"
+  },
+  {
+   "id": "air-watch-cpu-excluded-delete-fastpath",
+   "title": "Cut startup/idle CPU: excluded-path delete fast path, index-seek cascades, pooled-handle init cache",
+   "pr": 741,
+   "merged": true,
+   "date": "2026-09-25",
+   "hasNotes": false,
+   "summary": "1.50.1. Diagnosed with dotnet-trace/counters/sample: .git/.ai-badger/bin churn ran DeleteSourcePathAsync (OR LIKE full project scan, up to 0.9 s warm, write lock) for excluded never-fingerprinted paths; reconcile ~30 opens/s each dlopen'd vec0 + schema pass. Fixes: HasFingerprintAtOrUnder gate, rowid-IN (project_id,path) seeks + idx_entries_project_path, per-handle cache keyed on data_version/schema_version/user_version/application_id (every-open steps still run). A/B on live-bank copy: idle 5.84->0.64 CPU-s/min, 300 hidden writes 14.17->1.13. Starts docs/changelog/."
+  },
+  {
+   "id": "air-mlx-cache-limit-bucket-sweep",
+   "title": "MLX cache limit, length buckets, 766 arm",
+   "pr": 743,
+   "merged": true,
+   "date": "2026-09-25",
+   "hasNotes": false,
+   "summary": "17.9 GB footprint = MLX free-buffer cache (92 MiB active). mlx_set_cache_limit via shipped libmlxc caps it: 0.4-1.0 GB unpadded; x64 + 512 MiB cap = ~1.2 GB, same p50, ~2x CPU/row. x32 halves pad waste, doubles shapes/footprint uncapped. 766 arm: memory half of 1022's gain, code ties 510; D stays. Teardown abort 2/70 processes. #739 updated."
+  },
+  {
+   "id": "air-chunk-window-mlx-rerun",
+   "title": "Chunk-size arms re-run on MLX (M4) + config D memory 1022 / code 510",
+   "pr": 738,
+   "merged": true,
+   "date": "2026-09-25",
+   "hasNotes": false,
+   "summary": "MLX recall = CPU within ±0.007 MRR on all 8 arms. Cost is memory: footprint grows with distinct row lengths (17.9 GB peak at 1022 unpadded, 10.6-11.8 GB at 510); ×64 padding gives same vectors (cos>=0.999998), peaks 3.7 GB / 1.1 GB. Padded ms/1k tokens flat 46-57. Pick D + padding; product padding filed as #739. Report artifact E8eNowmT7e4avwTVurVrkA."
+  },
   {
    "id": "air-fusion-confidence-weighted-rrf-706",
    "title": "Confidence-weighted RRF measured (#706 round 2): A9 -> 2 but A6 and 6 held-out floors regress; keep off",
