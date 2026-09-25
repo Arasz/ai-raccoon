@@ -40,8 +40,8 @@ options change behaviour; they aren't about context capture. This decision doesn
 
 Application code (`src/`, `tests/`, `benchmarks/`) awaits directly and never calls
 `ConfigureAwait`. The existing calls are removed. A source-scan test,
-`NoConfigureAwaitTests.ConfigureAwait_IsNotCalledInSourceOrTests`, fails if a
-`.ConfigureAwait(` call shows up in `src/` or `tests/` again. CA2007 stays off.
+`NoConfigureAwaitTests.ConfigureAwait_IsNotCalledInSourceTestsOrBenchmarks`, fails if a
+`.ConfigureAwait(` call shows up in any of those directories again. CA2007 stays off.
 
 If AiRaccoon ever ships a reusable library package, that package follows the library rule
 instead, and its project is exempted from the scan.

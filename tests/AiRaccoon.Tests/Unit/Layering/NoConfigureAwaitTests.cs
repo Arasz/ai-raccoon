@@ -5,17 +5,17 @@ namespace AiRaccoon.Tests.Unit.Layering;
 
 /// <summary>
 ///     ADR-0113: AiRaccoon is an application with no <see cref="SynchronizationContext" />, so
-///     <c>ConfigureAwait</c> changes nothing and is not written anywhere in src or tests.
+///     <c>ConfigureAwait</c> changes nothing and is not written anywhere in src, tests or benchmarks.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class NoConfigureAwaitTests
 {
     [Fact]
-    public void ConfigureAwait_IsNotCalledInSourceOrTests()
+    public void ConfigureAwait_IsNotCalledInSourceTestsOrBenchmarks()
     {
         var root = RepositoryRoot();
-        var offenders = new[] { "src", "tests" }
+        var offenders = new[] { "src", "tests", "benchmarks" }
             .SelectMany(dir => Directory.EnumerateFiles(Path.Combine(root, dir), "*.cs", SearchOption.AllDirectories))
             .Where(p => !IsBuildOutput(p) && !p.EndsWith(nameof(NoConfigureAwaitTests) + ".cs", StringComparison.Ordinal))
             .Where(p => File.ReadAllText(p).Contains(".ConfigureAwait(", StringComparison.Ordinal))
