@@ -89,6 +89,12 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     /// executor is still disposed on that path. Always the real session's Dispose in production.</summary>
     private Action _mlxSessionDisposeAction;
 
+    /// <summary>
+    ///     Turns off ONNX Runtime's own telemetry client before any session exists. Its upload thread can
+    ///     abort the process at exit by locking a mutex that exit has already destroyed.
+    /// </summary>
+    static OnnxEmbeddingGenerator() => OrtEnv.Instance().DisableTelemetryEvents();
+
     internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
         int intraOpThreads = 0, bool preferGpu = false, bool preferMlx = false, string? cudaLibraryPath = null)
     {
