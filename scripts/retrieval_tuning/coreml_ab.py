@@ -19,7 +19,8 @@ Usage:
 
 configs.json: [{"name": str, "device": "cpu"|"mlx"|"coreml", "units": str|null, "step": int,
                 "threads": int, "max_sessions": int, "cache_limit_mib": int|null,
-                "mlx_dir": str|null}, ...]
+                "mlx_dir": str|null, "model_dir": str|null}, ...]
+model_dir overrides --model-dir for that config, so a re-exported graph can run against the shipped one.
 """
 
 from __future__ import annotations
@@ -92,6 +93,11 @@ def _require_coreml_cache_dir(configs: list[dict], coreml_cache_dir: Path | None
         raise SystemExit("--coreml-cache-dir is required: a config in --configs has device coreml")
 
 
+def config_model_dir(config: dict, default: Path) -> Path:
+    """The config's own model_dir when set, else the --model-dir every config shares."""
+    return Path(config["model_dir"]) if config.get("model_dir") else default
+
+
 def _run_one_config(args: argparse.Namespace) -> None:
     from tokenizers import Tokenizer
 
@@ -99,17 +105,18 @@ def _run_one_config(args: argparse.Namespace) -> None:
     config = configs[args.one_config]
     rows = json.loads(args.rows.read_text())["rows"]
 
+    model_dir = config_model_dir(config, args.model_dir)
     step = config.get("step", 64)
     buckets: tuple[int, ...] = ()
     if config["device"] == "coreml":
-        tokenizer = Tokenizer.from_file(str(args.model_dir / "tokenizer.json"))
+        tokenizer = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
         max_len = max(len(tokenizer.encode(r["text"], add_special_tokens=True).ids) for r in rows)
         top = max(step, -(-max_len // step) * step)
         buckets = tuple(coreml.bucket_lengths(step, top))
 
     cache_dir = (args.coreml_cache_dir / config["name"]) if config["device"] == "coreml" else None
     engine = chunk_window.Engine(
-        args.model_dir, config.get("threads", 1), config["device"],
+        model_dir, config.get("threads", 1), config["device"],
         mlx_dir=Path(config["mlx_dir"]) if config.get("mlx_dir") else None,
         pad_to=step if config["device"] != "coreml" else 0, buckets=buckets,
         cache_limit_mib=config.get("cache_limit_mib"), compute_units=config.get("units"),
