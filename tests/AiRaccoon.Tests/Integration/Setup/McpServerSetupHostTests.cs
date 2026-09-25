@@ -169,6 +169,20 @@ public class McpServerSetupHostTests : IAsyncLifetime
             .ShouldContain(service => service is BankMaintenanceHostedService);
     }
 
+    /// <summary>
+    ///     ADR-0116: unlike IdleWatchdog, the install watchdog is never conditional — every serve
+    ///     host is a `dotnet tool update` target regardless of --idle-timeout.
+    /// </summary>
+    [RetryFact]
+    public void HttpHost_AlwaysRegistersTheInstallWatchdog()
+    {
+        using var lease = LoopbackPort.Reserve();
+        var host = McpServerSetup.CreateServerHost(Config(McpTransport.Http, lease.Port));
+
+        host.Services.GetServices<IHostedService>()
+            .ShouldContain(service => service is InstallWatchdog);
+    }
+
     [RetryFact]
     public async Task RunAsync_HttpHost_StartsAndStopsCleanly()
     {
