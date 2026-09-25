@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import ctypes
 import json
+import os
 import random
 import re
 import sqlite3
 import statistics
+import subprocess
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -22,7 +24,7 @@ from typing import Sequence
 
 import numpy as np
 
-from retrieval_tuning import scoring
+from retrieval_tuning import coreml, scoring
 from retrieval_tuning.chunk_ports import chunk_code, chunk_markdown, distinct_in_order
 from retrieval_tuning.padding import pad_row
 from retrieval_tuning.process_memory import memory_kib
@@ -40,23 +42,103 @@ POSITION_BUCKETS = ((0, 64), (64, 128), (128, 256), (256, 512), (512, 1 << 30))
 # Engine
 
 
+def _spin_off(options: "ort.SessionOptions") -> None:  # noqa: F821 - onnxruntime is a lazy import
+    options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+    options.add_session_config_entry("session.inter_op.allow_spinning", "0")
+
+
+def _graph_input_shapes(model_path: Path) -> dict[str, list[object]]:
+    """input name -> ordered dim list (int or symbolic str), read from the graph without a session."""
+    import onnx
+
+    model = onnx.load(str(model_path), load_external_data=False)
+    return {inp.name: [dim.dim_param or dim.dim_value for dim in inp.type.tensor_type.shape.dim]
+            for inp in model.graph.input}
+
+
+def _capture_stderr(build):
+    """Runs build() with process fd 2 redirected to a temp file; returns (result, captured text).
+
+    ORT's CoreML EP logs partition/compute-plan info straight to C++ stderr, invisible to Python's
+    own logging, so redirecting the fd is the only way to recover it from inside the process.
+    """
+    import tempfile
+
+    fd, path = tempfile.mkstemp(prefix="coreml-ep-log-")
+    os.close(fd)
+    saved = os.dup(2)
+    log_fd = os.open(path, os.O_WRONLY | os.O_TRUNC)
+    try:
+        os.dup2(log_fd, 2)
+        result = build()
+    finally:
+        os.dup2(saved, 2)
+        os.close(saved)
+        os.close(log_fd)
+    text = Path(path).read_text(errors="replace")
+    Path(path).unlink(missing_ok=True)
+    return result, text
+
+
+def _dir_size_kib(root: Path) -> int:
+    return sum(p.stat().st_size for p in root.rglob("*") if p.is_file()) // 1024 if root.exists() else 0
+
+
+def _ps_time_seconds(value: str) -> float:
+    seconds = 0.0
+    for part in value.split(":"):
+        seconds = seconds * 60 + float(part)
+    return seconds
+
+
+def ane_compiler_cpu_s() -> float:
+    """Summed CPU time (seconds) of aned and ANECompilerService right now, from `ps -A`."""
+    out = subprocess.run(["ps", "-A", "-o", "time=,comm="], capture_output=True, text=True, check=False).stdout
+    total = 0.0
+    for line in out.splitlines():
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            continue
+        time_str, comm = parts
+        if comm.strip().rsplit("/", 1)[-1] in ("aned", "ANECompilerService"):
+            total += _ps_time_seconds(time_str)
+    return total
+
+
 class Engine:
     """The bundled granite fp16 graph, one row per run (OnnxEmbeddingGenerator.RunEachRow).
 
     device "cpu" runs model_fp16.onnx on the CPU provider; "mlx" registers the plugin EP from
-    mlx_dir and runs model_fp16_mlx.onnx on it, spinning off, as OnnxEmbeddingGenerator does.
+    mlx_dir and runs model_fp16_mlx.onnx on it; "coreml" builds one lazily-cached session per
+    length bucket (CoreML only accepts static shapes). All three run with ORT spinning off.
     """
 
     def __init__(self, model_dir: Path, threads: int, device: str = "cpu", mlx_dir: Path | None = None,
-                 pad_to: int = 0, buckets: Sequence[int] = (), cache_limit_mib: int | None = None) -> None:
+                 pad_to: int = 0, buckets: Sequence[int] = (), cache_limit_mib: int | None = None,
+                 compute_units: str | None = None, max_sessions: int = 0, coreml_cache_dir: Path | None = None,
+                 profile_compute_plan: bool = False, specialization: str | None = None) -> None:
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
         self.tokenizer = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
+        manifest = json.loads((model_dir / "ai-raccoon.manifest.json").read_text())
+        self.window = manifest["contextWindowTokens"]
+        self.dimensions = manifest["dimensions"]
+        self.device = device
+        self.pad_to = pad_to
+        self.buckets = tuple(buckets)
+        self.seen_lengths: set[int] = set()
+        self.padded_tokens = 0
+        self.coreml_nodes: int | None = None
+        self.coreml_partitions: int | None = None
+        self.compute_plan: dict[str, int] = {}
+        self.bucket_load_s: dict[int, float] = {}
+        self.bucket_first_run_ms: dict[int, float] = {}
+
         options = ort.SessionOptions()
         options.intra_op_num_threads = threads
+        _spin_off(options)
         if device == "mlx":
-            options.add_session_config_entry("session.intra_op.allow_spinning", "0")
             if mlx_dir is None:
                 raise ValueError("device mlx needs mlx_dir (the folder holding libonnxruntime_mlx_ep.dylib)")
             ort.register_execution_provider_library("MLXExecutionProvider",
@@ -71,16 +153,71 @@ class Engine:
         elif device == "cpu":
             self.session = ort.InferenceSession(str(model_dir / "model_fp16.onnx"), options,
                                                 providers=["CPUExecutionProvider"])
+        elif device == "coreml":
+            if not self.buckets:
+                raise ValueError("device coreml needs buckets (bucket_lengths(pad_to, top_bucket))")
+            if compute_units is None:
+                raise ValueError("device coreml needs compute_units")
+            if coreml_cache_dir is None:
+                raise ValueError("device coreml needs coreml_cache_dir")
+            self._threads = threads
+            self._model_path = model_dir / "model_fp16.onnx"
+            self._model_sha = manifest["onnx"]["files"][0]["sha256"]
+            self._compute_units = compute_units
+            self.coreml_cache_root = Path(coreml_cache_dir)
+            self._profile_compute_plan = profile_compute_plan
+            self._specialization = specialization
+            self._input_shapes = _graph_input_shapes(self._model_path)
+            self._first_build_pending = True
+            self.sessions = coreml.BucketSessions(factory=self._build_coreml_session, max_live=max_sessions)
         else:
             raise ValueError(f"unknown device {device!r}")
-        self.device = device
-        self.pad_to = pad_to
-        self.buckets = tuple(buckets)
-        self.seen_lengths: set[int] = set()
-        self.padded_tokens = 0
-        manifest = json.loads((model_dir / "ai-raccoon.manifest.json").read_text())
-        self.window = manifest["contextWindowTokens"]
-        self.dimensions = manifest["dimensions"]
+
+    def _build_coreml_session(self, bucket: int) -> object:
+        import onnxruntime as ort
+
+        so = ort.SessionOptions()
+        so.intra_op_num_threads = self._threads
+        _spin_off(so)
+        if self._first_build_pending:
+            so.log_severity_level = 0
+            so.log_verbosity_level = 0
+        for name, value in coreml.free_dim_overrides(self._input_shapes, bucket).items():
+            so.add_free_dimension_override_by_name(name, value)
+        cache_dir = coreml.cache_dir_for(self.coreml_cache_root, self._model_sha, ort.__version__,
+                                         self._compute_units, bucket)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        provider_options = {"ModelFormat": "MLProgram", "MLComputeUnits": self._compute_units,
+                            "RequireStaticInputShapes": "1", "ModelCacheDirectory": str(cache_dir)}
+        if self._profile_compute_plan:
+            provider_options["ProfileComputePlan"] = "1"
+        if self._specialization:
+            provider_options["SpecializationStrategy"] = self._specialization
+
+        def build() -> object:
+            return ort.InferenceSession(str(self._model_path), so,
+                                        providers=[("CoreMLExecutionProvider", provider_options),
+                                                   "CPUExecutionProvider"])
+
+        t0 = time.perf_counter()
+        if self._first_build_pending:
+            self._first_build_pending = False
+            session, log_text = _capture_stderr(build)
+            self._read_coreml_log(log_text)
+        else:
+            session = build()
+        self.bucket_load_s[bucket] = time.perf_counter() - t0
+        return session
+
+    def _read_coreml_log(self, text: str) -> None:
+        try:
+            info = coreml.parse_partition_log(text)
+        except ValueError:
+            return
+        self.coreml_nodes = info["nodes_supported"]
+        self.coreml_partitions = info["partitions"]
+        if self._profile_compute_plan:
+            self.compute_plan = coreml.parse_compute_plan(text)
 
     def mlx_memory_mib(self) -> dict[str, int]:
         """MLX allocator counters (active, free-buffer cache, peak) in MiB; empty off the MLX device."""
@@ -99,13 +236,18 @@ class Engine:
     def embed(self, text: str) -> tuple[np.ndarray, int, float, float]:
         """(unit vector, tokens incl. specials, wall ms, process CPU ms) for one row; new_length says it was a first-seen shape."""
         ids = self.tokenizer.encode(text, add_special_tokens=True).ids[: self.window]
+        if self.device == "coreml" and len(ids) > self.buckets[-1]:
+            raise ValueError(f"row of {len(ids)} tokens exceeds the top bucket ({self.buckets[-1]})")
         padded, mask = pad_row(ids, self.pad_to, PAD_ID, self.buckets)
         input_ids = np.asarray([padded], dtype=np.int64)
+        session = self.sessions.get(len(padded)) if self.device == "coreml" else self.session
         wall, cpu = time.perf_counter(), time.process_time()
-        out = self.session.run(["sentence_embedding"],
-                               {"input_ids": input_ids, "attention_mask": np.asarray([mask], dtype=np.int64)})[0][0]
+        out = session.run(["sentence_embedding"],
+                          {"input_ids": input_ids, "attention_mask": np.asarray([mask], dtype=np.int64)})[0][0]
         wall_ms = (time.perf_counter() - wall) * 1000
         cpu_ms = (time.process_time() - cpu) * 1000
+        if self.device == "coreml":
+            self.bucket_first_run_ms.setdefault(len(padded), wall_ms)
         self.padded_tokens += len(padded) - len(ids)
         self.new_length = len(padded) not in self.seen_lengths
         self.seen_lengths.add(len(padded))
@@ -260,6 +402,18 @@ class ArmResult:
     query_embed_ms: dict[str, float]
     query_cpu_ms: dict[str, float]
     gpu: str
+    coreml_nodes: int | None = None
+    coreml_partitions: int | None = None
+    compute_units: str | None = None
+    bucket_load_s: dict[int, float] = field(default_factory=dict)
+    bucket_first_run_ms: dict[int, float] = field(default_factory=dict)
+    sessions_live_peak: int = 0
+    evictions: int = 0
+    neural_kib_peak: int = 0
+    cache_disk_kib: int = 0
+    compiler_cpu_s: float = 0.0
+    energy_nj: int = 0
+    loadavg: float = 0.0
     vector: dict[str, float] = field(default_factory=dict)
     hybrid: dict[str, float] = field(default_factory=dict)
     per_query: list[dict[str, object]] = field(default_factory=list)
@@ -268,10 +422,14 @@ class ArmResult:
 
 def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads: int,
             work_dir: Path, device: str = "cpu", mlx_dir: Path | None = None, pad_to: int = 0,
-            buckets: Sequence[int] = (), cache_limit_mib: int | None = None) -> ArmResult:
+            buckets: Sequence[int] = (), cache_limit_mib: int | None = None,
+            compute_units: str | None = None, max_sessions: int = 0, coreml_cache_dir: Path | None = None,
+            profile_compute_plan: bool = False, specialization: str | None = None) -> ArmResult:
     """Chunk, embed and index one corpus at one budget, then run every query twice (second pass timed)."""
     documents, queries = (memory_corpus if corpus == "memory" else code_corpus)(repo)
-    engine = Engine(model_dir, threads, device, mlx_dir, pad_to, buckets, cache_limit_mib)
+    engine = Engine(model_dir, threads, device, mlx_dir, pad_to, buckets, cache_limit_mib,
+                    compute_units, max_sessions, coreml_cache_dir, profile_compute_plan, specialization)
+    compiler_cpu_before = ane_compiler_cpu_s() if device == "coreml" else 0.0
     mem_load = memory_kib()
     work_dir.mkdir(parents=True, exist_ok=True)
     db_path = work_dir / f"{corpus}-{chunk_tokens}.db"
@@ -331,6 +489,8 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
     gold_position = _gold_positions(queries, chunks, vectors, engine) if corpus == "code" else []
     db.close()
     lengths_arr = np.asarray(lengths)
+    mem_final = memory_kib()
+    compiler_cpu_s = ane_compiler_cpu_s() - compiler_cpu_before if device == "coreml" else 0.0
 
     def mean_of(leg: str) -> dict[str, float]:
         keys = per_query[0][leg].keys()  # type: ignore[union-attr]
@@ -346,9 +506,9 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
         embed_ms=_timing(embed_ms), embed_cpu_ms=_timing(embed_cpu),
         embed_ms_per_1k_tokens=sum(embed_ms) / (lengths_arr.sum() / 1000),
         rss_kib_after_load=mem_load.rss, rss_kib_peak_ingest=mem_ingest.rss_peak,
-        rss_kib_peak_total=memory_kib().rss_peak,
+        rss_kib_peak_total=mem_final.rss_peak,
         footprint_kib_after_load=mem_load.footprint, footprint_kib_peak_ingest=mem_ingest.footprint_peak,
-        footprint_kib_peak_total=memory_kib().footprint_peak, device=device,
+        footprint_kib_peak_total=mem_final.footprint_peak, device=device,
         embed_ms_first_length=_timing(first_ms) if first_ms else {},
         embed_ms_repeat_length=_timing(repeat_ms) if repeat_ms else {},
         distinct_lengths=len(engine.seen_lengths), pad_to=pad_to, buckets=list(buckets),
@@ -357,7 +517,16 @@ def run_arm(repo: Path, model_dir: Path, corpus: str, chunk_tokens: int, threads
         disk_bytes=db_path.stat().st_size, vector_bytes=int(vectors.nbytes),
         query_ms=_timing(q_ms), query_embed_ms=_timing(q_embed), query_cpu_ms=_timing(q_cpu),
         gpu=("MLX plugin EP (unified memory: GPU buffers count in footprint_kib_*)" if device == "mlx"
+             else "CoreML EP (ANE usage in neural_kib_peak)" if device == "coreml"
              else "not used: CPU provider"),
+        coreml_nodes=engine.coreml_nodes, coreml_partitions=engine.coreml_partitions,
+        compute_units=compute_units if device == "coreml" else None,
+        bucket_load_s=dict(engine.bucket_load_s), bucket_first_run_ms=dict(engine.bucket_first_run_ms),
+        sessions_live_peak=engine.sessions.peak_live if device == "coreml" else 0,
+        evictions=engine.sessions.evictions if device == "coreml" else 0,
+        neural_kib_peak=mem_final.neural_footprint_peak,
+        cache_disk_kib=_dir_size_kib(engine.coreml_cache_root) if device == "coreml" else 0,
+        compiler_cpu_s=compiler_cpu_s, energy_nj=mem_final.energy_nj, loadavg=os.getloadavg()[0],
         vector=mean_of("vector"), hybrid=mean_of("hybrid"), per_query=per_query, gold_position=gold_position,
     )
 

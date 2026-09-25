@@ -189,6 +189,16 @@ def test_bucket_sessions_lru_evicts_the_least_recently_used() -> None:
     assert made[64].closed is False
 
 
+def test_bucket_sessions_tracks_the_live_peak_across_evictions() -> None:
+    sessions = BucketSessions(factory=lambda bucket: object(), max_live=2)
+
+    for bucket in (64, 128, 192):
+        sessions.get(bucket)
+
+    assert sessions.peak_live == 2
+    assert sessions.live_count == 2
+
+
 def test_bucket_sessions_eviction_disposes_before_forgetting() -> None:
     disposed_order: list[int] = []
 

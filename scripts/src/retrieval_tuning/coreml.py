@@ -98,6 +98,7 @@ class BucketSessions:
         self.builds = 0
         self.evictions = 0
         self.disposed = 0
+        self.peak_live = 0
 
     def get(self, bucket: int) -> object:
         if bucket in self._live:
@@ -110,6 +111,7 @@ class BucketSessions:
             _, evicted = self._live.popitem(last=False)
             self._dispose(evicted)
             self.evictions += 1
+        self.peak_live = max(self.peak_live, len(self._live))
         return session
 
     def _dispose(self, session: object) -> None:
