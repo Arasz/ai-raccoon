@@ -124,6 +124,16 @@ def mark_chunk_mismatch(runs: list[dict]) -> int | None:
     return reference
 
 
+def calibration_notes(device: str, cold_run_calibrated: bool, wall: float, tier: int,
+                      tier_dirs: Sequence[str]) -> list[str]:
+    """Result notes for the calibration; the cold coreml run is credited only when it was the one that calibrated."""
+    notes = [f"calibration: {device} drained tier 0 (docs/adr) in {wall:.1f} s; "
+             f"benchmark corpus is tier {tier} ({', '.join(tier_dirs)})"]
+    if tier > 0 and cold_run_calibrated:
+        notes.append("the cold coreml run drained the tier 0 corpus; only its compile numbers compare")
+    return notes
+
+
 def calibrate_tier(base_seconds: float, tier_bytes: Sequence[int], min_seconds: float) -> int:
     """The smallest corpus tier whose drain, projected by bytes from tier 0's, reaches min_seconds (else the last)."""
     for index, size in enumerate(tier_bytes):

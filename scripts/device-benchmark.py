@@ -564,6 +564,7 @@ def main(argv: list[str] | None = None) -> int:
                 runs = protocol.run_session(slots[:1], run_one)
                 slots = slots[1:]
             calibrating = runs[0] if runs and runs[0].get("wall_s") is not None else None
+            cold_run_calibrated = calibrating is not None
             if calibrating is None:
                 calibrating = protocol.run_session([protocol.Slot(-1, -1, "auto", False)], run_one)[0]
             wall = calibrating.get("wall_s")
@@ -575,10 +576,8 @@ def main(argv: list[str] | None = None) -> int:
                 corpus = extract_corpus(args.corpus_sha, CORPUS_TIERS[tier], corpus_dir)
             corpus["calibration"] = {"device": calibrating["device"], "tier0_wall_s": wall, "tier": tier,
                                      "min_window_s": MIN_WINDOW_S}
-            notes.append(f"calibration: {calibrating['device']} drained tier 0 (docs/adr) in {wall:.1f} s; "
-                         f"benchmark corpus is tier {tier} ({', '.join(CORPUS_TIERS[tier])})")
-            if tier > 0 and runs:
-                notes.append("the cold coreml run drained the tier 0 corpus; only its compile numbers compare")
+            notes.extend(protocol.calibration_notes(calibrating["device"], cold_run_calibrated, wall, tier,
+                                                    CORPUS_TIERS[tier]))
             shutil.rmtree(out / "runs" / "-1-auto", ignore_errors=True)
 
         runs += protocol.run_session(slots, run_one)

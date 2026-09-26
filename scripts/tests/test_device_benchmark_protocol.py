@@ -236,3 +236,25 @@ def test_reset_bank_state_keeps_only_the_coreml_cache(tmp_path: Path) -> None:
 ])
 def test_coreml_start_label_judges_a_cache_hit_by_compiler_cpu(cold: bool, compiler_cpu_s: float | None, label: str) -> None:
     assert protocol.coreml_start_label(cold, compiler_cpu_s) == label
+
+
+def test_calibration_notes_claim_the_cold_coreml_drain_only_when_it_calibrated() -> None:
+    notes = protocol.calibration_notes("coreml", cold_run_calibrated=True, wall=12.0, tier=1,
+                                       tier_dirs=["docs/adr", "docs/plans"])
+
+    assert any("cold coreml run drained the tier 0 corpus" in n for n in notes)
+
+
+def test_calibration_notes_never_credit_a_refused_cold_run_when_auto_calibrated() -> None:
+    # The cold coreml run was refused, so a throwaway auto run calibrated instead.
+    notes = protocol.calibration_notes("auto", cold_run_calibrated=False, wall=25.0, tier=1,
+                                       tier_dirs=["docs/adr", "docs/plans"])
+
+    assert notes[0].startswith("calibration: auto drained tier 0")
+    assert not any("cold coreml" in n for n in notes)
+
+
+def test_calibration_notes_skip_the_cold_run_note_at_tier_zero() -> None:
+    notes = protocol.calibration_notes("coreml", cold_run_calibrated=True, wall=45.0, tier=0, tier_dirs=["docs/adr"])
+
+    assert not any("cold coreml" in n for n in notes)
