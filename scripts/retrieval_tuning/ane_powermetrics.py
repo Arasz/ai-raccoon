@@ -19,72 +19,19 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import plistlib
-import xml.parsers.expat
 import subprocess
 import sys
 import time
-from datetime import timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from device_benchmark.power import phase_of, power_fields, split_samples, summarize  # noqa: E402,F401
 
 SAMPLE_MS = 500
 BUCKETS = (256, 512, 768, 1024)
 ROW_TOKENS = (200, 450, 700, 1000)
 TEXT_SOURCE = Path(__file__).resolve().parents[2] / "docs" / "work" / "2026-09-25-coreml-ane-buckets-and-residency.md"
-
-
-# ---------------------------------------------------------------------------------------------
-# Pure helpers (stdlib only)
-
-
-def split_samples(data: bytes) -> list[dict]:
-    """powermetrics --format plist output: NUL-separated plist docs; a truncated tail is dropped."""
-    samples = []
-    for chunk in data.split(b"\0"):
-        if not chunk.strip():
-            continue
-        try:
-            samples.append(plistlib.loads(chunk))
-        except (plistlib.InvalidFileException, xml.parsers.expat.ExpatError, ValueError):
-            continue
-    return samples
-
-
-def power_fields(node: object, prefix: str = "") -> dict[str, float]:
-    """Numeric leaves whose key mentions power, by dotted path (lists are not descended)."""
-    fields: dict[str, float] = {}
-    if isinstance(node, dict):
-        for key, value in node.items():
-            path = f"{prefix}{key}"
-            if isinstance(value, dict):
-                fields.update(power_fields(value, f"{path}."))
-            elif isinstance(value, (int, float)) and not isinstance(value, bool) and "power" in key:
-                fields[path] = float(value)
-    return fields
-
-
-def phase_of(epoch: float, phases: list[dict]) -> str | None:
-    """Name of the phase whose [start, end) window holds epoch, or None."""
-    for phase in phases:
-        if phase["start"] <= epoch < phase["end"]:
-            return phase["name"]
-    return None
-
-
-def summarize(samples: list[dict], phases: list[dict]) -> dict[str, dict[str, float]]:
-    """Per phase: mean of every power field over the samples stamped inside it, plus the count."""
-    grouped: dict[str, list[dict[str, float]]] = {p["name"]: [] for p in phases}
-    for sample in samples:
-        stamp = sample["timestamp"].replace(tzinfo=timezone.utc)  # plist dates are UTC, loaded naive
-        name = phase_of(stamp.timestamp(), phases)
-        if name is not None:
-            grouped[name].append(power_fields(sample))
-    summary: dict[str, dict[str, float]] = {}
-    for name, rows in grouped.items():
-        keys = sorted({k for row in rows for k in row})
-        summary[name] = {k: sum(r[k] for r in rows if k in r) / sum(1 for r in rows if k in r) for k in keys}
-        summary[name]["samples"] = len(rows)
-    return summary
 
 
 # ---------------------------------------------------------------------------------------------
@@ -117,7 +64,6 @@ def main() -> None:
     parser.add_argument("--seconds", type=float, default=30.0)
     args = parser.parse_args()
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
     from retrieval_tuning import chunk_window  # noqa: E402
 
     out = args.out_dir / time.strftime("%Y%m%d-%H%M%S")

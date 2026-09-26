@@ -1,6 +1,7 @@
 using System.CommandLine;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.Integration.Setup;
@@ -210,6 +211,21 @@ public class SettingsCommandTreeTests
 
         parseResult.Errors.Select(e => e.Message).ShouldBeEmpty();
         parseResult.GetValue<string?>("path").ShouldBe("/opt/ort/libonnxruntime_providers_cuda.so");
+    }
+
+    /// <summary>Every device the setting accepts is named in the device command's help, so a new device cannot ship undocumented.</summary>
+    [Fact]
+    public void ModelDevice_HelpNamesEveryAcceptedDevice()
+    {
+        var device = CliCommandTree.BuildFullRootCommand().Subcommands.Single(c => c.Name == "settings")
+            .Subcommands.Single(c => c.Name == "model").Subcommands.Single(c => c.Name == "device");
+        var helpName = device.Arguments.Single(a => a.Name == "device").HelpName;
+
+        helpName.ShouldBe(string.Join('|', EmbeddingDeviceSetting.Values));
+        foreach (var value in EmbeddingDeviceSetting.Values)
+        {
+            device.Description.ShouldNotBeNull().ShouldContain(value);
+        }
     }
 
     [Theory]
