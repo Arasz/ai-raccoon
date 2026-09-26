@@ -84,7 +84,7 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
     /// <summary>Completes once the background compile has settled, with the state it settled in. Test hook.</summary>
     internal async Task<NeuralEngineState> WaitUntilSettledAsync(CancellationToken cancellationToken)
     {
-        await _settled.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _settled.WaitAsync(cancellationToken);
         return Switch.State;
     }
 
@@ -175,7 +175,7 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
         Loaded loaded;
         try
         {
-            loaded = await compile.WaitAsync(_deadline, _time, _stop.Token).ConfigureAwait(false);
+            loaded = await compile.WaitAsync(_deadline, _time, _stop.Token);
         }
         catch (TimeoutException)
         {
@@ -199,7 +199,7 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
         string? miss;
         try
         {
-            var expected = await reference.ConfigureAwait(false);
+            var expected = await reference;
             miss = ProbeMiss(probes, loaded.ProbeVectors, expected);
         }
         catch (Exception ex) when (!_stop.IsCancellationRequested)
