@@ -106,7 +106,7 @@ def run_session(slots: Sequence[Slot], run_one: Callable[[Slot], dict]) -> list[
             result = dict(run_one(slot))
         except Exception as exc:  # noqa: BLE001 — one failed run must not lose the rest of the session
             result = {"status": "error", "reason": str(exc)}
-        runs.append({"device": slot.device, "repeat": slot.repeat, "slot": slot.index, "cold": slot.cold, **result})
+        runs.append({**result, "device": slot.device, "repeat": slot.repeat, "slot": slot.index, "cold": slot.cold})
     return runs
 
 

@@ -185,3 +185,11 @@ def test_coreml_refusal_reads_a_plan_time_refusal_off_the_session_line() -> None
     assert protocol.coreml_refusal("WebGPU (CoreML refused: graph missing)") == "graph missing"
     assert protocol.coreml_refusal("WebGPU (CoreML compiling)") is None
     assert protocol.coreml_refusal(None) is None
+
+
+def test_the_slot_identity_wins_over_blank_keys_in_a_run_record() -> None:
+    # A runner that starts from a template of every run key must not blank out the slot's device.
+    runs = protocol.run_session(protocol.schedule(["cpu"], repeats=1),
+                                lambda slot: {"device": None, "repeat": None, "slot": None, "cold": None, "status": "ok"})
+
+    assert (runs[0]["device"], runs[0]["repeat"], runs[0]["slot"], runs[0]["cold"]) == ("cpu", 0, 0, False)
