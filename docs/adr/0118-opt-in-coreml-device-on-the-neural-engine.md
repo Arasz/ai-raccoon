@@ -122,6 +122,12 @@ only after:
 
 ## Consequences
 
+- CI has no macOS runner, so the real CoreML path is only ever exercised on a developer's Apple
+  Silicon machine or during the manual checklist, never in CI. This covers
+  `BundledEngineCoreMlSessionTests`, `DeviceSwitchTests`, `DeviceSwitchMidCompileTests` and the
+  ORT-telemetry exit fix. Those classes skip on every configured runner. CI covers the pure logic
+  (switch, cache locks, routing, device plan) and the committed-graph pins. The release checklist
+  must run the macOS classes and record their output.
 - Users who opt in move their embedding work to the Neural Engine, at roughly an order of magnitude
   less CPU per row than MLX. Nobody else sees a change.
 - First run after opting in, or after an upgrade: WebGPU serves for about 1-2 minutes while the ANE

@@ -39,10 +39,11 @@ public sealed class NeuralEngineEmbeddingGeneratorTests : IDisposable
         (await generator.WaitUntilSettledAsync(Ct)).ShouldBe(NeuralEngineState.NeuralEngineServing);
 
         var result = await generator.GenerateAsync([WordTokenizer.TextOf(1025)], cancellationToken: Ct);
+        await generator.GenerateAsync([WordTokenizer.TextOf(1500)], cancellationToken: Ct);
 
         result.Count.ShouldBe(1);
-        factory.OverflowsCreated.ShouldBe(1);
-        factory.Overflow.Rows.ShouldBe(1);
+        factory.OverflowsCreated.ShouldBe(1);  // built once and reused, never one session per long row
+        factory.Overflow.Rows.ShouldBe(2);
     }
 
     [Fact]
