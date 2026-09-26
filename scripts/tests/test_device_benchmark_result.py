@@ -94,3 +94,37 @@ Cold coreml compile: 55.0 s, 400.0 J system, 12.0 compiler CPU-s; warm load 3.0 
 - coreml vs auto: net system energy separated? yes (coreml lower); net SoC energy separated? yes (coreml lower); wall time separated? yes (coreml higher)
 - cpu vs auto: net system energy separated? no data; net SoC energy separated? no data; wall time separated? no data
 """
+
+
+# ---------------------------------------------------------------------------------------------
+# energy_fields: one run's SoC and system numbers from its windows
+
+
+def _segment(start: float, end: float, watts: float):
+    from device_benchmark.battery import Segment
+
+    return Segment(start, end, watts * 1000, watts * 1000, 0)
+
+
+def test_system_net_subtracts_idle_over_the_whole_covered_span_not_just_the_window() -> None:
+    # idle 5 W over [0, 60); the work runs [70, 100) inside the publish span [60, 120) that averaged 15 W.
+    segments = [_segment(0, 60, 5.0), _segment(60, 120, 15.0)]
+
+    fields = result.energy_fields(t0=70.0, t1=100.0, idle_start=0.0, idle_end=60.0, chunks=100,
+                                  soc_samples=None, segments=segments)
+
+    assert fields["system_energy_gross_j"] == pytest.approx(900.0)
+    assert fields["system_energy_net_j"] == pytest.approx(900.0 - 5.0 * 60)
+    assert fields["system_span_s"] == pytest.approx(60.0)
+    assert fields["system_mean_w_net"] == pytest.approx(600.0 / 30.0)
+    assert fields["mj_per_chunk_system_net"] == pytest.approx(6000.0)
+    assert fields["soc_energy_gross_j"] is None
+
+
+def test_energy_fields_leave_system_empty_without_battery_telemetry() -> None:
+    fields = result.energy_fields(t0=0.0, t1=10.0, idle_start=-20.0, idle_end=0.0, chunks=10,
+                                  soc_samples=None, segments=None)
+
+    assert fields["system_energy_net_j"] is None
+    assert fields["system_below_idle"] is False
+    assert fields["mj_per_chunk_system_net"] is None

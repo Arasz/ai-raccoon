@@ -10,6 +10,7 @@ from __future__ import annotations
 import statistics
 from typing import Sequence
 
+from device_benchmark import battery, power
 from retrieval_tuning.coreml import beats
 
 SCHEMA_VERSION = 1
@@ -34,6 +35,47 @@ SUMMARY_METRICS = (
 )
 
 VERDICT_METRICS = {"system_energy_net_j": "net system energy", "soc_energy_net_j": "net SoC energy", "wall_s": "wall time"}
+
+
+def _per_chunk_mj(net_j: float | None, chunks: int | None) -> float | None:
+    return None if net_j is None or not chunks else net_j * 1000.0 / chunks
+
+
+def energy_fields(*, t0: float, t1: float, idle_start: float, idle_end: float, chunks: int | None,
+                  soc_samples: list[dict] | None, segments: list[battery.Segment] | None) -> dict:
+    """One run's energy numbers. SoC: powermetrics over [t0, t1). System: the publish segments covering
+    [t0, t1), whose span is wider than the window, so the idle baseline comes off over that whole span;
+    system_mean_w_gross is the span's mean draw and system_mean_w_net the extra watts over the window."""
+    wall = t1 - t0
+    fields: dict = {}
+
+    soc_gross = soc_idle = None
+    soc_source = "off"
+    if soc_samples is not None:
+        energy = power.soc_energy(soc_samples, t0, t1)
+        soc_gross, soc_source = energy.joules, energy.source
+        soc_idle = power.mean_power_w(soc_samples, idle_start, idle_end)
+    soc_net = power.net_energy(soc_gross, soc_idle, wall)
+    fields.update(soc_energy_gross_j=soc_gross, soc_energy_net_j=soc_net.joules, idle_mean_w_soc=soc_idle,
+                  soc_mean_w_gross=None if soc_gross is None else soc_gross / wall,
+                  soc_mean_w_net=None if soc_net.joules is None else soc_net.joules / wall,
+                  soc_source=soc_source, soc_below_idle=soc_net.below_idle,
+                  mj_per_chunk_soc_net=_per_chunk_mj(soc_net.joules, chunks))
+
+    sys_gross = sys_idle = span_s = None
+    flow = False
+    if segments is not None:
+        span = battery.window_energy(segments, t0, t1)
+        sys_gross, span_s = span.joules, span.seconds
+        sys_idle = battery.idle_power_w(segments, idle_start, idle_end)
+        flow = battery.battery_flow(segments, t0, t1)
+    sys_net = power.net_energy(sys_gross, sys_idle, span_s or 0.0)
+    fields.update(system_energy_gross_j=sys_gross, system_energy_net_j=sys_net.joules, idle_mean_w_system=sys_idle,
+                  system_mean_w_gross=None if sys_gross is None or not span_s else sys_gross / span_s,
+                  system_mean_w_net=None if sys_net.joules is None else sys_net.joules / wall,
+                  system_span_s=span_s, system_below_idle=sys_net.below_idle, battery_flow=flow,
+                  mj_per_chunk_system_net=_per_chunk_mj(sys_net.joules, chunks))
+    return fields
 
 
 def _spread(values: Sequence[float]) -> dict:
