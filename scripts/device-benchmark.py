@@ -47,7 +47,7 @@ from run_code_eval import check_not_busy  # noqa: E402
 # The docs/adr tree at the 1.53.0 release (main after #769): 118 ADRs, ~1.3 MB of markdown.
 DEFAULT_CORPUS_SHA = "43138aa99e40be6989a3814692cc7dbf7ab0f9d3"
 CORPUS_DIRS = ("docs/adr",)
-CALIBRATION_EXTRA_DIRS = ("docs/changelog",)
+CALIBRATION_CANDIDATES = ("docs/plans", "docs/reviews", "docs/reference", "docs/research")
 MIN_WINDOW_S = 60.0
 PROJECT_ID = "device-benchmark"
 WARMUP_PROJECT_ID = "device-benchmark-warmup"
@@ -144,6 +144,12 @@ def product_info(binary: str) -> dict:
     if dll.exists():
         info["dll_sha256"] = _sha256(dll)
     return info
+
+
+def tree_bytes(sha: str, directory: str) -> int:
+    """Total blob bytes under directory at sha."""
+    out = _run(["git", "-C", str(REPO), "ls-tree", "-r", "-l", sha, directory])
+    return sum(int(line.split()[3]) for line in out.splitlines() if line.split()[3].isdigit())
 
 
 def extract_corpus(sha: str, dirs: tuple[str, ...], target: Path) -> dict:
@@ -535,11 +541,15 @@ def main(argv: list[str] | None = None) -> int:
             fastest = session.run(protocol.Slot(-1, -1, "auto", False))
             wall = fastest.get("wall_s")
             print(f"calibration: auto drained docs/adr in {wall} s", flush=True)
-            if wall is not None and wall < MIN_WINDOW_S:
-                corpus = extract_corpus(args.corpus_sha, CORPUS_DIRS + CALIBRATION_EXTRA_DIRS, corpus_dir)
-                notes.append(f"calibration: auto drained docs/adr in {wall:.1f} s < {MIN_WINDOW_S:.0f} s; added docs/changelog")
-            else:
-                notes.append(f"calibration: auto drained docs/adr in {wall} s; corpus kept")
+            if wall is None:
+                raise BenchmarkError(f"calibration run did not drain: {fastest.get('status')} {fastest.get('reason')}")
+            extra = protocol.calibrate_dirs(wall, corpus["bytes"], [(d, tree_bytes(args.corpus_sha, d)) for d in CALIBRATION_CANDIDATES],
+                                            min_seconds=MIN_WINDOW_S)
+            if extra:
+                corpus = extract_corpus(args.corpus_sha, CORPUS_DIRS + tuple(extra), corpus_dir)
+            notes.append(f"calibration: auto drained docs/adr in {wall:.1f} s (minimum {MIN_WINDOW_S:.0f} s); "
+                         f"added {', '.join(extra) if extra else 'nothing'}")
+            corpus["calibration"] = {"auto_wall_s": wall, "added": extra}
             shutil.rmtree(out / "runs", ignore_errors=True)
         if meter is not None:
             meter.start()

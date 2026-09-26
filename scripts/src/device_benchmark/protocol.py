@@ -121,3 +121,16 @@ def mark_chunk_mismatch(runs: list[dict]) -> int | None:
             run["status"] = "invalid"
             run["reason"] = f"chunk count {run.get('chunks')} differs from the session's {reference}"
     return reference
+
+
+def calibrate_dirs(base_seconds: float, base_bytes: int, candidates: Sequence[tuple[str, int]],
+                   min_seconds: float) -> list[str]:
+    """Candidate dirs to add, in order, until the drain projected by bytes reaches min_seconds."""
+    added: list[str] = []
+    total = base_bytes
+    for name, size in candidates:
+        if base_seconds * total / base_bytes >= min_seconds:
+            break
+        added.append(name)
+        total += size
+    return added

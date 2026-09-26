@@ -193,3 +193,19 @@ def test_the_slot_identity_wins_over_blank_keys_in_a_run_record() -> None:
                                 lambda slot: {"device": None, "repeat": None, "slot": None, "cold": None, "status": "ok"})
 
     assert (runs[0]["device"], runs[0]["repeat"], runs[0]["slot"], runs[0]["cold"]) == ("cpu", 0, 0, False)
+
+
+# ---------------------------------------------------------------------------------------------
+# Corpus calibration
+
+
+def test_calibration_adds_candidates_until_the_projected_drain_reaches_the_minimum() -> None:
+    # 25 s for 1.0 MB; 60 s needs 2.4 MB: 1.0 + 1.1 is short, + 0.7 reaches 2.8 MB (70 s).
+    extra = protocol.calibrate_dirs(25.0, 1_000_000, [("docs/plans", 1_100_000), ("docs/reviews", 700_000),
+                                                      ("docs/reference", 600_000)], min_seconds=60.0)
+
+    assert extra == ["docs/plans", "docs/reviews"]
+
+
+def test_calibration_adds_nothing_when_the_base_is_long_enough() -> None:
+    assert protocol.calibrate_dirs(75.0, 1_000_000, [("docs/plans", 1_100_000)], min_seconds=60.0) == []
