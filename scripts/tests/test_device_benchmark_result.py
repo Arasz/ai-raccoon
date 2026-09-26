@@ -18,10 +18,17 @@ def _run(device: str, repeat: int, wall: float, sys_net: float | None, soc_net: 
     return run
 
 
+def _coreml(repeat: int, wall: float, sys_net: float, soc_net: float, ready_s: float, compiler_s: float,
+            cold: bool = False) -> dict:
+    run = _run("coreml", repeat, wall, sys_net, soc_net, cold=cold)
+    run.update(neural_engine_ready_s=ready_s, ready_compiler_cpu_s=compiler_s)
+    return run
+
+
 RUNS = [
-    _run("coreml", 0, 90.0, 400.0, 200.0, cold=True),
-    _run("auto", 0, 30.0, 300.0, 150.0), _run("coreml", 0, 40.0, 200.0, 90.0),
-    _run("coreml", 1, 42.0, 210.0, 95.0), _run("auto", 1, 31.0, 320.0, 160.0),
+    _coreml(0, 90.0, 400.0, 200.0, 36.1, 29.5, cold=True),
+    _run("auto", 0, 30.0, 300.0, 150.0), _coreml(0, 40.0, 200.0, 90.0, 0.7, 0.1),
+    _coreml(1, 42.0, 210.0, 95.0, 34.6, 29.4), _run("auto", 1, 31.0, 320.0, 160.0),
     _run("cpu", 0, 60.0, None, None, status="fell_back"),
 ]
 
@@ -90,6 +97,8 @@ AiRaccoon 1.53.0 · corpus c0ffee (3 files) · 100 chunks · SoC: powermetrics �
 | cpu | fell_back×1 | – | – | – | – | – | – | – | – |
 
 Cold coreml compile: 55.0 s, 400.0 J system, 12.0 compiler CPU-s; warm load 3.0 s.
+
+coreml starts: slot 0 cold 36.1 s, 29.5 compiler CPU-s; slot 0 warm (cache hit) 0.7 s, 0.1 compiler CPU-s; slot 1 warm (recompiled) 34.6 s, 29.4 compiler CPU-s
 
 - coreml vs auto: net system energy separated? yes (coreml lower); net SoC energy separated? yes (coreml lower); wall time separated? yes (coreml higher)
 - cpu vs auto: net system energy separated? no data; net SoC energy separated? no data; wall time separated? no data

@@ -331,11 +331,13 @@ class Session:
         self.out = out
         self.corpus = corpus
         self.ioreg = ioreg
-        self.coreml_cache = out / "coreml-cache"
+        # CoreML keys its ANE compile cache by the compiled model's absolute path, so every coreml run
+        # shares this one root: a warm run wipes the bank and keeps coreml-cache/ in place.
+        self.coreml_root = out / "coreml-root"
 
-    def configure(self, root: Path, device: str) -> None:
+    def configure(self, root: Path, device: str, log_path: Path) -> None:
         """One-shot settings on the run's root through a setup server that is stopped before measuring."""
-        server = start_server(root, binary=self.args.binary, log_path=root.parent / "setup.log", idle_timeout="0")
+        server = start_server(root, binary=self.args.binary, log_path=log_path, idle_timeout="0")
         try:
             _cli(self.args.binary, root, server.port, "model", "embedding", "set", "local")
             _cli(self.args.binary, root, server.port, "settings", "model", "device", device)
@@ -347,37 +349,37 @@ class Session:
         run_dir = self.out / "runs" / f"{slot.index:02d}-{slot.device}{'-cold' if slot.cold else ''}"
         if run_dir.exists():
             shutil.rmtree(run_dir)
-        root = run_dir / "data-root"
-        root.mkdir(parents=True)
+        run_dir.mkdir(parents=True)
+        if slot.device == "coreml":
+            root = self.coreml_root
+            if slot.cold and root.exists():
+                shutil.rmtree(root)
+            if root.exists():
+                protocol.reset_bank_state(root)
+            root.mkdir(parents=True, exist_ok=True)
+        else:
+            root = run_dir / "data-root"
+            root.mkdir(parents=True)
         assert_safe_data_root(root)
         record: dict = {key: None for key in result.RUN_KEYS}
-        record.update(loadavg_start=list(os.getloadavg()))
+        record.update(loadavg_start=list(os.getloadavg()), data_root=str(root))
 
-        warm_coreml = slot.device == "coreml" and not slot.cold and self.coreml_cache.exists()
-        if warm_coreml:
-            shutil.move(str(self.coreml_cache), str(root / "coreml-cache"))
-            (root / "coreml-cache" / "status.json").unlink(missing_ok=True)
+        self.configure(root, slot.device, run_dir / "setup.log")
+
+        # Idle baseline, no server: SoC needs idle_seconds; system needs one whole publish segment.
+        idle_start = time.time()
+        time.sleep(self.args.idle_seconds)
+        idle_end = time.time()
+        if self.ioreg.available:
+            second = self.ioreg.wait_publishes(idle_start, 2, 2 * PUBLISH_WAIT_S)
+            idle_end = max(idle_end, second or time.time())
+        record.update(idle_start=idle_start, idle_end=idle_end)
+
+        server = start_server(root, binary=self.args.binary, log_path=run_dir / "serve.log", idle_timeout="0")
         try:
-            self.configure(root, slot.device)
-
-            # Idle baseline, no server: SoC needs idle_seconds; system needs one whole publish segment.
-            idle_start = time.time()
-            time.sleep(self.args.idle_seconds)
-            idle_end = time.time()
-            if self.ioreg.available:
-                second = self.ioreg.wait_publishes(idle_start, 2, 2 * PUBLISH_WAIT_S)
-                idle_end = max(idle_end, second or time.time())
-            record.update(idle_start=idle_start, idle_end=idle_end)
-
-            server = start_server(root, binary=self.args.binary, log_path=run_dir / "serve.log", idle_timeout="0")
-            try:
-                record.update(self._measure(slot, server, root, run_dir))
-            finally:
-                _stop_server(server, root)
+            record.update(self._measure(slot, server, root, run_dir))
         finally:
-            if slot.device == "coreml" and (root / "coreml-cache").exists() and (slot.cold or warm_coreml):
-                if not self.coreml_cache.exists():
-                    shutil.move(str(root / "coreml-cache"), str(self.coreml_cache))
+            _stop_server(server, root)
         return record
 
     def _measure(self, slot: protocol.Slot, server, root: Path, run_dir: Path) -> dict:

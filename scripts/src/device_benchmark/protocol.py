@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import statistics
 import time
 from dataclasses import dataclass
@@ -129,3 +130,27 @@ def calibrate_tier(base_seconds: float, tier_bytes: Sequence[int], min_seconds: 
         if base_seconds * size / tier_bytes[0] >= min_seconds:
             return index
     return len(tier_bytes) - 1
+
+
+CACHE_HIT_COMPILER_CPU_S = 2.0
+
+
+def reset_bank_state(root: Path) -> None:
+    """Delete everything under a coreml data root except coreml-cache/, so the next server starts a fresh
+    bank at the same absolute path (CoreML keys its ANE compile cache by the compiled model's path)."""
+    for entry in Path(root).iterdir():
+        if entry.name == "coreml-cache":
+            continue
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+
+
+def coreml_start_label(cold: bool, compiler_cpu_s: float | None) -> str:
+    """cold, or a warm start judged by the ANE compiler CPU it cost: under 2 s is a cache hit."""
+    if cold:
+        return "cold"
+    if compiler_cpu_s is None:
+        return "warm (unknown)"
+    return "warm (cache hit)" if compiler_cpu_s < CACHE_HIT_COMPILER_CPU_S else "warm (recompiled)"

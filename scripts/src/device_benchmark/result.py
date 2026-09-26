@@ -11,6 +11,7 @@ import statistics
 from typing import Sequence
 
 from device_benchmark import battery, power
+from device_benchmark.protocol import coreml_start_label
 from retrieval_tuning.coreml import beats
 
 SCHEMA_VERSION = 1
@@ -24,7 +25,7 @@ RUN_KEYS = (
     "system_span_s", "system_below_idle", "battery_flow",
     "mj_per_chunk_soc_net", "mj_per_chunk_system_net",
     "phys_footprint_peak_kib", "neural_footprint_peak_kib", "thermal_pressure_max", "loadavg_start",
-    "neural_engine_ready_s", "neural_engine_how",
+    "neural_engine_ready_s", "neural_engine_how", "ready_compiler_cpu_s",
 )
 
 TOP_KEYS = ("schemaVersion", "machine", "product", "corpus", "power_sources", "compile", "runs", "summary")
@@ -169,6 +170,12 @@ def render_markdown(doc: dict) -> str:
                      f"{_cell(compile_info.get('compiler_cpu_s'))} compiler CPU-s; warm load {_cell(compile_info.get('warm_ready_s'))} s.")
     else:
         lines.append("Cold coreml compile: not measured.")
+    starts = [r for r in doc["runs"] if r["device"] == "coreml" and r.get("neural_engine_ready_s") is not None]
+    if starts:
+        lines.append("")
+        lines.append("coreml starts: " + "; ".join(
+            f"slot {r['slot']} {coreml_start_label(r['cold'], r.get('ready_compiler_cpu_s'))} "
+            f"{_cell(r['neural_engine_ready_s'])} s, {_cell(r.get('ready_compiler_cpu_s'))} compiler CPU-s" for r in starts))
     lines.append("")
     reference = doc["summary"]["reference"]
     for device, verdict in doc["summary"]["verdicts"].items():

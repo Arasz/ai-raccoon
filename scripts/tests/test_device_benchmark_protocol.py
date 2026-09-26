@@ -207,3 +207,32 @@ def test_calibration_picks_the_smallest_tier_whose_projected_drain_reaches_the_m
 def test_calibration_keeps_tier_0_when_it_is_long_enough_and_caps_at_the_last_tier() -> None:
     assert protocol.calibrate_tier(45.0, [1_100_000, 3_660_000], min_seconds=30.0) == 0
     assert protocol.calibrate_tier(1.0, [1_100_000, 3_660_000], min_seconds=30.0) == 1
+
+
+# ---------------------------------------------------------------------------------------------
+# Warm coreml: one stable root, cache hit judged by compiler CPU
+
+
+def test_reset_bank_state_keeps_only_the_coreml_cache(tmp_path: Path) -> None:
+    root = tmp_path / "coreml-root"
+    (root / "coreml-cache" / "key").mkdir(parents=True)
+    (root / "coreml-cache" / "key" / "model.bin").write_text("compiled")
+    for name in ("memory.db", "memory.db-wal", "mcp-token", "serve.log"):
+        (root / name).write_text("x")
+    (root / "logs").mkdir()
+    (root / "logs" / "a.log").write_text("x")
+
+    protocol.reset_bank_state(root)
+
+    assert sorted(p.name for p in root.iterdir()) == ["coreml-cache"]
+    assert (root / "coreml-cache" / "key" / "model.bin").read_text() == "compiled"
+
+
+@pytest.mark.parametrize(("cold", "compiler_cpu_s", "label"), [
+    (True, 29.5, "cold"),
+    (False, 0.4, "warm (cache hit)"),
+    (False, 29.4, "warm (recompiled)"),
+    (False, None, "warm (unknown)"),
+])
+def test_coreml_start_label_judges_a_cache_hit_by_compiler_cpu(cold: bool, compiler_cpu_s: float | None, label: str) -> None:
+    assert protocol.coreml_start_label(cold, compiler_cpu_s) == label
