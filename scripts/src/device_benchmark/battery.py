@@ -14,11 +14,16 @@ Measured on a MacBook Air M4 (macOS 27.0, on AC, not charging), polling ioreg at
 - Under a load the adapter could not cover, BatteryPower read -4636 mW (printed as its unsigned
   64-bit wrap) and the SystemLoad mean exceeded the SystemPowerIn mean (24.4 W vs 22.5 W): SystemLoad
   is what the system drew from adapter and battery together, SystemPowerIn only the adapter's share.
+- When the battery started charging mid-session, SystemPowerIn's mean rose to 32.6 W with
+  BatteryPower +18.6 W while SystemLoad's stayed at 15.7 W: SystemLoad excludes charging.
+- Most publishes are 60 s apart, but some came 5-15 s apart (around charge-state changes); a
+  segment is whatever lies between two publishes.
 
 So system energy is SystemLoad's accumulator: each publish closes a segment whose mean power is
 Δacc/Δcount, and a window's energy is Σ mean × segment seconds over the segments it overlaps. The
 resolution is a minute, so callers align a timed window to publish boundaries and subtract the idle
-baseline over the whole covered span. A nonzero BatteryPower in the span is flagged. A Mac with no
+baseline over the whole covered span. A nonzero BatteryPower in the span (charging or topping up
+the adapter) is flagged; SystemLoad still counts only what the system drew. A Mac with no
 battery has no PowerTelemetryData: system energy is unavailable there.
 """
 
