@@ -545,9 +545,10 @@ def main(argv: list[str] | None = None) -> int:
         if meter is not None:
             meter.start()
         slots = protocol.schedule(devices, args.repeats)
+        total_slots = len(slots)
 
         def run_one(slot: protocol.Slot) -> dict:
-            label = "calibration" if slot.index < 0 else f"{slot.index + 1}/{len(slots)}"
+            label = "calibration" if slot.index < 0 else f"{slot.index + 1}/{total_slots}"
             print(f"[{label}] {slot.device}{' (cold)' if slot.cold else ''} repeat {slot.repeat}", flush=True)
             record = session.run(slot)
             print(f"    -> {record.get('status')} wall {record.get('wall_s')} provider {record.get('provider_actual')} "
