@@ -123,14 +123,9 @@ def mark_chunk_mismatch(runs: list[dict]) -> int | None:
     return reference
 
 
-def calibrate_dirs(base_seconds: float, base_bytes: int, candidates: Sequence[tuple[str, int]],
-                   min_seconds: float) -> list[str]:
-    """Candidate dirs to add, in order, until the drain projected by bytes reaches min_seconds."""
-    added: list[str] = []
-    total = base_bytes
-    for name, size in candidates:
-        if base_seconds * total / base_bytes >= min_seconds:
-            break
-        added.append(name)
-        total += size
-    return added
+def calibrate_tier(base_seconds: float, tier_bytes: Sequence[int], min_seconds: float) -> int:
+    """The smallest corpus tier whose drain, projected by bytes from tier 0's, reaches min_seconds (else the last)."""
+    for index, size in enumerate(tier_bytes):
+        if base_seconds * size / tier_bytes[0] >= min_seconds:
+            return index
+    return len(tier_bytes) - 1

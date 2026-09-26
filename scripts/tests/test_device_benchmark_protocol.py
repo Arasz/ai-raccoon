@@ -199,13 +199,11 @@ def test_the_slot_identity_wins_over_blank_keys_in_a_run_record() -> None:
 # Corpus calibration
 
 
-def test_calibration_adds_candidates_until_the_projected_drain_reaches_the_minimum() -> None:
-    # 25 s for 1.0 MB; 60 s needs 2.4 MB: 1.0 + 1.1 is short, + 0.7 reaches 2.8 MB (70 s).
-    extra = protocol.calibrate_dirs(25.0, 1_000_000, [("docs/plans", 1_100_000), ("docs/reviews", 700_000),
-                                                      ("docs/reference", 600_000)], min_seconds=60.0)
-
-    assert extra == ["docs/plans", "docs/reviews"]
+def test_calibration_picks_the_smallest_tier_whose_projected_drain_reaches_the_minimum() -> None:
+    # 12.8 s for tier 0 (1.1 MB): tier 1 (3.7 MB) projects 43 s, the first at or over 30 s.
+    assert protocol.calibrate_tier(12.8, [1_100_000, 3_660_000, 21_000_000], min_seconds=30.0) == 1
 
 
-def test_calibration_adds_nothing_when_the_base_is_long_enough() -> None:
-    assert protocol.calibrate_dirs(75.0, 1_000_000, [("docs/plans", 1_100_000)], min_seconds=60.0) == []
+def test_calibration_keeps_tier_0_when_it_is_long_enough_and_caps_at_the_last_tier() -> None:
+    assert protocol.calibrate_tier(45.0, [1_100_000, 3_660_000], min_seconds=30.0) == 0
+    assert protocol.calibrate_tier(1.0, [1_100_000, 3_660_000], min_seconds=30.0) == 1

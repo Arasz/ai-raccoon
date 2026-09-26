@@ -46,9 +46,14 @@ from run_code_eval import check_not_busy  # noqa: E402
 
 # The docs/adr tree at the 1.53.0 release (main after #769): 118 ADRs, ~1.3 MB of markdown.
 DEFAULT_CORPUS_SHA = "43138aa99e40be6989a3814692cc7dbf7ab0f9d3"
-CORPUS_DIRS = ("docs/adr",)
-CALIBRATION_CANDIDATES = ("docs/plans", "docs/reviews", "docs/reference", "docs/research")
-MIN_WINDOW_S = 60.0
+# Corpus tiers at the pinned sha: the benchmark uses the smallest one on which the fastest device's
+# drain projects to at least MIN_WINDOW_S (tier 0 ~1.1 MB, tier 1 ~3.7 MB, tier 2 ~21 MB).
+CORPUS_TIERS = (
+    ("docs/adr",),
+    ("docs/adr", "docs/plans", "docs/reviews", "docs/reference", "docs/research"),
+    ("docs/adr", "docs/plans", "docs/reviews", "docs/reference", "docs/research", "docs/work"),
+)
+MIN_WINDOW_S = 30.0
 PROJECT_ID = "device-benchmark"
 WARMUP_PROJECT_ID = "device-benchmark-warmup"
 COMPILER_NAMES = ("aned", "ANECompilerService")
@@ -532,37 +537,48 @@ def main(argv: list[str] | None = None) -> int:
         notes.append("no AppleSmartBattery PowerTelemetryData (desktop Mac?): system energy unavailable")
     meter = None if args.no_power else PowerMetrics(out / "powermetrics.plist")
     corpus_dir = out / "corpus"
-    corpus = extract_corpus(args.corpus_sha, CORPUS_DIRS, corpus_dir)
+    corpus = extract_corpus(args.corpus_sha, CORPUS_TIERS[0], corpus_dir)
     session = Session(args, out, corpus_dir, ioreg)
     runs: list[dict] = []
     soc_samples: list[dict] | None = None
     try:
-        if not args.no_calibrate:
-            fastest = session.run(protocol.Slot(-1, -1, "auto", False))
-            wall = fastest.get("wall_s")
-            print(f"calibration: auto drained docs/adr in {wall} s", flush=True)
-            if wall is None:
-                raise BenchmarkError(f"calibration run did not drain: {fastest.get('status')} {fastest.get('reason')}")
-            extra = protocol.calibrate_dirs(wall, corpus["bytes"], [(d, tree_bytes(args.corpus_sha, d)) for d in CALIBRATION_CANDIDATES],
-                                            min_seconds=MIN_WINDOW_S)
-            if extra:
-                corpus = extract_corpus(args.corpus_sha, CORPUS_DIRS + tuple(extra), corpus_dir)
-            notes.append(f"calibration: auto drained docs/adr in {wall:.1f} s (minimum {MIN_WINDOW_S:.0f} s); "
-                         f"added {', '.join(extra) if extra else 'nothing'}")
-            corpus["calibration"] = {"auto_wall_s": wall, "added": extra}
-            shutil.rmtree(out / "runs", ignore_errors=True)
         if meter is not None:
             meter.start()
         slots = protocol.schedule(devices, args.repeats)
 
         def run_one(slot: protocol.Slot) -> dict:
-            print(f"[{slot.index + 1}/{len(slots)}] {slot.device}{' (cold)' if slot.cold else ''} repeat {slot.repeat}", flush=True)
+            label = "calibration" if slot.index < 0 else f"{slot.index + 1}/{len(slots)}"
+            print(f"[{label}] {slot.device}{' (cold)' if slot.cold else ''} repeat {slot.repeat}", flush=True)
             record = session.run(slot)
             print(f"    -> {record.get('status')} wall {record.get('wall_s')} provider {record.get('provider_actual')} "
                   f"chunks {record.get('chunks')}", flush=True)
             return record
 
-        runs = protocol.run_session(slots, run_one)
+        if not args.no_calibrate:
+            # The cold coreml run doubles as the calibration run: its compile is what it measures, and its
+            # drain is the fastest one this benchmark sees. Without coreml (or if it is refused), auto calibrates.
+            if slots and slots[0].cold:
+                runs = protocol.run_session(slots[:1], run_one)
+                slots = slots[1:]
+            calibrating = runs[0] if runs and runs[0].get("wall_s") is not None else None
+            if calibrating is None:
+                calibrating = protocol.run_session([protocol.Slot(-1, -1, "auto", False)], run_one)[0]
+            wall = calibrating.get("wall_s")
+            if wall is None:
+                raise BenchmarkError(f"calibration run did not drain: {calibrating.get('status')} {calibrating.get('reason')}")
+            tier = protocol.calibrate_tier(wall, [sum(tree_bytes(args.corpus_sha, d) for d in dirs) for dirs in CORPUS_TIERS],
+                                           min_seconds=MIN_WINDOW_S)
+            if tier > 0:
+                corpus = extract_corpus(args.corpus_sha, CORPUS_TIERS[tier], corpus_dir)
+            corpus["calibration"] = {"device": calibrating["device"], "tier0_wall_s": wall, "tier": tier,
+                                     "min_window_s": MIN_WINDOW_S}
+            notes.append(f"calibration: {calibrating['device']} drained tier 0 (docs/adr) in {wall:.1f} s; "
+                         f"benchmark corpus is tier {tier} ({', '.join(CORPUS_TIERS[tier])})")
+            if tier > 0 and runs:
+                notes.append("the cold coreml run drained the tier 0 corpus; only its compile numbers compare")
+            shutil.rmtree(out / "runs" / "-1-auto", ignore_errors=True)
+
+        runs += protocol.run_session(slots, run_one)
     finally:
         if meter is not None:
             soc_samples = meter.stop()
@@ -572,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
     for run in runs:
         for key in result.RUN_KEYS:
             run.setdefault(key, None)
-    protocol.mark_chunk_mismatch(runs)
+    protocol.mark_chunk_mismatch([r for r in runs if not r["cold"]])
     compile_info = _finalize(runs, soc_samples, ioreg)
     if ioreg.available:
         (out / "ioreg-readings.json").write_text(json.dumps([{"t": r.t, **r.telemetry} for r in ioreg.readings]))
