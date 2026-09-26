@@ -238,13 +238,8 @@ internal static class CliCommandTree
         });
 
         model.Add(new Command("device",
-            "Where local embedding sessions run: auto (default: the bundled model on the GPU, other models on the CPU), " +
-            "gpu (every local model on the GPU where the platform has one), cpu, or mlx (the bundled engine only, " +
-            "through the onnxruntime MLX plugin on osx-arm64; falls back to gpu then cpu when unavailable, ADR-0110), " +
-            "cuda <path> (every local model through the onnxruntime CUDA provider library at <path>, Windows/Linux; " +
-            "falls back to gpu then cpu when unavailable), or coreml (the bundled engine only, on the Neural Engine of " +
-            "Apple Silicon Macs; WebGPU serves while it compiles and keeps serving if it is refused, ADR-0118). " +
-            "Takes effect on the next server restart.")
+            "Where local embedding runs: auto (default), gpu, cpu, mlx or coreml (bundled model, Apple Silicon), " +
+            "or cuda <path> (CUDA provider library). Unavailable devices fall back to gpu, then cpu. Applies on restart.")
         {
             new Argument<string>("device") { HelpName = string.Join('|', EmbeddingDeviceSetting.Values) },
             new Argument<string?>("path") { HelpName = "path-to-provider-library", Arity = ArgumentArity.ZeroOrOne }

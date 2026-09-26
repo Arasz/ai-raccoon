@@ -93,6 +93,20 @@ public class CliCommandTreeTests
     }
 
     [Fact]
+    public void EmbeddingDeviceHelpText_NamesEveryDeviceAndIsShort()
+    {
+        var description = CommandAt("settings model device").Description!;
+
+        foreach (var device in AiRaccoon.Infrastructure.Embedding.EmbeddingDeviceSetting.Values)
+        {
+            description.ShouldContain(device);
+        }
+
+        description.ShouldNotContain("ADR-");
+        description.Length.ShouldBeLessThan(220);
+    }
+
+    [Fact]
     public void ServeCommand_ExposesServeOptions()
     {
         var root = CliCommandTree.BuildFullRootCommand();
