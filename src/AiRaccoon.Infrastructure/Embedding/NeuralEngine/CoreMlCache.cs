@@ -238,9 +238,20 @@ internal sealed partial class CoreMlCache
                     entry.Delete();
                 }
             }
+
+            // Still holding the lock: unlink it and remove the now-empty set. A process that opens a
+            // fresh lock here in the meantime leaves the directory non-empty, and its work is kept.
+            File.Delete(Path.Combine(set, LockFileName));
+            try
+            {
+                Directory.Delete(set, false);
+            }
+            catch (IOException)
+            {
+                return;
+            }
         }
 
-        Directory.Delete(set, true);
         Log.StaleSetPruned(_logger, set);
     }
 
