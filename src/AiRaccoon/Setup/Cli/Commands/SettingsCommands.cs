@@ -309,8 +309,8 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
     }
 
     /// <summary>
-    ///     `settings model device auto|gpu|cpu|mlx|cuda [path]` (ADR-0108, ADR-0110); cuda requires an existing
-    ///     provider library path and no other device takes one. Every refusal writes nothing.
+    ///     `settings model device auto|gpu|cpu|mlx|cuda|coreml [path]` (ADR-0108, ADR-0110, ADR-0118); cuda requires
+    ///     an existing provider library path and no other device takes one. Every refusal writes nothing.
     /// </summary>
     public async Task<int> ModelDeviceSetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)

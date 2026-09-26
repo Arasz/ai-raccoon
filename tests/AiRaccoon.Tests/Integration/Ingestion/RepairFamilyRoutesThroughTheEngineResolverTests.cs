@@ -93,7 +93,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
 
     private static EmbeddingService Service() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-            NoOpMeasurementRecorder.Instance, TimeProvider.System);
+            NoOpMeasurementRecorder.Instance, TimeProvider.System, TestData.EmbeddingOptions());
 
     [RetryFact]
     public async Task ChunkPositionScanner_BudgetAsync_ManifestModel_ResolvesBudgetAndCounterFromTheManifest()

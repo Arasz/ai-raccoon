@@ -829,7 +829,7 @@ ai-raccoon model embedding set openai {model-id} [base-url] [--api-key <key>]
 ai-raccoon settings model embedding reset
 ai-raccoon settings model embedding show
 ai-raccoon settings model threads {n}       # ORT intra-op thread cap; 0 = ORT default, unset = max(1, logicalCores/2)
-ai-raccoon settings model device {auto|gpu|cpu|mlx|cuda [path]}   # auto (default) puts only the bundled model on the GPU (ADR-0108); mlx is bundled-engine + osx-arm64 only (ADR-0110); cuda needs a path to a CUDA provider library and applies to every local model (ADR-0112)
+ai-raccoon settings model device {auto|gpu|cpu|mlx|coreml|cuda [path]}   # auto (default) puts only the bundled model on the GPU (ADR-0108); mlx is bundled-engine + osx-arm64 only (ADR-0110); coreml is bundled-engine + osx-arm64 only, the Neural Engine (ADR-0118); cuda needs a path to a CUDA provider library and applies to every local model (ADR-0112)
 
 # model code set: the code corpus's own engine — independent settings rows, any manifest
 # dimension accepted (vec_code is reconciled to it), no memory-bank re-embed
@@ -1062,8 +1062,9 @@ It is also the code corpus's default engine (`ai-raccoon model code set default`
 activates the same bundled files for code — see [ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)).
 Sessions try the GPU first where the platform's ONNX Runtime build has one — WebGPU on macOS
 (built in) and on Windows/Linux (a packaged plugin, [ADR-0112](../adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md)),
-or MLX on osx-arm64 ([ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md))
-(`settings model device` forces `cpu`/`gpu`/`mlx`/`cuda [path]`, default `auto`). The files are gitignored
+or MLX or CoreML (the Neural Engine) on osx-arm64 ([ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md),
+[ADR-0118](../adr/0118-opt-in-coreml-device-on-the-neural-engine.md))
+(`settings model device` forces `cpu`/`gpu`/`mlx`/`coreml`/`cuda [path]`, default `auto`). The files are gitignored
 and fetched once by the pinned script (SHA-256 verified); the tests FAIL (never skip)
 when they are missing:
 

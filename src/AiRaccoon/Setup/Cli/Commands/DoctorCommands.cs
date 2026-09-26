@@ -1,7 +1,10 @@
+using System.Diagnostics;
 using System.Globalization;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
+using AiRaccoon.Infrastructure.Embedding.NeuralEngine;
+using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Setup.Diagnostics;
@@ -15,7 +18,8 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     the bank read-only, exactly like <c>OpenSnapshotReadOnly</c> (AppRegistrations.cs), so it
 ///     never runs <c>MemorySchema.EnsureAsync</c> against the very bank it is inspecting.
 /// </summary>
-public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnectionFactory, IEncryptionKeyResolver keyResolver, ILogger<DoctorCommands> logger)
+public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnectionFactory, IEncryptionKeyResolver keyResolver,
+    InfrastructureOptions options, ILogger<DoctorCommands> logger)
 {
     public async Task<int> RunAsync(StandardStreams streams, CancellationToken cancellationToken)
     {
@@ -77,7 +81,8 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
 
             var threads = await ReadEmbeddingThreadsStateAsync(connection, cancellationToken);
             var migration = await ReadModelMigrationStateAsync(connection, cancellationToken);
-            return await ReportAsync(bankPath, report, engines, threads, migration, streams);
+            var coreMl = await ReadCoreMlLineAsync(connection, cancellationToken);
+            return await ReportAsync(bankPath, report, engines, threads, coreMl, migration, streams);
         }
     }
 
@@ -142,7 +147,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
 
     private static async Task<int> ReportAsync(string bankPath, SchemaDoctorReport report,
         IReadOnlyDictionary<CorpusEngineProbe, CorpusEngineState> engines,
-        EmbeddingThreadsState threads, MigrationState migration, StandardStreams streams)
+        EmbeddingThreadsState threads, string? coreMl, MigrationState migration, StandardStreams streams)
     {
         await streams.WriteOutputLineAsync($"ai-raccoon doctor: {bankPath}");
         await streams.WriteOutputLineAsync($"user_version: {report.StoredVersion} (this binary: {report.CurrentVersion})");
@@ -155,6 +160,11 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         // #522: what `embedding.threads` resolves to, via EmbeddingService's own resolver.
         await streams.WriteOutputLineAsync(
             $"embedding threads: {EmbeddingService.ThreadCountDisplay(threads.Threads)} ({threads.Source})");
+        if (coreMl is not null)
+        {
+            await streams.WriteOutputLineAsync(coreMl);
+        }
+
         foreach (var probe in CorpusEngineProbe.All)
         {
             await streams.WriteOutputLineAsync(CorpusEngineLines.PendingLine(probe, engines[probe]));
@@ -289,6 +299,67 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         {
             var (threads, source) = EmbeddingService.ResolveThreadCountForDisplay(null);
             return new EmbeddingThreadsState(threads, source);
+        }
+    }
+
+    /// <summary>
+    ///     ADR-0118: the Neural Engine compile's last recorded state and the cache size, under
+    ///     <c>device coreml</c> or whenever a cache exists; null otherwise. Never fails the report.
+    /// </summary>
+    private async Task<string?> ReadCoreMlLineAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var root = Path.Combine(options.DataRoot, EmbeddingService.CoreMlCacheDirectoryName);
+        if (!Directory.Exists(root) && await ReadDeviceAsync(connection, cancellationToken) != EmbeddingDevice.CoreMl)
+        {
+            return null;
+        }
+
+        var cache = string.Create(CultureInfo.InvariantCulture, $"cache {CoreMlCache.SizeBytes(root) / (1024.0 * 1024.0):0} MiB");
+        CoreMlStatus? status;
+        try
+        {
+            status = CoreMlCache.ReadStatus(root);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            return $"coreml: status.json unreadable, {cache}";
+        }
+
+        if (status is null)
+        {
+            return $"coreml: not started, {cache}";
+        }
+
+        var reason = string.IsNullOrEmpty(status.Reason) ? "" : $": {status.Reason}";
+        var running = IsRunning(status.Pid) ? "" : " (not running)";
+        return $"coreml: {status.State} ({status.Trigger}{reason}) at {FormatTimestamp(status.At.ToUnixTimeSeconds())}, " +
+               $"pid {status.Pid}{running}, {cache}";
+    }
+
+    private static async Task<EmbeddingDevice> ReadDeviceAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return EmbeddingDeviceSetting.Parse(await TableExistsAsync(connection, "settings", cancellationToken)
+                ? await ReadSettingAsync(connection, EmbeddingSettingsKeys.Device, cancellationToken)
+                : null);
+        }
+        catch (SqliteException)
+        {
+            return EmbeddingDevice.Auto;
+        }
+    }
+
+    private static bool IsRunning(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return false;
         }
     }
 

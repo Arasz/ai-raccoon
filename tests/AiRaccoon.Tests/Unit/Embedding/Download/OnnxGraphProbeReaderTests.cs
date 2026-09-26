@@ -126,6 +126,64 @@ public class OnnxGraphProbeReaderTests
         probe.ExternalDataFiles.ShouldBeEmpty();
     }
 
+    /// <summary>#764 stage 3 P2: the ANE-shared-weights check needs each initializer's own
+    /// (offset, length) slice into the external file, not just the file name — two initializers
+    /// can share a location while reading disjoint byte ranges.</summary>
+    [Fact]
+    public void ReadsExternalDataRefs_WithNameOffsetAndLength()
+    {
+        var model = TestOnnx.MinimalModel(
+            initializers: [TestOnnx.TensorWithExternalData("weights", "model.onnx_data", offset: 128, length: 256)]);
+
+        var probe = Probe().Read(model);
+
+        probe.ExternalDataRefs.ShouldNotBeNull();
+        probe.ExternalDataRefs!.ShouldBe([new OnnxExternalDataRef("weights", "model.onnx_data", 128, 256)]);
+    }
+
+    /// <summary>Unlike <see cref="OnnxGraphProbe.ExternalDataFiles" />, which dedupes by location,
+    /// every initializer gets its own ref even when two share a location — that is exactly the case
+    /// a shared-weights graph relies on.</summary>
+    [Fact]
+    public void ReadsExternalDataRefs_OneEntryPerInitializer_EvenWhenLocationRepeats()
+    {
+        var model = TestOnnx.MinimalModel(
+            initializers:
+            [
+                TestOnnx.TensorWithExternalData("w1", "model.onnx_data", offset: 0, length: 64),
+                TestOnnx.TensorWithExternalData("w2", "model.onnx_data", offset: 64, length: 64)
+            ]);
+
+        var probe = Probe().Read(model);
+
+        probe.ExternalDataRefs.ShouldNotBeNull();
+        probe.ExternalDataRefs!.ShouldBe(
+        [
+            new OnnxExternalDataRef("w1", "model.onnx_data", 0, 64),
+            new OnnxExternalDataRef("w2", "model.onnx_data", 64, 64)
+        ]);
+    }
+
+    [Fact]
+    public void InlineInitializer_HasNoExternalDataRef()
+    {
+        var model = TestOnnx.MinimalModel(initializers: [TestOnnx.TensorWithExternalData("w", "stray.bin", dataLocation: 0)]);
+
+        var probe = Probe().Read(model);
+
+        probe.ExternalDataRefs.ShouldNotBeNull();
+        probe.ExternalDataRefs!.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void NoExternalData_YieldsEmptyExternalDataRefs()
+    {
+        var probe = Probe().Read(TestOnnx.MinimalModel());
+
+        probe.ExternalDataRefs.ShouldNotBeNull();
+        probe.ExternalDataRefs!.ShouldBeEmpty();
+    }
+
     [Fact]
     public void GarbageFile_Throws_WithActionableMessage()
     {
@@ -192,7 +250,7 @@ internal static class TestOnnx
         return model.ToArray();
     }
 
-    public static byte[] TensorWithExternalData(string name, string location, int dataLocation = 1)
+    public static byte[] TensorWithExternalData(string name, string location, int dataLocation = 1, long offset = 0, long length = 8)
     {
         var tensor = new List<byte>();
         tensor.AddRange(Int64Field(1, 2)); // dims
@@ -200,8 +258,8 @@ internal static class TestOnnx
         tensor.AddRange(Int64Field(2, 1)); // data_type FLOAT
         tensor.AddRange(StringField(3, name));
         tensor.AddRange(MessageField(13, StringStringEntry("location", location)));
-        tensor.AddRange(MessageField(13, StringStringEntry("offset", "0")));
-        tensor.AddRange(MessageField(13, StringStringEntry("length", "8")));
+        tensor.AddRange(MessageField(13, StringStringEntry("offset", offset.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+        tensor.AddRange(MessageField(13, StringStringEntry("length", length.ToString(System.Globalization.CultureInfo.InvariantCulture))));
         tensor.AddRange(Int64Field(14, dataLocation)); // data_location
         return tensor.ToArray();
     }

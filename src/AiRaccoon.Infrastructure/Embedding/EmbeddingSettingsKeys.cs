@@ -35,7 +35,7 @@ public static class EmbeddingSettingsKeys
     public const string Threads = "embedding.threads";
 
     /// <summary>Where local sessions run (ADR-0108): "auto" (unset) puts the bundled engine on the GPU
-    /// and other models on the CPU, "gpu" puts every model on the GPU, "cpu" none, "mlx"/"cuda" opt into those plugins. Next server restart.</summary>
+    /// and other models on the CPU, "gpu" puts every model on the GPU, "cpu" none, "mlx"/"cuda"/"coreml" opt into those plugins. Next server restart.</summary>
     public const string Device = "embedding.device";
 
     /// <summary>Absolute path of the onnxruntime CUDA provider library; read only when <see cref="Device" /> is "cuda".</summary>

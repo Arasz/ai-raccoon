@@ -2,7 +2,8 @@
 
 Date: 2026-09-25
 
-Status: Accepted
+Status: **Superseded** — 2026-09-26 by [ADR-0118](0118-opt-in-coreml-device-on-the-neural-engine.md),
+which ships the opt-in `coreml` device this ADR's re-open trigger cleared the way for.
 
 Amended 2026-09-25: **the re-open trigger fired, and the gates cleared, for a re-exported graph.**
 granite-small re-exported in fp16 in the `ml-ane-transformers` layout (#760) runs as one CoreML

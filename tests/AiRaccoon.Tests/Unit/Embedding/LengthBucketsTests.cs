@@ -43,4 +43,21 @@ public sealed class LengthBucketsTests
     [Fact]
     public void PaddedLength_ZeroLength_IsRejected() =>
         Should.Throw<ArgumentOutOfRangeException>(() => LengthBuckets.PaddedLength(0, 8190));
+
+    [Theory]
+    [InlineData(1, 256)]
+    [InlineData(256, 256)]
+    [InlineData(257, 512)]
+    [InlineData(1024, 1024)]
+    public void PaddedLength_WithAnExplicitStep_RoundsUpToTheNextMultipleOfIt(int length, int expected) =>
+        LengthBuckets.PaddedLength(length, LengthBuckets.CoreMlWindow, LengthBuckets.CoreMlStep).ShouldBe(expected);
+
+    [Fact]
+    public void PaddedLength_AboveTheWindow_ThrowsRegardlessOfStep() =>
+        Should.Throw<ArgumentOutOfRangeException>(
+            () => LengthBuckets.PaddedLength(1025, LengthBuckets.CoreMlWindow, LengthBuckets.CoreMlStep));
+
+    [Fact]
+    public void PaddedLength_TwoArgOverload_MatchesTheThreeArgOverloadAtTheDefaultStep() =>
+        LengthBuckets.PaddedLength(700, 8190).ShouldBe(LengthBuckets.PaddedLength(700, 8190, LengthBuckets.Step));
 }

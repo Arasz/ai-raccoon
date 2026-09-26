@@ -41,7 +41,7 @@ public sealed class QueryTruncationMetricsTests : IDisposable
 
     private EmbeddingService NewEmbeddingService() => new(_logger, new LocalTokenizer(), new EmbeddingTokenizerFactory(),
         new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
-        _measurements, _timeProvider);
+        _measurements, _timeProvider, TestData.EmbeddingOptions());
 
     [RetryFact]
     public async Task ALongQuery_RecordsTokensOverTheWindow()

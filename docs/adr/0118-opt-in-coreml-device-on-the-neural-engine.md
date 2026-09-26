@@ -2,9 +2,9 @@
 
 Date: 2026-09-26
 
-Status: Proposed. On acceptance it supersedes [ADR-0117](0117-coreml-execution-provider-stays-out.md)'s
-decision. Making it the Apple Silicon default is a later, separate decision; see "Before it can
-become the default".
+Status: **Accepted** — 2026-09-26. Opt-in shipped in 1.53.0. It supersedes
+[ADR-0117](0117-coreml-execution-provider-stays-out.md)'s decision. Making it the Apple Silicon
+default is a later, separate decision, still gated by "Before it can become the default" below.
 
 Research: `docs/work/2026-09-25-ane-layout-reexport.md` (F1-F7), following
 `docs/work/2026-09-25-coreml-ane-buckets-and-residency.md`.
@@ -52,9 +52,12 @@ WebGPU-then-CPU chain runs, as with MLX's refusals (ADR-0110).
 
 **Sessions.** There is one CoreML session per length bucket: 256, 512, 768 and 1024 tokens. Every
 shipped chunk budget plus [CLS]/[SEP] (256, 512, 1024) is one of these buckets, so no bundled row
-falls outside them. Rows run at batch 1, padded to their bucket. Each session is configured with:
+falls outside them. Rows run at batch 1, padded to their bucket. A row longer than 1024 tokens
+(outside the bundled chunk budgets) runs on a separate CPU session instead of a bucket. Each
+session is configured with:
 - free-dimension overrides for `batch_size`, `sequence_length` and the attention mask's own
-  `total_sequence_length`;
+  `total_sequence_length`, plus `RequireStaticInputShapes=1` (the plan review's ask, closing off any
+  silent fallback to a dynamic shape);
 - `ModelFormat=MLProgram` and `MLComputeUnits=CPUAndNeuralEngine`;
 - `session.intra_op.allow_spinning=0` and `inter_op.allow_spinning=0`;
 - its own `ModelCacheDirectory` at
@@ -119,6 +122,12 @@ only after:
 
 ## Consequences
 
+- CI has no macOS runner, so the real CoreML path is only ever exercised on a developer's Apple
+  Silicon machine or during the manual checklist, never in CI. This covers
+  `BundledEngineCoreMlSessionTests`, `DeviceSwitchTests`, `DeviceSwitchMidCompileTests` and the
+  ORT-telemetry exit fix. Those classes skip on every configured runner. CI covers the pure logic
+  (switch, cache locks, routing, device plan) and the committed-graph pins. The release checklist
+  must run the macOS classes and record their output.
 - Users who opt in move their embedding work to the Neural Engine, at roughly an order of magnitude
   less CPU per row than MLX. Nobody else sees a change.
 - First run after opting in, or after an upgrade: WebGPU serves for about 1-2 minutes while the ANE

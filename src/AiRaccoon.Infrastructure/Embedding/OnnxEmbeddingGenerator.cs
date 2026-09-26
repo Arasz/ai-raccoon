@@ -15,7 +15,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     bundled all-MiniLM-L6-v2 path — wordpiece tokenizer, mean-pool + L2, 256 window — is the
 ///     default descriptor and is behavior-preserved (G3 golden vectors).
 /// </summary>
-internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
+internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
 {
     /// <summary>
     ///     Real-content token budget of the BUNDLED engine: the 256-token window minus the
@@ -59,6 +59,24 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// <summary>WebGPU sessions share one process-wide GPU context, which concurrent runs corrupt.</summary>
     private static readonly Lock GpuGate = new();
 
+    /// <summary>Test hook: whether no thread holds <see cref="GpuGate" /> right now.</summary>
+    internal static bool GpuGateIsFree()
+    {
+        if (!GpuGate.TryEnter())
+        {
+            return false;
+        }
+
+        GpuGate.Exit();
+        return true;
+    }
+
+    /// <summary>Test hook: whether this generator's MLX thread is still running; false when it never had one.</summary>
+    internal bool MlxThreadAlive => _mlxExecutor?.IsThreadAlive ?? false;
+
+    /// <summary>Records a device this session was asked for but refused, as another "(… refused: …)" suffix.</summary>
+    internal void AppendRefusal(string device, string reason) => ExecutionProvider = $"{ExecutionProvider} ({device} refused: {reason})";
+
     /// <summary>True only for a session that actually landed on WebGPU (not a "(… refused: …)" fallback) — <see cref="Run" />'s gate check.</summary>
     private readonly bool _needsGpuGateForRun;
 
@@ -85,6 +103,12 @@ internal sealed partial class OnnxEmbeddingGenerator : IEmbeddingGenerator<strin
     /// a field (not a direct call) only so a test can substitute a throwing action and prove the
     /// executor is still disposed on that path. Always the real session's Dispose in production.</summary>
     private Action _mlxSessionDisposeAction;
+
+    /// <summary>
+    ///     Turns off ONNX Runtime's own telemetry client before any session exists. Its upload thread can
+    ///     abort the process at exit by locking a mutex that exit has already destroyed.
+    /// </summary>
+    static OnnxEmbeddingGenerator() => OrtEnv.Instance().DisableTelemetryEvents();
 
     internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
         int intraOpThreads = 0, bool preferGpu = false, bool preferMlx = false, string? cudaLibraryPath = null)
