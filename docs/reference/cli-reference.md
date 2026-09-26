@@ -64,7 +64,7 @@ listed above that read a non-settings table or mutate data (`watch registered`,
 | `settings model code reset` (aliases `unset`, `remove`) / `code show` (alias `list`) | Code engine configuration reset/inspect; never touches the memory engine |
 | `settings model reset` (aliases `unset`, `remove`) / `model show` (alias `list`) | Same reset/show pair, reported together; `show` also includes the code rows when set |
 | `settings model threads {n}` | ORT intra-op thread cap for local embedding sessions (`0` = ORT default, unset = `max(1, logicalCores/2)`); takes effect on next restart |
-| `settings model device {auto\|gpu\|cpu\|mlx\|cuda [path]}` | Where local embedding sessions run: `auto` (default) puts only the bundled model on the GPU; `mlx` is bundled-engine + osx-arm64 only (ADR-0110); `cuda` needs a path to a CUDA provider library and applies to every local model (ADR-0112); takes effect on next restart (ADR-0108) |
+| `settings model device {auto\|gpu\|cpu\|mlx\|coreml\|cuda [path]}` | Where local embedding sessions run: `auto` (default) puts only the bundled model on the GPU; `mlx` is bundled-engine + osx-arm64 only (ADR-0110); `coreml` is bundled-engine + osx-arm64 only, on the Neural Engine (ADR-0118); `cuda` needs a path to a CUDA provider library and applies to every local model (ADR-0112); takes effect on next restart (ADR-0108) |
 | `settings retrieval alpha set {0..1}` / `alpha show` | Dual-vector fusion alpha, default `0.5` |
 | `settings retrieval fusion enable` / `disable` / `show` (alias `list`) | No-fusion-regression reorder, off by default |
 | `settings retrieval rrfk set {n}` / `show` | `retrieval.rrfK`, integer ≥ 1, default `60` |
