@@ -448,8 +448,7 @@ public sealed class FileIngestor(
     /// <summary>
     ///     Directory-walk form: hidden not just when the leaf itself starts with `.`, but when any
     ///     segment between <paramref name="root" /> and <paramref name="path" /> does (`.git/hooks/
-    ///     pre-commit`), or matches the built-in deny set (<see cref="WatchDenySet" /> —
-    ///     node_modules/bin/obj/.git/.venv/__pycache__/dist/build/target).
+    ///     pre-commit`), or matches the built-in deny set (<see cref="WatchDenySet.Names" />).
     /// </summary>
     private static bool IsHidden(string root, string path) => WatchDenySet.Excludes(root, path);
 

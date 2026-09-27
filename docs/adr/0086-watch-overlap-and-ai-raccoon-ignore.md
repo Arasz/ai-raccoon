@@ -111,5 +111,13 @@ deleted, `last_change_ts` updated), and the catch-up scan's reconcile pass enque
 fingerprinted files that the predicate now covers, so a bank polluted before this shipped cleans
 itself on the next catch-up scan.
 
+## Amendment — 2026-09-28: `TestResults` joins the deny set
+
+The deny set in §6 gains `TestResults`, the directory `dotnet test` and Visual Studio write test
+logs and results into. It is machine output like `bin` and `obj`, so the name holds no docs in any
+project, which is the bar the ignore template sets for promoting a name here instead of leaving it
+to `ai-raccoon.ignore`. On the owner's bank one 50 MB log under it had become 5,811 embedded rows.
+Banks that already hold such files clean themselves through the #494 reconcile pass above.
+
 Extends ADR-0023 (probe-first, unconditional, idempotent migrations beside
 `MigrateIngestScopeKeysAsync`) and depends on ADR-0085 (the corpus this watch machinery feeds).
