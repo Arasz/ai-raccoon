@@ -200,14 +200,7 @@ public sealed class CodeChunker : ICodeChunker
         var remaining = line;
         while (remaining.Length > 0)
         {
-            var head = TokenBudget.Trim(remaining, maxTokens, countTokens);
-            if (head.Length == 0)
-            {
-                // Even a single character tokenizes over budget; take it anyway so every split
-                // makes forward progress and the loop is guaranteed to terminate.
-                head = remaining[..1];
-            }
-
+            var head = remaining[..TokenBudget.SplitLength(remaining, maxTokens, countTokens)];
             balance += BraceDelta(head);
             units.Add(new Unit(head, countTokens(head), lineNumber, lineNumber, balance));
             remaining = remaining[head.Length..];

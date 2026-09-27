@@ -262,6 +262,20 @@ public sealed class CodeChunkerTests
         allLineNumbers.ShouldBe(allLineNumbers.Distinct(), "no hard-split lines in this fixture: no line may repeat");
     }
 
+    [Fact]
+    public void Chunk_OverBudgetLineOfIdentifiers_SplitsBetweenIdentifiers()
+    {
+        var line = string.Join(" ", Enumerable.Range(0, 40).Select(i => $"register_handler_{i:D2}")) + "\n";
+
+        var chunks = Chunker(90).Chunk(line);
+
+        chunks.Count.ShouldBeGreaterThan(1, "premise: the line is longer than the budget");
+        var words = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
+        chunks.SelectMany(c => c.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+            .ShouldAllBe(word => words.Contains(word), "no chunk may hold part of an identifier");
+        string.Concat(chunks.Select(c => c.Text)).ShouldBe(line);
+    }
+
     private sealed class FakeCodeTokenizer(Func<string, int> count) : ICodeTokenizer
     {
         public int CountTokens(string text) => count(text);

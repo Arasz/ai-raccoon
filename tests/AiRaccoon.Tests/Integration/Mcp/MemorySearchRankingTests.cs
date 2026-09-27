@@ -1,8 +1,10 @@
 using AiRaccoon.Access;
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
@@ -255,7 +257,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
     public async Task Search_AllTermsKeywordMatchThatWinsFusion_StaysFirstAboveBoostedNeighbours()
     {
         var ct = TestContext.Current.CancellationToken;
-        var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNoteText()), ct);
+        var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNoteText(8)), ct);
         await AllowIngestAsync(ct);
         var observatory = await IngestAsync("observatory.md", ObservatoryText(), ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
@@ -271,9 +273,65 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         envelope.Data!.Results[0].Hash.ShouldBe(note.Hash, "a same-source boost must not lift vector-only neighbours above it");
     }
 
-    private static string LongNoteText() =>
+    /// <summary>
+    ///     A note long enough to span several chunks, with an identifier near a chunk boundary: the
+    ///     boundary falls on whitespace, so one chunk holds the whole identifier and the keyword leg finds it.
+    /// </summary>
+    [RetryFact]
+    public async Task Search_IdentifierInAMultiChunkNote_IsFoundByTheKeywordLeg()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var text = LongNoteText(10);
+        var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, text), ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+        await using (var connection = await _factory.OpenBankAsync(ct))
+        {
+            var rows = await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM entries", cancellationToken: ct));
+            rows.ShouldBeGreaterThan(1, "premise: the note spans more than one chunk");
+            var firstRow = await connection.ExecuteScalarAsync<string>(new CommandDefinition(
+                "SELECT value FROM entries WHERE hash = @hash", new { hash = note.Hash }, cancellationToken: ct));
+            firstRow.ShouldNotBeNull().ShouldNotContain("vk83jq", Case.Sensitive, "premise: the identifier lies past the first chunk");
+            var budget = await new ChunkPositionScanner(TestData.RealFileTypeMatcher(), TestData.CreateEmbeddingService())
+                .BudgetAsync(connection, ct);
+            var hardCut = TokenBudget.Trim(text, budget.MaxTokens, budget.CountTokens).Length;
+            var identifier = text.IndexOf("vk83jq", StringComparison.Ordinal);
+            hardCut.ShouldBeInRange(identifier + 1, identifier + 5, "premise: a budget-only cut lands inside the identifier");
+        }
+
+        var envelope = await _tools.Search(ProjectId, "vk83jq", Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+
+        envelope.Data!.EvidenceByHash.ShouldNotBeNull().Values
+            .ShouldContain(evidence => evidence.Legs.Any(leg => leg.LegName == "fts"), "one chunk must hold the whole identifier");
+    }
+
+    /// <summary>
+    ///     A term longer than the whole chunk budget has to be hard-cut, so no row holds it whole. A search
+    ///     for the whole term still gets a keyword hit on the row holding its start.
+    /// </summary>
+    [RetryFact]
+    public async Task Search_TermLongerThanTheChunkBudget_IsFoundByTheKeywordLeg()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, $"Release artifact digest {term} was pinned in the lockfile."), ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+        await using (var connection = await _factory.OpenBankAsync(ct))
+        {
+            var values = (await connection.QueryAsync<string>(new CommandDefinition("SELECT value FROM entries", cancellationToken: ct))).ToList();
+            values.Count.ShouldBeGreaterThan(1, "premise: the term is longer than one chunk");
+            values.ShouldAllBe(value => !value.Contains(term), "premise: no row holds the whole term");
+        }
+
+        var envelope = await _tools.Search(ProjectId, term, Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+
+        envelope.Data!.EvidenceByHash.ShouldNotBeNull().Values
+            .ShouldContain(evidence => evidence.Legs.Any(leg => leg.LegName == "fts"), "the row holding the term's start must match");
+    }
+
+    /// <summary>Eight repeats fit one chunk under the bundled model's budget; ten span two.</summary>
+    private static string LongNoteText(int repeats) =>
         string.Join(" ", Enumerable.Repeat(
-            "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", 8))
+            "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", repeats))
         + " Invoice reference vk83jq was filed with the parish council.";
 
     private static string ObservatoryText()

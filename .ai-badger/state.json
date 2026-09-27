@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-coreml-webgpu-latency-ab-record",
+   "title": "M4 device benchmark + coreml vs WebGPU p95 search latency; README Performance section",
+   "pr": 772,
+   "merged": true,
+   "date": "2026-09-27",
+   "hasNotes": false,
+   "summary": "#764 closed (owner: coreml stays opt-in). ADR-0118 gate 2 holds on M4: CPU-s separated in two runs (24.6-27.1 vs 41.8-43.9; 28.9-29.7 vs 44.7-47.8), p95 search 35-39 ms vs 51-88 ms. device-benchmark.py --search-queries (schema v2, fenced-code-aware headings). docs/work/2026-09-26-device-benchmark-m4.md (F1-F5, NPU screenshot), perf report section 4. README: Quick Start first, What's new, Breaking changes -> docs/reference/breaking-changes.md, new Performance section asking other-chip owners for benchmark issues. Owner live server on coreml since 2026-09-27. Open: gate 1 (second chip), gate 3 (one opt-in release)."
+  },
+  {
    "id": "air-device-power-benchmark-764",
    "title": "Cross-device embedding benchmark: time, SoC and system energy, RAM",
    "pr": 770,
