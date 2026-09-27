@@ -85,6 +85,36 @@
       "acceptance-reason": ""
     },
     {
+      "item": "keyword-search-across-a-chunk-boundary",
+      "expected-result": "memory_write a note made of\"The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.\" ten times, space-joined, then \" Invoice reference vk83jq was filed with the parish council.\" Premise: sqlite shows more than one entries row for the note's path. memory_search {query: \"vk83jq\", kind: memory, minRelativeScore: 0} returns the note with an `fts` leg in evidenceByHash, and one of its rows holds `vk83jq` whole (`instr(value,'vk83jq')`). A vector-only hit does not count: the vector leg finds this note on a broken build too. Then write a note holding one whitespace-free term of about 2,500 characters (40 concatenated SHA-256 hex digests); premise: no row holds the whole term; searching the whole term returns that note with an `fts` leg. A build without ADR-0120 returns both notes by the vector leg only, and no row holds vk83jq (ADR-0120)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "note-opening-chunk-reports-index-zero",
+      "expected-result": "memory_write a note with sourceFile /notes/minutes.md made of 62 paragraphs separated by blank lines (\"Paragraph N of the parish minutes records the treasurer's report on hall repairs, roof slates and the organ fund.\"), the first opening with \"Opening marker zq71\". Premise: sqlite shows more than one row for the note's path. memory_search {query: \"zq71\", kind: memory, minRelativeScore: 0} returns it with chunkIndex 0, and sqlite gives chunk_index 0 for the row where `instr(value,'zq71') > 0`. A build without ADR-0122 puts the opening at the last index (7 of 8) (ADR-0122)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "poison-memory-row-isolated-and-abandoned",
+      "expected-result": "On a fresh scratch bank with no engine set, memory_write four ordinary notes and one containing POISON-7Q, so all five rows are pending. Start `python3 scripts/poison-embedding-stub.py --port 0 --log stub.log`, then run `model embedding set openai stub-embed <printed base URL> --api-key stub-key` against the scratch server. memory_embed_pending returns {processed, pending} and does not fail or hang. Later calls return pending 1. `sqlite3 -readonly memory.db \"SELECT embed_state, embed_attempts, count(*) FROM entries GROUP BY 1, 2\"` shows four rows embedded and the poison row pending at embed_attempts 3. memory_stats.pending is 1, and the count of poison lines in stub.log stays the same across three more memory_embed_pending calls. Negative control: stub.log holds a `poison 5` batch line followed by `ok 1` lines, so the engine refused the batch and answered the single rows. A build without ADR-0119 fails every memory_embed_pending with ClientResultException, keeps all five rows pending and adds a poison line per call (ADR-0119)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
       "item": "write-path-noise-filtering",
       "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
       "command": "",
@@ -107,6 +137,16 @@
     {
       "item": "file-watch-status",
       "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "watch-catch-up-heals-a-missed-change",
+      "expected-result": "Watch a scratch directory (`settings ingest scope add`, `settings watch enable`, memory_watch_add) holding x.md, w.md and y.md, plus node_modules/pkg/index.md and .git/notes.md, each with a term found nowhere else. Wait for three watch_files rows, `chmod 000` node_modules, wait 2 s, then edit y.md so watches.last_change_ts moves past x.md's watch_files.updated_at. Read both values while the server runs, because a stopped WAL bank will not open read-only. Stop the server. Replace one word of x.md with a new term of the same byte length and `touch -t $(date -r <t> +%Y%m%d%H%M.%S)` it, where t is between x.md's updated_at and last_change_ts. Rewrite w.md at a different size with a new term, and touch it to before its own updated_at. Restart on the same data root. Within seconds memory_search finds both new terms, watch_files shows new updated_at and size for x.md and w.md, and memory_watch_status reads Healthy. Neither the node_modules term nor the .git term is ever found. Premise: before the restart, updated_at(x.md) <= mtime(x.md) <= last_change_ts. A build without ADR-0121 finds neither new term, because it re-queues only files with mtime > last_change_ts. The 5-minute heal pass (WatchHostedService.HealInterval, event 322 at Debug) is optional: it needs a server left up for over 5 minutes (ADR-0121)",
       "command": "",
       "evidence": "",
       "observed-result": "",

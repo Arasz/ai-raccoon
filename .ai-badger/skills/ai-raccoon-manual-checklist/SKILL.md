@@ -109,7 +109,7 @@ coordinating.
 
 ## Making an item able to fail
 
-Most of these steps can be written so that they pass whether or not the feature works. Three
+Most of these steps can be written so that they pass whether or not the feature works. Four
 shapes account for nearly all of it:
 
 - **A filter needs a negative control.** Feed clean content alongside the shapes you expect
@@ -120,6 +120,9 @@ shapes account for nearly all of it:
   that says "astrolabe", "lamplight", "observatory" — no literal overlap, so a dead vector leg
   actually fails the item. A query sharing words with the stored text passes on BM25 alone and
   tells you nothing about the half you meant to test.
+- **A keyword query must be judged by its leg.** The vector leg often finds a note by the words
+  around an identifier, so a keyword item passes on a build whose keyword leg misses. Read
+  `evidenceByHash` and require an `fts` leg on the hit.
 - **An empty list is a weak check.** A queue or candidate list on a fresh bank returns `[]`
   whether it works or is broken. Create the thing first, then assert on its content — the score,
   the reasons, the identity — not on the shape of the response.
@@ -135,15 +138,20 @@ registered in the build in front of you.
 - **Server lifecycle** — the server starts and `--restart` cycles the one it finds, both on a
   non-default port.
 - **Write path** — a write stores and returns a hash; a rejected write says so, with a reason,
-  rather than returning a fabricated entry.
+  rather than returning a fabricated entry. A note that cites a source file numbers its chunks in
+  text order, so its opening reports `chunkIndex` 0.
 - **Read path** — search returns the written entry, get returns its content by hash, and a
-  `file#section` anchor resolves its exact chunk.
+  `file#section` anchor resolves its exact chunk. Keyword search finds an identifier that sits
+  where a chunk boundary would fall, and a term longer than a whole chunk.
+- **Embedding** — a memory row the engine refuses is split from its batch and abandoned after
+  three attempts. `scripts/poison-embedding-stub.py` is an engine that refuses one marker.
 - **Noise filtering** — each *registered* write-path policy rejects what it claims to, and the
   rejected content stays retrievable from the noise store. Check which policies are registered
   before writing steps for them.
 - **Read-path query guard** — the refuse and annotate tiers behave as specified, and any detector
   that ships disabled is still disabled until explicitly armed.
-- **File watch** — watch status reflects live registrations.
+- **File watch** — watch status reflects live registrations, and a restart re-digests a file
+  changed without an event, judged against that file's own fingerprint.
 - **Promotion queue** — the promotion list reports candidates accurately.
 - **Full MCP surface** — every derived tool and prompt is reachable.
 - **Observability** — emitted event ids resolve against the logging event-id reference.
@@ -199,5 +207,8 @@ delete is not dormant; it is the one in use.
 - Force-updating a global tool can silently keep the previous build if the pack step failed
   earlier in the same run. The version comparison in step 2 is what catches it; do not skip it
   because the build "looked fine".
+- Read a scratch bank with `sqlite3 -readonly` while its server is running. Once the server
+  stops, the WAL bank has no `-shm` file and a read-only open fails with "unable to open database
+  file".
 - A scratch `--data-root` must be a path the running user can create. Pointing it inside a
   read-only or root-owned directory produces failures that look like product bugs.
