@@ -96,7 +96,9 @@ re-adding it starts a full scan, so no trigger is needed there.
   scan: those files have an mtime later than their fingerprint. The owner's 388 files are in this
   group.
 - **Positive.** Every catch-up scan, restart or timer, walks only the directories it can index,
-  which makes the start-up scan cheaper too.
+  which makes the start-up scan cheaper too. `FileIngestor.IngestDirectoryAsync`
+  (`memory_ingest_directory`) shares the same walk (`IndexableFileWalk`), so a manual directory
+  ingest no longer enters, or fails on, a denied directory either.
 - **Neutral.** Two new log events: 322 (Debug) for a heal pass and 323 (Information) for a recovery
   scan. One schema column, added without a version bump.
 - **Remaining limit.** A file replaced by content of exactly the same byte length with an mtime

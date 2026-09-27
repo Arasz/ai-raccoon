@@ -144,7 +144,7 @@ public sealed class FileIngestor(
             ? path
             : await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken);
         var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken);
-        var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+        var files = IndexableFileWalk.Under(path)
             .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, ignoreRoot, file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
 

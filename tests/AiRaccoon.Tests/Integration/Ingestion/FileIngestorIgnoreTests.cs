@@ -73,6 +73,41 @@ public sealed class FileIngestorIgnoreTests : IDisposable
         paths.ShouldNotContain(p => p.EndsWith(IgnoreRulesProvider.FileName, StringComparison.Ordinal));
     }
 
+    /// <summary>The directory walk never enters a deny-set or hidden directory, so an unreadable one cannot fail the ingest.</summary>
+    [RetryFact]
+    public async Task IngestDirectoryAsync_UnreadableDeniedAndHiddenDirectories_AreNeverEntered()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // POSIX permission bits do not exist on Windows.
+        }
+
+        await File.WriteAllTextAsync(Path.Combine(_testDir, "keep.md"), "# index me",
+            TestContext.Current.CancellationToken);
+        var blocked = new[] { Path.Combine(_testDir, "node_modules"), Path.Combine(_testDir, ".git") };
+        foreach (var dir in blocked)
+        {
+            Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(Path.Combine(dir, "inner.md"), "# never", TestContext.Current.CancellationToken);
+            File.SetUnixFileMode(dir, UnixFileMode.None);
+        }
+
+        try
+        {
+            var count = await _ingestor.IngestDirectoryAsync(_conn, "test_project", _testDir, null,
+                TestContext.Current.CancellationToken);
+
+            count.Indexed.ShouldBe(1);
+        }
+        finally
+        {
+            foreach (var dir in blocked)
+            {
+                File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            }
+        }
+    }
+
     /// <summary>
     ///     WP2 (docs/work/2026-08-23-post-delta-4-plan.md §WP2): the walk root's ignore file is
     ///     loaded at the walk root itself, so an ancestor's `ai-raccoon.ignore` — the one covering a
