@@ -12,8 +12,8 @@ namespace AiRaccoon.Tests.Integration.Ingestion;
 
 /// <summary>
 ///     Directory-ingest enumeration hardening (docs/work/2026-08-21-code-search-implementation-plan.md
-///     §2.3/§3): hidden directory segments and the built-in deny set (node_modules, bin, obj, .git,
-///     .venv, __pycache__, dist, build, target, TestResults) are skipped, not just hidden leaf files.
+///     §2.3/§3): hidden directory segments and the built-in deny set (<see cref="WatchDenySet.Names" />)
+///     are skipped, not just hidden leaf files.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

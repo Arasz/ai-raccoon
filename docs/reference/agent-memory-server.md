@@ -133,8 +133,8 @@ config channel (see [Command-line options](#command-line-options)).
   owner-adjustable) goes to the code corpus instead; anything else is skipped in both. A `.md`
   file inside a directory of otherwise-code files still routes to memory. `ai-raccoon.ignore`
   and the hidden-file/deny-set (`node_modules`, `bin`, `obj`, `.git`, `.venv`, `__pycache__`,
-  `dist`, `build`, `target`, `TestResults`) rules apply identically to both corpora. Code files are chunked
-  (`CodeChunker`, line-range splitting) and stored on every ingest regardless of engine
+  `dist`, `build`, `target`, `TestResults`) rules apply identically to both corpora. Code files
+  are chunked (`CodeChunker`, line-range splitting) and stored on every ingest regardless of engine
   configuration; each row lands `embed_state = 'pending'` until a code embedding engine is
   configured (`model code set local`, below) — until then the rows are FTS5-searchable only
   (see `kind=code` above). Memory ingest is unaffected.
