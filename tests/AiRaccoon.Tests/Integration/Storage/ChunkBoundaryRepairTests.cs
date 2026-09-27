@@ -607,6 +607,25 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         record.StructuredState.ShouldNotBeNull().ShouldContain(new KeyValuePair<string, string?>("Unproven", "1"));
     }
 
+    /// <summary>The job's log line also carries the files it renumbered in place.</summary>
+    [RetryFact]
+    public async Task Job_LogsTheFilesItRepositioned()
+    {
+        var file = await IngestFileAsync("logged.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        await SetPositionAsync(ids[^1], 1);
+        var logger = new FakeLogger<ChunkBoundaryRepairJob>();
+        var job = new ChunkBoundaryRepairJob(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+            TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow), logger);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await job.RunAsync(connection, TestContext.Current.CancellationToken);
+
+        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        record.Id.Id.ShouldBe(447);
+        record.StructuredState.ShouldNotBeNull().ShouldContain(new KeyValuePair<string, string?>("Repositioned", "1"));
+    }
+
     private async Task<ChunkBoundaryRepairReport> RepairAsync()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
