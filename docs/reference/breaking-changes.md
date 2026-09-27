@@ -1,0 +1,11 @@
+# Breaking changes
+
+What to do when you upgrade past each version. A version not listed here needs no action.
+
+- 1.47.0: the bundled embedding model is now granite-embedding-small-english-r2, for memory and code alike. On first start after upgrading, every bank re-embeds once on its own (the bank refuses tool calls until that finishes, minutes on a large bank), and a code corpus on the old default switches with `ai-raccoon model code set default`. [ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)
+- 1.45.0: every failure exit code is renumbered into two-digit categories, for example a missing bank is now `31` (was `22`), and `repair project-ids --apply` now exits non-zero when it does not converge. If a script or CI job checks `ai-raccoon` exit codes, update it from the [old → new table](../adr/0107-categorized-two-digit-exit-codes.md#old--new-mapping).
+- 1.44.0: `--attach` is removed. Delete it from your MCP client config, and **stop any server an older version started** before running the new one, because mixed versions are not supported. [How-to](../how-to/configure-ai-raccoon-server.md#backend-launch-attach-or-start-behind-the-identity-proof)
+- 1.44.0: a launch against a `--data-root` that has no bank no longer creates one. For a new data root, create the bank once with `ai-raccoon --data-root <path> serve`. [How-to](../how-to/configure-ai-raccoon-server.md#backend-launch-attach-or-start-behind-the-identity-proof)
+- 1.42.0: `--transport stdio` and `--transport https` are removed. In your MCP client config, replace `--transport stdio` with a bare `ai-raccoon`, and run `ai-raccoon serve` where you ran an HTTPS server. [How-to](../how-to/configure-ai-raccoon-server.md#launch-flags)
+- 1.39.0: project ids are no longer folded together automatically. If one project wrote under several ids, merge them once with `ai-raccoon repair project-ids --map <file>`. [ADR-0102](../adr/0102-durable-alias-map-with-p3-enforcement.md)
+- 1.38.0: `memory_search` requires `sessionId`. MCP agents pick it up from the tool schema, so only code that calls the tool directly has to add it. [ADR-0097](../adr/0097-search-quality-kind-column.md)
