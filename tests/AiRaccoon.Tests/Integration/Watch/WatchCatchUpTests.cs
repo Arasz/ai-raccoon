@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
@@ -27,7 +28,7 @@ public sealed class WatchCatchUpTests
 
     private static WatchCatchUp NewCatchUp(WatchTestStack stack, ILogger<WatchCatchUp>? logger = null) =>
         new(stack.Pipeline, stack.Store, stack.ScanGuard, stack.ScanLease, stack.Time,
-            logger ?? NullLogger<WatchCatchUp>.Instance, stack.IgnoreRules);
+            logger ?? NullLogger<WatchCatchUp>.Instance, stack.IgnoreRules, new IndexableFileWalk());
 
     private static void Stamp(string path, DateTimeOffset at) => SetLastWriteTimeUtc(path, at.UtcDateTime);
 
@@ -50,7 +51,7 @@ public sealed class WatchCatchUpTests
         WriteAllText(file, "zephyrlonger");
         Stamp(file, FingerprintedAt.AddHours(-1));
 
-        WatchCatchUp.EnumerateFiles(dir.Path, SizedStamp(file, 3)).ShouldContain(file);
+        WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, SizedStamp(file, 3)).ShouldContain(file);
     }
 
     [RetryFact]
@@ -61,7 +62,7 @@ public sealed class WatchCatchUpTests
         WriteAllText(file, "zephyrsame");
         Stamp(file, FingerprintedAt.AddHours(-1));
 
-        WatchCatchUp.EnumerateFiles(dir.Path, SizedStamp(file, new FileInfo(file).Length)).ShouldBeEmpty();
+        WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, SizedStamp(file, new FileInfo(file).Length)).ShouldBeEmpty();
     }
 
     /// <summary>A fingerprint from before sizes were recorded falls back to the mtime check alone.</summary>
@@ -73,7 +74,7 @@ public sealed class WatchCatchUpTests
         WriteAllText(file, "zephyrlegacy");
         Stamp(file, FingerprintedAt.AddHours(-1));
 
-        WatchCatchUp.EnumerateFiles(dir.Path, Stamps(file)).ShouldBeEmpty();
+        WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, Stamps(file)).ShouldBeEmpty();
     }
 
     [RetryFact]
@@ -85,7 +86,7 @@ public sealed class WatchCatchUpTests
         WriteAllText(a, "zephyrone");
         WriteAllText(b, "zephyrtwo");
 
-        var files = WatchCatchUp.EnumerateFiles(dir.Path, null).ToList();
+        var files = WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, null).ToList();
 
         files.ShouldContain(a);
         files.ShouldContain(b);
@@ -102,7 +103,7 @@ public sealed class WatchCatchUpTests
         Stamp(older, FingerprintedAt.AddHours(-1));
         Stamp(newer, FingerprintedAt.AddHours(1));
 
-        var files = WatchCatchUp.EnumerateFiles(dir.Path, Stamps(older, newer)).ToList();
+        var files = WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, Stamps(older, newer)).ToList();
 
         files.ShouldContain(newer);
         files.ShouldNotContain(older);
@@ -116,7 +117,7 @@ public sealed class WatchCatchUpTests
         WriteAllText(missed, "zephyrone");
         Stamp(missed, FingerprintedAt.AddHours(-1));
 
-        WatchCatchUp.EnumerateFiles(dir.Path, Stamps()).ShouldContain(missed);
+        WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, Stamps()).ShouldContain(missed);
     }
 
     /// <summary>A write in the same second as the digest that read the file may postdate the read, so it is due.</summary>
@@ -128,7 +129,7 @@ public sealed class WatchCatchUpTests
         WriteAllText(file, "zephyrone");
         Stamp(file, FingerprintedAt);
 
-        WatchCatchUp.EnumerateFiles(dir.Path, Stamps(file)).ShouldContain(file);
+        WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, Stamps(file)).ShouldContain(file);
     }
 
     /// <summary>The walk never descends into a deny-set or hidden directory, so an unreadable one cannot fail the scan.</summary>
@@ -154,7 +155,7 @@ public sealed class WatchCatchUpTests
 
         try
         {
-            WatchCatchUp.EnumerateFiles(dir.Path, null).ToList().ShouldBe([keep]);
+            WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, null).ToList().ShouldBe([keep]);
         }
         finally
         {
@@ -171,10 +172,10 @@ public sealed class WatchCatchUpTests
         WriteAllText(file, "zephyrone");
 
         Stamp(file, FingerprintedAt.AddHours(1));
-        WatchCatchUp.EnumerateFiles(file, null).ShouldContain(file);
-        WatchCatchUp.EnumerateFiles(file, Stamps(file)).ShouldContain(file);
+        WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), file, null).ShouldContain(file);
+        WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), file, Stamps(file)).ShouldContain(file);
         Stamp(file, FingerprintedAt.AddHours(-1));
-        WatchCatchUp.EnumerateFiles(file, Stamps(file)).ShouldBeEmpty();
+        WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), file, Stamps(file)).ShouldBeEmpty();
     }
 
     [RetryFact]
@@ -587,7 +588,7 @@ public sealed class WatchCatchUpTests
         WriteAllText(visible, "kept");
         WriteAllText(hidden, "git internals");
 
-        var files = WatchCatchUp.EnumerateFiles(dir.Path, null).ToList();
+        var files = WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, null).ToList();
 
         files.ShouldContain(visible);
         files.ShouldNotContain(hidden);
@@ -603,7 +604,7 @@ public sealed class WatchCatchUpTests
         WriteAllText(visible, "kept");
         WriteAllText(denied, "dependency tree");
 
-        var files = WatchCatchUp.EnumerateFiles(dir.Path, null).ToList();
+        var files = WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, null).ToList();
 
         files.ShouldContain(visible);
         files.ShouldNotContain(denied);
@@ -619,7 +620,7 @@ public sealed class WatchCatchUpTests
         WriteAllText(ignored, "secret");
         var rules = IgnoreRules.Parse("secret.md\n");
 
-        var files = WatchCatchUp.EnumerateFiles(dir.Path, null, rules).ToList();
+        var files = WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, null, rules).ToList();
 
         files.ShouldContain(kept);
         files.ShouldNotContain(ignored);

@@ -26,7 +26,8 @@ public sealed partial class WatchCatchUp(
     IWatchScanLease scanLease,
     TimeProvider timeProvider,
     ILogger<WatchCatchUp> logger,
-    IIgnoreRulesProvider ignoreRulesProvider) : IWatchScanInitiator
+    IIgnoreRulesProvider ignoreRulesProvider,
+    IndexableFileWalk walk) : IWatchScanInitiator
 {
     /// <summary>A mid-scan ignore-file edit can only ever redo the walk this many times before the
     /// scan gives up trying to reach a stable read — defensive only; real edits settle in one.</summary>
@@ -58,7 +59,7 @@ public sealed partial class WatchCatchUp(
     ///     (reconciliation removes its stale chunks). Directory enumeration skips hidden segments,
     ///     the built-in deny set, and any path the ignore rules match.
     /// </summary>
-    internal static IEnumerable<string> EnumerateFiles(string path, IReadOnlyDictionary<string, WatchFileStamp>? stamps,
+    internal static IEnumerable<string> EnumerateFiles(IndexableFileWalk walk, string path, IReadOnlyDictionary<string, WatchFileStamp>? stamps,
         IgnoreRules? ignoreRules = null)
     {
         if (!Directory.Exists(path))
@@ -72,7 +73,7 @@ public sealed partial class WatchCatchUp(
         }
 
         var rules = ignoreRules ?? IgnoreRules.Empty;
-        foreach (var file in IndexableFileWalk.Under(path))
+        foreach (var file in walk.Under(path))
         {
             if (WatchDenySet.Excludes(path, file))
             {
@@ -161,7 +162,7 @@ public sealed partial class WatchCatchUp(
     {
         var stamps = changedOnly ? await watchStore.ListFileStampsAsync(projectId, cancellationToken) : null;
         var nextRenew = timeProvider.GetUtcNow() + SqliteWatchScanLease.HeartbeatInterval;
-        foreach (var file in EnumerateFiles(path, stamps, ignoreRules))
+        foreach (var file in EnumerateFiles(walk, path, stamps, ignoreRules))
         {
             cancellationToken.ThrowIfCancellationRequested();
 

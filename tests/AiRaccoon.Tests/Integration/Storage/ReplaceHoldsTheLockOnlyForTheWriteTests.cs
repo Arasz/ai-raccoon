@@ -55,7 +55,7 @@ public sealed class ReplaceHoldsTheLockOnlyForTheWriteTests : IDisposable
         var realIngestor = new FileIngestor(
             new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]), sourceStore, time,
             embeddings, NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
         var blockingIngestor = new BlockingFileIngestor(realIngestor);
         var store = new SqliteMemoryStore(_factory, sourceStore, blockingIngestor,
             TestData.CreateEntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), time, new VecDimensionReconciler()), time,

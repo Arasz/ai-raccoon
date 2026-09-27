@@ -60,7 +60,7 @@ public sealed class DigestConvoyDoesNotStarveTheDrainTests : IDisposable
         var realIngestor = new FileIngestor(
             new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]), sourceStore, time,
             embeddings, NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
         var slowIngestor = new SlowFileIngestor(realIngestor, ChunkDelay);
         var store = new SqliteMemoryStore(_factory, sourceStore, slowIngestor,
             TestData.CreateEntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), time, new VecDimensionReconciler()), time,

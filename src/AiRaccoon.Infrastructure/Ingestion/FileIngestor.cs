@@ -26,7 +26,8 @@ public sealed class FileIngestor(
     ICodeFileTypeMatcher codeFileTypeMatcher,
     ICodeIngestor codeIngestor,
     IWatchStore watchStore,
-    IEventPump<EmbedDrainRequest> embedDrainPump) : IFileIngestor
+    IEventPump<EmbedDrainRequest> embedDrainPump,
+    IndexableFileWalk walk) : IFileIngestor
 {
     /// <summary>
     ///     Ignore rules apply ahead of routing, for both the memory and code pipelines —
@@ -144,7 +145,7 @@ public sealed class FileIngestor(
             ? path
             : await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken);
         var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken);
-        var files = IndexableFileWalk.Under(path)
+        var files = walk.Under(path)
             .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, ignoreRoot, file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
 

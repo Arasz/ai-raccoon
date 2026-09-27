@@ -58,13 +58,13 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         {
             return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
                 NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-                NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+                NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
         }
 
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
         return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(), codeIngestor,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
     }
 
     [RetryFact]
@@ -253,7 +253,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
         return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             new IgnoreRulesProvider(), new CodeFileTypeMatcher(), codeIngestor,
-            watchStore ?? NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+            watchStore ?? NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
     }
 
     private async Task<IWatchStore> RegisterWatchAsync(string path)

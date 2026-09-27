@@ -37,7 +37,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         _ingestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             new IgnoreRulesProvider(), NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
 
         using var scopeCmd = _conn.CreateCommand();
         scopeCmd.CommandText = "INSERT INTO settings (key, value) VALUES (@key, @scope);";
@@ -175,7 +175,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             new IgnoreRulesProvider(), NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            watchStore, NullEmbedDrainPump.Instance);
+            watchStore, NullEmbedDrainPump.Instance, new IndexableFileWalk());
     }
 
     private async Task<IWatchStore> RegisterWatchAsync(string path)

@@ -209,7 +209,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);
         CatchUp = catchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard,
             new SqliteWatchScanLease(Factory, TimeProvider), TimeProvider, NullLogger<WatchCatchUp>.Instance,
-            new IgnoreRulesProvider());
+            new IgnoreRulesProvider(), new IndexableFileWalk());
         Hosted = new WatchHostedService(Store, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
             TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         Service = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver(),

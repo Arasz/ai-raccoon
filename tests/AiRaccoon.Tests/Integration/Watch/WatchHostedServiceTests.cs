@@ -1,3 +1,4 @@
+using AiRaccoon.Infrastructure.Ingestion;
 using System.Diagnostics;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Observability;
@@ -31,7 +32,7 @@ public sealed class WatchHostedServiceTests
         var source = new WatchEventSource(stack.Pipeline.Enqueue, _ => { },
             NullLogger<WatchEventSource>.Instance);
         var catchUp = new WatchCatchUp(stack.Pipeline, stack.Store, stack.ScanGuard, stack.ScanLease, stack.Time,
-            NullLogger<WatchCatchUp>.Instance, stack.IgnoreRules);
+            NullLogger<WatchCatchUp>.Instance, stack.IgnoreRules, new IndexableFileWalk());
         var hosted = new WatchHostedService(stack.Memory, stack.Store, stack.Pipeline, source, catchUp, stack.Time,
             telemetry ?? TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         return (stack, source, catchUp, hosted);
