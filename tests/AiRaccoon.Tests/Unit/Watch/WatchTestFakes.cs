@@ -32,7 +32,7 @@ internal sealed class WatchTestStack
         Executor = new WatchDigestExecutor(Memory, Store, Time, IgnoreRules, scanInitiatorLazy, EmbedDrainPump,
             migrationGate ?? new NeverMigratedGate());
         Pipeline = new WatchPipeline(
-            new WatchScheduler(), Executor, new WatchRetryPolicy(), ScanGuard,
+            new WatchScheduler(), Executor, RetryPolicy, ScanGuard,
             Memory, Time, NullLogger<WatchPipeline>.Instance);
         Service = new WatchService(Store, Memory, Pipeline, Time, OverlapResolver,
             migrationGate ?? new NeverMigratedGate());
@@ -45,6 +45,8 @@ internal sealed class WatchTestStack
     public FakeWatchStore Store { get; } = new();
 
     public WatchScanGuard ScanGuard { get; } = new();
+
+    public WatchRetryPolicy RetryPolicy { get; } = new();
 
     public FakeWatchScanLease ScanLease { get; } = new();
 

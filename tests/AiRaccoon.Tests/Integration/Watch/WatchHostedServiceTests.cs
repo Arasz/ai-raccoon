@@ -178,6 +178,100 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
+    /// <summary>Seeds a synced watch with one fingerprinted, unchanged file and runs the start-up scan.</summary>
+    private static async Task<string> StartSyncedWatchAsync(WatchTestStack stack, WatchCatchUp catchUp,
+        WatchHostedService hosted, TempDir dir)
+    {
+        var now = stack.Time.GetUtcNow().ToUnixTimeSeconds();
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "zephyrold", TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(file, DateTimeOffset.FromUnixTimeSeconds(now - 7200).UtcDateTime);
+        stack.Enable();
+        stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, now, TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(file), "zephyrhash", now - 3600,
+            TestContext.Current.CancellationToken);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.ShouldBeEmpty("the start-up scan finds nothing changed");
+        return file;
+    }
+
+    /// <summary>A change whose event never arrived heals after one interval, with no restart.</summary>
+    [RetryFact]
+    public async Task Reconcile_AfterTheHealInterval_ReDigestsAFileChangedWithoutAnEvent()
+    {
+        using var dir = TempDir.New("hosted-heal");
+        var (stack, _, catchUp, hosted) = NewStack();
+        var file = await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
+        await File.WriteAllTextAsync(file, "zephyrnew", TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(file, stack.Time.GetUtcNow().UtcDateTime);
+
+        stack.Time.Advance(WatchHostedService.HealInterval - TimeSpan.FromSeconds(1));
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        stack.ScanGuard.StartedScans.ShouldBe(1, "no heal before the interval has passed");
+
+        stack.Time.Advance(TimeSpan.FromSeconds(1));
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.ScanGuard.StartedScans.ShouldBe(2);
+        stack.Memory.Ingested.ShouldContain((Project, file, "zephyrnew"));
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    [RetryFact]
+    public async Task Reconcile_AfterTheHealInterval_SkipsAStoppedWatch()
+    {
+        using var dir = TempDir.New("hosted-heal-stopped");
+        var (stack, _, catchUp, hosted) = NewStack();
+        var file = await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
+        await File.WriteAllTextAsync(file, "zephyrnew", TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(file, stack.Time.GetUtcNow().UtcDateTime);
+        for (var i = 0; i < 5; i++)
+        {
+            stack.RetryPolicy.RecordFailure(Project, IngestPath.Normalize(dir.Path), stack.Time.GetUtcNow());
+        }
+
+        stack.Time.Advance(WatchHostedService.HealInterval);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.ScanGuard.StartedScans.ShouldBe(1);
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     A failed digest drops its event. The first success after it scans the watch at once, so
+    ///     the dropped change is caught without waiting for the heal interval.
+    /// </summary>
+    [RetryFact]
+    public async Task DigestSucceedingAfterAFailure_ScansTheWatchForChangedFiles()
+    {
+        using var dir = TempDir.New("hosted-recovered");
+        var (stack, _, catchUp, hosted) = NewStack();
+        await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
+        var dropped = dir.File("dropped.md");
+        await File.WriteAllTextAsync(dropped, "zephyrdropped", TestContext.Current.CancellationToken);
+        stack.Memory.IngestError = new IOException("disk hiccup");
+        stack.Pipeline.Enqueue(new WatchEvent(Project, dropped, WatchEventKind.Created));
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.IngestError = null;
+
+        stack.Time.Advance(WatchRetryPolicy.BackoffFor(1));
+        var next = dir.File("next.md");
+        await File.WriteAllTextAsync(next, "zephyrnext", TestContext.Current.CancellationToken);
+        stack.Pipeline.Enqueue(new WatchEvent(Project, next, WatchEventKind.Created));
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.ScanGuard.StartedScans.ShouldBe(2);
+        stack.Memory.Ingested.ShouldContain((Project, dropped, "zephyrdropped"));
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
     [RetryFact]
     public async Task Reconcile_RemovedRegistration_StopsTheWatcher()
     {
