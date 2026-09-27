@@ -519,12 +519,29 @@ public sealed partial class EntryEmbedder(
             var settings = await ReadSettingsAsync(connection, cancellationToken);
             var generator = embeddings.CreateGenerator(settings);
             var headingPaths = candidates.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
-            var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, path => embeddings.DocumentText(settings, path),
+            Dictionary<string, byte[]> structure;
+            HashSet<string> unembeddable = [];
+            try
+            {
+                structure = await EmbedDistinctHeadingsAsync(generator, headingPaths,
+                    path => embeddings.DocumentText(settings, path), cancellationToken);
+            }
+            catch (Exception ex) when (IsRowFailure(ex))
+            {
+                Log.BatchFellBackToOneRowAtATime(logger, candidates.Count, ex);
+                (structure, unembeddable) = await EmbedHeadingsOneAtATimeAsync(generator, settings, headingPaths,
                     cancellationToken);
+            }
 
             for (var i = 0; i < candidates.Count; i++)
             {
                 var headingPath = headingPaths[i];
+                if (unembeddable.Contains(headingPath))
+                {
+                    Log.HeadingCannotEmbed(logger, candidates[i].Id, candidates[i].Source);
+                    headingPath = "";
+                }
+
                 structure.TryGetValue(headingPath, out var structureEmbedding);
                 await connection.ExecuteAsync(Def(MemorySql.MarkStructure,
                         new { id = candidates[i].Id, headingPath, structureEmbedding }, cancellationToken));
@@ -532,6 +549,45 @@ public sealed partial class EntryEmbedder(
 
             remaining -= candidates.Count;
         }
+    }
+
+    /// <summary>
+    ///     Embeds each distinct heading on its own after a failed batch call, returning the vectors
+    ///     and the headings that fail alone while the engine still answers; an engine that cannot
+    ///     answer at all rethrows, so no heading is given up on during an outage.
+    /// </summary>
+    private async Task<(Dictionary<string, byte[]> Vectors, HashSet<string> Unembeddable)> EmbedHeadingsOneAtATimeAsync(
+        IEmbeddingGenerator<string, Embedding<float>> generator, EmbeddingSettings settings,
+        IReadOnlyList<string> headingPaths, CancellationToken cancellationToken)
+    {
+        var vectors = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        var unembeddable = new HashSet<string>(StringComparer.Ordinal);
+        var engineAnswers = false;
+        foreach (var path in headingPaths.Where(path => path.Length > 0).Distinct(StringComparer.Ordinal))
+        {
+            try
+            {
+                var result = await generator.GenerateAsync([embeddings.DocumentText(settings, path)],
+                    cancellationToken: cancellationToken);
+                vectors[path] = EmbeddingBlob.ToBytes(result[0].Vector);
+                engineAnswers = true;
+            }
+            catch (Exception ex) when (IsRowFailure(ex))
+            {
+                if (!engineAnswers)
+                {
+                    engineAnswers = await EngineAnswersAsync(generator, settings, cancellationToken);
+                    if (!engineAnswers)
+                    {
+                        ExceptionDispatchInfo.Throw(ex);
+                    }
+                }
+
+                unembeddable.Add(path);
+            }
+        }
+
+        return (vectors, unembeddable);
     }
 
     /// <summary>Embeds each distinct non-empty heading path once; empty paths are omitted from the result.</summary>
@@ -630,5 +686,10 @@ public sealed partial class EntryEmbedder(
                       + "it once the cause is gone; switching the embedding model also retries it.")]
         public static partial void RowAbandonedAfterMaxEmbedAttempts(ILogger logger, long rowId, string? source,
             int attempts);
+
+        [LoggerMessage(EventId = 445, Level = LogLevel.Warning,
+            Message = "The heading of memory row {RowId} ({Source}) cannot embed; the row keeps its content vector "
+                      + "and goes without a structure vector")]
+        public static partial void HeadingCannotEmbed(ILogger logger, long rowId, string? source);
     }
 }

@@ -429,7 +429,8 @@ internal static class MemorySql
     // structure writer landed, or a chunk whose heading never parsed). Bounded per call by @limit;
     // MarkStructure sets heading_path on every candidate touched, so it leaves this set for good.
     public const string SelectStructureHealCandidates =
-        "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'embedded' AND heading_path IS NULL " +
+        "SELECT id AS Id, value AS Value, COALESCE(source_file, path) AS Source FROM entries " +
+        "WHERE embed_state = 'embedded' AND heading_path IS NULL " +
         "AND structure_embedding IS NULL AND project_id = @projectId ORDER BY id LIMIT @limit";
 
     public const string SelectEmbeddedForProject =

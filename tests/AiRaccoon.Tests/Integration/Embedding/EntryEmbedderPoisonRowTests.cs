@@ -248,7 +248,7 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
         var callsAfterFirst = embeddings.Calls.Count;
         await embedder.EmbedPendingAsync(connection, "acme", null, Ct);
 
-        (await HeadingPathOfAsync(connection, good)).ShouldBe("# Good heading");
+        (await HeadingPathOfAsync(connection, good)).ShouldBe("Good heading");
         (await StructureOfAsync(connection, good)).ShouldNotBeNull();
         (await HeadingPathOfAsync(connection, poison)).ShouldBe("", "the '' sentinel takes the row out of the heal set");
         (await StructureOfAsync(connection, poison)).ShouldBeNull();
