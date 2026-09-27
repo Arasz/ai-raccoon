@@ -208,6 +208,66 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
         logger.Collector.GetSnapshot().ShouldNotContain(r => r.Level >= LogLevel.Warning);
     }
 
+    /// <summary>A bank wedged by a poison row before the attempts column existed recovers once it is opened by this build.</summary>
+    [RetryFact]
+    public async Task ExistingBankWedgedBeforeUpgrade_RecoversItsGoodRowsAndAbandonsThePoisonRow()
+    {
+        await using var connection = await _factory.OpenBankAsync(Ct);
+        await ConfigureProviderAsync(connection);
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"ALTER TABLE entries DROP COLUMN embed_attempts; PRAGMA application_id = {MemorySchema.SchemaDigest + 1};",
+            cancellationToken: Ct));
+        var poison = await InsertAsync(connection, $"{Poison} row");
+        var good = await InsertAsync(connection, "good one");
+
+        await MemorySchema.EnsureAsync(connection, Ct);
+        var embedder = NewEmbedder(new PoisonEmbeddingService());
+        for (var pass = 0; pass < EntryEmbedder.MaxEmbedAttempts; pass++)
+        {
+            await embedder.EmbedPendingBatchAsync(connection, 32, Ct);
+        }
+
+        (await StateOfAsync(connection, good)).ShouldBe("embedded");
+        (await StateOfAsync(connection, poison)).ShouldBe("pending");
+        (await connection.ExecuteScalarAsync<bool>(new CommandDefinition(MemorySql.HasPendingEmbed, cancellationToken: Ct)))
+            .ShouldBeFalse();
+    }
+
+    /// <summary>The structure heal behind memory_embed_pending must not let one unembeddable heading fail every call.</summary>
+    [RetryFact]
+    public async Task StructureHeal_OnePoisonHeading_HealsTheOthersAndStopsRetryingIt()
+    {
+        await using var connection = await _factory.OpenBankAsync(Ct);
+        await ConfigureProviderAsync(connection);
+        var poison = await InsertLegacyEmbeddedAsync(connection, $"# {Poison} heading\nbody one");
+        var good = await InsertLegacyEmbeddedAsync(connection, "# Good heading\nbody two");
+        var embeddings = new PoisonEmbeddingService();
+        var embedder = NewEmbedder(embeddings);
+
+        await embedder.EmbedPendingAsync(connection, "acme", null, Ct);
+        var callsAfterFirst = embeddings.Calls.Count;
+        await embedder.EmbedPendingAsync(connection, "acme", null, Ct);
+
+        (await HeadingPathOfAsync(connection, good)).ShouldBe("# Good heading");
+        (await StructureOfAsync(connection, good)).ShouldNotBeNull();
+        (await HeadingPathOfAsync(connection, poison)).ShouldBe("", "the '' sentinel takes the row out of the heal set");
+        (await StructureOfAsync(connection, poison)).ShouldBeNull();
+        embeddings.Calls.Count.ShouldBe(callsAfterFirst, "a healed-or-given-up row is not retried");
+    }
+
+    [RetryFact]
+    public async Task StructureHeal_EngineDown_FailsAndGivesUpOnNoRow()
+    {
+        await using var connection = await _factory.OpenBankAsync(Ct);
+        await ConfigureProviderAsync(connection);
+        var row = await InsertLegacyEmbeddedAsync(connection, "# Good heading\nbody");
+        var embedder = NewEmbedder(new PoisonEmbeddingService { EngineDown = true });
+
+        await Should.ThrowAsync<InvalidOperationException>(() => embedder.EmbedPendingAsync(connection, "acme", null, Ct));
+
+        (await HeadingPathOfAsync(connection, row)).ShouldBeNull("an outage must not stamp the sentinel on a healthy row");
+    }
+
     /// <summary>A const SQL string cannot interpolate the ceiling, so this pins the literal to it.</summary>
     [RetryFact]
     public void PendingSelections_CarryTheCeilingAsTheirLiteral()
@@ -241,6 +301,26 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
     private static async Task<string> StateOfAsync(SqliteConnection connection, long id) =>
         await connection.ExecuteScalarAsync<string>(new CommandDefinition(
             "SELECT embed_state FROM entries WHERE id = @id", new { id }, cancellationToken: Ct)) ?? "";
+
+    /// <summary>An embedded row from before the structure writer: content vector, no heading path, no structure vector.</summary>
+    private static async Task<long> InsertLegacyEmbeddedAsync(SqliteConnection connection, string value)
+    {
+        var id = await InsertAsync(connection, value);
+        var blob = new float[384];
+        blob[0] = 1f;
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET embed_state = 'embedded', embedding = @embedding WHERE id = @id",
+            new { id, embedding = EmbeddingBlob.ToBytes(blob) }, cancellationToken: Ct));
+        return id;
+    }
+
+    private static async Task<string?> HeadingPathOfAsync(SqliteConnection connection, long id) =>
+        await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT heading_path FROM entries WHERE id = @id", new { id }, cancellationToken: Ct));
+
+    private static async Task<byte[]?> StructureOfAsync(SqliteConnection connection, long id) =>
+        await connection.ExecuteScalarAsync<byte[]?>(new CommandDefinition(
+            "SELECT structure_embedding FROM entries WHERE id = @id", new { id }, cancellationToken: Ct));
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
