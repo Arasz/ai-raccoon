@@ -1558,6 +1558,47 @@ public sealed class MemorySchemaVersionTests
             .ShouldBe(1L, "a delete after the migration must still write its tombstone");
     }
 
+    [RetryFact]
+    public async Task EnsureAsync_FreshBank_EntriesCarryEmbedAttemptsDefaultingToZero()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var id = await InsertEntryAsync(connection, "h-1", "a.md", scope: "project", projectId: "acme", workspaceId: null);
+
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT embed_attempts FROM entries WHERE id = @id", new { id },
+                cancellationToken: TestContext.Current.CancellationToken)))
+            .ShouldBe(0L);
+    }
+
+    /// <summary>A bank written by a build before the attempts column gains it on its next open.</summary>
+    [RetryFact]
+    public async Task EnsureAsync_CurrentVersionBankWithAStaleDigest_AddsEntriesEmbedAttempts()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"ALTER TABLE entries DROP COLUMN embed_attempts; PRAGMA application_id = {MemorySchema.SchemaDigest + 1};",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await ColumnsAsync(connection, "entries")).ShouldContain("embed_attempts");
+    }
+
+    /// <summary>The v17 step rebuilds entries from a fixed column list, so the column must survive it.</summary>
+    [RetryFact]
+    public async Task EnsureAsync_OnAV16Bank_EntriesStillCarryEmbedAttemptsAfterTheRebuild()
+    {
+        await using var connection = await OpenV16BankAsync();
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
+        (await ColumnsAsync(connection, "entries")).ShouldContain("embed_attempts");
+    }
+
     /// <summary>
     ///     Builds a v16-shaped bank: a full, current-shape bank (every trigger, index and companion
     ///     table created exactly as production does, via a real <see cref="MemorySchema.EnsureAsync" />
