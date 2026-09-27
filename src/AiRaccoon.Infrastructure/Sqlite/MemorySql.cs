@@ -400,15 +400,17 @@ internal static class MemorySql
     public const string PendingCount =
         "SELECT count(*) FROM entries WHERE embed_state = 'pending' AND project_id = @projectId";
 
+    /// <summary>A project's embeddable pending rows; a row past <c>EntryEmbedder.MaxEmbedAttempts</c> (the literal 3) is abandoned and left out.</summary>
     public const string SelectPendingForEmbed =
-        "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'pending' AND project_id = @projectId " +
+        "SELECT id AS Id, value AS Value, COALESCE(source_file, path) AS Source FROM entries " +
+        "WHERE embed_state = 'pending' AND embed_attempts < 3 AND project_id = @projectId " +
         "ORDER BY id LIMIT @limit";
 
     /// <summary>Bank-wide pending-row existence check for PendingEmbedJob.HasWorkAsync, polled every 15s (BankMaintenanceHostedService.OnDemandPollInterval) — EXISTS short-circuits on the first row instead of counting the whole backlog on every poll.</summary>
     public const string HasPendingEmbed =
-        "SELECT EXISTS(SELECT 1 FROM entries WHERE embed_state = 'pending' LIMIT 1)";
+        "SELECT EXISTS(SELECT 1 FROM entries WHERE embed_state = 'pending' AND embed_attempts < 3 LIMIT 1)";
 
-    /// <summary>Bank-wide pending-row COUNT sibling of <see cref="HasPendingEmbed" /> — PendingEmbedJob.CountOutstandingRowsAsync (WP3, #477), only called once per completed run, not on every 15s poll, so counting the whole backlog is affordable here.</summary>
+    /// <summary>Bank-wide pending-row COUNT sibling of <see cref="HasPendingEmbed" /> — PendingEmbedJob.CountOutstandingRowsAsync (WP3, #477), only called once per completed run, not on every 15s poll, so counting the whole backlog is affordable here. Counts abandoned rows too: they are still not embedded.</summary>
     public const string CountPendingEmbed =
         "SELECT COUNT(*) FROM entries WHERE embed_state = 'pending'";
 
@@ -430,7 +432,8 @@ internal static class MemorySql
     // structure writer landed, or a chunk whose heading never parsed). Bounded per call by @limit;
     // MarkStructure sets heading_path on every candidate touched, so it leaves this set for good.
     public const string SelectStructureHealCandidates =
-        "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'embedded' AND heading_path IS NULL " +
+        "SELECT id AS Id, value AS Value, COALESCE(source_file, path) AS Source FROM entries " +
+        "WHERE embed_state = 'embedded' AND heading_path IS NULL " +
         "AND structure_embedding IS NULL AND project_id = @projectId ORDER BY id LIMIT @limit";
 
     public const string SelectEmbeddedForProject =
@@ -442,7 +445,16 @@ internal static class MemorySql
 
     /// <summary>Bank-wide (not project-scoped) pending rows — the migration relay's own drain, distinct from the per-project memory_embed_pending path.</summary>
     public const string SelectAllPendingForEmbed =
-        "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'pending' ORDER BY id LIMIT @limit";
+        "SELECT id AS Id, value AS Value, COALESCE(source_file, path) AS Source FROM entries " +
+        "WHERE embed_state = 'pending' AND embed_attempts < 3 ORDER BY id LIMIT @limit";
+
+    /// <summary>Counts one failed embed attempt on a memory row and returns the new count.</summary>
+    public const string IncrementEmbedAttempts =
+        "UPDATE entries SET embed_attempts = embed_attempts + 1 WHERE id = @id RETURNING embed_attempts";
+
+    /// <summary>A new engine gets a fresh try at every row the previous one gave up on.</summary>
+    public const string ResetEmbedAttempts =
+        "UPDATE entries SET embed_attempts = 0 WHERE embed_attempts > 0";
 
     /// <summary>The outbox's own side effect: every currently-embedded row is stale under the new engine. Fires vec_entries_pending/vec_structure_pending, so the old vectors leave the searchable index the instant this commits.</summary>
     public const string MarkAllEmbeddedPending =

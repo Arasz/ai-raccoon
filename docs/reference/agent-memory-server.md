@@ -356,6 +356,12 @@ config channel (see [Command-line options](#command-line-options)).
   the built-in deny set, which would silently change ingest for every project.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
   (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
+- **A row that cannot embed** is retried on its own, not with its batch, and after three failed
+  attempts it is abandoned: no drain, `memory_embed_pending` call or migration selects it again,
+  and event 444 names it. It still counts in `memory_stats.pending`, because it is not embedded.
+  Rewriting or re-ingesting it gives it a fresh row; switching the embedding model resets every
+  row's attempts. An engine that cannot answer at all fails the pass instead and charges no row
+  ([ADR-0119](../adr/0119-poison-memory-rows-are-isolated-and-abandoned.md)).
 - **`memory_performance`:** project-scoped, except the reserved `__self_metrics__` project id,
   which returns the bank-wide series instead (a per-tenant whole-bank scope is still deferred). The
   `series` list is derived from the server's tool inventory plus the nine
