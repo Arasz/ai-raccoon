@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-defect-sweep-537-695-724",
+   "title": "Defect sweep: #537 poison embed row, #695 chunker splits identifiers, #724 stale files after checkout (+#778 found)",
+   "pr": 779,
+   "merged": true,
+   "date": "2026-09-27",
+   "hasNotes": false,
+   "summary": "All four real, fixed TDD with ADRs and existing-bank repair. #774 ADR-0119 1.53.2: per-row isolation, entries.embed_attempts ceiling 3, engine-outage/busy charge nothing, model switch resets. #775 ADR-0120 1.53.3: whitespace/term-boundary splits, >64-char FTS prefix match, one-shot chunk-boundary-repair-v1. #776 ADR-0121 1.53.4: per-file fingerprint catch-up (mtime>=updated_at or size differs), 5-min heal pass, pruned walk (6-7 CPU-s -> 0.1 per scan), vanish-mid-digest = delete. #779 ADR-0122 1.53.5: notes stored in text order, hash-proved NoteTextOrder, note-chunk-order-v1, sync keeps partition order. Checklist items: ai-badger#525 + #780 (poison-embedding-stub.py). Owner rules learned: fix found gaps in-PR; session owns merging."
+  },
+  {
    "id": "air-coreml-webgpu-latency-ab-record",
    "title": "M4 device benchmark + coreml vs WebGPU p95 search latency; README Performance section",
    "pr": 772,
@@ -357,7 +366,7 @@
    "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
   }
  ],
- "next": "Owner: merge ready PRs #717 #718 #719 #721 (before #729) #723 #725 #727 (before #730) #729 #730, then this state PR #720; rule on #706 (pin A9 + close, or ADR-0078 telemetry) and on #730 (merge off-flag vs record only); cut one release after the fixes land. Next task: structured config chunkers (XML/YAML/TOML) seed docs/work/2026-09-23-structured-config-chunkers-seed.md. Open: #724 watch catch-up staleness, #726 harness golden overnight run, #728 flaky ranking premise, #695.",
+ "next": "Owner: merge ready PRs #717 #718 #719 #721 (before #729) #723 #725 #727 (before #730) #729 #730, then this state PR #720; rule on #706 (pin A9 + close, or ADR-0078 telemetry) and on #730 (merge off-flag vs record only); cut one release after the fixes land. Next task: structured config chunkers (XML/YAML/TOML) seed docs/work/2026-09-23-structured-config-chunkers-seed.md. Open: #726 harness golden overnight run, #728 flaky ranking premise.",
  "filedNotStarted": [
   "#477 no job-level metrics (feature gap)",
   "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
