@@ -1,8 +1,10 @@
 using AiRaccoon.Access;
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
@@ -279,12 +281,21 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
     public async Task Search_IdentifierInAMultiChunkNote_IsFoundByTheKeywordLeg()
     {
         var ct = TestContext.Current.CancellationToken;
-        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNoteText(10)), ct);
+        var text = LongNoteText(10);
+        var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, text), ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
         await using (var connection = await _factory.OpenBankAsync(ct))
         {
             var rows = await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM entries", cancellationToken: ct));
             rows.ShouldBeGreaterThan(1, "premise: the note spans more than one chunk");
+            var firstRow = await connection.ExecuteScalarAsync<string>(new CommandDefinition(
+                "SELECT value FROM entries WHERE hash = @hash", new { hash = note.Hash }, cancellationToken: ct));
+            firstRow.ShouldNotBeNull().ShouldNotContain("vk83jq", Case.Sensitive, "premise: the identifier lies past the first chunk");
+            var budget = await new ChunkPositionScanner(TestData.RealFileTypeMatcher(), TestData.CreateEmbeddingService())
+                .BudgetAsync(connection, ct);
+            var hardCut = TokenBudget.Trim(text, budget.MaxTokens, budget.CountTokens).Length;
+            var identifier = text.IndexOf("vk83jq", StringComparison.Ordinal);
+            hardCut.ShouldBeInRange(identifier + 1, identifier + 5, "premise: a budget-only cut lands inside the identifier");
         }
 
         var envelope = await _tools.Search(ProjectId, "vk83jq", Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
