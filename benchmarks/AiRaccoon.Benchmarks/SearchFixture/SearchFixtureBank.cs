@@ -114,7 +114,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new PumpTopic(Ceiling: 8, Capacity: 8, Coalesce: true));
         var fileIngestor = new FileIngestor(fileTypeMatcher, sourceStore, TimeProvider.System, embeddingService,
             NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, embedDrainPump);
+            NullWatchStore.Instance, embedDrainPump, new IndexableFileWalk());
         var noiseFilteringService = new NoiseFilteringService([]);
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, new SqliteSettingsStore(factory),
