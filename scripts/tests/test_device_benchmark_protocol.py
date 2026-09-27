@@ -258,3 +258,47 @@ def test_calibration_notes_skip_the_cold_run_note_at_tier_zero() -> None:
     notes = protocol.calibration_notes("coreml", cold_run_calibrated=True, wall=45.0, tier=0, tier_dirs=["docs/adr"])
 
     assert not any("cold coreml" in n for n in notes)
+
+
+# ---------------------------------------------------------------------------------------------
+# Search-phase query derivation: deterministic off the corpus's markdown headings
+
+
+def _write_md(path: Path, *headings: str) -> None:
+    path.write_text("".join(f"# {h}\n\nsome text\n" for h in headings))
+
+
+def test_derive_search_queries_is_deterministic_for_the_same_corpus(tmp_path: Path) -> None:
+    _write_md(tmp_path / "a.md", "Alpha", "Beta")
+    _write_md(tmp_path / "b.md", "Gamma", "Delta")
+
+    first = protocol.derive_search_queries(tmp_path, 10)
+    second = protocol.derive_search_queries(tmp_path, 10)
+
+    assert first == second
+    assert sorted(first) == ["Alpha", "Beta", "Delta", "Gamma"]
+
+
+def test_derive_search_queries_caps_at_n(tmp_path: Path) -> None:
+    _write_md(tmp_path / "a.md", "Alpha", "Beta", "Gamma", "Delta")
+
+    assert len(protocol.derive_search_queries(tmp_path, 2)) == 2
+
+
+def test_derive_search_queries_dedupes_repeated_headings(tmp_path: Path) -> None:
+    _write_md(tmp_path / "a.md", "Alpha", "Alpha")
+    _write_md(tmp_path / "b.md", "Alpha")
+
+    assert protocol.derive_search_queries(tmp_path, 10) == ["Alpha"]
+
+
+def test_derive_search_queries_returns_empty_for_n_zero(tmp_path: Path) -> None:
+    _write_md(tmp_path / "a.md", "Alpha")
+
+    assert protocol.derive_search_queries(tmp_path, 0) == []
+
+
+def test_derive_search_queries_returns_empty_when_no_file_has_a_heading(tmp_path: Path) -> None:
+    (tmp_path / "no-heading.md").write_text("no heading here\n")
+
+    assert protocol.derive_search_queries(tmp_path, 10) == []

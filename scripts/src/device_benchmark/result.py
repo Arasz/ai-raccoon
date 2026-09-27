@@ -1,12 +1,16 @@
-"""The benchmark's JSON document (schemaVersion 1) and its markdown summary (stdlib only).
+"""The benchmark's JSON document (schemaVersion 2) and its markdown summary (stdlib only).
 
 soc_* numbers are powermetrics' CPU+GPU+ANE rails; system_* numbers are what the whole machine drew
 (AppleSmartBattery SystemLoad accumulator). *_net subtracts that run's idle baseline; a negative net
 is kept and flagged below_idle. Summaries use warm runs with status ok only.
+
+schemaVersion 2 adds the search-latency phase: search_latency_ms/search_p50_ms/search_p95_ms per
+run, a median-p95 summary column, and a per-device search_latency_verdicts "lose" flag.
 """
 
 from __future__ import annotations
 
+import math
 import statistics
 from typing import Sequence
 
@@ -14,11 +18,12 @@ from device_benchmark import battery, power
 from device_benchmark.protocol import coreml_start_label
 from retrieval_tuning.coreml import beats
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 RUN_KEYS = (
     "device", "repeat", "slot", "cold", "status", "reason", "provider_actual", "chunks", "wall_s",
     "server_cpu_s", "compiler_cpu_s",
+    "search_latency_ms", "search_p50_ms", "search_p95_ms",
     "soc_energy_gross_j", "soc_energy_net_j", "soc_mean_w_gross", "soc_mean_w_net", "idle_mean_w_soc", "soc_source",
     "soc_below_idle",
     "system_energy_gross_j", "system_energy_net_j", "system_mean_w_gross", "system_mean_w_net", "idle_mean_w_system",
@@ -32,7 +37,7 @@ TOP_KEYS = ("schemaVersion", "machine", "product", "corpus", "power_sources", "c
 
 SUMMARY_METRICS = (
     "wall_s", "system_energy_net_j", "soc_energy_net_j", "mj_per_chunk_system_net", "mj_per_chunk_soc_net",
-    "server_cpu_s", "phys_footprint_peak_kib", "neural_footprint_peak_kib",
+    "server_cpu_s", "search_p95_ms", "phys_footprint_peak_kib", "neural_footprint_peak_kib",
 )
 
 VERDICT_METRICS = {"system_energy_net_j": "net system energy", "soc_energy_net_j": "net SoC energy", "wall_s": "wall time"}
@@ -79,6 +84,31 @@ def energy_fields(*, t0: float, t1: float, idle_start: float, idle_end: float, c
     return fields
 
 
+def percentile(values: Sequence[float], pct: float) -> float | None:
+    """Nearest-rank percentile: the value at 1-based rank ceil(pct/100 * n), clamped into [1, n]; None
+    for an empty sequence."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    rank = min(len(ordered), max(1, math.ceil(pct / 100.0 * len(ordered))))
+    return ordered[rank - 1]
+
+
+def search_latency_fields(latencies_ms: Sequence[float]) -> dict:
+    """One run's raw per-query search_latency_ms plus its search_p50_ms/search_p95_ms; an empty list
+    leaves both percentiles None."""
+    values = list(latencies_ms)
+    return {"search_latency_ms": values, "search_p50_ms": percentile(values, 50), "search_p95_ms": percentile(values, 95)}
+
+
+def search_latency_loses(device_p95s: Sequence[float], auto_p95s: Sequence[float]) -> bool | None:
+    """LOSE when every device p95 sits above every auto p95 (range separation, mirroring `beats`);
+    None without usable data on either side."""
+    if not device_p95s or not auto_p95s:
+        return None
+    return beats(auto_p95s, device_p95s)
+
+
 def _spread(values: Sequence[float]) -> dict:
     if not values:
         return {"median": None, "min": None, "max": None, "n": 0}
@@ -116,12 +146,21 @@ def summarize(runs: Sequence[dict], reference: str) -> dict:
                 verdicts[device][metric] = "higher"
             else:
                 verdicts[device][metric] = "overlap"
-    return {"reference": reference, "devices": devices, "verdicts": verdicts}
+
+    search_verdicts: dict[str, bool | None] = {}
+    for device in devices:
+        if device == reference:
+            continue
+        ours = _values([r for r in runs if r["device"] == device and not r["cold"] and r["status"] == "ok"], "search_p95_ms")
+        theirs = _values([r for r in runs if r["device"] == reference and not r["cold"] and r["status"] == "ok"], "search_p95_ms")
+        search_verdicts[device] = search_latency_loses(ours, theirs)
+
+    return {"reference": reference, "devices": devices, "verdicts": verdicts, "search_latency_verdicts": search_verdicts}
 
 
 def build_result(*, machine: dict, product: dict, corpus: dict, power_sources: dict, compile: dict,
                  runs: list[dict], reference: str, notes: Sequence[str] = ()) -> dict:
-    """The schema-v1 document; raises ValueError when a run lacks a required key."""
+    """The schema-v2 document; raises ValueError when a run lacks a required key."""
     for run in runs:
         missing = [key for key in RUN_KEYS if key not in run]
         if missing:
@@ -153,8 +192,8 @@ def render_markdown(doc: dict) -> str:
         f"{chunks} chunks · SoC: {sources.get('soc')} · system: {sources.get('system')}",
         "",
         "| device | status | median wall s | system net J | SoC net J | system mJ/chunk | SoC mJ/chunk | server CPU-s "
-        "| peak phys MiB | peak neural MiB |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| median p95 search ms | peak phys MiB | peak neural MiB |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for device, row in doc["summary"]["devices"].items():
         status = ", ".join(f"{name}×{count}" for name, count in sorted(row["statuses"].items())) or "none"
@@ -162,6 +201,7 @@ def render_markdown(doc: dict) -> str:
             f"| {device} | {status} | {_cell(row['wall_s']['median'])} | {_cell(row['system_energy_net_j']['median'])} "
             f"| {_cell(row['soc_energy_net_j']['median'])} | {_cell(row['mj_per_chunk_system_net']['median'])} "
             f"| {_cell(row['mj_per_chunk_soc_net']['median'])} | {_cell(row['server_cpu_s']['median'])} "
+            f"| {_cell(row['search_p95_ms']['median'])} "
             f"| {_mib(row['phys_footprint_peak_kib']['median'])} | {_mib(row['neural_footprint_peak_kib']['median'])} |")
     compile_info = doc["compile"]
     lines.append("")
@@ -178,6 +218,7 @@ def render_markdown(doc: dict) -> str:
             f"{_cell(r['neural_engine_ready_s'])} s, {_cell(r.get('ready_compiler_cpu_s'))} compiler CPU-s" for r in starts))
     lines.append("")
     reference = doc["summary"]["reference"]
+    search_verdicts = doc["summary"].get("search_latency_verdicts", {})
     for device, verdict in doc["summary"]["verdicts"].items():
         parts = []
         for metric, label in VERDICT_METRICS.items():
@@ -185,6 +226,9 @@ def render_markdown(doc: dict) -> str:
             answer = {"lower": f"yes ({device} lower)", "higher": f"yes ({device} higher)",
                       "overlap": "no (ranges overlap)"}.get(outcome, "no data")
             parts.append(f"{label} separated? {answer}")
+        loses = search_verdicts.get(device)
+        if loses is not None:
+            parts.append(f"p95 search latency: lose? {'yes' if loses else 'no'}")
         lines.append(f"- {device} vs {reference}: " + "; ".join(parts))
     for note in doc.get("notes", []):
         lines.append(f"- note: {note}")

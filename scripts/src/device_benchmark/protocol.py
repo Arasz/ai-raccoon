@@ -8,6 +8,7 @@ chunk count differs from the session's), error (the run raised; its reason is ke
 from __future__ import annotations
 
 import json
+import random
 import re
 import shutil
 import statistics
@@ -164,3 +165,24 @@ def coreml_start_label(cold: bool, compiler_cpu_s: float | None) -> str:
     if compiler_cpu_s is None:
         return "warm (unknown)"
     return "warm (cache hit)" if compiler_cpu_s < CACHE_HIT_COMPILER_CPU_S else "warm (recompiled)"
+
+
+SEARCH_QUERY_SEED = 0
+
+
+def derive_search_queries(corpus_dir: Path, n: int, seed: int = SEARCH_QUERY_SEED) -> list[str]:
+    """The corpus's markdown '#' headings, deduped and sorted for a stable base order, shuffled with
+    a fixed seed (identical across every device and repeat), and capped to the first n."""
+    if n <= 0:
+        return []
+    headings: set[str] = set()
+    for path in sorted(Path(corpus_dir).rglob("*.md")):
+        for line in path.read_text(errors="replace").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                text = stripped.lstrip("#").strip()
+                if text:
+                    headings.add(text)
+    ordered = sorted(headings)
+    random.Random(seed).shuffle(ordered)
+    return ordered[:n]
