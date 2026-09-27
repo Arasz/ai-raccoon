@@ -179,8 +179,7 @@ public sealed partial class WatchHostedService : BackgroundService
             }
             else
             {
-                _catchUp.EnqueueChangedSince(registration.ProjectId, registration.Path, registration.LastChangeTs,
-                    cancellationToken);
+                _catchUp.EnqueueChangedFiles(registration.ProjectId, registration.Path, cancellationToken);
             }
         }
 

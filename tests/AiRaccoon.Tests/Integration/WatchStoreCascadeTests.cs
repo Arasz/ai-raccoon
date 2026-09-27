@@ -66,6 +66,25 @@ public sealed class WatchStoreCascadeTests
         (await stack.Store.HasFingerprintAtOrUnderAsync(Project, stack.Dir("repo", "other.md"), ct)).ShouldBeFalse("another project's fingerprint");
     }
 
+    /// <summary>The restart scan's per-file due check reads each fingerprint's own time, scoped to the project.</summary>
+    [RetryFact]
+    public async Task ListFileStampsAsync_ReturnsEachFingerprintsUpdatedAt_ForTheProjectOnly()
+    {
+        using var stack = new Stack();
+        var ct = TestContext.Current.CancellationToken;
+        var a = stack.Dir("repo", "a.md");
+        var b = stack.Dir("repo", "b.md");
+        await stack.Store.UpsertFileHashAsync(Project, a, "h", 100, ct);
+        await stack.Store.UpsertFileHashAsync(Project, b, "h", 200, ct);
+        await stack.Store.UpsertFileHashAsync(OtherProject, stack.Dir("repo", "c.md"), "h", 300, ct);
+
+        var stamps = await stack.Store.ListFileStampsAsync(Project, ct);
+
+        stamps.Count.ShouldBe(2);
+        stamps[a].ShouldBe(100);
+        stamps[b].ShouldBe(200);
+    }
+
     [RetryFact]
     public async Task RemoveWatchAsync_AlsoDeletesTheFingerprintsUnderTheWatch()
     {

@@ -15,7 +15,7 @@ namespace AiRaccoon.Tests.Integration.Watch;
 
 /// <summary>
 ///     Re-watch loop semantics: disabled projects keep registrations without checking; enabled
-///     registrations get a watcher + catch-up scan (full when never synced, since-watermark
+///     registrations get a watcher + catch-up scan (full when never synced, changed-files
 ///     otherwise); removed/disabled flips stop the watcher; StopAsync disposes everything.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -125,7 +125,7 @@ public sealed class WatchHostedServiceTests
     }
 
     [RetryFact]
-    public async Task Reconcile_EnabledWithWatermark_RunsASinceScan_OnlyNewerFilesQueued()
+    public async Task Reconcile_EnabledWithWatermark_RunsAChangedFilesScan_OnlyFilesWrittenSinceTheirFingerprintQueued()
     {
         using var dir = TempDir.New("hosted-since");
         var (stack, source, catchUp, hosted) = NewStack();
@@ -134,7 +134,7 @@ public sealed class WatchHostedServiceTests
         var newer = dir.File("newer.md");
         await File.WriteAllTextAsync(older, "zephyrone", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(newer, "zephyrtwo", TestContext.Current.CancellationToken);
-        File.SetLastWriteTimeUtc(older, DateTimeOffset.FromUnixTimeSeconds(watermark - 3600).UtcDateTime);
+        File.SetLastWriteTimeUtc(older, DateTimeOffset.FromUnixTimeSeconds(watermark - 7200).UtcDateTime);
         File.SetLastWriteTimeUtc(newer, DateTimeOffset.FromUnixTimeSeconds(watermark + 3600).UtcDateTime);
         stack.Enable();
         await stack.Store.AddWatchAsync(Project, dir.Path, 0, watermark,
@@ -149,6 +149,32 @@ public sealed class WatchHostedServiceTests
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
         stack.Memory.Ingested.Select(i => i.Path).ShouldContain(newer);
         stack.Memory.Ingested.Select(i => i.Path).ShouldNotContain(older);
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     A bank upgraded with a file already stale: written after its fingerprint, but before the
+    ///     watch's last change (another file digested later). The first reconcile re-digests it.
+    /// </summary>
+    [RetryFact]
+    public async Task Reconcile_FileWrittenAfterItsFingerprintButBeforeTheWatchsLastChange_IsReDigested()
+    {
+        using var dir = TempDir.New("hosted-stale-behind-watermark");
+        var (stack, _, catchUp, hosted) = NewStack();
+        var lastChange = stack.Time.GetUtcNow().ToUnixTimeSeconds();
+        var stale = dir.File("stale.md");
+        await File.WriteAllTextAsync(stale, "zephyrcurrent", TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(stale, DateTimeOffset.FromUnixTimeSeconds(lastChange - 1800).UtcDateTime);
+        stack.Enable();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, lastChange, TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(stale), "zephyroldhash",
+            lastChange - 3600, TestContext.Current.CancellationToken);
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.ShouldContain((Project, stale, "zephyrcurrent"));
         await hosted.StopAsync(CancellationToken.None);
     }
 

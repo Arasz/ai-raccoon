@@ -229,6 +229,16 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         ];
     }
 
+    public Task<IReadOnlyDictionary<string, long>> ListFileStampsAsync(string projectId,
+        CancellationToken cancellationToken = default)
+    {
+        ListFilesCalls++;
+        var prefix = $"{projectId}\u0000";
+        return Task.FromResult<IReadOnlyDictionary<string, long>>(FileHashes
+            .Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .ToDictionary(kv => kv.Key[prefix.Length..], kv => kv.Value.UpdatedAt, IngestPath.PathComparer));
+    }
+
     /// <summary>Synchronous fingerprint read/write — the fake memory store's replace transaction uses these.</summary>
     public string? PeekFingerprint(string projectId, string path) => FileHashes.TryGetValue(Key(projectId, path), out var file) ? file.Hash : null;
 
