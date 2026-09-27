@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -97,6 +98,21 @@ public sealed class ChunkIndexRepairTests : IDisposable
         positions["a note citing the doc"].ShouldBe(3);
         (await connection.QueryAsync<long>("SELECT total_chunks FROM entries WHERE source_file = @file", new { file }))
             .ShouldAllBe(total => total == 4);
+    }
+
+    /// <summary>A row at the right position whose total_chunks is not the row count is still a fix, and the report
+    /// counts it so a dry run does not claim there is nothing to do.</summary>
+    [RetryFact]
+    public async Task RunAsync_DryRun_CountsRowsWhoseOnlyFaultIsTheirTotal()
+    {
+        var file = Path.Combine(_dataRoot, "doc.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para one", 0), (file, "para two", 1), (file, "para three", 2));
+        await connection.ExecuteAsync("UPDATE entries SET total_chunks = 5");
+
+        var report = await Repair().RunAsync(connection, apply: false, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 3));
     }
 
     [RetryFact]

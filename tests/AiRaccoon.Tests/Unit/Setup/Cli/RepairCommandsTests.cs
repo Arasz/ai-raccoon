@@ -84,7 +84,7 @@ public sealed class RepairCommandsTests
     [Fact]
     public async Task ChunkIndex_Apply_QueuesForTheServer_AndDoesNotClaimToWriteLocally()
     {
-        var stdout = await RunChunkIndexAsync(apply: true, new ChunkIndexRepairReport(4, 2, 1));
+        var stdout = await RunChunkIndexAsync(apply: true, new ChunkIndexRepairReport(4, 2, 1, 3));
 
         stdout.ShouldContain("queued for the server");
         stdout.ShouldContain("maintenance poll");
@@ -93,7 +93,7 @@ public sealed class RepairCommandsTests
     [Fact]
     public async Task ChunkIndex_Apply_RequestsTheChunkIndexKind()
     {
-        var inner = new InMemorySettings { ChunkIndexReport = new ChunkIndexRepairReport(4, 2, 1) };
+        var inner = new InMemorySettings { ChunkIndexReport = new ChunkIndexRepairReport(4, 2, 1, 3) };
 
         await RunChunkIndexAsync(apply: true, inner);
 
@@ -721,9 +721,17 @@ public sealed class RepairCommandsTests
     }
 
     [Fact]
+    public async Task ChunkIndex_DryRun_ReportsTheRowsWhoseTotalItWouldFix()
+    {
+        var stdout = await RunChunkIndexAsync(apply: false, new ChunkIndexRepairReport(4, 0, 0, 3));
+
+        stdout.ShouldContain("3 row(s) given their partition's row count as total_chunks");
+    }
+
+    [Fact]
     public async Task ChunkIndex_DryRun_NeverRequestsARepair()
     {
-        var inner = new InMemorySettings { ChunkIndexReport = new ChunkIndexRepairReport(4, 2, 1) };
+        var inner = new InMemorySettings { ChunkIndexReport = new ChunkIndexRepairReport(4, 2, 1, 3) };
 
         await RunChunkIndexAsync(apply: false, inner);
 

@@ -31,6 +31,7 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
 
         var repositioned = 0;
         var setUnknown = 0;
+        var retotalled = 0;
 
         foreach (var memberId in groups)
         {
@@ -46,10 +47,9 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
                 var row = before[move.Id];
                 if (move.ChunkIndex == row.ChunkIndex)
                 {
-                    continue;
+                    retotalled++;
                 }
-
-                if (move.ChunkIndex < 0)
+                else if (move.ChunkIndex < 0)
                 {
                     setUnknown++;
                 }
@@ -65,6 +65,6 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
             }
         }
 
-        return new ChunkIndexRepairReport(groups.Count, repositioned, setUnknown);
+        return new ChunkIndexRepairReport(groups.Count, repositioned, setUnknown, retotalled);
     }
 }

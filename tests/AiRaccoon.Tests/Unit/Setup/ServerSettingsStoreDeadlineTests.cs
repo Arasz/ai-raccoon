@@ -106,7 +106,7 @@ public sealed class ServerSettingsStoreDeadlineTests
         {
             await Task.Delay(delay, cancellationToken);
             var query = request.RequestUri!.Query;
-            object? body = query.Contains(RepairKinds.ChunkIndex, StringComparison.Ordinal) ? new ChunkIndexRepairReport(7, 0, 0)
+            object? body = query.Contains(RepairKinds.ChunkIndex, StringComparison.Ordinal) ? new ChunkIndexRepairReport(7, 0, 0, 0)
                 : query.Contains(RepairKinds.Reingest, StringComparison.Ordinal) ? new ReingestRepairReport(0, 0, 0)
                 : query.Contains(RepairKinds.ProjectIds, StringComparison.Ordinal) ? new ProjectIdCensusReport([], 0, 0, 0, 0, [])
                 : null;
