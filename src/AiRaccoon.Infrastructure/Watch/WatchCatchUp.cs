@@ -96,7 +96,11 @@ public sealed partial class WatchCatchUp(
         !string.Equals(Path.GetFileName(file), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
         rules.IsIgnored(Path.GetRelativePath(root, file), false);
 
-    private static bool IsDue(string file, IReadOnlyDictionary<string, WatchFileStamp>? stamps)
+    /// <summary>
+    ///     Whether the scan queues <paramref name="file" />. A fingerprinted file deleted since the walk
+    ///     listed it is not due: the reconcile pass removes its fingerprint, and the scan carries on.
+    /// </summary>
+    internal static bool IsDue(string file, IReadOnlyDictionary<string, WatchFileStamp>? stamps)
     {
         if (stamps is null || !stamps.TryGetValue(IngestPath.Normalize(file), out var stamp))
         {
@@ -104,6 +108,11 @@ public sealed partial class WatchCatchUp(
         }
 
         var info = new FileInfo(file);
+        if (!info.Exists)
+        {
+            return false;
+        }
+
         return new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeSeconds() >= stamp.UpdatedAt ||
                stamp.Size is { } size && size != info.Length;
     }

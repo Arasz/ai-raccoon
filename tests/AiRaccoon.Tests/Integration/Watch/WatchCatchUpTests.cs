@@ -164,6 +164,43 @@ public sealed class WatchCatchUpTests
         }
     }
 
+    /// <summary>
+    ///     A fingerprinted file deleted between the walk listing it and the due check is simply not
+    ///     due; the reconcile pass removes its fingerprint, and the scan carries on.
+    /// </summary>
+    [RetryFact]
+    public void IsDue_FingerprintedFileWithASizeThatVanishedAfterTheWalk_IsNotDueAndDoesNotThrow()
+    {
+        using var dir = TempDir.New("catchup-vanished-file");
+        var gone = dir.File("gone.md");
+
+        WatchCatchUp.IsDue(gone, SizedStamp(gone, 42)).ShouldBeFalse();
+    }
+
+    /// <summary>A subdirectory deleted after its parent was listed but before the walk enters it is skipped, not fatal.</summary>
+    [RetryFact]
+    public void EnumerateFiles_SubdirectoryDeletedMidWalk_IsSkipped()
+    {
+        using var dir = TempDir.New("catchup-vanished-dir");
+        var first = dir.File("first.md");
+        WriteAllText(first, "zephyrfirst");
+        var doomed = Path.Combine(dir.Path, "doomed");
+        Directory.CreateDirectory(doomed);
+        WriteAllText(Path.Combine(doomed, "inner.md"), "zephyrinner");
+        var seen = new List<string>();
+
+        foreach (var file in WatchCatchUp.EnumerateFiles(new IndexableFileWalk(), dir.Path, null))
+        {
+            seen.Add(file);
+            if (Directory.Exists(doomed))
+            {
+                Directory.Delete(doomed, true);
+            }
+        }
+
+        seen.ShouldBe([first]);
+    }
+
     [RetryFact]
     public void EnumerateFiles_OnAFileTarget_ReturnsTheFileWhenItIsDue()
     {
