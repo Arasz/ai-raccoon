@@ -127,3 +127,31 @@ order whether or not `note-chunk-order-v1` ran first. File rows are ordered by p
   `MemorySync_Merge_KeepsPositionsThatAreNotInIdOrder`, and
   `ChunkBoundaryRepairTests` (text order after a renumber, a note stored in text order, an
   unprovable note left alone). Each failed before its change.
+
+## Addendum — unknown positions are placed before reordering, job renamed to v2 (#784)
+
+The bank-wide repair could still leave a note out of order. A note whose rows were never
+positioned (a merge in progress, or an old-writer note the first pass of this ADR never reached)
+has every row at the `-1` sentinel. `NoteTextOrder.Find` can still prove such a note's text order
+from an id-order rotation, but `Repositioned` refuses to act on it — it never invents a position —
+so the note moved nothing and was neither reordered nor counted unprovable. `chunk-boundary-repair-v1`
+ran right after in the same pass and renumbered every remaining `-1` in id order, which is exactly
+the opening-last layout this ADR exists to fix: the note's opening chunk, holding the highest id,
+landed last again. Reproduced on a seeded opening-last note with every row unpositioned: 354 notes
+on the owner's bank were stamped `note-chunk-order-v1` and left this way.
+
+`NoteChunkOrderRepair.RunAsync` (the bank-wide overload) now checks `UnpositionedNotePathsAsync`
+first and, when it finds any, runs `RecomputeChunkColumnsBankWideKeepingOrder` before reordering —
+the same fill `SyncService` already runs ahead of the path-scoped overload. Every row then holds a
+real position, and the proof-then-reposition step it already ran can act on it. The path-scoped
+overload is unchanged: sync always fills first, so a row it sees is never at `-1`.
+
+`NoteChunkOrderRepairJob.JobName` is renamed `note-chunk-order-v2`. The runner's due-check reads
+`maintenance_jobs` by name (ADR-0070), so a bank already stamped `note-chunk-order-v1` finds no row
+under the new name and runs the fixed repair once more on its next maintenance pass — no manual
+step. The repair stays safe to re-run: a note already in text order moves nothing.
+
+**Tests.** `NoteChunkOrderRepairTests` (every row unpositioned; the pass-level sequence — this
+repair then `ChunkBoundaryRepairJob`'s own recompute — leaves the opening first) and
+`NoteChunkOrderRepairJobLedgerTests` (a bank stamped `note-chunk-order-v1` runs the renamed job
+again). Each failed before its change.
