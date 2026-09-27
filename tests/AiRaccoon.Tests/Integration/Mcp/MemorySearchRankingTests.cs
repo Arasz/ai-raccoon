@@ -255,7 +255,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
     public async Task Search_AllTermsKeywordMatchThatWinsFusion_StaysFirstAboveBoostedNeighbours()
     {
         var ct = TestContext.Current.CancellationToken;
-        var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNoteText()), ct);
+        var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNoteText(8)), ct);
         await AllowIngestAsync(ct);
         var observatory = await IngestAsync("observatory.md", ObservatoryText(), ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
@@ -271,9 +271,32 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         envelope.Data!.Results[0].Hash.ShouldBe(note.Hash, "a same-source boost must not lift vector-only neighbours above it");
     }
 
-    private static string LongNoteText() =>
+    /// <summary>
+    ///     A note long enough to span several chunks, with an identifier near a chunk boundary: the
+    ///     boundary falls on whitespace, so one chunk holds the whole identifier and the keyword leg finds it.
+    /// </summary>
+    [RetryFact]
+    public async Task Search_IdentifierInAMultiChunkNote_IsFoundByTheKeywordLeg()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNoteText(10)), ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+        await using (var connection = await _factory.OpenBankAsync(ct))
+        {
+            var rows = await connection.ExecuteScalarAsync<long>(new CommandDefinition("SELECT COUNT(*) FROM entries", cancellationToken: ct));
+            rows.ShouldBeGreaterThan(1, "premise: the note spans more than one chunk");
+        }
+
+        var envelope = await _tools.Search(ProjectId, "vk83jq", Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+
+        envelope.Data!.EvidenceByHash.ShouldNotBeNull().Values
+            .ShouldContain(evidence => evidence.Legs.Any(leg => leg.LegName == "fts"), "one chunk must hold the whole identifier");
+    }
+
+    /// <summary>Eight repeats fit one chunk under the bundled model's budget; ten span two.</summary>
+    private static string LongNoteText(int repeats) =>
         string.Join(" ", Enumerable.Repeat(
-            "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", 8))
+            "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", repeats))
         + " Invoice reference vk83jq was filed with the parish council.";
 
     private static string ObservatoryText()

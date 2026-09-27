@@ -6,8 +6,8 @@ namespace AiRaccoon.Core.Chunking;
 ///     Line-granular markdown splitter: deterministic, token-bounded and code-fence-aware.
 ///     No emitted chunk can exceed maxTokens under the tokenizer that counted it (docs/adr/0036):
 ///     a closed fence stays one atomic unit only while it fits; any unit that is still oversized —
-///     a fence, a long line, a minified-JSON line, one very long word — falls back to token-level
-///     splitting, which always terminates. Joined multi-unit chunks are verified against the real
+///     a fence, a long line, a minified-JSON line, one very long word — is split on whitespace, and
+///     only a word longer than the budget is cut mid-word (docs/adr/0120); either way it terminates. Joined multi-unit chunks are verified against the real
 ///     tokenizer rather than trusted from summed per-unit counts, because BPE/WordPiece token
 ///     counts are not composable across a join. Every chunk is also a well-formed markdown
 ///     fragment: a boundary never falls inside a fence, because an over-budget fence is re-fenced
@@ -435,7 +435,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         units.Add(new Unit(lines, countTokens(string.Concat(lines))));
     }
 
-    /// <summary>Splits one fenced line into pieces that each fit maxTokens once wrapped in the delimiters.</summary>
+    /// <summary>Splits one fenced line on whitespace into pieces that each fit maxTokens once wrapped in the delimiters.</summary>
     private static List<string> SplitForSubFence(string line, string opener, string closer, int maxTokens,
         TokenCount countTokens)
     {
@@ -454,9 +454,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
                 break;
             }
 
-            // Even a single character can tokenize over budget; take it anyway so every split makes
-            // forward progress and the loop is guaranteed to terminate.
-            var headLength = Math.Max(1, LargestPrefixWithinBudget(remaining, maxTokens, Wrapped));
+            var headLength = TokenBudget.SplitLength(remaining, maxTokens, Wrapped);
             pieces.Add(remaining[..headLength]);
             remaining = remaining[headLength..];
         }
@@ -499,9 +497,9 @@ public sealed class MarkdownChunker : IMarkdownChunker
     }
 
     /// <summary>
-    ///     Adds text as one unit when it already fits maxTokens; otherwise falls back to
-    ///     token-level splitting via <see cref="LargestPrefixWithinBudget" />, which always makes
-    ///     progress. This is the floor beneath every coarser split (fence, line): no unit this
+    ///     Adds text as one unit when it already fits maxTokens; otherwise splits it on whitespace via
+    ///     <see cref="TokenBudget.SplitLength" />, hard-cutting only a word longer than the budget, which
+    ///     always makes progress. This is the floor beneath every coarser split (fence, line): no unit this
     ///     builds can ever exceed maxTokens, whatever it contains — a long line, a minified-JSON
     ///     blob, one very long word (docs/adr/0036).
     /// </summary>
@@ -517,40 +515,11 @@ public sealed class MarkdownChunker : IMarkdownChunker
         var remaining = text;
         while (remaining.Length > 0)
         {
-            var headLength = LargestPrefixWithinBudget(remaining, maxTokens, countTokens);
-            if (headLength <= 0)
-            {
-                // Even a single character tokenizes over budget; take it anyway so every split makes
-                // forward progress and the loop is guaranteed to terminate.
-                headLength = 1;
-            }
-
+            var headLength = TokenBudget.SplitLength(remaining, maxTokens, countTokens);
             var head = remaining[..headLength];
             units.Add(new Unit([head], countTokens(head)));
             remaining = remaining[headLength..];
         }
-    }
-
-    /// <summary>Binary search (assumes token count is non-decreasing in prefix length, true of every
-    /// tokenizer this project uses) for the longest prefix of text within the token budget.</summary>
-    private static int LargestPrefixWithinBudget(string text, int maxTokens, TokenCount countTokens)
-    {
-        var lo = 0;
-        var hi = text.Length;
-        while (lo < hi)
-        {
-            var mid = lo + (hi - lo + 1) / 2;
-            if (countTokens(text[..mid]) <= maxTokens)
-            {
-                lo = mid;
-            }
-            else
-            {
-                hi = mid - 1;
-            }
-        }
-
-        return lo;
     }
 
     private static bool IsFenceDelimiter(string line)
