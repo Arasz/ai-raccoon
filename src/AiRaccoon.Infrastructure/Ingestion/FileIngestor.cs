@@ -26,7 +26,8 @@ public sealed class FileIngestor(
     ICodeFileTypeMatcher codeFileTypeMatcher,
     ICodeIngestor codeIngestor,
     IWatchStore watchStore,
-    IEventPump<EmbedDrainRequest> embedDrainPump) : IFileIngestor
+    IEventPump<EmbedDrainRequest> embedDrainPump,
+    IndexableFileWalk walk) : IFileIngestor
 {
     /// <summary>
     ///     Ignore rules apply ahead of routing, for both the memory and code pipelines —
@@ -144,7 +145,7 @@ public sealed class FileIngestor(
             ? path
             : await ResolveIgnoreRootAsync(connection, projectId, path, cancellationToken);
         var ignoreRules = await ignoreRulesProvider.LoadAsync(ignoreRoot, cancellationToken);
-        var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+        var files = walk.Under(path)
             .Where(file => !IsHidden(path, file) && !IsIgnored(ignoreRules, ignoreRoot, file) && IsInScope(scope, file))
             .OrderBy(file => file, StringComparer.Ordinal);
 
@@ -159,7 +160,16 @@ public sealed class FileIngestor(
             {
                 if (codeFileTypeMatcher.IsCodeFile(file))
                 {
-                    var codeResult = await codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope);
+                    CodeIngestResult codeResult;
+                    try
+                    {
+                        codeResult = await codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope);
+                    }
+                    catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException && !File.Exists(file))
+                    {
+                        continue; // deleted after the walk listed it: nothing to ingest
+                    }
+
                     indexed += codeResult.Rows;
                     codeRowsWritten |= codeResult.Rows > 0;
                     walked.Add(new WalkedFile(file, [], ResolveCodeChunkHashes(codeResult)));
@@ -168,7 +178,16 @@ public sealed class FileIngestor(
                 continue;
             }
 
-            var content = await File.ReadAllTextAsync(file, cancellationToken);
+            string content;
+            try
+            {
+                content = await File.ReadAllTextAsync(file, cancellationToken);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException && !File.Exists(file))
+            {
+                continue; // deleted after the walk listed it: nothing to ingest
+            }
+
             var (rows, hashes) = await InsertChunksAsync(connection, projectId, file, content, handler, context,
                     cancellationToken);
             indexed += rows;

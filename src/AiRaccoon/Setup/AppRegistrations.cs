@@ -309,6 +309,7 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<ICodeTokenizer, CodeTokenizer>();
             services.AddRequiredSingleton<ICodeChunker, CodeChunker>();
             services.AddRequiredSingleton<ICodeIngestor, CodeIngestor>();
+            services.AddSingleton<IndexableFileWalk>();
             services.AddRequiredSingleton<IFileIngestor, FileIngestor>();
         }
 

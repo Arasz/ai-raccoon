@@ -83,6 +83,24 @@ public sealed class WatchDigestExecutor(
             return;
         }
 
+        try
+        {
+            await DigestExistingFileAsync(projectId, normalizedWatch, normalized, isIgnoreFile, cancellationToken);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException && !File.Exists(normalized))
+        {
+            // Deleted after the existence check above, e.g. by a branch switch: a delete, not a
+            // digest failure that would count against the whole watch.
+            await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken);
+        }
+    }
+
+    /// <summary>Hash-skip or replace for a file that existed when the digest looked; throws FileNotFoundException if it vanishes mid-way.</summary>
+    private async Task DigestExistingFileAsync(string projectId, string normalizedWatch, string normalized,
+        bool isIgnoreFile, CancellationToken cancellationToken)
+    {
+        // Read before the content: a write racing the digest then leaves a size that no longer matches.
+        var size = new FileInfo(normalized).Length;
         var content = await File.ReadAllTextAsync(normalized, cancellationToken);
         var hash = ComputeHash(normalized, content);
         var previous = await watchStore.GetFileHashAsync(projectId, normalized, cancellationToken);
@@ -90,6 +108,7 @@ public sealed class WatchDigestExecutor(
         {
             // Hash-skip: metadata-only touch — refresh timestamps, never touch memory or hooks.
             await TouchAsync(projectId, normalizedWatch, normalized, hash, cancellationToken);
+            await watchStore.SetFileSizeAsync(projectId, normalized, size, cancellationToken);
             return;
         }
 
@@ -97,6 +116,7 @@ public sealed class WatchDigestExecutor(
         // only a cheap filter, and a concurrent process either loses the race and skips or, on a
         // crash mid-digest, rolls back — the file is never left chunkless behind a matching hash.
         var replaceResult = await store.ReplaceIfFileChangedAsync(projectId, normalized, hash, cancellationToken);
+        await watchStore.SetFileSizeAsync(projectId, normalized, size, cancellationToken);
         // Signals whichever corpus the replace actually wrote to; rows stay embed_state='pending'
         // (the durable outbox, ADR-0076) until EmbedDrainService's single reader drains them.
         embedDrainPump.SignalWritten(replaceResult.Corpus);

@@ -31,7 +31,7 @@ Implement the file-watcher feature: three MCP tools (`memory_watch_add` / `memor
 
 ## 2. Design facts already ruled (cards — do NOT re-decide)
 
-- **D1** catch-up: per-watch last-change timestamp; restart re-ingests targets changed since it. No "stale" state.
+- **D1** catch-up: per-watch last-change timestamp marks a watch as synced; restart, a 5-minute heal pass and a recovery after a failed digest re-ingest each file changed since its own fingerprint (amended by ADR-0121). No "stale" state.
 - **D2** rename onto existing path: overwrite — incoming content wins, target's previous chunks are replaced.
 - **D3** path identity: `Path.GetFullPath` (absolute, separators and `..` resolved, trailing separator stripped); case comparison follows host OS.
 - **D4** status states: `scanning / healthy / retrying / stopped`.
@@ -289,7 +289,7 @@ dotnet test --filter "FullyQualifiedName~AiRaccoon.Tests.Unit.Watch"
 
 ### Scope
 - `WatchEventSource`: `FileSystemWatcher` wrapper (IncludeSubdirectories, all four event types → `WatchEvent`, path normalized per D3); never throws on its own — adapter-level try/catch feeds a synthetic error event to status. Per-OS event coalescing is accepted; the catch-up watermark is the safety net (spec risk).
-- `WatchCatchUp` (D1): on startup, for each registered watch: if the watch's `last_change_ts` is 0 (never synced) → full initial scan (status `scanning`); else enumerate subtree, queue files with `mtime > last_change_ts` for digest; initial scan is async — `memory_watch_add` returns immediately (feature rule 4). `last_change_ts` advances as digests complete.
+- `WatchCatchUp` (D1): on startup, for each registered watch: if the watch's `last_change_ts` is 0 (never synced) → full initial scan (status `scanning`); else enumerate subtree, queue files with no fingerprint, with `mtime >= watch_files.updated_at` for that file, or whose size differs from `watch_files.size` (ADR-0121: the watch-wide `mtime > last_change_ts` filter hid files whose live event was missed; the same scan also runs every 5 minutes and after a failed digest recovers); initial scan is async — `memory_watch_add` returns immediately (feature rule 4). `last_change_ts` advances as digests complete.
 - `WatchHostedService` (`BackgroundService`): on start — read enable config; load `watches`; **if watching is disabled, keep registrations but start no checking** (decision, see §10); re-watch + catch-up otherwise. On stop — dispose all `FileSystemWatcher`s.
 - Integration tests (real temp dirs, real `FileSystemWatcher`, `FakeTimeProvider` for ticks, bounded polling ≤5s for OS event delivery):
   - created file becomes searchable; delete removes chunks; rename moves content and leaves nothing under the old path; rename onto existing path leaves only the incoming content (D2).

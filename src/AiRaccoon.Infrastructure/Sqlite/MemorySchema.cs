@@ -338,6 +338,8 @@ internal static class MemorySchema
                                               updated_at      INTEGER NOT NULL,
                                               PRIMARY KEY (project_id, path)
                                           );
+                                          -- size (ADR-0121, file length at the last digest, NULL before it was
+                                          -- recorded) is added by EnsureWatchFilesSizeColumnAsync, not declared here.
 
                                           -- WP12 Fix A: the chunker runs outside the write lock, so two replaces
                                           -- racing the same stale-to-new transition (SqliteMemoryStore.ReplaceCoreAsync)
@@ -709,6 +711,7 @@ internal static class MemorySchema
             await EnsureEmbedAttemptsColumnAsync(connection, "code_entries", cancellationToken);
             await EnsureSearchQualityResultFeaturesColumnAsync(connection, cancellationToken);
             await EnsureRepairRequestsMapJsonColumnAsync(connection, cancellationToken);
+            await EnsureWatchFilesSizeColumnAsync(connection, cancellationToken);
 
             // P2-B (docs/adr/0109): identifiers column first, then the code_fts rebuild that reads
             // it — EnsureCodeFtsIdentifiersAsync's backfill assumes the column already exists.
@@ -1739,6 +1742,32 @@ internal static class MemorySchema
             await connection.ExecuteAsync(new CommandDefinition(
                     $"ALTER TABLE {table} ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0",
                     cancellationToken: cancellationToken));
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+        {
+        }
+    }
+
+    /// <summary>
+    ///     ADR-0121: adds the nullable watch_files.size if it is missing, on a digest mismatch only.
+    ///     Existing fingerprints keep NULL until their next digest; "duplicate column" means another
+    ///     connection won the race.
+    /// </summary>
+    private static async Task EnsureWatchFilesSizeColumnAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('watch_files')", cancellationToken: cancellationToken)))
+            .Contains("size", StringComparer.Ordinal);
+        if (hasColumn)
+        {
+            return;
+        }
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                    "ALTER TABLE watch_files ADD COLUMN size INTEGER NULL", cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {

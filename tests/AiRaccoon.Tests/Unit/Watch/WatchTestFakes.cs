@@ -32,7 +32,7 @@ internal sealed class WatchTestStack
         Executor = new WatchDigestExecutor(Memory, Store, Time, IgnoreRules, scanInitiatorLazy, EmbedDrainPump,
             migrationGate ?? new NeverMigratedGate());
         Pipeline = new WatchPipeline(
-            new WatchScheduler(), Executor, new WatchRetryPolicy(), ScanGuard,
+            new WatchScheduler(), Executor, RetryPolicy, ScanGuard,
             Memory, Time, NullLogger<WatchPipeline>.Instance);
         Service = new WatchService(Store, Memory, Pipeline, Time, OverlapResolver,
             migrationGate ?? new NeverMigratedGate());
@@ -45,6 +45,8 @@ internal sealed class WatchTestStack
     public FakeWatchStore Store { get; } = new();
 
     public WatchScanGuard ScanGuard { get; } = new();
+
+    public WatchRetryPolicy RetryPolicy { get; } = new();
 
     public FakeWatchScanLease ScanLease { get; } = new();
 
@@ -190,8 +192,14 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         return Task.CompletedTask;
     }
 
-    public Task<string?> GetFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
-        Task.FromResult(FileHashes.TryGetValue(Key(projectId, path), out var file) ? file.Hash : null);
+    /// <summary>Runs as a fingerprint is read — lets a test delete the file between the digest's read and its replace.</summary>
+    public Action<string>? OnGetFileHash { get; set; }
+
+    public Task<string?> GetFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    {
+        OnGetFileHash?.Invoke(path);
+        return Task.FromResult(FileHashes.TryGetValue(Key(projectId, path), out var file) ? file.Hash : null);
+    }
 
     public Task<bool> HasFingerprintAtOrUnderAsync(string projectId, string path,
         CancellationToken cancellationToken = default)
@@ -227,6 +235,31 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
                 .Where(k => k.StartsWith(prefix, StringComparison.Ordinal))
                 .Select(k => k[(projectId.Length + 1)..])
         ];
+    }
+
+    /// <summary>File sizes the digest recorded, by the same key as <see cref="FileHashes" />.</summary>
+    public Dictionary<string, long> FileSizes { get; } = new(StringComparer.Ordinal);
+
+    public Task<IReadOnlyDictionary<string, WatchFileStamp>> ListFileStampsAsync(string projectId,
+        CancellationToken cancellationToken = default)
+    {
+        ListFilesCalls++;
+        var prefix = $"{projectId}\u0000";
+        return Task.FromResult<IReadOnlyDictionary<string, WatchFileStamp>>(FileHashes
+            .Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .ToDictionary(kv => kv.Key[prefix.Length..],
+                kv => new WatchFileStamp(kv.Value.UpdatedAt, FileSizes.TryGetValue(kv.Key, out var size) ? size : null),
+                IngestPath.PathComparer));
+    }
+
+    public Task SetFileSizeAsync(string projectId, string path, long size, CancellationToken cancellationToken = default)
+    {
+        if (FileHashes.ContainsKey(Key(projectId, path)))
+        {
+            FileSizes[Key(projectId, path)] = size;
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>Synchronous fingerprint read/write — the fake memory store's replace transaction uses these.</summary>
@@ -270,8 +303,12 @@ internal sealed class FakeIgnoreRulesProvider : IIgnoreRulesProvider
         _afterFirstCallByRoot[root] = after;
     }
 
+    /// <summary>Runs on every load — lets a test delete a file after the digest saw it exist.</summary>
+    public Action? OnLoad { get; set; }
+
     public Task<IgnoreRules> LoadAsync(string root, CancellationToken cancellationToken = default)
     {
+        OnLoad?.Invoke();
         LoadCalls.Add(root);
         var current = _rulesByRoot.GetValueOrDefault(root, IgnoreRules.Empty);
         if (_afterFirstCallByRoot.TryGetValue(root, out var after))
