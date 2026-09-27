@@ -115,6 +115,24 @@ public sealed class ChunkIndexRepairTests : IDisposable
         report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 3));
     }
 
+    /// <summary>A file that gained a chunk before its stored rows still gives those rows positions below their
+    /// count, in document order: the rows the file still has are ranked, not placed at the file's new offsets.</summary>
+    [RetryFact]
+    public async Task RunAsync_FileGrewBeforeItsRows_KeepsEveryPositionBelowTheTotal()
+    {
+        var file = Path.Combine(_dataRoot, "doc.md");
+        await File.WriteAllTextAsync(file, "para zero\n\npara one\n\npara two", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para two", 0), (file, "para one", 1));
+
+        await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        var rows = (await connection.QueryAsync<(string Value, long ChunkIndex, long TotalChunks)>(
+            "SELECT value AS Value, chunk_index AS ChunkIndex, total_chunks AS TotalChunks FROM entries ORDER BY chunk_index")).ToList();
+        rows.Select(row => row.Value).ShouldBe(["para one", "para two"], "document order");
+        rows.Select(row => row.ChunkIndex).ShouldBe([0L, 1L]);
+        rows.ShouldAllBe(row => row.TotalChunks == 2);
+    }
+
     /// <summary>Fixing only a row's total leaves its section, so the full-text index is not rewritten for it.</summary>
     [RetryFact]
     public async Task RunAsync_TotalOnlyFix_LeavesTheFullTextIndexAlone()

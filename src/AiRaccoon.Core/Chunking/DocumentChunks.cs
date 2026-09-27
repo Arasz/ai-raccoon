@@ -33,9 +33,9 @@ public static class DocumentChunks
     }
 
     /// <summary>
-    ///     Positions for a (ctx, source_file) partition, whose total_chunks is its row count: the file's rows take
-    ///     <paramref name="filePositions" /> (-1 for a row it lacks), or keep their stored order when it is null, and
-    ///     every other row follows them in its stored order.
+    ///     Positions for a (ctx, source_file) partition, whose total_chunks is its row count: the file's rows are
+    ///     ranked in the document order <paramref name="filePositions" /> gives them (-1 for a row it lacks), or keep
+    ///     their stored order when it is null, and every other row follows them in its stored order.
     /// </summary>
     public static IReadOnlyDictionary<long, long> PartitionPositions(IReadOnlyList<PartitionRow> partition,
         IReadOnlyDictionary<long, int>? filePositions)
@@ -44,13 +44,31 @@ public static class DocumentChunks
 
         var fileRows = InStoredOrder(partition.Where(row => row.IsFileRow)).ToList();
         var positions = new Dictionary<long, long>(partition.Count);
-        for (var i = 0; i < fileRows.Count; i++)
+        if (filePositions is null)
         {
-            positions[fileRows[i].Id] = filePositions is null ? i
-                : filePositions.TryGetValue(fileRows[i].Id, out var position) ? position : -1;
+            for (var i = 0; i < fileRows.Count; i++)
+            {
+                positions[fileRows[i].Id] = i;
+            }
+        }
+        else
+        {
+            var placed = fileRows
+                .Select(row => (row.Id, Position: filePositions.TryGetValue(row.Id, out var position) ? position : -1))
+                .ToList();
+            var rank = 0;
+            foreach (var (id, _) in placed.Where(row => row.Position >= 0).OrderBy(row => row.Position))
+            {
+                positions[id] = rank++;
+            }
+
+            foreach (var (id, _) in placed.Where(row => row.Position < 0))
+            {
+                positions[id] = -1;
+            }
         }
 
-        var start = positions.Count == 0 ? 0 : Math.Max(fileRows.Count, positions.Values.Max() + 1);
+        var start = fileRows.Count;
         foreach (var (id, index) in After(start, partition.Where(row => !row.IsFileRow)))
         {
             positions[id] = index;
