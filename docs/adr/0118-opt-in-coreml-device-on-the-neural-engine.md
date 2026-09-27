@@ -8,6 +8,7 @@ default is a later, separate decision, still gated by "Before it can become the 
 
 Research: `docs/work/2026-09-25-ane-layout-reexport.md` (F1-F7), following
 `docs/work/2026-09-25-coreml-ane-buckets-and-residency.md`.
+Gate 2 evidence (M4, in-product A/B): `docs/work/2026-09-26-device-benchmark-m4.md`.
 
 ## Context
 
