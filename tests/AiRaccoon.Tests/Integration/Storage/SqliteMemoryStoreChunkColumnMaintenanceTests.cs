@@ -135,6 +135,28 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         rows.ShouldAllBe(r => r.TotalChunks == 2);
     }
 
+    /// <summary>A note citing a file shares its (ctx, source_file) partition: a re-ingest numbers the file's rows first,
+    /// moves the note after them and counts it in every row's total_chunks.</summary>
+    [RetryFact]
+    public async Task IngestFile_OfAFileANoteCites_PlacesTheNoteAfterTheFileRowsAndCountsIt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var file = Path.Combine(_dataRoot, "cited.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", ct);
+        await _store.IngestFileAsync("acme", file, null, ct);
+        var note = await _store.WriteAsync(new MemoryWriteRequest("acme", "a note citing the file", SourceFile: file), ct);
+
+        await File.WriteAllTextAsync(file, "para zero\n\npara one\n\npara two\n\npara three\n\npara four", ct);
+        await _store.IngestFileAsync("acme", file, null, ct);
+
+        var rows = await ChunkRowsForAsync(ContextNaming.ProjectContext("acme"), "acme", file);
+        rows.ShouldAllBe(r => r.TotalChunks == 6, "total_chunks counts the file's five rows and the note");
+        new[] { "para zero", "para one", "para two", "para three", "para four" }
+            .Select(text => rows.Single(r => r.Hash == ContentHash.Of(file, text)).ChunkIndex)
+            .ShouldBe([0, 1, 2, 3, 4]);
+        rows.Single(r => r.Hash == note.Hash).ChunkIndex.ShouldBe(5, "the note follows the file's rows");
+    }
+
     /// <summary>
     ///     GH #371: chunk_index was derived from row-id order, not document order. Editing a middle
     ///     paragraph deletes nothing — the unchanged chunks dedup and keep their old (low) ids, while

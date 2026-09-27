@@ -178,12 +178,12 @@ public sealed class LazyServerSettingsStoreTests
     [Fact]
     public async Task ReportChunkIndexAsync_DelegatesToTheAcquiredStore()
     {
-        var inner = new InMemorySettings { ChunkIndexReport = new ChunkIndexRepairReport(2, 4, 6) };
+        var inner = new InMemorySettings { ChunkIndexReport = new ChunkIndexRepairReport(2, 4, 6, 8) };
         var store = new LazyServerSettingsStore(_ => Task.FromResult<ISettingsStore>(inner));
 
         var report = await store.ReportChunkIndexAsync(TestContext.Current.CancellationToken);
 
-        report.ShouldBe(new ChunkIndexRepairReport(2, 4, 6));
+        report.ShouldBe(new ChunkIndexRepairReport(2, 4, 6, 8));
     }
 
     // Ledger — project-ids-report-not-delegated : --filter ReportProjectIdsAsync_DelegatesToTheAcquiredStore : InMemorySettings report.

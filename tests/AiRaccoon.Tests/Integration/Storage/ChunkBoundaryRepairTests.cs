@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -220,6 +221,31 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         string.Concat(positions.Select(p => p.Value)).ShouldBe(text, "positions follow the text order");
     }
 
+    /// <summary>Re-chunking a gone file cited by a note puts the file's rows first and the note after them, even when the
+    /// note's stored position sat among the file's.</summary>
+    [RetryFact]
+    public async Task Run_FileGoneFromDiskCitedByANote_IsRepairedWithTheNoteAfterTheFileRows()
+    {
+        const string closing = "Closing paragraph: the parish council thanked the committee.\n";
+        var text = LongNote() + "\n" + closing;
+        var file = await IngestFileAsync("gone-cited.md", text);
+        var (head, tail) = CutInside(LongNote(), "vk83jq");
+        await ResplitAsync(file, [head, tail + "\n", closing], noteOrder: false);
+        var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "The minutes were read aloud.", SourceFile: file),
+            TestContext.Current.CancellationToken);
+        await SetPositionAsync(await IdOfAsync(note.Hash), 1);
+        File.Delete(file);
+
+        var report = await RepairAsync();
+
+        report.GroupsRepaired.ShouldBe(1);
+        var partition = await PartitionAsync(file);
+        partition.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, partition.Count)]);
+        partition.ShouldAllBe(p => p.TotalChunks == partition.Count);
+        partition[^1].Value.ShouldBe("The minutes were read aloud.", "the note follows the file's rows");
+        string.Concat(partition.SkipLast(1).Select(p => p.Value)).ShouldBe(text);
+    }
+
     [RetryFact]
     public async Task Run_TermLongerThanTheBudget_IsLeftAsItIs()
     {
@@ -241,16 +267,17 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     {
         var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
         var file = await IngestFileAsync("lockfile.md", $"Release artifact digest {term} was pinned in the lockfile.\n");
-        var before = await IdsAsync(file);
-        before.Count.ShouldBeGreaterThan(1, "premise: the term is hard-cut across rows");
+        var stored = (await PositionsAsync(file)).Select(p => p.Value).ToList();
+        Enumerable.Range(0, stored.Count - 1).ShouldContain(i => ChunkSeam.CutsATerm(stored[i], stored[i + 1]),
+            "premise: the term is hard-cut across rows");
 
         var report = await RepairAsync();
 
         report.FilesReingested.ShouldBe(0, "re-ingesting would write the same rows and flag the same seam next run");
-        (await IdsAsync(file)).ShouldBe(before, "no row was rewritten");
+        (await FingerprintedAsync(file)).ShouldBeFalse("a re-ingest would have written the file's watch fingerprint");
     }
 
-    /// <summary>File rows the current chunker still reproduces but whose stored positions collide (#788) take their
+    /// <summary>File rows the current chunker still reproduces but whose stored positions collide take their
     /// document positions in place: no re-ingest, so their embeddings stay.</summary>
     [RetryFact]
     public async Task Run_FileRowsWithDuplicatePositions_TakeTheirDocumentPositionsInPlace()
@@ -260,12 +287,14 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
         var inDocumentOrder = await ValuesAsync(file);
         await SetPositionAsync(ids[^1], 1);
+        var embedded = await MarkEmbeddedAsync(file);
 
         var report = await RepairAsync();
 
         report.FilesReingested.ShouldBe(0);
         report.FilesRepositioned.ShouldBe(1);
-        (await IdsAsync(file)).ShouldBe(ids, "the rows are kept, not re-ingested");
+        (await EmbedStatesAsync(file)).ShouldBe(embedded, "the rows keep their embeddings");
+        (await FingerprintedAsync(file)).ShouldBeFalse("a re-ingest would have written the file's watch fingerprint");
         var positions = await PositionsAsync(file);
         positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count)]);
         positions.ShouldAllBe(p => p.TotalChunks == ids.Count);
@@ -287,12 +316,14 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         }
 
         await SetTotalAsync(file, ids.Count + 1);
+        var embedded = await MarkEmbeddedAsync(file);
 
         var report = await RepairAsync();
 
         report.FilesReingested.ShouldBe(0);
         report.FilesRepositioned.ShouldBe(1);
-        (await IdsAsync(file)).ShouldBe(ids, "the rows are kept, not re-ingested");
+        (await EmbedStatesAsync(file)).ShouldBe(embedded, "the rows keep their embeddings");
+        (await FingerprintedAsync(file)).ShouldBeFalse("a re-ingest would have written the file's watch fingerprint");
         var positions = await PositionsAsync(file);
         positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count)]);
         positions.ShouldAllBe(p => p.TotalChunks == ids.Count);
@@ -312,6 +343,80 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
 
         report.FilesRepositioned.ShouldBe(1);
         (await PositionsAsync(file)).ShouldAllBe(p => p.TotalChunks == ids.Count);
+    }
+
+    /// <summary>A file stored as one row (its chunks all identical) that an older ingest left at position 1 of 2 is
+    /// renumbered too: a single-row file group is examined like any other.</summary>
+    [RetryFact]
+    public async Task Run_LoneFileRowAtAnInflatedPosition_TakesPositionZeroOfOne()
+    {
+        var file = await IngestFileAsync("lone.md", "A short file with one paragraph.\n");
+        var id = (await IdsAsync(file)).ShouldHaveSingleItem();
+        await SetPositionAsync(id, 1);
+        await SetTotalAsync(file, 2);
+
+        var report = await RepairAsync();
+
+        report.FilesRepositioned.ShouldBe(1);
+        var position = (await PositionsAsync(file)).ShouldHaveSingleItem();
+        (position.ChunkIndex, position.TotalChunks).ShouldBe((0, 1));
+    }
+
+    /// <summary>A gapped file gone from disk has no document to take positions from and no cut to re-chunk, so its rows
+    /// are renumbered in place in their stored order.</summary>
+    [RetryFact]
+    public async Task Run_GappedFileGoneFromDisk_IsRenumberedInItsStoredOrder()
+    {
+        var file = await IngestFileAsync("gone-gapped.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        var inDocumentOrder = await ValuesAsync(file);
+        await GapPositionsAsync(ids);
+        File.Delete(file);
+
+        var report = await RepairAsync();
+
+        report.ShouldBe(new ChunkBoundaryRepairReport(0, 0, 0, 0, 1));
+        (await IdsAsync(file)).ShouldBe(ids);
+        await ShouldBeNumberedInOrderAsync(file, inDocumentOrder);
+    }
+
+    /// <summary>A gapped workspace file whose file changed on disk is neither re-ingested (workspace rows never are)
+    /// nor re-chunked (no cut), so its rows are renumbered in place in their stored order.</summary>
+    [RetryFact]
+    public async Task Run_GappedWorkspaceFileThatChangedOnDisk_IsRenumberedInItsStoredOrder()
+    {
+        var file = await IngestIntoWorkspaceAsync("workspace-gapped.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        var inDocumentOrder = await ValuesAsync(file);
+        await GapPositionsAsync(ids);
+        await File.AppendAllTextAsync(file, "A paragraph added after the ingest.\n", TestContext.Current.CancellationToken);
+
+        var report = await RepairAsync();
+
+        report.ShouldBe(new ChunkBoundaryRepairReport(0, 0, 0, 0, 1));
+        (await IdsAsync(file)).ShouldBe(ids);
+        await ShouldBeNumberedInOrderAsync(file, inDocumentOrder);
+    }
+
+    /// <summary>A workspace file whose rows collide but still match the file on disk takes its document positions in
+    /// place: nothing is re-chunked and nothing is tombstoned.</summary>
+    [RetryFact]
+    public async Task Run_WorkspaceFileWithDuplicatePositions_TakesItsDocumentPositionsInPlace()
+    {
+        var file = await IngestIntoWorkspaceAsync("workspace-plan.md", SectionedDocument(6));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        var inDocumentOrder = await ValuesAsync(file);
+        await SetPositionAsync(ids[^1], 1);
+
+        var report = await RepairAsync();
+
+        report.ShouldBe(new ChunkBoundaryRepairReport(0, 0, 0, 0, 1));
+        (await IdsAsync(file)).ShouldBe(ids);
+        (await TombstoneCountAsync()).ShouldBe(0, "rows repositioned in place leave nothing for a peer to delete");
+        await ShouldBeNumberedInOrderAsync(file, inDocumentOrder);
     }
 
     /// <summary>A file that grew on disk since its rows were written holds a chunk no row has yet, so repositioning
@@ -357,6 +462,38 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var positions = await PositionsAsync(file);
         positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count)]);
         (await ValuesAsync(file)).ShouldNotContain(value => value.Contains("Removed section"));
+    }
+
+    /// <summary>A note citing a file shares its position partition: the repair puts the file's rows first and the note
+    /// after them, total_chunks counts both, and a later memory_write keeps them agreeing so a second run has nothing to do.</summary>
+    [RetryFact]
+    public async Task Run_FileCitedByANote_NumbersTheWholePartitionAndIsIdempotent()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var file = await IngestFileAsync("cited.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        var inDocumentOrder = await ValuesAsync(file);
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "The plan was reviewed by the parish council.", SourceFile: file), ct);
+        await SetPositionAsync(ids[^1], 1);
+
+        var first = await RepairAsync();
+
+        first.FilesRepositioned.ShouldBe(1);
+        var partition = await PartitionAsync(file);
+        partition.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count + 1)]);
+        partition.ShouldAllBe(p => p.TotalChunks == ids.Count + 1, "total_chunks counts the note that cites the file");
+        partition.Take(ids.Count).Select(p => p.Value).ToList().ShouldBe(inDocumentOrder, "the file's rows come first");
+
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "The council approved the plan a week later.", SourceFile: file), ct);
+        partition = await PartitionAsync(file);
+        partition.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count + 2)]);
+        partition.ShouldAllBe(p => p.TotalChunks == ids.Count + 2);
+
+        var second = await RepairAsync();
+
+        second.ShouldBe(new ChunkBoundaryRepairReport(0, 0, 0, 0, 0), "the repair and memory_write agree on what the partition holds");
+        (await PartitionAsync(file)).ShouldBe(partition);
     }
 
     /// <summary>A code file whose identifier is longer than the budget is cut the same way on every ingest, so a
@@ -447,7 +584,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
             TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow),
             NullLogger<ChunkBoundaryRepairJob>.Instance);
         job.Interval.ShouldBeNull("once ever: it heals rows the write paths no longer create");
-        job.Name.ShouldBe("chunk-boundary-repair-v2", "a bank stamped v1 runs the repair once more for #788");
+        job.Name.ShouldBe("chunk-boundary-repair-v2", "a bank stamped v1 runs the repair once more");
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var leftPending = await job.RunAsync(connection, TestContext.Current.CancellationToken);
@@ -473,6 +610,25 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
         record.Id.Id.ShouldBe(447);
         record.StructuredState.ShouldNotBeNull().ShouldContain(new KeyValuePair<string, string?>("Unproven", "1"));
+    }
+
+    /// <summary>The job's log line also carries the files it renumbered in place.</summary>
+    [RetryFact]
+    public async Task Job_LogsTheFilesItRepositioned()
+    {
+        var file = await IngestFileAsync("logged.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        await SetPositionAsync(ids[^1], 1);
+        var logger = new FakeLogger<ChunkBoundaryRepairJob>();
+        var job = new ChunkBoundaryRepairJob(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+            TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow), logger);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await job.RunAsync(connection, TestContext.Current.CancellationToken);
+
+        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        record.Id.Id.ShouldBe(447);
+        record.StructuredState.ShouldNotBeNull().ShouldContain(new KeyValuePair<string, string?>("Repositioned", "1"));
     }
 
     private async Task<ChunkBoundaryRepairReport> RepairAsync()
@@ -575,6 +731,15 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
             new { path })];
     }
 
+    /// <summary>Every row of a file's position partition — its own rows and the notes citing it — by position.</summary>
+    private async Task<List<Position>> PartitionAsync(string file)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return [.. await connection.QueryAsync<Position>(
+            "SELECT chunk_index AS ChunkIndex, total_chunks AS TotalChunks, value AS Value FROM entries WHERE source_file = @file ORDER BY chunk_index",
+            new { file })];
+    }
+
     /// <summary>A markdown document long enough to span several rows.</summary>
     private static string SectionedDocument(int sections) =>
         string.Concat(Enumerable.Range(0, sections).Select(i =>
@@ -584,6 +749,71 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return [.. await connection.QueryAsync<long>("SELECT id FROM entries WHERE path = @path ORDER BY id", new { path })];
+    }
+
+    private async Task<string> IngestIntoWorkspaceAsync(string name, string text)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var workspace = await new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow))
+            .BeginAsync(ProjectId, cancellationToken: ct);
+        var file = Path.Combine(_dataRoot, name);
+        await File.WriteAllTextAsync(file, text, ct);
+        (await _store.IngestFileAsync(ProjectId, file, ContextNaming.WorkspaceContext(workspace.Id), ct)).ShouldBeGreaterThan(0);
+        return file;
+    }
+
+    /// <summary>Leaves a gap after each row's position, the shape an ingest that counted repeated chunks wrote.</summary>
+    private async Task GapPositionsAsync(List<long> ids)
+    {
+        for (var i = 1; i < ids.Count; i++)
+        {
+            await SetPositionAsync(ids[i], i + 1);
+        }
+    }
+
+    private async Task ShouldBeNumberedInOrderAsync(string file, List<string> values)
+    {
+        var positions = await PositionsAsync(file);
+        positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, values.Count)]);
+        positions.ShouldAllBe(p => p.TotalChunks == values.Count);
+        positions.Select(p => p.Value).ToList().ShouldBe(values);
+    }
+
+    private async Task<long> TombstoneCountAsync()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM sync_tombstones");
+    }
+
+    /// <summary>Marks a path's rows embedded and returns their embed state and update time, by id.</summary>
+    private async Task<List<string>> MarkEmbeddedAsync(string path)
+    {
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync("UPDATE entries SET embed_state = 'embedded' WHERE path = @path", new { path });
+        }
+
+        return await EmbedStatesAsync(path);
+    }
+
+    private async Task<List<string>> EmbedStatesAsync(string path)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return [.. await connection.QueryAsync<string>(
+            "SELECT id || ':' || embed_state || ':' || updated_at FROM entries WHERE path = @path ORDER BY id", new { path })];
+    }
+
+    /// <summary>True when a re-ingest wrote the file's watch fingerprint, which a position repair never does.</summary>
+    private async Task<bool> FingerprintedAsync(string file)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM watch_files WHERE path = @file", new { file }) > 0;
+    }
+
+    private async Task<long> IdOfAsync(string hash)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<long>("SELECT id FROM entries WHERE hash = @hash", new { hash });
     }
 
     private async Task SetPositionAsync(long id, long chunkIndex)
