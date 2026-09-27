@@ -50,6 +50,14 @@ The cold compile itself took 37.3 s, 30.4 compiler CPU-s and 948 J of system ene
 
 Pending. The benchmark above measures drains, not searches.
 
+### F5: the owner's live server runs on the Neural Engine after opting in [MEASURED]
+
+On 2026-09-27 the owner's own server (1.53.1, port 7721) was switched with `settings model device coreml` and restarted. `doctor` then went from `CompilingNeuralEngine` (10:04:07Z) to `NeuralEngineServing` with 4 buckets loaded, every probe row at cosine 0.999, and an 808 MiB cache (10:04:44Z). A system monitor shows the Neural Engine blocks powered in bursts during that compile and during later embedding work, and power-gated at idle.
+
+![Neural Engine powered blocks on the live server after the switch](device-benchmark/2026-09-26-m4/live-server-neural-engine.png)
+
+"Blocks powered" is the share of the engine that is not power-gated, not its utilization. `powermetrics --samplers ane_power` is the stronger check (1276 mW under load in `docs/work/2026-09-25-ane-layout-reexport.md`, F6).
+
 ## What this does not settle
 
 - Gate 1 (a second chip) and gate 3 (one release of opt-in use) are untouched.
