@@ -89,6 +89,20 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         rows.Select(r => (r.ChunkIndex, r.TotalChunks)).ShouldBe([(0, 5), (1, 5), (2, 5), (3, 5), (4, 5)]);
     }
 
+    /// <summary>A chunk repeated verbatim is stored once, so it takes its first occurrence's place and the positions
+    /// stay contiguous, with total_chunks counting the rows, not the repeats.</summary>
+    [RetryFact]
+    public async Task IngestFile_RepeatedParagraph_NumbersTheDistinctRowsContiguouslyByFirstOccurrence()
+    {
+        var file = Path.Combine(_dataRoot, "repeats.md");
+        await File.WriteAllTextAsync(file, "alpha\n\nrepeat\n\nbeta\n\nrepeat\n\ngamma", TestContext.Current.CancellationToken);
+
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+
+        var rows = await ChunkRowsForAsync(ContextNaming.ProjectContext("acme"), "acme", file);
+        rows.Select(r => (r.ChunkIndex, r.TotalChunks)).ShouldBe([(0, 4), (1, 4), (2, 4), (3, 4)]);
+    }
+
     /// <summary>Catches a C#-loop-index implementation: re-ingesting an unchanged file hits the existing-chunk `continue` skip for every chunk, so the loop never touches a new row — the recompute must still leave numbering correct.</summary>
     [RetryFact]
     public async Task IngestFile_ReIngestingAnUnchangedFile_LeavesNumberingUnchanged()

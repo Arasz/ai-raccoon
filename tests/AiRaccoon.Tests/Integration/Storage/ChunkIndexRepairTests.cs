@@ -54,6 +54,29 @@ public sealed class ChunkIndexRepairTests : IDisposable
         positions["para three"].ShouldBe(2);
     }
 
+    /// <summary>A repeated chunk is one row: it takes its first occurrence's place, and every row's total_chunks
+    /// becomes the row count, even where the row's position was already right.</summary>
+    [RetryFact]
+    public async Task RunAsync_RepeatedParagraph_TakesItsFirstPositionAndTotalBecomesTheRowCount()
+    {
+        var file = Path.Combine(_dataRoot, "repeats.md");
+        await File.WriteAllTextAsync(file, "alpha\n\nrepeat\n\nbeta\n\nrepeat\n\ngamma", TestContext.Current.CancellationToken);
+        // The shape the ingest used to write: the repeat at its last place and the repeats counted.
+        await using var connection = await OpenSeededAsync(
+            (file, "alpha", 0), (file, "repeat", 3), (file, "beta", 2), (file, "gamma", 4));
+        await connection.ExecuteAsync("UPDATE entries SET total_chunks = 5");
+
+        await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["alpha"].ShouldBe(0);
+        positions["repeat"].ShouldBe(1);
+        positions["beta"].ShouldBe(2);
+        positions["gamma"].ShouldBe(3);
+        (await connection.QueryAsync<long>("SELECT total_chunks FROM entries WHERE source_file = @file", new { file }))
+            .ShouldAllBe(total => total == 4);
+    }
+
     [RetryFact]
     public async Task RunAsync_SetsTheUnknownSentinel_WhenTheSourceFileNoLongerExists()
     {
