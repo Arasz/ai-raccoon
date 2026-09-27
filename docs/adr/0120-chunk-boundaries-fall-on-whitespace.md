@@ -152,8 +152,10 @@ Before a file group is re-ingested, the repair now re-chunks the file with the c
 chunker still writes, a re-ingest would change nothing but positions. The group then takes the
 positions and section labels the scan reports, in place, and the file is not re-ingested. That also
 covers a file group whose only defect is colliding positions, which the repair now selects alongside
-seamed groups. A group holding a row the chunker no longer writes is re-ingested as before. A file
-gone from disk, or one in a workspace, keeps the old path. The code corpus has no position scan, so
+seamed groups, and applies to workspace file rows too, since it rewrites positions and never replaces
+a row. A group holding a row the chunker no longer writes is re-ingested as before (a workspace group
+is re-chunked from its rows instead, as re-ingest never touches workspace rows). A file gone from disk
+keeps the old path. The code corpus has no position scan, so
 a code file is still re-ingested when a seam is found, but it is counted only when its stored chunk
 hashes changed.
 
