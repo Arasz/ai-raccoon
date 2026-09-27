@@ -1,6 +1,6 @@
-# Performance report: CPU, memory footprint and the move to the GPU
+# Performance report: CPU, memory footprint, the GPU and the Neural Engine
 
-Date: 2026-09-25. Covers releases 1.44.3 through 1.51.2. A dated snapshot, like everything in
+Date: 2026-09-25, updated 2026-09-27 with the Neural Engine (section 4). Covers releases 1.44.3 through 1.53.1. A dated snapshot, like everything in
 `docs/work/`: the numbers are what was measured on the day, on the machines named below.
 
 ## At a glance
@@ -15,6 +15,8 @@ Date: 2026-09-25. Covers releases 1.44.3 through 1.51.2. A dated snapshot, like 
 | Embedding model in memory | 2.7 GB | 0.25 GB | 11x smaller | 1.47.0 |
 | MLX engine footprint on a long ingest | 17.9 GB | 1.1-1.2 GB | 15x smaller | 1.51.1 |
 | Process CPU per embed, 512 tokens | 253-261 ms (CPU provider) | 2.8-8.3 ms (GPU) | 30-90x less | 1.47.0-1.50.0 |
+| Full docs drain, 4914 chunks, M4: time / system energy / server CPU | 70 s / 1389 J / 42 CPU-s (WebGPU) | 33 s / 379 J / 26 CPU-s (Neural Engine, opt-in) | 2.1x faster, 3.7x less energy | 1.53.0 |
+| p95 search latency, M4 | 51-88 ms (WebGPU) | 35-39 ms (Neural Engine, opt-in) | faster on every repeat | 1.53.1 |
 
 **The owner's server right now** (1.51.2, measured 2026-09-25 after 12 minutes of normal agent
 use): 0.3% CPU in `ps`, 2.55 CPU-s over a 2-minute window (about 2% of one core, well under 1% of
@@ -261,6 +263,32 @@ flowchart TD
   caught, so 1.51.2 turned the plugin off. Windows and Linux run on the CPU provider today; CUDA
   is opt-in and unmeasured.
 
+## 4. The Neural Engine (1.53.0, opt-in)
+
+### Why
+
+Apple silicon has a third compute unit next to the CPU and GPU. ADR-0117 first kept CoreML out, because the shipped graph cost 7-18x MLX's CPU there. A re-export of the same model in the Neural Engine's layout (fp16, 1x1 convolutions, per-head attention) changed that: CoreML places 1401-1405 of its roughly 1407 ops on the Neural Engine, at 6-8% of MLX's CPU per row, with recall unchanged ([ANE re-export](2026-09-25-ane-layout-reexport.md)). 1.53.0 ships it as `embedding.device coreml`, reading the weights the package already carries, so it adds 5.7 MB ([ADR-0118](../adr/0118-opt-in-coreml-device-on-the-neural-engine.md)).
+
+### Results on an M4, through the product
+
+`scripts/device-benchmark.py` drains the same 225-file docs corpus (4914 chunks) on each device, three repeats each, then times 50 searches. Medians, with ranges where the gate needs them:
+
+| device | drain | system energy | SoC energy | server CPU per repeat | p95 search per repeat |
+|---|---|---|---|---|---|
+| coreml (Neural Engine) | 33.1 s | 379 J | 214 J | 24.6-27.1 CPU-s | 35.1-39.4 ms |
+| mlx (GPU) | 48.8 s | 1146 J | 759 J | 36.3-40.4 CPU-s | not measured |
+| auto (WebGPU) | 70.4 s | 1389 J | 936 J | 41.8-43.9 CPU-s | 50.6-87.5 ms |
+| cpu | 169.6 s | 4076 J | 2493 J | 846.7-947.3 CPU-s | not measured |
+
+- Every coreml repeat is cheaper in CPU than every WebGPU repeat, in two independent runs, and every coreml p95 is below every WebGPU p95. That passes gate 2 of ADR-0118.
+- The first compile takes about 37 s and 30 compiler CPU-s, while WebGPU keeps serving. The compiled cache is 808 MiB; later starts load in 1.0 s.
+- Against MLX, coreml costs 70% of the CPU here, not the 6-8% the isolated encoder A/B showed. This number is the whole server (HTTP, chunking, SQLite, the vector index), and those parts do not change with the device.
+- The owner's own server runs on it since 2026-09-27: `doctor` reports `NeuralEngineServing`, four buckets, probe cosine 0.999.
+
+### Why it stays opt-in
+
+ADR-0118 makes coreml the Apple silicon default only after three gates. Gate 2 (beat WebGPU in the product) holds on the M4. Gate 1 (a second chip, M1-M3) and gate 3 (one release cycle of opt-in use) are open, and the default stays WebGPU until then. The README's Performance section recommends the switch on an M4 and asks owners of other chips to run the benchmark.
+
 ## Test results
 
 | Check | Result | Where |
@@ -298,6 +326,8 @@ All three are inside the bootstrap confidence interval ([-0.0171, 0.0073] for CP
 - **Different footprints for different shapes.** 1.1-1.2 GB is 400 rows of 300-1022 tokens; 866 MB
   is 200 short notes. Quote them with their shapes.
 - **Windows and Linux GPU latency is unmeasured.** No machine was available; CI has no real GPU.
+- **The Neural Engine numbers are one chip.** Only an M4 has been measured. Other Apple silicon, and
+  any machine without a Neural Engine, is unmeasured.
 
 ## Sources
 
@@ -313,4 +343,7 @@ All three are inside the bootstrap confidence interval ([-0.0171, 0.0073] for CP
   [ADR-0112](../adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md),
   [ONNX Runtime providers: GPU and MLX](2026-09-24-onnx-runtime-providers-gpu-mlx.md) (F10, F17, F25-F28, F38-F49),
   [WebGPU off macOS](2026-09-25-webgpu-off-macos.md), [changelog 1.51.2](../changelog/1.51.2-webgpu-plugin-off.md).
+- Neural Engine: [ADR-0118](../adr/0118-opt-in-coreml-device-on-the-neural-engine.md),
+  [ANE re-export](2026-09-25-ane-layout-reexport.md) (F1-F7),
+  [device benchmark, M4](2026-09-26-device-benchmark-m4.md) (F1-F5).
 - Tests: [1.51.1 release checklist](checklist/2026-09-25-1.51.1-release.json).

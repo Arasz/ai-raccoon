@@ -11,6 +11,8 @@ packaging metadata. Filenames are bare nouns.
 - [`ai-raccoon-ignore-template.ignore`](ai-raccoon-ignore-template.ignore): a commented
   starter `ai-raccoon.ignore` covering common noise families; copy it to a watched root
   and delete what doesn't apply.
+- [`breaking-changes.md`](breaking-changes.md): what to do when you upgrade past each
+  version, moved here from the README.
 - [`cli-reference.md`](cli-reference.md): the complete `ai-raccoon` verb tree and the
   full ADR-0107 exit-code table, derived from the CLI's own command definitions.
 - [`embedding-benchmark-report.html`](embedding-benchmark-report.html): the interactive

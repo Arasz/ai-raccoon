@@ -14,29 +14,6 @@ flowchart LR
     Server -.->|optional snapshot sync| Cloud[("S3 / Azure Blob")]
 ```
 
-## Breaking changes
-
-What to do when you upgrade past each version. A version not listed here needs no action.
-
-- 1.47.0: the bundled embedding model is now granite-embedding-small-english-r2, for memory and code alike. On first start after upgrading, every bank re-embeds once on its own (the bank refuses tool calls until that finishes, minutes on a large bank), and a code corpus on the old default switches with `ai-raccoon model code set default`. [ADR-0108](docs/adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)
-- 1.45.0: every failure exit code is renumbered into two-digit categories, for example a missing bank is now `31` (was `22`), and `repair project-ids --apply` now exits non-zero when it does not converge. If a script or CI job checks `ai-raccoon` exit codes, update it from the [old → new table](docs/adr/0107-categorized-two-digit-exit-codes.md#old--new-mapping).
-- 1.44.0: `--attach` is removed. Delete it from your MCP client config, and **stop any server an older version started** before running the new one, because mixed versions are not supported. [How-to](docs/how-to/configure-ai-raccoon-server.md#backend-launch-attach-or-start-behind-the-identity-proof)
-- 1.44.0: a launch against a `--data-root` that has no bank no longer creates one. For a new data root, create the bank once with `ai-raccoon --data-root <path> serve`. [How-to](docs/how-to/configure-ai-raccoon-server.md#backend-launch-attach-or-start-behind-the-identity-proof)
-- 1.42.0: `--transport stdio` and `--transport https` are removed. In your MCP client config, replace `--transport stdio` with a bare `ai-raccoon`, and run `ai-raccoon serve` where you ran an HTTPS server. [How-to](docs/how-to/configure-ai-raccoon-server.md#launch-flags)
-- 1.39.0: project ids are no longer folded together automatically. If one project wrote under several ids, merge them once with `ai-raccoon repair project-ids --map <file>`. [ADR-0102](docs/adr/0102-durable-alias-map-with-p3-enforcement.md)
-- 1.38.0: `memory_search` requires `sessionId`. MCP agents pick it up from the tool schema, so only code that calls the tool directly has to add it. [ADR-0097](docs/adr/0097-search-quality-kind-column.md)
-
-## What's new
-
-- On Apple silicon the bundled engine can also run on the Neural Engine, opt-in with `ai-raccoon settings model device coreml`. (1.53.0) [ADR-0118](docs/adr/0118-opt-in-coreml-device-on-the-neural-engine.md) · [how-to](docs/how-to/configure-embedding-engines.md)
-- On Windows and Linux x64 the bundled engine runs on the GPU through WebGPU again, from ONNX Runtime's own WebGPU-enabled core that now ships inside the package; linux-arm64 stays on the CPU. (1.52.0) [ADR-0115](docs/adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md) · [how-to](docs/how-to/configure-embedding-engines.md)
-- The server went from up to a full core of CPU and a 6.8 GB footprint to about 2% of one core and 1.75 GB, and embeds on the GPU with 30-90x less CPU per embed, at unchanged search quality. (1.44.3-1.51.2) [report](docs/work/2026-09-25-performance-cpu-memory-gpu.md)
-- On Windows and Linux x64 the bundled engine can run on CUDA, opt-in with `ai-raccoon settings model device cuda <path>`, unmeasured; the WebGPU plugin shipped in 1.51.0 is off again in 1.51.2. (1.51.0) [ADR-0112](docs/adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md) · [how-to](docs/how-to/configure-embedding-engines.md)
-- An encrypted bank tells a wrong key (exit `21`) from a corrupt file (exit `32`), using a key-check file next to the bank that never holds the key. (1.50.0) [ADR-0111](docs/adr/0111-key-check-sidecar-distinguishes-wrong-key-from-corrupt-bank.md)
-- On Apple silicon the bundled engine can run through the MLX execution provider, opt-in with `ai-raccoon settings model device mlx`. (1.50.0) [ADR-0110](docs/adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md) · [how-to](docs/how-to/configure-embedding-engines.md)
-
-Older releases: [What's new history](docs/reference/whats-new-history.md). A release tag is not proof of a nuget.org package, see [Releases and publishing](docs/reference/releases-and-publishing.md).
-
 ## Quick Start
 
 Install the global tool:
@@ -62,6 +39,51 @@ Add AiRaccoon to your agent's `.mcp.json`:
 ```
 
 The full walkthrough, including indexing your code, is [Get started with AiRaccoon](docs/tutorials/get-started-with-ai-raccoon.md).
+
+## What's new
+
+- On Apple silicon the bundled engine can also run on the Neural Engine, opt-in with `ai-raccoon settings model device coreml`. (1.53.0) [ADR-0118](docs/adr/0118-opt-in-coreml-device-on-the-neural-engine.md) · [how-to](docs/how-to/configure-embedding-engines.md)
+- On Windows and Linux x64 the bundled engine runs on the GPU through WebGPU again, from ONNX Runtime's own WebGPU-enabled core that now ships inside the package; linux-arm64 stays on the CPU. (1.52.0) [ADR-0115](docs/adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md) · [how-to](docs/how-to/configure-embedding-engines.md)
+- The server went from up to a full core of CPU and a 6.8 GB footprint to about 2% of one core and 1.75 GB, and embeds on the GPU with 30-90x less CPU per embed, at unchanged search quality. (1.44.3-1.51.2) [report](docs/work/2026-09-25-performance-cpu-memory-gpu.md)
+- On Windows and Linux x64 the bundled engine can run on CUDA, opt-in with `ai-raccoon settings model device cuda <path>`, unmeasured; the WebGPU plugin shipped in 1.51.0 is off again in 1.51.2. (1.51.0) [ADR-0112](docs/adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md) · [how-to](docs/how-to/configure-embedding-engines.md)
+- An encrypted bank tells a wrong key (exit `21`) from a corrupt file (exit `32`), using a key-check file next to the bank that never holds the key. (1.50.0) [ADR-0111](docs/adr/0111-key-check-sidecar-distinguishes-wrong-key-from-corrupt-bank.md)
+- On Apple silicon the bundled engine can run through the MLX execution provider, opt-in with `ai-raccoon settings model device mlx`. (1.50.0) [ADR-0110](docs/adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md) · [how-to](docs/how-to/configure-embedding-engines.md)
+
+Older releases: [What's new history](docs/reference/whats-new-history.md). A release tag is not proof of a nuget.org package, see [Releases and publishing](docs/reference/releases-and-publishing.md).
+
+## Breaking changes
+
+Upgrading from an older version? Check [Breaking changes](docs/reference/breaking-changes.md) for what to do past each version. The latest one is 1.47.0.
+
+## Performance
+
+We can only speak for one chip so far: an Apple M4 (Mac16,12). The numbers below come from `scripts/device-benchmark.py`, which drives the shipped product through the same corpus (225 docs files, 4914 chunks) on each device, three repeats each. Every other Mac, and every Windows or Linux machine, is unmeasured.
+
+| device on an M4 | drain time | system energy | server CPU | p95 search latency |
+|---|---|---|---|---|
+| `coreml` (Neural Engine, opt-in) | 33 s | 379 J | 26 CPU-s | 35-39 ms |
+| `mlx` (GPU, opt-in) | 49 s | 1146 J | 37 CPU-s | not measured |
+| `auto` (WebGPU, the default) | 70 s | 1389 J | 42 CPU-s | 51-88 ms |
+
+Medians over three repeats; latency is the range of per-repeat p95s over 50 searches. Search quality is the same on every device.
+
+**On an M4, switch to the Neural Engine.** It embeds twice as fast as the default, at about a quarter of the energy and 40% less server CPU, and searches come back faster:
+
+```bash
+ai-raccoon settings model device coreml
+ai-raccoon serve --restart
+```
+
+The first start after switching compiles the model for the Neural Engine, about 40 s, while WebGPU keeps serving. The compiled cache takes about 808 MiB in the data root, and later starts load in about a second. Newer chips (M5, M6) have faster Neural Engines, so we expect the same advice to hold there, but we have not measured them.
+
+Running AiRaccoon on a different Apple silicon chip? Please run the benchmark and share the result. You need the tool installed, a full clone of this repo (the script reads its corpus from git history), Python 3 with `httpx`, and AC power. From the clone:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install httpx
+.venv/bin/python scripts/device-benchmark.py --devices auto,mlx,coreml --repeats 3
+```
+
+It asks for your password once, for `powermetrics` (add `--no-power` to skip it), and takes 10-15 minutes. Then [open an issue](https://github.com/Arasz/ai-raccoon/issues/new?title=Device%20benchmark%3A%20%3Cyour%20chip%3E) and paste the `result.md` from the results folder it prints at the end. Full findings: [device benchmark report](docs/work/2026-09-26-device-benchmark-m4.md) and [performance report](docs/work/2026-09-25-performance-cpu-memory-gpu.md).
 
 ## What it does
 
