@@ -627,20 +627,21 @@ public partial class SyncService(
 
                 // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): the
                 // merge's tombstone DELETE can remove group members and the merge INSERT above
-                // can add new source_file-bearing rows to a group; bank-wide is cheap and sync
-                // is rare, so there is no reason to scope this to the affected groups.
-                // FromIdOrder (GH #371), not the sentinel-guarded form: a merge's pulled rows and a
-                // tombstone's survivors both need re-deriving from this bank's own id order — see
-                // MemorySql.RecomputeChunkColumnsBankWideFromIdOrder for why that is still safe here.
+                // adds rows at the -1 sentinel. The renumber keeps each partition's existing order,
+                // so only notes that received rows can come out of it out of text order; those are
+                // listed first and repaired after.
+                var noteRepair = new NoteChunkOrderRepair();
+                var receivedNotes = await noteRepair.UnpositionedNotePathsAsync(conn, cancellationToken);
                 await using (var recompute = conn.CreateCommand())
                 {
-                    recompute.CommandText = MemorySql.RecomputeChunkColumnsBankWideFromIdOrder;
+                    recompute.CommandText = MemorySql.RecomputeChunkColumnsBankWideKeepingOrder;
                     await recompute.ExecuteNonQueryAsync(cancellationToken);
                 }
 
-                // Id order puts a note stored with its opening last in the wrong order; a note's text order
-                // is provable from its rows, so put it back (docs/adr/0122).
-                await new NoteChunkOrderRepair().RunAsync(conn, cancellationToken);
+                if (receivedNotes.Count > 0)
+                {
+                    await noteRepair.RunAsync(conn, receivedNotes, cancellationToken);
+                }
 
                 return new MergeCounts(received, reindexed);
             }

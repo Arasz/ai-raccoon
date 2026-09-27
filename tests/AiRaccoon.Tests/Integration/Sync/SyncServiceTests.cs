@@ -360,6 +360,59 @@ public class SyncServiceTests : IDisposable
         survivors.Select(s => (s.ChunkIndex, s.TotalChunks)).ShouldBe([(0L, 2L), (1L, 2L)]);
     }
 
+    /// <summary>A merge that brings nothing into a partition must leave its positions as they were, even where they
+    /// are not in id order: they are the text order an ingest or a repair gave them.</summary>
+    [RetryFact]
+    public async Task MemorySync_Merge_KeepsPositionsThatAreNotInIdOrder()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var cloud = new FakeCloudStore();
+        await using (var conn = await CreateAndOpenAsync(BankPath, ct))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, chunk_index, total_chunks)
+                                 VALUES ('p2', 'doc.md', 'third part', 'doc.md', 'project', 'acme', 1, 1, 2, 3),
+                                        ('p0', 'doc.md', 'first part', 'doc.md', 'project', 'acme', 1, 1, 0, 3),
+                                        ('p1', 'doc.md', 'second part', 'doc.md', 'project', 'acme', 1, 1, 1, 3)
+                                 """;
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+
+        var remotePath = Path.Combine(_dataRoot, "remote.db");
+        await using (await CreateAndOpenAsync(remotePath, ct))
+        {
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, ct));
+        var service = new SyncService(cloud,
+            token => CreateAndOpenAsync(BankPath, token),
+            OpenSnapshotAsync,
+            async (snapshot, token) =>
+            {
+                var c = new SqliteConnection($"Data Source={snapshot}");
+                await c.OpenAsync(token);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", ct);
+
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(ct);
+        await using var select = check.CreateCommand();
+        select.CommandText = "SELECT hash FROM entries WHERE source_file = 'doc.md' ORDER BY chunk_index";
+        var hashes = new List<string>();
+        await using (var reader = await select.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                hashes.Add(reader.GetString(0));
+            }
+        }
+
+        hashes.ShouldBe(["p0", "p1", "p2"]);
+    }
+
     /// <summary>The post-merge recompute numbers every position partition in id order, and a note stored with its
     /// opening last would come out of it with the opening at the last position; the merge leaves notes in text order.</summary>
     [RetryFact]

@@ -10,24 +10,67 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 public sealed record NoteChunkOrderReport(int NotesReordered, int NotesUnproven);
 
 /// <summary>
-///     Puts the chunk positions of every multi-row note that cites a source file into the note's text order
-///     (docs/adr/0122). Each note keeps the positions it already held; a note whose order
-///     <see cref="NoteTextOrder" /> cannot prove is left as stored. Safe to run again: a note in text order moves nothing.
+///     Puts the chunk positions of multi-row notes that cite a source file into each note's text order. Each note
+///     keeps the positions it already held; a note whose order <see cref="NoteTextOrder" /> cannot prove is left as
+///     stored. Safe to run again: a note in text order moves nothing.
 /// </summary>
 public sealed class NoteChunkOrderRepair
 {
+    private const int PathsPerQuery = 500;
+
+    private static readonly string SelectNoteRows =
+        $"""
+         SELECT id AS Id, path AS Path, value AS Value, chunk_index AS ChunkIndex,
+                {MemorySql.ContextKeyExpression("")} AS Ctx
+         FROM entries
+         WHERE source_file IS NOT NULL AND path IS NOT NULL AND path <> source_file AND value IS NOT NULL
+         """;
+
+    /// <summary>Repairs every source-citing note in the bank.</summary>
     public async Task<NoteChunkOrderReport> RunAsync(SqliteConnection connection, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNull(connection);
 
-        var rows = await connection.QueryAsync<Row>(new CommandDefinition(
-            $"""
-             SELECT id AS Id, path AS Path, value AS Value, chunk_index AS ChunkIndex,
-                    {MemorySql.ContextKeyExpression("")} AS Ctx
-             FROM entries
-             WHERE source_file IS NOT NULL AND path IS NOT NULL AND path <> source_file AND value IS NOT NULL
-             """, cancellationToken: cancellationToken));
+        var rows = await connection.QueryAsync<Row>(new CommandDefinition(SelectNoteRows, cancellationToken: cancellationToken));
+        return await ReorderAsync(connection, rows, cancellationToken);
+    }
 
+    /// <summary>Repairs only the source-citing notes stored under <paramref name="paths" />.</summary>
+    public async Task<NoteChunkOrderReport> RunAsync(SqliteConnection connection, IReadOnlyCollection<string> paths,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNull(connection);
+        Guard.IsNotNull(paths);
+
+        List<Row> rows = [];
+        foreach (var batch in paths.Chunk(PathsPerQuery))
+        {
+            rows.AddRange(await connection.QueryAsync<Row>(new CommandDefinition(SelectNoteRows + " AND path IN @paths",
+                new { paths = batch }, cancellationToken: cancellationToken)));
+        }
+
+        return await ReorderAsync(connection, rows, cancellationToken);
+    }
+
+    /// <summary>Paths of source-citing notes holding a row whose position is still unknown: rows a merge just added.</summary>
+    public async Task<IReadOnlyList<string>> UnpositionedNotePathsAsync(SqliteConnection connection,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNull(connection);
+
+        return
+        [
+            .. await connection.QueryAsync<string>(new CommandDefinition(
+                """
+                SELECT DISTINCT path FROM entries
+                WHERE chunk_index < 0 AND source_file IS NOT NULL AND path IS NOT NULL AND path <> source_file
+                """, cancellationToken: cancellationToken))
+        ];
+    }
+
+    private static async Task<NoteChunkOrderReport> ReorderAsync(SqliteConnection connection, IEnumerable<Row> rows,
+        CancellationToken cancellationToken)
+    {
         var reordered = 0;
         var unproven = 0;
         foreach (var note in rows.GroupBy(row => (row.Ctx, row.Path)).Where(group => group.Count() > 1))

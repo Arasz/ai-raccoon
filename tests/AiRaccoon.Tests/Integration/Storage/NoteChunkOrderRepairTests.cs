@@ -79,6 +79,26 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
         (await ValuesByPositionAsync(path))[0].ShouldStartWith("Opening marker zq71");
     }
 
+    /// <summary>Sync repairs only the notes a merge added rows to, not the whole bank.</summary>
+    [RetryFact]
+    public async Task Run_ForListedPaths_RepairsOnlyThoseNotes()
+    {
+        var listed = await WriteAsync(SourceCitingNoteChunkOrderTests.LongNote());
+        var other = await WriteAsync(SourceCitingNoteChunkOrderTests.LongNote().Replace("parish", "village", StringComparison.Ordinal));
+        await StoreOpeningLastAsync(listed);
+        await StoreOpeningLastAsync(other);
+
+        NoteChunkOrderReport report;
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            report = await new NoteChunkOrderRepair().RunAsync(connection, [listed], TestContext.Current.CancellationToken);
+        }
+
+        report.NotesReordered.ShouldBe(1);
+        (await ValuesByPositionAsync(listed))[0].ShouldStartWith("Opening marker zq71");
+        (await ValuesByPositionAsync(other))[^1].ShouldStartWith("Opening marker zq71", customMessage: "a note not listed is left as stored");
+    }
+
     [RetryFact]
     public async Task Run_NoteAlreadyInTextOrder_MovesNothing()
     {
