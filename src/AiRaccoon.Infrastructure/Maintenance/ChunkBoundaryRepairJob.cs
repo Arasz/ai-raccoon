@@ -21,7 +21,7 @@ public sealed partial class ChunkBoundaryRepairJob(
     TimeProvider timeProvider,
     ILogger<ChunkBoundaryRepairJob> logger) : IMaintenanceJob
 {
-    public const string JobName = "chunk-boundary-repair-v1";
+    public const string JobName = "chunk-boundary-repair-v2";
 
     public string Name => JobName;
 

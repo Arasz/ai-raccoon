@@ -234,6 +234,63 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         (await ValuesAsync(path)).ShouldBe(before);
     }
 
+    /// <summary>A file whose seams the current chunker cuts again on every ingest (a term longer than the budget)
+    /// already holds the rows a re-ingest would write, so a repair leaves it alone instead of re-flagging it forever.</summary>
+    [RetryFact]
+    public async Task Run_FileTheChunkerMustCut_IsNotReingested()
+    {
+        var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
+        var file = await IngestFileAsync("lockfile.md", $"Release artifact digest {term} was pinned in the lockfile.\n");
+        var before = await IdsAsync(file);
+        before.Count.ShouldBeGreaterThan(1, "premise: the term is hard-cut across rows");
+
+        var report = await RepairAsync();
+
+        report.FilesReingested.ShouldBe(0, "re-ingesting would write the same rows and flag the same seam next run");
+        (await IdsAsync(file)).ShouldBe(before, "no row was rewritten");
+    }
+
+    /// <summary>File rows the current chunker still reproduces but whose stored positions collide (#788) take their
+    /// document positions in place: no re-ingest, so their embeddings stay.</summary>
+    [RetryFact]
+    public async Task Run_FileRowsWithDuplicatePositions_TakeTheirDocumentPositionsInPlace()
+    {
+        var file = await IngestFileAsync("plan.md", SectionedDocument(6));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        var inDocumentOrder = await ValuesAsync(file);
+        await SetPositionAsync(ids[^1], 1);
+
+        var report = await RepairAsync();
+
+        report.FilesReingested.ShouldBe(0);
+        report.FilesRepositioned.ShouldBe(1);
+        (await IdsAsync(file)).ShouldBe(ids, "the rows are kept, not re-ingested");
+        var positions = await PositionsAsync(file);
+        positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count)]);
+        positions.ShouldAllBe(p => p.TotalChunks == ids.Count);
+        positions.Select(p => p.Value).ToList().ShouldBe(inDocumentOrder, "positions follow the order the ingest wrote");
+    }
+
+    /// <summary>Colliding positions on a file that also holds a row the chunker no longer makes are repaired by
+    /// re-ingesting it, which drops the stale row.</summary>
+    [RetryFact]
+    public async Task Run_FileRowsWithDuplicatePositionsAndAStaleRow_AreReingested()
+    {
+        var file = await IngestFileAsync("stale.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        await SetPositionAsync(ids[^1], 1);
+        await InsertFileRowAsync(file, "## Removed section\n\nText the file no longer holds.\n", chunkIndex: 2);
+
+        var report = await RepairAsync();
+
+        report.FilesReingested.ShouldBe(1);
+        var positions = await PositionsAsync(file);
+        positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count)]);
+        (await ValuesAsync(file)).ShouldNotContain(value => value.Contains("Removed section"));
+    }
+
     [RetryFact]
     public async Task Run_CodeFileCutMidIdentifier_IsReingestedFromTheFile()
     {
@@ -296,7 +353,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
             TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow),
             NullLogger<ChunkBoundaryRepairJob>.Instance);
         job.Interval.ShouldBeNull("once ever: it heals rows the write paths no longer create");
-        job.Name.ShouldBe(ChunkBoundaryRepairJob.JobName);
+        job.Name.ShouldBe("chunk-boundary-repair-v2", "a bank stamped v1 runs the repair once more for #788");
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var leftPending = await job.RunAsync(connection, TestContext.Current.CancellationToken);
@@ -422,6 +479,48 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         return [.. await connection.QueryAsync<Position>(
             "SELECT chunk_index AS ChunkIndex, total_chunks AS TotalChunks, value AS Value FROM entries WHERE path = @path ORDER BY chunk_index",
             new { path })];
+    }
+
+    /// <summary>A markdown document long enough to span several rows.</summary>
+    private static string SectionedDocument(int sections) =>
+        string.Concat(Enumerable.Range(0, sections).Select(i =>
+            $"## Section {i}\n\n" + string.Join(" ", Enumerable.Repeat($"Paragraph {i} of the plan describes step {i} in detail.", 30)) + "\n\n"));
+
+    private async Task<List<long>> IdsAsync(string path)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return [.. await connection.QueryAsync<long>("SELECT id FROM entries WHERE path = @path ORDER BY id", new { path })];
+    }
+
+    private async Task SetPositionAsync(long id, long chunkIndex)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync("UPDATE entries SET chunk_index = @chunkIndex WHERE id = @id", new { id, chunkIndex });
+    }
+
+    private async Task InsertFileRowAsync(string file, string value, long chunkIndex)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var template = await connection.QueryFirstAsync(
+            "SELECT scope, project_id, source_id, created_at, total_chunks FROM entries WHERE path = @file", new { file });
+        await connection.ExecuteAsync(MemorySql.InsertEntry, new
+        {
+            hash = ContentHash.Of(file, value),
+            path = file,
+            value,
+            sourceFile = file,
+            section = (string?)null,
+            scope = (string?)template.scope,
+            projectId = (string?)template.project_id,
+            contextLabel = (string?)null,
+            workspaceId = (string?)null,
+            agentId = (string?)null,
+            createdAt = (long)template.created_at,
+            updatedAt = (long)template.created_at,
+            sourceId = (long?)template.source_id,
+            chunkIndex,
+            totalChunks = (long)template.total_chunks
+        });
     }
 
     private async Task<long> PendingCountAsync(string path)
