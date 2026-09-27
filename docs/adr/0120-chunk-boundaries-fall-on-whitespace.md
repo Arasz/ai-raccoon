@@ -135,9 +135,10 @@ it. Overlap would also duplicate text in every multi-chunk note's keyword and ve
   two chunks and the identifier sits in the second one, so that premise is about chunk count, not
   about the boundary. The ten-repeat case lives in its own test.
 
-## Addendum (1.53.7): files the chunker must cut, and colliding file positions
+## Addendum (1.53.7): files the chunker must cut, and file positions
 
-A manual run against a copy of a live bank showed two gaps in the repair (#788).
+A manual run against a copy of a live bank showed three gaps in the repair and in how file positions
+are written (#788).
 
 - **Some files were re-ingested on every run.** A file whose term is longer than the budget (such as
   whitespace-free JSON) is hard-cut by the current chunker too. The seam test flagged it, the
@@ -146,20 +147,32 @@ A manual run against a copy of a live bank showed two gaps in the repair (#788).
 - **Colliding positions on file rows survived.** 186 file groups on the live bank held two rows at
   one `chunk_index`. Watch catch-up skips an unchanged file, and the bank-wide recomputes keep the
   existing order and only fill `-1`, so nothing ever corrected them.
+- **`total_chunks` meant two things.** A chunk repeated verbatim in a file is stored once (one row
+  per hash). File ingest numbered rows by the chunker's output, so a repeat took its last place and
+  left a gap, and `total_chunks` counted the repeats: 520 rows with positions up to 871 and a total
+  of 872 on one JSON file. Every other writer (the recomputes, the delete compaction,
+  `repair chunk-index`) and the neighbour boost read it as the row count, with positions 0..n-1.
 
-Before a file group is re-ingested, the repair now re-chunks the file with the current chunker
-(`ChunkPositionScanner`, the same scan `repair chunk-index` uses). When every stored row is one the
-chunker still writes, a re-ingest would change nothing but positions. The group then takes the
-positions and section labels the scan reports, in place, and the file is not re-ingested. That also
-covers a file group whose only defect is colliding positions, which the repair now selects alongside
-seamed groups, and applies to workspace file rows too, since it rewrites positions and never replaces
-a row. A group holding a row the chunker no longer writes is re-ingested as before (a workspace group
-is re-chunked from its rows instead, as re-ingest never touches workspace rows). A file gone from disk
-keeps the old path. The code corpus has no position scan, so
-a code file is still re-ingested when a seam is found, but it is counted only when its stored chunk
-hashes changed.
+**One definition.** Positions run 0..n-1 in document order, a repeated chunk takes the place of its
+first occurrence, and `total_chunks` is the number of rows. `DocumentChunks.Distinct` holds the rule;
+file ingest and `ChunkPositionScanner` both use it, and `repair chunk-index` now corrects a row whose
+total is wrong even when its position is right. The code corpus keeps chunker numbering: code hits
+carry line ranges and nothing pairs code positions.
+
+**The repair.** It now also selects a file group whose rows are not numbered 0..n-1 with total n. Before
+re-ingesting any file group it re-chunks the file with the current chunker. When the file yields
+exactly the stored rows (same distinct chunk count, every row reproduced), a re-ingest would change
+nothing but positions, so the rows take the positions and section labels the scan reports, in place,
+and keep their embeddings. That applies to workspace file rows too, since it never replaces a row. A
+file with a row the chunker no longer writes, or with a chunk no row holds (it grew on disk), is
+re-ingested as before; a workspace group is re-chunked from its rows instead, as re-ingest never
+touches workspace rows. A file gone from disk keeps the old path. The code corpus has no position
+scan, so a code file is still re-ingested when a seam is found, but it is counted only when its
+stored chunk hashes changed.
 
 The job is renamed `chunk-boundary-repair-v2` so a bank whose ledger already holds the v1 stamp runs
-it once more. The repair is idempotent: a file already correct moves nothing. `ChunkBoundaryRepairTests`
-pins the three new shapes (a file the chunker must cut, colliding positions only, colliding positions
-plus a stale row) and the code-file case. Each failed before its change.
+it once more. The repair is idempotent: a file already correct moves nothing. `ChunkBoundaryRepairTests`,
+`ChunkIndexRepairTests` and `SqliteMemoryStoreChunkColumnMaintenanceTests` pin the new shapes (a file
+the chunker must cut, colliding positions, colliding positions plus a stale row, a file that grew, a
+gapped or inflated file, a repeated paragraph at ingest, a code file the chunker must cut). Each failed
+before its change.
