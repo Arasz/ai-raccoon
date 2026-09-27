@@ -976,6 +976,7 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Resilience/               ResiliencePipelineFactory (retry/timeout policies for outbound calls)
   Maintenance/              BankMaintenanceHostedService (WAL checkpoint, #79) running a job list
                             (ADR-0070): VacuumJob, Vec0ReclaimJob, ChunkBackfillJob,
+                            NoteChunkOrderRepairJob (once: puts source-citing notes' positions in text order),
                             ChunkBoundaryRepairJob (once: re-chunks rows an older chunker cut mid-word),
                             MetricsRetentionJob (purges `metrics` past its retention window),
                             ChunkIndexRepairJob, ReingestRepairJob (on-demand repair verbs),

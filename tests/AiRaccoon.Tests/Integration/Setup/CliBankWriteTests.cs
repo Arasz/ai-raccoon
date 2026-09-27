@@ -56,6 +56,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     internal static readonly string[] MaintenanceLedgerNames =
     [
         ChunkBackfillJob.JobName,
+        NoteChunkOrderRepairJob.JobName,
         ChunkBoundaryRepairJob.JobName,
         Vec0ReclaimJob.JobName,
         VacuumJob.JobName,

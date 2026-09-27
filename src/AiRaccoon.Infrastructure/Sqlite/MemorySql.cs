@@ -824,28 +824,24 @@ internal static class MemorySql
                                                                    """;
 
     /// <summary>
-    ///     The pre-GH-#371 bank-wide recompute, unconditional id order — kept, under its own name,
-    ///     for <see cref="AiRaccoon.Infrastructure.Sync.SyncService" />'s post-merge pass alone. A
-    ///     merge pulls rows from a second bank whose row ids carry no relationship to this bank's, so
-    ///     there is no position to protect by skipping already-assigned rows the way the other
-    ///     bank-wide form does; a tombstone-driven delete needs the SAME survivors renumbered.
-    ///     Explicit `memory_sync`, not something <c>MaintenanceJobRunner</c> can start unattended, so
-    ///     it does not carry the "must never run within seconds of bank open" risk the sentinel-guarded
-    ///     forms exist for. Re-deriving real document order across a sync is a separate design
-    ///     question (transmitting position with the row) — out of scope here.
+    ///     <see cref="AiRaccoon.Infrastructure.Sync.SyncService" />'s post-merge renumber: every position
+    ///     partition gets contiguous positions 0..n-1 in the order its rows already hold, so a tombstone
+    ///     delete closes its gap without scrambling the survivors, and rows the merge pulled in (still
+    ///     at the -1 sentinel) go after them in id order. Only rows whose values change are written.
     /// </summary>
-    public static readonly string RecomputeChunkColumnsBankWideFromIdOrder = $"""
-                                                                              WITH numbered AS (
-                                                                                  SELECT id,
-                                                                                         ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file ORDER BY id) - 1 AS ci,
-                                                                                         COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
-                                                                                  FROM entries
-                                                                                  WHERE source_file IS NOT NULL)
-                                                                              UPDATE entries
-                                                                                 SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
-                                                                                     total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
-                                                                               WHERE entries.id IN (SELECT id FROM numbered)
-                                                                              """;
+    public static readonly string RecomputeChunkColumnsBankWideKeepingOrder = $"""
+                                                                               WITH numbered AS (
+                                                                                   SELECT id, chunk_index, total_chunks,
+                                                                                          ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file
+                                                                                                             ORDER BY chunk_index < 0, chunk_index, id) - 1 AS ci,
+                                                                                          COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
+                                                                                   FROM entries
+                                                                                   WHERE source_file IS NOT NULL)
+                                                                               UPDATE entries
+                                                                                  SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
+                                                                                      total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
+                                                                                WHERE entries.id IN (SELECT id FROM numbered WHERE ci <> chunk_index OR tc <> total_chunks)
+                                                                               """;
 
     /// <summary>Sets one row's document position and section directly — the authoritative-at-insert
     /// write (GH #371) FileIngestor uses instead of the id-order recompute, and the write

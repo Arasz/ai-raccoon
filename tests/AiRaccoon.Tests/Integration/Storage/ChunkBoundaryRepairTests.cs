@@ -10,6 +10,7 @@ using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -57,6 +58,13 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
             "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", 10))
         + " Invoice reference vk83jq was filed with the parish council.";
 
+    /// <summary>A note whose middle row is cut inside "vk83jq", framed by an opening and a closing row.</summary>
+    private static string[] FramedPieces()
+    {
+        var (head, tail) = CutInside(LongNote(), "vk83jq");
+        return ["Opening line of the minutes.\n", head, tail + "\n", "Closing line of the minutes.\n"];
+    }
+
     private static (string Head, string Tail) CutInside(string text, string word)
     {
         var cut = text.IndexOf(word, StringComparison.Ordinal) + 2;
@@ -83,19 +91,20 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     }
 
     /// <summary>A note citing a source file shares that file's position partition. A seam in the middle of the
-    /// note must leave every row of the partition on its own, contiguous position.</summary>
+    /// note must leave every row of the partition on its own, contiguous position, in the note's text order.</summary>
     [RetryFact]
-    public async Task Run_SourceCitingNoteWithAMiddleSeam_KeepsPositionsDistinctAndContiguous()
+    public async Task Run_SourceCitingNoteWithAMiddleSeam_KeepsPositionsContiguousAndInTextOrder()
     {
         var ct = TestContext.Current.CancellationToken;
         var cited = Path.Combine(_dataRoot, "minutes.md");
-        var entry = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote(), SourceFile: cited), ct);
+        var pieces = FramedPieces();
+        var entry = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, string.Concat(pieces), SourceFile: cited), ct);
         var path = await PathOfAsync(entry.Hash);
-        var (head, tail) = CutInside(LongNote(), "vk83jq");
-        await ResplitAsync(path, ["Opening line of the minutes.\n", head, tail + "\n", "Closing line of the minutes.\n"], noteOrder: true);
+        await ResplitAsync(path, pieces, noteOrder: true);
         await RecomputePositionsAsync();
         var before = await PositionsAsync(path);
         before.Select(p => p.ChunkIndex).Distinct().Count().ShouldBe(4, "premise: the writer's positions are distinct");
+        before[^1].Value.ShouldStartWith("Opening", customMessage: "premise: the stored positions put the opening last");
 
         var report = await RepairAsync();
 
@@ -104,18 +113,49 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var after = await PositionsAsync(path);
         after.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, after.Count)], "no two rows may claim one position");
         after.ShouldAllBe(p => p.TotalChunks == after.Count);
-        after.First(p => p.Value.StartsWith("Closing", StringComparison.Ordinal)).ChunkIndex
-            .ShouldBeLessThan(after.First(p => p.Value.StartsWith("Opening", StringComparison.Ordinal)).ChunkIndex,
-                "untouched rows keep their relative order");
+        string.Concat(after.Select(p => p.Value)).ShouldBe(string.Concat(pieces), "positions follow the note's text order");
+    }
+
+    /// <summary>A note whose rows were stored in text order (a chunk backfill, or any write since) must be
+    /// repaired in that order, not with its last row taken for its opening.</summary>
+    [RetryFact]
+    public async Task Run_NoteStoredInTextOrder_IsRechunkedInTextOrder()
+    {
+        var text = LongNote();
+        var path = await WriteNoteAsync(text);
+        var (head, tail) = CutInside(text, "vk83jq");
+        await ResplitAsync(path, [head, tail], noteOrder: false);
+
+        var report = await RepairAsync();
+
+        report.GroupsRepaired.ShouldBe(1);
+        (await KeywordHitsAsync("vk83jq")).ShouldBe(1);
+        string.Concat(await ValuesAsync(path)).ShouldBe(text, "the repaired rows hold the note's text in order");
+    }
+
+    /// <summary>Rows that do not join back into the body their path names have no provable order, so a repair
+    /// leaves them as stored rather than re-chunking a guessed one.</summary>
+    [RetryFact]
+    public async Task Run_NoteRowsThatDoNotJoinBackIntoItsBody_AreLeftAsStored()
+    {
+        var path = await WriteNoteAsync(LongNote());
+        var (head, tail) = CutInside(LongNote(), "vk83jq");
+        await ResplitAsync(path, ["Opening line that was never part of the note.\n", head, tail], noteOrder: true);
+        var before = await ValuesAsync(path);
+
+        var report = await RepairAsync();
+
+        report.RowsWritten.ShouldBe(0);
+        report.NotesUnproven.ShouldBe(1, "a note left as stored must be counted, not skipped silently");
+        (await ValuesAsync(path)).ShouldBe(before);
     }
 
     /// <summary>A note without a source file has no positions at all; a middle seam repair leaves it that way.</summary>
     [RetryFact]
     public async Task Run_PlainNoteWithAMiddleSeam_StaysWithoutPositions()
     {
-        var path = await WriteNoteAsync(LongNote());
-        var (head, tail) = CutInside(LongNote(), "vk83jq");
-        var pieces = new[] { "Opening line of the minutes.\n", head, tail + "\n", "Closing line of the minutes.\n" };
+        var pieces = FramedPieces();
+        var path = await WriteNoteAsync(string.Concat(pieces));
         await ResplitAsync(path, pieces, noteOrder: true);
 
         var report = await RepairAsync();
@@ -236,7 +276,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     [RetryFact]
     public async Task Run_CutAfterAPieceNoLargerThanTheOverlay_IsNotJoined()
     {
-        var path = await WriteNoteAsync(LongNote());
+        var path = await WriteNoteAsync("Short note abcd continues here.");
         await ResplitAsync(path, ["Short note ab", "cd continues here."], noteOrder: true);
 
         var report = await RepairAsync();
@@ -253,7 +293,8 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var (head, tail) = CutInside(text, "vk83jq");
         await ResplitAsync(path, [head, tail], noteOrder: true);
         var job = new ChunkBoundaryRepairJob(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow));
+            TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow),
+            NullLogger<ChunkBoundaryRepairJob>.Instance);
         job.Interval.ShouldBeNull("once ever: it heals rows the write paths no longer create");
         job.Name.ShouldBe(ChunkBoundaryRepairJob.JobName);
 
@@ -262,6 +303,25 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
 
         leftPending.ShouldBeTrue("PendingEmbedJob must see the new rows in the same pass");
         (await KeywordHitsAsync("vk83jq")).ShouldBe(1);
+    }
+
+    /// <summary>The job logs what it did, including the notes it left as stored because their order is unprovable.</summary>
+    [RetryFact]
+    public async Task Job_LogsTheNotesItLeftAsStored()
+    {
+        var path = await WriteNoteAsync(LongNote());
+        var (head, tail) = CutInside(LongNote(), "vk83jq");
+        await ResplitAsync(path, ["Opening line that was never part of the note.\n", head, tail], noteOrder: true);
+        var logger = new FakeLogger<ChunkBoundaryRepairJob>();
+        var job = new ChunkBoundaryRepairJob(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+            TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow), logger);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await job.RunAsync(connection, TestContext.Current.CancellationToken);
+
+        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        record.Id.Id.ShouldBe(447);
+        record.StructuredState.ShouldNotBeNull().ShouldContain(new KeyValuePair<string, string?>("Unproven", "1"));
     }
 
     private async Task<ChunkBoundaryRepairReport> RepairAsync()

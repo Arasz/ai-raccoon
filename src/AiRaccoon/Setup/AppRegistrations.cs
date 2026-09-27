@@ -194,10 +194,13 @@ public static partial class AppRegistrations
                 new ChunkBackfillJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
                     sp.GetRequiredService<IPlainTextChunker>(), sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<IEmbeddingService>()),
+                // Once ever, before the boundary repair: that repair renumbers a note from the positions it holds.
+                new NoteChunkOrderRepairJob(sp.GetRequiredService<ILogger<NoteChunkOrderRepairJob>>()),
                 // Once ever, right after the backfill for the same reason: it leaves re-chunked rows pending.
                 new ChunkBoundaryRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
                     sp.GetRequiredService<IPlainTextChunker>(), sp.GetRequiredService<IEmbeddingService>(),
-                    sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>()),
+                    sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>(),
+                    sp.GetRequiredService<ILogger<ChunkBoundaryRepairJob>>()),
                 new Vec0ReclaimJob(),
                 new VacuumJob(),
                 new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>()),

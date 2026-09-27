@@ -119,14 +119,11 @@ public sealed partial class SqliteMemoryStore(
 
         var chunks = await fileIngestor.ChunkToBudgetAsync(connection, request.Content, cancellationToken);
         var hash = ContentHash.Of(path, chunks[0]);
-        foreach (var chunk in chunks.Skip(1))
+        foreach (var chunk in chunks)
         {
             await WriteChunks.InsertAsync(connection, ContentHash.Of(path, chunk), path, chunk, source, request,
                 bucket, now, cancellationToken);
         }
-
-        await WriteChunks.InsertAsync(connection, hash, path, chunks[0], source, request, bucket, now,
-            cancellationToken);
 
         var row = bucket.Scope == SharedScope
             ? await connection.QueryFirstOrDefaultAsync<EntryRow>(
