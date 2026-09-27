@@ -148,6 +148,26 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
         (await ValuesByPositionAsync(path)).ShouldBe(before);
     }
 
+    /// <summary>#784: a note whose rows are all still at the -1 sentinel (a merge just added them, or an
+    /// old-writer note was never positioned) must come out of the bank-wide repair in text order, not just
+    /// the notes whose positions were already known.</summary>
+    [RetryFact]
+    public async Task Run_NoteWithEveryRowUnpositioned_PutsOpeningAtPositionZero()
+    {
+        var note = SourceCitingNoteChunkOrderTests.LongNote();
+        var path = await WriteAsync(note);
+        await StoreOpeningLastAsync(path, fillPositions: false);
+        (await UnpositionedCountAsync(path)).ShouldBeGreaterThan(0, "premise: every row is still at the -1 sentinel");
+
+        var report = await RunAsync();
+
+        report.NotesReordered.ShouldBe(1);
+        var values = await ValuesByPositionAsync(path);
+        values[0].ShouldStartWith("Opening marker zq71");
+        (await PositionsAsync(path)).ShouldBe([.. Enumerable.Range(0, values.Count).Select(i => (long)i)],
+            "the note ends up with contiguous positions 0..n-1");
+    }
+
     /// <summary>Reproduces the incident (#784): a merge (or an old-writer note) can leave every row of an
     /// opening-last note at the -1 sentinel. NoteChunkOrderRepair.RunAsync alone cannot prove positions
     /// for rows it does not know, so it moves nothing; ChunkBoundaryRepairJob runs next in the same pass
