@@ -23,55 +23,111 @@ exists for: an identifier, an error code, a path.
 Any text that is not a file goes through `FileIngestor.ChunkToBudgetAsync`, which uses the `.md`
 handler, so `memory_write` notes hit `MarkdownChunker`. `PlainTextChunker` delegates to the same
 class. Short lines never reach the split path; the greedy packer joins whole lines, so only a line
-over the budget is affected.
+over the budget is affected. Banks written before this change already hold such rows, and nothing
+rewrites them: a note is never rewritten, and the watch digest skips a file whose content hash has
+not changed.
 
 ## Decision
 
-**When a line must be split, the cut backs off to the last whitespace inside the budget.** One pure
-helper, `TokenBudget.SplitLength` in `AiRaccoon.Core.Chunking`, answers how many characters to split
-off. It finds the longest prefix within budget by the same binary search as before, then walks back
-to the last whitespace character in it and cuts just after that character. The whitespace stays at
-the end of the earlier piece, so the pieces still concatenate to the original line.
+Three parts: a split rule for new chunks, a query rule for the one term no split can keep whole,
+and a once-per-bank repair for rows already cut.
 
-- **Every split site uses it.** `AddUnitOrSplit` (prose and any over-budget line), `SplitForSubFence`
-  (a long line inside a re-fenced code block, where identifiers matter just as much) and
-  `CodeChunker.AddLineOrSplit` all call `SplitLength`. The private binary search in `MarkdownChunker`
-  is gone; `TokenBudget.Trim` keeps its behaviour for query trimming and shares the search.
-- **A word longer than the whole budget is still hard-cut**, at the budget, and only that word. No
-  whitespace inside the budget means there is nowhere better to cut. That word stays unfindable by an
-  exact keyword match, as it was before; it cannot fit in any chunk, so no boundary rule could fix it.
-  Text with no whitespace at all (CJK prose, minified JSON, a base64 blob) therefore splits exactly
-  as before.
-- **Leading whitespace does not count as a cut point.** A cut after only leading whitespace would
-  emit a whitespace-only piece, so the walk stops before the first non-whitespace character and
-  falls back to the hard cut. `SplitLength` always returns at least 1, so every split loop still
-  makes progress and terminates.
-- **The budget holds.** The chosen prefix is never longer than the longest in-budget prefix, and
-  token counts are non-decreasing in prefix length for every tokenizer here (the assumption the old
-  search already made), so no piece can exceed `maxTokens`. ADR-0036's guarantee is unchanged, and
-  so is ADR-0048's fence balance.
+### Where a line is split
 
-**No overlap is added.** Overlap would only help if a boundary could still cut a word, and after
-this change the only word a boundary cuts is one longer than the whole budget, which no overlap
-smaller than the budget could hold either. Overlap also costs every multi-chunk note extra rows of
-duplicated text in both the keyword and the vector index. The existing unit-level `overlayTokens`
-setting is untouched.
+**`TokenBudget.SplitLength`** (pure, `AiRaccoon.Core.Chunking`) answers how many characters to split
+off. It finds the longest prefix within budget by the same binary search as before, then picks the
+cut in this order:
+
+1. just after the last whitespace inside that prefix;
+2. failing that, the last keyword-term boundary: a position next to a character outside letters,
+   digits and `_`, the same set `FtsQueryNormalizer` builds query terms from. A long URL or a
+   minified-JSON line with no spaces still keeps every search term whole. `_` counts as part of a
+   term because a query for `call_handler_07` becomes one FTS phrase;
+3. failing both, a hard cut at the budget. Only a single term longer than the whole budget gets
+   here, as does text with no boundary at all (CJK prose, a hex blob).
+
+The whitespace stays at the end of the earlier piece, so pieces still concatenate to the original
+line. Leading whitespace is never a cut point. `SplitLength` always returns at least 1, so every
+split loop terminates. A piece is whitespace-only only when the remaining text is all whitespace;
+`ChunkWithHeadings` drops such chunks, as it always has.
+
+**The budget holds.** The backed-off prefix is re-counted before it is used, because a tokenizer
+with whitespace-run tokens need not be monotonic at a space. If it counts over budget, the next
+rule is tried, and the hard cut (a prefix the binary search already proved fits) is the floor.
+ADR-0036's guarantee is unchanged, and so is ADR-0048's fence balance.
+
+`AddUnitOrSplit`, `SplitForSubFence` (a long line inside a re-fenced code block) and
+`CodeChunker.AddLineOrSplit` all call `SplitLength`. The chunker's private binary search is gone.
+`TokenBudget.Trim` keeps its behaviour for query trimming and shares the search.
+
+### A term longer than the budget
+
+A term longer than the budget cannot fit in any chunk, so it is stored hard-cut and no row holds it
+whole. **`FtsQueryNormalizer` matches a query term longer than 64 characters by its first 64 as an
+FTS5 prefix query** (`term[..64]*`). The term starts a piece (the split backs off to the boundary
+before it), and that first piece is a full hard cut, hundreds of characters at any real budget
+(254 memory, 510 code), so it always contains the prefix. A search for the whole term gets a
+keyword hit on the row holding its start. The only cost is that two distinct terms sharing their
+first 64 characters now match each other. No baseline query has a term that long.
+
+I rejected indexing the whole term in an extra FTS column. It needs a schema migration, a new
+column on every insert path and a fourth bm25 weight, and it buys nothing the prefix does not.
+
+### Repairing existing banks
+
+**`chunk-boundary-repair-v1`** (`ChunkBoundaryRepairJob` wrapping `ChunkBoundaryRepair`) runs once
+per bank from the maintenance job list, right after `chunk-backfill-v2` and before
+`PendingEmbedJob`. It groups rows by bucket and path and orders each group in text order: a file by
+position, a note with its first chunk last-inserted (highest id), as `memory_write` writes it. A
+seam is two adjacent rows where one ends and the next begins with a term character
+(`ChunkSeam.CutsATerm`). For a file it also counts the re-fenced form: a term just before a sub-fence
+closer and just after the next opener (`ChunkSeam.MayCutAFencedTerm`).
+
+- **A file row whose file is still readable is re-ingested** through `IMemoryStore.ReplaceAsync`,
+  the unconditional replace the reingest repair and the watch digest use. The seam test only decides
+  *whether*; the file decides *what*, so a false positive costs one correct re-ingest. This is what
+  heals watched files whose unchanged content hash would otherwise skip them forever. The code
+  corpus gets the same pass: a `code_entries` group with a seam has its file re-ingested, since
+  `ReplaceAsync` re-ingests both corpora. The repair runs on its own once rather
+  than behind `repair reingest --apply` (ADR-0075) because its candidate set is only files with a
+  seam, not every file any past chunker change left unreproducible.
+- **A note, or a file row whose file is gone, is re-chunked from its own rows.** Rows across a
+  hard cut concatenate back to the original text, because the old chunker's cut piece was a full
+  budget piece, larger than the 48-token overlay, so no overlay text was repeated after it. The
+  repair checks exactly that before joining a seam. Each joined run is re-chunked with the current
+  chunker; if the result is the same rows (a term still longer than the budget), nothing is
+  written. Replaced hashes are tombstoned so a sync peer does not resurrect them, a file group's
+  positions are renumbered in text order, and new rows stay `pending` for `PendingEmbedJob` in the
+  same maintenance pass. A note's first-chunk hash can change, so a hash an agent kept from before
+  may no longer resolve; per-row rating and access counts on replaced rows are lost, as in every
+  re-chunk.
+- **Two cases are left as they are, both because repairing them would mean inventing text.** A
+  mid-line cut inside a fenced block of a note, or of a file gone from disk: the old sub-fence split
+  added a line break before the closer, and without the source text that break cannot be told from
+  a real one. And code rows of a code file gone from disk: their line ranges cannot be re-derived
+  from the rows, and the watch digest prunes them once it sees the file is gone. Every other seam
+  is repaired.
+
+**No overlap is added.** After the split rule, the only term a boundary cuts is one longer than the
+whole budget, which no overlap smaller than the budget could hold either; the prefix query covers
+it. Overlap would also duplicate text in every multi-chunk note's keyword and vector rows.
 
 ## Consequences
 
-- **Positive.** Every whitespace-delimited word shorter than the budget appears whole in at least one
-  chunk, so keyword search finds identifiers wherever they fall.
-  `ChunkWordBoundaryTests` pins the rule for prose, plain text, overlay, a fenced line, a word longer
-  than the budget and text with no whitespace. `MemorySearchRankingTests.Search_IdentifierInAMultiChunkNote_IsFoundByTheKeywordLeg`
-  pins it end to end with the ten-repeat note from #695; both failed before the change.
-- **Neutral: pieces can be shorter.** A split piece may now end up to one word short of the budget,
-  and a short run of words before a very long token becomes its own small piece. Chunk counts on
-  over-budget lines can rise by at most a little.
-- **Neutral: no migration.** Only lines longer than the budget change their boundaries. Existing rows
-  keep their chunks until the file is re-ingested or the note rewritten; the new boundaries apply to
-  new writes and re-ingests only, and hash-keyed replacement on re-ingest already handles a changed
-  chunk set. No re-chunk job is needed; an old mid-word row stays as findable as it was.
+- **Positive.** Every term shorter than the budget appears whole in at least one chunk, and a
+  longer one is still found by its prefix. Existing banks repair themselves on the first
+  maintenance pass after upgrade, watched files included, with no user action.
+- **Tests.** `ChunkWordBoundaryTests`, `TokenBudgetTests`, `ChunkSeamTests`, the `CodeChunkerTests`
+  identifier case and `FtsQueryNormalizerTests` pin the rules; `ChunkBoundaryRepairTests` pins the
+  repair on seeded banks (note, watched file, fenced file, code file, file gone from disk, overlay
+  guard, a too-long term left alone). `MemorySearchRankingTests` pins both searches end to end with the
+  bundled engine, and asserts as a premise that a budget-only cut really lands inside `vk83jq`.
+  Each failed before its change.
+- **Neutral: pieces can be shorter.** A split piece may end up to one word short of the budget, and
+  a short run of words before a very long term becomes its own small piece.
+- **Neutral: one full-table read, once.** The repair reads every row's value once per bank, the
+  same cost `chunk-backfill-v2` paid.
 - **The ranking test keeps eight repeats.** `Search_AllTermsKeywordMatchThatWinsFusion_StaysFirstAboveBoostedNeighbours`
   asserts that the note's first row is the keyword leg's top hit. With ten repeats the note spans
   two chunks and the identifier sits in the second one, so that premise is about chunk count, not
-  about the boundary. The ten-repeat case lives in the new test instead.
+  about the boundary. The ten-repeat case lives in its own test.
