@@ -17,9 +17,10 @@ public sealed record ChunkBoundaryRepairReport(int FilesReingested, int GroupsRe
     int FilesRepositioned);
 
 /// <summary>
-///     Repairs rows an older chunker cut through the middle of a term (docs/adr/0120). A file row whose file is
-///     still readable is re-ingested from the file; any other group (a memory_write note, a file gone from disk)
-///     is re-chunked from its own rows, which concatenate back to the original text across such a cut.
+///     Repairs rows an older chunker cut through the middle of a term (docs/adr/0120). A file whose rows the
+///     current chunker still writes only takes its document positions; any other readable file is re-ingested;
+///     any other group (a memory_write note, a file gone from disk) is re-chunked from its own rows, which
+///     concatenate back to the original text across such a cut.
 ///     New rows are left pending for the embed drain.
 /// </summary>
 public sealed class ChunkBoundaryRepair(
@@ -172,12 +173,13 @@ public sealed class ChunkBoundaryRepair(
     }
 
     /// <summary>Code rows carry line ranges that cannot be re-derived from the rows, so a cut code file is only
-    /// re-ingested from disk; one no longer on disk is left for the watch digest to prune.</summary>
+    /// re-ingested from disk; one no longer on disk is left for the watch digest to prune. A re-ingest that writes
+    /// back the rows the file already had (a cut the chunker must make) is not counted.</summary>
     private static async Task<int> ReingestCutCodeFilesAsync(SqliteConnection connection, IMemoryStore store,
         CancellationToken cancellationToken)
     {
         var rows = await connection.QueryAsync<CodeRow>(new CommandDefinition(
-            "SELECT id AS Id, project_id AS ProjectId, path AS Path, value AS Value, chunk_index AS ChunkIndex FROM code_entries",
+            "SELECT id AS Id, project_id AS ProjectId, path AS Path, hash AS Hash, value AS Value, chunk_index AS ChunkIndex FROM code_entries",
             cancellationToken: cancellationToken));
         var reingested = 0;
         foreach (var group in rows.GroupBy(row => (row.ProjectId, row.Path)))
@@ -186,7 +188,14 @@ public sealed class ChunkBoundaryRepair(
             var cut = Enumerable.Range(0, ordered.Count - 1).Any(i => ChunkSeam.CutsATerm(ordered[i].Value, ordered[i + 1].Value));
             if (cut && await TryReingestAsync(store, group.Key.ProjectId, group.Key.Path, cancellationToken))
             {
-                reingested++;
+                var after = await connection.QueryAsync<string>(new CommandDefinition(
+                    "SELECT hash FROM code_entries WHERE project_id = @projectId AND path = @path",
+                    new { projectId = group.Key.ProjectId, path = group.Key.Path },
+                    cancellationToken: cancellationToken));
+                if (!after.ToHashSet(StringComparer.Ordinal).SetEquals(ordered.Select(row => row.Hash)))
+                {
+                    reingested++;
+                }
             }
         }
 
@@ -408,7 +417,7 @@ public sealed class ChunkBoundaryRepair(
 
     private sealed record PositionRow(long Id, long ChunkIndex);
 
-    private sealed record CodeRow(long Id, string ProjectId, string Path, string Value, long ChunkIndex);
+    private sealed record CodeRow(long Id, string ProjectId, string Path, string Hash, string Value, long ChunkIndex);
 
     private sealed record Row(
         long Id,

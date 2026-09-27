@@ -291,6 +291,32 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         (await ValuesAsync(file)).ShouldNotContain(value => value.Contains("Removed section"));
     }
 
+    /// <summary>A code file whose identifier is longer than the budget is cut the same way on every ingest, so a
+    /// re-ingest that writes back the same rows is not reported as a repair.</summary>
+    [RetryFact]
+    public async Task Run_CodeFileTheChunkerMustCut_IsNotReportedAsReingested()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var codeStore = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+            TestData.CreateEmbeddingService(), null, null, null, null, new CodeChunker(new CharCountTokenizer(), 90), null, null);
+        var file = Path.Combine(_dataRoot, "digest.cs");
+        await File.WriteAllTextAsync(file, "var digest = \"" + string.Concat(Enumerable.Range(0, 60).Select(i => $"q{i:D3}")) + "\";\n", ct);
+        await codeStore.IngestFileAsync(ProjectId, file, null, ct);
+        await using (var premise = await _factory.OpenBankAsync(ct))
+        {
+            (await premise.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM code_entries WHERE path = @file", new { file }))
+                .ShouldBeGreaterThan(1, "premise: the identifier is hard-cut across rows");
+        }
+
+        await using var repairConnection = await _factory.OpenBankAsync(ct);
+        var report = await new ChunkBoundaryRepair(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+                TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow))
+            .RunAsync(repairConnection, codeStore, ct);
+
+        report.FilesReingested.ShouldBe(0, "the re-ingest wrote back the rows the file already had");
+    }
+
     [RetryFact]
     public async Task Run_CodeFileCutMidIdentifier_IsReingestedFromTheFile()
     {
