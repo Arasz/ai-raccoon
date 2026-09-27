@@ -10,6 +10,7 @@ using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -145,6 +146,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var report = await RepairAsync();
 
         report.RowsWritten.ShouldBe(0);
+        report.NotesUnproven.ShouldBe(1, "a note left as stored must be counted, not skipped silently");
         (await ValuesAsync(path)).ShouldBe(before);
     }
 
@@ -291,7 +293,8 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var (head, tail) = CutInside(text, "vk83jq");
         await ResplitAsync(path, [head, tail], noteOrder: true);
         var job = new ChunkBoundaryRepairJob(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow));
+            TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow),
+            NullLogger<ChunkBoundaryRepairJob>.Instance);
         job.Interval.ShouldBeNull("once ever: it heals rows the write paths no longer create");
         job.Name.ShouldBe(ChunkBoundaryRepairJob.JobName);
 
@@ -300,6 +303,25 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
 
         leftPending.ShouldBeTrue("PendingEmbedJob must see the new rows in the same pass");
         (await KeywordHitsAsync("vk83jq")).ShouldBe(1);
+    }
+
+    /// <summary>The job logs what it did, including the notes it left as stored because their order is unprovable.</summary>
+    [RetryFact]
+    public async Task Job_LogsTheNotesItLeftAsStored()
+    {
+        var path = await WriteNoteAsync(LongNote());
+        var (head, tail) = CutInside(LongNote(), "vk83jq");
+        await ResplitAsync(path, ["Opening line that was never part of the note.\n", head, tail], noteOrder: true);
+        var logger = new FakeLogger<ChunkBoundaryRepairJob>();
+        var job = new ChunkBoundaryRepairJob(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+            TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow), logger);
+
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await job.RunAsync(connection, TestContext.Current.CancellationToken);
+
+        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        record.Id.Id.ShouldBe(447);
+        record.StructuredState.ShouldNotBeNull().ShouldContain(new KeyValuePair<string, string?>("Unproven", "1"));
     }
 
     private async Task<ChunkBoundaryRepairReport> RepairAsync()

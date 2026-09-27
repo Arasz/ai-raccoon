@@ -10,8 +10,9 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
-/// <summary>What a chunk-boundary repair did: files re-ingested, row groups re-chunked in place, rows written.</summary>
-public sealed record ChunkBoundaryRepairReport(int FilesReingested, int GroupsRepaired, int RowsWritten);
+/// <summary>What a chunk-boundary repair did: files re-ingested, row groups re-chunked in place, rows written, and notes left
+/// as stored because no order of their rows joins back into the body their path names.</summary>
+public sealed record ChunkBoundaryRepairReport(int FilesReingested, int GroupsRepaired, int RowsWritten, int NotesUnproven);
 
 /// <summary>
 ///     Repairs rows an older chunker cut through the middle of a term (docs/adr/0120). A file row whose file is
@@ -45,6 +46,7 @@ public sealed class ChunkBoundaryRepair(
         var filesReingested = 0;
         var groupsRepaired = 0;
         var rowsWritten = 0;
+        var notesUnproven = 0;
         var groups = rows.GroupBy(row => (row.Scope, row.ProjectId, row.ContextLabel, row.WorkspaceId, row.Path)).Where(group => group.Count() > 1);
         foreach (var group in groups)
         {
@@ -52,6 +54,7 @@ public sealed class ChunkBoundaryRepair(
             var ordered = InTextOrder(group.ToList());
             if (ordered is null)
             {
+                notesUnproven++;
                 continue;
             }
 
@@ -82,7 +85,7 @@ public sealed class ChunkBoundaryRepair(
 
         filesReingested += await ReingestCutCodeFilesAsync(connection, store, cancellationToken);
 
-        return new ChunkBoundaryRepairReport(filesReingested, groupsRepaired, rowsWritten);
+        return new ChunkBoundaryRepairReport(filesReingested, groupsRepaired, rowsWritten, notesUnproven);
     }
 
     /// <summary>A file's rows by position; a note's rows in the order <see cref="NoteTextOrder" /> proves, or null

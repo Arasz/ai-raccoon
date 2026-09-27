@@ -82,7 +82,8 @@ merged note's own order, so before the renumber sync lists the source-citing not
 and afterwards runs the note repair on those paths only. A sync that brings no notes repairs nothing.
 
 **The chunk-boundary repair orders a note by `NoteTextOrder`.** A note it cannot prove is skipped,
-not re-chunked from a guessed order. When it renumbers a source file's partition after a re-chunk,
+not re-chunked from a guessed order, and counted: `ChunkBoundaryRepairReport.NotesUnproven`, logged
+with the job's other counts as event 447. When it renumbers a source file's partition after a re-chunk,
 the repaired group's rows then take the group's positions in text order, so the renumber yields text
 order whether or not `note-chunk-order-v1` ran first. File rows are ordered by position as before.
 
