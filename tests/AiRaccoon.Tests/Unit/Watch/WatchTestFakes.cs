@@ -192,8 +192,14 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         return Task.CompletedTask;
     }
 
-    public Task<string?> GetFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
-        Task.FromResult(FileHashes.TryGetValue(Key(projectId, path), out var file) ? file.Hash : null);
+    /// <summary>Runs as a fingerprint is read — lets a test delete the file between the digest's read and its replace.</summary>
+    public Action<string>? OnGetFileHash { get; set; }
+
+    public Task<string?> GetFileHashAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    {
+        OnGetFileHash?.Invoke(path);
+        return Task.FromResult(FileHashes.TryGetValue(Key(projectId, path), out var file) ? file.Hash : null);
+    }
 
     public Task<bool> HasFingerprintAtOrUnderAsync(string projectId, string path,
         CancellationToken cancellationToken = default)
@@ -297,8 +303,12 @@ internal sealed class FakeIgnoreRulesProvider : IIgnoreRulesProvider
         _afterFirstCallByRoot[root] = after;
     }
 
+    /// <summary>Runs on every load — lets a test delete a file after the digest saw it exist.</summary>
+    public Action? OnLoad { get; set; }
+
     public Task<IgnoreRules> LoadAsync(string root, CancellationToken cancellationToken = default)
     {
+        OnLoad?.Invoke();
         LoadCalls.Add(root);
         var current = _rulesByRoot.GetValueOrDefault(root, IgnoreRules.Empty);
         if (_afterFirstCallByRoot.TryGetValue(root, out var after))

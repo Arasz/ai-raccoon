@@ -83,6 +83,22 @@ public sealed class WatchDigestExecutor(
             return;
         }
 
+        try
+        {
+            await DigestExistingFileAsync(projectId, normalizedWatch, normalized, isIgnoreFile, cancellationToken);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException && !File.Exists(normalized))
+        {
+            // Deleted after the existence check above, e.g. by a branch switch: a delete, not a
+            // digest failure that would count against the whole watch.
+            await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken);
+        }
+    }
+
+    /// <summary>Hash-skip or replace for a file that existed when the digest looked; throws FileNotFoundException if it vanishes mid-way.</summary>
+    private async Task DigestExistingFileAsync(string projectId, string normalizedWatch, string normalized,
+        bool isIgnoreFile, CancellationToken cancellationToken)
+    {
         // Read before the content: a write racing the digest then leaves a size that no longer matches.
         var size = new FileInfo(normalized).Length;
         var content = await File.ReadAllTextAsync(normalized, cancellationToken);

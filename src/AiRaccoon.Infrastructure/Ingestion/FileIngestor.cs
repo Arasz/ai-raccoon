@@ -160,7 +160,16 @@ public sealed class FileIngestor(
             {
                 if (codeFileTypeMatcher.IsCodeFile(file))
                 {
-                    var codeResult = await codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope);
+                    CodeIngestResult codeResult;
+                    try
+                    {
+                        codeResult = await codeIngestor.IngestFileAsync(connection, projectId, file, cancellationToken, scope);
+                    }
+                    catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException && !File.Exists(file))
+                    {
+                        continue; // deleted after the walk listed it: nothing to ingest
+                    }
+
                     indexed += codeResult.Rows;
                     codeRowsWritten |= codeResult.Rows > 0;
                     walked.Add(new WalkedFile(file, [], ResolveCodeChunkHashes(codeResult)));
@@ -169,7 +178,16 @@ public sealed class FileIngestor(
                 continue;
             }
 
-            var content = await File.ReadAllTextAsync(file, cancellationToken);
+            string content;
+            try
+            {
+                content = await File.ReadAllTextAsync(file, cancellationToken);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException && !File.Exists(file))
+            {
+                continue; // deleted after the walk listed it: nothing to ingest
+            }
+
             var (rows, hashes) = await InsertChunksAsync(connection, projectId, file, content, handler, context,
                     cancellationToken);
             indexed += rows;

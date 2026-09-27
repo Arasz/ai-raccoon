@@ -169,6 +169,59 @@ public sealed class FileIngestorIgnoreTests : IDisposable
             "the walk root's own ignore file must win even when the ancestor scope entry has none");
     }
 
+    /// <summary>
+    ///     Code and memory files deleted after the walk listed them are skipped; the rest of the
+    ///     directory still ingests.
+    /// </summary>
+    [RetryFact]
+    public async Task IngestDirectoryAsync_FilesDeletedAfterTheWalk_AreSkipped()
+    {
+        var trigger = Path.Combine(_testDir, "a.cs");
+        var goneCode = Path.Combine(_testDir, "b.cs");
+        var goneMemory = Path.Combine(_testDir, "c.md");
+        var kept = Path.Combine(_testDir, "d.md");
+        foreach (var file in new[] { trigger, goneCode, goneMemory, kept })
+        {
+            await File.WriteAllTextAsync(file, "# content", TestContext.Current.CancellationToken);
+        }
+
+        var sourceStore = new SqliteMemorySourceStore(_factory);
+        var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
+        var ingestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
+            new IgnoreRulesProvider(), new CsCodeFiles(), new DeletingCodeIngestor(trigger, [goneCode, goneMemory]),
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
+
+        var result = await ingestor.IngestDirectoryAsync(_conn, "test_project", _testDir, null,
+            TestContext.Current.CancellationToken);
+
+        result.Indexed.ShouldBe(1);
+        SelectSourceFiles().ShouldBe([kept]);
+    }
+
+    private sealed class CsCodeFiles : ICodeFileTypeMatcher
+    {
+        public bool IsCodeFile(string path) => path.EndsWith(".cs", StringComparison.Ordinal);
+    }
+
+    /// <summary>Reads each code file like the real ingestor; ingesting <paramref name="trigger" /> deletes files the walk already listed.</summary>
+    private sealed class DeletingCodeIngestor(string trigger, string[] victims) : ICodeIngestor
+    {
+        public async Task<CodeIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
+            CancellationToken cancellationToken, IReadOnlyList<string>? scope = null)
+        {
+            await File.ReadAllTextAsync(path, cancellationToken);
+            if (path == trigger)
+            {
+                foreach (var victim in victims)
+                {
+                    File.Delete(victim);
+                }
+            }
+
+            return new CodeIngestResult(0, false);
+        }
+    }
+
     private FileIngestor CreateIngestorWithWatchStore(IWatchStore watchStore)
     {
         var sourceStore = new SqliteMemorySourceStore(_factory);
