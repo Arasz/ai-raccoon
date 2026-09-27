@@ -42,6 +42,8 @@ tries every rotation of the id order and of the position order. That covers both
 a chunk-boundary repair that left a run's pieces in the run's place. For each candidate it joins the
 rows, trying each overlap where a row starts with the previous row's tail (longest first, capped at
 256 joins per order), and accepts the order only when the joined text hashes to the path's stem.
+`WritePathFor` hashes the body as sent, while the chunker stores it with `\r\n` and lone `\r`
+turned into `\n`, so the check also tries the join with every `\n` restored to `\r\n`, then to `\r`.
 No match means null; nothing is guessed. `Repositioned` hands a note's own positions, sorted, to
 its rows in text order. It lists only rows that move and does nothing when any position is unknown
 (`-1`), so it never invents a position and never touches another row of the partition.
@@ -78,7 +80,7 @@ order whether or not `note-chunk-order-v1` ran first. File rows are ordered by p
   the opening chunk as `chunkIndex` 0, and adjacency in `SourceAffinityRanker` means textual
   neighbours.
 - **Left as stored, and counted.** A note whose rows do not join back into its body: a body with
-  `\r\n` line endings (the chunker normalises them, so the hash differs), an oversized fence the
+  mixed line endings (only one ending used throughout can be restored), an oversized fence the
   chunker re-fenced, a note with two identical chunks deduplicated to one row, or rows a past repair
   changed. Event 446 reports how many.
 - **Unchanged.** Plain notes (no source file) carry no positions, so only the boundary repair reads
@@ -88,7 +90,7 @@ order whether or not `note-chunk-order-v1` ran first. File rows are ordered by p
   A note in either write layout proves on one of the first three candidate orders tried (id order,
   position order, id order with the last row first).
 - **Tests.** `SourceCitingNoteChunkOrderTests` (write order and the `memory_search` chunk index),
-  `NoteTextOrderTests`, `NoteChunkOrderRepairTests` (seeded opening-last note, a note already in
+  `NoteTextOrderTests`, `NoteChunkOrderRepairTests` (seeded opening-last note, one written with `\r\n`, a note already in
   order, an unprovable note, the job), `NoteChunkOrderRepairJobOrderTests` (registered before the
   boundary repair), `SyncServiceTests.MemorySync_Merge_LeavesASourceCitingNoteInTextOrder` and
   `ChunkBoundaryRepairTests` (text order after a renumber, a note stored in text order, an

@@ -65,6 +65,20 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
         (await PositionsAsync(path)).ShouldBe([.. Enumerable.Range(0, values.Count).Select(i => (long)i)], "the note keeps the positions it held");
     }
 
+    /// <summary>The path hashes the body as sent; the rows hold it with \n endings.</summary>
+    [RetryFact]
+    public async Task Run_NoteWrittenWithCrLfEndings_IsPutInTextOrder()
+    {
+        var path = await WriteAsync(SourceCitingNoteChunkOrderTests.LongNote().Replace("\n", "\r\n", StringComparison.Ordinal));
+        await StoreOpeningLastAsync(path);
+
+        var report = await RunAsync();
+
+        report.NotesReordered.ShouldBe(1);
+        report.NotesUnproven.ShouldBe(0);
+        (await ValuesByPositionAsync(path))[0].ShouldStartWith("Opening marker zq71");
+    }
+
     [RetryFact]
     public async Task Run_NoteAlreadyInTextOrder_MovesNothing()
     {

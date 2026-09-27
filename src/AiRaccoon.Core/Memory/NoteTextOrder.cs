@@ -14,6 +14,10 @@ public static class NoteTextOrder
 {
     private const int MaxJoinsPerOrder = 256;
 
+    /// <summary>The path hashes the body as written, but rows hold it with \n endings; a body that used one other
+    /// ending throughout is restored and checked too. Mixed endings cannot be restored without guessing.</summary>
+    private static readonly string[] BodyLineEndings = ["\n", "\r\n", "\r"];
+
     /// <summary>The rows in text order, or null when no candidate order joins back into the body the path names.</summary>
     public static IReadOnlyList<NoteRow>? Find(string path, IReadOnlyList<NoteRow> rows)
     {
@@ -88,7 +92,10 @@ public static class NoteTextOrder
         if (next == order.Count)
         {
             budget--;
-            return string.Equals(ContentHash.OfValue(text.ToString()), bodyHash, StringComparison.Ordinal);
+            var joined = text.ToString();
+            return BodyLineEndings.Any(ending => string.Equals(
+                ContentHash.OfValue(ending == "\n" ? joined : joined.Replace("\n", ending, StringComparison.Ordinal)),
+                bodyHash, StringComparison.Ordinal));
         }
 
         var before = order[next - 1].Value;

@@ -61,6 +61,21 @@ public sealed class NoteTextOrderTests
         Values(NoteTextOrder.Find(NotePath, Rows(chunks, idOrder, positionOrder))).ShouldBe(chunks);
     }
 
+    /// <summary>memory_write names the path after the body as sent, but the chunker stores it with \n line endings,
+    /// so a body written with \r\n (or a lone \r) joins back only once those endings are restored.</summary>
+    [Theory]
+    [InlineData("\r\n")]
+    [InlineData("\r")]
+    public void Find_BodyWrittenWithOtherLineEndings_ReturnsTheTextOrder(string lineEnding)
+    {
+        var body = Note.Replace("\n", lineEnding, StringComparison.Ordinal);
+        var chunks = TestData.RealMarkdownChunker().Chunk(body, 96, 24);
+        chunks.ShouldAllBe(chunk => !chunk.Contains('\r'), "premise: the chunker stores \\n line endings");
+        var idOrder = Enumerable.Range(1, chunks.Count - 1).Append(0).ToList();
+
+        Values(NoteTextOrder.Find($"{ContentHash.OfValue(body)}.md", Rows(chunks, idOrder))).ShouldBe(chunks);
+    }
+
     [Fact]
     public void Find_RowsThatDoNotJoinBackIntoTheNote_ReturnsNull()
     {
