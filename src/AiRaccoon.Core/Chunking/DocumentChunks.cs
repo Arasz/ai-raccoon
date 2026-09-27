@@ -6,6 +6,9 @@ namespace AiRaccoon.Core.Chunking;
 /// <summary>One stored row of a file: the chunk, its content hash, and its document position.</summary>
 public sealed record DocumentChunk(TextChunk Chunk, string Hash, int Position);
 
+/// <summary>A row of a (ctx, source_file) position partition: one of the file's own rows, or a note citing the file.</summary>
+public sealed record PartitionRow(long Id, bool IsFileRow, long ChunkIndex);
+
 public static class DocumentChunks
 {
     /// <summary>The rows a file's chunks are stored as: a chunk repeated verbatim is one row at its first occurrence,
@@ -28,4 +31,44 @@ public static class DocumentChunks
 
         return rows;
     }
+
+    /// <summary>
+    ///     Positions for a (ctx, source_file) partition, whose total_chunks is its row count: the file's rows take
+    ///     <paramref name="filePositions" /> (-1 for a row it lacks), or keep their stored order when it is null, and
+    ///     every other row follows them in its stored order.
+    /// </summary>
+    public static IReadOnlyDictionary<long, long> PartitionPositions(IReadOnlyList<PartitionRow> partition,
+        IReadOnlyDictionary<long, int>? filePositions)
+    {
+        Guard.IsNotNull(partition);
+
+        var fileRows = InStoredOrder(partition.Where(row => row.IsFileRow)).ToList();
+        var positions = new Dictionary<long, long>(partition.Count);
+        for (var i = 0; i < fileRows.Count; i++)
+        {
+            positions[fileRows[i].Id] = filePositions is null ? i
+                : filePositions.TryGetValue(fileRows[i].Id, out var position) ? position : -1;
+        }
+
+        var start = positions.Count == 0 ? 0 : Math.Max(fileRows.Count, positions.Values.Max() + 1);
+        foreach (var (id, index) in After(start, partition.Where(row => !row.IsFileRow)))
+        {
+            positions[id] = index;
+        }
+
+        return positions;
+    }
+
+    /// <summary>Positions for the rows citing a file that follow its first <paramref name="start" /> positions, in
+    /// their stored order.</summary>
+    public static IEnumerable<(long Id, long ChunkIndex)> After(long start, IEnumerable<PartitionRow> citing)
+    {
+        Guard.IsNotNull(citing);
+
+        return InStoredOrder(citing).Select((row, i) => (row.Id, start + i));
+    }
+
+    /// <summary>Known positions ascending, then unknown ones (-1) by id.</summary>
+    private static IOrderedEnumerable<PartitionRow> InStoredOrder(IEnumerable<PartitionRow> rows) =>
+        rows.OrderBy(row => row.ChunkIndex < 0).ThenBy(row => row.ChunkIndex).ThenBy(row => row.Id);
 }

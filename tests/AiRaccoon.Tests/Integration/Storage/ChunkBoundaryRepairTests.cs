@@ -220,6 +220,31 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         string.Concat(positions.Select(p => p.Value)).ShouldBe(text, "positions follow the text order");
     }
 
+    /// <summary>Re-chunking a gone file cited by a note puts the file's rows first and the note after them, even when the
+    /// note's stored position sat among the file's.</summary>
+    [RetryFact]
+    public async Task Run_FileGoneFromDiskCitedByANote_IsRepairedWithTheNoteAfterTheFileRows()
+    {
+        const string closing = "Closing paragraph: the parish council thanked the committee.\n";
+        var text = LongNote() + "\n" + closing;
+        var file = await IngestFileAsync("gone-cited.md", text);
+        var (head, tail) = CutInside(LongNote(), "vk83jq");
+        await ResplitAsync(file, [head, tail + "\n", closing], noteOrder: false);
+        var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "The minutes were read aloud.", SourceFile: file),
+            TestContext.Current.CancellationToken);
+        await SetPositionAsync(await IdOfAsync(note.Hash), 1);
+        File.Delete(file);
+
+        var report = await RepairAsync();
+
+        report.GroupsRepaired.ShouldBe(1);
+        var partition = await PartitionAsync(file);
+        partition.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, partition.Count)]);
+        partition.ShouldAllBe(p => p.TotalChunks == partition.Count);
+        partition[^1].Value.ShouldBe("The minutes were read aloud.", "the note follows the file's rows");
+        string.Concat(partition.SkipLast(1).Select(p => p.Value)).ShouldBe(text);
+    }
+
     [RetryFact]
     public async Task Run_TermLongerThanTheBudget_IsLeftAsItIs()
     {
@@ -357,6 +382,38 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var positions = await PositionsAsync(file);
         positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count)]);
         (await ValuesAsync(file)).ShouldNotContain(value => value.Contains("Removed section"));
+    }
+
+    /// <summary>A note citing a file shares its position partition: the repair puts the file's rows first and the note
+    /// after them, total_chunks counts both, and a later memory_write keeps them agreeing so a second run has nothing to do.</summary>
+    [RetryFact]
+    public async Task Run_FileCitedByANote_NumbersTheWholePartitionAndIsIdempotent()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var file = await IngestFileAsync("cited.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        var inDocumentOrder = await ValuesAsync(file);
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "The plan was reviewed by the parish council.", SourceFile: file), ct);
+        await SetPositionAsync(ids[^1], 1);
+
+        var first = await RepairAsync();
+
+        first.FilesRepositioned.ShouldBe(1);
+        var partition = await PartitionAsync(file);
+        partition.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count + 1)]);
+        partition.ShouldAllBe(p => p.TotalChunks == ids.Count + 1, "total_chunks counts the note that cites the file");
+        partition.Take(ids.Count).Select(p => p.Value).ToList().ShouldBe(inDocumentOrder, "the file's rows come first");
+
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "The council approved the plan a week later.", SourceFile: file), ct);
+        partition = await PartitionAsync(file);
+        partition.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count + 2)]);
+        partition.ShouldAllBe(p => p.TotalChunks == ids.Count + 2);
+
+        var second = await RepairAsync();
+
+        second.ShouldBe(new ChunkBoundaryRepairReport(0, 0, 0, 0, 0), "the repair and memory_write agree on what the partition holds");
+        (await PartitionAsync(file)).ShouldBe(partition);
     }
 
     /// <summary>A code file whose identifier is longer than the budget is cut the same way on every ingest, so a
@@ -575,6 +632,15 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
             new { path })];
     }
 
+    /// <summary>Every row of a file's position partition — its own rows and the notes citing it — by position.</summary>
+    private async Task<List<Position>> PartitionAsync(string file)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return [.. await connection.QueryAsync<Position>(
+            "SELECT chunk_index AS ChunkIndex, total_chunks AS TotalChunks, value AS Value FROM entries WHERE source_file = @file ORDER BY chunk_index",
+            new { file })];
+    }
+
     /// <summary>A markdown document long enough to span several rows.</summary>
     private static string SectionedDocument(int sections) =>
         string.Concat(Enumerable.Range(0, sections).Select(i =>
@@ -584,6 +650,12 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return [.. await connection.QueryAsync<long>("SELECT id FROM entries WHERE path = @path ORDER BY id", new { path })];
+    }
+
+    private async Task<long> IdOfAsync(string hash)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<long>("SELECT id FROM entries WHERE hash = @hash", new { hash });
     }
 
     private async Task SetPositionAsync(long id, long chunkIndex)
