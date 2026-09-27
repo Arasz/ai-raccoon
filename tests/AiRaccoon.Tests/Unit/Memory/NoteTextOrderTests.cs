@@ -76,6 +76,48 @@ public sealed class NoteTextOrderTests
         Values(NoteTextOrder.Find($"{ContentHash.OfValue(body)}.md", Rows(chunks, idOrder))).ShouldBe(chunks);
     }
 
+    /// <summary>A note of one line per row, stored with its opening last.</summary>
+    private static (string Path, List<NoteRow> Rows) LineNote(int rowCount)
+    {
+        var lines = Enumerable.Range(0, rowCount).Select(i => $"Line {i:D5} of a very long note.\n").ToList();
+        var idOrder = Enumerable.Range(1, rowCount - 1).Append(0).ToList();
+        return ($"{ContentHash.OfValue(string.Concat(lines))}.md", Rows(lines, idOrder));
+    }
+
+    [Fact]
+    public void Find_NoteWithAsManyRowsAsTheCap_ReturnsTheTextOrder()
+    {
+        var (path, rows) = LineNote(NoteTextOrder.MaxRows);
+
+        NoteTextOrder.Find(path, rows).ShouldNotBeNull().Count.ShouldBe(NoteTextOrder.MaxRows);
+    }
+
+    /// <summary>Past the cap a note is left as stored rather than searched: the cost grows with the row count.</summary>
+    [Fact]
+    public void Find_NoteWithMoreRowsThanTheCap_ReturnsNull()
+    {
+        var (path, rows) = LineNote(NoteTextOrder.MaxRows + 1);
+
+        NoteTextOrder.Find(path, rows).ShouldBeNull();
+    }
+
+    /// <summary>Identical paragraphs let every line boundary pass for an overlay, so a search over the joins could
+    /// branch without end; a note it cannot prove must still stop inside a fixed budget.</summary>
+    [Fact]
+    public void Find_LargeRepetitiveNoteItCannotProve_StopsWithinTheWorkBudget()
+    {
+        var rows = Enumerable.Range(0, 800)
+            .Select(i => new NoteRow(i, "Same paragraph.\nSame paragraph.\nSame paragraph.\n", i))
+            .ToList();
+        var started = System.Diagnostics.Stopwatch.StartNew();
+
+        var order = NoteTextOrder.Find($"{ContentHash.OfValue("some other body")}.md", rows, out var work);
+
+        order.ShouldBeNull();
+        work.ShouldBeLessThanOrEqualTo(NoteTextOrder.MaxWork);
+        started.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(3));
+    }
+
     [Fact]
     public void Find_RowsThatDoNotJoinBackIntoTheNote_ReturnsNull()
     {
