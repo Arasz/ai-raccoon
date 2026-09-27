@@ -56,7 +56,7 @@ public sealed class ChunkBoundaryRepair(
                 continue;
             }
 
-            if (isFile && ordered[0].WorkspaceId is null && await TryReingestAsync(store, ordered[0], cancellationToken))
+            if (isFile && ordered[0].WorkspaceId is null && await TryReingestAsync(store, ordered[0].ProjectId!, ordered[0].Path, cancellationToken))
             {
                 filesReingested++;
                 continue;
@@ -74,6 +74,8 @@ public sealed class ChunkBoundaryRepair(
         {
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
         }
+
+        filesReingested += await ReingestCutCodeFilesAsync(connection, store, cancellationToken);
 
         return new ChunkBoundaryRepairReport(filesReingested, groupsRepaired, rowsWritten);
     }
@@ -104,19 +106,41 @@ public sealed class ChunkBoundaryRepair(
         return false;
     }
 
-    /// <summary>Re-ingests a file row's file through the same unconditional replace the reingest repair uses; false
-    /// when the file cannot be read or ingested, so the caller repairs from the rows instead.</summary>
-    private static async Task<bool> TryReingestAsync(IMemoryStore store, Row row, CancellationToken cancellationToken)
+    /// <summary>Code rows carry line ranges that cannot be re-derived from the rows, so a cut code file is only
+    /// re-ingested from disk; one no longer on disk is left for the watch digest to prune.</summary>
+    private static async Task<int> ReingestCutCodeFilesAsync(SqliteConnection connection, IMemoryStore store,
+        CancellationToken cancellationToken)
+    {
+        var rows = await connection.QueryAsync<CodeRow>(new CommandDefinition(
+            "SELECT id AS Id, project_id AS ProjectId, path AS Path, value AS Value, chunk_index AS ChunkIndex FROM code_entries",
+            cancellationToken: cancellationToken));
+        var reingested = 0;
+        foreach (var group in rows.GroupBy(row => (row.ProjectId, row.Path)))
+        {
+            var ordered = group.OrderBy(row => row.ChunkIndex < 0 ? long.MaxValue : row.ChunkIndex).ThenBy(row => row.Id).ToList();
+            var cut = Enumerable.Range(0, ordered.Count - 1).Any(i => ChunkSeam.CutsATerm(ordered[i].Value, ordered[i + 1].Value));
+            if (cut && await TryReingestAsync(store, group.Key.ProjectId, group.Key.Path, cancellationToken))
+            {
+                reingested++;
+            }
+        }
+
+        return reingested;
+    }
+
+    /// <summary>Re-ingests a file through the same unconditional replace the reingest repair uses; false when the
+    /// file cannot be read or ingested, so the caller repairs from the rows instead.</summary>
+    private static async Task<bool> TryReingestAsync(IMemoryStore store, string projectId, string path, CancellationToken cancellationToken)
     {
         try
         {
-            if (!File.Exists(row.Path))
+            if (!File.Exists(path))
             {
                 return false;
             }
 
-            var content = await File.ReadAllTextAsync(row.Path, cancellationToken);
-            await store.ReplaceAsync(row.ProjectId!, row.Path, WatchDigestExecutor.ComputeHash(row.Path, content), cancellationToken);
+            var content = await File.ReadAllTextAsync(path, cancellationToken);
+            await store.ReplaceAsync(projectId, path, WatchDigestExecutor.ComputeHash(path, content), cancellationToken);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PathOutsideScopeException)
@@ -275,6 +299,8 @@ public sealed class ChunkBoundaryRepair(
                 chunkIndex = -1,
                 totalChunks = 0
             }, cancellationToken: cancellationToken));
+
+    private sealed record CodeRow(long Id, string ProjectId, string Path, string Value, long ChunkIndex);
 
     private sealed record Row(
         long Id,

@@ -1,6 +1,8 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Chunking;
+using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -147,6 +149,43 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         (await ValuesAsync(path)).ShouldBe(before);
     }
 
+    [RetryFact]
+    public async Task Run_CodeFileCutMidIdentifier_IsReingestedFromTheFile()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var codeStore = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
+            TestData.CreateEmbeddingService(), null, null, null, null, new CodeChunker(new CharCountTokenizer(), 90), null, null);
+        var line = string.Join(" ", Enumerable.Range(0, 20).Select(i => $"register_handler_{i:D2}();")) + " dispatch_vk83jq();\n";
+        var file = Path.Combine(_dataRoot, "dispatch.cs");
+        await File.WriteAllTextAsync(file, line, ct);
+        await codeStore.IngestFileAsync(ProjectId, file, null, ct);
+        var (head, tail) = CutInside(line, "vk83jq");
+        await using (var connection = await _factory.OpenBankAsync(ct))
+        {
+            await connection.ExecuteAsync("DELETE FROM code_entries WHERE path = @file", new { file });
+            for (var i = 0; i < 2; i++)
+            {
+                var value = i == 0 ? head : tail;
+                await connection.ExecuteAsync(
+                    """
+                    INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end, project_id, created_at, updated_at, chunk_index, total_chunks)
+                    VALUES (@hash, @file, @value, @file, 1, 1, @projectId, 1, 1, @i, 2)
+                    """, new { hash = ContentHash.Of(file, value), file, value, projectId = ProjectId, i });
+            }
+        }
+
+        await using var repairConnection = await _factory.OpenBankAsync(ct);
+        var report = await new ChunkBoundaryRepair(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+                TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow))
+            .RunAsync(repairConnection, codeStore, ct);
+
+        report.FilesReingested.ShouldBe(1);
+        await using var check = await _factory.OpenBankAsync(ct);
+        (await check.QueryAsync<string>("SELECT value FROM code_entries WHERE path = @file", new { file }))
+            .ShouldContain(value => value.Contains("dispatch_vk83jq"));
+    }
+
     /// <summary>A piece no larger than the overlay could have been repeated at the start of the next row, so
     /// joining the two could duplicate text; such a seam is not one the old chunker's hard cut produced.</summary>
     [RetryFact]
@@ -280,4 +319,9 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     }
 
     private sealed record Position(long ChunkIndex, long TotalChunks, string Value);
+
+    private sealed class CharCountTokenizer : ICodeTokenizer
+    {
+        public int CountTokens(string text) => text.Length;
+    }
 }
