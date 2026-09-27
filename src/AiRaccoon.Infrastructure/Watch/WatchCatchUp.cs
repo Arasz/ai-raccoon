@@ -6,18 +6,9 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>
-///     Catch-up scan (docs/plans/file-watcher-implementation.md D1, ADR-0121): a never-synced watch
-///     gets a full initial scan; otherwise it re-queues each file whose mtime is at or after its own
-///     fingerprint's time or whose size differs from the recorded one, or that was never fingerprinted, reconciles deletions from downtime, and
-///     is single-flighted per (projectId, path).
-///     Enumeration also skips hidden directory segments, the built-in deny set
-///     (<see cref="WatchDenySet.Excludes" />, the same predicate the digest applies to events), and
-///     `ai-raccoon.ignore` matches (docs/work/2026-08-21-code-search-implementation-plan.md §2.1/
-///     §2.3); <see cref="ReconcileAsync" /> cleans fingerprinted-but-now-excluded paths, and a
-///     mid-scan edit to the ignore file is caught by re-comparing the loaded <see cref="IgnoreRules" />
-///     for value equality (its source text, not a filesystem mtime check) at the end of each pass —
-///     no new queue state on <see cref="WatchScanGuard" /> (pinned H10, which named mtime-recheck;
-///     this is the shape actually built, and both are §2.1-permitted).
+///     Catch-up scan (ADR-0121): a never-synced watch gets a full scan; otherwise each file is re-queued
+///     when it has no fingerprint, its mtime is at or after its fingerprint's time, or its size differs.
+///     Deletions from downtime are reconciled, and scans are single-flighted per (projectId, path).
 /// </summary>
 public sealed partial class WatchCatchUp(
     WatchPipeline pipeline,
@@ -51,13 +42,9 @@ public sealed partial class WatchCatchUp(
     public void CancelAllScans() => scanGuard.CancelAll();
 
     /// <summary>
-    ///     Deterministic core: files under path are due when <paramref name="stamps" /> is null (full
-    ///     scan), the file has no fingerprint, its mtime is at or after its fingerprint's unix second, or
-    ///     its size differs from a recorded one — a per-file check, so a missed event is never hidden by a later digest of another
-    ///     file. A watched FILE target enumerates
-    ///     itself (no ignore rules — no tree, §5.6); a missing target enumerates nothing
-    ///     (reconciliation removes its stale chunks). Directory enumeration skips hidden segments,
-    ///     the built-in deny set, and any path the ignore rules match.
+    ///     Lists the files under path that are due: all of them when <paramref name="stamps" /> is null,
+    ///     otherwise those with no fingerprint, an mtime at or after it, or a different size. Skips hidden
+    ///     and denied directories and ignore-rule matches; a file target lists itself, a missing one nothing.
     /// </summary>
     internal static IEnumerable<string> EnumerateFiles(IndexableFileWalk walk, string path, IReadOnlyDictionary<string, WatchFileStamp>? stamps,
         IgnoreRules? ignoreRules = null)
