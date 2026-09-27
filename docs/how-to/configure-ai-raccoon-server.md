@@ -483,10 +483,11 @@ ai-raccoon repair chunk-index --apply    # performs the repair
 **Nothing repairs itself.** This is not in the maintenance job list, so upgrading does not silently
 rewrite your bank — you choose when it runs, and the default is a report.
 
-It is **UPDATE-only**: it never inserts or deletes a row. Where a chunk's position genuinely cannot
-be known — the source file has been moved or deleted, or the entry was written directly by
-`memory_write` and has no file — it sets `chunk_index = -1`, meaning *position unknown*, rather than
-guessing. The ranker skips those rows when testing adjacency instead of treating `-1` as a neighbour
+It is **UPDATE-only**: it never inserts or deletes a row. A file's own rows take their document
+positions; a `memory_write` note that cites the file keeps its place after them, and every row's
+`total_chunks` becomes the number of rows sharing that file. Where a file row's position genuinely
+cannot be known — the source file has been moved or deleted, or the current chunker no longer
+produces that row — it sets `chunk_index = -1`, meaning *position unknown*, rather than guessing. The ranker skips those rows when testing adjacency instead of treating `-1` as a neighbour
 of `0`.
 
 ### Read the dry run before you apply it
@@ -513,7 +514,13 @@ wrong adjacency this fix exists to eliminate — but it also removes any adjacen
 rows, which is a different behaviour from having a correct one. Whether that is an improvement on
 your bank is not something the repair can tell you, and it has not been measured across a query set.
 
-So: **run the dry run, read the two numbers, and decide.** If most of your bank would go to `-1`,
+The dry run also reports a third number: rows whose position is already right but whose
+`total_chunks` is not. Fixing those changes nothing about adjacency.
+
+A dry run on a large bank can take minutes; the command waits for the server's answer (Ctrl-C to
+stop it) rather than giving up after a fixed time.
+
+So: **run the dry run, read the numbers, and decide.** If most of your bank would go to `-1`,
 re-ingesting the affected sources under the current chunker is the more thorough fix — that is what
 [`repair reingest`](#re-ingesting-files-chunk-index-repair-could-only-mark-unknown) below does, and
 this repair is not a substitute for it.

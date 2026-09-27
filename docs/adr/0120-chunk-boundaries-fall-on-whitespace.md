@@ -153,26 +153,35 @@ are written (#788).
   of 872 on one JSON file. Every other writer (the recomputes, the delete compaction,
   `repair chunk-index`) and the neighbour boost read it as the row count, with positions 0..n-1.
 
-**One definition.** Positions run 0..n-1 in document order, a repeated chunk takes the place of its
-first occurrence, and `total_chunks` is the number of rows. `DocumentChunks.Distinct` holds the rule;
-file ingest and `ChunkPositionScanner` both use it, and `repair chunk-index` now corrects a row whose
-total is wrong even when its position is right. The code corpus keeps chunker numbering: code hits
-carry line ranges and nothing pairs code positions.
+**One definition.** Positions belong to the (context, source file) partition, which holds a file's
+own rows and any `memory_write` note citing that file. `total_chunks` is the partition's row count.
+The file's rows come first, 0..n-1 in document order, a chunk repeated verbatim taking the place of
+its first occurrence; citing notes follow in the order they already hold. `DocumentChunks` in Core
+holds the rule (`Distinct`, `PartitionPositions`, `After`), and every writer uses it or already
+agreed with it: file ingest, `ChunkPositionScanner`, `repair chunk-index`, this repair, the id-order
+recomputes after a note write (a new note has the highest id, so it lands last), the delete
+compaction and sync's renumber. `repair chunk-index` now fixes and reports a row whose total is wrong
+even when its position is right. A position-only fix leaves the row's section alone, so the
+full-text index is not rewritten. The code corpus keeps chunker numbering: code hits carry line
+ranges and nothing pairs code positions.
 
-**The repair.** It now also selects a file group whose rows are not numbered 0..n-1 with total n. Before
-re-ingesting any file group it re-chunks the file with the current chunker. When the file yields
-exactly the stored rows (same distinct chunk count, every row reproduced), a re-ingest would change
-nothing but positions, so the rows take the positions and section labels the scan reports, in place,
-and keep their embeddings. That applies to workspace file rows too, since it never replaces a row. A
-file with a row the chunker no longer writes, or with a chunk no row holds (it grew on disk), is
-re-ingested as before; a workspace group is re-chunked from its rows instead, as re-ingest never
-touches workspace rows. A file gone from disk keeps the old path. The code corpus has no position
-scan, so a code file is still re-ingested when a seam is found, but it is counted only when its
-stored chunk hashes changed.
+**The repair.** It selects every file group, including a lone row, whose partition is not numbered
+this way, alongside groups with a seam. Before re-ingesting a file it re-chunks the file with the
+current chunker. When the file yields exactly the stored rows (same distinct chunk count, every row
+reproduced), a re-ingest would change nothing but positions, so the partition takes the scan's
+positions and section labels in place, and the rows keep their embeddings. That applies to workspace
+file rows too, since it never replaces a row. A file with a row the chunker no longer writes, or with
+a chunk no row holds (it grew on disk), is re-ingested as before. When neither applies (a workspace
+file that changed on disk, or a file gone from disk) and there is no cut to re-chunk, the partition
+is renumbered in the order it already holds. The code corpus has no position scan: a code file with
+a seam is still re-ingested on every run of the job, but counted only when its stored chunk hashes
+changed. Event 447 now also logs the files repositioned in place.
 
 The job is renamed `chunk-boundary-repair-v2` so a bank whose ledger already holds the v1 stamp runs
 it once more. The repair is idempotent: a file already correct moves nothing. `ChunkBoundaryRepairTests`,
-`ChunkIndexRepairTests` and `SqliteMemoryStoreChunkColumnMaintenanceTests` pin the new shapes (a file
-the chunker must cut, colliding positions, colliding positions plus a stale row, a file that grew, a
-gapped or inflated file, a repeated paragraph at ingest, a code file the chunker must cut). Each failed
-before its change.
+`ChunkIndexRepairTests`, `SqliteMemoryStoreChunkColumnMaintenanceTests` and `ProjectIdsRepairJobTests`
+pin the new shapes (a file the chunker must cut, colliding positions, colliding positions plus a stale
+row, a file that grew, a gapped or inflated file, a lone inflated row, a gapped file gone from disk or
+changed in a workspace, a workspace collision, a file cited by a note, a repeated paragraph at ingest,
+a total-only fix, a code file the chunker must cut). Each failed before its change, or under a
+mutation where it passed on the old code by design.
