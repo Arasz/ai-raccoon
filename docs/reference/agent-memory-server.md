@@ -334,6 +334,12 @@ config channel (see [Command-line options](#command-line-options)).
   every access tier. `memory_watch_remove` stops and unregisters; a non-existent watch is a
   no-op. Registration failures surface as `watching-disabled:` / `path-outside-scope:` /
   `path-not-found:` / `watch-overlap:` tool errors; watch failures never fail the server.
+- **Healing a missed change:** a watch's catch-up scan re-queues a file whose mtime or size no
+  longer matches the fingerprint recorded at its last digest — not only a file changed while the
+  server was stopped; a running server can miss a live event too (a `git checkout` burst, a
+  digest that failed, a watch stopped after five retries). Catch-up runs on restart, once every 5
+  minutes for every watch that has not stopped, and right away when a watch's first digest
+  succeeds after a failure ([ADR-0121](../adr/0121-restart-catch-up-compares-each-file-with-its-own-fingerprint.md)).
 - **`ai-raccoon.ignore`:** an optional gitignore-subset exclude file at the root of a watched
   directory (or a `memory_ingest_directory` call's root) — `<root>/ai-raccoon.ignore`, one file
   per root, never discovered in subdirectories; a `memory_ingest_directory` root without its own
