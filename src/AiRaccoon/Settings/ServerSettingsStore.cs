@@ -40,16 +40,19 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore
 {
     /// <summary>How long an ordinary settings call waits before the server counts as not answering.</summary>
-    public static readonly TimeSpan DefaultRequestDeadline = TimeSpan.FromSeconds(100);
+    private static readonly TimeSpan DefaultRequestDeadline = TimeSpan.FromSeconds(100);
 
     private readonly HttpClient _client;
+    private readonly TimeSpan _requestDeadline;
 
     public ServerSettingsStore(HttpClient client, string token, TimeSpan? requestDeadline = null)
     {
         Guard.IsNotNull(client);
         Guard.IsNotNullOrWhiteSpace(token);
         _client = client;
-        _client.Timeout = requestDeadline ?? DefaultRequestDeadline;
+        // The deadline is applied per request, so a repair report's bank-wide scan can run unbounded.
+        _client.Timeout = Timeout.InfiniteTimeSpan;
+        _requestDeadline = requestDeadline ?? DefaultRequestDeadline;
         _client.DefaultRequestHeaders.Remove(McpTokenGate.HeaderName);
         _client.DefaultRequestHeaders.Add(McpTokenGate.HeaderName, token);
     }
@@ -57,7 +60,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(key);
-        var response = await SendAsync(() => _client.GetAsync(SettingsProtocol.ForKey(key), cancellationToken), cancellationToken);
+        var response = await SendAsync(token => _client.GetAsync(SettingsProtocol.ForKey(key), token), cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
@@ -72,7 +75,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(prefix);
-        var response = await SendAsync(() => _client.GetAsync(SettingsProtocol.ForPrefix(prefix), cancellationToken), cancellationToken);
+        var response = await SendAsync(token => _client.GetAsync(SettingsProtocol.ForPrefix(prefix), token), cancellationToken);
         Ensure(response);
         var rows = await response.Content.ReadFromJsonAsync<SettingRows>(cancellationToken);
         return rows?.Rows ?? new Dictionary<string, string>(StringComparer.Ordinal);
@@ -81,15 +84,15 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(key);
-        var response = await SendAsync(() =>
-            _client.PutAsJsonAsync(SettingsProtocol.Path, new SettingWrite(key, value), cancellationToken), cancellationToken);
+        var response = await SendAsync(token =>
+            _client.PutAsJsonAsync(SettingsProtocol.Path, new SettingWrite(key, value), token), cancellationToken);
         Ensure(response);
     }
 
     public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(key);
-        var response = await SendAsync(() => _client.DeleteAsync(SettingsProtocol.ForKey(key), cancellationToken), cancellationToken);
+        var response = await SendAsync(token => _client.DeleteAsync(SettingsProtocol.ForKey(key), token), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             // Mirror of StartModelMigrationAsync: the endpoint's 409 body is the refusal reason.
@@ -104,9 +107,9 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(provider);
-        var response = await SendAsync(() =>
+        var response = await SendAsync(token =>
             _client.PostAsJsonAsync(SettingsProtocol.ModelPath, new ModelMigrationRequest(provider, model, baseUrl),
-                cancellationToken), cancellationToken);
+                token), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ModelMigrationInProgressException(await response.Content.ReadAsStringAsync(cancellationToken));
@@ -127,9 +130,9 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(directory);
-        var response = await SendAsync(() =>
+        var response = await SendAsync(token =>
             _client.PostAsJsonAsync(SettingsProtocol.ModelCodePath, new ModelCodeActivationRequest(directory),
-                cancellationToken), cancellationToken);
+                token), cancellationToken);
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             throw new CodeEngineActivationRefusedException(await response.Content.ReadAsStringAsync(cancellationToken));
@@ -143,7 +146,8 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     /// <inheritdoc />
     public async Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default)
     {
-        var response = await SendAsync(() => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.Reingest), cancellationToken), cancellationToken);
+        var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.Reingest), token), cancellationToken,
+            Timeout.InfiniteTimeSpan);
         Ensure(response);
         return (await response.Content.ReadFromJsonAsync<ReingestRepairReport>(cancellationToken))!;
     }
@@ -151,7 +155,8 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     /// <inheritdoc />
     public async Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default)
     {
-        var response = await SendAsync(() => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ChunkIndex), cancellationToken), cancellationToken);
+        var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ChunkIndex), token), cancellationToken,
+            Timeout.InfiniteTimeSpan);
         Ensure(response);
         return (await response.Content.ReadFromJsonAsync<ChunkIndexRepairReport>(cancellationToken))!;
     }
@@ -159,7 +164,8 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     /// <inheritdoc />
     public async Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default)
     {
-        var response = await SendAsync(() => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ProjectIds), cancellationToken), cancellationToken);
+        var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ProjectIds), token), cancellationToken,
+            Timeout.InfiniteTimeSpan);
         Ensure(response);
         return (await response.Content.ReadFromJsonAsync<ProjectIdCensusReport>(cancellationToken))!;
     }
@@ -167,15 +173,15 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     /// <inheritdoc />
     public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null)
     {
-        var response = await SendAsync(() =>
-            _client.PostAsJsonAsync(RepairProtocol.Path, new RepairRequest(kind.ToKey(), projectIdsMapJson), cancellationToken), cancellationToken);
+        var response = await SendAsync(token =>
+            _client.PostAsJsonAsync(RepairProtocol.Path, new RepairRequest(kind.ToKey(), projectIdsMapJson), token), cancellationToken);
         Ensure(response);
     }
 
     /// <inheritdoc />
     public async Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default)
     {
-        var response = await SendAsync(() => _client.GetAsync(PromotionQueuePruneProtocol.Path, cancellationToken), cancellationToken);
+        var response = await SendAsync(token => _client.GetAsync(PromotionQueuePruneProtocol.Path, token), cancellationToken);
         Ensure(response);
         return (await response.Content.ReadFromJsonAsync<PromotionQueueOrphanReport>(cancellationToken))!;
     }
@@ -183,15 +189,15 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     /// <inheritdoc />
     public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default)
     {
-        var response = await SendAsync(() =>
-            _client.PostAsync(PromotionQueuePruneProtocol.Path, null, cancellationToken), cancellationToken);
+        var response = await SendAsync(token =>
+            _client.PostAsync(PromotionQueuePruneProtocol.Path, null, token), cancellationToken);
         Ensure(response);
     }
 
     /// <inheritdoc />
     public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
-        var response = await SendAsync(() => _client.GetAsync(MaintenanceStatsProtocol.Path, cancellationToken), cancellationToken);
+        var response = await SendAsync(token => _client.GetAsync(MaintenanceStatsProtocol.Path, token), cancellationToken);
         Ensure(response);
         return (await response.Content.ReadFromJsonAsync<BankStats>(cancellationToken))!;
     }
@@ -199,7 +205,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     /// <inheritdoc />
     public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default)
     {
-        var response = await SendAsync(() => _client.GetAsync(NoiseSummaryProtocol.Path, cancellationToken), cancellationToken);
+        var response = await SendAsync(token => _client.GetAsync(NoiseSummaryProtocol.Path, token), cancellationToken);
         Ensure(response);
         return (await response.Content.ReadFromJsonAsync<NoiseEntrySummary>(cancellationToken))!;
     }
@@ -207,26 +213,36 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     /// <inheritdoc />
     public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default)
     {
-        var response = await SendAsync(() => _client.GetAsync(WatchRegisteredProtocol.Path, cancellationToken), cancellationToken);
+        var response = await SendAsync(token => _client.GetAsync(WatchRegisteredProtocol.Path, token), cancellationToken);
         Ensure(response);
         return (await response.Content.ReadFromJsonAsync<List<WatchRegistration>>(cancellationToken))!;
     }
 
     /// <summary>
-    ///     A transport failure is reported as unavailable rather than surfacing a bare
-    ///     HttpRequestException: a caller has to be able to tell "no server answered" — where a write
-    ///     certainly did not land — from "the server said no".
+    ///     A transport failure, or no answer within <paramref name="deadline" /> (the request deadline
+    ///     by default), is reported as unavailable rather than surfacing a bare HttpRequestException: a
+    ///     caller has to be able to tell "no server answered" — where a write certainly did not land —
+    ///     from "the server said no". The caller's own cancellation still surfaces as cancellation.
     /// </summary>
-    private async Task<HttpResponseMessage> SendAsync(Func<Task<HttpResponseMessage>> send, CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendAsync(Func<CancellationToken, Task<HttpResponseMessage>> send,
+        CancellationToken cancellationToken, TimeSpan? deadline = null)
     {
+        var limit = deadline ?? _requestDeadline;
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bounded.CancelAfter(limit);
         try
         {
-            return await send();
+            return await send(bounded.Token);
         }
-        catch (Exception ex) when (ex is HttpRequestException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        catch (HttpRequestException ex)
         {
             throw new SettingsServerUnavailableException(ErrorCode.Reach.StoppedAnswering,
                 $"ai-raccoon: no settings server answered at {_client.BaseAddress} ({ex.Message})", ex);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new SettingsServerUnavailableException(ErrorCode.Reach.StoppedAnswering,
+                $"ai-raccoon: no settings server answered at {_client.BaseAddress} within {limit.TotalSeconds:0.###}s", ex);
         }
     }
 
