@@ -166,7 +166,8 @@ public static class NoteTextOrder
     }
 
     /// <summary>Overlay lengths the next row may start with, longest first: whole lines that open it and also close the
-    /// row before, or none. The chunker's overlay is always whole units of lines copied from the previous chunk.</summary>
+    /// row before, or none. The chunker's overlay is whole units, and a unit that starts mid-line (a later piece of a cut
+    /// line) never shares a row with the piece before it.</summary>
     private static List<int> Overlays(string before, string value, ref int work, int limit)
     {
         List<int> overlays = [];

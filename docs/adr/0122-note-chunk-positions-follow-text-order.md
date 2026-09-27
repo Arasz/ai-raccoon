@@ -41,9 +41,16 @@ opening the lowest position of the note's run. The returned entry still addresse
 tries the id order and the position order, each also with up to four of its last rows moved to the
 front. That covers both write layouts (the opening-last one needs one move), and a chunk-boundary
 repair that left a short run's pieces in the run's place. For each candidate it joins the rows,
-trying each overlap where whole lines open a row and also close the row before (longest first; the
-chunker's overlay is always whole units of lines), and accepts the order only when the joined text
-hashes to the path's stem. The search walks the junctions with an explicit stack, not recursion, so a
+trying each overlap where whole lines open a row and also close the row before (longest first), and
+accepts the order only when the joined text hashes to the path's stem. Requiring a line start on the
+row-before side is what keeps a lone blank line from matching at every junction, and it loses no real
+overlay. `MarkdownChunker` copies whole units forward as overlay, and the only unit that does not start
+a line is a later piece of a line `AddUnitOrSplit` cut because it was over budget. That piece can be the
+overlay (a short last piece is), but it never shares a row with the piece before it: the two together
+are the over-budget text that was cut, and `BuildChunk`'s recount sheds whichever would join them. So
+in the row before, the overlay starts that row or follows a line end. `NoteTextOrderTests` checks this
+over notes with long terms and long prose at five budget and overlay pairs, 600 notes in all, and
+`NoteChunkOrderRepairTests` checks it for a term over the budget written through `memory_write`. The search walks the junctions with an explicit stack, not recursion, so a
 long note cannot exhaust the thread's stack.
 
 **The search has a fixed cost ceiling.** A note with more than 1,024 rows is not searched. One `Find`
@@ -99,7 +106,7 @@ order whether or not `note-chunk-order-v1` ran first. File rows are ordered by p
 - **Left as stored, and counted.** A note whose rows do not join back into its body: a body with
   mixed line endings (only one ending used throughout can be restored), an oversized fence the
   chunker re-fenced, a note with two identical chunks deduplicated to one row, rows a past repair
-  changed, an overlay that was not whole lines (an older chunker's partial-line overlay), a re-chunked
+  changed, rows from a chunker older than the one described above whose overlay began mid-line, a re-chunked
   head of more than four pieces, a note over 1,024 rows, or one that runs out of work budget. Event
   446 reports how many.
 - **Unchanged.** Plain notes (no source file) carry no positions, so only the boundary repair reads

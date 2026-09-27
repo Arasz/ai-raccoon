@@ -79,6 +79,22 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
         (await ValuesByPositionAsync(path))[0].ShouldStartWith("Opening marker zq71");
     }
 
+    /// <summary>A term longer than the budget is hard-cut across rows by the write path; the note is still proven.</summary>
+    [RetryFact]
+    public async Task Run_NoteWithATermLongerThanTheBudget_IsPutInTextOrder()
+    {
+        var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
+        var shorts = string.Concat(Enumerable.Range(0, 12).Select(i => $"Short line {i:D2}.\n"));
+        var path = await WriteAsync($"Opening marker zq71 starts the digest note.\n{shorts}Digest {term} was pinned.\n{shorts}Closing line.\n");
+        await StoreOpeningLastAsync(path);
+
+        var report = await RunAsync();
+
+        report.NotesUnproven.ShouldBe(0);
+        report.NotesReordered.ShouldBe(1);
+        (await ValuesByPositionAsync(path))[0].ShouldStartWith("Opening marker zq71");
+    }
+
     /// <summary>Sync repairs only the notes a merge added rows to, not the whole bank.</summary>
     [RetryFact]
     public async Task Run_ForListedPaths_RepairsOnlyThoseNotes()

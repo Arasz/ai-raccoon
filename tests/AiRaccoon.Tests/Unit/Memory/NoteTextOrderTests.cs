@@ -118,6 +118,46 @@ public sealed class NoteTextOrderTests
         started.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(3));
     }
 
+    /// <summary>
+    ///     Lines longer than the budget are cut into pieces, and a short last piece is small enough to be copied
+    ///     forward as an overlay. The chunker never packs two pieces of one line into a row (together they are the
+    ///     over-budget text that was cut), so an overlay still starts a line in the row before. Every note it cuts
+    ///     this way, across budgets and overlays, is proven.
+    /// </summary>
+    [Theory]
+    [InlineData(40, 16)]
+    [InlineData(64, 24)]
+    [InlineData(96, 24)]
+    [InlineData(96, 48)]
+    [InlineData(128, 48)]
+    public void Find_NoteWithLinesLongerThanTheBudget_ReturnsTheTextOrder(int maxTokens, int overlayTokens)
+    {
+        var chunker = TestData.RealMarkdownChunker();
+        var unproven = new List<string>();
+        var overlaid = 0;
+        for (var extra = 1; extra <= 120; extra++)
+        {
+            var longTerm = string.Concat(Enumerable.Range(0, maxTokens + extra).Select(i => (char)('a' + i % 26)));
+            var longProse = string.Join(" ", Enumerable.Range(0, maxTokens + extra).Select(i => $"w{i}"));
+            var shorts = string.Concat(Enumerable.Range(0, extra % 7).Select(i => $"s{i}\n"));
+            var body = $"Opening line.\n{longProse}\n{shorts}Short line.\n{longTerm}\n{shorts}{longProse}\n{longTerm}\nClosing line.\n";
+            var chunks = chunker.Chunk(body, maxTokens, overlayTokens);
+            if (string.Concat(chunks) != body)
+            {
+                overlaid++;
+            }
+
+            var idOrder = Enumerable.Range(1, chunks.Count - 1).Append(0).ToList();
+            if (NoteTextOrder.Find($"{ContentHash.OfValue(body)}.md", Rows(chunks, idOrder)) is null)
+            {
+                unproven.Add($"extra={extra} rows={chunks.Count}");
+            }
+        }
+
+        overlaid.ShouldBeGreaterThan(0, "premise: some of these notes carry an overlay");
+        unproven.ShouldBeEmpty();
+    }
+
     [Fact]
     public void Find_RowsThatDoNotJoinBackIntoTheNote_ReturnsNull()
     {
