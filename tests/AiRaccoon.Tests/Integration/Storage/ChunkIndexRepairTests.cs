@@ -115,6 +115,23 @@ public sealed class ChunkIndexRepairTests : IDisposable
         report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 3));
     }
 
+    /// <summary>Fixing only a row's total leaves its section, so the full-text index is not rewritten for it.</summary>
+    [RetryFact]
+    public async Task RunAsync_TotalOnlyFix_LeavesTheFullTextIndexAlone()
+    {
+        var file = Path.Combine(_dataRoot, "doc.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para one", 0), (file, "para two", 1), (file, "para three", 2));
+        await connection.ExecuteAsync("UPDATE entries SET total_chunks = 5");
+        const string ftsBlocks = "SELECT group_concat(hex(block), '') FROM (SELECT block FROM entries_fts_data ORDER BY id)";
+        var before = await connection.ExecuteScalarAsync<string>(ftsBlocks);
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.RowsRetotalled.ShouldBe(3, "premise: every row's total was wrong");
+        (await connection.ExecuteScalarAsync<string>(ftsBlocks)).ShouldBe(before);
+    }
+
     [RetryFact]
     public async Task RunAsync_SetsTheUnknownSentinel_WhenTheSourceFileNoLongerExists()
     {

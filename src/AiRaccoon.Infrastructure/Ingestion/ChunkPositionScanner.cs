@@ -48,7 +48,7 @@ public sealed record PartitionEntry(
 }
 
 /// <summary>A position write: the row's new chunk_index, total_chunks and section.</summary>
-public sealed record ChunkMove(long Id, long ChunkIndex, long TotalChunks, string? Section);
+public sealed record ChunkMove(long Id, long ChunkIndex, long TotalChunks, string? Section, bool SectionChanged);
 
 /// <summary>
 ///     Re-chunks a source file with the current chunker and matches stored rows to it by content hash, and
@@ -127,13 +127,14 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
 
             // A row the scan does not place keeps its section: unknown is not gone.
             var section = scan is not null && row.IsFileRow && index >= 0 ? scan.SectionById[row.Id] : row.Section;
-            moves.Add(new ChunkMove(row.Id, index, partition.Count, section));
+            moves.Add(new ChunkMove(row.Id, index, partition.Count, section, !string.Equals(section, row.Section, StringComparison.Ordinal)));
         }
 
         return moves;
     }
 
-    /// <summary>Applies <paramref name="moves" /> in one transaction.</summary>
+    /// <summary>Applies <paramref name="moves" /> in one transaction; a section is written only when it changes, so the
+    /// full-text index is not rewritten for a position-only move.</summary>
     public static async Task WriteAsync(SqliteConnection connection, IReadOnlyList<ChunkMove> moves,
         CancellationToken cancellationToken)
     {
@@ -149,7 +150,8 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
         {
             foreach (var move in moves)
             {
-                await connection.ExecuteAsync(new CommandDefinition(MemorySql.SetChunkPosition,
+                await connection.ExecuteAsync(new CommandDefinition(
+                    move.SectionChanged ? MemorySql.SetChunkPosition : MemorySql.SetChunkColumns,
                     new { id = move.Id, chunkIndex = move.ChunkIndex, totalChunks = move.TotalChunks, section = move.Section },
                     cancellationToken: cancellationToken));
             }
