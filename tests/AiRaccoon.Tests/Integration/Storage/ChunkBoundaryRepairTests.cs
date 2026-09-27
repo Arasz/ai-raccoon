@@ -267,16 +267,17 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     {
         var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
         var file = await IngestFileAsync("lockfile.md", $"Release artifact digest {term} was pinned in the lockfile.\n");
-        var before = await IdsAsync(file);
-        before.Count.ShouldBeGreaterThan(1, "premise: the term is hard-cut across rows");
+        var stored = (await PositionsAsync(file)).Select(p => p.Value).ToList();
+        Enumerable.Range(0, stored.Count - 1).ShouldContain(i => ChunkSeam.CutsATerm(stored[i], stored[i + 1]),
+            "premise: the term is hard-cut across rows");
 
         var report = await RepairAsync();
 
         report.FilesReingested.ShouldBe(0, "re-ingesting would write the same rows and flag the same seam next run");
-        (await IdsAsync(file)).ShouldBe(before, "no row was rewritten");
+        (await FingerprintedAsync(file)).ShouldBeFalse("a re-ingest would have written the file's watch fingerprint");
     }
 
-    /// <summary>File rows the current chunker still reproduces but whose stored positions collide (#788) take their
+    /// <summary>File rows the current chunker still reproduces but whose stored positions collide take their
     /// document positions in place: no re-ingest, so their embeddings stay.</summary>
     [RetryFact]
     public async Task Run_FileRowsWithDuplicatePositions_TakeTheirDocumentPositionsInPlace()
@@ -286,12 +287,14 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
         var inDocumentOrder = await ValuesAsync(file);
         await SetPositionAsync(ids[^1], 1);
+        var embedded = await MarkEmbeddedAsync(file);
 
         var report = await RepairAsync();
 
         report.FilesReingested.ShouldBe(0);
         report.FilesRepositioned.ShouldBe(1);
-        (await IdsAsync(file)).ShouldBe(ids, "the rows are kept, not re-ingested");
+        (await EmbedStatesAsync(file)).ShouldBe(embedded, "the rows keep their embeddings");
+        (await FingerprintedAsync(file)).ShouldBeFalse("a re-ingest would have written the file's watch fingerprint");
         var positions = await PositionsAsync(file);
         positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count)]);
         positions.ShouldAllBe(p => p.TotalChunks == ids.Count);
@@ -313,12 +316,14 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         }
 
         await SetTotalAsync(file, ids.Count + 1);
+        var embedded = await MarkEmbeddedAsync(file);
 
         var report = await RepairAsync();
 
         report.FilesReingested.ShouldBe(0);
         report.FilesRepositioned.ShouldBe(1);
-        (await IdsAsync(file)).ShouldBe(ids, "the rows are kept, not re-ingested");
+        (await EmbedStatesAsync(file)).ShouldBe(embedded, "the rows keep their embeddings");
+        (await FingerprintedAsync(file)).ShouldBeFalse("a re-ingest would have written the file's watch fingerprint");
         var positions = await PositionsAsync(file);
         positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count)]);
         positions.ShouldAllBe(p => p.TotalChunks == ids.Count);
@@ -579,7 +584,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
             TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow),
             NullLogger<ChunkBoundaryRepairJob>.Instance);
         job.Interval.ShouldBeNull("once ever: it heals rows the write paths no longer create");
-        job.Name.ShouldBe("chunk-boundary-repair-v2", "a bank stamped v1 runs the repair once more for #788");
+        job.Name.ShouldBe("chunk-boundary-repair-v2", "a bank stamped v1 runs the repair once more");
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var leftPending = await job.RunAsync(connection, TestContext.Current.CancellationToken);
@@ -778,6 +783,31 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM sync_tombstones");
+    }
+
+    /// <summary>Marks a path's rows embedded and returns their embed state and update time, by id.</summary>
+    private async Task<List<string>> MarkEmbeddedAsync(string path)
+    {
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync("UPDATE entries SET embed_state = 'embedded' WHERE path = @path", new { path });
+        }
+
+        return await EmbedStatesAsync(path);
+    }
+
+    private async Task<List<string>> EmbedStatesAsync(string path)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return [.. await connection.QueryAsync<string>(
+            "SELECT id || ':' || embed_state || ':' || updated_at FROM entries WHERE path = @path ORDER BY id", new { path })];
+    }
+
+    /// <summary>True when a re-ingest wrote the file's watch fingerprint, which a position repair never does.</summary>
+    private async Task<bool> FingerprintedAsync(string file)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM watch_files WHERE path = @file", new { file }) > 0;
     }
 
     private async Task<long> IdOfAsync(string hash)

@@ -14,7 +14,7 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     What re-chunking one source file with the current chunker found. <see cref="PositionById" />
 ///     maps every given row's id to its document position, or -1 when this chunker does not
 ///     reproduce its content hash. <see cref="SectionById" /> maps every given row's id to the
-///     section the current chunker reports for it (docs/adr/0048, #549), or null when it holds no
+///     section the current chunker reports for it (docs/adr/0048), or null when it holds no
 ///     section or its position is unknown. <see cref="FileUsable" /> is false when the source file
 ///     is missing, unreadable, or has no matching handler — every row then maps to -1/null without a
 ///     document position ever being computed, and <see cref="TotalChunks" />/<see cref="Content" />
