@@ -13,6 +13,15 @@
    "summary": "All four real, fixed TDD with ADRs and existing-bank repair. #774 ADR-0119 1.53.2: per-row isolation, entries.embed_attempts ceiling 3, engine-outage/busy charge nothing, model switch resets. #775 ADR-0120 1.53.3: whitespace/term-boundary splits, >64-char FTS prefix match, one-shot chunk-boundary-repair-v1. #776 ADR-0121 1.53.4: per-file fingerprint catch-up (mtime>=updated_at or size differs), 5-min heal pass, pruned walk (6-7 CPU-s -> 0.1 per scan), vanish-mid-digest = delete. #779 ADR-0122 1.53.5: notes stored in text order, hash-proved NoteTextOrder, note-chunk-order-v1, sync keeps partition order. Checklist items: ai-badger#525 + #780 (poison-embedding-stub.py). Owner rules learned: fix found gaps in-PR; session owns merging."
   },
   {
+   "id": "air-harness-granite-golden-regen-726",
+   "title": "Regenerate the granite harness golden (#726)",
+   "pr": 773,
+   "merged": true,
+   "date": "2026-09-27",
+   "hasNotes": false,
+   "summary": "#726 closed. Fresh live-bank copy cb99fe6e (70,763 entries) kept at ~/ai-raccoon-eval/copies/cb99fe6ecbe0.db (owner's AI_RACCOON_EVAL_COPY); project-corpus-100 re-pinned (98/100 queries changed; old pin e0434a72 lost with /tmp). Full run took 48 min, not 13 h. results-granite.json: harness hit 0.909 / ai-raccoon 0.919, MCC 0.94, stale C048; conservation test live. Bank leg on embedding.device auto. eval-set-100 keeps old pin (ADR 0060 anchor drift + MiniLM goldens): follow-up #777; until then the copy-gated test_pinned_copy_reproduces_every_committed_corpus fails locally."
+  },
+  {
    "id": "air-coreml-webgpu-latency-ab-record",
    "title": "M4 device benchmark + coreml vs WebGPU p95 search latency; README Performance section",
    "pr": 772,
