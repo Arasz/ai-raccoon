@@ -137,4 +137,32 @@ public sealed class FtsQueryNormalizerTests
         plan.Fallback.ShouldBeNull();
         plan.TokenCount.ShouldBe(1);
     }
+    [Fact]
+    public void BuildPlan_TermLongerThanThePrefixLength_MatchesByItsPrefix()
+    {
+        var term = string.Concat(Enumerable.Range(0, 30).Select(i => $"k{i:D2}"));
+
+        var plan = FtsQueryNormalizer.BuildPlan(term);
+
+        plan.Expression.ShouldBe(term[..FtsQueryNormalizer.PrefixLength] + "*",
+            "a term longer than a chunk is stored hard-cut; its first piece still starts with this prefix");
+    }
+
+    [Fact]
+    public void BuildPlan_TermAtThePrefixLength_StaysAnExactTerm()
+    {
+        var term = new string('k', FtsQueryNormalizer.PrefixLength);
+
+        FtsQueryNormalizer.BuildPlan(term).Expression.ShouldBe(term);
+    }
+
+    [Fact]
+    public void BuildPlan_LongTermAmongOthers_IsPrefixedInsideTheAndJoin()
+    {
+        var term = new string('z', FtsQueryNormalizer.PrefixLength + 10);
+
+        var plan = FtsQueryNormalizer.BuildPlan("digest " + term);
+
+        plan.Expression.ShouldBe("digest AND " + new string('z', FtsQueryNormalizer.PrefixLength) + "*");
+    }
 }

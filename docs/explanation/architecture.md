@@ -349,6 +349,12 @@ tokens: 254 content tokens for the bundled granite-embedding-small-english-r2 en
 models. An unconfigured bank resolves to the same bundled default: 254 tokens per chunk
 with a 48-token overlay.
 
+A line longer than the budget is split at the last whitespace inside it, else at the last
+keyword-term boundary (a character outside letters, digits and `_`), so every search term stays
+whole in one chunk. Only a term longer than the whole budget is hard-cut, and the keyword leg
+matches a query term longer than 64 characters by its first 64 as an FTS5 prefix query, which
+the row holding the term's start always contains (ADR-0120).
+
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:36-113`
 > (`memory_write`), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:27-61`
 > (ingest entry points, single open), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:175-191`
@@ -970,6 +976,7 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Resilience/               ResiliencePipelineFactory (retry/timeout policies for outbound calls)
   Maintenance/              BankMaintenanceHostedService (WAL checkpoint, #79) running a job list
                             (ADR-0070): VacuumJob, Vec0ReclaimJob, ChunkBackfillJob,
+                            ChunkBoundaryRepairJob (once: re-chunks rows an older chunker cut mid-word),
                             MetricsRetentionJob (purges `metrics` past its retention window),
                             ChunkIndexRepairJob, ReingestRepairJob (on-demand repair verbs),
                             PendingEmbedJob, CodeReindexJob (enqueue-only embed-drain signalers;
