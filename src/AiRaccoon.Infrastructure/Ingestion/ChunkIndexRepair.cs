@@ -50,7 +50,7 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
 
             var rows = (await connection.QueryAsync<GroupRow>(new CommandDefinition(
                     $"""
-                     SELECT id AS Id, hash AS Hash, chunk_index AS ChunkIndex, section AS Section
+                     SELECT id AS Id, hash AS Hash, chunk_index AS ChunkIndex, total_chunks AS TotalChunks, section AS Section
                      FROM entries
                      WHERE source_file = @sourceFile AND ({MemorySql.ContextKeyExpression("")}) = @ctx
                      """, new { sourceFile = group.SourceFile, ctx = group.Ctx }, cancellationToken: cancellationToken))).ToList();
@@ -62,16 +62,16 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
             foreach (var row in rows)
             {
                 var newIndex = scan.PositionById[row.Id];
-                if (newIndex == row.ChunkIndex)
+                if (newIndex == row.ChunkIndex && row.TotalChunks == totalChunks)
                 {
                     continue;
                 }
 
-                if (newIndex < 0)
+                if (newIndex != row.ChunkIndex && newIndex < 0)
                 {
                     setUnknown++;
                 }
-                else
+                else if (newIndex != row.ChunkIndex)
                 {
                     repositioned++;
                 }
@@ -107,6 +107,8 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
         public string Hash { get; set; } = "";
 
         public long ChunkIndex { get; set; }
+
+        public long TotalChunks { get; set; }
 
         public string? Section { get; set; }
     }
