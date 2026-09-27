@@ -21,6 +21,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 public sealed class EntryEmbedderPoisonRowTests : IDisposable
 {
     private const string Poison = "POISON";
+    private const string Busy = "BUSY";
 
     private readonly string _dataRoot = TestData.CreateTempRoot("entry-embedder-poison-row");
     private readonly SqliteConnectionFactory _factory;
@@ -153,6 +154,24 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
     }
 
     [RetryFact]
+    public async Task BankBusy_WhileEmbeddingARow_FailsThePassWithoutChargingTheRow()
+    {
+        await using var connection = await _factory.OpenBankAsync(Ct);
+        await ConfigureProviderAsync(connection);
+        var row = await InsertAsync(connection, $"{Busy} row");
+        var embedder = NewEmbedder(new PoisonEmbeddingService());
+
+        for (var pass = 0; pass < EntryEmbedder.MaxEmbedAttempts; pass++)
+        {
+            await Should.ThrowAsync<SqliteException>(() => embedder.EmbedPendingBatchAsync(connection, 32, Ct));
+        }
+
+        (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT embed_attempts FROM entries WHERE id = @row", new { row }, cancellationToken: Ct)))
+            .ShouldBe(0L, "another writer holding the lock is not the row's fault");
+    }
+
+    [RetryFact]
     public async Task PoisonRow_LogsAWarningPerAttemptAndOneErrorWhenAbandoned()
     {
         await using var connection = await _factory.OpenBankAsync(Ct);
@@ -225,8 +244,8 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    /// <summary>384-dim test engine: any call containing a <see cref="Poison" /> input throws, and
-    /// <see cref="EngineDown" /> makes every call throw.</summary>
+    /// <summary>384-dim test engine: a call containing a <see cref="Poison" /> input throws, one containing
+    /// <see cref="Busy" /> throws SQLITE_BUSY, and <see cref="EngineDown" /> makes every call throw.</summary>
     private sealed class PoisonEmbeddingService : IEmbeddingService, IEmbeddingGenerator<string, Embedding<float>>
     {
         public bool PoisonEnabled { get; set; } = true;
@@ -259,6 +278,11 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
             if (EngineDown)
             {
                 throw new InvalidOperationException("simulated engine outage");
+            }
+
+            if (items.Any(item => item.Contains(Busy, StringComparison.Ordinal)))
+            {
+                throw new SqliteException("database is locked", 5);
             }
 
             if (PoisonEnabled && items.Any(item => item.Contains(Poison, StringComparison.Ordinal)))
