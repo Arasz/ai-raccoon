@@ -54,7 +54,7 @@ public sealed class ChunkBoundaryRepair(
         var notesUnproven = 0;
         var filesRepositioned = 0;
         var groups = rows.GroupBy(row => (row.Scope, row.ProjectId, row.ContextLabel, row.WorkspaceId, row.Path))
-            .Where(group => group.Count() > 1);
+            .Where(group => group.First().IsFileRow || group.Count() > 1);
         foreach (var group in groups)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -100,6 +100,11 @@ public sealed class ChunkBoundaryRepair(
             {
                 groupsRepaired++;
                 rowsWritten += written;
+            }
+            else if (keepingOrder.Count > 0)
+            {
+                await ChunkPositionScanner.WriteAsync(connection, keepingOrder, cancellationToken);
+                filesRepositioned++;
             }
         }
 

@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -339,6 +340,80 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         (await PositionsAsync(file)).ShouldAllBe(p => p.TotalChunks == ids.Count);
     }
 
+    /// <summary>A file stored as one row (its chunks all identical) that an older ingest left at position 1 of 2 is
+    /// renumbered too: a single-row file group is examined like any other.</summary>
+    [RetryFact]
+    public async Task Run_LoneFileRowAtAnInflatedPosition_TakesPositionZeroOfOne()
+    {
+        var file = await IngestFileAsync("lone.md", "A short file with one paragraph.\n");
+        var id = (await IdsAsync(file)).ShouldHaveSingleItem();
+        await SetPositionAsync(id, 1);
+        await SetTotalAsync(file, 2);
+
+        var report = await RepairAsync();
+
+        report.FilesRepositioned.ShouldBe(1);
+        var position = (await PositionsAsync(file)).ShouldHaveSingleItem();
+        (position.ChunkIndex, position.TotalChunks).ShouldBe((0, 1));
+    }
+
+    /// <summary>A gapped file gone from disk has no document to take positions from and no cut to re-chunk, so its rows
+    /// are renumbered in place in their stored order.</summary>
+    [RetryFact]
+    public async Task Run_GappedFileGoneFromDisk_IsRenumberedInItsStoredOrder()
+    {
+        var file = await IngestFileAsync("gone-gapped.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        var inDocumentOrder = await ValuesAsync(file);
+        await GapPositionsAsync(ids);
+        File.Delete(file);
+
+        var report = await RepairAsync();
+
+        report.ShouldBe(new ChunkBoundaryRepairReport(0, 0, 0, 0, 1));
+        (await IdsAsync(file)).ShouldBe(ids);
+        await ShouldBeNumberedInOrderAsync(file, inDocumentOrder);
+    }
+
+    /// <summary>A gapped workspace file whose file changed on disk is neither re-ingested (workspace rows never are)
+    /// nor re-chunked (no cut), so its rows are renumbered in place in their stored order.</summary>
+    [RetryFact]
+    public async Task Run_GappedWorkspaceFileThatChangedOnDisk_IsRenumberedInItsStoredOrder()
+    {
+        var file = await IngestIntoWorkspaceAsync("workspace-gapped.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        var inDocumentOrder = await ValuesAsync(file);
+        await GapPositionsAsync(ids);
+        await File.AppendAllTextAsync(file, "A paragraph added after the ingest.\n", TestContext.Current.CancellationToken);
+
+        var report = await RepairAsync();
+
+        report.ShouldBe(new ChunkBoundaryRepairReport(0, 0, 0, 0, 1));
+        (await IdsAsync(file)).ShouldBe(ids);
+        await ShouldBeNumberedInOrderAsync(file, inDocumentOrder);
+    }
+
+    /// <summary>A workspace file whose rows collide but still match the file on disk takes its document positions in
+    /// place: nothing is re-chunked and nothing is tombstoned.</summary>
+    [RetryFact]
+    public async Task Run_WorkspaceFileWithDuplicatePositions_TakesItsDocumentPositionsInPlace()
+    {
+        var file = await IngestIntoWorkspaceAsync("workspace-plan.md", SectionedDocument(6));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        var inDocumentOrder = await ValuesAsync(file);
+        await SetPositionAsync(ids[^1], 1);
+
+        var report = await RepairAsync();
+
+        report.ShouldBe(new ChunkBoundaryRepairReport(0, 0, 0, 0, 1));
+        (await IdsAsync(file)).ShouldBe(ids);
+        (await TombstoneCountAsync()).ShouldBe(0, "rows repositioned in place leave nothing for a peer to delete");
+        await ShouldBeNumberedInOrderAsync(file, inDocumentOrder);
+    }
+
     /// <summary>A file that grew on disk since its rows were written holds a chunk no row has yet, so repositioning
     /// the rows would leave it unindexed: the file is re-ingested instead.</summary>
     [RetryFact]
@@ -650,6 +725,40 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return [.. await connection.QueryAsync<long>("SELECT id FROM entries WHERE path = @path ORDER BY id", new { path })];
+    }
+
+    private async Task<string> IngestIntoWorkspaceAsync(string name, string text)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var workspace = await new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow))
+            .BeginAsync(ProjectId, cancellationToken: ct);
+        var file = Path.Combine(_dataRoot, name);
+        await File.WriteAllTextAsync(file, text, ct);
+        (await _store.IngestFileAsync(ProjectId, file, ContextNaming.WorkspaceContext(workspace.Id), ct)).ShouldBeGreaterThan(0);
+        return file;
+    }
+
+    /// <summary>Leaves a gap after each row's position, the shape an ingest that counted repeated chunks wrote.</summary>
+    private async Task GapPositionsAsync(List<long> ids)
+    {
+        for (var i = 1; i < ids.Count; i++)
+        {
+            await SetPositionAsync(ids[i], i + 1);
+        }
+    }
+
+    private async Task ShouldBeNumberedInOrderAsync(string file, List<string> values)
+    {
+        var positions = await PositionsAsync(file);
+        positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, values.Count)]);
+        positions.ShouldAllBe(p => p.TotalChunks == values.Count);
+        positions.Select(p => p.Value).ToList().ShouldBe(values);
+    }
+
+    private async Task<long> TombstoneCountAsync()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM sync_tombstones");
     }
 
     private async Task<long> IdOfAsync(string hash)
