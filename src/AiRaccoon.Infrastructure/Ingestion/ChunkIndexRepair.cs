@@ -9,7 +9,8 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// <summary>
 ///     Re-derives each (ctx, source_file) partition's positions from the file on disk: the file's rows take their
 ///     document positions (-1 when the file no longer reproduces them, never a guess), notes citing the file follow
-///     them, and total_chunks is the row count. Pure UPDATE; runs only when `repair chunk-index --apply` asks for it.
+///     them, and total_chunks is the row count. A partition an older chunking left in a valid order keeps it
+///     (docs/adr/0123). Pure UPDATE; runs only when `repair chunk-index --apply` asks for it.
 /// </summary>
 public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddingService embeddingService)
 {
@@ -40,7 +41,10 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
             var partition = await ChunkPositionScanner.PartitionAsync(connection, memberId, cancellationToken);
             var fileRows = partition.Where(row => row.IsFileRow).Select(row => new StoredChunk(row.Id, row.Hash)).ToList();
             var scan = _scanner.Scan(partition[0].SourceFile, fileRows, maxTokens, overlayTokens, countTokens);
-            var moves = ChunkPositionScanner.Moves(partition, scan);
+            var gone = await GoneFromTheFileAsync(connection, partition, scan, cancellationToken);
+            var moves = gone is not null
+                ? ChunkPositionScanner.MovesKeepingStoredOrder(partition, gone)
+                : ChunkPositionScanner.Moves(partition, scan);
             var before = partition.ToDictionary(row => row.Id);
             foreach (var move in moves)
             {
@@ -66,5 +70,55 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
         }
 
         return new ChunkIndexRepairReport(groups.Count, repositioned, setUnknown, retotalled);
+    }
+
+    /// <summary>
+    ///     The rows that go to unknown when the partition keeps the stored order an older chunking left
+    ///     (docs/adr/0123): only the rows whose text left the file — every other row keeps its stored
+    ///     position, holes and all. Null when the stored order is not one this rule may keep: the file is
+    ///     unusable, the scan reproduces every row, the stored positions are not 0..n-1 (a row already
+    ///     unknown may stand at -1 and keeps it), or the rows the scan reproduces are not stored in
+    ///     document order.
+    /// </summary>
+    private static async Task<IReadOnlySet<long>?> GoneFromTheFileAsync(SqliteConnection connection,
+        IReadOnlyList<PartitionEntry> partition, ChunkPositionScan scan, CancellationToken cancellationToken)
+    {
+        var fileRows = partition.Where(row => row.IsFileRow)
+            .OrderBy(row => row.ChunkIndex < 0).ThenBy(row => row.ChunkIndex).ThenBy(row => row.Id)
+            .ToList();
+        var unplaced = fileRows.Where(row => scan.PositionById[row.Id] < 0).Select(row => row.Id).ToList();
+        if (!scan.FileUsable || unplaced.Count == 0)
+        {
+            return null;
+        }
+
+        var known = fileRows.Select(row => row.ChunkIndex).Where(index => index >= 0).ToList();
+        if (known.Any(index => index >= fileRows.Count) || known.Distinct().Count() != known.Count)
+        {
+            return null;
+        }
+
+        // Only rows with a stored position prove it: one already at -1 has no place in the order, whatever
+        // the scan found for it (the keep rule never resurrects it).
+        var placed = fileRows.Where(row => row.ChunkIndex >= 0)
+            .Select(row => scan.PositionById[row.Id]).Where(position => position >= 0).ToList();
+        if (placed.Zip(placed.Skip(1)).Any(pair => pair.First >= pair.Second))
+        {
+            return null;
+        }
+
+        var values = (await connection.QueryAsync<(long Id, string Value)>(new CommandDefinition(
+                "SELECT id AS Id, value AS Value FROM entries WHERE id IN @ids", new { ids = unplaced },
+                cancellationToken: cancellationToken)))
+            .ToDictionary(row => row.Id, row => row.Value);
+
+        // The chunkers normalize \r\n and lone \r to \n before they slice (MarkdownChunker.NormalizeLineEndings),
+        // so a stored row's text is looked for in the file as the chunker reads it — and in the raw bytes for a
+        // chunker that slices those as they are. Line endings are not "text gone from the file".
+        var normalized = scan.Content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        return unplaced
+            .Where(id => !scan.Content.Contains(values[id], StringComparison.Ordinal)
+                && !normalized.Contains(values[id], StringComparison.Ordinal))
+            .ToHashSet();
     }
 }
