@@ -36,7 +36,7 @@ The worst coreml repeat is 14.7 CPU-s below the best `auto` repeat. That clears 
 | coreml | 33.1 | 379 | 214 | 77 |
 | mlx | 48.8 | 1146 | 759 | 233 |
 | auto | 70.4 | 1389 | 936 | 283 |
-| cpu | 169.6 | 4076 | 2493 | 830 |
+| cpu | 169.6 | 4076 | 2493 | 829 |
 
 All three per-device comparisons against `auto` come out separated on system energy, SoC energy and wall time.
 
@@ -48,7 +48,7 @@ The cold compile itself took 37.3 s, 30.4 compiler CPU-s and 948 J of system ene
 
 ### F4: coreml does not lose on p95 search latency; it wins [MEASURED]
 
-A second run on 2026-09-27 (1.53.1, `--devices auto,coreml --repeats 3 --no-power`) added a search phase. After each drain, still on the same server, it runs 3 untimed warm-ups and then 50 fixed queries, which are headings drawn from the corpus in a seeded order. Each query is timed client-side through MCP `memory_search` with limit 8. p95 is nearest-rank.
+A second run on 2026-09-27 (1.53.1, `--devices auto,coreml --repeats 3 --no-power`) added a search phase. After each drain, still on the same server, it runs 3 untimed warm-ups and then 50 fixed queries, which are headings drawn from the corpus in a seeded order. Two of the 50 came from `#` lines inside fenced code blocks; later runs skip fenced code, and two query strings do not move a p95 taken over 50. Each query is timed client-side through MCP `memory_search` with limit 8. p95 is nearest-rank.
 
 | device | p95 ms per repeat | p50 ms per repeat | CPU-s per repeat |
 |---|---|---|---|

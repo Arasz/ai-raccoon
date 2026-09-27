@@ -101,12 +101,12 @@ def search_latency_fields(latencies_ms: Sequence[float]) -> dict:
     return {"search_latency_ms": values, "search_p50_ms": percentile(values, 50), "search_p95_ms": percentile(values, 95)}
 
 
-def search_latency_loses(device_p95s: Sequence[float], auto_p95s: Sequence[float]) -> bool | None:
-    """LOSE when every device p95 sits above every auto p95 (range separation, mirroring `beats`);
-    None without usable data on either side."""
-    if not device_p95s or not auto_p95s:
+def search_latency_loses(device_p95s: Sequence[float], reference_p95s: Sequence[float]) -> bool | None:
+    """LOSE when every device p95 sits above every reference-device p95 (range separation, mirroring
+    `beats`); None without usable data on either side."""
+    if not device_p95s or not reference_p95s:
         return None
-    return beats(auto_p95s, device_p95s)
+    return beats(reference_p95s, device_p95s)
 
 
 def _spread(values: Sequence[float]) -> dict:

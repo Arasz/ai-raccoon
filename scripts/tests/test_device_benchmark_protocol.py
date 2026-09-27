@@ -302,3 +302,9 @@ def test_derive_search_queries_returns_empty_when_no_file_has_a_heading(tmp_path
     (tmp_path / "no-heading.md").write_text("no heading here\n")
 
     assert protocol.derive_search_queries(tmp_path, 10) == []
+
+
+def test_derive_search_queries_skips_hash_lines_inside_fenced_code(tmp_path: Path) -> None:
+    (tmp_path / "a.md").write_text("# Alpha\n\n```sh\n#!/bin/sh\n# a shell comment\n```\n\n## Beta\n")
+
+    assert sorted(protocol.derive_search_queries(tmp_path, 10)) == ["Alpha", "Beta"]

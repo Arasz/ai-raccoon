@@ -171,15 +171,18 @@ SEARCH_QUERY_SEED = 0
 
 
 def derive_search_queries(corpus_dir: Path, n: int, seed: int = SEARCH_QUERY_SEED) -> list[str]:
-    """The corpus's markdown '#' headings, deduped and sorted for a stable base order, shuffled with
-    a fixed seed (identical across every device and repeat), and capped to the first n."""
+    """The corpus's markdown '#' headings outside fenced code, deduped and sorted for a stable base
+    order, shuffled with a fixed seed (identical across every device and repeat), capped to n."""
     if n <= 0:
         return []
     headings: set[str] = set()
     for path in sorted(Path(corpus_dir).rglob("*.md")):
+        in_fence = False
         for line in path.read_text(errors="replace").splitlines():
             stripped = line.strip()
-            if stripped.startswith("#"):
+            if stripped.startswith(("```", "~~~")):
+                in_fence = not in_fence
+            elif not in_fence and stripped.startswith("#"):
                 text = stripped.lstrip("#").strip()
                 if text:
                     headings.add(text)
