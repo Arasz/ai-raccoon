@@ -50,6 +50,11 @@ public sealed class ChunkBoundaryRepair(
         {
             cancellationToken.ThrowIfCancellationRequested();
             var ordered = InTextOrder(group.ToList());
+            if (ordered is null)
+            {
+                continue;
+            }
+
             var isFile = ordered[0].IsFileRow;
             if (!HasSeam(ordered, isFile))
             {
@@ -80,16 +85,18 @@ public sealed class ChunkBoundaryRepair(
         return new ChunkBoundaryRepairReport(filesReingested, groupsRepaired, rowsWritten);
     }
 
-    /// <summary>A file's rows by position; a note's first chunk is written last, so it holds the highest id.</summary>
-    private static List<Row> InTextOrder(List<Row> rows)
+    /// <summary>A file's rows by position; a note's rows in the order <see cref="NoteTextOrder" /> proves, or null
+    /// when no order joins back into the note's body.</summary>
+    private static List<Row>? InTextOrder(List<Row> rows)
     {
         if (rows[0].IsFileRow)
         {
             return [.. rows.OrderBy(row => row.ChunkIndex < 0 ? long.MaxValue : row.ChunkIndex).ThenBy(row => row.Id)];
         }
 
-        var first = rows.MaxBy(row => row.Id)!;
-        return [first, .. rows.Where(row => row.Id != first.Id).OrderBy(row => row.Id)];
+        var byId = rows.ToDictionary(row => row.Id);
+        var order = NoteTextOrder.Find(rows[0].Path, [.. rows.Select(row => new NoteRow(row.Id, row.Value, row.ChunkIndex))]);
+        return order is null ? null : [.. order.Select(row => byId[row.Id])];
     }
 
     private static bool HasSeam(List<Row> ordered, bool isFile)
@@ -235,15 +242,18 @@ public sealed class ChunkBoundaryRepair(
                     new { id = row.Id }, cancellationToken: cancellationToken));
             }
 
+            Dictionary<long, List<long>> pieceIds = [];
             foreach (var (old, pieces) in replacements)
             {
                 var slot = old[0].ChunkIndex < 0 ? long.MaxValue : old[0].ChunkIndex;
+                pieceIds[old[0].Id] = [];
                 for (var i = 0; i < pieces.Count; i++)
                 {
                     var id = await InsertAsync(connection, old[0], pieces[i], now, cancellationToken);
                     if (id is not null)
                     {
                         placed.Add(new Placed(id.Value, slot, i + 1));
+                        pieceIds[old[0].Id].Add(id.Value);
                         written++;
                     }
                 }
@@ -251,7 +261,13 @@ public sealed class ChunkBoundaryRepair(
 
             if (template.SourceFile is not null)
             {
-                await RenumberPartitionAsync(connection, template, placed, cancellationToken);
+                var replaced = replacements.SelectMany(r => r.Old).Select(row => row.Id).ToHashSet();
+                List<long> textOrder =
+                [
+                    .. ordered.SelectMany(row => pieceIds.TryGetValue(row.Id, out var ids) ? ids
+                        : replaced.Contains(row.Id) ? [] : [row.Id])
+                ];
+                await RenumberPartitionAsync(connection, template, placed, textOrder, cancellationToken);
             }
 
             await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
@@ -267,10 +283,11 @@ public sealed class ChunkBoundaryRepair(
 
     /// <summary>
     ///     Gives every row sharing the template's source-file position partition a contiguous position: untouched
-    ///     rows keep their relative order, and a run's new pieces take the slot its first old row held.
+    ///     rows keep their relative order, a run's new pieces take the slot its first old row held, and the repaired
+    ///     group's own rows then take its positions in <paramref name="textOrder" />.
     /// </summary>
     private static async Task RenumberPartitionAsync(SqliteConnection connection, Row template, List<Placed> placed,
-        CancellationToken cancellationToken)
+        List<long> textOrder, CancellationToken cancellationToken)
     {
         var partition = await connection.QueryAsync<PositionRow>(new CommandDefinition(
             $"""
@@ -292,11 +309,17 @@ public sealed class ChunkBoundaryRepair(
                 : new Placed(row.Id, row.ChunkIndex < 0 ? long.MaxValue : row.ChunkIndex, 0))
             .OrderBy(p => p.Slot).ThenBy(p => p.Piece).ThenBy(p => p.Id)
             .ToList();
-        for (var i = 0; i < order.Count; i++)
+        var position = order.Select((p, i) => (p.Id, Index: (long)i)).ToDictionary(p => p.Id, p => p.Index);
+        foreach (var (id, index) in NoteTextOrder.Repositioned([.. textOrder.Select(id => new NoteRow(id, string.Empty, position[id]))]))
+        {
+            position[id] = index;
+        }
+
+        foreach (var (id, index) in position)
         {
             await connection.ExecuteAsync(new CommandDefinition(
                 "UPDATE entries SET chunk_index = @index, total_chunks = @total WHERE id = @id",
-                new { index = i, total = order.Count, id = order[i].Id }, cancellationToken: cancellationToken));
+                new { index, total = order.Count, id }, cancellationToken: cancellationToken));
         }
     }
 
