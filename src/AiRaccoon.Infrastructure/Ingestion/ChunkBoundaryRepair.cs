@@ -210,14 +210,14 @@ public sealed class ChunkBoundaryRepair(
     }
 
     /// <summary>Swaps each run for its new pieces in one transaction, tombstoning every hash that disappears, and
-    /// renumbers a file group's positions in text order.</summary>
+    /// renumbers the source file's position partition with each run's pieces in the run's own place.</summary>
     private async Task<int> ReplaceRowsAsync(SqliteConnection connection, List<Row> ordered,
         List<(List<Row> Old, IReadOnlyList<string> New)> replacements, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var template = ordered[0];
         var newHashes = replacements.SelectMany(r => r.New).Select(piece => ContentHash.Of(template.Path, piece)).ToHashSet(StringComparer.Ordinal);
-        List<long> finalOrder = [];
+        List<Placed> placed = [];
         var written = 0;
 
         await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
@@ -235,36 +235,23 @@ public sealed class ChunkBoundaryRepair(
                     new { id = row.Id }, cancellationToken: cancellationToken));
             }
 
-            var replacedIds = replacements.SelectMany(r => r.Old).Select(row => row.Id).ToHashSet();
-            foreach (var row in ordered)
+            foreach (var (old, pieces) in replacements)
             {
-                var replacement = replacements.FirstOrDefault(r => r.Old[0].Id == row.Id);
-                if (replacement.Old is not null)
+                var slot = old[0].ChunkIndex < 0 ? long.MaxValue : old[0].ChunkIndex;
+                for (var i = 0; i < pieces.Count; i++)
                 {
-                    foreach (var piece in replacement.New)
+                    var id = await InsertAsync(connection, old[0], pieces[i], now, cancellationToken);
+                    if (id is not null)
                     {
-                        var id = await InsertAsync(connection, row, piece, now, cancellationToken);
-                        if (id is not null)
-                        {
-                            finalOrder.Add(id.Value);
-                            written++;
-                        }
+                        placed.Add(new Placed(id.Value, slot, i + 1));
+                        written++;
                     }
-                }
-                else if (!replacedIds.Contains(row.Id))
-                {
-                    finalOrder.Add(row.Id);
                 }
             }
 
-            if (template.IsFileRow)
+            if (template.SourceFile is not null)
             {
-                for (var i = 0; i < finalOrder.Count; i++)
-                {
-                    await connection.ExecuteAsync(new CommandDefinition(
-                        "UPDATE entries SET chunk_index = @index, total_chunks = @total WHERE id = @id",
-                        new { index = i, total = finalOrder.Count, id = finalOrder[i] }, cancellationToken: cancellationToken));
-                }
+                await RenumberPartitionAsync(connection, template, placed, cancellationToken);
             }
 
             await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
@@ -276,6 +263,41 @@ public sealed class ChunkBoundaryRepair(
         }
 
         return written;
+    }
+
+    /// <summary>
+    ///     Gives every row sharing the template's source-file position partition a contiguous position: untouched
+    ///     rows keep their relative order, and a run's new pieces take the slot its first old row held.
+    /// </summary>
+    private static async Task RenumberPartitionAsync(SqliteConnection connection, Row template, List<Placed> placed,
+        CancellationToken cancellationToken)
+    {
+        var partition = await connection.QueryAsync<PositionRow>(new CommandDefinition(
+            $"""
+             SELECT id AS Id, chunk_index AS ChunkIndex FROM entries
+             WHERE source_file = @sourceFile AND ({MemorySql.ContextKeyExpression("")}) = ({MemorySql.ContextKeyExpression("@")})
+             """,
+            new
+            {
+                sourceFile = template.SourceFile,
+                workspace_id = template.WorkspaceId,
+                scope = template.Scope,
+                project_id = template.ProjectId,
+                context_label = template.ContextLabel
+            }, cancellationToken: cancellationToken));
+        var byId = placed.ToDictionary(p => p.Id);
+        var order = partition
+            .Select(row => byId.TryGetValue(row.Id, out var p)
+                ? p
+                : new Placed(row.Id, row.ChunkIndex < 0 ? long.MaxValue : row.ChunkIndex, 0))
+            .OrderBy(p => p.Slot).ThenBy(p => p.Piece).ThenBy(p => p.Id)
+            .ToList();
+        for (var i = 0; i < order.Count; i++)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE entries SET chunk_index = @index, total_chunks = @total WHERE id = @id",
+                new { index = i, total = order.Count, id = order[i].Id }, cancellationToken: cancellationToken));
+        }
     }
 
     private static Task<long?> InsertAsync(SqliteConnection connection, Row row, string piece, long now,
@@ -299,6 +321,11 @@ public sealed class ChunkBoundaryRepair(
                 chunkIndex = -1,
                 totalChunks = 0
             }, cancellationToken: cancellationToken));
+
+    /// <summary>A row's sort key in its partition: the slot it holds, and for a new piece its order within the run.</summary>
+    private sealed record Placed(long Id, long Slot, int Piece);
+
+    private sealed record PositionRow(long Id, long ChunkIndex);
 
     private sealed record CodeRow(long Id, string ProjectId, string Path, string Value, long ChunkIndex);
 

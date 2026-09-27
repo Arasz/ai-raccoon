@@ -96,8 +96,11 @@ closer and just after the next opener (`ChunkSeam.MayCutAFencedTerm`).
   budget piece, larger than the 48-token overlay, so no overlay text was repeated after it. The
   repair checks exactly that before joining a seam. Each joined run is re-chunked with the current
   chunker; if the result is the same rows (a term still longer than the budget), nothing is
-  written. Replaced hashes are tombstoned so a sync peer does not resurrect them, a file group's
-  positions are renumbered in text order, and new rows stay `pending` for `PendingEmbedJob` in the
+  written. Replaced hashes are tombstoned so a sync peer does not resurrect them. When the rows
+  carry a source file (a file's own rows, or a note citing one), the whole position partition for
+  that file is renumbered: untouched rows keep their order and a run's new pieces take the slot
+  the run held. Leaving that to the id-order recompute would push pieces from a middle run after
+  later rows and give two rows one position. New rows stay `pending` for `PendingEmbedJob` in the
   same maintenance pass. A note's first-chunk hash can change, so a hash an agent kept from before
   may no longer resolve; per-row rating and access counts on replaced rows are lost, as in every
   re-chunk.

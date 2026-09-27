@@ -82,6 +82,51 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         (await TombstonedAsync(ContentHash.Of(path, head))).ShouldBeTrue("a peer must not resurrect the old half on sync");
     }
 
+    /// <summary>A note citing a source file shares that file's position partition. A seam in the middle of the
+    /// note must leave every row of the partition on its own, contiguous position.</summary>
+    [RetryFact]
+    public async Task Run_SourceCitingNoteWithAMiddleSeam_KeepsPositionsDistinctAndContiguous()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var cited = Path.Combine(_dataRoot, "minutes.md");
+        var entry = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote(), SourceFile: cited), ct);
+        var path = await PathOfAsync(entry.Hash);
+        var (head, tail) = CutInside(LongNote(), "vk83jq");
+        await ResplitAsync(path, ["Opening line of the minutes.\n", head, tail + "\n", "Closing line of the minutes.\n"], noteOrder: true);
+        await RecomputePositionsAsync();
+        var before = await PositionsAsync(path);
+        before.Select(p => p.ChunkIndex).Distinct().Count().ShouldBe(4, "premise: the writer's positions are distinct");
+
+        var report = await RepairAsync();
+
+        report.GroupsRepaired.ShouldBe(1);
+        (await KeywordHitsAsync("vk83jq")).ShouldBe(1);
+        var after = await PositionsAsync(path);
+        after.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, after.Count)], "no two rows may claim one position");
+        after.ShouldAllBe(p => p.TotalChunks == after.Count);
+        after.First(p => p.Value.StartsWith("Closing", StringComparison.Ordinal)).ChunkIndex
+            .ShouldBeLessThan(after.First(p => p.Value.StartsWith("Opening", StringComparison.Ordinal)).ChunkIndex,
+                "untouched rows keep their relative order");
+    }
+
+    /// <summary>A note without a source file has no positions at all; a middle seam repair leaves it that way.</summary>
+    [RetryFact]
+    public async Task Run_PlainNoteWithAMiddleSeam_StaysWithoutPositions()
+    {
+        var path = await WriteNoteAsync(LongNote());
+        var (head, tail) = CutInside(LongNote(), "vk83jq");
+        var pieces = new[] { "Opening line of the minutes.\n", head, tail + "\n", "Closing line of the minutes.\n" };
+        await ResplitAsync(path, pieces, noteOrder: true);
+
+        var report = await RepairAsync();
+
+        report.GroupsRepaired.ShouldBe(1);
+        (await KeywordHitsAsync("vk83jq")).ShouldBe(1);
+        var after = await PositionsAsync(path);
+        after.ShouldAllBe(p => p.ChunkIndex == -1 && p.TotalChunks == 0);
+        after.Sum(p => p.Value.Length).ShouldBe(pieces.Sum(p => p.Length));
+    }
+
     [RetryFact]
     public async Task Run_WatchedFileCutMidWord_IsReingestedEvenThoughItsContentHashIsUnchanged()
     {
@@ -274,6 +319,20 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
                 totalChunks = noteOrder ? 0 : pieces.Count
             });
         }
+    }
+
+    private async Task<string> PathOfAsync(string hash)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<string>("SELECT path FROM entries WHERE hash = @hash", new { hash })
+               ?? throw new InvalidOperationException("no row for the hash");
+    }
+
+    /// <summary>The positions memory_write gives a source-citing note: filled in id order after the insert.</summary>
+    private async Task RecomputePositionsAsync()
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(MemorySql.RecomputeChunkColumnsBankWide);
     }
 
     private async Task SeedWatchFingerprintAsync(string file, string content)
