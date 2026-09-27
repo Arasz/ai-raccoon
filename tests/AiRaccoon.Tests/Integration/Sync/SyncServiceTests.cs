@@ -360,6 +360,66 @@ public class SyncServiceTests : IDisposable
         survivors.Select(s => (s.ChunkIndex, s.TotalChunks)).ShouldBe([(0L, 2L), (1L, 2L)]);
     }
 
+    /// <summary>The post-merge recompute numbers every position partition in id order, and a note stored with its
+    /// opening last would come out of it with the opening at the last position; the merge leaves notes in text order.</summary>
+    [RetryFact]
+    public async Task MemorySync_Merge_LeavesASourceCitingNoteInTextOrder()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var cloud = new FakeCloudStore();
+        string[] pieces = ["Opening part of the note.\n", "Middle part of the note.\n", "Closing part of the note."];
+        var path = $"{ContentHash.OfValue(string.Concat(pieces))}.md";
+        await using (var conn = await CreateAndOpenAsync(BankPath, ct))
+        {
+            foreach (var i in new[] { 1, 2, 0 })
+            {
+                await using var insert = conn.CreateCommand();
+                insert.CommandText = """
+                                     INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, chunk_index, total_chunks)
+                                     VALUES (@hash, @path, @value, 'doc.md', 'project', 'acme', 1, 1, -1, 0)
+                                     """;
+                insert.Parameters.AddWithValue("@hash", $"n{i}");
+                insert.Parameters.AddWithValue("@path", path);
+                insert.Parameters.AddWithValue("@value", pieces[i]);
+                await insert.ExecuteNonQueryAsync(ct);
+            }
+        }
+
+        var remotePath = Path.Combine(_dataRoot, "remote.db");
+        await using (await CreateAndOpenAsync(remotePath, ct))
+        {
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, ct));
+        var service = new SyncService(cloud,
+            token => CreateAndOpenAsync(BankPath, token),
+            OpenSnapshotAsync,
+            async (snapshot, token) =>
+            {
+                var c = new SqliteConnection($"Data Source={snapshot}");
+                await c.OpenAsync(token);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", ct);
+
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(ct);
+        await using var select = check.CreateCommand();
+        select.CommandText = "SELECT value FROM entries WHERE path = @path ORDER BY chunk_index";
+        select.Parameters.AddWithValue("@path", path);
+        var values = new List<string>();
+        await using (var reader = await select.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                values.Add(reader.GetString(0));
+            }
+        }
+
+        values.ShouldBe(pieces);
+    }
+
     [RetryFact]
     public async Task MemorySync_TombstoneFromRemote_IsProjectScoped()
     {

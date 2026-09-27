@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Sync;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -636,6 +637,10 @@ public partial class SyncService(
                     recompute.CommandText = MemorySql.RecomputeChunkColumnsBankWideFromIdOrder;
                     await recompute.ExecuteNonQueryAsync(cancellationToken);
                 }
+
+                // Id order puts a note stored with its opening last in the wrong order; a note's text order
+                // is provable from its rows, so put it back (docs/adr/0122).
+                await new NoteChunkOrderRepair().RunAsync(conn, cancellationToken);
 
                 return new MergeCounts(received, reindexed);
             }
