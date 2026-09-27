@@ -5,9 +5,9 @@
 **Follows:** ADR-0118 ("Before it can become the default", gate 2) and `scripts/device-benchmark.py` (#770).
 **Question:** On the same corpus, embedded through the shipped product, does `embedding.device coreml` beat `auto` (WebGPU) on CPU-seconds by range separation, and does it lose on p95 search latency?
 
-**Answer:** It wins on CPU-seconds, and the ranges don't touch: 24.6 to 27.1 CPU-s per drain against 41.8 to 43.9 for `auto`. It also drains in half the time and at roughly a quarter of the system energy. The p95 half of the gate is answered in F4.
+**Answer:** It wins on CPU-seconds, and the ranges don't touch: 24.6 to 27.1 CPU-s per drain against 41.8 to 43.9 for `auto`. It also drains in half the time and at roughly a quarter of the system energy. It is also faster at p95 search latency, 35 to 39 ms against 51 to 88 ms (F4), so both halves of gate 2 hold on this chip.
 
-Evidence: `docs/work/device-benchmark/2026-09-26-m4/` (`result.json`, `result.md`, `corpus-manifest.json`). The 217 MB powermetrics plist and the 3 MB ioreg trace stayed on the owner's machine.
+Evidence: `docs/work/device-benchmark/2026-09-26-m4/` and `docs/work/device-benchmark/2026-09-27-m4-search-latency/` (`result.json`, `result.md`, `corpus-manifest.json` each). The 217 MB powermetrics plist and the 3 MB ioreg trace stayed on the owner's machine.
 
 ## Setup
 
@@ -46,9 +46,18 @@ The first warm coreml repeat took 45.7 s against 32.3 and 33.1 s for the other t
 
 The cold compile itself took 37.3 s, 30.4 compiler CPU-s and 948 J of system energy. Every warm start after it loaded in 1.0 s.
 
-### F4: p95 search latency
+### F4: coreml does not lose on p95 search latency; it wins [MEASURED]
 
-Pending. The benchmark above measures drains, not searches.
+A second run on 2026-09-27 (1.53.1, `--devices auto,coreml --repeats 3 --no-power`) added a search phase. After each drain, still on the same server, it runs 3 untimed warm-ups and then 50 fixed queries, which are headings drawn from the corpus in a seeded order. Each query is timed client-side through MCP `memory_search` with limit 8. p95 is nearest-rank.
+
+| device | p95 ms per repeat | p50 ms per repeat | CPU-s per repeat |
+|---|---|---|---|
+| coreml | 37.2, 35.1, 39.4 | 31.5, 29.1, 30.7 | 29.7, 29.1, 28.9 |
+| auto (WebGPU) | 87.5, 50.6, 51.3 | 51.6, 40.7, 38.6 | 44.7, 45.8, 47.8 |
+
+Every coreml p95 is below every `auto` p95, so the "must not lose" half of gate 2 holds with room to spare. The same run reproduces F1: the CPU-second ranges are separated again, 28.9 to 29.7 against 44.7 to 47.8. The first `auto` repeat's 87.5 ms is an outlier, but dropping it would not change the verdict.
+
+The run itself printed "lose? yes". That was wrong. A mutation check just before the run left a stale `.pyc` with the rule flipped (the restored file had the same size and mtime second). `summary` in `device-benchmark/2026-09-27-m4-search-latency/result.json` was re-derived from the stored per-query latencies with the correct rule, and the note in that file says so.
 
 ### F5: the owner's live server runs on the Neural Engine after opting in [MEASURED]
 
