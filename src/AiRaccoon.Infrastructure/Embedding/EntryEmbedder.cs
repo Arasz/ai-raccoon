@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.ExceptionServices;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
@@ -17,7 +18,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     re-embed everything when the engine changes. Takes an open connection rather than opening
 ///     its own, since every caller is already inside one and embedding is never its own transaction.
 /// </summary>
-public sealed class EntryEmbedder(
+public sealed partial class EntryEmbedder(
     IEmbeddingService embeddings,
     IModelMigrationLease migrationLease,
     TimeProvider timeProvider,
@@ -28,6 +29,15 @@ public sealed class EntryEmbedder(
 {
     /// <summary>Rows per generator call. Internal so PendingEmbedJob can derive its own per-run bound from it instead of duplicating the number.</summary>
     internal const int BatchSize = 32;
+
+    /// <summary>Failed embed attempts after which a memory row is abandoned; MemorySql's pending selections carry it as the literal 3.</summary>
+    internal const int MaxEmbedAttempts = 3;
+
+    private const string EngineProbeText = "ai-raccoon embedding engine probe";
+
+    private const int SqliteBusy = 5;
+
+    private const int SqliteLocked = 6;
 
     private const string BundledModel = "bundled";
 
@@ -94,6 +104,7 @@ public sealed class EntryEmbedder(
             }
 
             await connection.ExecuteAsync(Def(MemorySql.MarkAllEmbeddedPending, cancellationToken, transaction));
+            await connection.ExecuteAsync(Def(MemorySql.ResetEmbedAttempts, cancellationToken, transaction));
 
             await transaction.CommitAsync(cancellationToken);
         }
@@ -338,11 +349,8 @@ public sealed class EntryEmbedder(
                 : null);
 
     /// <summary>
-    ///     Embeds a set of rows with the configured engine; missing rows are skipped. One
-    ///     <c>BEGIN IMMEDIATE</c>/<c>COMMIT</c> per <c>BatchSize</c> sub-batch around that batch's
-    ///     <c>MarkEmbedded</c> writes (WP12 Fix B) — inference stays outside it, so a BUSY write lock
-    ///     costs at most one batch's already-done inference, not every row this call has marked so
-    ///     far.
+    ///     Embeds a set of rows with the configured engine; missing rows are skipped. A sub-batch
+    ///     that fails falls back to one row at a time, so one bad row cannot hold the rest hostage.
     /// </summary>
     private async Task<int> EmbedAsync(SqliteConnection connection, IReadOnlyList<EmbedRow> rows,
         CancellationToken cancellationToken)
@@ -358,42 +366,132 @@ public sealed class EntryEmbedder(
         for (var offset = 0; offset < rows.Count; offset += BatchSize)
         {
             var batch = rows.Skip(offset).Take(BatchSize).ToList();
-            var result = await generator.GenerateAsync(batch.Select(r => embeddings.DocumentText(settings, r.Value)),
-                cancellationToken: cancellationToken);
-
-            var headingPaths = batch.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
-            var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, path => embeddings.DocumentText(settings, path),
-                cancellationToken);
-            var embeddingBlobs = result.Select(r => EmbeddingBlob.ToBytes(r.Vector)).ToList();
-
-            await connection.ExecuteAsync(
-                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
             try
             {
-                for (var i = 0; i < batch.Count; i++)
+                affected += await EmbedBatchAsync(connection, generator, settings, batch, cancellationToken);
+            }
+            catch (Exception ex) when (IsRowFailure(ex))
+            {
+                Log.BatchFellBackToOneRowAtATime(logger, batch.Count, ex);
+                affected += await EmbedRowByRowAsync(connection, generator, settings, batch, cancellationToken);
+            }
+        }
+
+        return affected;
+    }
+
+    /// <summary>
+    ///     Embeds each row on its own and charges a failed attempt to the row that failed. The first
+    ///     failure probes the engine: if the engine cannot answer at all, the pass fails and no row
+    ///     is charged, so an outage never abandons a healthy backlog.
+    /// </summary>
+    private async Task<int> EmbedRowByRowAsync(SqliteConnection connection,
+        IEmbeddingGenerator<string, Embedding<float>> generator, EmbeddingSettings settings,
+        IReadOnlyList<EmbedRow> batch, CancellationToken cancellationToken)
+    {
+        var affected = 0;
+        var engineAnswers = false;
+        foreach (var row in batch)
+        {
+            try
+            {
+                affected += await EmbedBatchAsync(connection, generator, settings, [row], cancellationToken);
+                engineAnswers = true;
+            }
+            catch (Exception ex) when (IsRowFailure(ex))
+            {
+                if (!engineAnswers)
                 {
-                    var headingPath = headingPaths[i];
-                    structure.TryGetValue(headingPath, out var structureEmbedding);
-                    affected += await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
-                            new
-                            {
-                                id = batch[i].Id,
-                                embedding = embeddingBlobs[i],
-                                headingPath,
-                                structureEmbedding
-                            },
-                            cancellationToken));
+                    engineAnswers = await EngineAnswersAsync(generator, settings, cancellationToken);
+                    if (!engineAnswers)
+                    {
+                        ExceptionDispatchInfo.Throw(ex);
+                    }
                 }
 
-                await connection.ExecuteAsync(
-                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
+                await CountFailedAttemptAsync(connection, row, ex, cancellationToken);
             }
-            catch
+        }
+
+        return affected;
+    }
+
+    private async Task<bool> EngineAnswersAsync(IEmbeddingGenerator<string, Embedding<float>> generator,
+        EmbeddingSettings settings, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await generator.GenerateAsync([embeddings.DocumentText(settings, EngineProbeText)],
+                cancellationToken: cancellationToken);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    private async Task CountFailedAttemptAsync(SqliteConnection connection, EmbedRow row, Exception error,
+        CancellationToken cancellationToken)
+    {
+        var attempts = await connection.ExecuteScalarAsync<int>(Def(MemorySql.IncrementEmbedAttempts,
+                new { id = row.Id }, cancellationToken));
+        Log.RowEmbedAttemptFailed(logger, row.Id, row.Source, attempts, MaxEmbedAttempts, error);
+        if (attempts >= MaxEmbedAttempts)
+        {
+            Log.RowAbandonedAfterMaxEmbedAttempts(logger, row.Id, row.Source, attempts);
+        }
+    }
+
+    /// <summary>A failure one row can cause: not cancellation, and not another writer holding the bank's lock.</summary>
+    private static bool IsRowFailure(Exception ex) =>
+        ex is not OperationCanceledException and not SqliteException { SqliteErrorCode: SqliteBusy or SqliteLocked };
+
+    /// <summary>
+    ///     One generator call for the rows and one for their distinct headings, then every
+    ///     <c>MarkEmbedded</c> in a single <c>BEGIN IMMEDIATE</c>/<c>COMMIT</c>; inference stays
+    ///     outside the write lock.
+    /// </summary>
+    private async Task<int> EmbedBatchAsync(SqliteConnection connection,
+        IEmbeddingGenerator<string, Embedding<float>> generator, EmbeddingSettings settings,
+        IReadOnlyList<EmbedRow> batch, CancellationToken cancellationToken)
+    {
+        var result = await generator.GenerateAsync(batch.Select(r => embeddings.DocumentText(settings, r.Value)),
+            cancellationToken: cancellationToken);
+
+        var headingPaths = batch.Select(r => HeadingPathParser.Parse(r.Value)).ToList();
+        var structure = await EmbedDistinctHeadingsAsync(generator, headingPaths, path => embeddings.DocumentText(settings, path),
+            cancellationToken);
+        var embeddingBlobs = result.Select(r => EmbeddingBlob.ToBytes(r.Vector)).ToList();
+
+        var affected = 0;
+        await connection.ExecuteAsync(
+                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
+        try
+        {
+            for (var i = 0; i < batch.Count; i++)
             {
-                await connection.ExecuteAsync(
-                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
-                throw;
+                var headingPath = headingPaths[i];
+                structure.TryGetValue(headingPath, out var structureEmbedding);
+                affected += await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
+                        new
+                        {
+                            id = batch[i].Id,
+                            embedding = embeddingBlobs[i],
+                            headingPath,
+                            structureEmbedding
+                        },
+                        cancellationToken));
             }
+
+            await connection.ExecuteAsync(
+                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
+        }
+        catch
+        {
+            await connection.ExecuteAsync(
+                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
+            throw;
         }
 
         return affected;
@@ -509,5 +607,28 @@ public sealed class EntryEmbedder(
         public long Id { get; init; }
 
         public string Value { get; init; } = "";
+
+        /// <summary>The row's source file, or its path when it has none: what a reader needs to find it.</summary>
+        public string? Source { get; init; }
+    }
+
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 442, Level = LogLevel.Debug,
+            Message = "A batch of {Rows} memory rows failed to embed as one call; retrying them one at a time")]
+        public static partial void BatchFellBackToOneRowAtATime(ILogger logger, int rows, Exception exception);
+
+        [LoggerMessage(EventId = 443, Level = LogLevel.Warning,
+            Message = "Memory row {RowId} ({Source}) failed to embed on attempt {Attempts} of {MaxAttempts}; "
+                      + "it stays pending and the drain will retry it")]
+        public static partial void RowEmbedAttemptFailed(ILogger logger, long rowId, string? source, int attempts,
+            int maxAttempts, Exception exception);
+
+        [LoggerMessage(EventId = 444, Level = LogLevel.Error,
+            Message = "Giving up on memory row {RowId} ({Source}) after {Attempts} failed embed attempts: it will not "
+                      + "be selected for embedding again and search cannot match it on meaning. Rewrite or re-ingest "
+                      + "it once the cause is gone; switching the embedding model also retries it.")]
+        public static partial void RowAbandonedAfterMaxEmbedAttempts(ILogger logger, long rowId, string? source,
+            int attempts);
     }
 }

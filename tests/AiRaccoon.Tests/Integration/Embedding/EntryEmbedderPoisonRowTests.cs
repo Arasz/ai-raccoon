@@ -21,7 +21,6 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 public sealed class EntryEmbedderPoisonRowTests : IDisposable
 {
     private const string Poison = "POISON";
-    private const int Ceiling = 3;
 
     private readonly string _dataRoot = TestData.CreateTempRoot("entry-embedder-poison-row");
     private readonly SqliteConnectionFactory _factory;
@@ -61,7 +60,7 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
         var embeddings = new PoisonEmbeddingService();
         var embedder = NewEmbedder(embeddings);
 
-        for (var pass = 0; pass < Ceiling; pass++)
+        for (var pass = 0; pass < EntryEmbedder.MaxEmbedAttempts; pass++)
         {
             await embedder.EmbedPendingBatchAsync(connection, 32, Ct);
         }
@@ -119,7 +118,7 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
         var embedder = NewEmbedder(embeddings);
         await embedder.StartMigrationAsync(connection, "local", "model-a", null, DateTimeOffset.UnixEpoch, Ct);
         var poison = await InsertAsync(connection, $"{Poison} row");
-        for (var pass = 0; pass < Ceiling; pass++)
+        for (var pass = 0; pass < EntryEmbedder.MaxEmbedAttempts; pass++)
         {
             await embedder.EmbedPendingBatchAsync(connection, 32, Ct);
         }
@@ -141,7 +140,7 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
         var embeddings = new PoisonEmbeddingService { EngineDown = true };
         var embedder = NewEmbedder(embeddings);
 
-        for (var pass = 0; pass < Ceiling + 2; pass++)
+        for (var pass = 0; pass < EntryEmbedder.MaxEmbedAttempts + 2; pass++)
         {
             await Should.ThrowAsync<InvalidOperationException>(
                 () => embedder.EmbedPendingBatchAsync(connection, 32, Ct));
@@ -162,14 +161,14 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
         var logger = new FakeLogger<EntryEmbedder>();
         var embedder = NewEmbedder(new PoisonEmbeddingService(), logger);
 
-        for (var pass = 0; pass < Ceiling + 1; pass++)
+        for (var pass = 0; pass < EntryEmbedder.MaxEmbedAttempts + 1; pass++)
         {
             await embedder.EmbedPendingBatchAsync(connection, 32, Ct);
         }
 
         var records = logger.Collector.GetSnapshot();
         var warnings = records.Where(r => r.Level == LogLevel.Warning).ToList();
-        warnings.Count.ShouldBe(Ceiling, "one warning per failed attempt, none once abandoned");
+        warnings.Count.ShouldBe(EntryEmbedder.MaxEmbedAttempts, "one warning per failed attempt, none once abandoned");
         warnings.ShouldAllBe(r => r.Exception != null);
         var giveUp = records.Where(r => r.Level == LogLevel.Error).ShouldHaveSingleItem();
         giveUp.Message.ShouldContain(poison.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -188,6 +187,17 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
         (await embedder.EmbedPendingBatchAsync(connection, 32, Ct)).ShouldBe(1);
 
         logger.Collector.GetSnapshot().ShouldNotContain(r => r.Level >= LogLevel.Warning);
+    }
+
+    /// <summary>A const SQL string cannot interpolate the ceiling, so this pins the literal to it.</summary>
+    [RetryFact]
+    public void PendingSelections_CarryTheCeilingAsTheirLiteral()
+    {
+        var clause = $"embed_attempts < {EntryEmbedder.MaxEmbedAttempts} ";
+
+        MemorySql.SelectPendingForEmbed.ShouldContain(clause);
+        MemorySql.SelectAllPendingForEmbed.ShouldContain(clause);
+        MemorySql.HasPendingEmbed.ShouldContain(clause);
     }
 
     private static EntryEmbedder NewEmbedder(IEmbeddingService embeddings, ILogger<EntryEmbedder>? logger = null) =>
