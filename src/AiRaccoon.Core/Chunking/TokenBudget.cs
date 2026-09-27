@@ -22,8 +22,8 @@ public static class TokenBudget
 
     /// <summary>
     ///     How many leading characters of <paramref name="text" /> to split off as one piece: the longest
-    ///     prefix within budget that ends on whitespace, so no word is cut. A word longer than the whole
-    ///     budget is hard-cut at the budget instead. Always at least 1, so a split loop terminates.
+    ///     in-budget prefix ending just after whitespace, else ending on a keyword-term boundary, else a hard
+    ///     cut at the budget (a term longer than the whole budget). Always at least 1, so a split loop terminates.
     /// </summary>
     public static int SplitLength(string text, int maxTokens, TokenCount countTokens)
     {
@@ -42,15 +42,35 @@ public static class TokenBudget
             firstContent++;
         }
 
-        for (var length = fits; length > firstContent + 1; length--)
+        var afterWhitespace = LastCut(fits, length => length - 1 > firstContent && char.IsWhiteSpace(text[length - 1]));
+        if (afterWhitespace > 0 && countTokens(text[..afterWhitespace]) <= maxTokens)
         {
-            if (char.IsWhiteSpace(text[length - 1]))
+            return afterWhitespace;
+        }
+
+        var termBoundary = LastCut(fits, length => length > firstContent && (!IsTermChar(text[length - 1]) || !IsTermChar(text[length])));
+        if (termBoundary > 0 && countTokens(text[..termBoundary]) <= maxTokens)
+        {
+            return termBoundary;
+        }
+
+        return Math.Max(1, fits);
+    }
+
+    /// <summary>A character keyword search treats as part of a term: the same set its query tokenizer keeps.</summary>
+    public static bool IsTermChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+    private static int LastCut(int fits, Func<int, bool> isCut)
+    {
+        for (var length = fits; length > 0; length--)
+        {
+            if (isCut(length))
             {
                 return length;
             }
         }
 
-        return Math.Max(1, fits);
+        return 0;
     }
 
     /// <summary>Binary search (token count is non-decreasing in prefix length for every tokenizer this

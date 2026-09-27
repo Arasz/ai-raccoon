@@ -6,8 +6,8 @@ namespace AiRaccoon.Core.Chunking;
 ///     Line-granular markdown splitter: deterministic, token-bounded and code-fence-aware.
 ///     No emitted chunk can exceed maxTokens under the tokenizer that counted it (docs/adr/0036):
 ///     a closed fence stays one atomic unit only while it fits; any unit that is still oversized —
-///     a fence, a long line, a minified-JSON line, one very long word — is split on whitespace, and
-///     only a word longer than the budget is cut mid-word (docs/adr/0120); either way it terminates. Joined multi-unit chunks are verified against the real
+///     a fence, a long line, a minified-JSON line, one very long word — is split on whitespace, else on a
+///     keyword-term boundary, and only a term longer than the budget is hard-cut (docs/adr/0120). Joined multi-unit chunks are verified against the real
 ///     tokenizer rather than trusted from summed per-unit counts, because BPE/WordPiece token
 ///     counts are not composable across a join. Every chunk is also a well-formed markdown
 ///     fragment: a boundary never falls inside a fence, because an over-budget fence is re-fenced
@@ -497,8 +497,8 @@ public sealed class MarkdownChunker : IMarkdownChunker
     }
 
     /// <summary>
-    ///     Adds text as one unit when it already fits maxTokens; otherwise splits it on whitespace via
-    ///     <see cref="TokenBudget.SplitLength" />, hard-cutting only a word longer than the budget, which
+    ///     Adds text as one unit when it already fits maxTokens; otherwise splits it via
+    ///     <see cref="TokenBudget.SplitLength" /> (whitespace, then term boundary, then hard cut), which
     ///     always makes progress. This is the floor beneath every coarser split (fence, line): no unit this
     ///     builds can ever exceed maxTokens, whatever it contains — a long line, a minified-JSON
     ///     blob, one very long word (docs/adr/0036).
