@@ -65,7 +65,7 @@ public sealed class ChunkBoundaryRepair(
             }
 
             var isFile = ordered[0].IsFileRow;
-            if (!HasSeam(ordered, isFile) && !(isFile && HasCollidingPositions(ordered)))
+            if (!HasSeam(ordered, isFile) && (!isFile || IsNumberedByRowCount(ordered)))
             {
                 continue;
             }
@@ -74,7 +74,7 @@ public sealed class ChunkBoundaryRepair(
             {
                 var scan = scanner.Scan(ordered[0].Path, [.. ordered.Select(row => new StoredChunk(row.Id, row.Hash))],
                     budget.MaxTokens, budget.OverlayTokens, budget.CountTokens);
-                if (scan.FileUsable && ordered.TrueForAll(row => scan.PositionById[row.Id] >= 0))
+                if (scan.MatchesStoredRows)
                 {
                     if (await RepositionAsync(connection, ordered, scan, cancellationToken))
                     {
@@ -123,11 +123,22 @@ public sealed class ChunkBoundaryRepair(
         return order is null ? null : [.. order.Select(row => byId[row.Id])];
     }
 
-    private static bool HasCollidingPositions(List<Row> ordered) =>
-        ordered.Where(row => row.ChunkIndex >= 0).GroupBy(row => row.ChunkIndex).Any(group => group.Count() > 1);
+    /// <summary>True when rows ordered by position hold exactly positions 0..n-1 and each carries n as its total.</summary>
+    private static bool IsNumberedByRowCount(List<Row> ordered)
+    {
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            if (ordered[i].ChunkIndex != i || ordered[i].TotalChunks != ordered.Count)
+            {
+                return false;
+            }
+        }
 
-    /// <summary>Gives a file's rows, all of which the current chunker still writes, the positions a re-ingest would;
-    /// true when any row moved.</summary>
+        return true;
+    }
+
+    /// <summary>Gives a file's rows, exactly the rows the current chunker writes for it, the positions a re-ingest
+    /// would; true when any row moved.</summary>
     private static async Task<bool> RepositionAsync(SqliteConnection connection, List<Row> ordered, ChunkPositionScan scan,
         CancellationToken cancellationToken)
     {

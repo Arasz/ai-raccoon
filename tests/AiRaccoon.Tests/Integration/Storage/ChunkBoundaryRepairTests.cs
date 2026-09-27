@@ -272,6 +272,74 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         positions.Select(p => p.Value).ToList().ShouldBe(inDocumentOrder, "positions follow the order the ingest wrote");
     }
 
+    /// <summary>File rows left with a gap and a total that counts a repeated chunk twice, the shape the ingest used to
+    /// write, take contiguous positions and the row count in place.</summary>
+    [RetryFact]
+    public async Task Run_FileRowsWithAGapAndAnInflatedTotal_TakeContiguousPositionsInPlace()
+    {
+        var file = await IngestFileAsync("gapped.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        var inDocumentOrder = await ValuesAsync(file);
+        for (var i = 1; i < ids.Count; i++)
+        {
+            await SetPositionAsync(ids[i], i + 1);
+        }
+
+        await SetTotalAsync(file, ids.Count + 1);
+
+        var report = await RepairAsync();
+
+        report.FilesReingested.ShouldBe(0);
+        report.FilesRepositioned.ShouldBe(1);
+        (await IdsAsync(file)).ShouldBe(ids, "the rows are kept, not re-ingested");
+        var positions = await PositionsAsync(file);
+        positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, ids.Count)]);
+        positions.ShouldAllBe(p => p.TotalChunks == ids.Count);
+        positions.Select(p => p.Value).ToList().ShouldBe(inDocumentOrder);
+    }
+
+    /// <summary>File rows whose positions are right but whose total_chunks is not the row count take the row count.</summary>
+    [RetryFact]
+    public async Task Run_FileRowsWithOnlyAnInflatedTotal_TakeTheRowCount()
+    {
+        var file = await IngestFileAsync("inflated.md", SectionedDocument(4));
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        await SetTotalAsync(file, ids.Count + 3);
+
+        var report = await RepairAsync();
+
+        report.FilesRepositioned.ShouldBe(1);
+        (await PositionsAsync(file)).ShouldAllBe(p => p.TotalChunks == ids.Count);
+    }
+
+    /// <summary>A file that grew on disk since its rows were written holds a chunk no row has yet, so repositioning
+    /// the rows would leave it unindexed: the file is re-ingested instead.</summary>
+    [RetryFact]
+    public async Task Run_FileRowsWithDuplicatePositionsWhoseFileGrew_AreReingested()
+    {
+        var document = SectionedDocument(4);
+        var file = await IngestFileAsync("grown.md", document);
+        var ids = await IdsAsync(file);
+        ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
+        await SetPositionAsync(ids[^1], 1);
+        // A paragraph too large to join the last row, so every stored row is still reproduced.
+        var appended = string.Join(" ", Enumerable.Repeat("The appended paragraph records a step added after the last ingest.", 30));
+        await File.WriteAllTextAsync(file, document + appended + "\n", TestContext.Current.CancellationToken);
+        (await ScanAsync(file)).PositionById.Values.ShouldAllBe(position => position >= 0,
+            "premise: the grown file still reproduces every stored row");
+
+        var report = await RepairAsync();
+
+        report.FilesRepositioned.ShouldBe(0);
+        report.FilesReingested.ShouldBe(1);
+        (await ValuesAsync(file)).ShouldContain(value => value.Contains("appended paragraph"));
+        var positions = await PositionsAsync(file);
+        positions.Select(p => (int)p.ChunkIndex).ToList().ShouldBe([.. Enumerable.Range(0, positions.Count)]);
+        positions.ShouldAllBe(p => p.TotalChunks == positions.Count);
+    }
+
     /// <summary>Colliding positions on a file that also holds a row the chunker no longer makes are repaired by
     /// re-ingesting it, which drops the stale row.</summary>
     [RetryFact]
@@ -522,6 +590,22 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await connection.ExecuteAsync("UPDATE entries SET chunk_index = @chunkIndex WHERE id = @id", new { id, chunkIndex });
+    }
+
+    /// <summary>What the current chunker makes of a file's rows on disk.</summary>
+    private async Task<ChunkPositionScan> ScanAsync(string file)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var scanner = new ChunkPositionScanner(TestData.RealFileTypeMatcher(), TestData.CreateEmbeddingService());
+        var budget = await scanner.BudgetAsync(connection, TestContext.Current.CancellationToken);
+        var rows = await connection.QueryAsync<StoredChunk>("SELECT id AS Id, hash AS Hash FROM entries WHERE path = @file", new { file });
+        return scanner.Scan(file, [.. rows], budget.MaxTokens, budget.OverlayTokens, budget.CountTokens);
+    }
+
+    private async Task SetTotalAsync(string path, long totalChunks)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync("UPDATE entries SET total_chunks = @totalChunks WHERE path = @path", new { path, totalChunks });
     }
 
     private async Task InsertFileRowAsync(string file, string value, long chunkIndex)

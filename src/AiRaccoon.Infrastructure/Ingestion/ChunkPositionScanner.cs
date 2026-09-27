@@ -16,14 +16,21 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     section or its position is unknown. <see cref="FileUsable" /> is false when the source file
 ///     is missing, unreadable, or has no matching handler — every row then maps to -1/null without a
 ///     document position ever being computed, and <see cref="TotalChunks" />/<see cref="Content" />
-///     are empty/zero.
+///     are empty/zero. <see cref="TotalChunks" /> counts the rows the file is stored as — a chunk
+///     repeated verbatim once (<see cref="DocumentChunks" />).
 /// </summary>
 public sealed record ChunkPositionScan(
     bool FileUsable,
     string Content,
     int TotalChunks,
     IReadOnlyDictionary<long, int> PositionById,
-    IReadOnlyDictionary<long, string?> SectionById);
+    IReadOnlyDictionary<long, string?> SectionById)
+{
+    /// <summary>True when the given rows are exactly the rows the file is stored as: every one is reproduced and the
+    /// file holds no chunk without one.</summary>
+    public bool MatchesStoredRows =>
+        FileUsable && TotalChunks == PositionById.Count && PositionById.Values.All(position => position >= 0);
+}
 
 /// <summary>
 ///     Shared chunk-position detection (GH #371): re-chunks a source file with the current chunker
@@ -43,17 +50,17 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
                 rows.ToDictionary(row => row.Id, _ => (string?)null));
         }
 
-        var chunks = handler.Chunker.ChunkWithHeadings(content, maxTokens, overlayTokens, countTokens);
+        var chunks = DocumentChunks.Distinct(sourceFile,
+            handler.Chunker.ChunkWithHeadings(content, maxTokens, overlayTokens, countTokens));
         var byHash = rows.ToDictionary(row => row.Hash, row => row.Id, StringComparer.Ordinal);
         var positionById = new Dictionary<long, int>(rows.Count);
         var sectionById = new Dictionary<long, string?>(rows.Count);
-        for (var ordinal = 0; ordinal < chunks.Count; ordinal++)
+        foreach (var chunk in chunks)
         {
-            var hash = ContentHash.Of(sourceFile, chunks[ordinal].Text);
-            if (byHash.TryGetValue(hash, out var id))
+            if (byHash.TryGetValue(chunk.Hash, out var id))
             {
-                positionById[id] = ordinal;
-                sectionById[id] = chunks[ordinal].SectionLabel();
+                positionById[id] = chunk.Position;
+                sectionById[id] = chunk.Chunk.SectionLabel();
             }
         }
 

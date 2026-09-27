@@ -254,21 +254,22 @@ public sealed class FileIngestor(
         var source = await sourceStore.ResolveOrCreateOnConnectionAsync(
             connection, SourceType.File, path, null, null, cancellationToken);
 
-        // Document position is authoritative here (GH #371): the chunker just produced `chunks` in
-        // document order, so every chunk's ordinal is written straight to chunk_index — for a
-        // freshly inserted row and for one this pass merely rediscovers unchanged (dedup) alike.
-        // Deriving it later from row-id order would put an edited-then-reinserted middle chunk last,
-        // since dedup gives unchanged siblings the old (low) id and the edit the newest (highest) one.
+        // Document position is authoritative here (GH #371): every row's position is written straight
+        // to chunk_index — for a freshly inserted row and for one this pass merely rediscovers unchanged
+        // (dedup) alike. Deriving it later from row-id order would put an edited-then-reinserted middle
+        // chunk last, since dedup gives unchanged siblings the old (low) id and the edit the newest one.
+        // A chunk repeated verbatim is one row, so positions and total_chunks count rows, not repeats.
+        var rows = DocumentChunks.Distinct(path, chunks);
         var inserted = 0;
-        for (var ordinal = 0; ordinal < chunks.Count; ordinal++)
+        foreach (var row in rows)
         {
-            var chunk = chunks[ordinal].Text;
-            var hash = ContentHash.Of(path, chunk);
+            var chunk = row.Chunk.Text;
+            var hash = row.Hash;
             hashes.Add(hash);
             // SourcePathQuery ANDs a "file#section" anchor against the FTS {source_file section}
             // columns; the chunker reports the heading path in force at each chunk (docs/adr/0048,
             // #549), and the anchor only ever names its leaf.
-            var section = chunks[ordinal].SectionLabel();
+            var section = row.Chunk.SectionLabel();
             var existingId = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
                         new
@@ -303,8 +304,8 @@ public sealed class FileIngestor(
                                 createdAt = now,
                                 updatedAt = now,
                                 sourceId = source.Id,
-                                chunkIndex = ordinal,
-                                totalChunks = chunks.Count
+                                chunkIndex = row.Position,
+                                totalChunks = rows.Count
                             },
                             cancellationToken));
                 if (affected > 0)
@@ -317,7 +318,7 @@ public sealed class FileIngestor(
 
             var chunkId = existingId.Value;
             await connection.ExecuteAsync(
-                    Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = ordinal, totalChunks = chunks.Count, section },
+                    Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = row.Position, totalChunks = rows.Count, section },
                         cancellationToken));
         }
 
