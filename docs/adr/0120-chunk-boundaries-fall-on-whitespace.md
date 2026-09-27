@@ -75,7 +75,7 @@ column on every insert path and a fourth bm25 weight, and it buys nothing the pr
 
 ### Repairing existing banks
 
-**`chunk-boundary-repair-v1`** (`ChunkBoundaryRepairJob` wrapping `ChunkBoundaryRepair`) runs once
+**`chunk-boundary-repair-v1`** (`ChunkBoundaryRepairJob` wrapping `ChunkBoundaryRepair`; renamed `chunk-boundary-repair-v2`, see the addendum) runs once
 per bank from the maintenance job list, right after `chunk-backfill-v2` and before
 `PendingEmbedJob`. It groups rows by bucket and path and orders each group in text order: a file by
 position, a note with its first chunk last-inserted (highest id), as `memory_write` writes it. A
@@ -134,3 +134,30 @@ it. Overlap would also duplicate text in every multi-chunk note's keyword and ve
   asserts that the note's first row is the keyword leg's top hit. With ten repeats the note spans
   two chunks and the identifier sits in the second one, so that premise is about chunk count, not
   about the boundary. The ten-repeat case lives in its own test.
+
+## Addendum (1.53.7): files the chunker must cut, and colliding file positions
+
+A manual run against a copy of a live bank showed two gaps in the repair (#788).
+
+- **Some files were re-ingested on every run.** A file whose term is longer than the budget (such as
+  whitespace-free JSON) is hard-cut by the current chunker too. The seam test flagged it, the
+  re-ingest wrote back the same rows, and the next run flagged it again: 15 files on the first run
+  of a bank copy, 14 on a second run of the same copy.
+- **Colliding positions on file rows survived.** 186 file groups on the live bank held two rows at
+  one `chunk_index`. Watch catch-up skips an unchanged file, and the bank-wide recomputes keep the
+  existing order and only fill `-1`, so nothing ever corrected them.
+
+Before a file group is re-ingested, the repair now re-chunks the file with the current chunker
+(`ChunkPositionScanner`, the same scan `repair chunk-index` uses). When every stored row is one the
+chunker still writes, a re-ingest would change nothing but positions. The group then takes the
+positions and section labels the scan reports, in place, and the file is not re-ingested. That also
+covers a file group whose only defect is colliding positions, which the repair now selects alongside
+seamed groups. A group holding a row the chunker no longer writes is re-ingested as before. A file
+gone from disk, or one in a workspace, keeps the old path. The code corpus has no position scan, so
+a code file is still re-ingested when a seam is found, but it is counted only when its stored chunk
+hashes changed.
+
+The job is renamed `chunk-boundary-repair-v2` so a bank whose ledger already holds the v1 stamp runs
+it once more. The repair is idempotent: a file already correct moves nothing. `ChunkBoundaryRepairTests`
+pins the three new shapes (a file the chunker must cut, colliding positions only, colliding positions
+plus a stale row) and the code-file case. Each failed before its change.
