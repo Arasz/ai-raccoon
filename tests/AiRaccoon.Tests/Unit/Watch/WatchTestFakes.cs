@@ -229,14 +229,29 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         ];
     }
 
-    public Task<IReadOnlyDictionary<string, long>> ListFileStampsAsync(string projectId,
+    /// <summary>File sizes the digest recorded, by the same key as <see cref="FileHashes" />.</summary>
+    public Dictionary<string, long> FileSizes { get; } = new(StringComparer.Ordinal);
+
+    public Task<IReadOnlyDictionary<string, WatchFileStamp>> ListFileStampsAsync(string projectId,
         CancellationToken cancellationToken = default)
     {
         ListFilesCalls++;
         var prefix = $"{projectId}\u0000";
-        return Task.FromResult<IReadOnlyDictionary<string, long>>(FileHashes
+        return Task.FromResult<IReadOnlyDictionary<string, WatchFileStamp>>(FileHashes
             .Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
-            .ToDictionary(kv => kv.Key[prefix.Length..], kv => kv.Value.UpdatedAt, IngestPath.PathComparer));
+            .ToDictionary(kv => kv.Key[prefix.Length..],
+                kv => new WatchFileStamp(kv.Value.UpdatedAt, FileSizes.TryGetValue(kv.Key, out var size) ? size : null),
+                IngestPath.PathComparer));
+    }
+
+    public Task SetFileSizeAsync(string projectId, string path, long size, CancellationToken cancellationToken = default)
+    {
+        if (FileHashes.ContainsKey(Key(projectId, path)))
+        {
+            FileSizes[Key(projectId, path)] = size;
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>Synchronous fingerprint read/write — the fake memory store's replace transaction uses these.</summary>

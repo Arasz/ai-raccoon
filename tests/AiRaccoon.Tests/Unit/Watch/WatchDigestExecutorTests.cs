@@ -45,6 +45,43 @@ public sealed class WatchDigestExecutorTests
             WatchTestStack.FixedNow.ToUnixTimeSeconds());
     }
 
+    /// <summary>The digest records the file's size beside its fingerprint, for the catch-up scan's size check.</summary>
+    [Fact]
+    public async Task Digest_RecordsTheFileSize()
+    {
+        using var dir = TempDir.New("digest-size");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "hello", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Created, null,
+            TestContext.Current.CancellationToken);
+
+        (await stack.Store.ListFileStampsAsync(Project, TestContext.Current.CancellationToken))[file].Size
+            .ShouldBe(5);
+    }
+
+    /// <summary>A hash-skip touch fills the size too, so a fingerprint written before sizes existed gains one.</summary>
+    [Fact]
+    public async Task Digest_HashSkip_RecordsTheFileSize()
+    {
+        using var dir = TempDir.New("digest-size-touch");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "hello", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, file, WatchDigestExecutor.ComputeHash(file, "hello"), 1,
+            TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, file, WatchEventKind.Changed, null,
+            TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldBeEmpty();
+        (await stack.Store.ListFileStampsAsync(Project, TestContext.Current.CancellationToken))[file].Size
+            .ShouldBe(5);
+    }
+
     /// <summary>A watched file that routed to the code corpus must wake the code drain, not
     /// memory — the fake reports which corpus the replace actually wrote to, exactly like the
     /// real store's ReplaceIfFileChangedAsync now does.</summary>

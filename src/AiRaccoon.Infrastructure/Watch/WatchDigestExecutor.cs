@@ -83,6 +83,8 @@ public sealed class WatchDigestExecutor(
             return;
         }
 
+        // Read before the content: a write racing the digest then leaves a size that no longer matches.
+        var size = new FileInfo(normalized).Length;
         var content = await File.ReadAllTextAsync(normalized, cancellationToken);
         var hash = ComputeHash(normalized, content);
         var previous = await watchStore.GetFileHashAsync(projectId, normalized, cancellationToken);
@@ -90,6 +92,7 @@ public sealed class WatchDigestExecutor(
         {
             // Hash-skip: metadata-only touch — refresh timestamps, never touch memory or hooks.
             await TouchAsync(projectId, normalizedWatch, normalized, hash, cancellationToken);
+            await watchStore.SetFileSizeAsync(projectId, normalized, size, cancellationToken);
             return;
         }
 
@@ -97,6 +100,7 @@ public sealed class WatchDigestExecutor(
         // only a cheap filter, and a concurrent process either loses the race and skips or, on a
         // crash mid-digest, rolls back — the file is never left chunkless behind a matching hash.
         var replaceResult = await store.ReplaceIfFileChangedAsync(projectId, normalized, hash, cancellationToken);
+        await watchStore.SetFileSizeAsync(projectId, normalized, size, cancellationToken);
         // Signals whichever corpus the replace actually wrote to; rows stay embed_state='pending'
         // (the durable outbox, ADR-0076) until EmbedDrainService's single reader drains them.
         embedDrainPump.SignalWritten(replaceResult.Corpus);

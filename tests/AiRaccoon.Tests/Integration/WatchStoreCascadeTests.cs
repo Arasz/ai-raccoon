@@ -66,9 +66,9 @@ public sealed class WatchStoreCascadeTests
         (await stack.Store.HasFingerprintAtOrUnderAsync(Project, stack.Dir("repo", "other.md"), ct)).ShouldBeFalse("another project's fingerprint");
     }
 
-    /// <summary>The restart scan's per-file due check reads each fingerprint's own time, scoped to the project.</summary>
+    /// <summary>The catch-up scan's per-file due check reads each fingerprint's own time and size, scoped to the project.</summary>
     [RetryFact]
-    public async Task ListFileStampsAsync_ReturnsEachFingerprintsUpdatedAt_ForTheProjectOnly()
+    public async Task ListFileStampsAsync_ReturnsEachFingerprintsTimeAndSize_ForTheProjectOnly()
     {
         using var stack = new Stack();
         var ct = TestContext.Current.CancellationToken;
@@ -76,13 +76,41 @@ public sealed class WatchStoreCascadeTests
         var b = stack.Dir("repo", "b.md");
         await stack.Store.UpsertFileHashAsync(Project, a, "h", 100, ct);
         await stack.Store.UpsertFileHashAsync(Project, b, "h", 200, ct);
+        await stack.Store.SetFileSizeAsync(Project, b, 42, ct);
         await stack.Store.UpsertFileHashAsync(OtherProject, stack.Dir("repo", "c.md"), "h", 300, ct);
 
         var stamps = await stack.Store.ListFileStampsAsync(Project, ct);
 
         stamps.Count.ShouldBe(2);
-        stamps[a].ShouldBe(100);
-        stamps[b].ShouldBe(200);
+        stamps[a].ShouldBe(new WatchFileStamp(100, null));
+        stamps[b].ShouldBe(new WatchFileStamp(200, 42));
+    }
+
+    /// <summary>A size is only ever set on an existing fingerprint; a path never fingerprinted stays absent.</summary>
+    [RetryFact]
+    public async Task SetFileSizeAsync_OnAPathWithoutAFingerprint_WritesNothing()
+    {
+        using var stack = new Stack();
+        var ct = TestContext.Current.CancellationToken;
+
+        await stack.Store.SetFileSizeAsync(Project, stack.Dir("repo", "a.md"), 42, ct);
+
+        (await stack.Store.ListFileStampsAsync(Project, ct)).ShouldBeEmpty();
+    }
+
+    /// <summary>A new fingerprint for changed content keeps the old size until the digest writes the new one.</summary>
+    [RetryFact]
+    public async Task UpsertFileHashAsync_OnAnExistingFingerprint_KeepsItsSize()
+    {
+        using var stack = new Stack();
+        var ct = TestContext.Current.CancellationToken;
+        var a = stack.Dir("repo", "a.md");
+        await stack.Store.UpsertFileHashAsync(Project, a, "h1", 100, ct);
+        await stack.Store.SetFileSizeAsync(Project, a, 42, ct);
+
+        await stack.Store.UpsertFileHashAsync(Project, a, "h2", 200, ct);
+
+        (await stack.Store.ListFileStampsAsync(Project, ct))[a].ShouldBe(new WatchFileStamp(200, 42));
     }
 
     [RetryFact]

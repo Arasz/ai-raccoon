@@ -9,7 +9,7 @@ namespace AiRaccoon.Infrastructure.Watch;
 /// <summary>
 ///     Catch-up scan (docs/plans/file-watcher-implementation.md D1, ADR-0121): a never-synced watch
 ///     gets a full initial scan; otherwise it re-queues each file whose mtime is at or after its own
-///     fingerprint's time, or that was never fingerprinted, reconciles deletions from downtime, and
+///     fingerprint's time or whose size differs from the recorded one, or that was never fingerprinted, reconciles deletions from downtime, and
 ///     is single-flighted per (projectId, path).
 ///     Enumeration also skips hidden directory segments, the built-in deny set
 ///     (<see cref="WatchDenySet.Excludes" />, the same predicate the digest applies to events), and
@@ -52,14 +52,14 @@ public sealed partial class WatchCatchUp(
 
     /// <summary>
     ///     Deterministic core: files under path are due when <paramref name="stamps" /> is null (full
-    ///     scan), the file has no fingerprint, or its mtime is at or after its fingerprint's unix
-    ///     second — a per-file check, so a missed event is never hidden by a later digest of another
+    ///     scan), the file has no fingerprint, its mtime is at or after its fingerprint's unix second, or
+    ///     its size differs from a recorded one — a per-file check, so a missed event is never hidden by a later digest of another
     ///     file. A watched FILE target enumerates
     ///     itself (no ignore rules — no tree, §5.6); a missing target enumerates nothing
     ///     (reconciliation removes its stale chunks). Directory enumeration skips hidden segments,
     ///     the built-in deny set, and any path the ignore rules match.
     /// </summary>
-    internal static IEnumerable<string> EnumerateFiles(string path, IReadOnlyDictionary<string, long>? stamps,
+    internal static IEnumerable<string> EnumerateFiles(string path, IReadOnlyDictionary<string, WatchFileStamp>? stamps,
         IgnoreRules? ignoreRules = null)
     {
         if (!Directory.Exists(path))
@@ -106,10 +106,17 @@ public sealed partial class WatchCatchUp(
         !string.Equals(Path.GetFileName(file), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
         rules.IsIgnored(Path.GetRelativePath(root, file), false);
 
-    private static bool IsDue(string file, IReadOnlyDictionary<string, long>? stamps) =>
-        stamps is null ||
-        !stamps.TryGetValue(IngestPath.Normalize(file), out var fingerprintedAt) ||
-        new DateTimeOffset(File.GetLastWriteTimeUtc(file)).ToUnixTimeSeconds() >= fingerprintedAt;
+    private static bool IsDue(string file, IReadOnlyDictionary<string, WatchFileStamp>? stamps)
+    {
+        if (stamps is null || !stamps.TryGetValue(IngestPath.Normalize(file), out var stamp))
+        {
+            return true;
+        }
+
+        var info = new FileInfo(file);
+        return new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeSeconds() >= stamp.UpdatedAt ||
+               stamp.Size is { } size && size != info.Length;
+    }
 
     private async Task ScanCoreAsync(string projectId, string path, bool changedOnly,
         CancellationToken cancellationToken)

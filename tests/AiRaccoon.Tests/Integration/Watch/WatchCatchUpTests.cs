@@ -31,8 +31,50 @@ public sealed class WatchCatchUpTests
 
     private static void Stamp(string path, DateTimeOffset at) => SetLastWriteTimeUtc(path, at.UtcDateTime);
 
-    private static IReadOnlyDictionary<string, long> Stamps(params string[] paths) =>
-        paths.ToDictionary(IngestPath.Normalize, _ => FingerprintedAt.ToUnixTimeSeconds(), IngestPath.PathComparer);
+    private static IReadOnlyDictionary<string, WatchFileStamp> Stamps(params string[] paths) =>
+        paths.ToDictionary(IngestPath.Normalize, _ => new WatchFileStamp(FingerprintedAt.ToUnixTimeSeconds(), null),
+            IngestPath.PathComparer);
+
+    private static IReadOnlyDictionary<string, WatchFileStamp> SizedStamp(string path, long size) =>
+        new Dictionary<string, WatchFileStamp>(IngestPath.PathComparer)
+        {
+            [IngestPath.Normalize(path)] = new(FingerprintedAt.ToUnixTimeSeconds(), size)
+        };
+
+    /// <summary>Content replaced under an mtime older than the fingerprint (cp -p, tar -x) is caught by its size.</summary>
+    [RetryFact]
+    public void EnumerateFiles_FileWithAnOlderMtimeButADifferentSize_IsDue()
+    {
+        using var dir = TempDir.New("catchup-size-differs");
+        var file = dir.File("a.md");
+        WriteAllText(file, "zephyrlonger");
+        Stamp(file, FingerprintedAt.AddHours(-1));
+
+        WatchCatchUp.EnumerateFiles(dir.Path, SizedStamp(file, 3)).ShouldContain(file);
+    }
+
+    [RetryFact]
+    public void EnumerateFiles_FileWithAnOlderMtimeAndTheSameSize_IsNotDue()
+    {
+        using var dir = TempDir.New("catchup-size-same");
+        var file = dir.File("a.md");
+        WriteAllText(file, "zephyrsame");
+        Stamp(file, FingerprintedAt.AddHours(-1));
+
+        WatchCatchUp.EnumerateFiles(dir.Path, SizedStamp(file, new FileInfo(file).Length)).ShouldBeEmpty();
+    }
+
+    /// <summary>A fingerprint from before sizes were recorded falls back to the mtime check alone.</summary>
+    [RetryFact]
+    public void EnumerateFiles_FingerprintWithoutASize_AndAnOlderMtime_IsNotDue()
+    {
+        using var dir = TempDir.New("catchup-size-unknown");
+        var file = dir.File("a.md");
+        WriteAllText(file, "zephyrlegacy");
+        Stamp(file, FingerprintedAt.AddHours(-1));
+
+        WatchCatchUp.EnumerateFiles(dir.Path, Stamps(file)).ShouldBeEmpty();
+    }
 
     [RetryFact]
     public void EnumerateFiles_FullScan_ReturnsEveryFile()
@@ -271,6 +313,36 @@ public sealed class WatchCatchUpTests
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
 
         stack.Memory.Ingested.ShouldContain((Project, replaced, "zephyrnew"));
+    }
+
+    /// <summary>
+    ///     Content restored with an old mtime (cp -p, tar -x) and no event: the size the digest
+    ///     recorded no longer matches, so the changed-files scan re-digests it.
+    /// </summary>
+    [RetryFact]
+    public async Task ChangedFilesScan_FileReplacedWithAnOlderMtimeAndADifferentSize_IsReDigested()
+    {
+        using var dir = TempDir.New("catchup-restored-older");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var restored = dir.File("restored.md");
+        await WriteAllTextAsync(restored, "zephyrcurrent", TestContext.Current.CancellationToken);
+        Stamp(restored, stack.Time.GetUtcNow().AddMinutes(-1));
+        stack.Pipeline.Enqueue(new WatchEvent(Project, restored, WatchEventKind.Created));
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        await WriteAllTextAsync(restored, "zephyrrestoredbackup", TestContext.Current.CancellationToken);
+        Stamp(restored, stack.Time.GetUtcNow().AddDays(-30));
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueChangedFiles(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldContain((Project, restored, "zephyrrestoredbackup"));
     }
 
     [RetryFact]
