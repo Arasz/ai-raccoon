@@ -43,10 +43,10 @@ def _result() -> dict:
         runs=RUNS, reference="auto")
 
 
-def test_build_result_carries_schema_version_1_and_every_section() -> None:
+def test_build_result_carries_schema_version_2_and_every_section() -> None:
     doc = _result()
 
-    assert doc["schemaVersion"] == 1
+    assert doc["schemaVersion"] == 2
     assert set(result.TOP_KEYS) <= set(doc)
 
 
@@ -90,11 +90,11 @@ EXPECTED_MARKDOWN = """\
 
 AiRaccoon 1.53.0 · corpus c0ffee (3 files) · 100 chunks · SoC: powermetrics · system: AppleSmartBattery SystemLoad accumulator
 
-| device | status | median wall s | system net J | SoC net J | system mJ/chunk | SoC mJ/chunk | server CPU-s | peak phys MiB | peak neural MiB |
-|---|---|---|---|---|---|---|---|---|---|
-| auto | ok×2 | 30.5 | 310.0 | 155.0 | 3100.0 | 1550.0 | 61.0 | 512 | 0 |
-| coreml | ok×2 | 41.0 | 205.0 | 92.5 | 2050.0 | 925.0 | 82.0 | 512 | 0 |
-| cpu | fell_back×1 | – | – | – | – | – | – | – | – |
+| device | status | median wall s | system net J | SoC net J | system mJ/chunk | SoC mJ/chunk | server CPU-s | median p95 search ms | peak phys MiB | peak neural MiB |
+|---|---|---|---|---|---|---|---|---|---|---|
+| auto | ok×2 | 30.5 | 310.0 | 155.0 | 3100.0 | 1550.0 | 61.0 | – | 512 | 0 |
+| coreml | ok×2 | 41.0 | 205.0 | 92.5 | 2050.0 | 925.0 | 82.0 | – | 512 | 0 |
+| cpu | fell_back×1 | – | – | – | – | – | – | – | – | – |
 
 Cold coreml compile: 55.0 s, 400.0 J system, 12.0 compiler CPU-s; warm load 3.0 s.
 
@@ -137,3 +137,128 @@ def test_energy_fields_leave_system_empty_without_battery_telemetry() -> None:
     assert fields["system_energy_net_j"] is None
     assert fields["system_below_idle"] is False
     assert fields["mj_per_chunk_system_net"] is None
+
+
+# ---------------------------------------------------------------------------------------------
+# percentile: nearest-rank
+
+
+def test_percentile_nearest_rank_on_a_known_list() -> None:
+    values = [1.0, 2.0, 3.0, 4.0, 5.0]
+
+    assert result.percentile(values, 50) == 3.0
+    assert result.percentile(values, 95) == 5.0
+
+
+def test_percentile_of_a_single_element_is_that_element_at_any_pct() -> None:
+    assert result.percentile([42.0], 50) == 42.0
+    assert result.percentile([42.0], 95) == 42.0
+
+
+def test_percentile_of_an_empty_sequence_is_none() -> None:
+    assert result.percentile([], 50) is None
+    assert result.percentile([], 95) is None
+
+
+def test_percentile_ignores_input_order() -> None:
+    assert result.percentile([5.0, 1.0, 3.0, 2.0, 4.0], 50) == result.percentile([1.0, 2.0, 3.0, 4.0, 5.0], 50)
+
+
+# ---------------------------------------------------------------------------------------------
+# search_latency_fields: one run's p50/p95 off its raw per-query latencies
+
+
+def test_search_latency_fields_carries_the_raw_list_and_its_percentiles() -> None:
+    fields = result.search_latency_fields([10.0, 20.0, 30.0, 40.0])
+
+    assert fields["search_latency_ms"] == [10.0, 20.0, 30.0, 40.0]
+    assert fields["search_p50_ms"] == 20.0
+    assert fields["search_p95_ms"] == 40.0
+
+
+def test_search_latency_fields_of_an_empty_list_leaves_percentiles_none() -> None:
+    fields = result.search_latency_fields([])
+
+    assert fields["search_latency_ms"] == []
+    assert fields["search_p50_ms"] is None
+    assert fields["search_p95_ms"] is None
+
+
+# ---------------------------------------------------------------------------------------------
+# search_latency_loses: range-separation verdict, mirroring `beats`
+
+
+def test_search_latency_loses_when_every_device_p95_sits_above_every_auto_p95() -> None:
+    assert result.search_latency_loses([50.0, 55.0], [10.0, 12.0]) is True
+
+
+def test_search_latency_does_not_lose_when_the_ranges_overlap() -> None:
+    assert result.search_latency_loses([10.0, 30.0], [15.0, 25.0]) is False
+
+
+def test_search_latency_does_not_lose_when_the_device_range_sits_entirely_below_auto() -> None:
+    assert result.search_latency_loses([5.0, 8.0], [20.0, 25.0]) is False
+
+
+def test_search_latency_loses_is_none_without_data_on_either_side() -> None:
+    assert result.search_latency_loses([], [10.0]) is None
+    assert result.search_latency_loses([10.0], []) is None
+
+
+# ---------------------------------------------------------------------------------------------
+# Summary + markdown: the median-p95 column and the lose verdict line
+
+
+def _with_search(run: dict, p95: float | None) -> dict:
+    run = dict(run)
+    run.update(search_latency_ms=[] if p95 is None else [p95], search_p50_ms=p95, search_p95_ms=p95)
+    return run
+
+
+def test_device_summary_carries_median_p95_search_ms_over_its_repeats() -> None:
+    runs = [_with_search(_run("auto", 0, 30.0, 300.0, 150.0), 12.0),
+            _with_search(_run("auto", 1, 31.0, 320.0, 160.0), 18.0)]
+
+    summary = result.summarize(runs, "auto")["devices"]["auto"]["search_p95_ms"]
+
+    assert summary == {"median": 15.0, "min": 12.0, "max": 18.0, "n": 2}
+
+
+def test_summary_search_latency_verdict_loses_when_ranges_separate_higher() -> None:
+    runs = [_with_search(_run("auto", 0, 30.0, 300.0, 150.0), 10.0),
+            _with_search(_run("auto", 1, 31.0, 320.0, 160.0), 12.0),
+            _with_search(_run("coreml", 0, 40.0, 200.0, 90.0), 50.0),
+            _with_search(_run("coreml", 1, 42.0, 210.0, 95.0), 55.0)]
+
+    verdicts = result.summarize(runs, "auto")["search_latency_verdicts"]
+
+    assert verdicts["coreml"] is True
+
+
+def test_summary_search_latency_verdict_is_none_when_the_phase_was_disabled() -> None:
+    runs = [_run("auto", 0, 30.0, 300.0, 150.0), _run("coreml", 0, 40.0, 200.0, 90.0)]
+
+    verdicts = result.summarize(runs, "auto")["search_latency_verdicts"]
+
+    assert verdicts["coreml"] is None
+
+
+def test_markdown_includes_the_search_column_and_the_lose_line_when_data_is_present() -> None:
+    doc = _result()
+    doc["runs"] = [_with_search(r, 10.0 if r["device"] == "auto" else 50.0) if r["device"] in ("auto", "coreml")
+                   else r for r in doc["runs"]]
+    doc["summary"] = result.summarize(doc["runs"], "auto")
+
+    markdown = result.render_markdown(doc)
+
+    assert "median p95 search ms" in markdown
+    assert "coreml vs auto: " in markdown
+    coreml_line = next(line for line in markdown.splitlines() if line.startswith("- coreml vs auto"))
+    assert "p95 search latency: lose? yes" in coreml_line
+
+
+def test_markdown_omits_the_lose_line_when_no_run_carries_search_latency() -> None:
+    markdown = result.render_markdown(_result())
+
+    assert "median p95 search ms" in markdown
+    assert "p95 search latency" not in markdown

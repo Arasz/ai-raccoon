@@ -105,7 +105,7 @@ the ceiling, and fp16 (97 MB) does not.
   (0.6 MB) and gains about 100 MB.
 - First start after upgrading re-embeds every bank. ADR-0076 measured roughly 6 minutes of
   refused tool calls on a 25,917-entry bank with the old engine. The new engine is heavier per
-  row on the CPU and lighter on the GPU. README's Breaking changes names the cost.
+  row on the CPU and lighter on the GPU. The [breaking changes](../reference/breaking-changes.md) page names the cost.
 - The bundled engine's memory chunk budget stays 254 tokens (`chunkTokens`). The code corpus keeps
   its own 510-token chunks, and activation now checks the engine's window, not its memory budget.
 - The code corpus switches with `model code set default`. A corpus left on code-daemon-embed-v1
