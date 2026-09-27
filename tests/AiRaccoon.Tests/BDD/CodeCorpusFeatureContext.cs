@@ -232,7 +232,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         var codeFileTypeMatcher = new CodeFileTypeMatcher();
         var codeIngestor = new CodeIngestor(codeFileTypeMatcher, new StubCodeChunker(), TimeProvider);
         var fileIngestor = new FileIngestor(matcher, sourceStore, TimeProvider, embeddings,
-            new IgnoreRulesProvider(), codeFileTypeMatcher, codeIngestor, WatchStore, EmbedDrainPump);
+            new IgnoreRulesProvider(), codeFileTypeMatcher, codeIngestor, WatchStore, EmbedDrainPump, new IndexableFileWalk());
         var noiseFilteringService = new NoiseFilteringService([]);
         return new SqliteMemoryStore(Factory, sourceStore, fileIngestor, embedder, TimeProvider,
             NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, Settings, EmbedDrainPump,
@@ -252,7 +252,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         EventSource = new WatchEventSource(Pipeline.Enqueue, _ => { }, NullLogger<WatchEventSource>.Instance);
         CatchUp = catchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard,
             new SqliteWatchScanLease(Factory, TimeProvider), TimeProvider, NullLogger<WatchCatchUp>.Instance,
-            new IgnoreRulesProvider());
+            new IgnoreRulesProvider(), new IndexableFileWalk());
         Hosted = new WatchHostedService(Store, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
             TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         WatchServiceInstance = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver(),

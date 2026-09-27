@@ -72,8 +72,10 @@ public sealed class MemorySchemaDdlStatementCountTests
         // probes fall under the existing code_entries exclusion above and add nothing here. The
         // project-scoped tombstone repair (5 statements) moved to MigrateToV11Async in the
         // version ladder. +3 the ADR-0119 entries.embed_attempts ensure (sqlite_master probe +
-        // pragma_table_info probe traced twice; the column is already there, so no ALTER).
-        CountDdl(statements).ShouldBe(69, Report(statements));
+        // pragma_table_info probe traced twice; the column is already there, so no ALTER). +2 the
+        // ADR-0121 watch_files.size ensure (one pragma_table_info probe traced twice; watch_files
+        // is always created by the block itself, so there is no sqlite_master probe).
+        CountDdl(statements).ShouldBe(71, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)

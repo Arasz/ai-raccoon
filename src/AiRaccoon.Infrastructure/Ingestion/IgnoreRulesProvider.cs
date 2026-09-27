@@ -25,8 +25,14 @@ public sealed class IgnoreRulesProvider : IIgnoreRulesProvider
             return IgnoreRules.Empty;
         }
 
-        var content = await File.ReadAllTextAsync(path, cancellationToken);
-        return IgnoreRules.Parse(content);
+        try
+        {
+            return IgnoreRules.Parse(await File.ReadAllTextAsync(path, cancellationToken));
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return IgnoreRules.Empty; // deleted between the check and the read
+        }
     }
 }
 

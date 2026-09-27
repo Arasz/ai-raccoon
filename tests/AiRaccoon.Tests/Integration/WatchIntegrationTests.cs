@@ -856,7 +856,7 @@ public sealed class WatchIntegrationTests
                 new FakeLogger<WatchEventSource>(_logs));
             CatchUp = catchUp = new WatchCatchUp(Pipeline, WatchStore, ScanGuard,
                 new SqliteWatchScanLease(_factory, Time), Time, new FakeLogger<WatchCatchUp>(_logs),
-                new IgnoreRulesProvider());
+                new IgnoreRulesProvider(), new IndexableFileWalk());
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
                 TestTelemetry.None, new FakeLogger<WatchHostedService>(_logs));
             Service = new WatchService(WatchStore, Memory, Pipeline, Time, new WatchOverlapResolver(),

@@ -46,7 +46,7 @@ public class FileIngestorSectionColumnTests : IDisposable
         _embedder = TestData.CreateEntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
         _ingestor = new FileIngestor(matcher, new SqliteMemorySourceStore(factory), TimeProvider.System,
             TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
-            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance);
+            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
 
         using var scopeCmd = _conn.CreateCommand();
         scopeCmd.CommandText = "INSERT INTO settings (key, value) VALUES (@key, @scope);";

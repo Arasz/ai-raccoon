@@ -369,6 +369,12 @@ internal static class MemorySql
     public const string SelectWatchFilesByProject =
         "SELECT path FROM watch_files WHERE project_id = @projectId";
 
+    public const string SelectWatchFileStampsByProject =
+        "SELECT path, updated_at, size FROM watch_files WHERE project_id = @projectId";
+
+    public const string UpdateWatchFileSize =
+        "UPDATE watch_files SET size = @size WHERE project_id = @projectId AND path = @path";
+
     /// <summary>
     ///     WP12 Fix A: claims the right to chunk (project_id, path) — 1 row affected means this
     ///     caller now owns it (a fresh claim, or a reclaim of one stale by more than

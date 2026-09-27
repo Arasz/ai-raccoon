@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -44,7 +45,17 @@ public interface IWatchStore
 
     /// <summary>Lists every fingerprinted file path for the project (catch-up reconciliation).</summary>
     Task<IReadOnlyList<string>> ListFilesAsync(string projectId, CancellationToken cancellationToken = default);
+
+    /// <summary>Maps every fingerprinted file path for the project to when its fingerprint was written and the file's size then.</summary>
+    Task<IReadOnlyDictionary<string, WatchFileStamp>> ListFileStampsAsync(string projectId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Records the file length the digest saw beside an existing fingerprint; a path without one is left alone.</summary>
+    Task SetFileSizeAsync(string projectId, string path, long size, CancellationToken cancellationToken = default);
 }
+
+/// <summary>A fingerprint's unix-second write time and the file length the digest saw (null before sizes were recorded).</summary>
+public sealed record WatchFileStamp(long UpdatedAt, long? Size);
 
 /// <summary>Dapper impl of IWatchStore over the watches/watch_files tables (MemorySql consts); also
 /// the server-side default for <see cref="IWatchRegisteredStore" /> (ADR-0075 amendment) —
@@ -199,6 +210,25 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
                 new CommandDefinition(MemorySql.SelectWatchFilesByProject, new { projectId },
                     cancellationToken: cancellationToken));
         return [.. rows];
+    }
+
+    public async Task<IReadOnlyDictionary<string, WatchFileStamp>> ListFileStampsAsync(string projectId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
+        var rows = await connection.QueryAsync<(string Path, long UpdatedAt, long? Size)>(
+                new CommandDefinition(MemorySql.SelectWatchFileStampsByProject, new { projectId },
+                    cancellationToken: cancellationToken));
+        return rows.ToDictionary(r => r.Path, r => new WatchFileStamp(r.UpdatedAt, r.Size), IngestPath.PathComparer);
+    }
+
+    public async Task SetFileSizeAsync(string projectId, string path, long size,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
+        await connection.ExecuteAsync(
+                new CommandDefinition(MemorySql.UpdateWatchFileSize, new { projectId, path, size },
+                    cancellationToken: cancellationToken));
     }
 
     /// <summary>

@@ -6,17 +6,9 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Watch;
 
 /// <summary>
-///     Catch-up scan (docs/plans/file-watcher-implementation.md D1): a never-synced watch gets a
-///     full initial scan; otherwise it re-queues files changed since the watermark or never
-///     fingerprinted, reconciles deletions from downtime, and is single-flighted per (projectId, path).
-///     Enumeration also skips hidden directory segments, the built-in deny set
-///     (<see cref="WatchDenySet.Excludes" />, the same predicate the digest applies to events), and
-///     `ai-raccoon.ignore` matches (docs/work/2026-08-21-code-search-implementation-plan.md §2.1/
-///     §2.3); <see cref="ReconcileAsync" /> cleans fingerprinted-but-now-excluded paths, and a
-///     mid-scan edit to the ignore file is caught by re-comparing the loaded <see cref="IgnoreRules" />
-///     for value equality (its source text, not a filesystem mtime check) at the end of each pass —
-///     no new queue state on <see cref="WatchScanGuard" /> (pinned H10, which named mtime-recheck;
-///     this is the shape actually built, and both are §2.1-permitted).
+///     Catch-up scan (ADR-0121): a never-synced watch gets a full scan; otherwise each file is re-queued
+///     when it has no fingerprint, its mtime is at or after its fingerprint's time, or its size differs.
+///     Deletions from downtime are reconciled, and scans are single-flighted per (projectId, path).
 /// </summary>
 public sealed partial class WatchCatchUp(
     WatchPipeline pipeline,
@@ -25,7 +17,8 @@ public sealed partial class WatchCatchUp(
     IWatchScanLease scanLease,
     TimeProvider timeProvider,
     ILogger<WatchCatchUp> logger,
-    IIgnoreRulesProvider ignoreRulesProvider) : IWatchScanInitiator
+    IIgnoreRulesProvider ignoreRulesProvider,
+    IndexableFileWalk walk) : IWatchScanInitiator
 {
     /// <summary>A mid-scan ignore-file edit can only ever redo the walk this many times before the
     /// scan gives up trying to reach a stable read — defensive only; real edits settle in one.</summary>
@@ -35,33 +28,30 @@ public sealed partial class WatchCatchUp(
     internal Task? LastScan { get; private set; }
 
     public void EnqueueInitialScan(string projectId, string path, CancellationToken cancellationToken = default) =>
-        LastScan = scanGuard.Run(projectId, path, ct => ScanCoreAsync(projectId, path, null, ct), cancellationToken);
+        LastScan = scanGuard.Run(projectId, path, ct => ScanCoreAsync(projectId, path, false, ct), cancellationToken);
 
     /// <summary>IWatchScanInitiator: triggers a full re-scan (ignore-file edit) — single-flighted,
     /// like every other scan trigger; a scan already running is joined, not duplicated.</summary>
     void IWatchScanInitiator.EnqueueInitialScan(string projectId, string path) => EnqueueInitialScan(projectId, path);
 
-    public void EnqueueChangedSince(string projectId, string path, long watermark,
-        CancellationToken cancellationToken = default) =>
-        LastScan = scanGuard.Run(projectId, path, ct => ScanCoreAsync(projectId, path, watermark, ct),
-            cancellationToken);
+    /// <summary>Restart scan of an already-synced watch: queues only the files changed since their own fingerprint.</summary>
+    public void EnqueueChangedFiles(string projectId, string path, CancellationToken cancellationToken = default) =>
+        LastScan = scanGuard.Run(projectId, path, ct => ScanCoreAsync(projectId, path, true, ct), cancellationToken);
 
     /// <summary>Cancels every in-flight scan (host shutdown).</summary>
     public void CancelAllScans() => scanGuard.CancelAll();
 
     /// <summary>
-    ///     Deterministic core: files under path are due when there is no watermark, the mtime is
-    ///     after the watermark, or the file was never fingerprinted. A watched FILE target enumerates
-    ///     itself (no ignore rules — no tree, §5.6); a missing target enumerates nothing
-    ///     (reconciliation removes its stale chunks). Directory enumeration skips hidden segments,
-    ///     the built-in deny set, and any path the ignore rules match.
+    ///     Lists the files under path that are due: all of them when <paramref name="stamps" /> is null,
+    ///     otherwise those with no fingerprint, an mtime at or after it, or a different size. Skips hidden
+    ///     and denied directories and ignore-rule matches; a file target lists itself, a missing one nothing.
     /// </summary>
-    internal static IEnumerable<string> EnumerateFiles(string path, long? sinceWatermark,
-        IReadOnlySet<string> fingerprinted, IgnoreRules? ignoreRules = null)
+    internal static IEnumerable<string> EnumerateFiles(IndexableFileWalk walk, string path, IReadOnlyDictionary<string, WatchFileStamp>? stamps,
+        IgnoreRules? ignoreRules = null)
     {
         if (!Directory.Exists(path))
         {
-            if (File.Exists(path) && IsDue(path, sinceWatermark, fingerprinted))
+            if (File.Exists(path) && IsDue(path, stamps))
             {
                 yield return path;
             }
@@ -70,7 +60,7 @@ public sealed partial class WatchCatchUp(
         }
 
         var rules = ignoreRules ?? IgnoreRules.Empty;
-        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        foreach (var file in walk.Under(path))
         {
             if (WatchDenySet.Excludes(path, file))
             {
@@ -82,7 +72,7 @@ public sealed partial class WatchCatchUp(
                 continue;
             }
 
-            if (IsDue(file, sinceWatermark, fingerprinted))
+            if (IsDue(file, stamps))
             {
                 yield return file;
             }
@@ -93,12 +83,28 @@ public sealed partial class WatchCatchUp(
         !string.Equals(Path.GetFileName(file), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
         rules.IsIgnored(Path.GetRelativePath(root, file), false);
 
-    private static bool IsDue(string file, long? sinceWatermark, IReadOnlySet<string> fingerprinted) =>
-        sinceWatermark is null ||
-        new DateTimeOffset(File.GetLastWriteTimeUtc(file)).ToUnixTimeSeconds() > sinceWatermark.Value ||
-        !fingerprinted.Contains(IngestPath.Normalize(file));
+    /// <summary>
+    ///     Whether the scan queues <paramref name="file" />. A fingerprinted file deleted since the walk
+    ///     listed it is not due: the reconcile pass removes its fingerprint, and the scan carries on.
+    /// </summary>
+    internal static bool IsDue(string file, IReadOnlyDictionary<string, WatchFileStamp>? stamps)
+    {
+        if (stamps is null || !stamps.TryGetValue(IngestPath.Normalize(file), out var stamp))
+        {
+            return true;
+        }
 
-    private async Task ScanCoreAsync(string projectId, string path, long? sinceWatermark,
+        var info = new FileInfo(file);
+        if (!info.Exists)
+        {
+            return false;
+        }
+
+        return new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeSeconds() >= stamp.UpdatedAt ||
+               stamp.Size is { } size && size != info.Length;
+    }
+
+    private async Task ScanCoreAsync(string projectId, string path, bool changedOnly,
         CancellationToken cancellationToken)
     {
         if (!await scanLease.TryAcquireAsync(projectId, path, cancellationToken))
@@ -109,11 +115,10 @@ public sealed partial class WatchCatchUp(
         var startedAt = timeProvider.GetUtcNow();
         try
         {
-            var watermark = sinceWatermark;
             for (var attempt = 0; attempt < MaxRescanAttempts; attempt++)
             {
                 var ignoreRules = await ignoreRulesProvider.LoadAsync(path, cancellationToken);
-                if (!await RunOnePassAsync(projectId, path, watermark, ignoreRules, cancellationToken))
+                if (!await RunOnePassAsync(projectId, path, changedOnly, ignoreRules, cancellationToken))
                 {
                     // Lease lost mid-pass — already logged and released by RunOnePassAsync's caller contract.
                     return;
@@ -121,14 +126,14 @@ public sealed partial class WatchCatchUp(
 
                 // Re-read at the end of the pass: a mid-scan ignore-file edit must apply before the
                 // scan chain settles, without any new WatchScanGuard queue state (pinned H10) — the
-                // running scan simply redoes its own walk, full (watermark null), with fresh rules.
+                // running scan simply redoes its own walk, full, with fresh rules.
                 var reread = await ignoreRulesProvider.LoadAsync(path, cancellationToken);
                 if (reread == ignoreRules)
                 {
                     break;
                 }
 
-                watermark = null;
+                changedOnly = false;
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -148,15 +153,12 @@ public sealed partial class WatchCatchUp(
     }
 
     /// <summary>One walk + reconcile pass. Returns false when the lease was lost mid-pass (caller stops).</summary>
-    private async Task<bool> RunOnePassAsync(string projectId, string path, long? sinceWatermark,
+    private async Task<bool> RunOnePassAsync(string projectId, string path, bool changedOnly,
         IgnoreRules ignoreRules, CancellationToken cancellationToken)
     {
-        var fingerprinted = sinceWatermark is null
-            ? (IReadOnlySet<string>)new HashSet<string>()
-            : (await watchStore.ListFilesAsync(projectId, cancellationToken))
-            .ToHashSet(IngestPath.PathComparer);
+        var stamps = changedOnly ? await watchStore.ListFileStampsAsync(projectId, cancellationToken) : null;
         var nextRenew = timeProvider.GetUtcNow() + SqliteWatchScanLease.HeartbeatInterval;
-        foreach (var file in EnumerateFiles(path, sinceWatermark, fingerprinted, ignoreRules))
+        foreach (var file in EnumerateFiles(walk, path, stamps, ignoreRules))
         {
             cancellationToken.ThrowIfCancellationRequested();
 

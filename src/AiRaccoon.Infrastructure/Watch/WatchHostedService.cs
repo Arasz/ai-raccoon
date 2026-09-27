@@ -27,6 +27,8 @@ public sealed partial class WatchHostedService : BackgroundService
     private readonly IWatchStore _store;
     private readonly IOperationTelemetry _telemetry;
     private readonly TimeProvider _timeProvider;
+    private DateTimeOffset? _nextHealAt;
+    private CancellationToken _stopping;
 
     public WatchHostedService(IMemoryStore memory, IWatchStore store, WatchPipeline pipeline,
         WatchEventSource eventSource, WatchCatchUp catchUp, TimeProvider timeProvider,
@@ -43,9 +45,22 @@ public sealed partial class WatchHostedService : BackgroundService
         // The one removal choke point (docs/plans/2026-08-07-watch-scan-runaway-fix.md D-1): every
         // removal drops the key here instantly, so a remove-then-re-add never reads as continuously active.
         _pipeline.Unregistered += OnWatchUnregistered;
+        _pipeline.Recovered += OnWatchRecovered;
     }
 
     public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    ///     How often every enabled, non-stopped watch gets a changed-files scan, so a change whose
+    ///     event never arrived heals without a restart. One pruned walk of the owner's roots costs about 0.1 CPU-s.
+    /// </summary>
+    public static TimeSpan HealInterval { get; } = TimeSpan.FromMinutes(5);
+
+    private void OnWatchRecovered(string projectId, string path)
+    {
+        Log.RecoveredScanQueued(_logger, projectId, path);
+        _catchUp.EnqueueChangedFiles(projectId, path, _stopping);
+    }
 
     private void OnWatchUnregistered(string projectId, string path)
     {
@@ -58,6 +73,7 @@ public sealed partial class WatchHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _stopping = stoppingToken;
         // The 1s digest tick is a second loop beside reconciliation: without it, events
         // enqueue into the channel but nothing drains them in production.
         var pipelineLoop = _pipeline.RunAsync(stoppingToken);
@@ -179,8 +195,7 @@ public sealed partial class WatchHostedService : BackgroundService
             }
             else
             {
-                _catchUp.EnqueueChangedSince(registration.ProjectId, registration.Path, registration.LastChangeTs,
-                    cancellationToken);
+                _catchUp.EnqueueChangedFiles(registration.ProjectId, registration.Path, cancellationToken);
             }
         }
 
@@ -190,6 +205,8 @@ public sealed partial class WatchHostedService : BackgroundService
             stale = [.. _registered.Where(k => !seen.Contains(k))];
         }
 
+        HealIfDue(pass, cancellationToken);
+
         foreach (var s in stale)
         {
             pass.NoteWork();
@@ -198,6 +215,45 @@ public sealed partial class WatchHostedService : BackgroundService
             // docs/plans/2026-08-07-watch-scan-runaway-fix.md) OnWatchUnregistered also handles.
             _pipeline.UnregisterWatch(s.ProjectId, s.Path);
             Log.StaleRegistrationUnregistered(_logger, s.ProjectId, s.Path);
+        }
+    }
+
+    /// <summary>
+    ///     Once per <see cref="HealInterval" />, queues a changed-files scan for every active watch that
+    ///     has not stopped. The scan guard joins a scan already running instead of starting another.
+    /// </summary>
+    private void HealIfDue(IOperationScope pass, CancellationToken cancellationToken)
+    {
+        var now = _timeProvider.GetUtcNow();
+        if (_nextHealAt is null)
+        {
+            _nextHealAt = now + HealInterval;
+            return;
+        }
+
+        if (now < _nextHealAt)
+        {
+            return;
+        }
+
+        _nextHealAt = now + HealInterval;
+        WatchKey[] active;
+        lock (_activeGate)
+        {
+            active = [.. _active];
+        }
+
+        var queued = 0;
+        foreach (var key in active.Where(k => !_pipeline.IsStopped(k.ProjectId, k.Path)))
+        {
+            _catchUp.EnqueueChangedFiles(key.ProjectId, key.Path, cancellationToken);
+            queued++;
+        }
+
+        if (queued > 0)
+        {
+            pass.NoteWork();
+            Log.HealScansQueued(_logger, queued);
         }
     }
 
@@ -220,5 +276,13 @@ public sealed partial class WatchHostedService : BackgroundService
         [LoggerMessage(EventId = 321, Level = LogLevel.Information,
             Message = "Stale watch registration for project {ProjectId} at {Path} unregistered from the pipeline")]
         public static partial void StaleRegistrationUnregistered(ILogger logger, string projectId, string path);
+
+        [LoggerMessage(EventId = 322, Level = LogLevel.Debug,
+            Message = "Watch heal queued a changed-files scan for {Count} watches")]
+        public static partial void HealScansQueued(ILogger logger, int count);
+
+        [LoggerMessage(EventId = 323, Level = LogLevel.Information,
+            Message = "Watch for project {ProjectId} at {Path} digested again after a failure; scanning it for changed files")]
+        public static partial void RecoveredScanQueued(ILogger logger, string projectId, string path);
     }
 }

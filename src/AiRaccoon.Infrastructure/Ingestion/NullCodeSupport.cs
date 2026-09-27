@@ -57,4 +57,12 @@ public sealed class NullWatchStore : IWatchStore
         Task.CompletedTask;
 
     public Task<IReadOnlyList<string>> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<string>>([]);
+
+    public Task<IReadOnlyDictionary<string, WatchFileStamp>> ListFileStampsAsync(string projectId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, WatchFileStamp>>(new Dictionary<string, WatchFileStamp>());
+
+    public Task SetFileSizeAsync(string projectId, string path, long size,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
 }

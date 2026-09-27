@@ -18,6 +18,15 @@ public interface IWatchPipeline
     /// </summary>
     event Action<string, string>? Unregistered;
 
+    /// <summary>
+    ///     Raised after a watch's first successful digest following a failure, with its project id and
+    ///     normalized path: the failed digest dropped its event, so the watch needs a changed-files scan.
+    /// </summary>
+    event Action<string, string>? Recovered;
+
+    /// <summary>True when the watch stopped checking after repeated failures (it stays so until removed).</summary>
+    bool IsStopped(string projectId, string path);
+
     /// <summary>Thread-safe entry point for the event source (docs/plans/file-watcher-implementation.md S5): writes into the single channel.</summary>
     void Enqueue(WatchEvent evt);
 
@@ -66,6 +75,13 @@ public sealed partial class WatchPipeline(
     ///     their own liveness bookkeeping can invalidate it at the same instant instead of waiting for a poll.
     /// </summary>
     public event Action<string, string>? Unregistered;
+
+    /// <inheritdoc />
+    public event Action<string, string>? Recovered;
+
+    /// <inheritdoc />
+    public bool IsStopped(string projectId, string path) =>
+        retryPolicy.IsStopped(projectId, IngestPath.Normalize(path));
 
     /// <summary>Thread-safe entry point for the event source (docs/plans/file-watcher-implementation.md S5): writes into the single channel.</summary>
     public void Enqueue(WatchEvent evt)
@@ -229,15 +245,22 @@ public sealed partial class WatchPipeline(
             await executor.DigestAsync(evt.ProjectId, job.WatchPath, evt.Path, evt.Kind, evt.OldPath,
                     cancellationToken);
             retryPolicy.RecordSuccess(evt.ProjectId, job.WatchPath);
+            var recovered = false;
             lock (_gate)
             {
                 // A job dispatched before UnregisterWatch removed the entry must not resurrect it
                 // (D21): only update state for a watch that is still registered.
-                if (_runtime.ContainsKey(new WatchKey(evt.ProjectId, job.WatchPath)))
+                if (_runtime.TryGetValue(new WatchKey(evt.ProjectId, job.WatchPath), out var previous))
                 {
+                    recovered = previous.State == WatchState.Retrying;
                     _runtime[new WatchKey(evt.ProjectId, job.WatchPath)] =
                         new WatchRuntimeState(WatchState.Healthy, null, timeProvider.GetUtcNow());
                 }
+            }
+
+            if (recovered)
+            {
+                Recovered?.Invoke(evt.ProjectId, job.WatchPath);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

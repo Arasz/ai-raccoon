@@ -179,9 +179,11 @@ Feature: File watcher
             And "file.md" changed while the server was stopped
             When the server restarts and re-watches
             Then "file.md" is re-digested and its new content is searchable
-    # 2026-08-04 (card 1): missed events only occur while the server is
-    # down; each watch keeps a last-change timestamp; on restart, targets
-    # changed since it are re-ingested (catch-up).
+    # 2026-08-04 (card 1): each watch keeps a last-change timestamp; on
+    # restart, targets changed since it are re-ingested (catch-up).
+    # 2026-09-27 (ADR-0121): a running server misses events too, so catch-up
+    # compares each file's mtime and size with its own fingerprint, and runs
+    # every 5 minutes and after a failed digest recovers, not only on restart.
 
     Rule: A delete event removes the deleted file's chunks from memory
         # 2026-08-04: file deleted on disk -> its memory entries are deleted too
