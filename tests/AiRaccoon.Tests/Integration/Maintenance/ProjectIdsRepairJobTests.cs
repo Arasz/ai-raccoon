@@ -492,6 +492,35 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
         positions.Select(p => p.TotalChunks).ShouldBe([2L, 2L]);
     }
 
+    /// <summary>Rows at their right positions but with a wrong total are still fixed by the pass, so its receipt and
+    /// its created-work flag count them.</summary>
+    [RetryFact]
+    public async Task ChunkRenumber_TotalOnlyFix_IsCountedInTheReceipt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var file = Path.Combine(_dataRoot, "doc.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", ct);
+        await using var connection = await _factory.OpenBankAsync(ct);
+        var now = FixedNow.ToUnixTimeSeconds();
+        string[] values = ["para one", "para two", "para three"];
+        for (var i = 0; i < values.Length; i++)
+        {
+            await connection.ExecuteAsync(
+                "INSERT INTO entries (hash, path, value, source_file, scope, project_id, context_label, created_at, updated_at, embed_state, chunk_index, total_chunks) " +
+                "VALUES (@hash, @file, @value, @file, 'project', 'jsaa', 'ctx-a', @now, @now, 'pending', @i, 9)",
+                new { hash = ContentHash.Of(file, values[i]), file, value = values[i], now, i });
+        }
+
+        await RequestRepairAsync(connection);
+        var sink = new CapturingLogger<ProjectIdsRepairJob>();
+
+        var created = await NewJob(sink).RunAsync(connection, ct);
+
+        created.ShouldBeTrue("the pass rewrote three totals");
+        sink.Entries.Single(entry => entry.EventId == ProjectIdsRepairJob.PassReceiptEventId)
+            .Message.ShouldContain("repositioned 3 chunk row(s)");
+    }
+
     private static string FixtureMapJson() =>
         new ProjectIdAliasMap(
                 [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon"), new ProjectIdAliasEntry("pinned-workspace-id", "jsaa")],
