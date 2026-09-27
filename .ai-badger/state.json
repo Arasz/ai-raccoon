@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-note-order-repair-retry-784",
+   "title": "Note chunk order repair skipped unpositioned notes; retry as v2 (#784)",
+   "pr": 786,
+   "merged": true,
+   "date": "2026-09-27",
+   "hasNotes": false,
+   "summary": "1.53.5 checklist (PR #785) found 354 live notes still opening-last with note-chunk-order-v1 stamped. Cause (red test first): Repositioned bails on chunk_index -1, then ChunkBoundaryRepair's RecomputeChunkColumnsBankWide fills -1 in id order. Fix: bank-wide RunAsync fills unknown positions with KeepingOrder first (as SyncService does); job renamed note-chunk-order-v2 so stamped banks re-run. Released 1.53.6 (publish awaits production approval). Owner's live bank already repaired by hand (ledger row deleted, re-ran 18:45)."
+  },
+  {
    "id": "air-docs-sweep-after-defect-fixes",
    "title": "Post-merge documentation-gap audit for ADR-0119..0122",
    "pr": 782,
