@@ -69,8 +69,7 @@ public static class NoteTextOrder
         List<NoteRow>? byPosition = rows.All(row => row.ChunkIndex >= 0)
             ? [.. rows.OrderBy(row => row.ChunkIndex).ThenBy(row => row.Id)]
             : null;
-        List<int> shifts = [0, byId.Count - 1, .. Enumerable.Range(1, Math.Max(byId.Count - 2, 0))];
-        foreach (var shift in shifts.Distinct())
+        for (var shift = 0; shift < byId.Count; shift++)
         {
             yield return Rotated(byId, shift);
             if (byPosition is not null)
