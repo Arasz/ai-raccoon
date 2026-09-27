@@ -148,6 +148,28 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
         (await ValuesByPositionAsync(path)).ShouldBe(before);
     }
 
+    /// <summary>Reproduces the incident (#784): a merge (or an old-writer note) can leave every row of an
+    /// opening-last note at the -1 sentinel. NoteChunkOrderRepair.RunAsync alone cannot prove positions
+    /// for rows it does not know, so it moves nothing; ChunkBoundaryRepairJob runs next in the same pass
+    /// and fills every -1 in id order, landing the opening at the last position instead of the first.</summary>
+    [RetryFact]
+    public async Task Run_NoteWithUnpositionedOpeningLastRows_ThenChunkBoundaryRecompute_PutsOpeningFirst()
+    {
+        var note = SourceCitingNoteChunkOrderTests.LongNote();
+        var path = await WriteAsync(note);
+        await StoreOpeningLastAsync(path, fillPositions: false);
+        (await UnpositionedCountAsync(path)).ShouldBeGreaterThan(0, "premise: every row is still at the -1 sentinel");
+
+        await RunAsync();
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(MemorySql.RecomputeChunkColumnsBankWide);
+        }
+
+        (await ValuesByPositionAsync(path))[0].ShouldStartWith("Opening marker zq71",
+            customMessage: "the pass-level sequence NoteChunkOrderRepair -> ChunkBoundaryRepair's recompute must not leave the opening last");
+    }
+
     [RetryFact]
     public async Task Job_RunsOnceAndCreatesNoEmbedWork()
     {
@@ -179,9 +201,11 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
                ?? throw new InvalidOperationException("the note stored no row");
     }
 
-    /// <summary>Re-stores a note's rows the way memory_write used to: continuation rows first, the opening last,
-    /// positions filled in id order.</summary>
-    private async Task StoreOpeningLastAsync(string path)
+    /// <summary>Re-stores a note's rows the way memory_write used to: continuation rows first, the opening last.
+    /// With <paramref name="fillPositions" /> true (the default) positions are then filled in id order, the shape a
+    /// bank held before ADR-0122; false leaves every row at the -1 sentinel, the shape a merge or an unrepaired
+    /// old-writer note leaves rows in.</summary>
+    private async Task StoreOpeningLastAsync(string path, bool fillPositions = true)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var rows = (await connection.QueryAsync<StoredRow>(
@@ -214,7 +238,17 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
             });
         }
 
-        await connection.ExecuteAsync(MemorySql.RecomputeChunkColumnsBankWide);
+        if (fillPositions)
+        {
+            await connection.ExecuteAsync(MemorySql.RecomputeChunkColumnsBankWide);
+        }
+    }
+
+    private async Task<long> UnpositionedCountAsync(string path)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM entries WHERE path = @path AND chunk_index < 0", new { path });
     }
 
     private async Task<List<string>> ValuesByPositionAsync(string path)
