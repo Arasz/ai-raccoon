@@ -38,10 +38,20 @@ gives back the body, and that hash check is exact.
 opening the lowest position of the note's run. The returned entry still addresses chunk 0.
 
 **`NoteTextOrder` (pure, `AiRaccoon.Core.Memory`) proves a note's order from its rows.** `Find`
-tries every rotation of the id order and of the position order. That covers both write layouts, and
-a chunk-boundary repair that left a run's pieces in the run's place. For each candidate it joins the
-rows, trying each overlap where a row starts with the previous row's tail (longest first, capped at
-256 joins per order), and accepts the order only when the joined text hashes to the path's stem.
+tries the id order and the position order, each also with up to four of its last rows moved to the
+front. That covers both write layouts (the opening-last one needs one move), and a chunk-boundary
+repair that left a short run's pieces in the run's place. For each candidate it joins the rows,
+trying each overlap where whole lines open a row and also close the row before (longest first; the
+chunker's overlay is always whole units of lines), and accepts the order only when the joined text
+hashes to the path's stem. The search walks the junctions with an explicit stack, not recursion, so a
+long note cannot exhaust the thread's stack.
+
+**The search has a fixed cost ceiling.** A note with more than 1,024 rows is not searched. One `Find`
+call may spend 100,000 work units (one per overlay tried at a junction, one per row for each joined
+body hashed), split evenly across the candidate orders so a wrong order cannot starve the right one.
+Past the ceiling the note is unprovable and left as stored. Without it, 800 identical paragraphs took
+17 seconds for one unprovable note; with it the same call stays inside the budget, and the test holds
+it under 3 seconds.
 `WritePathFor` hashes the body as sent, while the chunker stores it with `\r\n` and lone `\r`
 turned into `\n`, so the check also tries the join with every `\n` restored to `\r\n`, then to `\r`.
 No match means null; nothing is guessed. `Repositioned` hands a note's own positions, sorted, to
@@ -52,10 +62,17 @@ its rows in text order. It lists only rows that move and does nothing when any p
 bank, right after `chunk-backfill-v2` and before `chunk-boundary-repair-v1`. It groups
 source-citing note rows by context key and path, proves each group's order and moves its positions
 in one transaction per note. It logs one line (event 446) with the notes it reordered and the notes
-it left as stored because no order joins back. It creates no embed work. Because a note already in
-text order moves nothing, the same repair is safe to run again, and **the sync post-merge pass runs
-it** after `RecomputeChunkColumnsBankWideFromIdOrder`. Without that, the first sync would put every
-note merged from a peer back in id order.
+it left as stored because no order joins back. It creates no embed work. A note already in text
+order moves nothing, so the repair is safe to run again.
+
+**Sync keeps order instead of re-deriving it.** The post-merge renumber used to number every
+partition by id (`RecomputeChunkColumnsBankWideFromIdOrder`), which undid text order on every sync
+and would have forced a bank-wide note repair each time. It is now
+`RecomputeChunkColumnsBankWideKeepingOrder`: each partition gets positions 0..n-1 in the order its rows
+already hold, rows the merge added (still at the `-1` default) go after them by id, and only rows whose
+values change are written. A tombstone delete still closes its gap. The one thing it cannot know is a
+merged note's own order, so before the renumber sync lists the source-citing notes holding a `-1` row
+and afterwards runs the note repair on those paths only. A sync that brings no notes repairs nothing.
 
 **The chunk-boundary repair orders a note by `NoteTextOrder`.** A note it cannot prove is skipped,
 not re-chunked from a guessed order. When it renumbers a source file's partition after a re-chunk,
@@ -81,17 +98,24 @@ order whether or not `note-chunk-order-v1` ran first. File rows are ordered by p
   neighbours.
 - **Left as stored, and counted.** A note whose rows do not join back into its body: a body with
   mixed line endings (only one ending used throughout can be restored), an oversized fence the
-  chunker re-fenced, a note with two identical chunks deduplicated to one row, or rows a past repair
-  changed. Event 446 reports how many.
+  chunker re-fenced, a note with two identical chunks deduplicated to one row, rows a past repair
+  changed, an overlay that was not whole lines (an older chunker's partial-line overlay), a re-chunked
+  head of more than four pieces, a note over 1,024 rows, or one that runs out of work budget. Event
+  446 reports how many.
 - **Unchanged.** Plain notes (no source file) carry no positions, so only the boundary repair reads
-  their order. A file's own rows across a sync still take id order, the separate question
-  `RecomputeChunkColumnsBankWideFromIdOrder` already records.
-- **Neutral.** The repair reads every source-citing note row once per bank, and again on each sync.
-  A note in either write layout proves on one of the first three candidate orders tried (id order,
-  position order, id order with the last row first).
+  their order.
+- **Cost.** The once-per-bank job reads every source-citing note row once, and each note's proof is
+  capped at 100,000 work units. On sync the extra cost is one scan for notes with a `-1` row, which is
+  the same pass over source-carrying rows the renumber already makes, plus the repair of the notes it
+  finds, normally none. No index was added: the listing query reads the rows the renumber's window
+  reads anyway, and a partial index on `chunk_index < 0` would be churned by every write, which inserts
+  at `-1` and is positioned straight after.
 - **Tests.** `SourceCitingNoteChunkOrderTests` (write order and the `memory_search` chunk index),
-  `NoteTextOrderTests`, `NoteChunkOrderRepairTests` (seeded opening-last note, one written with `\r\n`, a note already in
-  order, an unprovable note, the job), `NoteChunkOrderRepairJobOrderTests` (registered before the
-  boundary repair), `SyncServiceTests.MemorySync_Merge_LeavesASourceCitingNoteInTextOrder` and
+  `NoteTextOrderTests` (including the row cap at its boundary and an 800-row repetitive note that must
+  stop inside the budget), `NoteChunkOrderRepairTests` (seeded opening-last note, one written with
+  `\r\n`, listed paths only, a note already in order, an unprovable note, the job),
+  `NoteChunkOrderRepairJobOrderTests` (registered before the boundary repair),
+  `SyncServiceTests.MemorySync_Merge_LeavesASourceCitingNoteInTextOrder` and
+  `MemorySync_Merge_KeepsPositionsThatAreNotInIdOrder`, and
   `ChunkBoundaryRepairTests` (text order after a renumber, a note stored in text order, an
   unprovable note left alone). Each failed before its change.
