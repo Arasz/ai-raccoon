@@ -254,21 +254,30 @@ public sealed class FileIngestor(
         var source = await sourceStore.ResolveOrCreateOnConnectionAsync(
             connection, SourceType.File, path, null, null, cancellationToken);
 
-        // Document position is authoritative here (GH #371): the chunker just produced `chunks` in
-        // document order, so every chunk's ordinal is written straight to chunk_index — for a
-        // freshly inserted row and for one this pass merely rediscovers unchanged (dedup) alike.
-        // Deriving it later from row-id order would put an edited-then-reinserted middle chunk last,
-        // since dedup gives unchanged siblings the old (low) id and the edit the newest (highest) one.
-        var inserted = 0;
-        for (var ordinal = 0; ordinal < chunks.Count; ordinal++)
+        // Every row, new or rediscovered, takes its document position here; notes citing the file follow its rows,
+        // and total_chunks counts the whole (ctx, source_file) partition. An id-order recompute would misplace edits.
+        var rows = DocumentChunks.Distinct(path, chunks);
+        var bucketParams = new
         {
-            var chunk = chunks[ordinal].Text;
-            var hash = ContentHash.Of(path, chunk);
+            path,
+            scope = bucket.Scope,
+            project_id = bucket.ProjectId,
+            context_label = bucket.ContextLabel,
+            workspace_id = bucket.WorkspaceId
+        };
+        var citing = (await connection.QueryAsync<(long Id, long ChunkIndex)>(Def(SelectCitingRows, bucketParams, cancellationToken)))
+            .Select(row => new PartitionRow(row.Id, false, row.ChunkIndex)).ToList();
+        var totalChunks = rows.Count + citing.Count;
+        var inserted = 0;
+        foreach (var row in rows)
+        {
+            var chunk = row.Chunk.Text;
+            var hash = row.Hash;
             hashes.Add(hash);
             // SourcePathQuery ANDs a "file#section" anchor against the FTS {source_file section}
             // columns; the chunker reports the heading path in force at each chunk (docs/adr/0048,
             // #549), and the anchor only ever names its leaf.
-            var section = chunks[ordinal].SectionLabel();
+            var section = row.Chunk.SectionLabel();
             var existingId = await connection.ExecuteScalarAsync<long?>(
                     Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
                         new
@@ -303,8 +312,8 @@ public sealed class FileIngestor(
                                 createdAt = now,
                                 updatedAt = now,
                                 sourceId = source.Id,
-                                chunkIndex = ordinal,
-                                totalChunks = chunks.Count
+                                chunkIndex = row.Position,
+                                totalChunks
                             },
                             cancellationToken));
                 if (affected > 0)
@@ -317,12 +326,28 @@ public sealed class FileIngestor(
 
             var chunkId = existingId.Value;
             await connection.ExecuteAsync(
-                    Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = ordinal, totalChunks = chunks.Count, section },
+                    Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = row.Position, totalChunks, section },
                         cancellationToken));
+        }
+
+        foreach (var (id, chunkIndex) in DocumentChunks.After(rows.Count, citing))
+        {
+            await connection.ExecuteAsync(Def(SetCitingPosition, new { id, chunkIndex, totalChunks }, cancellationToken));
         }
 
         return new InsertedChunks(inserted > 0 ? 1 : 0, hashes);
     }
+
+    /// <summary>The rows of a file's position partition that are not its own: notes citing it.</summary>
+    private static readonly string SelectCitingRows = $"""
+        SELECT id, chunk_index FROM entries
+        WHERE source_file = @path AND path IS NOT @path
+          AND ({MemorySql.ContextKeyExpression("")}) = ({MemorySql.ContextKeyExpression("@")})
+        """;
+
+    private const string SetCitingPosition =
+        "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks "
+        + "WHERE id = @id AND (chunk_index <> @chunkIndex OR total_chunks <> @totalChunks)";
 
     private readonly record struct InsertedChunks(int Rows, List<string> Hashes);
 

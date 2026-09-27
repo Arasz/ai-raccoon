@@ -227,7 +227,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
                 TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"))
             .Replace("\"contextWindowTokens\": 512", "\"contextWindowTokens\": 128");
         File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), manifest);
-        var store = new ServerSettingsStore(new HttpClient { BaseAddress = new Uri(_app.Urls.First()) }, Token);
+        var store = new ServerSettingsStore(new HttpClient { BaseAddress = new Uri(_app.Urls.First()) }, Token, CliSettingsBackend.RequestDeadline);
 
         var ex = await Should.ThrowAsync<CodeEngineActivationRefusedException>(
             () => store.ActivateCodeEngineAsync(dir, TestContext.Current.CancellationToken));

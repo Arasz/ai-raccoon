@@ -95,7 +95,8 @@ public sealed partial class ProjectIdsRepairJob(
 
         var chunks = await new ChunkIndexRepair(fileTypeMatcher, embeddingService)
             .RunAsync(connection, true, cancellationToken);
-        createdWork = createdWork || chunks.RowsRepositioned > 0 || chunks.RowsSetToUnknown > 0;
+        var chunkRowsFixed = chunks.RowsRepositioned + chunks.RowsSetToUnknown + chunks.RowsRetotalled;
+        createdWork = createdWork || chunkRowsFixed > 0;
         // Package D (D4 storage): persist the applied one-shot map on success — append-only,
         // alias-PK first-writer-wins, rows immutable thereafter (see ProjectIdAliases).
         await ProjectIdAliases.PersistAppliedAsync(connection, map,
@@ -105,7 +106,7 @@ public sealed partial class ProjectIdsRepairJob(
         // retired id is accepted until a restart. LoadAndCache reads the table we just wrote.
         await ProjectIdAliases.LoadAndCacheAsync(connection, _logger, cancellationToken);
         Log.PassApplied(_logger, plan.Folds.Count, plan.Dropped.Count, plan.RetiredProjects.Count,
-            moved, chunks.RowsRepositioned + chunks.RowsSetToUnknown);
+            moved, chunkRowsFixed);
 
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
                 new { kind = RepairKinds.ProjectIds, finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },

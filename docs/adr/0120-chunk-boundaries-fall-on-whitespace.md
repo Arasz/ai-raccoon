@@ -75,7 +75,7 @@ column on every insert path and a fourth bm25 weight, and it buys nothing the pr
 
 ### Repairing existing banks
 
-**`chunk-boundary-repair-v1`** (`ChunkBoundaryRepairJob` wrapping `ChunkBoundaryRepair`) runs once
+**`chunk-boundary-repair-v1`** (`ChunkBoundaryRepairJob` wrapping `ChunkBoundaryRepair`; renamed `chunk-boundary-repair-v2`, see the addendum) runs once
 per bank from the maintenance job list, right after `chunk-backfill-v2` and before
 `PendingEmbedJob`. It groups rows by bucket and path and orders each group in text order: a file by
 position, a note with its first chunk last-inserted (highest id), as `memory_write` writes it. A
@@ -134,3 +134,54 @@ it. Overlap would also duplicate text in every multi-chunk note's keyword and ve
   asserts that the note's first row is the keyword leg's top hit. With ten repeats the note spans
   two chunks and the identifier sits in the second one, so that premise is about chunk count, not
   about the boundary. The ten-repeat case lives in its own test.
+
+## Addendum (1.53.7): files the chunker must cut, and file positions
+
+A manual run against a copy of a live bank showed three gaps in the repair and in how file positions
+are written (#788).
+
+- **Some files were re-ingested on every run.** A file whose term is longer than the budget (such as
+  whitespace-free JSON) is hard-cut by the current chunker too. The seam test flagged it, the
+  re-ingest wrote back the same rows, and the next run flagged it again: 15 files on the first run
+  of a bank copy, 14 on a second run of the same copy.
+- **Colliding positions on file rows survived.** 186 file groups on the live bank held two rows at
+  one `chunk_index`. Watch catch-up skips an unchanged file, and the bank-wide recomputes keep the
+  existing order and only fill `-1`, so nothing ever corrected them.
+- **`total_chunks` meant two things.** A chunk repeated verbatim in a file is stored once (one row
+  per hash). File ingest numbered rows by the chunker's output, so a repeat took its last place and
+  left a gap, and `total_chunks` counted the repeats: 520 rows with positions up to 871 and a total
+  of 872 on one JSON file. Every other writer (the recomputes, the delete compaction,
+  `repair chunk-index`) and the neighbour boost read it as the row count, with positions 0..n-1.
+
+**One definition.** Positions belong to the (context, source file) partition, which holds a file's
+own rows and any `memory_write` note citing that file. `total_chunks` is the partition's row count.
+The file's rows come first, 0..n-1 in document order, a chunk repeated verbatim taking the place of
+its first occurrence; citing notes follow in the order they already hold. `DocumentChunks` in Core
+holds the rule (`Distinct`, `PartitionPositions`, `After`), and every writer uses it or already
+agreed with it: file ingest, `ChunkPositionScanner`, `repair chunk-index`, this repair, the id-order
+recomputes after a note write (a new note has the highest id, so it lands last), the delete
+compaction and sync's renumber. `repair chunk-index` now fixes and reports a row whose total is wrong
+even when its position is right. A position-only fix leaves the row's section alone, so the
+full-text index is not rewritten. The code corpus keeps chunker numbering: code hits carry line
+ranges and nothing pairs code positions.
+
+**The repair.** It selects every file group, including a lone row, whose partition is not numbered
+this way, alongside groups with a seam. Before re-ingesting a file it re-chunks the file with the
+current chunker. When the file yields exactly the stored rows (same distinct chunk count, every row
+reproduced), a re-ingest would change nothing but positions, so the partition takes the scan's
+positions and section labels in place, and the rows keep their embeddings. That applies to workspace
+file rows too, since it never replaces a row. A file with a row the chunker no longer writes, or with
+a chunk no row holds (it grew on disk), is re-ingested as before. When neither applies (a workspace
+file that changed on disk, or a file gone from disk) and there is no cut to re-chunk, the partition
+is renumbered in the order it already holds. The code corpus has no position scan: a code file with
+a seam is still re-ingested on every run of the job, but counted only when its stored chunk hashes
+changed. Event 447 now also logs the files repositioned in place.
+
+The job is renamed `chunk-boundary-repair-v2` so a bank whose ledger already holds the v1 stamp runs
+it once more. The repair is idempotent: a file already correct moves nothing. `ChunkBoundaryRepairTests`,
+`ChunkIndexRepairTests`, `SqliteMemoryStoreChunkColumnMaintenanceTests` and `ProjectIdsRepairJobTests`
+pin the new shapes (a file the chunker must cut, colliding positions, colliding positions plus a stale
+row, a file that grew, a gapped or inflated file, a lone inflated row, a gapped file gone from disk or
+changed in a workspace, a workspace collision, a file cited by a note, a repeated paragraph at ingest,
+a total-only fix, a code file the chunker must cut). Each failed before its change, or under a
+mutation where it passed on the old code by design.

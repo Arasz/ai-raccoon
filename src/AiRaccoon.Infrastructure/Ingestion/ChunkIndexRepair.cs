@@ -7,19 +7,9 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Ingestion;
 
 /// <summary>
-///     GH #371: re-derives chunk_index/total_chunks per (ctx, source_file) group straight from the
-///     document a still-present source_file names, instead of the row-id order the old recompute
-///     left behind. A group whose source_file is missing, unreadable, or absent gets chunk_index =
-///     -1 (position unknown) — never a guess. Pure UPDATE: never inserts or deletes a row.
-///     <para>
-///         This class itself never implements <see cref="AiRaccoon.Infrastructure.Maintenance.IMaintenanceJob" />
-///         — <see cref="AiRaccoon.Infrastructure.Maintenance.ChunkIndexRepairJob" /> wraps it instead
-///         (ADR-0075 amendment), registered on the maintenance list but on-demand only (<c>Interval</c>
-///         is null): it only ever runs because a human explicitly requested it via
-///         `ai-raccoon repair chunk-index --apply`, which now commits a repair_requests row through
-///         the server rather than writing here directly. Never on a clock, so it still cannot run
-///         unattended against a live bank on open (docs/plans/2026-08-08-search-knn-perf.md §3.3).
-///     </para>
+///     Re-derives each (ctx, source_file) partition's positions from the file on disk: the file's rows take their
+///     document positions (-1 when the file no longer reproduces them, never a guess), notes citing the file follow
+///     them, and total_chunks is the row count. Pure UPDATE; runs only when `repair chunk-index --apply` asks for it.
 /// </summary>
 public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddingService embeddingService)
 {
@@ -32,42 +22,34 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
 
         var (maxTokens, overlayTokens, countTokens) = await _scanner.BudgetAsync(connection, cancellationToken);
 
-        var groups = (await connection.QueryAsync<GroupKey>(new CommandDefinition(
+        var groups = (await connection.QueryAsync<long>(new CommandDefinition(
                 $"""
-                 SELECT DISTINCT {MemorySql.ContextKeyExpression("")} AS Ctx, source_file AS SourceFile
-                 FROM entries
+                 SELECT MIN(id) FROM entries
                  WHERE source_file IS NOT NULL
+                 GROUP BY {MemorySql.ContextKeyExpression("")}, source_file
                  """, cancellationToken: cancellationToken))).ToList();
 
-        var groupsExamined = 0;
         var repositioned = 0;
         var setUnknown = 0;
+        var retotalled = 0;
 
-        foreach (var group in groups)
+        foreach (var memberId in groups)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            groupsExamined++;
 
-            var rows = (await connection.QueryAsync<GroupRow>(new CommandDefinition(
-                    $"""
-                     SELECT id AS Id, hash AS Hash, chunk_index AS ChunkIndex, section AS Section
-                     FROM entries
-                     WHERE source_file = @sourceFile AND ({MemorySql.ContextKeyExpression("")}) = @ctx
-                     """, new { sourceFile = group.SourceFile, ctx = group.Ctx }, cancellationToken: cancellationToken))).ToList();
-            var totalChunks = rows.Count;
-
-            var scan = _scanner.Scan(group.SourceFile, rows.Select(row => new StoredChunk(row.Id, row.Hash)).ToList(),
-                maxTokens, overlayTokens, countTokens);
-
-            foreach (var row in rows)
+            var partition = await ChunkPositionScanner.PartitionAsync(connection, memberId, cancellationToken);
+            var fileRows = partition.Where(row => row.IsFileRow).Select(row => new StoredChunk(row.Id, row.Hash)).ToList();
+            var scan = _scanner.Scan(partition[0].SourceFile, fileRows, maxTokens, overlayTokens, countTokens);
+            var moves = ChunkPositionScanner.Moves(partition, scan);
+            var before = partition.ToDictionary(row => row.Id);
+            foreach (var move in moves)
             {
-                var newIndex = scan.PositionById[row.Id];
-                if (newIndex == row.ChunkIndex)
+                var row = before[move.Id];
+                if (move.ChunkIndex == row.ChunkIndex)
                 {
-                    continue;
+                    retotalled++;
                 }
-
-                if (newIndex < 0)
+                else if (move.ChunkIndex < 0)
                 {
                     setUnknown++;
                 }
@@ -75,39 +57,14 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
                 {
                     repositioned++;
                 }
+            }
 
-                if (apply)
-                {
-                    // An unreproduced row's section is unknown, not gone (Copilot round 5,
-                    // comment 3838133861) — keep what it already had rather than clearing it.
-                    var section = newIndex < 0 ? row.Section : scan.SectionById[row.Id];
-                    await connection.ExecuteAsync(new CommandDefinition(MemorySql.SetChunkPosition,
-                            new { id = row.Id, chunkIndex = newIndex, totalChunks, section }, cancellationToken: cancellationToken));
-                }
+            if (apply)
+            {
+                await ChunkPositionScanner.WriteAsync(connection, moves, cancellationToken);
             }
         }
 
-        return new ChunkIndexRepairReport(groupsExamined, repositioned, setUnknown);
-    }
-
-    // Plain classes, not records: Ctx is a computed SQL expression with no declared column type, and
-    // an empty result set makes Microsoft.Data.Sqlite report it as byte[] rather than string —
-    // property-set materialization tolerates that; record constructor-matching does not.
-    private sealed class GroupKey
-    {
-        public string Ctx { get; set; } = "";
-
-        public string SourceFile { get; set; } = "";
-    }
-
-    private sealed class GroupRow
-    {
-        public long Id { get; set; }
-
-        public string Hash { get; set; } = "";
-
-        public long ChunkIndex { get; set; }
-
-        public string? Section { get; set; }
+        return new ChunkIndexRepairReport(groups.Count, repositioned, setUnknown, retotalled);
     }
 }

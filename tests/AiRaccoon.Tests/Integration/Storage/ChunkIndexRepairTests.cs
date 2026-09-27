@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -52,6 +53,101 @@ public sealed class ChunkIndexRepairTests : IDisposable
         positions["para one"].ShouldBe(0);
         positions["para two"].ShouldBe(1);
         positions["para three"].ShouldBe(2);
+    }
+
+    /// <summary>A repeated chunk is one row: it takes its first occurrence's place, and every row's total_chunks
+    /// becomes the row count, even where the row's position was already right.</summary>
+    [RetryFact]
+    public async Task RunAsync_RepeatedParagraph_TakesItsFirstPositionAndTotalBecomesTheRowCount()
+    {
+        var file = Path.Combine(_dataRoot, "repeats.md");
+        await File.WriteAllTextAsync(file, "alpha\n\nrepeat\n\nbeta\n\nrepeat\n\ngamma", TestContext.Current.CancellationToken);
+        // The shape the ingest used to write: the repeat at its last place and the repeats counted.
+        await using var connection = await OpenSeededAsync(
+            (file, "alpha", 0), (file, "repeat", 3), (file, "beta", 2), (file, "gamma", 4));
+        await connection.ExecuteAsync("UPDATE entries SET total_chunks = 5");
+
+        await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["alpha"].ShouldBe(0);
+        positions["repeat"].ShouldBe(1);
+        positions["beta"].ShouldBe(2);
+        positions["gamma"].ShouldBe(3);
+        (await connection.QueryAsync<long>("SELECT total_chunks FROM entries WHERE source_file = @file", new { file }))
+            .ShouldAllBe(total => total == 4);
+    }
+
+    /// <summary>A note citing the file shares its partition: the file's rows take their document positions, the note
+    /// follows them keeping its own position rather than being set to unknown, and every total counts both.</summary>
+    [RetryFact]
+    public async Task RunAsync_NoteCitingTheFile_FollowsTheFileRowsAndCountsInTheTotal()
+    {
+        var file = Path.Combine(_dataRoot, "doc.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync(
+            (file, "para one", 0), (file, "para three", 1), (file, "para two", 2));
+        await InsertNoteAsync(connection, file, "a note citing the doc", chunkIndex: 1);
+
+        await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para one"].ShouldBe(0);
+        positions["para two"].ShouldBe(1);
+        positions["para three"].ShouldBe(2);
+        positions["a note citing the doc"].ShouldBe(3);
+        (await connection.QueryAsync<long>("SELECT total_chunks FROM entries WHERE source_file = @file", new { file }))
+            .ShouldAllBe(total => total == 4);
+    }
+
+    /// <summary>A row at the right position whose total_chunks is not the row count is still a fix, and the report
+    /// counts it so a dry run does not claim there is nothing to do.</summary>
+    [RetryFact]
+    public async Task RunAsync_DryRun_CountsRowsWhoseOnlyFaultIsTheirTotal()
+    {
+        var file = Path.Combine(_dataRoot, "doc.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para one", 0), (file, "para two", 1), (file, "para three", 2));
+        await connection.ExecuteAsync("UPDATE entries SET total_chunks = 5");
+
+        var report = await Repair().RunAsync(connection, apply: false, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 3));
+    }
+
+    /// <summary>A file that gained a chunk before its stored rows still gives those rows positions below their
+    /// count, in document order: the rows the file still has are ranked, not placed at the file's new offsets.</summary>
+    [RetryFact]
+    public async Task RunAsync_FileGrewBeforeItsRows_KeepsEveryPositionBelowTheTotal()
+    {
+        var file = Path.Combine(_dataRoot, "doc.md");
+        await File.WriteAllTextAsync(file, "para zero\n\npara one\n\npara two", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para two", 0), (file, "para one", 1));
+
+        await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        var rows = (await connection.QueryAsync<(string Value, long ChunkIndex, long TotalChunks)>(
+            "SELECT value AS Value, chunk_index AS ChunkIndex, total_chunks AS TotalChunks FROM entries ORDER BY chunk_index")).ToList();
+        rows.Select(row => row.Value).ShouldBe(["para one", "para two"], "document order");
+        rows.Select(row => row.ChunkIndex).ShouldBe([0L, 1L]);
+        rows.ShouldAllBe(row => row.TotalChunks == 2);
+    }
+
+    /// <summary>Fixing only a row's total leaves its section, so the full-text index is not rewritten for it.</summary>
+    [RetryFact]
+    public async Task RunAsync_TotalOnlyFix_LeavesTheFullTextIndexAlone()
+    {
+        var file = Path.Combine(_dataRoot, "doc.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para one", 0), (file, "para two", 1), (file, "para three", 2));
+        await connection.ExecuteAsync("UPDATE entries SET total_chunks = 5");
+        const string ftsBlocks = "SELECT group_concat(hex(block), '') FROM (SELECT block FROM entries_fts_data ORDER BY id)";
+        var before = await connection.ExecuteScalarAsync<string>(ftsBlocks);
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.RowsRetotalled.ShouldBe(3, "premise: every row's total was wrong");
+        (await connection.ExecuteScalarAsync<string>(ftsBlocks)).ShouldBe(before);
     }
 
     [RetryFact]
@@ -161,6 +257,19 @@ public sealed class ChunkIndexRepairTests : IDisposable
                 "SELECT value AS Value, chunk_index AS ChunkIndex FROM entries WHERE source_file = @sourceFile",
                 new { sourceFile }))
             .ToDictionary(r => r.Value, r => r.ChunkIndex, StringComparer.Ordinal);
+
+    /// <summary>A memory_write note row whose source_file cites <paramref name="sourceFile" />.</summary>
+    private static Task InsertNoteAsync(SqliteConnection connection, string sourceFile, string value, int chunkIndex)
+    {
+        const string notePath = "notes/review.md";
+        return connection.ExecuteAsync(
+            """
+            INSERT INTO entries (hash, path, value, source_file, scope, project_id,
+                                 created_at, updated_at, embed_state, chunk_index, total_chunks)
+            VALUES (@hash, @path, @value, @sourceFile, 'project', @projectId, 1, 1, 'embedded', @chunkIndex, 4)
+            """,
+            new { hash = ContentHash.Of(notePath, value), path = notePath, value, sourceFile, projectId = ProjectId, chunkIndex });
+    }
 
     /// <summary>
     ///     Seeds rows with an explicit (wrong-on-purpose) chunk_index, the way an id-order recompute

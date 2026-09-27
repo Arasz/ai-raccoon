@@ -89,6 +89,20 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         rows.Select(r => (r.ChunkIndex, r.TotalChunks)).ShouldBe([(0, 5), (1, 5), (2, 5), (3, 5), (4, 5)]);
     }
 
+    /// <summary>A chunk repeated verbatim is stored once, so it takes its first occurrence's place and the positions
+    /// stay contiguous, with total_chunks counting the rows, not the repeats.</summary>
+    [RetryFact]
+    public async Task IngestFile_RepeatedParagraph_NumbersTheDistinctRowsContiguouslyByFirstOccurrence()
+    {
+        var file = Path.Combine(_dataRoot, "repeats.md");
+        await File.WriteAllTextAsync(file, "alpha\n\nrepeat\n\nbeta\n\nrepeat\n\ngamma", TestContext.Current.CancellationToken);
+
+        await _store.IngestFileAsync("acme", file, null, TestContext.Current.CancellationToken);
+
+        var rows = await ChunkRowsForAsync(ContextNaming.ProjectContext("acme"), "acme", file);
+        rows.Select(r => (r.ChunkIndex, r.TotalChunks)).ShouldBe([(0, 4), (1, 4), (2, 4), (3, 4)]);
+    }
+
     /// <summary>Catches a C#-loop-index implementation: re-ingesting an unchanged file hits the existing-chunk `continue` skip for every chunk, so the loop never touches a new row — the recompute must still leave numbering correct.</summary>
     [RetryFact]
     public async Task IngestFile_ReIngestingAnUnchangedFile_LeavesNumberingUnchanged()
@@ -119,6 +133,28 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         rows.Single(r => r.Hash == first.Hash).ChunkIndex.ShouldBe(0);
         rows.Single(r => r.Hash == second.Hash).ChunkIndex.ShouldBe(1);
         rows.ShouldAllBe(r => r.TotalChunks == 2);
+    }
+
+    /// <summary>A note citing a file shares its (ctx, source_file) partition: a re-ingest numbers the file's rows first,
+    /// moves the note after them and counts it in every row's total_chunks.</summary>
+    [RetryFact]
+    public async Task IngestFile_OfAFileANoteCites_PlacesTheNoteAfterTheFileRowsAndCountsIt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var file = Path.Combine(_dataRoot, "cited.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", ct);
+        await _store.IngestFileAsync("acme", file, null, ct);
+        var note = await _store.WriteAsync(new MemoryWriteRequest("acme", "a note citing the file", SourceFile: file), ct);
+
+        await File.WriteAllTextAsync(file, "para zero\n\npara one\n\npara two\n\npara three\n\npara four", ct);
+        await _store.IngestFileAsync("acme", file, null, ct);
+
+        var rows = await ChunkRowsForAsync(ContextNaming.ProjectContext("acme"), "acme", file);
+        rows.ShouldAllBe(r => r.TotalChunks == 6, "total_chunks counts the file's five rows and the note");
+        new[] { "para zero", "para one", "para two", "para three", "para four" }
+            .Select(text => rows.Single(r => r.Hash == ContentHash.Of(file, text)).ChunkIndex)
+            .ShouldBe([0, 1, 2, 3, 4]);
+        rows.Single(r => r.Hash == note.Hash).ChunkIndex.ShouldBe(5, "the note follows the file's rows");
     }
 
     /// <summary>

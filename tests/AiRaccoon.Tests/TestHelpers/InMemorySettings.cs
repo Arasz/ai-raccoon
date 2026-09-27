@@ -28,7 +28,7 @@ public sealed class InMemorySettings : ISettingsStore, IModelMigrationStore, IRe
 
     public ReingestRepairReport ReingestReport { get; set; } = new(0, 0, 0);
 
-    public ChunkIndexRepairReport ChunkIndexReport { get; set; } = new(0, 0, 0);
+    public ChunkIndexRepairReport ChunkIndexReport { get; set; } = new(0, 0, 0, 0);
 
     public ProjectIdCensusReport ProjectIdsReport { get; set; } = new([], 0, 0, 0, 0, []);
 

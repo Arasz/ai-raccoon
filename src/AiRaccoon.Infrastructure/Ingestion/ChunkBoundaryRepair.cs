@@ -10,14 +10,17 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
-/// <summary>What a chunk-boundary repair did: files re-ingested, row groups re-chunked in place, rows written, and notes left
-/// as stored because no order of their rows joins back into the body their path names.</summary>
-public sealed record ChunkBoundaryRepairReport(int FilesReingested, int GroupsRepaired, int RowsWritten, int NotesUnproven);
+/// <summary>What a chunk-boundary repair did: files re-ingested, row groups re-chunked in place, rows written, notes left
+/// as stored because no order of their rows joins back into the body their path names, and files whose rows kept their
+/// content and were renumbered in place.</summary>
+public sealed record ChunkBoundaryRepairReport(int FilesReingested, int GroupsRepaired, int RowsWritten, int NotesUnproven,
+    int FilesRepositioned);
 
 /// <summary>
-///     Repairs rows an older chunker cut through the middle of a term (docs/adr/0120). A file row whose file is
-///     still readable is re-ingested from the file; any other group (a memory_write note, a file gone from disk)
-///     is re-chunked from its own rows, which concatenate back to the original text across such a cut.
+///     Repairs rows an older chunker cut through the middle of a term (docs/adr/0120) and file position partitions not
+///     numbered by <see cref="DocumentChunks.PartitionPositions" />. A file whose rows the current chunker still writes
+///     takes its document positions in place; another readable project file is re-ingested; any other group (a note, a
+///     workspace or gone file) is re-chunked from its own rows across a cut, or else renumbered in its stored order.
 ///     New rows are left pending for the embed drain.
 /// </summary>
 public sealed class ChunkBoundaryRepair(
@@ -33,12 +36,14 @@ public sealed class ChunkBoundaryRepair(
         Guard.IsNotNull(connection);
         Guard.IsNotNull(store);
 
-        var budget = await new ChunkPositionScanner(fileTypeMatcher, embeddingService).BudgetAsync(connection, cancellationToken);
+        var scanner = new ChunkPositionScanner(fileTypeMatcher, embeddingService);
+        var budget = await scanner.BudgetAsync(connection, cancellationToken);
         var rows = await connection.QueryAsync<Row>(new CommandDefinition(
             """
             SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, source_file AS SourceFile, section AS Section,
                    scope AS Scope, project_id AS ProjectId, context_label AS ContextLabel, workspace_id AS WorkspaceId,
-                   agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId, chunk_index AS ChunkIndex
+                   agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId, chunk_index AS ChunkIndex,
+                   total_chunks AS TotalChunks
             FROM entries
             WHERE value IS NOT NULL AND path IS NOT NULL
             """, cancellationToken: cancellationToken));
@@ -47,7 +52,9 @@ public sealed class ChunkBoundaryRepair(
         var groupsRepaired = 0;
         var rowsWritten = 0;
         var notesUnproven = 0;
-        var groups = rows.GroupBy(row => (row.Scope, row.ProjectId, row.ContextLabel, row.WorkspaceId, row.Path)).Where(group => group.Count() > 1);
+        var filesRepositioned = 0;
+        var groups = rows.GroupBy(row => (row.Scope, row.ProjectId, row.ContextLabel, row.WorkspaceId, row.Path))
+            .Where(group => group.First().IsFileRow || group.Count() > 1);
         foreach (var group in groups)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -59,15 +66,33 @@ public sealed class ChunkBoundaryRepair(
             }
 
             var isFile = ordered[0].IsFileRow;
-            if (!HasSeam(ordered, isFile))
+            IReadOnlyList<PartitionEntry> partition = isFile
+                ? await ChunkPositionScanner.PartitionAsync(connection, ordered[0].Id, cancellationToken)
+                : [];
+            var keepingOrder = ChunkPositionScanner.Moves(partition, null);
+            if (!HasSeam(ordered, isFile) && keepingOrder.Count == 0)
             {
                 continue;
             }
 
-            if (isFile && ordered[0].WorkspaceId is null && await TryReingestAsync(store, ordered[0].ProjectId!, ordered[0].Path, cancellationToken))
+            if (isFile)
             {
-                filesReingested++;
-                continue;
+                var scan = scanner.Scan(ordered[0].Path,
+                    [.. partition.Where(row => row.IsFileRow).Select(row => new StoredChunk(row.Id, row.Hash))],
+                    budget.MaxTokens, budget.OverlayTokens, budget.CountTokens);
+                if (scan.MatchesStoredRows)
+                {
+                    var moves = ChunkPositionScanner.Moves(partition, scan);
+                    await ChunkPositionScanner.WriteAsync(connection, moves, cancellationToken);
+                    filesRepositioned += moves.Count > 0 ? 1 : 0;
+                    continue;
+                }
+
+                if (ordered[0].WorkspaceId is null && await TryReingestAsync(store, ordered[0].ProjectId!, ordered[0].Path, cancellationToken))
+                {
+                    filesReingested++;
+                    continue;
+                }
             }
 
             var written = await RechunkRunsAsync(connection, ordered, budget, cancellationToken);
@@ -75,6 +100,11 @@ public sealed class ChunkBoundaryRepair(
             {
                 groupsRepaired++;
                 rowsWritten += written;
+            }
+            else if (keepingOrder.Count > 0)
+            {
+                await ChunkPositionScanner.WriteAsync(connection, keepingOrder, cancellationToken);
+                filesRepositioned++;
             }
         }
 
@@ -85,7 +115,7 @@ public sealed class ChunkBoundaryRepair(
 
         filesReingested += await ReingestCutCodeFilesAsync(connection, store, cancellationToken);
 
-        return new ChunkBoundaryRepairReport(filesReingested, groupsRepaired, rowsWritten, notesUnproven);
+        return new ChunkBoundaryRepairReport(filesReingested, groupsRepaired, rowsWritten, notesUnproven, filesRepositioned);
     }
 
     /// <summary>A file's rows by position; a note's rows in the order <see cref="NoteTextOrder" /> proves, or null
@@ -117,12 +147,13 @@ public sealed class ChunkBoundaryRepair(
     }
 
     /// <summary>Code rows carry line ranges that cannot be re-derived from the rows, so a cut code file is only
-    /// re-ingested from disk; one no longer on disk is left for the watch digest to prune.</summary>
+    /// re-ingested from disk; one no longer on disk is left for the watch digest to prune. A re-ingest that writes
+    /// back the rows the file already had (a cut the chunker must make) is not counted.</summary>
     private static async Task<int> ReingestCutCodeFilesAsync(SqliteConnection connection, IMemoryStore store,
         CancellationToken cancellationToken)
     {
         var rows = await connection.QueryAsync<CodeRow>(new CommandDefinition(
-            "SELECT id AS Id, project_id AS ProjectId, path AS Path, value AS Value, chunk_index AS ChunkIndex FROM code_entries",
+            "SELECT id AS Id, project_id AS ProjectId, path AS Path, hash AS Hash, value AS Value, chunk_index AS ChunkIndex FROM code_entries",
             cancellationToken: cancellationToken));
         var reingested = 0;
         foreach (var group in rows.GroupBy(row => (row.ProjectId, row.Path)))
@@ -131,7 +162,14 @@ public sealed class ChunkBoundaryRepair(
             var cut = Enumerable.Range(0, ordered.Count - 1).Any(i => ChunkSeam.CutsATerm(ordered[i].Value, ordered[i + 1].Value));
             if (cut && await TryReingestAsync(store, group.Key.ProjectId, group.Key.Path, cancellationToken))
             {
-                reingested++;
+                var after = await connection.QueryAsync<string>(new CommandDefinition(
+                    "SELECT hash FROM code_entries WHERE project_id = @projectId AND path = @path",
+                    new { projectId = group.Key.ProjectId, path = group.Key.Path },
+                    cancellationToken: cancellationToken));
+                if (!after.ToHashSet(StringComparer.Ordinal).SetEquals(ordered.Select(row => row.Hash)))
+                {
+                    reingested++;
+                }
             }
         }
 
@@ -255,7 +293,7 @@ public sealed class ChunkBoundaryRepair(
                     var id = await InsertAsync(connection, old[0], pieces[i], now, cancellationToken);
                     if (id is not null)
                     {
-                        placed.Add(new Placed(id.Value, slot, i + 1));
+                        placed.Add(new Placed(id.Value, old[0].IsFileRow, slot, i + 1));
                         pieceIds[old[0].Id].Add(id.Value);
                         written++;
                     }
@@ -285,16 +323,16 @@ public sealed class ChunkBoundaryRepair(
     }
 
     /// <summary>
-    ///     Gives every row sharing the template's source-file position partition a contiguous position: untouched
-    ///     rows keep their relative order, a run's new pieces take the slot its first old row held, and the repaired
-    ///     group's own rows then take its positions in <paramref name="textOrder" />.
+    ///     Gives every row sharing the template's source-file position partition a contiguous position: the file's own
+    ///     rows first, untouched rows keeping their relative order, a run's new pieces taking the slot its first old row
+    ///     held, and the repaired group's own rows then taking its positions in <paramref name="textOrder" />.
     /// </summary>
     private static async Task RenumberPartitionAsync(SqliteConnection connection, Row template, List<Placed> placed,
         List<long> textOrder, CancellationToken cancellationToken)
     {
         var partition = await connection.QueryAsync<PositionRow>(new CommandDefinition(
             $"""
-             SELECT id AS Id, chunk_index AS ChunkIndex FROM entries
+             SELECT id AS Id, chunk_index AS ChunkIndex, path AS Path, source_file AS SourceFile FROM entries
              WHERE source_file = @sourceFile AND ({MemorySql.ContextKeyExpression("")}) = ({MemorySql.ContextKeyExpression("@")})
              """,
             new
@@ -309,8 +347,8 @@ public sealed class ChunkBoundaryRepair(
         var order = partition
             .Select(row => byId.TryGetValue(row.Id, out var p)
                 ? p
-                : new Placed(row.Id, row.ChunkIndex < 0 ? long.MaxValue : row.ChunkIndex, 0))
-            .OrderBy(p => p.Slot).ThenBy(p => p.Piece).ThenBy(p => p.Id)
+                : new Placed(row.Id, row.IsFileRow, row.ChunkIndex < 0 ? long.MaxValue : row.ChunkIndex, 0))
+            .OrderBy(p => !p.IsFileRow).ThenBy(p => p.Slot).ThenBy(p => p.Piece).ThenBy(p => p.Id)
             .ToList();
         var position = order.Select((p, i) => (p.Id, Index: (long)i)).ToDictionary(p => p.Id, p => p.Index);
         foreach (var (id, index) in NoteTextOrder.Repositioned([.. textOrder.Select(id => new NoteRow(id, string.Empty, position[id]))]))
@@ -348,12 +386,16 @@ public sealed class ChunkBoundaryRepair(
                 totalChunks = 0
             }, cancellationToken: cancellationToken));
 
-    /// <summary>A row's sort key in its partition: the slot it holds, and for a new piece its order within the run.</summary>
-    private sealed record Placed(long Id, long Slot, int Piece);
+    /// <summary>A row's sort key in its partition: the file's rows first, then the slot it holds, and for a new piece
+    /// its order within the run.</summary>
+    private sealed record Placed(long Id, bool IsFileRow, long Slot, int Piece);
 
-    private sealed record PositionRow(long Id, long ChunkIndex);
+    private sealed record PositionRow(long Id, long ChunkIndex, string? Path, string? SourceFile)
+    {
+        public bool IsFileRow => SourceFile is not null && string.Equals(Path, SourceFile, StringComparison.Ordinal);
+    }
 
-    private sealed record CodeRow(long Id, string ProjectId, string Path, string Value, long ChunkIndex);
+    private sealed record CodeRow(long Id, string ProjectId, string Path, string Hash, string Value, long ChunkIndex);
 
     private sealed record Row(
         long Id,
@@ -369,7 +411,8 @@ public sealed class ChunkBoundaryRepair(
         string? AgentId,
         long CreatedAt,
         long? SourceId,
-        long ChunkIndex)
+        long ChunkIndex,
+        long TotalChunks)
     {
         /// <summary>A file's own mirror row, as opposed to a memory_write note that may merely cite the file.</summary>
         public bool IsFileRow => SourceFile is not null && string.Equals(Path, SourceFile, StringComparison.Ordinal);

@@ -45,7 +45,7 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
     }
 
     private static ServerSettingsStore NewStore(Uri baseAddress, string token) =>
-        new(new HttpClient { BaseAddress = baseAddress }, token);
+        new(new HttpClient { BaseAddress = baseAddress }, token, CliSettingsBackend.RequestDeadline);
 
     [RetryFact]
     public async Task SetThenGet_RoundTrips()

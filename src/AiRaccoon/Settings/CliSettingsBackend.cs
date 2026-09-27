@@ -19,6 +19,9 @@ namespace AiRaccoon.Settings;
 /// </summary>
 internal static partial class CliSettingsBackend
 {
+    /// <summary>How long an ordinary settings call waits before the server counts as not answering.</summary>
+    internal static readonly TimeSpan RequestDeadline = TimeSpan.FromSeconds(100);
+
     /// <summary>
     ///     The production entry point: builds a real launcher, probe client and logger. Must stay
     ///     <c>async</c> rather than tail-return the inner call — the probe client has to live for the
@@ -87,8 +90,15 @@ internal static partial class CliSettingsBackend
         // disclosure only — the backend survives this command; the line names the port that actually
         // holds it (the fallback's ephemeral port included) and how to stop it.
         Log.BackendOutlivesCommand(logger, new Uri(acquired.Result.Url).Port);
-        return new ServerSettingsStore(new HttpClient { BaseAddress = new Uri(acquired.Result.Url) }, token);
+        return new ServerSettingsStore(CreateClient(acquired.Result.Url), token, RequestDeadline);
     }
+
+    /// <summary>
+    ///     The client every settings call goes through. It has no timeout of its own: the store bounds
+    ///     each call with <see cref="RequestDeadline" />, and a repair report's bank-wide scan runs unbounded.
+    /// </summary>
+    internal static HttpClient CreateClient(string url) =>
+        new() { BaseAddress = new Uri(url), Timeout = Timeout.InfiniteTimeSpan };
 
     internal static partial class Log
     {

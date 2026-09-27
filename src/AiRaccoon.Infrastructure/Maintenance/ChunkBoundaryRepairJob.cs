@@ -21,7 +21,7 @@ public sealed partial class ChunkBoundaryRepairJob(
     TimeProvider timeProvider,
     ILogger<ChunkBoundaryRepairJob> logger) : IMaintenanceJob
 {
-    public const string JobName = "chunk-boundary-repair-v1";
+    public const string JobName = "chunk-boundary-repair-v2";
 
     public string Name => JobName;
 
@@ -33,14 +33,15 @@ public sealed partial class ChunkBoundaryRepairJob(
     {
         var report = await new ChunkBoundaryRepair(fileTypeMatcher, noteChunker, fallbackChunker, embeddingService, timeProvider)
             .RunAsync(connection, store, cancellationToken);
-        Log.Repaired(logger, report.FilesReingested, report.GroupsRepaired, report.RowsWritten, report.NotesUnproven);
+        Log.Repaired(logger, report.FilesReingested, report.GroupsRepaired, report.RowsWritten, report.NotesUnproven,
+            report.FilesRepositioned);
         return report.RowsWritten > 0 || report.FilesReingested > 0;
     }
 
     private static partial class Log
     {
         [LoggerMessage(EventId = 447, Level = LogLevel.Information,
-            Message = "Chunk boundary repair: {Reingested} file(s) re-ingested, {Groups} group(s) re-chunked into {Rows} row(s), {Unproven} note(s) left as stored (text order not provable from the rows)")]
-        public static partial void Repaired(ILogger logger, int reingested, int groups, int rows, int unproven);
+            Message = "Chunk boundary repair: {Reingested} file(s) re-ingested, {Groups} group(s) re-chunked into {Rows} row(s), {Unproven} note(s) left as stored (text order not provable from the rows), {Repositioned} file(s) renumbered in place")]
+        public static partial void Repaired(ILogger logger, int reingested, int groups, int rows, int unproven, int repositioned);
     }
 }

@@ -851,6 +851,10 @@ internal static class MemorySql
     public const string SetChunkPosition =
         "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks, section = @section WHERE id = @id";
 
+    /// <summary>Sets one row's position and total without touching section, so the full-text trigger does not fire.</summary>
+    public const string SetChunkColumns =
+        "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks WHERE id = @id";
+
     // Renumbers survivors after a row is removed from a (ctx, source_file) group: shifts every
     // later chunk_index down by one and shrinks total_chunks — never re-derives from id order, so it
     // cannot scramble a group whose positions are already correct. @deletedIndex < 0 means the

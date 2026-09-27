@@ -53,7 +53,7 @@ public sealed class ModelResetGuardTests
             {
                 BaseAddress = new Uri("http://127.0.0.1:1/")
             },
-            "test-token");
+            "test-token", CliSettingsBackend.RequestDeadline);
 
         var ex = await Should.ThrowAsync<ModelMigrationInProgressException>(
             () => store.DeleteSettingAsync(EmbeddingSettingsKeys.Provider));
