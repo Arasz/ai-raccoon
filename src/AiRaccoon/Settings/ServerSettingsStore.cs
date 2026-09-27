@@ -39,13 +39,17 @@ internal sealed class SettingsServerErrorException(string message) : Exception(m
 internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, ICodeEngineStore, IRepairStore,
     IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore
 {
+    /// <summary>How long an ordinary settings call waits before the server counts as not answering.</summary>
+    public static readonly TimeSpan DefaultRequestDeadline = TimeSpan.FromSeconds(100);
+
     private readonly HttpClient _client;
 
-    public ServerSettingsStore(HttpClient client, string token)
+    public ServerSettingsStore(HttpClient client, string token, TimeSpan? requestDeadline = null)
     {
         Guard.IsNotNull(client);
         Guard.IsNotNullOrWhiteSpace(token);
         _client = client;
+        _client.Timeout = requestDeadline ?? DefaultRequestDeadline;
         _client.DefaultRequestHeaders.Remove(McpTokenGate.HeaderName);
         _client.DefaultRequestHeaders.Add(McpTokenGate.HeaderName, token);
     }
