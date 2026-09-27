@@ -65,7 +65,7 @@ No match means null; nothing is guessed. `Repositioned` hands a note's own posit
 its rows in text order. It lists only rows that move and does nothing when any position is unknown
 (`-1`), so it never invents a position and never touches another row of the partition.
 
-**`note-chunk-order-v1`** (`NoteChunkOrderRepairJob` wrapping `NoteChunkOrderRepair`) runs once per
+**`note-chunk-order-v1`** (`NoteChunkOrderRepairJob` wrapping `NoteChunkOrderRepair`; renamed `note-chunk-order-v2`, see the addendum) runs once per
 bank, right after `chunk-backfill-v2` and before `chunk-boundary-repair-v1`. It groups
 source-citing note rows by context key and path, proves each group's order and moves its positions
 in one transaction per note. It logs one line (event 446) with the notes it reordered and the notes
