@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-docs-sweep-after-defect-fixes",
+   "title": "Post-merge documentation-gap audit for ADR-0119..0122",
+   "pr": 782,
+   "merged": true,
+   "date": "2026-09-27",
+   "hasNotes": false,
+   "summary": "Docs were current except agent-memory-server.md, which lacked ADR-0121 watch self-healing (per-file fingerprint catch-up on restart, every 5 min for non-stopped watches, on digest recovery); added. EventId register, ADR index 0119-0122, architecture repair jobs verified. Open gap: memory_ingest_directory no longer fails on a denied directory - undocumented."
+  },
+  {
    "id": "air-defect-sweep-537-695-724",
    "title": "Defect sweep: #537 poison embed row, #695 chunker splits identifiers, #724 stale files after checkout (+#778 found)",
    "pr": 779,
