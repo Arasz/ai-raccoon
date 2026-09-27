@@ -35,22 +35,15 @@ public sealed record ChunkPositionScan(
 }
 
 /// <summary>One stored row of a (ctx, source_file) position partition, as the position repairs read it.</summary>
-public sealed class PartitionEntry
+public sealed record PartitionEntry(
+    long Id,
+    string Hash,
+    string? Path,
+    string SourceFile,
+    long ChunkIndex,
+    long TotalChunks,
+    string? Section)
 {
-    public long Id { get; set; }
-
-    public string Hash { get; set; } = "";
-
-    public string? Path { get; set; }
-
-    public string SourceFile { get; set; } = "";
-
-    public long ChunkIndex { get; set; }
-
-    public long TotalChunks { get; set; }
-
-    public string? Section { get; set; }
-
     public bool IsFileRow => string.Equals(Path, SourceFile, StringComparison.Ordinal);
 }
 

@@ -323,9 +323,9 @@ public sealed class ChunkBoundaryRepair(
     }
 
     /// <summary>
-    ///     Gives every row sharing the template's source-file position partition a contiguous position: the file's
-    ///     own rows first, untouched rows keeping their relative order, a run's new pieces take the slot its first old row held, and the repaired
-    ///     group's own rows then take its positions in <paramref name="textOrder" />.
+    ///     Gives every row sharing the template's source-file position partition a contiguous position: the file's own
+    ///     rows first, untouched rows keeping their relative order, a run's new pieces taking the slot its first old row
+    ///     held, and the repaired group's own rows then taking its positions in <paramref name="textOrder" />.
     /// </summary>
     private static async Task RenumberPartitionAsync(SqliteConnection connection, Row template, List<Placed> placed,
         List<long> textOrder, CancellationToken cancellationToken)
