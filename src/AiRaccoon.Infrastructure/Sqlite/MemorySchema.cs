@@ -520,12 +520,12 @@ internal static class MemorySchema
                                               total_chunks INTEGER NOT NULL DEFAULT 0
                                           );
 
-                                          -- embed_attempts (S2) and identifiers (P2-B, docs/adr/0109) are NOT declared
-                                          -- here: ALTER TABLE ADD COLUMN isn't idempotent under a race (two connections
+                                          -- entries.embed_attempts (ADR-0119), code_entries.embed_attempts (S2) and
+                                          -- identifiers (P2-B, docs/adr/0109) are NOT declared here: ALTER TABLE ADD COLUMN isn't idempotent under a race (two connections
                                           -- opening the bank at once, e.g. the maintenance hosted service and the first
                                           -- real request, can both see it missing before either commits), unlike every
                                           -- CREATE/DROP ... IF [NOT] EXISTS statement in this block — see
-                                          -- EnsureCodeEmbedAttemptsColumnAsync/EnsureCodeIdentifiersColumnAsync, called
+                                          -- EnsureEmbedAttemptsColumnAsync/EnsureCodeIdentifiersColumnAsync, called
                                           -- right after this block runs (same digest-mismatch-only cadence, never on a
                                           -- steady-state open) and tolerant of losing that race.
 
@@ -704,8 +704,9 @@ internal static class MemorySchema
             // Not folded into the Ddl string: unlike CREATE/DROP ... IF [NOT] EXISTS there, a
             // bare ALTER TABLE ADD COLUMN is not idempotent under two connections racing the same
             // digest mismatch — its own step, with its own column-existence check (see
-            // EnsureCodeEmbedAttemptsColumnAsync).
-            await EnsureCodeEmbedAttemptsColumnAsync(connection, cancellationToken);
+            // EnsureEmbedAttemptsColumnAsync).
+            await EnsureEmbedAttemptsColumnAsync(connection, "entries", cancellationToken);
+            await EnsureEmbedAttemptsColumnAsync(connection, "code_entries", cancellationToken);
             await EnsureSearchQualityResultFeaturesColumnAsync(connection, cancellationToken);
             await EnsureRepairRequestsMapJsonColumnAsync(connection, cancellationToken);
 
@@ -857,6 +858,9 @@ internal static class MemorySchema
         if (healthy && storedVersion < 17)
         {
             scopelessEntriesRemoved = await MigrateToV17Async(connection, cancellationToken);
+
+            // The v17 rebuild copies a fixed column list, so it drops entries.embed_attempts.
+            await EnsureEmbedAttemptsColumnAsync(connection, "entries", cancellationToken);
         }
 
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
@@ -1707,27 +1711,24 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     S2: adds code_entries.embed_attempts if it is missing — additive, no ladder step, same
-    ///     as code_entries itself. Called only from inside the Ddl block's own digest-mismatch
-    ///     branch (never on a steady-state open where the digest already matches — WP1/ADR-0075's
-    ///     four-statements-not-forty budget applies here too). Tolerates losing a race against
-    ///     another connection doing the same thing concurrently (two connections can both detect
-    ///     the same digest mismatch, e.g. the maintenance hosted service and the first real request
-    ///     opening a stale bank at once): the loser's ALTER fails with "duplicate column name",
-    ///     which means the column is already there — exactly the outcome being verified.
+    ///     Adds <paramref name="table" />.embed_attempts if it is missing. Runs only on a digest
+    ///     mismatch (and for entries after the v17 rebuild), and tolerates losing the ALTER race to
+    ///     another connection opening the same stale bank: "duplicate column" means it is already there.
     /// </summary>
-    private static async Task EnsureCodeEmbedAttemptsColumnAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    private static async Task EnsureEmbedAttemptsColumnAsync(SqliteConnection connection, string table,
+        CancellationToken cancellationToken)
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'code_entries'",
-                cancellationToken: cancellationToken)) > 0;
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = @table",
+                new { table }, cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
-            return; // the Ddl block just above creates code_entries; nothing to alter yet
+            return; // the Ddl block just above creates the table; nothing to alter yet
         }
 
         var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('code_entries')", cancellationToken: cancellationToken))).Contains("embed_attempts", StringComparer.Ordinal);
+                "SELECT name FROM pragma_table_info(@table)", new { table }, cancellationToken: cancellationToken)))
+            .Contains("embed_attempts", StringComparer.Ordinal);
         if (hasColumn)
         {
             return;
@@ -1736,7 +1737,7 @@ internal static class MemorySchema
         try
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                    "ALTER TABLE code_entries ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0",
+                    $"ALTER TABLE {table} ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0",
                     cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
@@ -1746,7 +1747,7 @@ internal static class MemorySchema
 
     /// <summary>
     ///     P2-B (docs/adr/0109): adds code_entries.identifiers if it is missing — same tolerant
-    ///     shape as <see cref="EnsureCodeEmbedAttemptsColumnAsync" /> (pragma probe + duplicate-column
+    ///     shape as <see cref="EnsureEmbedAttemptsColumnAsync" /> (pragma probe + duplicate-column
     ///     catch for two connections racing the same digest mismatch). Called only from inside the
     ///     Ddl block's own digest-mismatch branch, before <see cref="EnsureCodeFtsIdentifiersAsync" />,
     ///     whose backfill reads this column.
@@ -1874,7 +1875,7 @@ internal static class MemorySchema
 
     /// <summary>
     ///     P6b: adds search_quality.result_features if it is missing — same tolerant shape as
-    ///     <see cref="EnsureCodeEmbedAttemptsColumnAsync" /> (pragma probe + duplicate-column catch
+    ///     <see cref="EnsureEmbedAttemptsColumnAsync" /> (pragma probe + duplicate-column catch
     ///     for two connections racing the same digest mismatch). Called only from inside the Ddl
     ///     block's own digest-mismatch branch: no <see cref="CurrentVersion" /> bump (M1) — legacy
     ///     banks gain the column on their next open's digest rerun. Old rows stay valid with no
@@ -1910,7 +1911,7 @@ internal static class MemorySchema
 
     /// <summary>
     ///     Adds <c>repair_requests.map_json</c> if it is missing — same tolerant shape as
-    ///     <see cref="EnsureCodeEmbedAttemptsColumnAsync" /> (pragma probe + duplicate-column catch
+    ///     <see cref="EnsureEmbedAttemptsColumnAsync" /> (pragma probe + duplicate-column catch
     ///     for two connections racing the same digest mismatch). Called only from inside the Ddl
     ///     block's own digest-mismatch branch: the v13 ladder step covers version-gated banks.
     ///     Old rows stay valid with no backfill: null means the empty map.
