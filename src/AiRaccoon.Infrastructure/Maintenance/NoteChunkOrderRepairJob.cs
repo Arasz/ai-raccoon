@@ -10,7 +10,7 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 /// </summary>
 public sealed partial class NoteChunkOrderRepairJob(ILogger<NoteChunkOrderRepairJob> logger) : IMaintenanceJob
 {
-    public const string JobName = "note-chunk-order-v1";
+    public const string JobName = "note-chunk-order-v2";
 
     public string Name => JobName;
 

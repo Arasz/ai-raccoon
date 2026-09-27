@@ -26,10 +26,19 @@ public sealed class NoteChunkOrderRepair
          WHERE source_file IS NOT NULL AND path IS NOT NULL AND path <> source_file AND value IS NOT NULL
          """;
 
-    /// <summary>Repairs every source-citing note in the bank.</summary>
+    /// <summary>Repairs every source-citing note in the bank. Rows still at the -1 sentinel are first given a place
+    /// by the bank-wide keeping-order renumber sync also runs, so <see cref="NoteTextOrder.Repositioned" /> can act on
+    /// them; the full-table pass is accepted because this runs once per bank.</summary>
     public async Task<NoteChunkOrderReport> RunAsync(SqliteConnection connection, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNull(connection);
+
+        var unpositioned = await UnpositionedNotePathsAsync(connection, cancellationToken);
+        if (unpositioned.Count > 0)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWideKeepingOrder,
+                cancellationToken: cancellationToken));
+        }
 
         var rows = await connection.QueryAsync<Row>(new CommandDefinition(SelectNoteRows, cancellationToken: cancellationToken));
         return await ReorderAsync(connection, rows, cancellationToken);
