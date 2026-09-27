@@ -124,7 +124,7 @@ public sealed class CommandFailureExitCodeTests
             {
                 BaseAddress = new Uri("http://127.0.0.1:1/")
             },
-            "test-token");
+            "test-token", CliSettingsBackend.RequestDeadline);
         var commands = TestData.CreateConfigCommands(new SettingsRoutedStore(serverStore), settings: new SettingsCommands());
 
         var (exit, _, err) = await CliRun.RunAsync(["settings", "sweep", "show"],
@@ -290,7 +290,7 @@ public sealed class CommandFailureExitCodeTests
         {
             BaseAddress = new Uri("http://127.0.0.1:1/")
         },
-            "test-token");
+            "test-token", CliSettingsBackend.RequestDeadline);
 
     private static Task<(int Exit, string Out, string Err)> RunWithStoreThrowing(Exception toThrow) =>
         CliRun.RunAsync(["settings", "sweep", "show"],

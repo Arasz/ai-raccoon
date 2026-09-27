@@ -19,7 +19,7 @@ public sealed class ServerSettingsStoreDeadlineTests
 {
     private const string Token = "deadline-token";
     private static readonly TimeSpan ShortDeadline = TimeSpan.FromMilliseconds(50);
-    private static readonly TimeSpan SlowerThanTheDeadline = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan SlowerThanTheDeadline = TimeSpan.FromMilliseconds(150);
 
     [Theory]
     [InlineData(RepairKinds.ChunkIndex)]
@@ -33,18 +33,24 @@ public sealed class ServerSettingsStoreDeadlineTests
     }
 
     [Fact]
-    public async Task ChunkIndexReport_OnAClientWithAShortTimeout_StillSucceeds()
+    public async Task NewStore_OnAClientThatHasAlreadySent_StillAnswers()
     {
-        var client = new HttpClient(new DelayingHandler(SlowerThanTheDeadline))
-        {
-            BaseAddress = new Uri("http://127.0.0.1:1/mcp"),
-            Timeout = ShortDeadline,
-        };
-        var store = new ServerSettingsStore(client, Token);
+        var client = new HttpClient(new DelayingHandler(TimeSpan.Zero)) { BaseAddress = new Uri("http://127.0.0.1:1/mcp") };
+        var first = new ServerSettingsStore(client, Token, ShortDeadline);
+        await first.GetSettingAsync("sweep.threshold", TestContext.Current.CancellationToken);
 
-        var report = await store.ReportChunkIndexAsync(TestContext.Current.CancellationToken);
+        var second = new ServerSettingsStore(client, Token, ShortDeadline);
 
-        report.GroupsExamined.ShouldBe(7);
+        (await second.GetSettingAsync("sweep.threshold", TestContext.Current.CancellationToken)).ShouldBeNull();
+    }
+
+    [Fact]
+    public void CliClient_HasNoClientTimeout_SoOnlyTheRequestDeadlineBoundsACall()
+    {
+        using var client = CliSettingsBackend.CreateClient("http://127.0.0.1:1/mcp");
+
+        client.Timeout.ShouldBe(Timeout.InfiniteTimeSpan);
+        client.BaseAddress.ShouldBe(new Uri("http://127.0.0.1:1/mcp"));
     }
 
     [Fact]

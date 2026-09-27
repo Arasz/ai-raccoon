@@ -39,20 +39,19 @@ internal sealed class SettingsServerErrorException(string message) : Exception(m
 internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, ICodeEngineStore, IRepairStore,
     IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore
 {
-    /// <summary>How long an ordinary settings call waits before the server counts as not answering.</summary>
-    private static readonly TimeSpan DefaultRequestDeadline = TimeSpan.FromSeconds(100);
-
     private readonly HttpClient _client;
     private readonly TimeSpan _requestDeadline;
 
-    public ServerSettingsStore(HttpClient client, string token, TimeSpan? requestDeadline = null)
+    /// <summary>
+    ///     <paramref name="requestDeadline" /> bounds each ordinary settings call; a repair report runs
+    ///     without it. The client's own <see cref="HttpClient.Timeout" /> still applies, so its owner sets it.
+    /// </summary>
+    public ServerSettingsStore(HttpClient client, string token, TimeSpan requestDeadline)
     {
         Guard.IsNotNull(client);
         Guard.IsNotNullOrWhiteSpace(token);
         _client = client;
-        // The deadline is applied per request, so a repair report's bank-wide scan can run unbounded.
-        _client.Timeout = Timeout.InfiniteTimeSpan;
-        _requestDeadline = requestDeadline ?? DefaultRequestDeadline;
+        _requestDeadline = requestDeadline;
         _client.DefaultRequestHeaders.Remove(McpTokenGate.HeaderName);
         _client.DefaultRequestHeaders.Add(McpTokenGate.HeaderName, token);
     }

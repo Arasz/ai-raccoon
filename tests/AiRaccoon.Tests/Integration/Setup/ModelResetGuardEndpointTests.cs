@@ -51,7 +51,7 @@ public sealed class ModelResetGuardEndpointTests : IAsyncLifetime
         await _app.StartAsync(TestContext.Current.CancellationToken);
         _client = new HttpClient { BaseAddress = new Uri(_app.Urls.First()) };
         _client.DefaultRequestHeaders.Add(McpTokenGate.HeaderName, Token);
-        _store = new ServerSettingsStore(_client, Token);
+        _store = new ServerSettingsStore(_client, Token, CliSettingsBackend.RequestDeadline);
     }
 
     public async ValueTask DisposeAsync()
@@ -129,7 +129,7 @@ public sealed class ModelResetGuardEndpointTests : IAsyncLifetime
         // over the same authed HTTP client (AppRunner.cs:209-236); the fake stands in for that
         // indirection with only the member ModelResetAsync calls given a real body (R2 F6/F14).
         var store = new DelegatingMemoryStore(new LazyServerSettingsStore(
-            _ => Task.FromResult<ISettingsStore>(new ServerSettingsStore(_client, Token))));
+            _ => Task.FromResult<ISettingsStore>(new ServerSettingsStore(_client, Token, CliSettingsBackend.RequestDeadline))));
         var commands = TestData.CreateConfigCommands(store, settings: new SettingsCommands());
         return await CliRun.RunAsync(verb, commands);
     }
