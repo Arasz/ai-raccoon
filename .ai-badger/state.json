@@ -1,8 +1,53 @@
 {
- "lastUpdated": "2026-09-25",
+ "lastUpdated": "2026-09-27",
  "notesRef": ".ai-badger/status-notes.json",
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
+  {
+   "id": "air-device-power-benchmark-764",
+   "title": "Cross-device embedding benchmark: time, SoC and system energy, RAM",
+   "pr": 770,
+   "merged": true,
+   "date": "2026-09-26",
+   "hasNotes": false,
+   "summary": "#764. scripts/device-benchmark.py drives the real product per device (auto/cpu/mlx/coreml) on a tiered docs corpus; powermetrics SoC (sudo) + AppleSmartBattery system energy, server CPU-s, phys/neural peak. Owner run on M4 (1.53.0, 4914 chunks, x3): coreml 33.1 s / 379 J / 26.2 CPU-s vs auto(WebGPU) 70.4 s / 1389 J / 42.0 CPU-s; CPU-s ranges separated (24.6-27.1 vs 41.8-43.9). Cold compile 37.3 s, warm 1.0 s. p95 search latency not measured."
+  },
+  {
+   "id": "air-opt-in-coreml-device-764",
+   "title": "Opt-in embedding.device coreml on the Neural Engine (1.53.0)",
+   "pr": 769,
+   "merged": true,
+   "date": "2026-09-26",
+   "hasNotes": false,
+   "summary": "#764 stage 3, ADR-0118 Accepted, ADR-0117 Superseded. model_fp16_ane.onnx (5.7 MB, shared weights, offsets pinned), 4 CoreML bucket sessions (256-1024, batch 1), >1024 rows on a lazy CPU session, NeuralEngineSwitch state machine with background compile + per-bucket parity probe, WebGPU serves meanwhile, CoreMlCache with flock (exclusive compile, shared serve), .complete marker, contained prune, status.json + doctor coreml line, EventIds 436-441 (register 206). ORT telemetry disabled (fixed exit 134 after MLX+CoreML). M4: cosine >=0.999998, cold 35 s / warm 0.7 s, 808 MiB. macOS-only suites never run in CI. Default flip gated: second chip, in-product WebGPU A/B, one opt-in release."
+  },
+  {
+   "id": "air-coreml-default-apple-silicon-adr",
+   "title": "ADR-0118: opt-in coreml device on the Neural Engine (Proposed)",
+   "pr": 768,
+   "merged": true,
+   "date": "2026-09-26",
+   "hasNotes": false,
+   "summary": "#764 stage 2. Owner ruling: opt-in first; auto unchanged. Per-bucket CoreML sessions (256/512/768/1024), shared-weights model_fp16_ane.onnx, cache under data root, background compile with WebGPU serving + parity-probe state machine, every ordered device switch must work across restart and in-process. Default flip later gated by second chip, in-product WebGPU A/B, one opt-in release."
+  },
+  {
+   "id": "air-ane-shared-weights-export-764",
+   "title": "ANE graph that reads the shipped fp16 weights (5.7 MB added)",
+   "pr": 767,
+   "merged": true,
+   "date": "2026-09-25",
+   "hasNotes": false,
+   "summary": "#764 stage 1.1 (PRs #766 powermetrics result, #767). export_ane_encoder.py --share-weights-with rebuilds every ANE weight from the product's separate q/k/v/o/gate/up/down fp16 initializers via constant ops ORT folds before partitioning; bit-identical to the standalone export, CoreML 1 partition 1401-1405 NE ops, 5.68 MB added. powermetrics: ANE rail 1276 mW vs 29 idle. Published standalone export: huggingface.co/Arraasz/granite-embedding-small-english-r2-ane. Stage 1 left: second chip (needs M1/M2/M3); WebGPU direct A/B deferred to product."
+  },
+  {
+   "id": "air-ane-layout-encoder-reexport-760",
+   "title": "ANE-layout re-export of granite-small clears ADR-0117's CoreML gates",
+   "pr": 763,
+   "merged": true,
+   "date": "2026-09-25",
+   "hasNotes": false,
+   "summary": "#760 (PRs #763, #765; research only, no VERSION). fp16 ml-ane-transformers-layout export (conv1x1, per-head MatMul attention, Neg-free RoPE) = 1 CoreML partition, ~1405/1407 ops on ANE; fp32 graphs get 0 ANE ops. step256: 6-8% of MLX CPU-s, 0.49-0.57 GiB phys+neural, 808 MiB cache, recall unchanged. ADR-0117 amended, decision stands. Tools: export_ane_encoder.py, coreml_ab per-config model_dir, ane_powermetrics.py (owner runs, sudo). Next stage #764: shared-weights export, second chip, WebGPU compare, powermetrics, then ADR + coreml device."
+  },
   {
    "id": "air-server-exits-when-install-replaced",
    "title": "Server exits when its install is replaced; pre-update proxies respawn through the tool shim",

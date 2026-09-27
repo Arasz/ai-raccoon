@@ -10,10 +10,10 @@ telemetry needs no sudo).
 Usage:
     python3 scripts/device-benchmark.py [--devices auto,cpu,mlx,coreml] [--repeats 3] [--idle-seconds 20]
         [--binary $(which ai-raccoon)] [--corpus-sha <sha>] [--out ~/ai-raccoon-device-benchmark/<ts>/]
-        [--no-power] [--allow-busy] [--drain-timeout 1800]
+        [--no-power] [--allow-busy] [--drain-timeout 1800] [--search-queries 50]
 
 Needs httpx (the MCP client): use the repo's .venv or `python3 -m pip install httpx`.
-Writes <out>/result.json (schemaVersion 1), <out>/result.md, <out>/powermetrics.plist and one
+Writes <out>/result.json (schemaVersion 2), <out>/result.md, <out>/powermetrics.plist and one
 directory per run under <out>/runs/. Never touches port 7721 or ~/.ai-raccoon.
 """
 
@@ -60,6 +60,9 @@ COMPILER_NAMES = ("aned", "ANECompilerService")
 NEURAL_ENGINE_TIMEOUT_S = 300.0
 PUBLISH_WAIT_S = 75.0
 POLL_S = 0.5
+SEARCH_LIMIT = 8  # product default
+SEARCH_WARMUP_RUNS = 3
+SEARCH_WARMUP_QUERY = "warm up the search phase"
 
 
 class BenchmarkError(RuntimeError):
@@ -448,6 +451,8 @@ class Session:
         if self.ioreg.available:
             tail_publish = self.ioreg.wait_publishes(t1, 1, PUBLISH_WAIT_S)
 
+        search_fields = self._search_latency(server)
+
         (run_dir / "ingest.json").write_text(json.dumps(ingest, indent=1, default=str))
         return {
             **record, "status": status, "t0": t0, "t1": t1, "wall_s": t1 - t0, "chunks": _chunks(db, PROJECT_ID),
@@ -455,8 +460,23 @@ class Session:
             "server_cpu_s": None if cpu_before is None or cpu_after is None else cpu_after - cpu_before,
             "compiler_cpu_s": compiled, "compiler_pids_vanished": vanished,
             "phys_footprint_peak_kib": peak.phys, "neural_footprint_peak_kib": peak.neural,
-            "tail_publish": tail_publish,
+            "tail_publish": tail_publish, **search_fields,
         }
+
+    def _search_latency(self, server) -> dict:
+        """After the drain, while the server is still up: 3 untimed warm-ups, then every derived
+        query once, sequentially, each timed client-side. Disabled (--search-queries 0) returns Nones."""
+        if self.args.search_queries <= 0:
+            return {"search_latency_ms": None, "search_p50_ms": None, "search_p95_ms": None}
+        queries = protocol.derive_search_queries(self.corpus, self.args.search_queries)
+        for _ in range(SEARCH_WARMUP_RUNS):
+            server.client.memory_search(PROJECT_ID, SEARCH_WARMUP_QUERY, limit=SEARCH_LIMIT)
+        latencies = []
+        for query in queries:
+            start = time.perf_counter()
+            server.client.memory_search(PROJECT_ID, query, limit=SEARCH_LIMIT)
+            latencies.append((time.perf_counter() - start) * 1000.0)
+        return result.search_latency_fields(latencies)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -499,6 +519,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--allow-busy", action="store_true")
     parser.add_argument("--drain-timeout", type=float, default=1800.0)
     parser.add_argument("--no-calibrate", action="store_true", help="keep docs/adr even when the fastest drain is short")
+    parser.add_argument("--search-queries", type=int, default=50,
+                        help="timed searches per run after the drain, 0 disables the phase (default 50)")
     return parser.parse_args(argv)
 
 

@@ -1,0 +1,1127 @@
+[
+ {
+  "path": "docs/adr/0001-fluentvalidation-in-core.md",
+  "bytes": 2088,
+  "sha256": "a97a9981a3ffa1c67841e4882d243ebd34a932a114c51562e1c52c7d75f87ce9"
+ },
+ {
+  "path": "docs/adr/0002-opentelemetry-observability.md",
+  "bytes": 11144,
+  "sha256": "774ff9964e69727291b16873b643d2709390d5a7d111bab125aacb4cb5d4468b"
+ },
+ {
+  "path": "docs/adr/0003-source-file-first-class-citizen.md",
+  "bytes": 6761,
+  "sha256": "36a5f7e5dda1088dd4577e6dd3b80933219f35f8c992281ea7e18147782d1fc4"
+ },
+ {
+  "path": "docs/adr/0004-dual-vector-structure-signal.md",
+  "bytes": 7971,
+  "sha256": "da23abce76c89645cd4845a6306d8be968a5ece6d2794bc3b768496df5bec73b"
+ },
+ {
+  "path": "docs/adr/0005-source-affinity-ranking.md",
+  "bytes": 6311,
+  "sha256": "c5704ba0f4ea4e8ce6535cc4a723d3fc5aa8936048e513154a4351d60b7060b0"
+ },
+ {
+  "path": "docs/adr/0006-rrf-parameter-optimization.md",
+  "bytes": 19159,
+  "sha256": "fda8cc2d8e6e70e3b9e4daedf27bab3e8258ef95710e136b54230cc252fe214d"
+ },
+ {
+  "path": "docs/adr/0007-propose-tier.md",
+  "bytes": 8416,
+  "sha256": "a9bc3b723434b2914d18824b322b19a366fc904c11a816f1f2044a224b5b218a"
+ },
+ {
+  "path": "docs/adr/0008-live-pid-discovery-for-monitoring.md",
+  "bytes": 7489,
+  "sha256": "df61c14c309e0d494b9a29275c76c99fcae830fc7ebb977d3b4d3a453c0d154e"
+ },
+ {
+  "path": "docs/adr/0009-otlp-export.md",
+  "bytes": 29954,
+  "sha256": "f4fea255d9391e63fa5c5824894e1144238e44c5557098b03c8c706d3994c1b1"
+ },
+ {
+  "path": "docs/adr/0010-bank-maintenance.md",
+  "bytes": 4130,
+  "sha256": "ddaaeed70c10ca020ab88b8b4ee1266f7fdb5f798a837c1a7ee4f2e58961e014"
+ },
+ {
+  "path": "docs/adr/0011-schema-versioning.md",
+  "bytes": 6593,
+  "sha256": "74af49e89aac4f3ce0ba9fc692c1e73fe77434196c9461750f33c9352e5b27f9"
+ },
+ {
+  "path": "docs/adr/0012-ssh-key-derivation-hkdf-replacement.md",
+  "bytes": 5247,
+  "sha256": "62cc9dd3affccea7a1b9509b5f6b87713ba773969e73d4e227bd671622537aad"
+ },
+ {
+  "path": "docs/adr/0013-extension-host-hook-surface.md",
+  "bytes": 4989,
+  "sha256": "d44ff2d2bca7868cb23452534aa66aeb80c48f49b98fb30f414a4f0f507aae26"
+ },
+ {
+  "path": "docs/adr/0014-settings-never-sync.md",
+  "bytes": 5246,
+  "sha256": "ad05440fb5352d4cf4393c0183dd83fdc23dc57ff20b551b9a8ce1c99e388d13"
+ },
+ {
+  "path": "docs/adr/0015-retrieval-gates-assert-portable-bands.md",
+  "bytes": 4727,
+  "sha256": "04792fd59d37b8af410d71fc000d5db044d8627a713f286f37ce2a51af2de89f"
+ },
+ {
+  "path": "docs/adr/0016-remove-the-extension-host.md",
+  "bytes": 8540,
+  "sha256": "810dd2c23278bb8298b1c761fca957eb1a511bef189cb831b473db4311d69438"
+ },
+ {
+  "path": "docs/adr/0017-tensorprimitives-in-core.md",
+  "bytes": 9733,
+  "sha256": "e5a2a395b52d193ec2a1e6284c3434ecbba6f3480b9694108f4330c5aa1f4fd7"
+ },
+ {
+  "path": "docs/adr/0018-promotion-scoring-v2.md",
+  "bytes": 22085,
+  "sha256": "b6961443289639e70631ae8594b53d1443cd9603dafa342afdaec8a31c9e231b"
+ },
+ {
+  "path": "docs/adr/0019-forward-version-write-guard.md",
+  "bytes": 5488,
+  "sha256": "d737d566c1ab5b52c34122c42b1ab1691e65cd21ad6a4890dcd8826d51f51b0a"
+ },
+ {
+  "path": "docs/adr/0020-always-on-http-stdio-proxy.md",
+  "bytes": 26835,
+  "sha256": "fedbd64acfe8ec4e7d134866ba57b916e32336e731ffc30b456271fede28d897"
+ },
+ {
+  "path": "docs/adr/0021-export-the-aspnet-request-span.md",
+  "bytes": 11075,
+  "sha256": "71d8db5b62f82c119a775fccd25f873459a43bb06c2fd8f1ab1d7a3371f767e5"
+ },
+ {
+  "path": "docs/adr/0022-authenticated-loopback-restart.md",
+  "bytes": 16411,
+  "sha256": "cd8fe7601d6699a6371242992908b809cbb26066fb8044211353b9dbb2a76297"
+ },
+ {
+  "path": "docs/adr/0023-promotion-queue-entries-delete-invalidation.md",
+  "bytes": 13927,
+  "sha256": "79393a9950ec71f699407705a41efcc7bdb56619ce0f513b4315e5efb0368ba3"
+ },
+ {
+  "path": "docs/adr/0024-unknown-id-contract.md",
+  "bytes": 3835,
+  "sha256": "f18093279dec6de7d8a855d0f181cb2c15990e47fc40f9d2995ec59cf3298b03"
+ },
+ {
+  "path": "docs/adr/0025-the-sweep-reaper.md",
+  "bytes": 14240,
+  "sha256": "9b078ee108d9ffb8e377b32cfd6f3d03f6dc9296d7b1ac244ace4d61cb31db79"
+ },
+ {
+  "path": "docs/adr/0026-persistent-discards-and-shared-exclusion.md",
+  "bytes": 5757,
+  "sha256": "ac9517317af9355456c62818ff854edbaa55fd4c829cd7e5da9f5f00fc4443f4"
+ },
+ {
+  "path": "docs/adr/0027-extensible-file-type-handlers-and-json-support.md",
+  "bytes": 3258,
+  "sha256": "2487ecd789480d18f1ae4a6b10a9213d4c2bbfdffc801b23bbb785da07c151c3"
+ },
+ {
+  "path": "docs/adr/0029-pre-write-noise-filtering.md",
+  "bytes": 3105,
+  "sha256": "2c354600b512abe13d9fb474787cec6922a435219fdac867698a0c763dd84444"
+ },
+ {
+  "path": "docs/adr/0030-realtime-heuristic-ttl.md",
+  "bytes": 2084,
+  "sha256": "8d0543cf12b9f6dd5709f47e449223ac3aed9f961c3a87a13ee2407325de1ece"
+ },
+ {
+  "path": "docs/adr/0031-polly-resilience-pipelines.md",
+  "bytes": 2953,
+  "sha256": "662cad5dc9944105ef9dc1a487e4fbe87d914026d589614f57abc92a035c7092"
+ },
+ {
+  "path": "docs/adr/0032-truthful-write-outcome.md",
+  "bytes": 3613,
+  "sha256": "7eb6918ca6a5c984543d09aaa100da574b6505bbf3b6f4c166e734867913ea10"
+ },
+ {
+  "path": "docs/adr/0033-remove-zero-shot-noise-filter-and-noise-learning.md",
+  "bytes": 8451,
+  "sha256": "788b11d768139c0908de21dacda11e00c63d6a09f1ee5925fa60d02346818760"
+ },
+ {
+  "path": "docs/adr/0034-explicit-ttl-is-authoritative.md",
+  "bytes": 4648,
+  "sha256": "178d00532e0186ca73785449e635f9dbca0c97f18333e4a7cd22d892c19ec2b9"
+ },
+ {
+  "path": "docs/adr/0035-memory-get-and-query-relevant-snippets.md",
+  "bytes": 4996,
+  "sha256": "c103b13c0fb17e6ccb4871d2bbf0517ae597dc2779cfbfdbf1b2ae8dcf13fbe9"
+ },
+ {
+  "path": "docs/adr/0036-engine-aware-chunk-token-budget.md",
+  "bytes": 10595,
+  "sha256": "f9caac625d143b3f788775922fa388b81dacd501dc8309e7cbc4f3addd24b705"
+ },
+ {
+  "path": "docs/adr/0037-workspace-and-promotion-queue-concurrency-guards.md",
+  "bytes": 9513,
+  "sha256": "5f9d9ab72adb756839e9f1efb0e7d0c81a7647b20e443e7a1dcd9fbfb4652433"
+ },
+ {
+  "path": "docs/adr/0038-cache-the-resolved-encryption-key-per-config-fingerprint.md",
+  "bytes": 4674,
+  "sha256": "cc6d3fcea5a3548c62d80b539767c94b7a5ee9e1dfc148f8b381c61500843203"
+ },
+ {
+  "path": "docs/adr/0039-noise-learning-substrate-and-shadow-mode.md",
+  "bytes": 16604,
+  "sha256": "0567f7aae183b4a87d00cdcf956acf2414d9cc1573c72ebd89e1243c17f947d0"
+ },
+ {
+  "path": "docs/adr/0040-read-path-query-guard.md",
+  "bytes": 7958,
+  "sha256": "691515489b4380832ac08414badc7e96500fb4a50f06d467f1467915f56a72d2"
+ },
+ {
+  "path": "docs/adr/0041-structural-noise-detector.md",
+  "bytes": 13786,
+  "sha256": "4986a2e7144a4c62dcce06f3e7f535f109b4363052a9ae59c91208778bffa8ee"
+ },
+ {
+  "path": "docs/adr/0042-fixtures-are-built-by-the-product-not-beside-it.md",
+  "bytes": 8429,
+  "sha256": "bc626f48fbfaa8e970dfb24aa01821220d4c455598419a9d50a797c7a5d63320"
+ },
+ {
+  "path": "docs/adr/0043-a-probe-with-no-answer-is-not-an-empty-port.md",
+  "bytes": 6861,
+  "sha256": "0a1b9a8f3d9a6437203911805c34e4e6afc4767d9f4772870c8a3fc20bd38037"
+ },
+ {
+  "path": "docs/adr/0044-section-fts-weight.md",
+  "bytes": 4403,
+  "sha256": "083e8dc77d459cb149e8439ff9e94d58ec21c0344355773e7becf74b829801aa"
+ },
+ {
+  "path": "docs/adr/0045-context-is-a-label-not-a-boundary.md",
+  "bytes": 5178,
+  "sha256": "2782656c14562b53fc295e5dd2772f824de26882ec9ec360ec166301d8444f11"
+ },
+ {
+  "path": "docs/adr/0046-project-membership-has-one-definition.md",
+  "bytes": 5342,
+  "sha256": "1f3eabb7948d5f79a8f31b4abb51320dae0c8e499d8e772afd128e0ae16f7841"
+ },
+ {
+  "path": "docs/adr/0047-relative-score-floor.md",
+  "bytes": 9023,
+  "sha256": "3819560e5fb82b0ed31d703fc36561cd05593c743e6d703bb897edd8705c6be6"
+ },
+ {
+  "path": "docs/adr/0048-a-chunk-is-a-well-formed-markdown-fragment.md",
+  "bytes": 11913,
+  "sha256": "d9af238a4e5dcee780d67b9bba29eaaebfee424da55a5ff0806d8ca9052b0d9d"
+ },
+ {
+  "path": "docs/adr/0049-embeddings-depend-on-the-host-cpu.md",
+  "bytes": 9812,
+  "sha256": "a30592174091c07572f0c8e7772ed08b0d914891e7ce533975d11b47d521b360"
+ },
+ {
+  "path": "docs/adr/0050-sweep-gates-search-with-pinned-query-vectors.md",
+  "bytes": 6953,
+  "sha256": "d56bca01944cf4cd340c0ed0b59f3a5157efc94565ad6daf0f4ff3339b2d68e2"
+ },
+ {
+  "path": "docs/adr/0051-a-context-never-names-another-project.md",
+  "bytes": 5330,
+  "sha256": "c6c5c3b02261ad257f06ad93b7126189fec8e646323c3b6f7b1cd4f1d6363aff"
+ },
+ {
+  "path": "docs/adr/0052-the-workspace-lifecycle-is-a-write-not-a-destruction.md",
+  "bytes": 3834,
+  "sha256": "9ae69c1401503fce8bbbc96b57d70f8f4aef42a741cdd328853f018f4f882b36"
+ },
+ {
+  "path": "docs/adr/0053-rating-is-computed-where-it-is-stored.md",
+  "bytes": 4814,
+  "sha256": "dee9ae21c012ef12dd0402e568f50c19eca9d8108e9b7f48ff2b2ccc46247027"
+ },
+ {
+  "path": "docs/adr/0054-a-default-that-answers-wrongly-is-worse-than-no-default.md",
+  "bytes": 3483,
+  "sha256": "2f390a091f2abc599ef995a65eb637d792eca2696c8c73b82756221f39eb4007"
+ },
+ {
+  "path": "docs/adr/0055-a-discard-is-load-bearing-while-its-entry-lives.md",
+  "bytes": 3681,
+  "sha256": "de8572ab6f7c6f8303f48f95a95f210c17a1a0f50102a85d8dc3da3065ad2fe9"
+ },
+ {
+  "path": "docs/adr/0056-a-retrieval-gate-measured-off-its-tuning-set.md",
+  "bytes": 5879,
+  "sha256": "f5dda7b3701adb767e2f230f6dd053b1fbd55f423796015b2d0c6e08ec99ddf4"
+ },
+ {
+  "path": "docs/adr/0057-the-headless-penalty-is-load-bearing.md",
+  "bytes": 5083,
+  "sha256": "a88d71fa19d6150be10780ef44da3e449e00561c3394f967aaea9b59a5322642"
+ },
+ {
+  "path": "docs/adr/0058-the-second-fusion-is-order-preserving-and-its-removal-is-not-yet-measurable.md",
+  "bytes": 6164,
+  "sha256": "dc794cadf6d2a6f08cb3573a6e77f6c5f0e14d2be109c78faf1650c800ffb3a6"
+ },
+ {
+  "path": "docs/adr/0059-the-layering-guard-the-repo-had-already-paid-for.md",
+  "bytes": 4827,
+  "sha256": "53f86cde551af960dcc44b61e9463cdb4edb0abad01bf2c5d2c7eea4f735c6cf"
+ },
+ {
+  "path": "docs/adr/0060-an-unrecognised-verb-must-not-launch-anything.md",
+  "bytes": 6636,
+  "sha256": "56934e5c29ff3885396d331f32216875e278f707cc5320acfbd22a0bbaf2d49c"
+ },
+ {
+  "path": "docs/adr/0061-an-unmapped-exception-must-say-what-it-was.md",
+  "bytes": 4373,
+  "sha256": "14ec9a1e1d0904326929e2f73a7a057da2484dd2be98a349d65443ef679503b8"
+ },
+ {
+  "path": "docs/adr/0062-a-fake-clock-advanced-before-its-timer-exists-is-lost.md",
+  "bytes": 9140,
+  "sha256": "8c5372adfcfd8948424069232b01a3487e37f806223c8e69f61ecbc8e5111ab7"
+ },
+ {
+  "path": "docs/adr/0063-chunk-to-the-engine-that-will-embed-not-the-one-configured.md",
+  "bytes": 3933,
+  "sha256": "0f03855c32a341147046b7533cb06a45851691926c916f1c6b36108a96a7ea5a"
+ },
+ {
+  "path": "docs/adr/0064-memory-write-chunks-like-everything-else.md",
+  "bytes": 4599,
+  "sha256": "480ec5f1867e66501f895722c51ed7ad4d1ef7574f9ba4ea6da3a27f041f96ef"
+ },
+ {
+  "path": "docs/adr/0065-the-tool-layer-holds-no-pipeline.md",
+  "bytes": 5022,
+  "sha256": "d7877333178529acff2cee6480b026c42db66c194f3ab5b1caba4573916e647b"
+ },
+ {
+  "path": "docs/adr/0066-the-env-gate-had-writers-but-no-readers.md",
+  "bytes": 4732,
+  "sha256": "21c971f985c2cfda2ba19c3754f628cadc5ff87cd649fe3438c8306834feeb21"
+ },
+ {
+  "path": "docs/adr/0067-naming-shared-asks-for-promotion.md",
+  "bytes": 5214,
+  "sha256": "0d439e07e48ae5ef3c4b5c4dbc5e1fefb7da3a9f5d374e2ec3ed46944fd011b4"
+ },
+ {
+  "path": "docs/adr/0068-ctx-is-a-vec0-metadata-column-not-a-partition-key.md",
+  "bytes": 5018,
+  "sha256": "7e2aa0bde0333dd7a9329c5b5e0c1546d75c5fdf59a33d91a13e18c542af14d8"
+ },
+ {
+  "path": "docs/adr/0069-a-backfill-re-chunks-the-row-it-has-not-the-file-it-remembers.md",
+  "bytes": 3379,
+  "sha256": "fb119767004e4e794481db1d4872ec46a14f2217e91e80c43f61baab2b7404b6"
+ },
+ {
+  "path": "docs/adr/0070-maintenance-is-a-list-of-jobs-with-a-ledger.md",
+  "bytes": 5240,
+  "sha256": "7d0750f4436891589dcd5165e884edc1f13d2dce2a0088efc8510ad0b5a2401d"
+ },
+ {
+  "path": "docs/adr/0071-a-query-is-trimmed-deliberately-and-said-so.md",
+  "bytes": 7460,
+  "sha256": "e2c8b2aabec375ff84cb0219006c73ae862c5369b106401fd783e41b3360feef"
+ },
+ {
+  "path": "docs/adr/0072-a-term-budget-for-long-queries-is-not-adjudicable.md",
+  "bytes": 9941,
+  "sha256": "2f4163578e4a73e5cec77ae09a9bd6079caaf60d89615672acb9a3c736de7d95"
+ },
+ {
+  "path": "docs/adr/0073-a-write-embeds-the-chunk-it-stored.md",
+  "bytes": 3230,
+  "sha256": "40674add572bfd8d6c302ae67c54741bef36bc08936297ffada83e1bbd8f9c61"
+ },
+ {
+  "path": "docs/adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md",
+  "bytes": 4566,
+  "sha256": "c59c947178de0613d4e1dbe9d36ee51876d9269f0e94b48c277b5e43f5b0ea79"
+ },
+ {
+  "path": "docs/adr/0075-only-the-server-writes-to-the-bank.md",
+  "bytes": 35138,
+  "sha256": "6d863b8fba2209bd2f11be1bc117a683af8959426bc6fa1698f6a64071d64270"
+ },
+ {
+  "path": "docs/adr/0076-model-set-is-an-outbox-drained-by-an-on-demand-relay.md",
+  "bytes": 23032,
+  "sha256": "c3f9558f321cfa11f504c4f70dcdbf48b870c9480675b91dcf93eb4e687b9c2e"
+ },
+ {
+  "path": "docs/adr/0077-table-chunking-is-not-adjudicable-on-a-table-blind-corpus.md",
+  "bytes": 12368,
+  "sha256": "fccfbf9c38b464618aceba748b07f2388cd9bc0cd2003f6d839cdd9c232ad276"
+ },
+ {
+  "path": "docs/adr/0078-the-no-fusion-regression-rule-is-an-order-and-ships-default-off.md",
+  "bytes": 22469,
+  "sha256": "ae6c15df20b5834f2d7b4f2dcc4d5604d9e7dc0d8ddf755c4fcf8734297b519b"
+ },
+ {
+  "path": "docs/adr/0079-table-chunking-becomes-adjudicable-on-a-corpus-that-rechunks.md",
+  "bytes": 8825,
+  "sha256": "c533549d7e6ba148d08630410534b800fc5c8fc2f1cd143ea61b90446ea13818"
+ },
+ {
+  "path": "docs/adr/0080-the-phases-close-against-search-total-not-the-tool-total.md",
+  "bytes": 6473,
+  "sha256": "2fa553fe0bf9b7c31a7d9bf36465f5f002b2da3ef9dc15c789ec82d20c9efc1e"
+ },
+ {
+  "path": "docs/adr/0081-the-table-chunking-correctness-properties-cost-retrieval.md",
+  "bytes": 6493,
+  "sha256": "978ada086e9b33e982e7be45d253b7e547701e17edfd3977fa9a5faa8f54ab79"
+ },
+ {
+  "path": "docs/adr/0082-at-forty-queries-two-table-arms-beat-the-baseline.md",
+  "bytes": 5169,
+  "sha256": "196bbe06048ed88d148cda7073bf6243edadf21f8e5f877320c6d47fa6311bb8"
+ },
+ {
+  "path": "docs/adr/0083-search-parameters-unified-source.md",
+  "bytes": 4943,
+  "sha256": "9aaf71b14149c1f43a1d3acd5c32575dcf9b77983f0fa88a7ba42e1f8736d71f"
+ },
+ {
+  "path": "docs/adr/0084-arbitrary-embedding-models-are-manifest-described.md",
+  "bytes": 10375,
+  "sha256": "b83fc96cdcdc4e6b70c6441a21a6fee764783b1fa424db7ff28da3bb1349f242"
+ },
+ {
+  "path": "docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md",
+  "bytes": 4227,
+  "sha256": "2b70070f4cd3003dbd5c191c72a854e5ad6dce94433e613cccb016c372fa1277"
+ },
+ {
+  "path": "docs/adr/0086-watch-overlap-and-ai-raccoon-ignore.md",
+  "bytes": 7901,
+  "sha256": "dbbeff0e2432982a7ac0f79c991e5888b2aedf9a9aaad29fc2a46fb482a71418"
+ },
+ {
+  "path": "docs/adr/0087-code-drain-is-configure-transaction-invalidation-not-the-model-migration-outbox.md",
+  "bytes": 6023,
+  "sha256": "19e6b600d5c9d641f907cf6d9b9b07bd02d8f0b22c5c0e1078f89fa78c6a1adc"
+ },
+ {
+  "path": "docs/adr/0088-code-search-surface-kind-envelope-no-fusion.md",
+  "bytes": 8599,
+  "sha256": "683bf3349d8825f0fc16664cfad1cd4d06ec659459e830bc0a4e64d650305c8a"
+ },
+ {
+  "path": "docs/adr/0089-the-project-id-is-a-guidv7-and-that-is-not-access-control.md",
+  "bytes": 22353,
+  "sha256": "a9d4bcd0010de86c65d6befb3ac2249757a27f0a9da41bb8d3b868b6247fc7b6"
+ },
+ {
+  "path": "docs/adr/0090-the-fixture-corpus-is-this-repository-s-own-public-docs.md",
+  "bytes": 9871,
+  "sha256": "2ffbd099e16975fc9cf3714156aad2bf45d74aad02d23a8e39e6663ff1874743"
+ },
+ {
+  "path": "docs/adr/0091-the-event-pump-never-blocks-a-producer.md",
+  "bytes": 18314,
+  "sha256": "3db41d6c5386c4a2b4c43e4280c4708ea9d87e1276886f56491122030b222d22"
+ },
+ {
+  "path": "docs/adr/0092-the-code-engine-keeps-fp32-cpu-unless-an-arm-clears-both-gates.md",
+  "bytes": 10271,
+  "sha256": "99409a9c26f700b990d42fb38360f6a744539948764e6514bedadbaaf85d716b"
+ },
+ {
+  "path": "docs/adr/0093-vec-code-is-dimension-agnostic-through-the-shared-d3-reconciler.md",
+  "bytes": 4533,
+  "sha256": "accc0903e68856286e528429e93f8463c09bd664c6ecaea753a2f012042a02ed"
+ },
+ {
+  "path": "docs/adr/0094-search-quality-records-every-kind.md",
+  "bytes": 5392,
+  "sha256": "47df6ff80313e662bd68defc30038b7737798779fd756428725518de4e2f2182"
+ },
+ {
+  "path": "docs/adr/0095-promotion-scorer-rebalance-ablation-pair.md",
+  "bytes": 5403,
+  "sha256": "6aeac11e8f7a4b29a9f5ddd50bb50aafb9d15ae42558c4468d6659307cdafd98"
+ },
+ {
+  "path": "docs/adr/0096-default-search-limit-8-floor-0-6.md",
+  "bytes": 2862,
+  "sha256": "8bb96c31484467f9be94c0025484344ba5342ccb4ef5b04af010ad35404a44a8"
+ },
+ {
+  "path": "docs/adr/0097-search-quality-kind-column.md",
+  "bytes": 4943,
+  "sha256": "ff00df239c552b1fa56fa81b1a8b91f267b5a3bdf3404df90372af2497420008"
+ },
+ {
+  "path": "docs/adr/0098-telemetry-never-syncs.md",
+  "bytes": 4229,
+  "sha256": "aab187300ed8670496e297d1db3810e62901cae7d35d22964c77de4d8cdda65d"
+ },
+ {
+  "path": "docs/adr/0099-empty-default-alias-map.md",
+  "bytes": 4116,
+  "sha256": "26e2468be035c0b2603e0711b63100cd345be039fdf8d8c396b12a49c8ae86b6"
+ },
+ {
+  "path": "docs/adr/0100-repair-folds-all-committed-scopes.md",
+  "bytes": 3373,
+  "sha256": "2ceeac3913e998c22631a6d1d06345076893025a07cf94366bc64f73cdd45a18"
+ },
+ {
+  "path": "docs/adr/0101-repair-verdicts-ignore-telemetry-workspaces-block.md",
+  "bytes": 2446,
+  "sha256": "1ae33fb9247cb515e53ecbdc38817edd52d1e7aa743aa8eea2863ce2228ff475"
+ },
+ {
+  "path": "docs/adr/0102-durable-alias-map-with-p3-enforcement.md",
+  "bytes": 3423,
+  "sha256": "184cc20375995db983707524e79f75b690a6fc91af13b39cbf025a15c120e037"
+ },
+ {
+  "path": "docs/adr/0103-run-until-fixed-loop-with-falsifiable-verdict.md",
+  "bytes": 2880,
+  "sha256": "6668d785ebc1afbc91a4b31f4813f8736cdbb6a55e10cc4b1671a297062e8bce"
+ },
+ {
+  "path": "docs/adr/0104-remove-the-stdio-full-server-mode.md",
+  "bytes": 14190,
+  "sha256": "8c9705ea30c37dbeddadbb43c9fc919df0e5c4e7e87aa8f97f24af6d133f65c6"
+ },
+ {
+  "path": "docs/adr/0105-private-spawn-is-the-launch-default.md",
+  "bytes": 20103,
+  "sha256": "ec00c0ff0204cd016094740a9ef2b98fbb946ff538bba9524927b6a968e5d936"
+ },
+ {
+  "path": "docs/adr/0106-attach-or-start-with-backend-identity-proof.md",
+  "bytes": 15812,
+  "sha256": "c467d099a5afd567aa5a2bc95124a6291bbf889932ed324f1093c713460536c5"
+ },
+ {
+  "path": "docs/adr/0107-categorized-two-digit-exit-codes.md",
+  "bytes": 28610,
+  "sha256": "a4318281232fc53ec5a34b13d1eb9f8993b57fcad2184f2ee0e5f2af354d081f"
+ },
+ {
+  "path": "docs/adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md",
+  "bytes": 10699,
+  "sha256": "3f2dc0290d8b30c129441cd7faafc42fd558d6eddedbb75521f8165e142c25c2"
+ },
+ {
+  "path": "docs/adr/0109-code-fts-carries-a-derived-identifiers-column.md",
+  "bytes": 5986,
+  "sha256": "730fe7a42eb2316febc03cdf203df25df56c731a92b7b45cab4a14abac5cfdc7"
+ },
+ {
+  "path": "docs/adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md",
+  "bytes": 9439,
+  "sha256": "af051801bea7afcc044b2792dbf0789981a07d7c6313d4108afb5e8b5993e607"
+ },
+ {
+  "path": "docs/adr/0111-key-check-sidecar-distinguishes-wrong-key-from-corrupt-bank.md",
+  "bytes": 15977,
+  "sha256": "978f082751958f4c803a0ee2b8277b44404a31bcc5f35ca45d6afa2186462e06"
+ },
+ {
+  "path": "docs/adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md",
+  "bytes": 18034,
+  "sha256": "497ea8f3340f312573957eb368b9dc196eeacdc536aff2dba3085b7286a51510"
+ },
+ {
+  "path": "docs/adr/0113-no-configureawait-in-application-code.md",
+  "bytes": 3366,
+  "sha256": "d98218d501ff9598c99dda2f9d126e4e8d22b12b38a22be85863d23840630051"
+ },
+ {
+  "path": "docs/adr/0114-mlx-length-buckets-and-a-capped-buffer-cache.md",
+  "bytes": 5233,
+  "sha256": "c838019d83f45fd39b7ea01b0bc085a92c47022e19a7fc5d00ad8dc9ff6b44fc"
+ },
+ {
+  "path": "docs/adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md",
+  "bytes": 7303,
+  "sha256": "c5041b4f1bd50e3867418a340d994d24ade61e5089fd7a1c5fd722d46a522943"
+ },
+ {
+  "path": "docs/adr/0116-server-exits-when-its-install-is-replaced.md",
+  "bytes": 7826,
+  "sha256": "da71dfe519b72f7564ee2375a92c4e3d94066953847921cf903daa9367d1bc21"
+ },
+ {
+  "path": "docs/adr/0117-coreml-execution-provider-stays-out.md",
+  "bytes": 8232,
+  "sha256": "fe8df628aa4897a0453ea10c713ecdcf8bfa0f701f0faaa325aff2ff67355cea"
+ },
+ {
+  "path": "docs/adr/0118-opt-in-coreml-device-on-the-neural-engine.md",
+  "bytes": 10962,
+  "sha256": "fcda0ddee1182d87d9099d25b72458144d5e80944b34ae650af4d605dd4ee39d"
+ },
+ {
+  "path": "docs/adr/README.md",
+  "bytes": 92951,
+  "sha256": "853c6e0b455fa20cc401c2da5e327e59e8b967e6dc51470f05151ee9010a2bf6"
+ },
+ {
+  "path": "docs/plans/2026-08-06-http-serve-mode-plan.md",
+  "bytes": 11779,
+  "sha256": "bbd819a789af41cd7b4db3ddab22b70b98ec88b3ecdd778fd46c17d5dd0608aa"
+ },
+ {
+  "path": "docs/plans/2026-08-06-improve-sqlite.md",
+  "bytes": 5314,
+  "sha256": "c0b6f60fab4ffb433f5287643e915a29aa80eaa1ba6c7e29911a97dcc85db728"
+ },
+ {
+  "path": "docs/plans/2026-08-07-hkdf-rekey-migration.md",
+  "bytes": 16827,
+  "sha256": "db679a4cb0f5d531ebf6b2d88740a14cf2362eef145ae88e13d24810b50796d1"
+ },
+ {
+  "path": "docs/plans/2026-08-07-watch-scan-runaway-fix.md",
+  "bytes": 11061,
+  "sha256": "38c0c796616227c58fcbbce65c7a56c3a6d4d099c4ec625a83a825eaf2211aa7"
+ },
+ {
+  "path": "docs/plans/2026-08-08-embedding-perf.md",
+  "bytes": 33367,
+  "sha256": "962dc37f73b068667a37bc3c39ab12b1e06e62a2a8aa32d80175ffd65dca2b1e"
+ },
+ {
+  "path": "docs/plans/2026-08-08-search-knn-perf.md",
+  "bytes": 40181,
+  "sha256": "cb68a46deefe1cd34b8266f1578344638ef9125fe866876d7acebb1b4033a9d0"
+ },
+ {
+  "path": "docs/plans/2026-08-09-http-token-clients.md",
+  "bytes": 33800,
+  "sha256": "d1bd0d57347a9467354564c144729845d48627c9e893c432997d6e951da96d06"
+ },
+ {
+  "path": "docs/plans/2026-08-09-mcp-loopback-token-flow.md",
+  "bytes": 14020,
+  "sha256": "0db5028d863e0bd581050eb2b0e8785ce48f70d968394a3b7107baf203e71410"
+ },
+ {
+  "path": "docs/plans/2026-08-09-memory-decay-implementation-plan.md",
+  "bytes": 12802,
+  "sha256": "ea32551f05198d30ebe1d7b5f53e174ec859ec011bd6ecca6663bec62b5da77a"
+ },
+ {
+  "path": "docs/plans/2026-08-09-promotion-accounting-fix-plan.md",
+  "bytes": 13178,
+  "sha256": "b5065e7e345fd2e91a7d91354814f75886996989b4acc53bc2e12bba5e017424"
+ },
+ {
+  "path": "docs/plans/2026-08-11-mem-cleanup-plan.md",
+  "bytes": 10862,
+  "sha256": "92b1eba3f83167e6702a746bdbb8857df90b09b002f53d33bf95446513f42cbb"
+ },
+ {
+  "path": "docs/plans/2026-08-11-mem-imp-1-queue-hygiene-plan.md",
+  "bytes": 11946,
+  "sha256": "41e41f8a49d2db24f744b3397fb622cdd5337c0fed6730d0f51b977cd0d43366"
+ },
+ {
+  "path": "docs/plans/2026-08-11-search-quality-metric-plan.md",
+  "bytes": 12247,
+  "sha256": "18e1c5298e23b9e3e9f3e9bf6e9590ffd7e314d28190bc7a5211345abe2a52d9"
+ },
+ {
+  "path": "docs/plans/2026-08-12-json-filetype-handler-plan.md",
+  "bytes": 4284,
+  "sha256": "80b9b39b7608bb783c8b94502f0dc68c6ec701f2712c00ea34ca4eead2128ffc"
+ },
+ {
+  "path": "docs/plans/2026-08-13-algorithmic-research-roadmap.md",
+  "bytes": 2252,
+  "sha256": "cf49765bdc89b94ca12a76926e368a15f7cf8c3a3c94b8bf9339248d5882a540"
+ },
+ {
+  "path": "docs/plans/2026-08-13-architecture-fix-plan.md",
+  "bytes": 11214,
+  "sha256": "ebe26b44da1b0eb78319d30b7eccfe7c5c6a4285653828d8bfb888f76be433f8"
+ },
+ {
+  "path": "docs/plans/2026-08-13-dynamic-noise-vector-learning-research.md",
+  "bytes": 24309,
+  "sha256": "6bab3c8164f296c332e7b39e0f5922663962a697167734b30a6d472cd13d8d7f"
+ },
+ {
+  "path": "docs/plans/2026-08-13-json-overlay-measurement-plan.md",
+  "bytes": 6897,
+  "sha256": "71b83482301b0d5eb50e23fcc5770c8b91a1e74a50f08d9c4b7e4bd6d83864dc"
+ },
+ {
+  "path": "docs/plans/2026-08-13-polly-resilience-plan.md",
+  "bytes": 5155,
+  "sha256": "aa531f9e135cac897b321ddfc3d2afbf9c206f695f5dff28d17e58b7883cfa5f"
+ },
+ {
+  "path": "docs/plans/2026-08-13-v4-dynamic-noise-and-semantic-promotion-plan.md",
+  "bytes": 7118,
+  "sha256": "83bfc8f96824e958a9d08d34d4339ef60f0a157ffea3c704c7e08e398485589e"
+ },
+ {
+  "path": "docs/plans/2026-08-13-v4-zero-shot-noise-filtering-plan.md",
+  "bytes": 3813,
+  "sha256": "c5e0463937d9a30401790ec121db538665cae0c2f3d9fe457a96d99ff90a0e11"
+ },
+ {
+  "path": "docs/plans/2026-08-14-code-quality-improvement-plan.md",
+  "bytes": 29452,
+  "sha256": "b4a73509ef00ebdabf1dc8c0fef3b4c3716e7445fc4fb75be89ee3dd383c423e"
+ },
+ {
+  "path": "docs/plans/2026-08-14-project-scope-improvement-plan.md",
+  "bytes": 74490,
+  "sha256": "4dc13bf403f449f7fc4a55b0dda0fdbfdab275ccf5cba751777790ac87a6b537"
+ },
+ {
+  "path": "docs/plans/2026-08-15-performance-metrics-implementation.md",
+  "bytes": 63836,
+  "sha256": "22b7d998fc601d64659b9ec4809653d33f6a99607559a32f3416143682d6de8f"
+ },
+ {
+  "path": "docs/plans/2026-08-15-performance-observability-design.md",
+  "bytes": 11904,
+  "sha256": "6207839e08bb087b05a5224b61f6d67c72d92050724a19b989355bc3b5ac8642"
+ },
+ {
+  "path": "docs/plans/2026-08-16-bank-open-cost-implementation.md",
+  "bytes": 54929,
+  "sha256": "972429d2c1faab26d7cdc770a12cdd183da5ce6fed908c7be8ddcaa59307d5c9"
+ },
+ {
+  "path": "docs/plans/2026-08-17-issue-close-357-367.md",
+  "bytes": 67593,
+  "sha256": "f1a20cce5aab18d3dcfbab1dd0a00dca78a2ac90c02f2326053c0249886bc84c"
+ },
+ {
+  "path": "docs/plans/2026-08-17-search-phase-attribution.md",
+  "bytes": 43890,
+  "sha256": "7a2db34275c75cab55f467d49e16eca9f831e323ac403580d4bfcd0181facf2b"
+ },
+ {
+  "path": "docs/plans/2026-09-03-bank-quality-audit-plan.md",
+  "bytes": 8343,
+  "sha256": "d2f249a135f0f35b387ca0f1d42f029ff9fd1c3f6216e1e2797601e867e8b378"
+ },
+ {
+  "path": "docs/plans/2026-09-03-search-signal-preservation-plan.md",
+  "bytes": 14484,
+  "sha256": "881f6d01865cce0fafbaa239050b9f77dd65cac2bb7322d1574bfef0391bea1e"
+ },
+ {
+  "path": "docs/plans/adoption-improvement-plan.md",
+  "bytes": 10171,
+  "sha256": "e50b2cb871225ef7481f76639ebd3572c765e169c3e5075f65ff6df0c7e537b6"
+ },
+ {
+  "path": "docs/plans/azure-blob-sync-plan.md",
+  "bytes": 27840,
+  "sha256": "76069f7649c514a08cc8a4b95dfb4038c11134007b1c5d29155177519eb1008f"
+ },
+ {
+  "path": "docs/plans/cli-args-parsing.md",
+  "bytes": 29937,
+  "sha256": "679e004465cd6f00e5ed3d973ef32ec51f75f4154ffa01eac133aeb54a4b922c"
+ },
+ {
+  "path": "docs/plans/default-projectid-from-cwd.md",
+  "bytes": 4271,
+  "sha256": "862d2db94f16315822deb5f429c12cfcedc7cc8b3940fdbfda2b89a7968f735e"
+ },
+ {
+  "path": "docs/plans/doc-ingestion-implementation-plan.md",
+  "bytes": 27195,
+  "sha256": "d77b4035cd001c1ce962302e5a30951b7db9ff9ef310f7e65e8ba2d66a1db7d7"
+ },
+ {
+  "path": "docs/plans/encryption-bitwarden-implementation.md",
+  "bytes": 46300,
+  "sha256": "1dd7427221c155a3547026a7794e57e0ccca5912008c74b4fb5197e142d0daac"
+ },
+ {
+  "path": "docs/plans/file-watcher-implementation.md",
+  "bytes": 42068,
+  "sha256": "aad186fccd1a77cb245eb2a0def1f1ae82d3196587a1ede5b10d8dd014484061"
+ },
+ {
+  "path": "docs/plans/mcp-setup-refactor.md",
+  "bytes": 4598,
+  "sha256": "d7ef7f0279485a71021a2e3cd134a050b501e86adf508b9fcc096178c7cdb7eb"
+ },
+ {
+  "path": "docs/plans/memory-audit-fixes.md",
+  "bytes": 9612,
+  "sha256": "435a6c24dce58fa0385bb382f18bf229972fd15f7cba0244a71f92b4e6269770"
+ },
+ {
+  "path": "docs/plans/memory-first-gate-implementation-plan.md",
+  "bytes": 26990,
+  "sha256": "ca715e1cbbf07cf06fec5780d11db433480fd0df0e6b988fb0f2ef43044e0195"
+ },
+ {
+  "path": "docs/plans/part2-plan.md",
+  "bytes": 6248,
+  "sha256": "f5123e7921aa474d1117feef6b2d5709c8c20609883e725e88d2220a1545a006"
+ },
+ {
+  "path": "docs/plans/promotion-propose-tier-implementation-plan.md",
+  "bytes": 21369,
+  "sha256": "2873558a2a78ce0acd4cdc3dcbe845860bd60a4def81faba3eea6ea09cd7a9e9"
+ },
+ {
+  "path": "docs/plans/retrieval-improvement-a.md",
+  "bytes": 15909,
+  "sha256": "33134a447229455384087648ae68695c0d9c8a5747496737ee7966d837631ac0"
+ },
+ {
+  "path": "docs/plans/retrieval-improvement-b.md",
+  "bytes": 18344,
+  "sha256": "5b090dd388461ffd90465f2ceab5a1ea028e0276375c263d012718f6377b5b3c"
+ },
+ {
+  "path": "docs/plans/retrieval-improvement-c.md",
+  "bytes": 30682,
+  "sha256": "935af02132ca8a9082c215d2b879186c7c3956917135e0821d3a294e46cc6e76"
+ },
+ {
+  "path": "docs/plans/scripts-refactor.md",
+  "bytes": 22543,
+  "sha256": "142b780fcafd3f5252eb5af00c951e8df779e150c4035727e2f791ef44a838cf"
+ },
+ {
+  "path": "docs/plans/sync-cloud-identity-creds.md",
+  "bytes": 15593,
+  "sha256": "249b951998eed6274cd60b10c45bf396c7fda8356a6ddea40e736da332db02bd"
+ },
+ {
+  "path": "docs/plans/watch-list-format-refactor-test-plan.md",
+  "bytes": 23440,
+  "sha256": "86ae7a863f8dfb6cd0b94f58c68a9b416a611102a16e316d20403afed988b6f8"
+ },
+ {
+  "path": "docs/plans/watch-list-format-refactor.md",
+  "bytes": 45613,
+  "sha256": "e28ba0070be57100309b0e45d1c0daa3f6829a3f80f6ecf950db973fd5f31c5a"
+ },
+ {
+  "path": "docs/plans/watch-star-glob-cli-refactor-test-plan.md",
+  "bytes": 17986,
+  "sha256": "0c9c5dbf910af7ac62a0b42bb67b73deb7199da8a0b886686b905f6f281e1318"
+ },
+ {
+  "path": "docs/plans/watch-star-glob-cli-refactor.md",
+  "bytes": 20106,
+  "sha256": "a7ac70b67558a89533f13b755be016bdbae5ab4bcd8fb2b139c59dc20a4f8f5e"
+ },
+ {
+  "path": "docs/reference/README.md",
+  "bytes": 1769,
+  "sha256": "c3961e53615b40183d9faae6e22c1187659b4acaa6abc1bb9a769c5833558ed5"
+ },
+ {
+  "path": "docs/reference/agent-memory-server.md",
+  "bytes": 100585,
+  "sha256": "d4b5c0b75b58f8078efc2301efb4111d83f4c63db8cf94bc0c9e454ed93af714"
+ },
+ {
+  "path": "docs/reference/ai-raccoon-ignore-template.ignore",
+  "bytes": 2929,
+  "sha256": "16d71ce05b45143f4d78bceec87940151005e14db69e73a3327459a285eeab54"
+ },
+ {
+  "path": "docs/reference/cli-reference.md",
+  "bytes": 20228,
+  "sha256": "fd0a4d35a15ff65b8b51b75e6c6dbe7ceb97bd4a950ef642edb737205719d6e0"
+ },
+ {
+  "path": "docs/reference/embedding-benchmark-report.html",
+  "bytes": 446476,
+  "sha256": "2b16a71d504b312a5b10e0286e4bfac9d84758eda4f0dbb0a322f0acf99c82cc"
+ },
+ {
+  "path": "docs/reference/embedding-benchmark.md",
+  "bytes": 10011,
+  "sha256": "939a7f2f4d92efd75375c6a0cb95bc1b2128d66cdf64d11fa8317e6027c7415c"
+ },
+ {
+  "path": "docs/reference/logging-event-ids.md",
+  "bytes": 30674,
+  "sha256": "d5da6a42df93e37e012655c052321b01e80874fc553766ccdfd42ac6b89c2d23"
+ },
+ {
+  "path": "docs/reference/releases-and-publishing.md",
+  "bytes": 1688,
+  "sha256": "ec7d3d2857662e152bf727805dc178205d3817f9778667aedeb45838dc8ae16e"
+ },
+ {
+  "path": "docs/reference/search-parameters.md",
+  "bytes": 2731,
+  "sha256": "fb6a6d56366f968a4b0877cba4febcbe20ab5dfd64afc8878a757e6b312475ac"
+ },
+ {
+  "path": "docs/reference/whats-new-history.md",
+  "bytes": 7752,
+  "sha256": "4627765cf46dd5fcf9a9f0cef090c912ca17811073f3f85eed9ea22b8e5120e2"
+ },
+ {
+  "path": "docs/research/archive/adr-retrieval-solutions.md",
+  "bytes": 6884,
+  "sha256": "73ad33302387436751ad52353d679d01b22b7318ce0a27c9549a9ca3a542b978"
+ },
+ {
+  "path": "docs/research/archive/encryption-at-rest.md",
+  "bytes": 17826,
+  "sha256": "d5c43117dc778e2bbbdd944f995fc0a2fbe04281a247874306eb4945600a29c3"
+ },
+ {
+  "path": "docs/research/archive/per-query-alpha-tuning.md",
+  "bytes": 3341,
+  "sha256": "d1427252dcbeeca73631a17a8033fdaf391067e433b0256712de465c1b0416a4"
+ },
+ {
+  "path": "docs/research/archive/structured-doc-retrieval-scamper.md",
+  "bytes": 3950,
+  "sha256": "3d482ff38bf3544e95504cf63300eb4891618ebaa7a4ba8b310730391acbf06e"
+ },
+ {
+  "path": "docs/research/llm-humanization-research.md",
+  "bytes": 8099,
+  "sha256": "cc5610e926232f89d984df74b3301fef546f6d6d9eb7c54016fcd4d91c443a94"
+ },
+ {
+  "path": "docs/research/prompt-eng/person-prompt-design-reseasrch_1.md",
+  "bytes": 22498,
+  "sha256": "f346ff2ac71aab692cfaf7446932afa13c27711636bfa10bbfc6f1c3ae72d7fa"
+ },
+ {
+  "path": "docs/research/prompt-eng/persona-prompt-research-part2-OxAlpha.md",
+  "bytes": 30289,
+  "sha256": "0366e35b8b712b21ff222c7fdbf214d4eaa10b12676634bdf9fb01ccd27dc7e1"
+ },
+ {
+  "path": "docs/research/prompt-eng/persona-prompt-research-part2-xiaomi.md",
+  "bytes": 57972,
+  "sha256": "84b5c7ab3b68ca1865a4d594719c5b488081c3347ffbc598357d5b98b93d63f2"
+ },
+ {
+  "path": "docs/reviews/2026-08-05-integration-review-pr24-26.md",
+  "bytes": 7736,
+  "sha256": "844e8d8bd1c03044d98f1a9acfc91b3f1f3afc33b7345045ef8026ef704f7874"
+ },
+ {
+  "path": "docs/reviews/2026-08-06-integration-review-1-0-8.md",
+  "bytes": 10882,
+  "sha256": "e6dc51c272d205beba7f7009737c5c2bc9a6dd01f10621eafa6ea415e8e0855d"
+ },
+ {
+  "path": "docs/reviews/2026-08-06-integration-review-1-0-9.md",
+  "bytes": 14783,
+  "sha256": "526d0d48d5d2a9012742955109e0fafac33e17c66799506a48e671e7ebc6ba3b"
+ },
+ {
+  "path": "docs/reviews/2026-08-08-manual-tool-sweep-1-3-1.md",
+  "bytes": 19942,
+  "sha256": "d123fd19f1cf2e4d8027fd4e82531ca10afeb71a5b300e2e540d1b73c1592ca1"
+ },
+ {
+  "path": "docs/reviews/2026-08-09-1-6-0-high-fix-briefs.md",
+  "bytes": 26037,
+  "sha256": "c37f8aa5259baa48eb5d270dc0488142dccbf53e466dd1ad9e8d6e4cfada1b2e"
+ },
+ {
+  "path": "docs/reviews/2026-08-09-h9-decay-design-brief.md",
+  "bytes": 15571,
+  "sha256": "952b13dcef22acd1bdcc1f6dc26ab0115bf542dab997951fb1c7ae1f3ee65799"
+ },
+ {
+  "path": "docs/reviews/2026-08-09-integration-review-1-6-0.md",
+  "bytes": 22717,
+  "sha256": "95cc4c67530a84de2f63d4e1629dbcf051595aee0bc05b4dcdba8fcfc0b7580f"
+ },
+ {
+  "path": "docs/reviews/2026-08-09-manual-tool-sweep-1-5-0.md",
+  "bytes": 20717,
+  "sha256": "a9b7d3509a2904eb7dc5421ad9a4c06ca4909798c860765b122e159bba99260d"
+ },
+ {
+  "path": "docs/reviews/2026-08-09-otlp-export-review.md",
+  "bytes": 19977,
+  "sha256": "23e88b9f763bec81d789887232e0bd5754639cbf9b1022f2e54f7fa308041772"
+ },
+ {
+  "path": "docs/reviews/2026-08-09-otlp-integration-review.md",
+  "bytes": 14795,
+  "sha256": "cc6b252f71e511f874c4b76c904715272b7352c7da97d254d210e429a7588424"
+ },
+ {
+  "path": "docs/reviews/2026-08-11-integration-review-gate-1.7.0.md",
+  "bytes": 10191,
+  "sha256": "f0e62349188b55f5f79a80640f6c27c5717b0e1b908da06e1739f25506ef8c49"
+ },
+ {
+  "path": "docs/reviews/2026-08-13-architecture-review-ingestion-and-deps-refactor.md",
+  "bytes": 15217,
+  "sha256": "053d91284338b594bf2f71281c817e7211f20cb46ada8bc7092d0f2867d6493f"
+ },
+ {
+  "path": "docs/reviews/2026-08-14-moe-codebase-review.md",
+  "bytes": 46374,
+  "sha256": "a3109f06419f94231685802ee62d2fe2e61dc3e14b2867289aa6903a48c02a5a"
+ },
+ {
+  "path": "docs/reviews/2026-08-14-project-scope-review-ground-truth.md",
+  "bytes": 7134,
+  "sha256": "77af8b120f173f27aab262097d744413fe40614509c54e4af7a64a9e19b088f0"
+ },
+ {
+  "path": "docs/reviews/2026-08-14-project-scope-review.md",
+  "bytes": 45050,
+  "sha256": "25873c4c61832a67d75b29650119b5bf6dec06ed07b31e62b55540b618c72650"
+ },
+ {
+  "path": "docs/reviews/2026-08-17-moe-plan-review.md",
+  "bytes": 9517,
+  "sha256": "3d9e63e53d617355430bd3d6b512161ce0500d05dfce588b1b2bcb58aa56ad67"
+ },
+ {
+  "path": "docs/reviews/2026-08-21-delta-review-ground-truth.md",
+  "bytes": 10674,
+  "sha256": "a05023ab6ea5dd8149a3eab979583f6459cc7a44930917843a672097d175a4a5"
+ },
+ {
+  "path": "docs/reviews/2026-08-21-delta-review.md",
+  "bytes": 8078,
+  "sha256": "e9809d3da53dc642ec67579571ee35751fae0855fa313a8c651453ce59d0c9a3"
+ },
+ {
+  "path": "docs/reviews/doc-ingestion-plan-review.md",
+  "bytes": 11577,
+  "sha256": "34801da1d35179e3df6b4b61a7918d41f3b6f8c7854f106e8668caeafbec035f"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-14-lane-architecture.md",
+  "bytes": 31213,
+  "sha256": "7e0135528485a8c186f76df9791fe9585f56b123399853fa8610928edbd7da4b"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-14-lane-ci-scripts-docs.md",
+  "bytes": 19435,
+  "sha256": "7807f88f32f08895d27599088fee177d9832c74d2085820025d12fd506bd94da"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-14-lane-consumer-surface.md",
+  "bytes": 15939,
+  "sha256": "f683a4471c6ca4db7028663fb740ce1a375cc59552fb4ea459f2049622af40ae"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-14-lane-data-access.md",
+  "bytes": 18058,
+  "sha256": "25467e0e3a152c3d8dc8905f26b553508dd7a735fbbecbee9b345b7cd1d58bb9"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-14-lane-operations.md",
+  "bytes": 14116,
+  "sha256": "8db617c0e619186e12164a4ee36c920fe0e26dd654a103deb895f450632520c5"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-14-lane-retrieval.md",
+  "bytes": 23296,
+  "sha256": "d1780527c758e62c4724007631b0406e2a14a5b715d4424f3d305573f349355c"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-14-lane-security.md",
+  "bytes": 32153,
+  "sha256": "f96d47758af1dc0a65df89862b6b22d1a6d03bf5f25f7f8c34fbc0122b147dea"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-14-lane-test-qa.md",
+  "bytes": 13082,
+  "sha256": "0ac7e3c80cfbe72f34ba74dc3db421880ec9163df6a384625ad57b97140bbca1"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-17-lane-architecture-surface.md",
+  "bytes": 20294,
+  "sha256": "aa303c26219f605940cd5bf5fbfdd9955b87de2af19ce65bf0bf5738518c3e1d"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-17-lane-data-safety.md",
+  "bytes": 23753,
+  "sha256": "71ee81469abb4a1454275c4c36b53ba7a1cf87f1791ecdfb911eab6817996712"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-17-lane-gates.md",
+  "bytes": 18713,
+  "sha256": "733f656cd168ae1b8170c405e2483bdbc79c5c7d82092c341e3378622d20522d"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-17-lane-retrieval-measurement.md",
+  "bytes": 28376,
+  "sha256": "e0fe542dd6c3399cb81cc2b0fb57667ad2e32b82249afa2d357ed40e6979a192"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-17-lane-simplicity.md",
+  "bytes": 32657,
+  "sha256": "37f3f0067a49daf5177a9b64d48c581b57ecd5d159d51670236b1f4a6890b969"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-21-delta-architecture.md",
+  "bytes": 5307,
+  "sha256": "066a61d4d89d3b33c5f257bf56cc869bc2fc7ecfacbd8ca85497578ee4d62d84"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-21-delta-consumer-surface.md",
+  "bytes": 4338,
+  "sha256": "0e30a08557523b652fedb438a6ebce8654052d2426efcf832587c73dcc46a232"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-21-delta-data-access.md",
+  "bytes": 5346,
+  "sha256": "939f863dd6973f29031ec810be2bbfc3c591ca528665fe6373979c97f2157f79"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-21-delta-retrieval.md",
+  "bytes": 4725,
+  "sha256": "0b35719cbea6a432fa2fc88e569a3e414496282952d3de22d6f28d63281725db"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-21-delta-security.md",
+  "bytes": 4801,
+  "sha256": "3838a54a76e1e2e2a9e46aece79016dd6ea666a684102891e488aaf7215602de"
+ },
+ {
+  "path": "docs/reviews/lanes/2026-08-21-delta-test-qa.md",
+  "bytes": 4770,
+  "sha256": "be87ce8172183abd462ab8dd201ea0e12031b9b852abc48cc5679443c5085dcc"
+ }
+]
