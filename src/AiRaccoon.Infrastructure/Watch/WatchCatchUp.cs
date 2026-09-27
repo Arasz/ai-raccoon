@@ -1,3 +1,4 @@
+using System.IO.Enumeration;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -72,7 +73,7 @@ public sealed partial class WatchCatchUp(
         }
 
         var rules = ignoreRules ?? IgnoreRules.Empty;
-        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        foreach (var file in EnumerateTree(path))
         {
             if (WatchDenySet.Excludes(path, file))
             {
@@ -90,6 +91,16 @@ public sealed partial class WatchCatchUp(
             }
         }
     }
+
+    /// <summary>Every file under <paramref name="root" />, never descending into a hidden or deny-set directory.</summary>
+    private static IEnumerable<string> EnumerateTree(string root) =>
+        new FileSystemEnumerable<string>(root, (ref FileSystemEntry entry) => entry.ToFullPath(),
+            new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0, IgnoreInaccessible = false })
+        {
+            ShouldIncludePredicate = (ref FileSystemEntry entry) => !entry.IsDirectory,
+            ShouldRecursePredicate = (ref FileSystemEntry entry) =>
+                !entry.FileName.StartsWith('.') && !WatchDenySet.Names.Contains(entry.FileName.ToString())
+        };
 
     private static bool IsIgnoredFile(IgnoreRules rules, string root, string file) =>
         !string.Equals(Path.GetFileName(file), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&

@@ -89,6 +89,38 @@ public sealed class WatchCatchUpTests
         WatchCatchUp.EnumerateFiles(dir.Path, Stamps(file)).ShouldContain(file);
     }
 
+    /// <summary>The walk never descends into a deny-set or hidden directory, so an unreadable one cannot fail the scan.</summary>
+    [RetryFact]
+    public void EnumerateFiles_NeverDescendsIntoADeniedOrHiddenDirectory()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // POSIX permission bits do not exist on Windows.
+        }
+
+        using var dir = TempDir.New("catchup-prune");
+        var keep = dir.File("keep.md");
+        WriteAllText(keep, "zephyrkeep");
+        var denied = Path.Combine(dir.Path, "node_modules");
+        var hidden = Path.Combine(dir.Path, ".git");
+        foreach (var blocked in new[] { denied, hidden })
+        {
+            Directory.CreateDirectory(blocked);
+            WriteAllText(Path.Combine(blocked, "inner.md"), "zephyrinner");
+            File.SetUnixFileMode(blocked, UnixFileMode.None);
+        }
+
+        try
+        {
+            WatchCatchUp.EnumerateFiles(dir.Path, null).ToList().ShouldBe([keep]);
+        }
+        finally
+        {
+            File.SetUnixFileMode(denied, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(hidden, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
     [RetryFact]
     public void EnumerateFiles_OnAFileTarget_ReturnsTheFileWhenItIsDue()
     {
