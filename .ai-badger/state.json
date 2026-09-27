@@ -4,6 +4,15 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-file-chunk-index-repair-788",
+   "title": "Boundary repair v2: duplicate/gapped file positions, one total_chunks rule, repair reports without a CLI deadline (#788)",
+   "pr": 790,
+   "merged": true,
+   "date": "2026-09-27",
+   "hasNotes": false,
+   "summary": "1.53.6 checklist: 186 live file groups with duplicate chunk_index; boundary repair re-ingested must-cut files every run. Fix: ChunkBoundaryRepair scans before re-ingest; exact match (MatchesStoredRows) repositions in place, stale/grown files re-ingest, gone/workspace-changed renumber in stored order; job renamed chunk-boundary-repair-v2. One rule in Core DocumentChunks: (ctx, source_file) partition, file rows first by first occurrence, citing notes after, total = partition row count; FileIngestor/scanner/ChunkIndexRepair agree; position-only moves skip section (no FTS rewrite). repair chunk-index reports RowsRetotalled; CLI client has no timeout, 100 s per-request deadline except repair reports. Released 1.53.7 (publish awaits production approval). Two debug lanes + integration review (B1 reused-HttpClient Timeout throw, S1 two total definitions) + 3 bot review rounds."
+  },
+  {
    "id": "air-note-order-repair-retry-784",
    "title": "Note chunk order repair skipped unpositioned notes; retry as v2 (#784)",
    "pr": 786,
