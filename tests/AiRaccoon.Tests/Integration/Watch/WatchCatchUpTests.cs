@@ -747,6 +747,34 @@ public sealed class WatchCatchUpTests
         stack.Memory.Ingested.ShouldBeEmpty();
     }
 
+    /// <summary>A file indexed from a `TestResults` directory before the deny set named it is dropped on the next pass.</summary>
+    [RetryFact]
+    public async Task EnqueueChangedFiles_FingerprintedFileUnderTestResults_ReconcileDeletesIt()
+    {
+        using var dir = TempDir.New("catchup-reconcile-testresults");
+        var leaked = Path.Combine(dir.Path, "TestResults", "build_0_step_1_container_0.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(leaked)!);
+        await WriteAllTextAsync(leaked, "test log", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        stack.Memory.Settings[WatchConfigKeys.ConcurrencyProject(Project)] = "1";
+        stack.Memory.OnDeletePath = stack.Store.RemoveFingerprint;
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(leaked), "stale-hash",
+            0, TestContext.Current.CancellationToken);
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueChangedFiles(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.DeletedPaths.ShouldContain((Project, IngestPath.Normalize(leaked)));
+        (await stack.Store.GetFileHashAsync(Project, IngestPath.Normalize(leaked),
+            TestContext.Current.CancellationToken)).ShouldBeNull();
+        stack.Memory.Ingested.ShouldBeEmpty();
+    }
+
     /// <summary>
     ///     S5: the original version of this test asserted <c>LoadCalls.Count &gt; 1</c>, which can
     ///     never fail — one settling attempt (no re-walk at all) already costs 2 LoadAsync calls

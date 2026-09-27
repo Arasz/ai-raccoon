@@ -127,6 +127,15 @@ public sealed class IngestPathTests
     }
 
     [Fact]
+    public void Excludes_TestResultsDirectory_IsDenied()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
+        var file = Path.Combine(root, "TestResults", "build_4287_step_108_container_0.txt");
+
+        WatchDenySet.Excludes(root, file).ShouldBeTrue();
+    }
+
+    [Fact]
     public void HasHiddenOrDeniedSegment_DeniedLookalikeName_IsNotDenied()
     {
         var root = Path.Combine(Path.GetTempPath(), "watch-hidden-root", "repo");
