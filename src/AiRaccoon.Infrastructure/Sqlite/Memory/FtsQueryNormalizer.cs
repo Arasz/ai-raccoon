@@ -24,6 +24,10 @@ internal static partial class FtsQueryNormalizer
             "for", "of", "by", "with", "from"
         ], StringComparison.Ordinal);
 
+    /// <summary>A query term longer than this matches by its first this-many characters: a term longer than a
+    /// whole chunk is stored hard-cut, and only its first piece is guaranteed to hold this much of its start.</summary>
+    public const int PrefixLength = 64;
+
     public static FtsQueryPlan BuildPlan(string query)
     {
         var rawTokens = TokenRegex().Matches(query)
@@ -38,7 +42,7 @@ internal static partial class FtsQueryNormalizer
             case 0:
                 return new FtsQueryPlan("", null, 0);
             case 1:
-                return new FtsQueryPlan(tokens[0], null, 1) { MatchesAllTerms = true };
+                return new FtsQueryPlan(Term(tokens[0]), null, 1) { MatchesAllTerms = true };
         }
 
 
@@ -51,14 +55,16 @@ internal static partial class FtsQueryNormalizer
         if (tokens.Count <= 4)
         {
             return new FtsQueryPlan(
-                string.Join(" AND ", tokens),
-                string.Join(" OR ", rawTokens.Concat(bigrams)),
+                string.Join(" AND ", tokens.Select(Term)),
+                string.Join(" OR ", rawTokens.Select(Term).Concat(bigrams)),
                 tokens.Count)
             { MatchesAllTerms = true };
         }
 
-        return new FtsQueryPlan(string.Join(" OR ", rawTokens), null, tokens.Count);
+        return new FtsQueryPlan(string.Join(" OR ", rawTokens.Select(Term)), null, tokens.Count);
     }
+
+    private static string Term(string token) => token.Length > PrefixLength ? token[..PrefixLength] + "*" : token;
 
     [GeneratedRegex(@"[\p{L}\p{N}_]+", RegexOptions.CultureInvariant)]
     private static partial Regex TokenRegex();

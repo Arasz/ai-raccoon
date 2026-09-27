@@ -293,6 +293,30 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
             .ShouldContain(evidence => evidence.Legs.Any(leg => leg.LegName == "fts"), "one chunk must hold the whole identifier");
     }
 
+    /// <summary>
+    ///     A term longer than the whole chunk budget has to be hard-cut, so no row holds it whole. A search
+    ///     for the whole term still gets a keyword hit on the row holding its start.
+    /// </summary>
+    [RetryFact]
+    public async Task Search_TermLongerThanTheChunkBudget_IsFoundByTheKeywordLeg()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, $"Release artifact digest {term} was pinned in the lockfile."), ct);
+        await _store.EmbedPendingAsync(ProjectId, null, ct);
+        await using (var connection = await _factory.OpenBankAsync(ct))
+        {
+            var values = (await connection.QueryAsync<string>(new CommandDefinition("SELECT value FROM entries", cancellationToken: ct))).ToList();
+            values.Count.ShouldBeGreaterThan(1, "premise: the term is longer than one chunk");
+            values.ShouldAllBe(value => !value.Contains(term), "premise: no row holds the whole term");
+        }
+
+        var envelope = await _tools.Search(ProjectId, term, Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+
+        envelope.Data!.EvidenceByHash.ShouldNotBeNull().Values
+            .ShouldContain(evidence => evidence.Legs.Any(leg => leg.LegName == "fts"), "the row holding the term's start must match");
+    }
+
     /// <summary>Eight repeats fit one chunk under the bundled model's budget; ten span two.</summary>
     private static string LongNoteText(int repeats) =>
         string.Join(" ", Enumerable.Repeat(
