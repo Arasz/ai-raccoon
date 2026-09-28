@@ -1,8 +1,26 @@
 {
- "lastUpdated": "2026-09-27",
+ "lastUpdated": "2026-09-28",
  "notesRef": ".ai-badger/status-notes.json",
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
+  {
+   "id": "air-sync-keeps-repaired-chunk-positions",
+   "title": "Sync's post-merge renumber keeps the positions repair chunk-index kept (ADR-0123 addendum, 1.53.10)",
+   "pr": 796,
+   "merged": true,
+   "date": "2026-09-28",
+   "hasNotes": false,
+   "summary": "Sync's RecomputeChunkColumnsBankWideKeepingOrder read -1 as 'merge-added', so a sync after chunk-index --apply closed ADR-0123 holes and positioned 'position unknown' rows. Now the merge INSERT writes chunk_index=-1 explicitly and sync passes @lastId (max id before merge): only file rows at -1 above it get positions (after the file rows); other file rows keep positions/holes/-1 while distinct and < file-row count, else renumber 0..k-1 (tombstone gap still closes); notes unchanged; note-order repair passes long.MaxValue. The sync tests' hand-built schema defaults chunk_index to 0, which hid the dependency on the column default. 2 SyncServiceTests + 3 mutants killed; 117/117 renumber consumers."
+  },
+  {
+   "id": "air-chunk-index-keeps-older-chunkings",
+   "title": "repair chunk-index keeps stored order an older chunking left; StoredOrderChain locates each kept row (ADR-0123, 1.53.9)",
+   "pr": 795,
+   "merged": true,
+   "date": "2026-09-28",
+   "hasNotes": false,
+   "summary": "Live dry run proposed 23,459 rows to -1: pre-granite (#687) and August chunkings of unchanged files, not corruption (tokenizer switch explains ~5k, #775 ~30). #794 keeps a partition's stored order when positions are 0..n-1 and reproduced rows are in document order; #795 (from two parallel reviews) locates every row's text in one SearchValues pass and keeps the heaviest stored-order chain (reproduced rows outweigh), adds duplicate/lone-CR/moved/out-of-place tests, fixes how-to drift, bumps 1.53.9. Snapshot: 742 to -1, 21 moved."
+  },
   {
    "id": "air-file-chunk-index-repair-788",
    "title": "Boundary repair v2: duplicate/gapped file positions, one total_chunks rule, repair reports without a CLI deadline (#788)",
