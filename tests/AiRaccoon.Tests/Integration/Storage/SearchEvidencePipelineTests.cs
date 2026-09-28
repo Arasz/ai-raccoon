@@ -2,6 +2,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Memory;
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Storage;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
@@ -177,20 +178,7 @@ public sealed class SearchEvidencePipelineTests(ITestOutputHelper output) : IDis
 
         result.EvidenceByHash.ShouldNotBeNull("the count pin is meaningless unless evidence actually flowed");
         result.Results.Count.ShouldBe(3);
-        statements.Count.ShouldBe(ExpectedStatementCount);
+        statements.Count.ShouldBe(SearchStatementPins.FtsOnly);
     }
 
-    // Pinned by running SearchAsync_EvidenceCapture_IssuesZeroNewQueries: the count the
-    // FTS-only search path issues today, with evidence flowing. Deliberate, not incidental —
-    // adding a query to the search path means updating this literal (SearchResultsTests.PhaseNames
-    // precedent: the pin is the review gate). Pair-update with the P7 G5 conjunction pin
-    // (SearchSignalPreservationStageOneTests.EquippedSearch_AddsExactlyOneStatementBeyondTheUnequippedPath,
-    // same 15 re-proven through the full tools path) and the P7 vector-path pin
-    // (LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount): any search-path query change
-    // must reconcile all three.
-    // 16 since the pooled-handle cache (SqliteConnectionFactory.InitializedHandles): a re-open of an
-    // initialised handle reads the bank state once instead of PRAGMA user_version + application_id.
-    // +1 the ADR-0124 every-open vec-trigger-body probe (2026-09-28), the open path's fourth
-    // schema/watch check.
-    private const int ExpectedStatementCount = 16;
 }
