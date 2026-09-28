@@ -486,33 +486,32 @@ rewrite your bank — you choose when it runs, and the default is a report.
 It is **UPDATE-only**: it never inserts or deletes a row. A file's own rows take their document
 positions; a `memory_write` note that cites the file keeps its place after them, and every row's
 `total_chunks` becomes the number of rows sharing that file. Where a file row's position genuinely
-cannot be known — the source file has been moved or deleted, or the current chunker no longer
-produces that row — it sets `chunk_index = -1`, meaning *position unknown*, rather than guessing. The ranker skips those rows when testing adjacency instead of treating `-1` as a neighbour
-of `0`.
+cannot be known (the source file has been moved or deleted, or the row's text is no longer where its
+position puts it) it sets `chunk_index = -1`, meaning *position unknown*, rather than guessing. The
+ranker skips those rows when testing adjacency instead of treating `-1` as a neighbour of `0`.
 
-### Read the dry run before you apply it
+### Rows from an older chunker keep their order
 
-**On a bank with any history, the repair will mark a large fraction of rows *position unknown*, and
-you should decide whether that is the trade you want.**
-
-It positions a row by re-chunking the source file with the **current** chunker and matching on
-content hash. A row produced by an *older* chunker has different boundaries, so its hash does not
-match anything the current chunker produces, and it is honestly marked `-1` rather than guessed at.
+The repair re-chunks each source file with the **current** chunker and matches rows by content hash.
 This project has changed chunk boundaries several times ([ADR-0036](../adr/0036-engine-aware-chunk-token-budget.md),
-[ADR-0048](../adr/0048-a-chunk-is-a-well-formed-markdown-fragment.md), and others), so most rows on
-an older bank predate the boundaries in force today.
+[ADR-0048](../adr/0048-a-chunk-is-a-well-formed-markdown-fragment.md), [ADR-0120](../adr/0120-chunk-boundaries-fall-on-whitespace.md)),
+so on a bank with any history most rows were cut by an older chunker and match nothing it writes today.
 
-Measured on a real 25,995-entry bank:
+Those rows are not wrong. Their stored numbering came from the file, in document order, and the file
+has not moved them since. So when a file's stored positions run 0..n-1 and the rows the current
+chunker does reproduce sit in document order, the repair keeps that numbering
+([ADR-0123](../adr/0123-chunk-index-repair-keeps-a-valid-stored-order.md)). It still checks each kept
+row against the file. It looks for every row's text in the file (line endings read the way the
+chunkers read them) and keeps the longest run of rows whose text appears in stored order; a row whose
+text left the file, moved, or survives only somewhere its position cannot be goes to `-1` on its own.
+Every other row keeps its exact position, so a `-1` leaves a hole rather than shifting its neighbours.
 
-| | rows | share |
+Measured on a snapshot of a real 4,027-file bank:
+
+| | before 1.53.9 | 1.53.9 |
 |---|---|---|
-| would be repositioned | 4,710 | 18% |
-| would be marked position-unknown (`-1`) | 16,074 | 62% |
-
-A row at `-1` is **skipped** by the adjacent-chunk boost rather than mis-boosted. That removes the
-wrong adjacency this fix exists to eliminate — but it also removes any adjacency signal for those
-rows, which is a different behaviour from having a correct one. Whether that is an improvement on
-your bank is not something the repair can tell you, and it has not been measured across a query set.
+| rows marked position-unknown (`-1`) | 23,459 | 742 |
+| rows repositioned | 2,797 | 21 |
 
 The dry run also reports a third number: rows whose position is already right but whose
 `total_chunks` is not. Fixing those changes nothing about adjacency.
@@ -520,8 +519,9 @@ The dry run also reports a third number: rows whose position is already right bu
 A dry run on a large bank can take minutes; the command waits for the server's answer (Ctrl-C to
 stop it) rather than giving up after a fixed time.
 
-So: **run the dry run, read the numbers, and decide.** If most of your bank would go to `-1`,
-re-ingesting the affected sources under the current chunker is the more thorough fix — that is what
+So: **run the dry run, read the numbers, and decide.** A row the repair marks `-1` loses its
+adjacency signal. If that is a large share of a file, re-ingesting it under the current chunker is
+the thorough fix: that is what
 [`repair reingest`](#re-ingesting-files-chunk-index-repair-could-only-mark-unknown) below does, and
 this repair is not a substitute for it.
 
@@ -533,10 +533,12 @@ ai-raccoon --data-root /path/to/copy --port 7799 repair chunk-index
 
 ## Re-ingesting files chunk-index repair could only mark unknown
 
-`repair chunk-index` never guesses: a row an older chunker produced gets `chunk_index = -1` because
-its content hash does not match anything the current chunker emits. That is honest, but it leaves
-those chunks with no adjacency signal at all. `repair reingest` is the thorough fix for that
-subset — it re-ingests the file itself, so the affected chunks get real positions instead of `-1`.
+`repair chunk-index` never guesses: a row an older chunker produced keeps its stored position only
+while its text still sits where that position puts it, and gets `chunk_index = -1` otherwise. `-1`
+is honest, but it leaves those chunks with no adjacency signal at all. `repair reingest` is the
+thorough fix: it re-ingests the file itself under the current chunker, so every chunk gets a real
+position. It also re-chunks files whose older rows `repair chunk-index` kept, because it targets
+every file with a row the current chunker cannot reproduce by hash.
 
 ```bash
 ai-raccoon repair reingest            # dry run: reports what it would re-ingest, changes nothing
@@ -545,8 +547,8 @@ ai-raccoon repair reingest --apply    # performs the re-ingest
 
 **When to reach for this instead of `repair chunk-index`.** Use `repair chunk-index` first — it is
 cheap (a pure `UPDATE`) and fixes every row it can. Reach for `repair reingest` only for the files
-`repair chunk-index`'s dry run reported as `-1`, and only if you want those chunks to have a real
-position rather than being skipped by the adjacency boost. It targets exactly that subset: a source
+`repair chunk-index`'s dry run left at `-1`, or when you want every chunk cut by the current
+chunker rather than kept in an older chunker's order. It targets exactly that subset: a source
 file that still exists on disk with at least one stored row the current chunker cannot reproduce by
 hash. A `memory_write` entry that merely cites a file as its source, and a row whose source file is
 gone, are never touched — there is nothing to re-ingest from either.
