@@ -11,8 +11,9 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 /// <summary>
 ///     WP3 D6/D7/D9: manifest-local chunk budget (ctx − 2 capped at 510), the fingerprint over the
 ///     manifest's content INCLUDING per-file sha256s, and the tokenizer resolver. The D6 budget is
-///     the ONLY WP3 behavior change and it is confined to manifest models — bundled stays 254,
-///     openai stays at today's min(256, 8191) = 256.
+///     the ONLY WP3 behavior change and it is confined to manifest models — the bundled engine
+///     follows its manifest's chunkTokens (1022 since config D, ADR-0125), legacy .onnx files stay
+///     254, openai stays at today's min(256, 8191) = 256.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -72,9 +73,21 @@ public sealed class EmbeddingServiceManifestBudgetTests
     [RetryFact]
     public void ResolveChunkBudgetFor_BundledLocal_IsItsManifestsChunkTokens()
     {
-        // ADR-0108: the bundled manifest pins chunkTokens 254 — the size its retrieval was measured at —
-        // over the min(510, ctx − 2) its 8,190-token window would otherwise give.
-        Service().ResolveChunkBudgetFor(new EmbeddingSettings("local", null, null, null)).ShouldBe(254);
+        // Config D (ADR-0125): the bundled manifest pins chunkTokens 1022 — the measured best memory
+        // trade — over the min(510, ctx − 2) its 8,190-token window would otherwise give.
+        Service().ResolveChunkBudgetFor(new EmbeddingSettings("local", null, null, null)).ShouldBe(1022);
+    }
+
+    [RetryFact]
+    public void TheBundledManifestFile_LiterallyDeclares1022_AndTheValidatorAcceptsIt()
+    {
+        var manifestPath = Path.Combine(BundledModel.ResolveDirectory(), EmbeddingManifest.FileName);
+        var manifest = new EmbeddingManifestSerializer().Deserialize(File.ReadAllText(manifestPath));
+
+        manifest.ChunkTokens.ShouldBe(1022,
+            "the bundled manifest's chunkTokens IS the memory chunk budget (config D) — this pins the shipped value itself");
+        new EmbeddingManifestValidator().Validate(manifest).ShouldBeEmpty(
+            "the shipped manifest must satisfy its own v1 contract (chunkTokens fits the window minus specials)");
     }
 
     [RetryFact]
@@ -94,6 +107,17 @@ public sealed class EmbeddingServiceManifestBudgetTests
 
         Service().ResolveChunkBudgetFor(new EmbeddingSettings("local", dir, null, null))
             .ShouldBe(EmbeddingService.MaxManifestChunkTokens, "ctx − 2 = 8190, capped at the D6 constant 510");
+    }
+
+    [RetryFact]
+    public void ResolveChunkBudgetFor_ManifestWithExplicitChunkTokens_WinsOverThe510Cap()
+    {
+        var manifest = Manifest(8192);
+        manifest["chunkTokens"] = 700;
+        var dir = WriteManifestDir(manifest, ("vocab.txt", "vocab"), ("model.onnx", "model"));
+
+        Service().ResolveChunkBudgetFor(new EmbeddingSettings("local", dir, null, null))
+            .ShouldBe(700, "an explicit chunkTokens is the manifest's own budget — not capped at the D6 constant 510");
     }
 
     /// <summary>

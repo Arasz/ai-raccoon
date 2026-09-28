@@ -26,8 +26,15 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
 {
     private const string ProjectId = "acme";
 
-    /// <summary>The bundled model's window; a chunk must leave room for [CLS] and [SEP].</summary>
-    private const int BertWindow = 256;
+    /// <summary>The bundled engine's chunk budget plus [CLS]/[SEP], derived from the resolved budget
+    /// (config D: the manifest's chunkTokens) — never a literal window.</summary>
+    private static int BundledWindow()
+    {
+        var bundled = new EmbeddingSettings("local", null, null, null);
+        var service = TestData.CreateEmbeddingService();
+        return service.ResolveChunkBudgetFor(bundled)
+               + service.ResolveTokenizer(bundled)!.SpecialTokenReservation;
+    }
 
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
@@ -73,7 +80,7 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
         var bundled = new EmbeddingSettings("local", null, null, null);
         var engineTokenizer = TestData.CreateEmbeddingService().ResolveTokenizer(bundled)!;
-        var engineWindow = TestData.CreateEmbeddingService().ResolveChunkBudgetFor(bundled) + engineTokenizer.SpecialTokenReservation;
+        var engineWindow = BundledWindow();
         var tokens = rows.Select(row => (row.Hash, Count: engineTokenizer.EncodeToIds(row.Value, true).Count)).ToList();
 
         rows.Count.ShouldBeGreaterThan(1,

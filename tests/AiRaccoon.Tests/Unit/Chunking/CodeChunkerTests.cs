@@ -82,13 +82,14 @@ public sealed class CodeChunkerTests
     }
 
     /// <summary>#422: the budget is the model's MEASURED window minus the reservation — 510, not
-    /// the 126 the exploration spike's 128-token claim produced, and not the memory chunker's 254.</summary>
+    /// the 126 the exploration spike's 128-token claim produced, and not the memory chunker's budget.</summary>
     [Fact]
-    public void Budget_IsCtxMinusTwo_NotTheMemory254()
+    public void Budget_IsCtxMinusTwo_NotTheMemoryBudget()
     {
         CodeChunker.DefaultBudget.ShouldBe(510,
             "code-daemon-embed-v1: measured ctx 512 - reservation 2 (#422)");
-        CodeChunker.DefaultBudget.ShouldNotBe(254, "254 is the memory bundled-model budget, not code's");
+        CodeChunker.DefaultBudget.ShouldNotBe(1022,
+            "1022 is the memory bundled-model budget (config D), not code's");
         CodeChunker.DefaultBudget.ShouldNotBe(126,
             "126 came from the spike's '128-token hard cap', which the graph contradicts");
 
