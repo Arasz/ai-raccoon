@@ -10,10 +10,11 @@ namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
 ///     ADR-0075: the <c>Ddl</c> block is gated on a digest of itself, stored in
-///     <c>PRAGMA application_id</c>, so a digest-matched bank skips it on reopen while the three
-///     unconditional repairs (ADR-0023, +1 for the watch-overlap prune demoted off the v11 ladder —
-///     "fix(schema): demote watch-overlap prune from a v11 ladder step to an unconditional
-///     every-open step") keep running.
+///     <c>PRAGMA application_id</c>, so a digest-matched bank skips it on reopen while the four
+///     unconditional repairs (the ingest-scope key move, ADR-0023's promotion-queue trigger guard,
+///     ADR-0124's vec-ctx trigger-body replacement, and the watch-overlap prune demoted off the
+///     v11 ladder — "fix(schema): demote watch-overlap prune from a v11 ladder step to an
+///     unconditional every-open step") keep running.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
