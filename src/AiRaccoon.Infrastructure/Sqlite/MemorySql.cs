@@ -920,16 +920,19 @@ internal static class MemorySql
                                                  """;
 
     public const string SelectRebudgetMirrorGroups = """
-                                                     SELECT DISTINCT project_id AS ProjectId, source_file AS SourceFile
+                                                     SELECT DISTINCT scope AS Scope, project_id AS ProjectId, context_label AS ContextLabel,
+                                                            workspace_id AS WorkspaceId, source_file AS SourceFile
                                                      FROM entries
-                                                     WHERE source_file IS NOT NULL AND workspace_id IS NULL AND path = source_file
+                                                     WHERE source_file IS NOT NULL AND path = source_file
                                                      """;
 
     public const string SelectRebudgetMirrorRows = """
                                                    SELECT id AS Id, hash AS Hash
                                                    FROM entries
                                                    WHERE project_id = @projectId AND source_file = @sourceFile
-                                                     AND path = @sourceFile AND workspace_id IS NULL
+                                                     AND path = @sourceFile
+                                                     AND scope IS @scope AND context_label IS @contextLabel
+                                                     AND workspace_id IS @workspaceId
                                                    """;
 
     // The vec0 `ctx` column — a partition key until v9, a metadata column since (ADR-0068).
@@ -1034,12 +1037,32 @@ internal static class MemorySql
 
     public const string DeleteChunksForPathExcept = "DELETE FROM entries WHERE " + DeleteChunksForPathExceptPredicate;
 
+    // config-D F1: the context-preserving replace's prune — the same delete as the pair above,
+    // narrowed to one bucket by the ctx partition key, so replacing a path's rows in one context
+    // can never delete the same path's rows in another. ContextKeyExpression covers every bucket,
+    // including a workspace partition; the unscoped pair stays for the legacy replace path.
+    public static readonly string DeleteChunksForPathExceptBucketPredicate = $"""
+                                                                               project_id = @projectId AND path = @path AND hash NOT IN @keep
+                                                                                 AND ({ContextKeyExpression("")}) = @ctx
+                                                                               """;
+
+    public static readonly string DeleteChunksForPathExceptBucket =
+        "DELETE FROM entries WHERE " + DeleteChunksForPathExceptBucketPredicate;
+
     public const string DeleteAllChunksForPathPredicate = """
                                                            project_id = @projectId AND workspace_id IS NULL
                                                              AND path = @path
                                                            """;
 
     public const string DeleteAllChunksForPath = "DELETE FROM entries WHERE " + DeleteAllChunksForPathPredicate;
+
+    public static readonly string DeleteAllChunksForPathBucketPredicate = $"""
+                                                                            project_id = @projectId AND path = @path
+                                                                              AND ({ContextKeyExpression("")}) = @ctx
+                                                                            """;
+
+    public static readonly string DeleteAllChunksForPathBucket =
+        "DELETE FROM entries WHERE " + DeleteAllChunksForPathBucketPredicate;
 
     // #436, code-corpus leg of Defect B: same predicate as DeleteCodeBySourcePath (path or
     // subtree prefix) — inert for a single file, since no sibling file's path can equal

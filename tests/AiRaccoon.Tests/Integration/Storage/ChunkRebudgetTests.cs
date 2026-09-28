@@ -85,6 +85,17 @@ public sealed class ChunkRebudgetTests : IDisposable
                 """, new { path }, cancellationToken: Ct))
         ];
 
+    /// <summary>Every row of one path with its bucket columns, so a two-context case can be asserted per bucket.</summary>
+    private static async Task<List<BucketRow>> BucketRowsAsync(SqliteConnection connection, string path) =>
+        [
+            .. await connection.QueryAsync<BucketRow>(new CommandDefinition(
+                """
+                SELECT id AS Id, hash AS Hash, value AS Value, scope AS Scope, context_label AS ContextLabel,
+                       workspace_id AS WorkspaceId, embed_state AS EmbedState
+                FROM entries WHERE path = @path ORDER BY id
+                """, new { path }, cancellationToken: Ct))
+        ];
+
     private static async Task<string?> StampAsync(SqliteConnection connection) =>
         await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
             "SELECT value FROM settings WHERE key = @key", new { key = StampKey }, cancellationToken: Ct));
@@ -233,6 +244,33 @@ public sealed class ChunkRebudgetTests : IDisposable
     }
 
     [RetryFact]
+    public async Task Rebudget_TheSameFileInTwoContexts_RechunksEachBucketInPlace()
+    {
+        var file = Path.Combine(_dataRoot, "twice.md");
+        await File.WriteAllTextAsync(file, FileBody(), Ct);
+        await _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), Ct);
+        await _store.IngestFileAsync(ProjectId, file, null, Ct);
+        await _store.IngestFileAsync(ProjectId, file, "alpha", Ct);
+        await using var connection = await OpenAsync();
+        var before = await BucketRowsAsync(connection, file);
+        before.Count(row => row.Scope == "project").ShouldBeGreaterThan(1, "premise: the file splits at 254");
+        before.Count(row => row.Scope == "custom" && row.ContextLabel == "alpha")
+            .ShouldBe(before.Count(row => row.Scope == "project"));
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        var report = await _reconciler.RunAsync(connection, Ct);
+
+        report.MirrorGroupsRechunked.ShouldBe(2, "one mirror group per context (config-D F1)");
+        var after = await BucketRowsAsync(connection, file);
+        var projectAfter = after.Where(row => row.Scope == "project").ToList();
+        var alphaAfter = after.Where(row => row.Scope == "custom" && row.ContextLabel == "alpha").ToList();
+        projectAfter.Count.ShouldBeLessThan(before.Count(row => row.Scope == "project"),
+            "the project bucket re-chunks at the resolved budget");
+        alphaAfter.Count.ShouldBe(projectAfter.Count, "the custom bucket is preserved, not relabelled or deleted");
+        alphaAfter.ShouldAllBe(row => row.EmbedState == "pending", "its replacement rows arrive pending too");
+    }
+
+    [RetryFact]
     public async Task Rebudget_MirrorGroups_RechunkFromDiskAndVanishedFilesAreTerminalSkipped()
     {
         var kept = Path.Combine(_dataRoot, "kept.md");
@@ -294,6 +332,37 @@ public sealed class ChunkRebudgetTests : IDisposable
             "a later run converges and then stamps");
     }
 
+    [RetryFact]
+    public async Task Rebudget_AMirrorFileInAWorkspace_RechunksInsideItsWorkspaceBucket()
+    {
+        var file = Path.Combine(_dataRoot, "workspace-file.md");
+        await File.WriteAllTextAsync(file, FileBody(), Ct);
+        await _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), Ct);
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('ws-7', @projectId, 'active', 0)",
+            new { projectId = ProjectId }, cancellationToken: Ct));
+        await _store.IngestFileAsync(ProjectId, file, ContextNaming.WorkspaceContext("ws-7"), Ct);
+        var before = await BucketRowsAsync(connection, file);
+        before.Count.ShouldBeGreaterThan(1, "premise: the file splits at 254");
+        before.ShouldAllBe(row => row.Scope == null && row.WorkspaceId == "ws-7",
+            "premise: the rows live in the workspace bucket");
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        var report = await _reconciler.RunAsync(connection, Ct);
+
+        report.MirrorGroupsRechunked.ShouldBe(1,
+            "the workspace-row policy is re-chunk per bucket (config-D F2) — counted, never silently skipped");
+        var after = await BucketRowsAsync(connection, file);
+        after.Count.ShouldBeLessThan(before.Count, "the workspace bucket re-chunks at the resolved budget");
+        after.ShouldAllBe(row => row.Scope == null && row.WorkspaceId == "ws-7",
+            "the rows stay in their workspace bucket — never moved to the project context");
+        after.ShouldAllBe(row => row.EmbedState == "pending", "its replacement rows arrive pending too");
+    }
+
     private sealed record Row(long Id, string Hash, string Value, string EmbedState, string? AgentId,
         string? SourceFile, string? Section, long? SourceId, long CreatedAt, long ChunkIndex, long TotalChunks);
+
+    private sealed record BucketRow(long Id, string Hash, string Value, string? Scope, string? ContextLabel,
+        string? WorkspaceId, string EmbedState);
 }

@@ -155,8 +155,11 @@ public sealed class ChunkBudgetReconciler(
             cancellationToken.ThrowIfCancellationRequested();
             var rows = (await connection.QueryAsync<MirrorRow>(new CommandDefinition(
                 MemorySql.SelectRebudgetMirrorRows,
-                new { projectId = group.ProjectId, sourceFile = group.SourceFile },
-                cancellationToken: cancellationToken))).ToList();
+                new
+                {
+                    projectId = group.ProjectId, sourceFile = group.SourceFile, scope = group.Scope,
+                    contextLabel = group.ContextLabel, workspaceId = group.WorkspaceId
+                }, cancellationToken: cancellationToken))).ToList();
             if (rows.Count == 0)
             {
                 continue;
@@ -178,10 +181,12 @@ public sealed class ChunkBudgetReconciler(
                 continue;
             }
 
-            // The same unconditional replace the reingest repair uses (scan-and-replace); it chunks
-            // from disk at the same resolved budget and leaves the rows pending for the embed drain.
+            // The same unconditional replace the reingest repair uses (scan-and-replace), now per
+            // context (config-D F1/F2): it chunks from disk at the same resolved budget, re-ingests
+            // under this group's own scope/context/workspace, and prunes only this bucket — so the
+            // same file stored under two contexts keeps both and never silently relabels to project.
             await memoryStore().ReplaceAsync(group.ProjectId, group.SourceFile,
-                WatchDigestExecutor.ComputeHash(group.SourceFile, scan.Content), cancellationToken);
+                WatchDigestExecutor.ComputeHash(group.SourceFile, scan.Content), MirrorContext(group), cancellationToken);
             mirrorsRechunked++;
         }
 
@@ -215,6 +220,19 @@ public sealed class ChunkBudgetReconciler(
 
         return new ChunkRebudgetReport(budget.MaxTokens, notesRechunked, mirrorsRechunked, unchanged, retryable, terminal);
     }
+
+    /// <summary>The context string that maps back to a mirror group's own bucket — so a replace
+    /// re-ingests under the scope/context/workspace the rows were stored under, never the project default.</summary>
+    private static string MirrorContext(MirrorGroup group) =>
+        group.WorkspaceId is not null
+            ? ContextNaming.WorkspaceContext(group.WorkspaceId)
+            : group.Scope switch
+            {
+                "shared" => ContextNaming.SharedContext,
+                "custom" when string.IsNullOrEmpty(group.ContextLabel) => "",
+                "custom" => ContextNaming.LabelContext(group.ProjectId, group.ContextLabel!),
+                _ => ContextNaming.ProjectContext(group.ProjectId)
+            };
 
     /// <summary>
     ///     Swaps one note group for its new pieces in one transaction — tombstone each vanishing hash
@@ -281,7 +299,8 @@ public sealed class ChunkBudgetReconciler(
         string? Scope, string? ProjectId, string? ContextLabel, string? WorkspaceId, string? AgentId,
         long CreatedAt, long? SourceId, long ChunkIndex);
 
-    private sealed record MirrorGroup(string ProjectId, string SourceFile);
+    private sealed record MirrorGroup(string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId,
+        string SourceFile);
 
     private sealed record MirrorRow(long Id, string Hash);
 }

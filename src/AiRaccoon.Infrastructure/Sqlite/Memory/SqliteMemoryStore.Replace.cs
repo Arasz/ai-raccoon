@@ -32,7 +32,7 @@ public sealed partial class SqliteMemoryStore
                 var stored = await connection.ExecuteScalarAsync<string?>(
                         Def(MemorySql.SelectWatchFile, new { projectId, path }, cancellationToken));
                 return !string.Equals(stored, fileHash, StringComparison.Ordinal);
-            }, cancellationToken);
+            }, null, cancellationToken);
     }
 
     /// <summary>
@@ -46,7 +46,24 @@ public sealed partial class SqliteMemoryStore
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileHash);
 
-        await ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, cancellationToken);
+        await ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, null, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Context-preserving unconditional replace-by-path (config-D F1/F2): the same re-ingest as
+    ///     <see cref="ReplaceAsync(string, string, string, CancellationToken)" />, but under
+    ///     <paramref name="context" /> and pruning only that bucket's rows — so the same path stored
+    ///     in two contexts keeps both instead of one replace deleting the other. A null context
+    ///     behaves as the plain replace.
+    /// </summary>
+    public async Task ReplaceAsync(string projectId, string path, string fileHash, string? context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileHash);
+
+        await ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, context, cancellationToken);
     }
 
     /// <summary>
@@ -99,7 +116,7 @@ public sealed partial class SqliteMemoryStore
                 new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
         try
         {
-            await PruneAsync(connection, projectId, path, keep, keepCode, cancellationToken);
+            await PruneAsync(connection, projectId, path, keep, keepCode, null, cancellationToken);
             await connection.ExecuteAsync(
                     new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
         }
@@ -136,7 +153,8 @@ public sealed partial class SqliteMemoryStore
     ///     </para>
     /// </summary>
     private async Task PruneAsync(SqliteConnection connection, string projectId, string path,
-        IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken)
+        IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, string? pruneContext,
+        CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(Def(MemorySql.CreateQueueRestoreTable, null, cancellationToken));
         await connection.ExecuteAsync(
@@ -147,21 +165,34 @@ public sealed partial class SqliteMemoryStore
                     new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken));
 
         var deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        // A context-preserving replace prunes only its own bucket; the legacy path (null context)
+        // keeps the unscoped predicates it has always used.
+        var ctx = pruneContext is null ? null : MemorySql.ContextKeyFor(pruneContext, projectId);
+        var deleteAllPredicate = pruneContext is null
+            ? MemorySql.DeleteAllChunksForPathPredicate
+            : MemorySql.DeleteAllChunksForPathBucketPredicate;
+        var deleteAll = pruneContext is null ? MemorySql.DeleteAllChunksForPath : MemorySql.DeleteAllChunksForPathBucket;
+        var deleteExceptPredicate = pruneContext is null
+            ? MemorySql.DeleteChunksForPathExceptPredicate
+            : MemorySql.DeleteChunksForPathExceptBucketPredicate;
+        var deleteExcept = pruneContext is null
+            ? MemorySql.DeleteChunksForPathExcept
+            : MemorySql.DeleteChunksForPathExceptBucket;
         if (keep.Count == 0)
         {
             await connection.ExecuteAsync(
-                    Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteAllChunksForPathPredicate),
-                        new { projectId, path, deletedAt }, cancellationToken));
+                    Def(MemorySql.TombstoneFromPredicate(deleteAllPredicate),
+                        new { projectId, path, deletedAt, ctx }, cancellationToken));
             await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteAllChunksForPath, new { projectId, path }, cancellationToken));
+                    Def(deleteAll, new { projectId, path, ctx }, cancellationToken));
         }
         else
         {
             await connection.ExecuteAsync(
-                    Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteChunksForPathExceptPredicate),
-                        new { projectId, path, keep, deletedAt }, cancellationToken));
+                    Def(MemorySql.TombstoneFromPredicate(deleteExceptPredicate),
+                        new { projectId, path, keep, deletedAt, ctx }, cancellationToken));
             await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteChunksForPathExcept, new { projectId, path, keep }, cancellationToken));
+                    Def(deleteExcept, new { projectId, path, keep, ctx }, cancellationToken));
         }
 
         if (keepCode is not null)
@@ -183,9 +214,9 @@ public sealed partial class SqliteMemoryStore
     }
 
     private async Task<ReplaceResult> ReplaceIfChangedCoreAsync(string projectId, string path, string fileHash,
-        Func<SqliteConnection, Task<bool>>? guard, CancellationToken cancellationToken)
+        Func<SqliteConnection, Task<bool>>? guard, string? context, CancellationToken cancellationToken)
     {
-        var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, null,
+        var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, context,
             true, cancellationToken);
         return new ReplaceResult(result.Ran, result.Corpus);
     }
@@ -245,7 +276,7 @@ public sealed partial class SqliteMemoryStore
             try
             {
                 await PruneAsync(connection, projectId, path, ingestResult.ChunkHashes ?? [],
-                        ingestResult.CodeChunkHashes, cancellationToken);
+                        ingestResult.CodeChunkHashes, context, cancellationToken);
                 if (ownsClaim)
                 {
                     await connection.ExecuteAsync(Def(MemorySql.ReleaseWatchDigestClaim,
