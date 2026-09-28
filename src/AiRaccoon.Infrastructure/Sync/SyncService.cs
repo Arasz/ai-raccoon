@@ -428,6 +428,15 @@ public partial class SyncService(
                     }
                 }
 
+                // The highest id before the merge: a file row above it at the -1 sentinel is one the merge added, and
+                // the only kind the post-merge renumber positions (a -1 below it is "position unknown", ADR-0123).
+                long lastIdBeforeMerge;
+                await using (var maxId = conn.CreateCommand())
+                {
+                    maxId.CommandText = "SELECT COALESCE(MAX(id), 0) FROM entries";
+                    lastIdBeforeMerge = (long)(await maxId.ExecuteScalarAsync(cancellationToken))!;
+                }
+
                 // Merge entries: content-addressed near-union (skip duplicates). OR IGNORE also
                 // absorbs the unique-bucket constraints: a replica pushing a row the local bank
                 // already has is silently skipped and converges on the next write
@@ -452,11 +461,11 @@ public partial class SyncService(
                                                INSERT OR IGNORE INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                                                workspace_id, agent_id, created_at, updated_at,
                                                                                access_count, last_accessed_at, rating, ttl_days,
-                                                                               embed_state, embedding)
+                                                                               embed_state, embedding, chunk_index)
                                                SELECT r.hash, r.path, r.value, r.source_file, r.section, r.scope, {scopedFold}, r.context_label,
                                                       r.workspace_id, r.agent_id, r.created_at, r.updated_at,
                                                       r.access_count, r.last_accessed_at, r.rating, r.ttl_days,
-                                                      'pending', NULL
+                                                      'pending', NULL, -1
                                                FROM remote.entries r
                                                WHERE r.workspace_id IS NULL
                                                  -- A remote pushed by an older peer may still hold a row with
@@ -635,6 +644,7 @@ public partial class SyncService(
                 await using (var recompute = conn.CreateCommand())
                 {
                     recompute.CommandText = MemorySql.RecomputeChunkColumnsBankWideKeepingOrder;
+                    recompute.Parameters.AddWithValue("@lastId", lastIdBeforeMerge);
                     await recompute.ExecuteNonQueryAsync(cancellationToken);
                 }
 

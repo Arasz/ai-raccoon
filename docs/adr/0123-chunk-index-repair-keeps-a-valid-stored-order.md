@@ -130,12 +130,7 @@ occurrence fits between its neighbours, since the file cannot say which copy the
 On the snapshot 52 of 26,314 located rows have text that occurs more than once, none shorter than
 80 characters.
 
-**Not changed: sync renumbers after a merge.** `RecomputeChunkColumnsBankWideKeepingOrder`, which
-sync (and the one-time note-order repair) run, numbers every partition 0..n-1 in stored order and
-puts rows at `-1` last. On a bank that syncs, that closes the holes this rule leaves and gives the
-`-1` rows positions after the file's rows. That writer treats `-1` as "not yet positioned" (rows a
-merge added), not "position unknown", and changing that meaning is a separate decision. The owner's
-bank does not sync.
+**Sync renumbers after a merge** (changed in 1.53.10, see the addendum below).
 
 **Tests** (each failed before its change, or with its check removed):
 `RunAsync_OlderChunkingRowWhoseTextMoved_GoesUnknownAlone` and
@@ -145,3 +140,34 @@ for the duplicate-position check, and `RunAsync_RowsFromAnOlderChunkingOnALoneCr
 for lone `\r` line endings. `RunAsync_AnUnknownRowTheScanReproduces_DoesNotUnsettleTheKeptOrder`
 had seeded a row whose text sat before its stored position, which the chain now correctly sends to
 `-1`, so its fixture uses text that follows the stored order.
+
+## Addendum: sync keeps what this repair kept (1.53.10)
+
+Sync's post-merge renumber, `RecomputeChunkColumnsBankWideKeepingOrder`, numbered every partition
+0..n-1 in stored order and put rows at `-1` after the file's rows. It read `-1` as "a row the merge
+just added", so on a bank that syncs, the first sync after `repair chunk-index --apply` closed the
+holes this rule leaves and gave the rows it set to "position unknown" positions they cannot be proven
+to hold.
+
+`-1` now means one thing only on a file row: position unknown. Sync tells a row it added apart by its
+id instead. It reads the highest id before the merge, and the merge INSERT writes `chunk_index = -1`
+explicitly rather than relying on the column default. The renumber then treats a partition like this:
+
+- A file row at `-1` with an id above that watermark is one the merge added. It goes after the
+  partition's file rows, in id order.
+- Every other file row keeps its position, holes and `-1` included, as long as those positions are
+  one this ADR certifies: distinct, and each below the number of file rows. Otherwise, for example
+  when a tombstone deleted a row and left a survivor past the end, the positioned rows are
+  renumbered 0..k-1 in stored order (the gap still closes, as [ADR-0122](0122-note-chunk-positions-follow-text-order.md)
+  describes). The rows at `-1` stay there.
+- Notes citing the file follow its rows in stored order, as before, and `total_chunks` is the
+  partition row count.
+
+The one-time note-order repair runs the same renumber with no watermark (`long.MaxValue`), because it
+adds no rows. Its notes are positioned exactly as before, and it no longer positions file rows at
+`-1`. Writers that position file rows authoritatively (ingest, this repair) were never at stake.
+
+**Tests** (each seen red with its change removed): `SyncServiceTests.MemorySync_Merge_KeepsTheHolesAndUnknownFileRowsARepairLeft`
+(red when the renumber never keeps a numbering, and when it ignores the id watermark) and
+`MemorySync_Merge_PositionsAFileRowItAdds_AfterTheKeptRows` (red without the watermark, and when the
+merge INSERT leaves the column default, which the sync tests' own schema sets to 0).
