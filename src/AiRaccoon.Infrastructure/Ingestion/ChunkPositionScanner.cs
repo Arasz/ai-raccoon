@@ -98,10 +98,11 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
     {
         Guard.IsNotNull(connection);
 
-        // Membership is the GROUP BY group, and GROUP BY puts every NULL key in one group (a row with no
-        // project id keys NULL): matching it takes NULL-safe `IS`, since `=` finds nothing for NULL = NULL and
-        // the member's whole partition would come back empty. source_file is never NULL in a group (the group
-        // queries filter it), so plain `=` keeps a NULL-source_file member from matching unrelated rows.
+        // Membership is the GROUP BY group: `IS` matches like `=` for these keys and, unlike `=`,
+        // also matches a NULL key (a legacy row an older build keyed NULL) to itself — kept as
+        // totality defense now that ContextKeyExpression is total for a NULL project id (ADR-0124).
+        // source_file is never NULL in a group (the group queries filter it), so plain `=` keeps a
+        // NULL-source_file member from matching unrelated rows.
         return [.. await connection.QueryAsync<PartitionEntry>(new CommandDefinition(
             $"""
              WITH member AS (SELECT source_file AS sf, {MemorySql.ContextKeyExpression("")} AS ctx FROM entries WHERE id = @memberId)

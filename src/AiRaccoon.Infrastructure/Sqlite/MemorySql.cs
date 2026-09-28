@@ -894,22 +894,27 @@ internal static class MemorySql
 
     // The vec0 `ctx` column — a partition key until v9, a metadata column since (ADR-0068).
     // Length-prefixed, not
-    // ':'-joined, because the naive join collides across project id/label boundaries.
+    // ':'-joined, because the naive join collides across project id/label boundaries. Total over
+    // a NULL project_id (ADR-0124): every concatenating branch COALESCEs it to '', so a row with
+    // no project id keys 'project:' / 'custom:0::L' / 'workspace:0::W' — the same key
+    // ContextKeyFor(context, "") builds, and never NULL, which vec0's metadata column rejects.
     public static string ContextKeyExpression(string prefix) =>
         $"""
          CASE
              WHEN {prefix}workspace_id IS NOT NULL
-                  THEN 'workspace:' || length({prefix}project_id) || ':' || {prefix}project_id || ':' || {prefix}workspace_id
+                  THEN 'workspace:' || length(COALESCE({prefix}project_id, '')) || ':' || COALESCE({prefix}project_id, '') || ':' || {prefix}workspace_id
              WHEN {prefix}scope = 'shared'  THEN 'shared'
-             WHEN {prefix}scope = 'project' THEN 'project:' || {prefix}project_id
-             ELSE 'custom:' || length({prefix}project_id) || ':' || {prefix}project_id || ':' || COALESCE({prefix}context_label, '')
+             WHEN {prefix}scope = 'project' THEN 'project:' || COALESCE({prefix}project_id, '')
+             ELSE 'custom:' || length(COALESCE({prefix}project_id, '')) || ':' || COALESCE({prefix}project_id, '') || ':' || COALESCE({prefix}context_label, '')
          END
          """;
 
     /// <summary>
     ///     The C#-side twin of <see cref="ContextKeyExpression" />, parsing a search context string
     ///     into the same key. Mirrors FilterFor's branches, including reading the project id from the
-    ///     context string rather than <paramref name="projectId" />, so the two never diverge.
+    ///     context string rather than <paramref name="projectId" />, so the two never diverge. An
+    ///     empty <paramref name="projectId" /> builds the key the SQL fragment gives a NULL project
+    ///     id (ADR-0124): 'project:', 'workspace:0::W', 'custom:0::L'.
     /// </summary>
     public static string ContextKeyFor(string context, string projectId)
     {
