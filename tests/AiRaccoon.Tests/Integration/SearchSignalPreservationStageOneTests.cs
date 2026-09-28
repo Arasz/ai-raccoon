@@ -47,15 +47,6 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
     private const int RrfK = 60;
     private const int UnitWeight = 1;
 
-    // Pinned by running LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount: the count the
-    // both-legs search path issues today, with evidence flowing on both legs (3 open PRAGMAs,
-    // 1 bank-state read on an already-initialised pooled handle, 3 schema/watch checks, the 2-statement settings snapshot, 5 embedding-setting reads, 1 context
-    // resolve, 2 shared + 2 project vector-candidate queries, 2 FTS candidate queries, 1 grouped
-    // snippet lookup, and 1 access bump per served row (5)). Deliberate, not incidental —
-    // pair-update with the two FTS-only pins (SearchEvidencePipelineTests and the
-    // P7 G5 conjunction below): any search-path query change must reconcile all three.
-    private const int ExpectedVectorStatementCount = 27;
-
     private readonly List<string> _roots = [];
     private FakeEmbeddingEndpoint _openAi = null!;
 
@@ -349,11 +340,10 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
 
         plain.Data!.EvidenceByHash.ShouldNotBeNull("the pin is meaningless unless evidence flowed on the plain path too");
         wired.Data!.EvidenceByHash.ShouldNotBeNull("the pin is meaningless unless evidence flowed on the wired path");
-        plainStatements.Count.ShouldBe(15,
+        plainStatements.Count.ShouldBe(SearchStatementPins.FtsOnly,
             "the P4 FTS-only pin re-proven through the full tools path (vectorWeight: 0 — the " +
             "both-legs path has its own pin, LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount): " +
-            "gate, guard, and buffered recording add zero SQL to the search itself. " +
-            "Pair-update with SearchEvidencePipelineTests.ExpectedStatementCount.");
+            "gate, guard, and buffered recording add zero SQL to the search itself.");
         ServedKeys(wired).ShouldBe(ServedKeys(plain), "telemetry changes no served row");
         ServedRankings(wired).ShouldBe(ServedRankings(plain), "telemetry changes no ranking");
 
@@ -424,7 +414,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         var evidence = both.Data!.EvidenceByHash.ShouldNotBeNull();
         evidence.Values.Where(row => row.Cosine is not null).ShouldNotBeEmpty(
             "vector-participating rows carry their content cosine");
-        traced.Count.ShouldBe(ExpectedVectorStatementCount,
+        traced.Count.ShouldBe(SearchStatementPins.BothLegs,
             "G5 on the both-legs path: capture adds zero SQL beyond the pinned search shape");
     }
 
