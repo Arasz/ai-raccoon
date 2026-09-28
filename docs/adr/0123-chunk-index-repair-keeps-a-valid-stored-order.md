@@ -87,7 +87,7 @@ verified by disabling each check in turn and watching the named test fail.
   whose file is missing or unreadable, whose stored positions have a gap or a duplicate, or whose
   reproduced rows are stored out of document order. These are the 706's other 56 rows on the
   snapshot.
-- **Known limitation.** "Reproduced rows in document order" is the only order proof; the unplaced
+- **Known limitation (closed in 1.53.9, see the addendum below).** "Reproduced rows in document order" is the only order proof; the unplaced
   kept rows' order is certified by the 0..n-1 numbering alone. A file whose text was rearranged
   without changing any row's bytes can keep a stale order — the offset proof in the alternatives
   would close this for both this rule and the old behaviour, at the cost of declining more
