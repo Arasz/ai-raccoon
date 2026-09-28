@@ -14,6 +14,7 @@ public sealed class LengthBucketsTests
 {
     [Theory]
     [InlineData(1, 64)]
+    [InlineData(3, 64)]
     [InlineData(63, 64)]
     [InlineData(64, 64)]
     [InlineData(65, 128)]
