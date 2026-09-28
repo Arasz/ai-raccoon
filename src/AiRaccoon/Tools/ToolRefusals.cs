@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
@@ -139,6 +140,7 @@ internal static partial class ToolRefusals
         McpRequestHandler<CallToolRequestParams, CallToolResult> next) =>
         async (request, cancellationToken) =>
         {
+            var started = Stopwatch.GetTimestamp();
             try
             {
                 return await next(request, cancellationToken);
@@ -149,6 +151,7 @@ internal static partial class ToolRefusals
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                LogTimedOut(request, Stopwatch.GetElapsedTime(started));
                 throw;
             }
             catch (OperationCanceledException)
@@ -237,6 +240,34 @@ internal static partial class ToolRefusals
         };
     }
 
+    /// <summary>
+    ///     Logs which call the caller gave up on, after how long, and how long its query was — the
+    ///     rethrown exception the SDK logs next to it names neither.
+    /// </summary>
+    private static void LogTimedOut(RequestContext<CallToolRequestParams> request, TimeSpan elapsed)
+    {
+        var logger = request.Services?.GetService<ILoggerFactory>()?.CreateLogger("AiRaccoon.Tools.ToolRefusals");
+        if (logger is null)
+        {
+            return;
+        }
+
+        var name = request.Params?.Name ?? string.Empty;
+        var elapsedMs = (long)elapsed.TotalMilliseconds;
+        if (request.Params?.Arguments is { } arguments
+            && arguments.TryGetValue("query", out var value)
+            && value.ValueKind == JsonValueKind.String)
+        {
+            // The length travels as a raw number (914's QueryLength), so log aggregation can filter
+            // and aggregate on it — never as a pre-formatted clause in a structured field.
+            Log.ToolTimedOut(logger, name, elapsedMs, value.GetString()!.Length);
+        }
+        else
+        {
+            Log.ToolTimedOutNoQuery(logger, name, elapsedMs);
+        }
+    }
+
     private static CallToolResult Refused(RequestContext<CallToolRequestParams> request, string message,
         string reason, LogLevel level)
     {
@@ -269,5 +300,13 @@ internal static partial class ToolRefusals
 
         [LoggerMessage(EventId = 913, Level = LogLevel.Information, Message = "\"{ToolName}\" cancelled: {Reason}")]
         public static partial void ToolCancelled(ILogger logger, string toolName, string reason);
+
+        [LoggerMessage(EventId = 914, Level = LogLevel.Warning,
+            Message = "\"{ToolName}\" timed out after {ElapsedMs} ms (query of {QueryLength} chars): the caller cancelled it")]
+        public static partial void ToolTimedOut(ILogger logger, string toolName, long elapsedMs, long queryLength);
+
+        [LoggerMessage(EventId = 915, Level = LogLevel.Warning,
+            Message = "\"{ToolName}\" timed out after {ElapsedMs} ms: the caller cancelled it")]
+        public static partial void ToolTimedOutNoQuery(ILogger logger, string toolName, long elapsedMs);
     }
 }

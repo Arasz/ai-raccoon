@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
@@ -78,15 +79,78 @@ public sealed class ToolRefusalsCancellationTests
         record.Exception.ShouldBeNull();
     }
 
+    /// <summary>A caller that gave up still rethrows, but leaves a line saying which call timed out and on what query.</summary>
+    [Fact]
+    public async Task OperationCanceled_WithCancelledToken_LogsTheTimeoutWithTheQueryLength()
+    {
+        var logger = new FakeLogger();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var arguments = new Dictionary<string, JsonElement>
+        {
+            ["query"] = JsonSerializer.SerializeToElement(new string('q', 4181))
+        };
+
+        await Should.ThrowAsync<OperationCanceledException>(() =>
+            ToolRefusals.Filter(Throwing(new TaskCanceledException()))(
+                Request("memory_search", arguments, logger), cts.Token).AsTask());
+
+        var record = logger.Collector.LatestRecord;
+        record.ShouldNotBeNull();
+        record.Id.Id.ShouldBe(914);
+        record.Level.ShouldBe(LogLevel.Warning);
+        record.Message.ShouldContain("memory_search");
+        record.Message.ShouldContain("timed out");
+        record.Message.ShouldContain("query of 4181 chars");
+        record.Exception.ShouldBeNull();
+        // The length is the record's own QueryLength field — raw digits aggregation can filter and
+        // aggregate on — not a presentation clause. (The fake stringifies state values.)
+        record.StructuredState!.Single(kv => kv.Key == "QueryLength").Value.ShouldBe("4181");
+    }
+
+    /// <summary>A tool with no query argument logs the timeout without a query clause — its own event 915: one
+    /// EventId per [LoggerMessage] method is unconditional (docs/reference/logging-event-ids.md), so the two
+    /// renderings of one timeout cannot share 914.</summary>
+    [Fact]
+    public async Task OperationCanceled_WithCancelledToken_NoQuery_LogsTheTimeoutWithoutAQueryClause()
+    {
+        var logger = new FakeLogger();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Should.ThrowAsync<OperationCanceledException>(() =>
+            ToolRefusals.Filter(Throwing(new OperationCanceledException()))(
+                Request("memory_sync", null, logger), cts.Token).AsTask());
+
+        var record = logger.Collector.LatestRecord;
+        record.ShouldNotBeNull();
+        record.Id.Id.ShouldBe(915);
+        record.Message.ShouldContain("memory_sync");
+        record.Message.ShouldNotContain("query");
+        record.StructuredState!.ShouldNotContain(kv => kv.Key == "QueryLength");
+    }
+
     private static McpRequestHandler<CallToolRequestParams, CallToolResult> Throwing(Exception exception) =>
         (_, _) => ValueTask.FromException<CallToolResult>(exception);
 
-    private static RequestContext<CallToolRequestParams> Request(string toolName)
+    private static RequestContext<CallToolRequestParams> Request(string toolName) => Request(toolName, null, null);
+
+    private static RequestContext<CallToolRequestParams> Request(string toolName,
+        IDictionary<string, JsonElement>? arguments, ILogger? logger)
     {
         var server = Substitute.For<McpServer>();
-        return new RequestContext<CallToolRequestParams>(server,
+        var context = new RequestContext<CallToolRequestParams>(server,
             new JsonRpcRequest { Method = "tools/call", Id = new RequestId("cancel-1") },
-            new CallToolRequestParams { Name = toolName });
+            new CallToolRequestParams { Name = toolName, Arguments = arguments });
+        if (logger is not null)
+        {
+            var factory = Substitute.For<ILoggerFactory>();
+            factory.CreateLogger(Arg.Any<string>()).Returns(logger);
+            var services = Substitute.For<IServiceProvider>();
+            services.GetService(typeof(ILoggerFactory)).Returns(factory);
+            context.Services = services;
+        }
+        return context;
     }
 
     private static string TextOf(CallToolResult result) =>
