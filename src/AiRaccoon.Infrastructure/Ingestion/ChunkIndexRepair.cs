@@ -34,12 +34,22 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
         var repositioned = 0;
         var setUnknown = 0;
         var retotalled = 0;
+        var examined = 0;
 
         foreach (var memberId in groups)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var partition = await ChunkPositionScanner.PartitionAsync(connection, memberId, cancellationToken);
+            if (partition.Count == 0)
+            {
+                // The group list is a snapshot and this walk re-chunks files for minutes while the bank stays
+                // live: a partition deleted or re-keyed since the snapshot is gone — nothing to repair, and not
+                // examined either. Its [0] would have crashed the whole pass over one vanished group.
+                continue;
+            }
+
+            examined++;
             var fileRows = partition.Where(row => row.IsFileRow).Select(row => new StoredChunk(row.Id, row.Hash)).ToList();
             var scan = _scanner.Scan(partition[0].SourceFile, fileRows, maxTokens, overlayTokens, countTokens);
             var gone = await UnplaceableAsync(connection, partition, scan, cancellationToken);
@@ -70,7 +80,7 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
             }
         }
 
-        return new ChunkIndexRepairReport(groups.Count, repositioned, setUnknown, retotalled);
+        return new ChunkIndexRepairReport(examined, repositioned, setUnknown, retotalled);
     }
 
     /// <summary>

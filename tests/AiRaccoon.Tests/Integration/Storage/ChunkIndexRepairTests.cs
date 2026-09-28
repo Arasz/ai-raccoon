@@ -465,6 +465,60 @@ public sealed class ChunkIndexRepairTests : IDisposable
         positions["para three"].ShouldBe(2);
     }
 
+    /// <summary>A row whose context key is NULL still belongs to a partition. MemorySql.ContextKeyExpression concatenates
+    /// project_id away, so a row with no project (legal: `project_id TEXT NULL`) in any non-shared scope keys NULL — and
+    /// GROUP BY treats NULL as one group, so the pass walks it. The partition lookup must find those rows: comparing the
+    /// key with `=` can never match NULL = NULL, the lookup came back empty, and the pass crashed on its first [0].</summary>
+    [RetryFact]
+    public async Task RunAsync_NullContextKeyPartition_IsRepairedLikeAnyOther()
+    {
+        var file = Path.Combine(_dataRoot, "doc.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync(
+            (file, "para one", 0), (file, "para three", 1), (file, "para two", 2));
+        // The row shape a write without a project id leaves behind: no project_id, non-shared scope.
+        await connection.ExecuteAsync("UPDATE entries SET project_id = NULL, scope = 'custom', context_label = 'lab'");
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 2, 0, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para one"].ShouldBe(0);
+        positions["para two"].ShouldBe(1);
+        positions["para three"].ShouldBe(2);
+    }
+
+    /// <summary>The group list is a snapshot taken before the walk, and the walk re-chunks files for minutes while the bank
+    /// stays live — on this server's bank 95 rows were deleted inside the crashed run's window (sync_tombstones). A partition
+    /// deleted or re-keyed after the snapshot leaves a group id whose lookup finds nothing, and the pass must skip it — the
+    /// group is gone, there is nothing to repair — rather than crash on the empty partition. The trigger stands in for that
+    /// concurrent writer: the first UPDATE the pass makes (it only ever UPDATEs) deletes every other partition's rows, so
+    /// whichever order the two groups are walked in, the second is gone by its turn.</summary>
+    [RetryFact]
+    public async Task RunAsync_APartitionDeletedAfterTheSnapshot_IsSkippedAndNotExamined()
+    {
+        var first = Path.Combine(_dataRoot, "first.md");
+        var second = Path.Combine(_dataRoot, "second.md");
+        await File.WriteAllTextAsync(first, "first one\n\nfirst two", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(second, "second one\n\nsecond two", TestContext.Current.CancellationToken);
+        // Both partitions seeded with total_chunks = 4 (the row count seeded), so the surviving one is
+        // guaranteed writes and the trigger below fires — its positions are already right.
+        await using var connection = await OpenSeededAsync(
+            (first, "first one", 0), (first, "first two", 1),
+            (second, "second one", 0), (second, "second two", 1));
+        await connection.ExecuteAsync(
+            """
+            CREATE TRIGGER vanish_after_first_write AFTER UPDATE ON entries
+            BEGIN
+                DELETE FROM entries WHERE source_file <> NEW.source_file;
+            END
+            """);
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 2));
+    }
+
     private static ChunkIndexRepair Repair()
     {
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);
