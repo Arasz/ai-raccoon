@@ -399,6 +399,14 @@ public static partial class AppRegistrations
             // before IEntryEmbedder so constructor injection resolves it.
             services.AddRequiredSingleton<IModelMigrationLease, SqliteModelMigrationLease>();
             services.AddRequiredSingleton<IVecDimensionReconciler, VecDimensionReconciler>();
+            // config-D P1c: the migration drain's chunk-budget rebudget phase, beside IVecDimensionReconciler
+            // (plan P1 files). The Func<IMemoryStore> defers store resolution past EntryEmbedder's
+            // construction — the store itself takes IEntryEmbedder — and is called only when the phase runs.
+            services.AddRequiredSingleton<IChunkBudgetReconciler, ChunkBudgetReconciler>(
+                sp => new ChunkBudgetReconciler(sp.GetRequiredService<IFileTypeMatcher>(),
+                    sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<IEmbeddingService>(),
+                    sp.GetRequiredService<TimeProvider>(),
+                    () => sp.GetRequiredService<IMemoryStore>()));
             // The drain's one log + metric surface (LANE P4): registered beside EntryEmbedder so
             // the narrower CLI graph RegisterCoreMemoryServices builds on its own can resolve it
             // too — EmbedDrainService (RegisterEmbedDrainServices) resolves the same singleton.

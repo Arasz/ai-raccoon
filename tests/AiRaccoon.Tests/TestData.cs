@@ -104,8 +104,10 @@ public static class TestData
     ///     dependencies the production constructor gains.
     /// </summary>
     public static EntryEmbedder CreateEntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease migrationLease,
-        TimeProvider timeProvider, IVecDimensionReconciler vecDimensionReconciler) =>
+        TimeProvider timeProvider, IVecDimensionReconciler vecDimensionReconciler,
+        IChunkBudgetReconciler? chunkBudgetReconciler = null) =>
         new(embeddings, migrationLease, timeProvider, vecDimensionReconciler,
+            chunkBudgetReconciler ?? NoOpChunkBudgetReconciler.Instance,
             new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, timeProvider),
             TestTelemetry.None, NullLogger<EntryEmbedder>.Instance);
 

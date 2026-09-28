@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Observability;
@@ -46,7 +47,8 @@ public sealed class EntryEmbedderMigrationDrainReportingTests : IDisposable
     private EntryEmbedder NewEmbedder(FakeLogger<EntryEmbedder> logger, RecordingMeasurementRecorder measurements,
         IEmbeddingService? embeddings = null, IOperationTelemetry? telemetry = null) =>
         new(embeddings ?? new CountingEmbeddingService(), new SqliteModelMigrationLease(_time), _time,
-            new VecDimensionReconciler(), new EmbedDrainReporter(measurements, _time),
+            new VecDimensionReconciler(), NoOpChunkBudgetReconciler.Instance,
+            new EmbedDrainReporter(measurements, _time),
             telemetry ?? TestTelemetry.None, logger);
 
     /// <summary>WP-P4-2: a drain that embeds N rows emits 1008 (Information, rows owed) then 1003
@@ -135,7 +137,8 @@ public sealed class EntryEmbedderMigrationDrainReportingTests : IDisposable
         lease.TryAcquireAsync(Arg.Any<SqliteConnection>(), Arg.Any<CancellationToken>()).Returns(true);
         var logger = new FakeLogger<EntryEmbedder>();
         var embedder = new EntryEmbedder(new CountingEmbeddingService(), lease, _time,
-            new VecDimensionReconciler(), new EmbedDrainReporter(new RecordingMeasurementRecorder(), _time),
+            new VecDimensionReconciler(), NoOpChunkBudgetReconciler.Instance,
+            new EmbedDrainReporter(new RecordingMeasurementRecorder(), _time),
             TestTelemetry.None, logger);
 
         (await embedder.DrainMigrationAsync(connection, Ct)).ShouldBeFalse();
