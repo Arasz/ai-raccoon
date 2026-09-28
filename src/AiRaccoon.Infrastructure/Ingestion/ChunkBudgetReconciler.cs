@@ -261,7 +261,7 @@ public sealed class ChunkBudgetReconciler(
 
             foreach (var piece in pieces)
             {
-                await connection.ExecuteAsync(new CommandDefinition(MemorySql.InsertEntry,
+                await connection.ExecuteAsync(new CommandDefinition(MemorySql.InsertRebudgetEntry,
                     new
                     {
                         hash = ContentHash.Of(group.Path!, piece),
@@ -277,6 +277,7 @@ public sealed class ChunkBudgetReconciler(
                         createdAt = template.CreatedAt,
                         updatedAt = now,
                         sourceId = template.SourceId,
+                        ttlDays = template.TtlDays,
                         // Plain notes keep WriteChunks' sentinel; the phase-end repair positions citing notes.
                         chunkIndex = -1,
                         totalChunks = 0
@@ -297,7 +298,7 @@ public sealed class ChunkBudgetReconciler(
 
     private sealed record GroupRow(long Id, string Hash, string Value, string? SourceFile, string? Section,
         string? Scope, string? ProjectId, string? ContextLabel, string? WorkspaceId, string? AgentId,
-        long CreatedAt, long? SourceId, long ChunkIndex);
+        long CreatedAt, long? SourceId, long ChunkIndex, long? TtlDays);
 
     private sealed record MirrorGroup(string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId,
         string SourceFile);

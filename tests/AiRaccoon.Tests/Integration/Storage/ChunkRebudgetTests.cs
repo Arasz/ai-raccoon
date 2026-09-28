@@ -80,7 +80,7 @@ public sealed class ChunkRebudgetTests : IDisposable
                 """
                 SELECT id AS Id, hash AS Hash, value AS Value, embed_state AS EmbedState, agent_id AS AgentId,
                        source_file AS SourceFile, section AS Section, source_id AS SourceId, created_at AS CreatedAt,
-                       chunk_index AS ChunkIndex, total_chunks AS TotalChunks
+                       chunk_index AS ChunkIndex, total_chunks AS TotalChunks, ttl_days AS TtlDays
                 FROM entries WHERE (@path IS NULL OR path = @path) ORDER BY id
                 """, new { path }, cancellationToken: Ct))
         ];
@@ -360,8 +360,29 @@ public sealed class ChunkRebudgetTests : IDisposable
         after.ShouldAllBe(row => row.EmbedState == "pending", "its replacement rows arrive pending too");
     }
 
+    [RetryFact]
+    public async Task Rebudget_ANoteWithTtlDays_CarriesTheTtlToItsRechunkedRows()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET ttl_days = 7", cancellationToken: Ct));
+        var before = await RowsAsync(connection);
+        before.Count.ShouldBeGreaterThan(1, "premise: the note splits at 254");
+        before.ShouldAllBe(row => row.TtlDays == 7, "premise: every stored row carries the TTL");
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        var report = await _reconciler.RunAsync(connection, Ct);
+
+        report.NoteGroupsRechunked.ShouldBe(1);
+        var after = await RowsAsync(connection);
+        after.ShouldAllBe(row => row.TtlDays == 7,
+            "ttl_days is the per-entry forgetting knob the re-chunk carries forward (config-D F3)");
+    }
+
     private sealed record Row(long Id, string Hash, string Value, string EmbedState, string? AgentId,
-        string? SourceFile, string? Section, long? SourceId, long CreatedAt, long ChunkIndex, long TotalChunks);
+        string? SourceFile, string? Section, long? SourceId, long CreatedAt, long ChunkIndex, long TotalChunks,
+        long? TtlDays);
 
     private sealed record BucketRow(long Id, string Hash, string Value, string? Scope, string? ContextLabel,
         string? WorkspaceId, string EmbedState);

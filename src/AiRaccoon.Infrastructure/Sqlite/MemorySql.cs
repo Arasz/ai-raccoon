@@ -20,6 +20,19 @@ internal static class MemorySql
                                       ON CONFLICT DO NOTHING
                                       """;
 
+    // config-D F3: the rebudget note replace's insert — InsertEntry plus ttl_days, the per-entry
+    // forgetting knob carried from the group's template row. The file-ingest insert cannot carry it
+    // (FileIngestor reads no TTL), so mirror rows re-ingested from disk lose it; note groups keep it.
+    public const string InsertRebudgetEntry = """
+                                              INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
+                                                                   workspace_id, agent_id, created_at, updated_at, source_id, chunk_index, total_chunks,
+                                                                   ttl_days)
+                                              VALUES (@hash, @path, @value, @sourceFile, @section, @scope, @projectId, @contextLabel,
+                                                      @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId, @chunkIndex, @totalChunks,
+                                                      @ttlDays)
+                                              ON CONFLICT DO NOTHING
+                                              """;
+
     public const string SelectEntryById = """
                                           SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
                                                  project_id AS ProjectId, context_label AS ContextLabel,
@@ -911,7 +924,7 @@ internal static class MemorySql
                                                         section AS Section, scope AS Scope, project_id AS ProjectId,
                                                         context_label AS ContextLabel, workspace_id AS WorkspaceId,
                                                         agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId,
-                                                        chunk_index AS ChunkIndex
+                                                        chunk_index AS ChunkIndex, ttl_days AS TtlDays
                                                  FROM entries
                                                  WHERE path = @path AND scope IS @scope AND project_id IS @projectId
                                                    AND context_label IS @contextLabel AND workspace_id IS @workspaceId
