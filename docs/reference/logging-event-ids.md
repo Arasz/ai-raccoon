@@ -9,14 +9,16 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **215** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **216** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
 
-(Remeasured 2026-09-28, fix/log-cancelled-tool-call: **215**. `ToolRefusals` takes 914 for one Warning
-when the caller cancels a tool call it gave up on: the tool, the elapsed milliseconds and, when the call
-has one, the query's length, next to the exception the SDK logs for the rethrow.)
+(Remeasured 2026-09-28, fix/log-cancelled-tool-call: **216**. `ToolRefusals` takes 914-915 for the one
+Warning when the caller cancels a tool call it gave up on — the tool, the elapsed milliseconds and, on 914
+only, the query's length as a raw `QueryLength` number aggregation can filter on (915 is the no-query
+rendering; one EventId per `[LoggerMessage]` method is unconditional, so the two cannot share 914) — next
+to the exception the SDK logs for the rethrow.)
 
 (Remeasured 2026-09-27, fix/778-note-chunk-order: **214**. ADR-0122 gives `NoteChunkOrderRepairJob`
 a single-id block, 446, right after `EntryEmbedder`'s 442-445 and before 497: one Information line per
@@ -190,7 +192,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 800-807 | `src/AiRaccoon/Setup/Cli/Commands/EncryptionCommands.cs` |
 | 897-900 | `src/AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs` and `SqliteMemoryStore.Replace.cs` (path corrected 2026-08-22, same commit that added 899: the doc named `Sqlite/SqliteMemoryStore.cs`, but the file has lived at `Sqlite/Memory/SqliteMemoryStore.cs` since the class was split into partials — 899 is WP11 Finding (b)'s `ReplaceCoreAsync` transaction-span log, in `Replace.cs`, sharing the `Log` class nested in the outer `SqliteMemoryStore` partial (WP12 split its single "held the write lock" message into separate wait/held numbers once the chunker moved outside the lock); 898 added WP12 review round 3: the watch-digest chunk claim's best-effort release failing in the catch path (a rare BUSY/LOCKED on that DELETE), placed just below 899 rather than after 900 to leave `SqliteMemoryStore.cs`'s own 900 undisturbed; 897 added 2026-09-14, fix/bank-busy-tool-ux: the search's access-rating bump skipped on a busy bank — one friendly Warning with no exception, and the search still returns its results; grew the block downward rather than into `SqliteConnectionFactory`'s 901-903, the same convention as 898) |
 | 901-906 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteConnectionFactory.cs` (added 2026-08-21: the overlap-prune report (formerly the v11 ladder step, now an unconditional open-time step)'s overlap-prune report — one line per pruned watch + a count, docs/work/2026-08-21-code-search-implementation-plan.md §4; the migration itself is silent and only returns the pruned list, since `SqliteConnectionFactory.InitializeAsync` is the one caller in the chain that owns a logger. 904 added 2026-09-23, F34: the one-time v17 ladder step's scope-less/workspace-less `entries` row count, same silent-migration/logging-caller split as 901-903. 905-906 added 2026-09-24, ADR-0111: the key-check sidecar's rewrite-on-mismatch and write-unavailable lines) |
-| 910-914 | `src/AiRaccoon/Tools/ToolRefusals.cs` (913 added air-handle-tool-cancellation-errors-gracefully: the live-connection cancellation line; 914 added 2026-09-28: the caller-cancelled timeout line with elapsed ms and query length) |
+| 910-915 | `src/AiRaccoon/Tools/ToolRefusals.cs` (913 added air-handle-tool-cancellation-errors-gracefully: the live-connection cancellation line; 914 added 2026-09-28: the caller-cancelled timeout line with elapsed ms and the query's length as a raw `QueryLength` number; 915 added same day: the no-query rendering of that same timeout line) |
 | 920-921 | `src/AiRaccoon/Tools/MemoryTools.cs` (docs/adr/0040: read-path query guard shadow-mode verdict; 921 added — WP10, docs/plans/2026-08-15-performance-metrics-implementation.md: best-effort phase-measurement recording failure) |
 | 951 | `src/AiRaccoon.Infrastructure/Sqlite/NoiseShadowObserver.cs` (ADR-0039: shadow mode records what a detector would have rejected, without rejecting) |
 | 960 | `src/AiRaccoon.Infrastructure/Metrics/MetricsRecorder.cs` (docs/plans/2026-08-15-performance-metrics-implementation.md, WP3) |

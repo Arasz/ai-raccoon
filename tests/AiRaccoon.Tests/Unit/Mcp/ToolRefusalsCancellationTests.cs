@@ -103,9 +103,14 @@ public sealed class ToolRefusalsCancellationTests
         record.Message.ShouldContain("timed out");
         record.Message.ShouldContain("query of 4181 chars");
         record.Exception.ShouldBeNull();
+        // The length is the record's own QueryLength field — raw digits aggregation can filter and
+        // aggregate on — not a presentation clause. (The fake stringifies state values.)
+        record.StructuredState!.Single(kv => kv.Key == "QueryLength").Value.ShouldBe("4181");
     }
 
-    /// <summary>A tool with no query argument logs the timeout without a query clause.</summary>
+    /// <summary>A tool with no query argument logs the timeout without a query clause — its own event 915: one
+    /// EventId per [LoggerMessage] method is unconditional (docs/reference/logging-event-ids.md), so the two
+    /// renderings of one timeout cannot share 914.</summary>
     [Fact]
     public async Task OperationCanceled_WithCancelledToken_NoQuery_LogsTheTimeoutWithoutAQueryClause()
     {
@@ -119,9 +124,10 @@ public sealed class ToolRefusalsCancellationTests
 
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
-        record.Id.Id.ShouldBe(914);
+        record.Id.Id.ShouldBe(915);
         record.Message.ShouldContain("memory_sync");
         record.Message.ShouldNotContain("query");
+        record.StructuredState!.ShouldNotContain(kv => kv.Key == "QueryLength");
     }
 
     private static McpRequestHandler<CallToolRequestParams, CallToolResult> Throwing(Exception exception) =>

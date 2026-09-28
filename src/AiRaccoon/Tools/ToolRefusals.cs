@@ -252,12 +252,20 @@ internal static partial class ToolRefusals
             return;
         }
 
-        var query = request.Params?.Arguments is { } arguments
-                    && arguments.TryGetValue("query", out var value)
-                    && value.ValueKind == JsonValueKind.String
-            ? $" (query of {value.GetString()!.Length} chars)"
-            : string.Empty;
-        Log.ToolTimedOut(logger, request.Params?.Name ?? string.Empty, (long)elapsed.TotalMilliseconds, query);
+        var name = request.Params?.Name ?? string.Empty;
+        var elapsedMs = (long)elapsed.TotalMilliseconds;
+        if (request.Params?.Arguments is { } arguments
+            && arguments.TryGetValue("query", out var value)
+            && value.ValueKind == JsonValueKind.String)
+        {
+            // The length travels as a raw number (914's QueryLength), so log aggregation can filter
+            // and aggregate on it — never as a pre-formatted clause in a structured field.
+            Log.ToolTimedOut(logger, name, elapsedMs, value.GetString()!.Length);
+        }
+        else
+        {
+            Log.ToolTimedOutNoQuery(logger, name, elapsedMs);
+        }
     }
 
     private static CallToolResult Refused(RequestContext<CallToolRequestParams> request, string message,
@@ -294,7 +302,11 @@ internal static partial class ToolRefusals
         public static partial void ToolCancelled(ILogger logger, string toolName, string reason);
 
         [LoggerMessage(EventId = 914, Level = LogLevel.Warning,
-            Message = "\"{ToolName}\" timed out after {ElapsedMs} ms{Query}: the caller cancelled it")]
-        public static partial void ToolTimedOut(ILogger logger, string toolName, long elapsedMs, string query);
+            Message = "\"{ToolName}\" timed out after {ElapsedMs} ms (query of {QueryLength} chars): the caller cancelled it")]
+        public static partial void ToolTimedOut(ILogger logger, string toolName, long elapsedMs, long queryLength);
+
+        [LoggerMessage(EventId = 915, Level = LogLevel.Warning,
+            Message = "\"{ToolName}\" timed out after {ElapsedMs} ms: the caller cancelled it")]
+        public static partial void ToolTimedOutNoQuery(ILogger logger, string toolName, long elapsedMs);
     }
 }
