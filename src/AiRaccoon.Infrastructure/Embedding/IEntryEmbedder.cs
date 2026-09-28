@@ -27,7 +27,9 @@ public interface IEntryEmbedder
     ///     Opens a migration when the configured engine's fingerprint no longer matches the one the
     ///     bank recorded (a tool upgrade that changes the bundled model, ADR-0108), so the bank
     ///     re-embeds with no model-set command. False when nothing changed, no engine is recorded, or
-    ///     a migration is already open.
+    ///     a migration is already open. On an equal fingerprint, drift of <c>embedding.chunkBudget</c>
+    ///     from the resolved budget instead force-opens a re-chunk-only migration; false once this
+    ///     process spent its once-per-server-start drift retry.
     /// </summary>
     Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken);
 
