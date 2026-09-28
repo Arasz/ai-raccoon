@@ -20,7 +20,8 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 ///     the engine fingerprint matches (no <see cref="MemorySql.MarkAllEmbeddedPending" />; unchanged
 ///     rows keep their vectors and the engine is never asked for them again). A zero-row bank is
 ///     stamped without one. Retryable skips withhold the stamp and are retried via this drift path
-///     once per server start until they converge.
+///     once per server start until they converge — or until the config-D F5 attempt bound (three
+///     unproven passes per budget) leaves them terminal and stamps anyway.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -173,6 +174,9 @@ public sealed class ChunkBudgetDriftOpensAMigrationTests : IDisposable
         (await OpenMigrationsAsync(connection)).ShouldBe(0);
     }
 
+    /// <summary>Retried once per server start while the group is still broken — up to the F5 attempt
+    /// bound; <see cref="AnUnprovableGroup_DoesNotReopenTheMigrationAfterTheAttemptBound" /> pins the
+    /// bound that stops the retry forever for a group whose merge can never prove.</summary>
     [RetryFact]
     public async Task RetryableSkips_AreRetriedOncePerServerStartUntilTheyConverge()
     {
@@ -196,5 +200,34 @@ public sealed class ChunkBudgetDriftOpensAMigrationTests : IDisposable
         var secondStart = NewEmbedder();
         (await secondStart.ReconcileFingerprintAsync(connection, Ct)).ShouldBeTrue(
             "a later server start retries the drift path");
+    }
+
+    [RetryFact]
+    public async Task AnUnprovableGroup_DoesNotReopenTheMigrationAfterTheAttemptBound()
+    {
+        await using var connection = await OpenAsync();
+        await ConfigureEqualFingerprintAsync(connection);
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET value = value || ' tampered' WHERE id = (SELECT MIN(id) FROM entries)",
+            cancellationToken: Ct));
+        await SetStampAsync(connection, OldBudget.ToString());
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var start = NewEmbedder();
+            (await start.ReconcileFingerprintAsync(connection, Ct)).ShouldBeTrue(
+                $"server start {attempt} retries the drift while attempts remain");
+            (await start.DrainMigrationAsync(connection, Ct)).ShouldBeTrue();
+        }
+
+        (await StampAsync(connection)).ShouldBe(NewBudget.ToString(),
+            "three attempts spent: the permanently-unproven group is terminal and no longer withholds the stamp (config-D F5)");
+
+        var laterStart = NewEmbedder();
+        (await laterStart.ReconcileFingerprintAsync(connection, Ct)).ShouldBeFalse(
+            "a permanently-unprovable group must not re-open the migration forever");
+        (await OpenMigrationsAsync(connection)).ShouldBe(0);
     }
 }

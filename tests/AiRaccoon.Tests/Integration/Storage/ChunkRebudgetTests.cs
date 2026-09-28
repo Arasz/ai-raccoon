@@ -23,7 +23,8 @@ namespace AiRaccoon.Tests.Integration.Storage;
 ///     one transaction that carries the insert spec forward (never <c>ChunkBackfill</c>'s nulls).
 ///     Unproven note groups are untouched and retryable-skipped; vanished source files are untouched
 ///     and terminal-skipped; the <c>embedding.chunkBudget</c> stamp is written only at zero
-///     retryable skips.
+///     retryable skips. The F5 retry bound: an unproven group spends at most three passes before it
+///     is counted unprovable — terminal for this budget — and stops gating the stamp.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -33,6 +34,7 @@ public sealed class ChunkRebudgetTests : IDisposable
     private const int OldBudget = 254;
     private const int NewBudget = 1022;
     private const string StampKey = "embedding.chunkBudget";
+    private const string RetryAttemptsKey = "embedding.chunkBudget.retryAttempts";
 
     private static readonly DateTimeOffset FixedNow = new(2026, 9, 28, 12, 0, 0, TimeSpan.Zero);
 
@@ -99,6 +101,10 @@ public sealed class ChunkRebudgetTests : IDisposable
     private static async Task<string?> StampAsync(SqliteConnection connection) =>
         await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
             "SELECT value FROM settings WHERE key = @key", new { key = StampKey }, cancellationToken: Ct));
+
+    private static async Task<string?> RetryAttemptsAsync(SqliteConnection connection) =>
+        await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT value FROM settings WHERE key = @key", new { key = RetryAttemptsKey }, cancellationToken: Ct));
 
     private IReadOnlyList<string> ExpectedPieces(string content, int budget) =>
         TestData.RealMarkdownChunker().Chunk(content, budget, ChunkingDefaults.OverlayTokens, CountTokens);
@@ -378,6 +384,85 @@ public sealed class ChunkRebudgetTests : IDisposable
         var after = await RowsAsync(connection);
         after.ShouldAllBe(row => row.TtlDays == 7,
             "ttl_days is the per-entry forgetting knob the re-chunk carries forward (config-D F3)");
+    }
+
+    /// <summary>The F5 rule: a group no join proves is retried once per pass while the persisted
+    /// attempt counter (keyed by the resolved budget) has windows left. The third unproven pass
+    /// re-classifies the group unprovable — untouched, terminal for this budget — and writes the
+    /// stamp anyway, so a permanently-unprovable group can never re-open the migration forever.</summary>
+    [RetryFact]
+    public async Task Rebudget_AnUnprovableGroup_SpendsThreeAttempts_ThenStopsGatingTheStamp()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await using var connection = await OpenAsync();
+        var victim = (await RowsAsync(connection)).MinBy(row => row.Id)!;
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET value = value || ' tampered' WHERE id = @id",
+            new { id = victim.Id }, cancellationToken: Ct));
+        var broken = await RowsAsync(connection);
+        broken.Count.ShouldBeGreaterThan(1, "premise: the note splits at 254 and its merge cannot prove");
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        ChunkRebudgetReport third = null!;
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var report = await _reconciler.RunAsync(connection, Ct);
+            (await RetryAttemptsAsync(connection)).ShouldBe($"{NewBudget}:{attempt}",
+                "each unproven pass spends one persisted attempt (three per budget)");
+            if (attempt < 3)
+            {
+                report.RetryableSkipped.ShouldBe(1, "unproven passes are retried while windows remain");
+                (await StampAsync(connection)).ShouldBeNull("an unproven group withholds the stamp");
+            }
+
+            third = report;
+        }
+
+        third.RetryableSkipped.ShouldBe(0,
+            "the third pass re-classifies the unproven group out of the retryable count");
+        third.UnprovableSkipped.ShouldBe(1,
+            "and counts it unprovable — untouched, terminal for this budget (config-D F5)");
+        third.NoteGroupsRechunked.ShouldBe(0, "nothing re-chunked from an unproven group");
+        (await StampAsync(connection)).ShouldBe(NewBudget.ToString(),
+            "the spent bound writes the stamp — terminal skips do not gate it (config-D F5)");
+        (await RowsAsync(connection)).Select(row => (row.Id, row.Value))
+            .ShouldBe(broken.Select(row => (row.Id, row.Value)), "the unproven group is never touched");
+
+        var fourth = await _reconciler.RunAsync(connection, Ct);
+
+        fourth.RetryableSkipped.ShouldBe(0, "the persisted bound keeps the residual population terminal");
+        (await StampAsync(connection)).ShouldBe(NewBudget.ToString(),
+            "and it never re-gates the stamp — the migration cannot re-open on it");
+    }
+
+    [RetryFact]
+    public async Task Rebudget_AGroupThatConvergesOnALaterPass_ClearsItsRetryAttempts()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await using var connection = await OpenAsync();
+        var victim = (await RowsAsync(connection)).MinBy(row => row.Id)!;
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET value = value || ' tampered' WHERE id = @id",
+            new { id = victim.Id }, cancellationToken: Ct));
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        (await _reconciler.RunAsync(connection, Ct)).RetryableSkipped.ShouldBe(1,
+            "premise: the group is unproven on the first pass");
+        (await RetryAttemptsAsync(connection)).ShouldBe($"{NewBudget}:1",
+            "the unproven pass spends one attempt");
+        (await StampAsync(connection)).ShouldBeNull("an unproven group withholds the stamp");
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET value = @value WHERE id = @id",
+            new { id = victim.Id, value = victim.Value }, cancellationToken: Ct));
+        _time.Advance(TimeSpan.FromHours(1));
+
+        var converged = await _reconciler.RunAsync(connection, Ct);
+
+        converged.RetryableSkipped.ShouldBe(0);
+        converged.NoteGroupsRechunked.ShouldBe(1, "the proven group re-chunks at the resolved budget");
+        (await RetryAttemptsAsync(connection)).ShouldBeNull("a converging pass clears the attempt counter");
+        (await StampAsync(connection)).ShouldBe(NewBudget.ToString(), "and stamps the bank");
     }
 
     private sealed record Row(long Id, string Hash, string Value, string EmbedState, string? AgentId,
