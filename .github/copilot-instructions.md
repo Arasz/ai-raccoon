@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon, changelog
-> Scaffolded by ai-badger 0.177.2. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
+> Scaffolded by ai-badger 0.178.0. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
 
 ## Commands
 
@@ -213,10 +213,10 @@ Each tool's own description covers the rest.
   → `.ai-badger/invariants/pin-actions-to-sha.md`
 
 - **Always bump VERSION and add changelog entry** — Every release — no matter how small — must:
-    1. Bump `VERSION` (semver patch for fixes, minor for features, major for breaking changes)
-    2. Add a `docs/changelog/{version}-{slug}.md` entry describing what changed
-    3. Update `docs/changelog/README.md` if adding a new changelog format convention
-       → `.ai-badger/invariants/version-changelog-required.md`
+  1. Bump `VERSION` (semver patch for fixes, minor for features, major for breaking changes)
+  2. Add a `docs/changelog/{version}-{slug}.md` entry describing what changed
+  3. Update `docs/changelog/README.md` if adding a new changelog format convention
+  → `.ai-badger/invariants/version-changelog-required.md`
 
 ## Framework
 

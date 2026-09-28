@@ -24,6 +24,17 @@ from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Set, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import frontmatter as fm  # noqa: E402
 
+# Copilot's camelCase hook events, mapped to the PascalCase spelling hooks.json keys its
+# commands by. Shared by the Copilot adjuster (to select a source command) and validate.py's
+# hooks-manifest resolution check (to prove that command actually exists).
+COPILOT_TO_SOURCE_EVENT: Dict[str, str] = {
+    "sessionStart": "SessionStart",
+    "userPromptSubmitted": "UserPromptSubmit",
+    "sessionEnd": "SessionEnd",
+    "preToolUse": "PreToolUse",
+    "postToolUse": "PostToolUse",
+}
+
 
 class FeatureType(NamedTuple):
     """One catalog feature type and the behaviour every stage keys off.
