@@ -96,6 +96,32 @@ internal static class MemorySchema
                                                                """;
 
     /// <summary>
+    ///     The <c>vec_entries_au</c> body, declared once: the fresh-bank <see cref="Ddl" />, the v17
+    ///     rebuild and the v2 rebuild all create it, and the every-open
+    ///     <see cref="EnsureVecCtxTriggerBodiesAsync" /> compares a stored body against this same
+    ///     text — one definition, two roles, so the stored body and the intended body cannot drift
+    ///     (ADR-0124, same reasoning as <see cref="PromotionQueueTriggerDdl" />).
+    /// </summary>
+    private static readonly string VecEntriesUpdateTriggerDdl = $"""
+                                                               CREATE TRIGGER IF NOT EXISTS vec_entries_au AFTER UPDATE OF embed_state ON entries
+                                                               WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
+                                                               BEGIN
+                                                                   DELETE FROM vec_entries WHERE rowid = NEW.id;
+                                                                   INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
+                                                               END;
+                                                               """;
+
+    /// <summary>The <c>vec_structure_au</c> twin of <see cref="VecEntriesUpdateTriggerDdl" />.</summary>
+    private static readonly string VecStructureUpdateTriggerDdl = $"""
+                                                                 CREATE TRIGGER IF NOT EXISTS vec_structure_au AFTER UPDATE OF structure_embedding ON entries
+                                                                 WHEN NEW.structure_embedding IS NOT NULL
+                                                                 BEGIN
+                                                                     DELETE FROM vec_structure WHERE rowid = NEW.id;
+                                                                     INSERT INTO vec_structure(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.structure_embedding);
+                                                                 END;
+                                                                 """;
+
+    /// <summary>
     ///     The <c>search_quality</c> table shape, declared once: the digest-gated <see cref="Ddl" />
     ///     block interpolates it for fresh banks, and the v12 ladder step executes it for the
     ///     staged-absence branch (a runtime DROP the digest gate cannot see) — one definition,
@@ -210,12 +236,7 @@ internal static class MemorySchema
 
                                           -- Mirrors vec_entries_au: fires when the embed transition writes
                                           -- structure_embedding (MarkEmbedded/MarkStructure).
-                                          CREATE TRIGGER IF NOT EXISTS vec_structure_au AFTER UPDATE OF structure_embedding ON entries
-                                          WHEN NEW.structure_embedding IS NOT NULL
-                                          BEGIN
-                                              DELETE FROM vec_structure WHERE rowid = NEW.id;
-                                              INSERT INTO vec_structure(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.structure_embedding);
-                                          END;
+                                          {VecStructureUpdateTriggerDdl}
 
                                           -- Clear arm for vec_structure: merge-reindex invalidates a row by setting
                                           -- embed_state back to 'pending' (see SyncService's reindex UPDATE, which also
@@ -247,12 +268,7 @@ internal static class MemorySchema
                                           -- vec0 has no triggers: embedding rows follow embed_state. Marking embedded
                                           -- upserts the vec row (delete-then-insert, so a re-embed replaces rather than
                                           -- duplicates); marking pending or deleting the entry removes it.
-                                          CREATE TRIGGER IF NOT EXISTS vec_entries_au AFTER UPDATE OF embed_state ON entries
-                                          WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
-                                          BEGIN
-                                              DELETE FROM vec_entries WHERE rowid = NEW.id;
-                                              INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
-                                          END;
+                                          {VecEntriesUpdateTriggerDdl}
 
                                           CREATE TRIGGER IF NOT EXISTS vec_entries_pending AFTER UPDATE OF embed_state ON entries
                                           WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
@@ -650,6 +666,10 @@ internal static class MemorySchema
         // Runs on every open, version or not, same shape as above: one indexed sqlite_master read,
         // write only when the stored trigger body still needs the H4 scope guard.
         await EnsurePromotionQueueTriggerScopeGuardAsync(connection, cancellationToken);
+
+        // Runs on every open, version or not, same shape as above: one indexed sqlite_master read
+        // for both vec0 ctx triggers, write only when a stored body predates ADR-0124's total key.
+        await EnsureVecCtxTriggerBodiesAsync(connection, cancellationToken);
 
         // Runs on every open, version or not (orchestrator ruling, S7): no-overlapping-watches was
         // originally a one-time v11 ladder step; demoted to an unconditional, ungated step in the
@@ -1542,12 +1562,7 @@ internal static class MemorySchema
                              VALUES (new.id, new.value, new.source_file, new.section);
                          END;
 
-                         CREATE TRIGGER vec_entries_au AFTER UPDATE OF embed_state ON entries
-                         WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
-                         BEGIN
-                             DELETE FROM vec_entries WHERE rowid = NEW.id;
-                             INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
-                         END;
+                         {VecEntriesUpdateTriggerDdl}
 
                          CREATE TRIGGER vec_entries_pending AFTER UPDATE OF embed_state ON entries
                          WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
@@ -1563,12 +1578,7 @@ internal static class MemorySchema
                              DELETE FROM vec_structure WHERE rowid = OLD.id;
                          END;
 
-                         CREATE TRIGGER vec_structure_au AFTER UPDATE OF structure_embedding ON entries
-                         WHEN NEW.structure_embedding IS NOT NULL
-                         BEGIN
-                             DELETE FROM vec_structure WHERE rowid = NEW.id;
-                             INSERT INTO vec_structure(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.structure_embedding);
-                         END;
+                         {VecStructureUpdateTriggerDdl}
 
                          CREATE TRIGGER vec_structure_pending AFTER UPDATE OF embed_state ON entries
                          WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
@@ -2044,6 +2054,45 @@ internal static class MemorySchema
     }
 
     /// <summary>
+    ///     ADR-0124: the <c>vec_entries_au</c>/<c>vec_structure_au</c> bodies embed
+    ///     <see cref="MemorySql.ContextKeyExpression" />, and the totality fix to it must reach a
+    ///     bank whose bodies an older build already stored — <c>CREATE TRIGGER IF NOT EXISTS</c> can
+    ///     only ever create. Same probe-first body replacement, and the same
+    ///     no-write/no-cookie-bump/no-missing-trigger-window reasoning, as the promotion-queue guard
+    ///     above: one sqlite_master read covers both triggers, and the comparison is against the
+    ///     same constants the creation sites use, so a stored body and the intended one cannot
+    ///     drift.
+    /// </summary>
+    private static async Task EnsureVecCtxTriggerBodiesAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var stored = (await connection.QueryAsync<TriggerRow>(
+                new CommandDefinition(
+                    "SELECT name AS Name, sql AS Sql FROM sqlite_master " +
+                    "WHERE type = 'trigger' AND name IN ('vec_entries_au', 'vec_structure_au')",
+                    cancellationToken: cancellationToken)))
+            .ToDictionary(row => row.Name, row => row.Sql, StringComparer.Ordinal);
+
+        if (stored.Count == 2
+            && Normalize(stored["vec_entries_au"]!) == Normalize(VecEntriesUpdateTriggerDdl)
+            && Normalize(stored["vec_structure_au"]!) == Normalize(VecStructureUpdateTriggerDdl))
+        {
+            return;
+        }
+
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    $"""
+                     DROP TRIGGER IF EXISTS vec_entries_au;
+                     DROP TRIGGER IF EXISTS vec_structure_au;
+
+                     {VecEntriesUpdateTriggerDdl}
+
+                     {VecStructureUpdateTriggerDdl}
+                     """,
+                    cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
     ///     Whitespace-insensitive comparison against what sqlite_master actually stores: the body as
     ///     written, minus the <c>IF NOT EXISTS</c> and minus the statement's trailing semicolon.
     /// </summary>
@@ -2362,12 +2411,7 @@ internal static class MemorySchema
                          DROP TRIGGER IF EXISTS vec_entries_pending;
                          DROP TRIGGER IF EXISTS vec_entries_ad;
 
-                         CREATE TRIGGER vec_entries_au AFTER UPDATE OF embed_state ON entries
-                         WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
-                         BEGIN
-                             DELETE FROM vec_entries WHERE rowid = NEW.id;
-                             INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
-                         END;
+                         {VecEntriesUpdateTriggerDdl}
 
                          CREATE TRIGGER vec_entries_pending AFTER UPDATE OF embed_state ON entries
                          WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
@@ -2618,6 +2662,8 @@ internal static class MemorySchema
     }
 
     private sealed record PragmaColumnRow(string Name, string Type, long NotNull, long Pk);
+
+    private sealed record TriggerRow(string Name, string? Sql);
 
     private sealed record TombstoneRow(string ProjectId, string Hash, string Scope, long DeletedAt);
 

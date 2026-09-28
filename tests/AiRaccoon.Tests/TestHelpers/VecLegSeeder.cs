@@ -50,9 +50,9 @@ public static class VecLegSeeder
         await EmbedContent(await InsertEntry("vec-beta-content", "beta"));
         await EmbedStructure(await InsertEntry("vec-beta-structure", "beta"));
 
-        // Embedded but project_id IS NULL: must be excluded from every count. Scope is 'shared' --
-        // ContextKeyExpression's 'project'/'custom' branches concatenate project_id and go NULL
-        // (rejected by vec0's TEXT metadata column) when project_id itself is NULL.
+        // Embedded but project_id IS NULL: must be excluded from every count. Scope is 'shared',
+        // whose key is the constant 'shared' whatever project_id holds (ADR-0124 made the other
+        // branches total too: a NULL project id now keys 'project:' / 'custom:0::…').
         await EmbedContent(await InsertEntry("vec-null-content", null, "shared"));
 
         // Never embedded at all: must not appear in either vec leg's counts.
