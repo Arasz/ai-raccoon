@@ -105,4 +105,28 @@ public class QueryLengthGuardTests
     /// tokens-to-chars ratio (1,000 chars / 254 tokens) -- pinned here so the two tests above document
     /// where the boundary actually falls instead of asserting a number chosen to make them pass.</summary>
     private const int WiderBudgetThresholdChars = 2008;
+
+    // Config D (ADR-0125): the query budget follows chunkTokens to 1022, and the guard's char
+    // threshold scales with it — 1022 × (1,000 / 254) rounds to 4,024 chars. The guidance quotes
+    // N0-grouped figures ("1,022", "4,024"), so the pins below read it ungrouped.
+
+    [Fact]
+    public void Evaluate_WithTheConfigDBudget_AtExactly4024Chars_IsClean()
+    {
+        var query = new string('a', 4024);
+
+        QueryLengthGuard.Evaluate(query, budgetTokens: 1022).Tier.ShouldBe(QueryGuardTier.Clean);
+    }
+
+    [Fact]
+    public void Evaluate_WithTheConfigDBudget_OneCharOver4024_WarnsQuoting1022()
+    {
+        var verdict = QueryLengthGuard.Evaluate(new string('a', 4025), budgetTokens: 1022);
+
+        verdict.Tier.ShouldBe(QueryGuardTier.Warn);
+        verdict.Guidance.ShouldNotBeNull();
+        var ungrouped = verdict.Guidance!.Replace(",", "");
+        ungrouped.ShouldContain("1022");
+        ungrouped.ShouldContain("4024");
+    }
 }

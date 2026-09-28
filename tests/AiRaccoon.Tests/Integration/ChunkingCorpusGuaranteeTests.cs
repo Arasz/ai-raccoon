@@ -10,9 +10,10 @@ namespace AiRaccoon.Tests.Integration;
 /// <summary>
 ///     RAG-F3/RAG-F4 hard invariant (docs/adr/0036): chunking this repo's own docs/**/*.md, plus a
 ///     set of adversarial fixtures, through the production local-engine path must never emit a chunk
-///     whose real BERT WordPiece length exceeds the model's usable content budget
-///     (<see cref="OnnxEmbeddingGenerator.MaxContentTokens" /> = 254, reserving 2 for [CLS]/[SEP]).
-///     This is asserted as a hard ceiling, not a percentage improvement.
+///     whose real BERT WordPiece length exceeds the engine's usable content budget. Run at both
+///     shipped budgets — the legacy 254 (<see cref="OnnxEmbeddingGenerator.MaxContentTokens" />) and
+///     the bundled manifest's 1022 since config D (ADR-0125) — each ceiling reserving 2 for
+///     [CLS]/[SEP]. This is asserted as a hard ceiling, not a percentage improvement.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
@@ -20,9 +21,12 @@ public sealed class ChunkingCorpusGuaranteeTests
 {
     private const int MaxTokens = OnnxEmbeddingGenerator.MaxContentTokens;
 
-    [RetryFact]
-    public void ChunkingDocsCorpus_WithRealBertTokenizer_NoChunkExceedsTheContentBudget()
+    [RetryTheory]
+    [InlineData(OnnxEmbeddingGenerator.MaxContentTokens)]
+    [InlineData(1022)]
+    public void ChunkingDocsCorpus_WithRealBertTokenizer_NoChunkExceedsTheContentBudget(int budget)
     {
+        var ceiling = budget + EngineDescriptor.DefaultSpecialTokenReservation;
         var (chunker, bert) = BuildRealLocalChunker();
         var repoRoot = FindRepoRoot();
         var files = Directory.EnumerateFiles(Path.Combine(repoRoot, "docs"), "*.md", SearchOption.AllDirectories)
@@ -35,12 +39,12 @@ public sealed class ChunkingCorpusGuaranteeTests
         foreach (var file in files)
         {
             var content = File.ReadAllText(file);
-            var chunks = chunker.Chunk(content, MaxTokens, 48);
+            var chunks = chunker.Chunk(content, budget, 48);
             foreach (var chunk in chunks)
             {
                 totalChunks++;
                 var tokens = bert.EncodeToIds(chunk, true, true, true).Count;
-                if (tokens > 256)
+                if (tokens > ceiling)
                 {
                     overBudget.Add((file, tokens));
                 }
@@ -48,7 +52,7 @@ public sealed class ChunkingCorpusGuaranteeTests
         }
 
         overBudget.ShouldBeEmpty(
-            $"{overBudget.Count}/{totalChunks} chunks exceed the model's 256-token window; " +
+            $"{overBudget.Count}/{totalChunks} chunks exceed the {ceiling}-token ceiling ({budget} + specials); " +
             $"worst: {(overBudget.Count > 0 ? overBudget.MaxBy(x => x.Tokens) : default)}");
     }
 
@@ -93,16 +97,19 @@ public sealed class ChunkingCorpusGuaranteeTests
             line.TrimStart().StartsWith("```", StringComparison.Ordinal)
             || line.TrimStart().StartsWith("~~~", StringComparison.Ordinal));
 
-    [RetryFact]
-    public void ChunkingHostileFixtures_NoChunkExceedsTheContentBudget()
+    [RetryTheory]
+    [InlineData(OnnxEmbeddingGenerator.MaxContentTokens)]
+    [InlineData(1022)]
+    public void ChunkingHostileFixtures_NoChunkExceedsTheContentBudget(int budget)
     {
+        var ceiling = budget + EngineDescriptor.DefaultSpecialTokenReservation;
         var (chunker, bert) = BuildRealLocalChunker();
 
         foreach (var (name, text) in HostileFixtures())
         {
-            var chunks = chunker.Chunk(text, MaxTokens, 48);
-            chunks.ShouldAllBe(chunk => bert.EncodeToIds(chunk, true, true, true).Count <= 256,
-                $"fixture '{name}' produced a chunk over the 256-token window");
+            var chunks = chunker.Chunk(text, budget, 48);
+            chunks.ShouldAllBe(chunk => bert.EncodeToIds(chunk, true, true, true).Count <= ceiling,
+                $"fixture '{name}' produced a chunk over the {ceiling}-token ceiling ({budget} + specials)");
         }
     }
 

@@ -12,8 +12,10 @@ namespace AiRaccoon.Core.Memory.QueryGuard;
 ///         Chars, not tokens: Core cannot reference the ONNX tokenizer or the embedding manifest
 ///         (clean-layering), so this is a proxy for the engine's real content-token window, not an
 ///         exact count. The caller supplies that window's token budget (its own
-///         <c>IEmbeddingService.ResolveChunkBudgetFor</c> result — 254 for the bundled model, wider
-///         for a manifest model); when it does not, <see cref="BundledBudgetTokens" /> applies. The
+///         <c>IEmbeddingService.ResolveChunkBudgetFor</c> result — 1022 for the bundled model since
+///         config D, ADR-0125, because the query budget deliberately follows the manifest's
+///         chunkTokens; 254 for the legacy path, wider for other manifest models); when it does
+///         not, <see cref="BundledBudgetTokens" /> applies. The
 ///         char threshold scales from the budget using the bundled model's own tokens-to-chars ratio
 ///         (~1,000 characters per 254 tokens is the rule of thumb for English prose; the real figure
 ///         varies with content — a 12,952-character markdown table measured 249 tokens because its

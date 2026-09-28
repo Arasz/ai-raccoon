@@ -62,10 +62,13 @@ public sealed class SqliteMemoryStoreChunkingTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
         entries.Count.ShouldBeGreaterThan(1);
 
-        // The engine window (openai: 8191) bounds the chunk size; the default 256-token cap
-        // applies on top, so no chunk exceeds the bundled model's 256-token window either.
+        // The engine window (openai: 8191) bounds the chunk size; the engine's own resolved chunk
+        // budget applies on top — derived, so it follows the engine instead of a stale literal.
         var tokenizer = TiktokenTokenizer.CreateForEncoding("o200k_base");
-        entries.ShouldAllBe(entry => tokenizer.CountTokens(entry.Value) <= 256);
+        var budget = TestData.CreateEmbeddingService().ResolveChunkBudgetFor(
+            new EmbeddingSettings("openai", "nomic-embed-text", null, null));
+        entries.ShouldAllBe(entry => tokenizer.CountTokens(entry.Value) <= budget,
+            $"no chunk may exceed the active engine's resolved chunk budget of {budget}");
     }
 
     private static string BuildLongNote() =>
