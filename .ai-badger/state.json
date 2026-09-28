@@ -4,6 +4,24 @@
  "historyRef": ".ai-badger/status-history.json",
  "completedTasks": [
   {
+   "id": "air-chunk-columns-null-ctx-key",
+   "title": "Context key total over a NULL project id; stored vec-trigger bodies replaced (ADR-0124, 1.53.13)",
+   "pr": 801,
+   "merged": true,
+   "date": "2026-09-28",
+   "hasNotes": false,
+   "summary": "vec0's metadata ctx rejects NULL, while MemorySql.ContextKeyExpression returned SQL NULL for project_id IS NULL (its C# twin never did): the vec_entries_au/vec_structure_au triggers threw at MarkEmbedded (ADR-0119 charged 3 attempts then abandoned the row), the v9 rebuild's rethrow blocked opening a v2-v8 bank holding such a row, and pre-v9 partition keys accepted the NULL. Fix: COALESCE(project_id,'') in every concatenating branch (key total: project:/custom:0::L/workspace:0::W, equal to ContextKeyFor(_, '')) plus an every-open probe-first replacement of the two stored trigger bodies from shared constants (EnsureVecCtxTriggerBodiesAsync, ADR-0023 amendment shape) — CREATE TRIGGER IF NOT EXISTS cannot replace an existing bank's body, and the live bank's bodies carried the old expression. No migration (verified: vec0 0.1.9 rejects NULL metadata; pre-v9 rows are rebuilt by v9; live bank 0 NULL/'' ctx). 8 RED-first tests; the plan review caught the stored-body blocker; both implementation reviews folded (consumer table, IS rationale, sibling statement-count gate). 1.53.13."
+  },
+  {
+   "id": "air-chunk-index-repair-vanished-partition",
+   "title": "repair chunk-index survives a partition vanishing mid-pass (NULL-safe partition key + vanished-group skip, 1.53.12)",
+   "pr": 800,
+   "merged": true,
+   "date": "2026-09-28",
+   "hasNotes": false,
+   "summary": "Live dry run crashed with ArgumentOutOfRangeException at ChunkIndexRepair.cs:44 (partition[0] on an empty PartitionAsync result): the group list is a snapshot and the walk re-chunks files for minutes, so a partition deleted or re-keyed since the snapshot left an empty lookup (95 rows were deleted inside the crashed run's window, sync_tombstones 12:57-13:10 UTC); a second latent path keys NULL for project_id IS NULL rows (GROUP BY groups NULLs, `= NULL` matches nothing). Fix: NULL-safe `IS` on the context-key comparison in ChunkPositionScanner.PartitionAsync; skip empty partitions and count only groups examined (GroupsExamined). Two RED-first tests (NULL-key partition; trigger-simulated concurrent delete), 68/68 on the touched surface. Rebased onto #799's 1.53.11; merged as a1aa1383."
+  },
+  {
    "id": "air-sync-keeps-repaired-chunk-positions",
    "title": "Sync's post-merge renumber keeps the positions repair chunk-index kept (ADR-0123 addendum, 1.53.10)",
    "pr": 796,
@@ -420,7 +438,7 @@
    "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
   }
  ],
- "next": "Owner: merge ready PRs #717 #718 #719 #721 (before #729) #723 #725 #727 (before #730) #729 #730, then this state PR #720; rule on #706 (pin A9 + close, or ADR-0078 telemetry) and on #730 (merge off-flag vs record only); cut one release after the fixes land. Next task: structured config chunkers (XML/YAML/TOML) seed docs/work/2026-09-23-structured-config-chunkers-seed.md. Open: #726 harness golden overnight run, #728 flaky ranking premise.",
+ "next": "Owner: no merge queue as of 2026-09-28 (#799 1.53.11, #800 1.53.12, #801 1.53.13 all merged today). Rule on #706 (pin A9 + close, or ADR-0078 telemetry) and on #730 (merge off-flag vs record only). Next task: structured config chunkers (XML/YAML/TOML) seed docs/work/2026-09-23-structured-config-chunkers-seed.md. Open: #726 harness golden overnight run, #728 flaky ranking premise.",
  "filedNotStarted": [
   "#477 no job-level metrics (feature gap)",
   "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
