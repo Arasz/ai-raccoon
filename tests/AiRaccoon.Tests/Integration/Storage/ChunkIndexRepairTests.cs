@@ -465,10 +465,10 @@ public sealed class ChunkIndexRepairTests : IDisposable
         positions["para three"].ShouldBe(2);
     }
 
-    /// <summary>A row whose context key is NULL still belongs to a partition. MemorySql.ContextKeyExpression concatenates
-    /// project_id away, so a row with no project (legal: `project_id TEXT NULL`) in any non-shared scope keys NULL — and
-    /// GROUP BY treats NULL as one group, so the pass walks it. The partition lookup must find those rows: comparing the
-    /// key with `=` can never match NULL = NULL, the lookup came back empty, and the pass crashed on its first [0].</summary>
+    /// <summary>A row with no project id (legal: `project_id TEXT NULL`) still belongs to a partition. Before ADR-0124 its
+    /// context key was NULL: GROUP BY grouped those rows while `= m.ctx` could never match NULL, the lookup came back empty,
+    /// and the pass crashed on its first [0]. Since ADR-0124 the key is total (`custom:0::lab`), so the lookup matches it
+    /// like any other partition — this pins the end-to-end repair of such a partition.</summary>
     [RetryFact]
     public async Task RunAsync_NullContextKeyPartition_IsRepairedLikeAnyOther()
     {

@@ -39,6 +39,26 @@ public sealed class VecCtxNullProjectTests
         (await VecCtxAsync(connection, "vec_structure", id)).ShouldBe("project:");
     }
 
+    /// <summary>A workspace row with no project id takes the workspace branch's normalized key end to end, not just in the SQL theory.</summary>
+    [RetryFact]
+    public async Task MarkEmbedded_OnAProjectIdNullWorkspaceRow_StoresTheNormalizedWorkspaceCtx()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, cancellationToken);
+        // The entries CHECK requires a workspace row to carry scope IS NULL (workspace_id IS NOT NULL),
+        // and the FK requires the workspace itself to exist first.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('W', 'acme', 'Active', 1)",
+            cancellationToken: cancellationToken));
+        var id = await InsertAsync(connection, "w1", scope: null, projectId: null, contextLabel: null, workspaceId: "W");
+
+        await MarkEmbeddedAsync(connection, id);
+
+        (await VecCtxAsync(connection, "vec_entries", id)).ShouldBe("workspace:0::W");
+        (await VecCtxAsync(connection, "vec_structure", id)).ShouldBe("workspace:0::W");
+    }
+
     /// <summary>
     ///     The stored bodies on any bank written before this change still concatenate project_id
     ///     directly; CREATE TRIGGER IF NOT EXISTS can only create, never replace, so without the
@@ -74,8 +94,11 @@ public sealed class VecCtxNullProjectTests
     }
 
     /// <summary>
-    ///     A genuine pre-v9 bank holding the row the old expression wrote — partition-key `ctx` set
-    ///     to NULL — must survive the v9 rebuild. The vec row is written directly rather than
+    ///     A bank on the current schema everywhere except its vec tables, which are rolled back to
+    ///     the pre-v9 partitioned shape and stamped user_version = 8 (the same hybrid fixture
+    ///     Vec0PartitionKeyDemotionTests.SeedV8BankAsync documents), holding the row the old
+    ///     expression wrote — partition-key `ctx` set to NULL — must survive the v9 rebuild. The vec
+    ///     row is written directly rather than
     ///     through the trigger fixture so the NULL ctx is a property of the fixture, not of the
     ///     code under test: a trigger-driven fixture produces a non-NULL key once the fix is in, and
     ///     would stop exercising the upgrade of a NULL-key bank.
@@ -93,7 +116,10 @@ public sealed class VecCtxNullProjectTests
         (await VecCtxAsync(connection, "vec_entries", id)).ShouldBeNull(
             "the fixture must reproduce the pre-v9 row: the old expression keyed a missing project id NULL");
 
-        await Should.NotThrowAsync(() => MemorySchema.EnsureAsync(connection, cancellationToken));
+        // Record rather than Should.NotThrow: the version assert below must still run in the RED
+        // state, where the call throws — that is what makes "threw AND stayed at v8" observable.
+        var thrown = await Record.ExceptionAsync(() => MemorySchema.EnsureAsync(connection, cancellationToken));
+        thrown.ShouldBeNull();
 
         (await ReadVersionAsync(connection)).ShouldBe(MemorySchema.CurrentVersion);
         (await VecCtxAsync(connection, "vec_entries", id)).ShouldBe(MemorySql.ContextKeyFor("L", ""));
@@ -104,7 +130,9 @@ public sealed class VecCtxNullProjectTests
 
     /// <summary>
     ///     The store's chunk-column recompute is keyed on the normalized key, so a row with no
-    ///     project id must be reachable at the key ContextKeyFor builds for it.
+    ///     project id must be reachable at the key ContextKeyFor builds for it. (The public store API
+    ///     cannot pass this key — its ctx comes from ContextKeyFor with a non-empty project id — so
+    ///     this pins the SQL constant's totality, not a production-reachable path.)
     /// </summary>
     [RetryFact]
     public async Task RecomputeChunkColumnsForContext_OnAProjectIdNullRow_GivenTheNormalizedCtx_RenumbersTheGroup()
@@ -128,7 +156,7 @@ public sealed class VecCtxNullProjectTests
         rows.Select(r => (r.ChunkIndex, r.TotalChunks)).ShouldBe([(0L, 3L), (1L, 3L), (2L, 3L)]);
     }
 
-    /// <summary>The delete-path compaction is keyed the same way, so it must shift the survivors of a group a missing project id keyed.</summary>
+    /// <summary>The delete-path compaction is keyed the same way, so it must shift the survivors of a group a missing project id keyed. (Same unreachable-from-the-public-API caveat as the recompute test above.)</summary>
     [RetryFact]
     public async Task CompactChunkColumnsAfterDelete_OnAProjectIdNullGroup_GivenTheNormalizedCtx_ShiftsSurvivors()
     {
@@ -174,6 +202,30 @@ public sealed class VecCtxNullProjectTests
 
         await connection.ExecuteAsync(new CommandDefinition(
             MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
+
+        var rows = await connection.QueryAsync<(string Scope, long ChunkIndex, long TotalChunks)>(new CommandDefinition(
+            "SELECT scope AS Scope, chunk_index AS ChunkIndex, total_chunks AS TotalChunks FROM entries ORDER BY id",
+            cancellationToken: cancellationToken));
+        rows.Select(r => (r.Scope, r.ChunkIndex, r.TotalChunks))
+            .ShouldBe([("project", 0L, 2L), ("project", 1L, 2L), ("custom", 0L, 2L), ("custom", 1L, 2L)],
+                "each context must number its own NULL-project rows, not share one NULL-keyed group");
+    }
+
+    /// <summary>The ordered bank-wide form (SyncService, NoteChunkOrderRepair) partitions by the same expression: NULL-project rows must group at their normalized keys here too, not share one NULL-keyed partition.</summary>
+    [RetryFact]
+    public async Task RecomputeChunkColumnsBankWideKeepingOrder_SeparatesProjectIdNullRowsByNormalizedKey()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, cancellationToken);
+        await InsertAsync(connection, "p1", scope: "project", projectId: null, contextLabel: null, workspaceId: null);
+        await InsertAsync(connection, "p2", scope: "project", projectId: null, contextLabel: null, workspaceId: null);
+        await InsertAsync(connection, "l1", scope: "custom", projectId: null, contextLabel: null, workspaceId: null);
+        await InsertAsync(connection, "l2", scope: "custom", projectId: null, contextLabel: null, workspaceId: null);
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            MemorySql.RecomputeChunkColumnsBankWideKeepingOrder, new { lastId = long.MaxValue },
+            cancellationToken: cancellationToken));
 
         var rows = await connection.QueryAsync<(string Scope, long ChunkIndex, long TotalChunks)>(new CommandDefinition(
             "SELECT scope AS Scope, chunk_index AS ChunkIndex, total_chunks AS TotalChunks FROM entries ORDER BY id",

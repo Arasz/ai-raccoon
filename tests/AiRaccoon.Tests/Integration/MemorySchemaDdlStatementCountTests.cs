@@ -12,8 +12,8 @@ namespace AiRaccoon.Tests.Integration;
 ///     Counts the SQLite statements <see cref="MemorySchema.EnsureAsync" /> executes, via
 ///     <c>sqlite3_trace</c> on the real connection handle — not by splitting the <c>Ddl</c> source
 ///     string, which would misparse the trigger bodies' embedded semicolons. Pins both sides of
-///     ADR-0075's digest gate: 5 statements when the digest matches (4 gate/repair reads + the S7
-///     watches probe), 58 in the block when it does not.
+///     ADR-0075's digest gate: 6 statements when the digest matches (4 gate/repair reads + the S7
+///     watches probe + the ADR-0124 vec-trigger-body probe), 58 in the block when it does not.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -29,9 +29,9 @@ public sealed class MemorySchemaDdlStatementCountTests
 
         var statements = await TraceAsync(connection);
 
-        // The whole point of the gate: an install past its first run pays 5 cheap reads, not the full block.
+        // The whole point of the gate: an install past its first run pays 6 cheap reads, not the full block.
         CountDdl(statements).ShouldBe(0, Report(statements));
-        statements.Count.ShouldBe(5, Report(statements));
+        statements.Count.ShouldBe(6, Report(statements));
     }
 
     /// <summary>
@@ -96,6 +96,9 @@ public sealed class MemorySchemaDdlStatementCountTests
         - statements.Count(s => s.Contains("watch.scope.", StringComparison.Ordinal))
         - statements.Count(s =>
             s.Contains("type = 'trigger' AND name = 'promotion_queue_entries_ad'", StringComparison.Ordinal))
+        // ADR-0124 vec-trigger-body probe: one sqlite_master read for both vec triggers, unconditional
+        // on every open — a repair probe on both sides of the digest gate, like the one above:
+        - statements.Count(s => s.Contains("name IN ('vec_entries_au', 'vec_structure_au')", StringComparison.Ordinal))
         // code-corpus probes: S2 column ensure (digest-mismatch branch only) + the S7
         // watch-overlap prune's watches read, demoted off the v11 ladder to an unconditional
         // every-open step:
