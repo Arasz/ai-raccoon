@@ -48,7 +48,7 @@ The keep applies to a whole partition and only when the stored order is one this
 Otherwise the repair behaves exactly as before: reproduced rows take ranks in file order, rows it
 cannot reproduce go to `-1`, notes citing the file follow its rows in stored order, and
 `total_chunks` is the partition row count. It stays a pure UPDATE and runs only on
-`repair chunk-index --apply`. `ChunkIndexRepair.GoneFromTheFileAsync` holds the decision and
+`repair chunk-index --apply`. `ChunkIndexRepair.UnplaceableAsync` holds the decision and
 `ChunkPositionScanner.MovesKeepingStoredOrder` the writes.
 
 Each certification has a test that goes red when the check is removed
@@ -87,10 +87,61 @@ verified by disabling each check in turn and watching the named test fail.
   whose file is missing or unreadable, whose stored positions have a gap or a duplicate, or whose
   reproduced rows are stored out of document order. These are the 706's other 56 rows on the
   snapshot.
-- **Known limitation.** "Reproduced rows in document order" is the only order proof; the unplaced
+- **Known limitation (closed in 1.53.9, see the addendum below).** "Reproduced rows in document order" is the only order proof; the unplaced
   kept rows' order is certified by the 0..n-1 numbering alone. A file whose text was rearranged
   without changing any row's bytes can keep a stale order — the offset proof in the alternatives
   would close this for both this rule and the old behaviour, at the cost of declining more
   partitions.
 - **Cost.** One `SELECT value FROM entries WHERE id IN (...)` per partition with unplaced rows, on
   the rows the scan already read. No schema change, no index.
+
+## Addendum: a kept row must sit where its position puts it (1.53.9)
+
+A review of the first release of this rule found two ways it kept a position the file no longer
+supports. It asked only whether a row's text was *somewhere* in the file. A row whose own section was
+deleted, but whose text survives as a copy elsewhere, was kept; so was a row whose text moved to
+another part of the file. The limitation above ("the unplaced kept rows' order is certified by the
+0..n-1 numbering alone") was the same gap.
+
+**Each kept row is now located in the file.** `StoredOrderChain` (pure, `AiRaccoon.Core.Chunking`)
+finds every offset at which each stored row's text occurs in the file, with line endings read as the
+chunkers read them, and picks the heaviest chain of rows whose offsets strictly increase in stored
+order. A row the current chunker reproduces weighs more than every other row together, so the chain
+bends around the rows the file proves by hash. An unreproduced row outside the chain goes to `-1`
+alone: its text left the file, moved, or survives only where its stored position cannot be. The
+partition-level checks above are unchanged, and a reproduced row is never set to `-1` by this rule.
+
+This is the offset proof the alternatives rejected, applied per row instead of per partition. The
+rejection was about declining whole partitions (2,230 kept rows on the snapshot); per row, only the
+rows that are actually out of place go.
+
+**One pass over the file.** The text search runs once per partition over the file with a
+`SearchValues<string>` multi-string search, not once per row. A per-row `IndexOf` is
+O(rows × file size), which the 50 MB, 5,811-row log file on the owner's bank would have made
+visible.
+
+**Measured** on the same snapshot, read-only dry run: 742 rows to `-1` (706 under the first
+release; the 36 more are rows whose text is out of place or moved), 21 rows moved, and the full
+dry run takes 264 s against 246 s without the keep rule. Nearly all of that is re-chunking every
+file.
+
+**Where a copy is truly ambiguous.** Text that occurs at more than one offset is kept when some
+occurrence fits between its neighbours, since the file cannot say which copy the row was cut from.
+On the snapshot 52 of 26,314 located rows have text that occurs more than once, none shorter than
+80 characters.
+
+**Not changed: sync renumbers after a merge.** `RecomputeChunkColumnsBankWideKeepingOrder`, which
+sync (and the one-time note-order repair) run, numbers every partition 0..n-1 in stored order and
+puts rows at `-1` last. On a bank that syncs, that closes the holes this rule leaves and gives the
+`-1` rows positions after the file's rows. That writer treats `-1` as "not yet positioned" (rows a
+merge added), not "position unknown", and changing that meaning is a separate decision. The owner's
+bank does not sync.
+
+**Tests** (each failed before its change, or with its check removed):
+`RunAsync_OlderChunkingRowWhoseTextMoved_GoesUnknownAlone` and
+`RunAsync_OlderChunkingRowWhoseTextSurvivesOnlyOutOfPlace_GoesUnknown` for the chain (the second
+also fails when reproduced rows carry no extra weight), `RunAsync_OlderChunkingWithADuplicatePosition_UsesTheFileOrder`
+for the duplicate-position check, and `RunAsync_RowsFromAnOlderChunkingOnALoneCrFile_KeepTheirPositions`
+for lone `\r` line endings. `RunAsync_AnUnknownRowTheScanReproduces_DoesNotUnsettleTheKeptOrder`
+had seeded a row whose text sat before its stored position, which the chain now correctly sends to
+`-1`, so its fixture uses text that follows the stored order.

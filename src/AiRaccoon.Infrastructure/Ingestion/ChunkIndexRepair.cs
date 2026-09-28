@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -41,7 +42,7 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
             var partition = await ChunkPositionScanner.PartitionAsync(connection, memberId, cancellationToken);
             var fileRows = partition.Where(row => row.IsFileRow).Select(row => new StoredChunk(row.Id, row.Hash)).ToList();
             var scan = _scanner.Scan(partition[0].SourceFile, fileRows, maxTokens, overlayTokens, countTokens);
-            var gone = await GoneFromTheFileAsync(connection, partition, scan, cancellationToken);
+            var gone = await UnplaceableAsync(connection, partition, scan, cancellationToken);
             var moves = gone is not null
                 ? ChunkPositionScanner.MovesKeepingStoredOrder(partition, gone)
                 : ChunkPositionScanner.Moves(partition, scan);
@@ -74,13 +75,13 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
 
     /// <summary>
     ///     The rows that go to unknown when the partition keeps the stored order an older chunking left
-    ///     (docs/adr/0123): only the rows whose text left the file — every other row keeps its stored
-    ///     position, holes and all. Null when the stored order is not one this rule may keep: the file is
-    ///     unusable, the scan reproduces every row, the stored positions are not 0..n-1 (a row already
-    ///     unknown may stand at -1 and keeps it), or the rows the scan reproduces are not stored in
-    ///     document order.
+    ///     (docs/adr/0123): only the rows whose text no longer sits where their stored position puts it —
+    ///     every other row keeps its stored position, holes and all. Null when the stored order is not one
+    ///     this rule may keep: the file is unusable, the scan reproduces every row, the stored positions are
+    ///     not 0..n-1 (a row already unknown may stand at -1 and keeps it), or the rows the scan reproduces
+    ///     are not stored in document order.
     /// </summary>
-    private static async Task<IReadOnlySet<long>?> GoneFromTheFileAsync(SqliteConnection connection,
+    private static async Task<IReadOnlySet<long>?> UnplaceableAsync(SqliteConnection connection,
         IReadOnlyList<PartitionEntry> partition, ChunkPositionScan scan, CancellationToken cancellationToken)
     {
         var fileRows = partition.Where(row => row.IsFileRow)
@@ -107,18 +108,15 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
             return null;
         }
 
+        var stored = fileRows.Where(row => row.ChunkIndex >= 0).ToList();
         var values = (await connection.QueryAsync<(long Id, string Value)>(new CommandDefinition(
-                "SELECT id AS Id, value AS Value FROM entries WHERE id IN @ids", new { ids = unplaced },
+                "SELECT id AS Id, value AS Value FROM entries WHERE id IN @ids", new { ids = stored.Select(row => row.Id) },
                 cancellationToken: cancellationToken)))
             .ToDictionary(row => row.Id, row => row.Value);
 
-        // The chunkers normalize \r\n and lone \r to \n before they slice (MarkdownChunker.NormalizeLineEndings),
-        // so a stored row's text is looked for in the file as the chunker reads it — and in the raw bytes for a
-        // chunker that slices those as they are. Line endings are not "text gone from the file".
-        var normalized = scan.Content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
-        return unplaced
-            .Where(id => !scan.Content.Contains(values[id], StringComparison.Ordinal)
-                && !normalized.Contains(values[id], StringComparison.Ordinal))
-            .ToHashSet();
+        // A kept row is one whose text still sits where its stored position puts it: located in the file as the
+        // chunkers read it, in stored order (StoredOrderChain). Text gone, moved, or surviving only out of place is not.
+        return StoredOrderChain.Unplaceable(
+            [.. stored.Select(row => new StoredOrderRow(row.Id, values[row.Id], scan.PositionById[row.Id] >= 0))], scan.Content);
     }
 }

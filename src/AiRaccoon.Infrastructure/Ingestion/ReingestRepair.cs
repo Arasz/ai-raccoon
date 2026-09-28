@@ -7,9 +7,9 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Infrastructure.Ingestion;
 
 /// <summary>
-///     GH #371 follow-up: fixes what <see cref="ChunkIndexRepair" /> can only mark chunk_index = -1
-///     for — a source file whose stored rows a chunker-version change made unreproducible by hash —
-///     by re-ingesting it through <see cref="IMemoryStore.ReplaceAsync" />'s unconditional
+///     Re-chunks a source file whose stored rows a chunker-version change made unreproducible by hash
+///     (<see cref="ChunkIndexRepair" /> keeps their stored order when it still fits the file, and marks
+///     the rest chunk_index = -1) by re-ingesting it through <see cref="IMemoryStore.ReplaceAsync" />'s unconditional
 ///     delete-and-reingest, the same atomic replace the watch digest uses, forced rather than
 ///     fingerprint-gated (the file's content has not changed; the chunker has).
 ///     <para>

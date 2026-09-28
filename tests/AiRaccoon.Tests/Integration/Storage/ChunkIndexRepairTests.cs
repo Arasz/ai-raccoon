@@ -349,15 +349,91 @@ public sealed class ChunkIndexRepairTests : IDisposable
         positions["para three"].ShouldBe(1);
     }
 
+    /// <summary>A row whose text moved elsewhere in the file has no place in the stored order: it goes to unknown, and
+    /// the rows whose text still follows the stored order keep their positions.</summary>
+    [RetryFact]
+    public async Task RunAsync_OlderChunkingRowWhoseTextMoved_GoesUnknownAlone()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "r1\n\nr2\n\nt1\n\nt2\n\np1\n\np2", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "p1\n\np2", 0), (file, "r1\n\nr2", 1), (file, "t1\n\nt2", 2));
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 1, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["p1\n\np2"].ShouldBe(-1);
+        positions["r1\n\nr2"].ShouldBe(1);
+        positions["t1\n\nt2"].ShouldBe(2);
+    }
+
+    /// <summary>Text that is still in the file only somewhere the stored order cannot put the row — its own section
+    /// is gone and a copy survives elsewhere — is not the row's text: the row goes to unknown and the rows the file
+    /// reproduces keep their places.</summary>
+    [RetryFact]
+    public async Task RunAsync_OlderChunkingRowWhoseTextSurvivesOnlyOutOfPlace_GoesUnknown()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "alpha\n\nx1\n\nx2\n\nbeta\n\ngamma\n\nx1\n\nx2", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync(
+            (file, "alpha", 0), (file, "beta", 1), (file, "x1\n\nx2", 2), (file, "gamma", 3));
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 1, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["alpha"].ShouldBe(0);
+        positions["beta"].ShouldBe(1);
+        positions["x1\n\nx2"].ShouldBe(-1);
+        positions["gamma"].ShouldBe(3);
+    }
+
+    /// <summary>A file saved with lone `\r` line endings: the chunkers read those as `\n` too, so the older chunking's
+    /// rows are still in the file and keep their positions.</summary>
+    [RetryFact]
+    public async Task RunAsync_RowsFromAnOlderChunkingOnALoneCrFile_KeepTheirPositions()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "para one\r\rpara two\r\rpara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para one\n\npara two", 0), (file, "para three", 1));
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para one\n\npara two"].ShouldBe(0);
+        positions["para three"].ShouldBe(1);
+    }
+
+    /// <summary>Two rows stored at the same position are not a numbering to keep (#788): the repair ranks the rows the
+    /// file reproduces and sends the older chunking's row to unknown, so no position is held twice.</summary>
+    [RetryFact]
+    public async Task RunAsync_OlderChunkingWithADuplicatePosition_UsesTheFileOrder()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three\n\npara four", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync(
+            (file, "para one", 0), (file, "para two", 1), (file, "para three\n\npara four", 1));
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 1, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para one"].ShouldBe(0);
+        positions["para two"].ShouldBe(1);
+        positions["para three\n\npara four"].ShouldBe(-1);
+    }
+
     /// <summary>A row already unknown has no place in the order proof: the scan reproducing its hash again does not
     /// unsettle a stored order the other rows prove, and the keep rule does not resurrect it.</summary>
     [RetryFact]
     public async Task RunAsync_AnUnknownRowTheScanReproduces_DoesNotUnsettleTheKeptOrder()
     {
         var file = Path.Combine(_dataRoot, "legacy.md");
-        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three\n\npara four\n\npara five",
+            TestContext.Current.CancellationToken);
         await using var connection = await OpenSeededAsync(
-            (file, "para two", 0), (file, "para three", 1), (file, "para one", -1), (file, "para one\n\npara two", 2));
+            (file, "para two", 0), (file, "para three", 1), (file, "para one", -1), (file, "para four\n\npara five", 2));
 
         var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
 
@@ -366,7 +442,7 @@ public sealed class ChunkIndexRepairTests : IDisposable
         positions["para two"].ShouldBe(0);
         positions["para three"].ShouldBe(1);
         positions["para one"].ShouldBe(-1);
-        positions["para one\n\npara two"].ShouldBe(2);
+        positions["para four\n\npara five"].ShouldBe(2);
     }
 
     /// <summary>What the rule writes it also keeps: its own output — kept positions, one unknown row — is a
