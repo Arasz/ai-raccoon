@@ -911,7 +911,7 @@ internal static class MemorySql
 
     /// <summary>
     ///     The C#-side twin of <see cref="ContextKeyExpression" />, parsing a search context string
-    ///     into the same key. Mirrors FilterFor's branches, including reading the project id from the
+    ///     into the same key. Mirrors ContextFilterProvider's branches, including reading the project id from the
     ///     context string rather than <paramref name="projectId" />, so the two never diverge. An
     ///     empty <paramref name="projectId" /> builds the key the SQL fragment gives a NULL project
     ///     id (ADR-0124): 'project:', 'workspace:0::W', 'custom:0::L'.

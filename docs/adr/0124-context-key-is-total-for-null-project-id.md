@@ -89,8 +89,11 @@ DDL):
   UPDATE if a future bank ever needs one (probed: `UPDATE v2 SET ctx = 'custom:0::L' WHERE rowid =
   1` succeeds and reads back), which is recorded here as the escape hatch, not shipped as a job.
 
-`ChunkPositionScanner.PartitionAsync`'s NULL-safe `IS` stays. With a total key it matches like
-`=`; it is kept as totality defense for a legacy bank whose rows an older build already keyed NULL.
+`ChunkPositionScanner.PartitionAsync`'s NULL-safe `IS` stays. The key is recomputed from each row
+by the now-total expression, so the arm that matched a NULL key is unreachable and `IS` behaves
+exactly like `=`; it stays as the partition rule's NULL-safe form — the shape that fixed the
+empty-lookup crash — and costs nothing. `ChunkIndexRepairTests`' NULL-project case pins the
+end-to-end repair of such a partition, not the NULL arm.
 
 ## Alternatives rejected
 
@@ -139,6 +142,10 @@ DDL):
   populates it, not the shape.
 - **The v2–v8 hazard is recorded, not refuted.** Pre-v9 partition keys genuinely accepted NULL, and
   a pre-v9 bank could genuinely hold an index-invisible row; the v9 rebuild is what now converts it.
+- **A non-BMP project id still diverges.** SQLite `length()` counts code points while C#'s
+  `string.Length` counts UTF-16 units, so a project id outside the BMP keys differently on the two
+  sides. Pre-existing, unchanged by `COALESCE` (the identity on a non-NULL id), and unreachable with
+  the guidv7 ids the tool writes; recorded, not fixed here.
 
 ## Gates
 
