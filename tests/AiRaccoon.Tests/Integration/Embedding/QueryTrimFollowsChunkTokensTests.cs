@@ -17,9 +17,21 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class QueryTrimFollowsChunkTokensTests
+public sealed class QueryTrimFollowsChunkTokensTests : IDisposable
 {
     private const int QueryTrimmedEventId = 426;
+
+    private readonly List<string> _manifestDirs = [];
+
+    /// <summary>Every fixture manifest dir this case set up goes away with it (review F7: each case
+    /// used to leave one behind).</summary>
+    public void Dispose()
+    {
+        foreach (var dir in _manifestDirs)
+        {
+            TestData.DeleteTempRoot(dir);
+        }
+    }
 
     [RetryTheory]
     [InlineData(700)]
@@ -69,11 +81,11 @@ public sealed class QueryTrimFollowsChunkTokensTests
         string.Join(' ', Enumerable.Repeat(
             "how does the retrieval pipeline weigh full text against vectors when the corpus is large", 80));
 
-    private static string WriteManifestDir(int chunkTokens)
+    private string WriteManifestDir(int chunkTokens)
     {
         var vocab = File.ReadAllText(BundledModel.ResolveVocabPath());
-        var dir = Path.Combine(Path.GetTempPath(), "ai-raccoon-trim-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
+        var dir = TestData.CreateTempRoot("ai-raccoon-trim-tests");
+        _manifestDirs.Add(dir);
         File.WriteAllText(Path.Combine(dir, "vocab.txt"), vocab);
         File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
         File.WriteAllText(Path.Combine(dir, EmbeddingManifest.FileName), new JsonObject

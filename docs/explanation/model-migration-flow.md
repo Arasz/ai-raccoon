@@ -98,6 +98,7 @@ sequenceDiagram
     Note over R: startup pass, or the 15s on-demand poll
     R->>DB: HasWorkAsync → is a migration open?
     R->>DB: claim lease (60s TTL, renewed per batch)
+    R->>DB: pre-loop phases: vec-dimension reconcile, chunk-budget re-chunk (ADR-0125 ⇒ log 448)
     loop each pending row
         R->>DB: embed with the new engine, write vec0
     end

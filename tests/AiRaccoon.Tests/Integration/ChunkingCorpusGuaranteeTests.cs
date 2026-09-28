@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
@@ -21,9 +22,23 @@ public sealed class ChunkingCorpusGuaranteeTests
 {
     private const int MaxTokens = OnnxEmbeddingGenerator.MaxContentTokens;
 
+    /// <summary>Both shipped memory budgets — the legacy 254 and the bundled manifest's own
+    /// chunkTokens, derived so a manifest move cannot leave this gate green against a stale number
+    /// (plan row 15).</summary>
+    public static TheoryData<int> ShippedMemoryBudgets =>
+    [
+        OnnxEmbeddingGenerator.MaxContentTokens,
+        BundledManifestChunkTokens()
+    ];
+
+    /// <summary>The bundled manifest's chunkTokens — read from the manifest, never a literal.</summary>
+    private static int BundledManifestChunkTokens() =>
+        new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())
+            .Load(BundledModel.ResolveDirectory()).ChunkTokens
+        ?? throw new InvalidOperationException("the bundled manifest must declare chunkTokens");
+
     [RetryTheory]
-    [InlineData(OnnxEmbeddingGenerator.MaxContentTokens)]
-    [InlineData(1022)]
+    [MemberData(nameof(ShippedMemoryBudgets))]
     public void ChunkingDocsCorpus_WithRealBertTokenizer_NoChunkExceedsTheContentBudget(int budget)
     {
         var ceiling = budget + EngineDescriptor.DefaultSpecialTokenReservation;
@@ -98,8 +113,7 @@ public sealed class ChunkingCorpusGuaranteeTests
             || line.TrimStart().StartsWith("~~~", StringComparison.Ordinal));
 
     [RetryTheory]
-    [InlineData(OnnxEmbeddingGenerator.MaxContentTokens)]
-    [InlineData(1022)]
+    [MemberData(nameof(ShippedMemoryBudgets))]
     public void ChunkingHostileFixtures_NoChunkExceedsTheContentBudget(int budget)
     {
         var ceiling = budget + EngineDescriptor.DefaultSpecialTokenReservation;

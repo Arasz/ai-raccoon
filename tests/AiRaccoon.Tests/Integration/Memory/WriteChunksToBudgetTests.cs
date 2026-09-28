@@ -88,6 +88,10 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
             + $"{string.Join(", ", tokens.Select(t => t.Count))} tokens");
         tokens.Where(t => t.Count > engineWindow).ShouldBeEmpty(
             $"every stored row must fit the model that embeds it; worst {tokens.Max(t => t.Count)} tokens");
+        var legacyWindow = OnnxEmbeddingGenerator.MaxContentTokens + engineTokenizer.SpecialTokenReservation;
+        tokens.Max(t => t.Count).ShouldBeGreaterThan(legacyWindow,
+            "the lower bound proves the resolved budget is actually in use: a body this size must produce a row "
+            + $"past the legacy {legacyWindow}-token window, or the ceiling above would pass even chunked at 254");
     }
 
     /// <summary>No text may be lost in the split — the reason the acceptance criteria include a length check.</summary>

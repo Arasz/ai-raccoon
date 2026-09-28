@@ -243,7 +243,7 @@ unchanged afterwards; **historical** = a dated record, never edited.
 | 36 | `scripts/src/retrieval_tuning/eval-sets/code-smoke.json:56-57` (CS-04) | wording "the bundled model's embedding window" | **moves**: reword to "the active engine's chunk budget" (no number to move) |
 | 37 | `src/AiRaccoon.Core/Chunking/ChunkingDefaults.cs:7` (`OverlayTokens = 48`) | overlay | stays |
 | 38 | `src/AiRaccoon.Infrastructure/Embedding/Manifest/EmbeddingManifestValidator.cs:49-51` | `chunkTokens ≤ contextWindowTokens − 2` (1022 ≤ 8188, valid) | stays; add the 1022-valid case to the tests |
-| 39 | `tests/AiRaccoon.Tests/Integration/Storage/SqliteMemoryStoreChunkingTests.cs:65-68` | literal `≤ 256` ceiling over budget-derived chunking | **moves** (review F3 item 1: goes red at the flip) → derive from resolved budget + reservation; §3 row 21 |
+| 39 | `tests/AiRaccoon.Tests/Integration/Storage/SqliteMemoryStoreChunkingTests.cs:65-68` | literal `≤ 256` ceiling over budget-derived chunking | **moves** (review F3 item 1; premise corrected — the test configures `openai` at 256 on both sides, so the literal did not go red at the flip; §3 row 21) → derive from resolved budget + reservation |
 | 40 | `src/AiRaccoon/Tools/MemoryTools.cs:139-145` | MCP `search` tool description: "254 tokens for the bundled model" — agent-facing | **moves** (review F3 item 2) → de-number or say 1022 |
 | 41 | `docs/how-to/configure-embedding-engines.md:42` | "8,190 tokens (chunked to 254 for memory, 510 for code)" | **moves** (review F3 item 3) → 1022 for memory |
 | 42 | `src/AiRaccoon/Tools/MemoryTools.cs:320-323`, `src/AiRaccoon.Infrastructure/Embedding/IEmbeddingService.cs:25-26`, `src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs:194-195`, `src/AiRaccoon.Infrastructure/Chunking/CodeChunker.cs:22`, `tests/AiRaccoon.Tests/Unit/Chunking/CodeChunkerTests.cs:85`, `scripts/retrieval_tuning/llamaindex_harness/ingest.py:67`, `tests/AiRaccoon.Tests/Integration/ChunkingCorpusGuaranteeTests.cs:43,51,104-105` | comment/doc wording "254"/"256" aging with the flip | **moves** (review F3 minors: comment/doc cleanups) |
@@ -406,9 +406,11 @@ ADR + breaking-changes entries say so instead of promising "every bank re-chunks
    cosine ≥ 0.9999. RED mutation: remove `_bucketRows = true` at `OnnxEmbeddingGenerator.cs:611` →
    the row runs unpadded at 3 and the assertion reddens. The skip must be **fail-closed somewhere
    named** (review F2 defect 1): an env flag (e.g. `AIRACCOON_REQUIRE_MLX=1`) turns `Assert.Skip` into
-   `Assert.Fail` when the plugin is absent, set on the designated MLX run — the pre-release manual
-   checklist (`ai-raccoon-manual-checklist`) gains a named row for it, and any nightly running on the
-   MLX host sets it. *Gate:* same filter, plus the flag-bearing named run.
+   `Assert.Fail` when the plugin is absent, set on the named MLX run: the `build-mlx` job in
+   `.github/workflows/build.yml` (osx-arm64, `AIRACCOON_REQUIRE_MLX: 1` on the session-test step,
+   every push to main and manual dispatch — the same trust-then-promote shape as `build-arm64`).
+   The pre-release manual checklist (`ai-raccoon-manual-checklist`) keeps a named row as the manual
+   backstop. *Gate:* same filter, plus the flag-bearing `build-mlx` run.
 3. The CPU path stays unpadded (regression pin against someone "fixing" padding onto CPU).
    *Gate:* `--filter "FullyQualifiedName~BundledEngineBucketPaddingTests"` (existing test, kept).
 
@@ -450,8 +452,9 @@ between the merges.)
    still passes. *Gate:* `--filter "FullyQualifiedName~ChunkingCorpusGuaranteeTests"`.
 5. The write path chunks at the resolved budget (the `BertWindow = 256` constant now derives),
    including `SqliteMemoryStoreChunkingTests` (review F3 item 1: its `≤ 256` literal at
-   `tests/AiRaccoon.Tests/Integration/Storage/SqliteMemoryStoreChunkingTests.cs:65-68` goes red at
-   the flip and matched no gate). *Gate:* `--filter "FullyQualifiedName~WriteChunksToBudgetTests|FullyQualifiedName~SqliteMemoryStoreChunkingTests"`.
+   `tests/AiRaccoon.Tests/Integration/Storage/SqliteMemoryStoreChunkingTests.cs:65-68` matched no
+   gate — and could not go red at the flip, since the test configures `openai`, whose resolved
+   budget is 256 on both sides; §3 row 21 carries the corrected premise). *Gate:* `--filter "FullyQualifiedName~WriteChunksToBudgetTests|FullyQualifiedName~SqliteMemoryStoreChunkingTests"`.
 
 ### P4 — Docs, ADR-0125, version and changelog
 
@@ -500,8 +503,10 @@ F7 dangling "items 14-15" reference is corrected to exactly these rows), and the
    not before); (d) migration closed and `embedding.chunkBudget == 1022`; (e) code rows re-embedded
    but code chunk boundaries unchanged (510). *Gate:*
    `dotnet test --filter "FullyQualifiedName~ConfigDEndToEndMigrationTests"`.
-2. The padding precondition is exercised by P2's named fail-closed MLX run — the short-row pin rides
-   the same end-to-end scenario where MLX is present; on non-MLX hosts `AIRACCOON_REQUIRE_MLX=1`'s
+2. The padding precondition is exercised by P2's named fail-closed MLX run — the short-row pin is
+   `BundledEngineMlxSessionTests.PreferMlx_FilesPresent_AShortRow_PadsToOneBucket_WithTheCpuSessionsVectors`,
+   not the end-to-end scenario (that one runs a fake generator, which has no padding property to
+   assert); on non-MLX hosts `AIRACCOON_REQUIRE_MLX=1`'s
    absence means 'not exercised', which is why P2's named run is the binding gate (review F2 defect 3:
    a full-size row on the MLX seam is a tautology and is dropped). *Gate:* P2's named run.
 3. The suites of P1, P2 and P3 pass together on one tree (no cross-package interference), once.
@@ -533,12 +538,12 @@ discipline). Mandatory items (a)-(d) are marked.
 | 13 **(d)** | `QueryTruncationTests.cs` (update `:75`) | 426 message contains "1022" for the bundled engine | message quotes a stale constant | P3 |
 | 14 **(d)** | `Unit/Memory/QueryGuard/QueryLengthGuardTests.cs` (additive) | budget 1022 → threshold ≈ 4,024 chars, guidance quotes 1022 | threshold pinned to 1,000 chars | P3 |
 | 15 | `Integration/ChunkingCorpusGuaranteeTests.cs` (update `:21`, `:44`) | corpus + hostile fixtures under ceiling `budget + 2` for both the legacy 254 and the resolved 1022 | chunker emits an over-budget chunk at 1022 (break `BuildChunk` verification to watch it red) | P3 |
-| 16 | `Integration/Memory/WriteChunksToBudgetTests.cs` (update `:29`) | write chunks fit resolved budget + reservation | constant left at 256 after the flip | P3 |
+| 16 | `Integration/Memory/WriteChunksToBudgetTests.cs` (update `:29`) | write chunks fit resolved budget + reservation, and at least one chunk passes the legacy 254 window (lower bound — the window is self-derived, so the ceiling alone cannot tell 1022 from 254) | constant left at 256 after the flip | P3 |
 | 17 | `Unit/Chunking/CodeChunkerTests.cs` (update `:87-92`) | `CodeChunker.DefaultBudget` is 510 and `ShouldNotBe(1022)` | code budget dragged along with memory | P3 |
 | 18 | `Integration/Embedding/ConfigDEndToEndMigrationTests.cs` | P5 criteria 1-2 in one scenario | any P1/P3 regression crossing packages | P5 |
 | 19 **(b)** | `Integration/Storage/ChunkRebudgetTests.cs` (mirror-group case; review F9 — the original gate was vacuous with no mirror-group test) | file rows at 254 → 1022 pieces re-chunked from disk; a deleted source file is untouched and counted terminal-skipped | phase touches vanished-file groups; phase skips mirror groups silently | P1 |
 | 20 **(b)** | `Integration/Storage/ChunkRebudgetTests.cs` (stamp-gate case; review F1 mech 4) | `embedding.chunkBudget` written only at zero retryable skips; retryable skips withhold the stamp and a later run stamps after convergence; terminal skips never block the stamp | stamp written unconditionally at phase end | P1 |
-| 21 | `Integration/Storage/SqliteMemoryStoreChunkingTests.cs` (update `:65-68`; review F3 item 1) | ceiling derives from resolved budget + reservation instead of the literal 256 | literal left in place (goes red at the flip) | P3 |
+| 21 | `Integration/Storage/SqliteMemoryStoreChunkingTests.cs` (update `:65-68`; review F3 item 1) | ceiling derives from resolved budget + reservation instead of the literal 256 | the store chunks over the resolved budget (premise corrected: the test configures `openai`, whose resolved budget is 256 on both sides of the flip, so the old literal could not go red at the flip — the guard is the derived ceiling moving with the store, and the resolver itself is pinned by rows 1-3) | P3 |
 
 Existing tests kept as regression pins without edits:
 `BundledEngineBucketPaddingTests.cs` (CPU unpadded, bucketed parity),
