@@ -39,7 +39,7 @@ graph LR
 
 | Engine kind | Model | Dimensions | Context window | Used for | Activate with |
 |---|---|---:|---:|---|---|
-| Local, bundled (default) | `granite-embedding-small-english-r2` (fp16, Apache-2.0) | 384 | 8,190 tokens (chunked to 254 for memory, 510 for code) | Memory + code | `model embedding set local` / `model code set default` |
+| Local, bundled (default) | `granite-embedding-small-english-r2` (fp16, Apache-2.0) | 384 | 8,190 tokens (chunked to 1022 for memory, 510 for code) | Memory + code | `model embedding set local` / `model code set default` |
 | Local, downloaded | Any Hugging Face repo whose `config.json` reports a `bert*`/`new`/`gte*` model type with a `vocab.txt` (WordPiece), an `xlm-roberta`/`roberta`/`t5` type (SentencePiece), or that simply ships a `tokenizer.json` (BPE/byte-level, including decoder-style models pooled last-token) | Whatever the manifest declares | Whatever the manifest declares | Memory or code | `model download <repo-id>`, then `model embedding set local <dir>` / `model code set local <dir>` |
 | Remote, OpenAI-compatible | Any `/v1/embeddings` endpoint: OpenAI (`text-embedding-3-small`/`-large`), Ollama, LM Studio, etc. | Endpoint-reported, or `--dims` | Provider's own (8,191 assumed) | Memory only — the code corpus is local-only | `model embedding set openai <model> [base-url] --api-key --dims` |
 

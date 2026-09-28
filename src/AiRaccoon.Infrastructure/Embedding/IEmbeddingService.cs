@@ -22,8 +22,10 @@ public interface IEmbeddingService
     double? RelevanceFloor(EmbeddingSettings settings);
 
     /// <summary>
-    ///     The configured LOCAL engine's content-token chunk budget (D6/D9): 254 for bundled/legacy,
-    ///     min(510, ctx − 2) for manifest models, 256 for non-local providers (unchanged).
+    ///     The configured LOCAL engine's content-token chunk budget (D6/D9): the manifest's
+    ///     <c>chunkTokens</c> (1022 for the bundled engine from 1.54.0), min(510, ctx − 2) when a
+    ///     manifest declares none, 254 for legacy non-manifest local models, 256 for non-local
+    ///     providers (unchanged).
     /// </summary>
     int ResolveChunkBudgetFor(EmbeddingSettings settings);
 

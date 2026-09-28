@@ -19,7 +19,8 @@ public sealed class CodeChunker : ICodeChunker
 {
     /// <summary>
     ///     min(510, ctx − reservation) for code-daemon-embed-v1's MEASURED 512-token window and its
-    ///     2-token &lt;s&gt;/&lt;/s&gt; reservation — 510, not the memory chunker's 254. Was 126 until
+    ///     2-token &lt;s&gt;/&lt;/s&gt; reservation — 510, not the memory chunker's budget (1022 since
+    ///     ADR-0125). Was 126 until
     ///     #422: that came from the exploration spike's "128-token hard cap", which the graph
     ///     contradicts (514-row position table, 512 accepted, 513 a hard Gather failure — see
     ///     <c>CodeModelGraphWindowTests</c>). Derived from
