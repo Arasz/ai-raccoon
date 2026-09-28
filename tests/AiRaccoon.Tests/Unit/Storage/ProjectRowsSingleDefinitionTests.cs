@@ -23,7 +23,7 @@ public class ProjectRowsSingleDefinitionTests
     /// </summary>
     private static readonly string[] Allowed =
     [
-        "WHEN {prefix}scope = 'project' THEN 'project:' || {prefix}project_id",
+        "WHEN {prefix}scope = 'project' THEN 'project:' || COALESCE({prefix}project_id, '')",
         // Display ordering, not membership: puts shared first, then the project's own rows.
         "ORDER BY CASE WHEN scope = 'shared' THEN 0 WHEN scope = 'project' THEN 1 ELSE 2 END"
     ];
