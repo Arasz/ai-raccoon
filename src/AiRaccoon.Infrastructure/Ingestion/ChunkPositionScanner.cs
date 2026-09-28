@@ -133,6 +133,41 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
         return moves;
     }
 
+    /// <summary>
+    ///     The writes that keep a partition's stored order (docs/adr/0123): every row keeps its stored
+    ///     chunk_index except <paramref name="unknownIds" /> — a row whose text left the file goes to -1,
+    ///     never a guess — the rows citing the file follow its rows in stored order, and total_chunks is
+    ///     the row count. No row's section changes.
+    /// </summary>
+    public static IReadOnlyList<ChunkMove> MovesKeepingStoredOrder(IReadOnlyList<PartitionEntry> partition,
+        IReadOnlySet<long> unknownIds)
+    {
+        Guard.IsNotNull(partition);
+        Guard.IsNotNull(unknownIds);
+
+        var positions = DocumentChunks.After(partition.Count(row => row.IsFileRow),
+                partition.Where(row => !row.IsFileRow).Select(row => new PartitionRow(row.Id, row.IsFileRow, row.ChunkIndex)))
+            .ToDictionary(pair => pair.Id, pair => pair.ChunkIndex);
+        foreach (var row in partition.Where(row => row.IsFileRow))
+        {
+            positions[row.Id] = unknownIds.Contains(row.Id) ? -1 : row.ChunkIndex;
+        }
+
+        List<ChunkMove> moves = [];
+        foreach (var row in partition)
+        {
+            var index = positions[row.Id];
+            if (index == row.ChunkIndex && row.TotalChunks == partition.Count)
+            {
+                continue;
+            }
+
+            moves.Add(new ChunkMove(row.Id, index, partition.Count, row.Section, false));
+        }
+
+        return moves;
+    }
+
     /// <summary>Applies <paramref name="moves" /> in one transaction; a section is written only when it changes, so the
     /// full-text index is not rewritten for a position-only move.</summary>
     public static async Task WriteAsync(SqliteConnection connection, IReadOnlyList<ChunkMove> moves,

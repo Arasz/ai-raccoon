@@ -246,6 +246,149 @@ public sealed class ChunkIndexRepairTests : IDisposable
         row.Section.ShouldBe("Keep");
     }
 
+    /// <summary>Rows an older chunker cut differently still hold the file's text in a valid order: the repair keeps
+    /// that order instead of setting the rows it cannot reproduce to unknown.</summary>
+    [RetryFact]
+    public async Task RunAsync_RowsFromAnOlderChunkingInValidOrder_KeepTheirPositions()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para one\n\npara two", 0), (file, "para three", 1));
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para one\n\npara two"].ShouldBe(0);
+        positions["para three"].ShouldBe(1);
+    }
+
+    /// <summary>A kept order still gets its totals fixed.</summary>
+    [RetryFact]
+    public async Task RunAsync_RowsFromAnOlderChunkingInValidOrder_StillTakeThePartitionRowCountAsTotal()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para one\n\npara two", 0), (file, "para three", 1));
+        await connection.ExecuteAsync("UPDATE entries SET total_chunks = 5");
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 2));
+        (await connection.QueryAsync<long>("SELECT chunk_index FROM entries WHERE source_file = @file ORDER BY chunk_index", new { file }))
+            .ShouldBe([0L, 1L]);
+    }
+
+    /// <summary>When the rows the file does reproduce are stored out of document order, the stored order is not valid:
+    /// the repair ranks those by the file and sets the older chunking's row to unknown, as before.</summary>
+    [RetryFact]
+    public async Task RunAsync_OlderChunkingWithReproducedRowsOutOfOrder_UsesTheFileOrder()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three\n\npara four", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync(
+            (file, "para two", 0), (file, "para one", 1), (file, "para three\n\npara four", 2));
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 2, 1, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para one"].ShouldBe(0);
+        positions["para two"].ShouldBe(1);
+        positions["para three\n\npara four"].ShouldBe(-1);
+    }
+
+    /// <summary>Stored positions with a gap are not a valid order to keep: the older chunking's row goes to unknown and
+    /// the reproduced row takes its rank in the file.</summary>
+    [RetryFact]
+    public async Task RunAsync_OlderChunkingWithAGapInItsPositions_UsesTheFileOrder()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para one\n\npara two", 0), (file, "para three", 3));
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 1, 1, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para one\n\npara two"].ShouldBe(-1);
+        positions["para three"].ShouldBe(0);
+    }
+
+    /// <summary>Only the row whose text left the file goes unknown: the older chunking's rows whose text is still
+    /// in the file keep their stored positions.</summary>
+    [RetryFact]
+    public async Task RunAsync_RowsFromAnOlderChunkingWhoseTextLeftTheFile_GoUnknownAlone()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para one\n\npara two", 0), (file, "para zzz", 1));
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 1, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para one\n\npara two"].ShouldBe(0);
+        positions["para zzz"].ShouldBe(-1);
+    }
+
+    /// <summary>Line endings are not text gone from the file: the chunkers store rows with bare \n, so a CRLF
+    /// file's rows keep their positions even though the raw bytes hold no exact match for their text.</summary>
+    [RetryFact]
+    public async Task RunAsync_RowsFromAnOlderChunkingOnACrlfFile_KeepTheirPositions()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "para one\r\n\r\npara two\r\n\r\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync((file, "para one\n\npara two", 0), (file, "para three", 1));
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para one\n\npara two"].ShouldBe(0);
+        positions["para three"].ShouldBe(1);
+    }
+
+    /// <summary>A row already unknown has no place in the order proof: the scan reproducing its hash again does not
+    /// unsettle a stored order the other rows prove, and the keep rule does not resurrect it.</summary>
+    [RetryFact]
+    public async Task RunAsync_AnUnknownRowTheScanReproduces_DoesNotUnsettleTheKeptOrder()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync(
+            (file, "para two", 0), (file, "para three", 1), (file, "para one", -1), (file, "para one\n\npara two", 2));
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para two"].ShouldBe(0);
+        positions["para three"].ShouldBe(1);
+        positions["para one"].ShouldBe(-1);
+        positions["para one\n\npara two"].ShouldBe(2);
+    }
+
+    /// <summary>What the rule writes it also keeps: its own output — kept positions, one unknown row — is a
+    /// fixed point, so a second run changes nothing.</summary>
+    [RetryFact]
+    public async Task RunAsync_KeptOrderWithAnUnknownRow_IsItsOwnFixedPoint()
+    {
+        var file = Path.Combine(_dataRoot, "legacy.md");
+        await File.WriteAllTextAsync(file, "para one\n\npara two\n\npara three", TestContext.Current.CancellationToken);
+        await using var connection = await OpenSeededAsync(
+            (file, "para one\n\npara two", 0), (file, "para zzz", 1), (file, "para three", 2));
+        await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        var report = await Repair().RunAsync(connection, apply: true, TestContext.Current.CancellationToken);
+
+        report.ShouldBe(new ChunkIndexRepairReport(1, 0, 0, 0));
+        var positions = await PositionsByValueAsync(connection, file);
+        positions["para one\n\npara two"].ShouldBe(0);
+        positions["para zzz"].ShouldBe(-1);
+        positions["para three"].ShouldBe(2);
+    }
+
     private static ChunkIndexRepair Repair()
     {
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]);
