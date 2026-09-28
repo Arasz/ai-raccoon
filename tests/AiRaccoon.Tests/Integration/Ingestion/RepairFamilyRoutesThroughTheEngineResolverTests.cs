@@ -107,7 +107,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         var budget = await scanner.BudgetAsync(connection, TestContext.Current.CancellationToken);
 
         budget.MaxTokens.ShouldBe(EmbeddingService.MaxManifestChunkTokens,
-            "a manifest 8192-window model must budget at the D6 cap, not the bundled 254");
+            "a manifest 8192-window model must budget at the D6 cap, not the bundled model's chunk budget");
         const string probe = "The quick brown fox jumps over the lazy dog.";
         var sentencePieceCount = budget.CountTokens(probe);
         var bundledCount = new LocalTokenizer().CountTokens(probe);

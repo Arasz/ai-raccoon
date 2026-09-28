@@ -138,9 +138,9 @@ public sealed partial class MemoryTools(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description(
             "The search query. Semantic matching only sees roughly the first N tokens — the active " +
-            "memory embedding engine's own window (254 tokens for the bundled model; a manifest " +
-            "model's is wider, and a result warning names the real number when a query is long " +
-            "enough to hit it) — for a long paste (a log, stack trace, test output), search its " +
+            "memory embedding engine's own window (1022 tokens for the bundled model from 1.54.0; " +
+            "a result warning names the real number when a query is long enough to hit it) — for a " +
+            "long paste (a log, stack trace, test output), search its " +
             "identifying line (exception type, error code, failing test name) instead of the whole " +
             "dump. Keyword matching still covers the query in full. When kind is code or both, the " +
             "code leg has its own, separately-sized engine window and its own trim warning — a query " +
@@ -319,7 +319,7 @@ public sealed partial class MemoryTools(
 
     /// <summary>
     ///     QueryLengthGuard's reported budget must track the ACTIVE memory engine, not the bundled
-    ///     model's fixed 254 -- resolved via IEmbeddingService.ResolveChunkBudgetFor (D6/D9), the same
+    ///     model's fixed default -- resolved via IEmbeddingService.ResolveChunkBudgetFor (D6/D9), the same
     ///     number EntryEmbedder.EmbedQueryAsync will actually trim to. An unconfigured provider
     ///     resolves as "local" (the bundled model the remedy activates), so the guard's number still
     ///     matches what a fresh bank would do once fixed.
