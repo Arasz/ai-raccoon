@@ -824,24 +824,49 @@ internal static class MemorySql
                                                                    """;
 
     /// <summary>
-    ///     <see cref="AiRaccoon.Infrastructure.Sync.SyncService" />'s post-merge renumber: every position
-    ///     partition gets contiguous positions 0..n-1 in the order its rows already hold, so a tombstone
-    ///     delete closes its gap without scrambling the survivors, and rows the merge pulled in (still
-    ///     at the -1 sentinel) go after them in id order. Only rows whose values change are written.
+    ///     <see cref="AiRaccoon.Infrastructure.Sync.SyncService" />'s post-merge renumber (docs/adr/0123). A file row at the
+    ///     -1 sentinel with an id above <c>@lastId</c> was added by the merge and goes after the partition's file rows in
+    ///     id order; every other file row keeps its position, holes and -1 ("position unknown") included, while those
+    ///     positions are distinct and below the file-row count, and is renumbered 0..k-1 in stored order otherwise (a
+    ///     tombstone delete that left one past the end). Notes citing the file follow its rows in stored order, and
+    ///     total_chunks is the partition row count. Only rows whose values change are written.
     /// </summary>
     public static readonly string RecomputeChunkColumnsBankWideKeepingOrder = $"""
-                                                                               WITH numbered AS (
-                                                                                   SELECT id, chunk_index, total_chunks,
-                                                                                          ROW_NUMBER() OVER (PARTITION BY {ContextKeyExpression("")}, source_file
-                                                                                                             ORDER BY chunk_index < 0, chunk_index, id) - 1 AS ci,
-                                                                                          COUNT(*)     OVER (PARTITION BY {ContextKeyExpression("")}, source_file)              AS tc
-                                                                                   FROM entries
-                                                                                   WHERE source_file IS NOT NULL)
-                                                                               UPDATE entries
-                                                                                  SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
-                                                                                      total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
-                                                                                WHERE entries.id IN (SELECT id FROM numbered WHERE ci <> chunk_index OR tc <> total_chunks)
-                                                                               """;
+        WITH base AS (
+            SELECT id, chunk_index, total_chunks, {ContextKeyExpression("")} AS ctx, source_file AS sf,
+                   CASE WHEN path = source_file THEN 1 ELSE 0 END AS f,
+                   CASE WHEN path = source_file AND chunk_index < 0 AND id > @lastId THEN 1 ELSE 0 END AS added
+            FROM entries
+            WHERE source_file IS NOT NULL),
+        agg AS (
+            SELECT ctx, sf, COUNT(*) AS tc, SUM(f) - SUM(added) AS held, SUM(added) AS addedCount,
+                   SUM(CASE WHEN f = 1 AND added = 0 AND chunk_index >= 0 THEN 1 ELSE 0 END) AS known,
+                   COUNT(DISTINCT CASE WHEN f = 1 AND added = 0 AND chunk_index >= 0 THEN chunk_index END) AS distinctKnown,
+                   MAX(CASE WHEN f = 1 AND added = 0 THEN chunk_index END) AS maxKnown
+            FROM base
+            GROUP BY ctx, sf),
+        ranked AS (
+            SELECT b.id, b.chunk_index, b.total_chunks, b.f, b.added, a.tc, a.addedCount,
+                   CASE WHEN a.known = a.distinctKnown AND COALESCE(a.maxKnown, -1) < a.held THEN a.held ELSE a.known END AS fileBase,
+                   a.known = a.distinctKnown AND COALESCE(a.maxKnown, -1) < a.held AS valid,
+                   ROW_NUMBER() OVER (PARTITION BY b.ctx, b.sf, b.f, b.added, b.chunk_index < 0 ORDER BY b.chunk_index, b.id) - 1 AS r,
+                   ROW_NUMBER() OVER (PARTITION BY b.ctx, b.sf, b.f ORDER BY b.chunk_index < 0, b.chunk_index, b.id) - 1 AS nr
+            FROM base b
+            JOIN agg a ON a.ctx = b.ctx AND a.sf = b.sf),
+        numbered AS (
+            SELECT id, chunk_index, total_chunks, tc AS tc,
+                   CASE
+                       WHEN f = 1 AND added = 0 AND chunk_index < 0 THEN -1
+                       WHEN f = 1 AND added = 0 THEN CASE WHEN valid THEN chunk_index ELSE r END
+                       WHEN f = 1 THEN fileBase + r
+                       ELSE fileBase + addedCount + nr
+                   END AS ci
+            FROM ranked)
+        UPDATE entries
+           SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
+               total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
+         WHERE entries.id IN (SELECT id FROM numbered WHERE ci <> chunk_index OR tc <> total_chunks)
+        """;
 
     /// <summary>Sets one row's document position and section directly — the authoritative-at-insert
     /// write (GH #371) FileIngestor uses instead of the id-order recompute, and the write

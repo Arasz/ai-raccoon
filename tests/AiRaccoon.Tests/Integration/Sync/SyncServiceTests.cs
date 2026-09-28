@@ -413,6 +413,101 @@ public class SyncServiceTests : IDisposable
         hashes.ShouldBe(["p0", "p1", "p2"]);
     }
 
+    /// <summary>A partition `repair chunk-index` kept (ADR-0123) holds a hole and a file row at -1, "position unknown":
+    /// a merge that brings nothing into it leaves both, and the note citing the file keeps its place after the file.</summary>
+    [RetryFact]
+    public async Task MemorySync_Merge_KeepsTheHolesAndUnknownFileRowsARepairLeft()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using (var conn = await CreateAndOpenAsync(BankPath, ct))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, chunk_index, total_chunks)
+                                 VALUES ('f0', 'doc.md', 'first part', 'doc.md', 'project', 'acme', 1, 1, 0, 4),
+                                        ('f2', 'doc.md', 'third part', 'doc.md', 'project', 'acme', 1, 1, 2, 4),
+                                        ('fu', 'doc.md', 'gone part', 'doc.md', 'project', 'acme', 1, 1, -1, 4),
+                                        ('n0', 'note.md', 'a note', 'doc.md', 'project', 'acme', 1, 1, 3, 4)
+                                 """;
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+
+        await SyncWithRemoteAsync(ct);
+
+        (await PositionsAsync(ct)).ShouldBe([("f0", 0L, 4L), ("f2", 2L, 4L), ("fu", -1L, 4L), ("n0", 3L, 4L)]);
+    }
+
+    /// <summary>A file row the merge adds lands at the -1 default; it takes the next position after the file rows the
+    /// partition already held, while the row a repair left unknown stays at -1.</summary>
+    [RetryFact]
+    public async Task MemorySync_Merge_PositionsAFileRowItAdds_AfterTheKeptRows()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using (var conn = await CreateAndOpenAsync(BankPath, ct))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, chunk_index, total_chunks)
+                                 VALUES ('f0', 'doc.md', 'first part', 'doc.md', 'project', 'acme', 1, 1, 0, 2),
+                                        ('fu', 'doc.md', 'gone part', 'doc.md', 'project', 'acme', 1, 1, -1, 2)
+                                 """;
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+
+        await SyncWithRemoteAsync(ct, """
+                                      INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at)
+                                      VALUES ('r1', 'doc.md', 'a part from the other machine', 'doc.md', 'project', 'acme', 5, 5)
+                                      """);
+
+        (await PositionsAsync(ct)).ShouldBe([("f0", 0L, 3L), ("fu", -1L, 3L), ("r1", 2L, 3L)]);
+    }
+
+    /// <summary>Pushes a remote bank seeded by <paramref name="remoteSql" /> (empty when null) and syncs the local bank with it.</summary>
+    private async Task SyncWithRemoteAsync(CancellationToken ct, string? remoteSql = null)
+    {
+        var cloud = new FakeCloudStore();
+        var remotePath = Path.Combine(_dataRoot, "remote.db");
+        await using (var remote = await CreateAndOpenAsync(remotePath, ct))
+        {
+            if (remoteSql is not null)
+            {
+                await using var seed = remote.CreateCommand();
+                seed.CommandText = remoteSql;
+                await seed.ExecuteNonQueryAsync(ct);
+            }
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, ct));
+        var service = new SyncService(cloud,
+            token => CreateAndOpenAsync(BankPath, token),
+            OpenSnapshotAsync,
+            async (snapshot, token) =>
+            {
+                var c = new SqliteConnection($"Data Source={snapshot}");
+                await c.OpenAsync(token);
+                return c;
+            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+
+        await service.MemorySyncAsync("acme", "test-object", ct);
+    }
+
+    /// <summary>Every row citing doc.md as (hash, chunk_index, total_chunks), by hash.</summary>
+    private async Task<List<(string Hash, long ChunkIndex, long TotalChunks)>> PositionsAsync(CancellationToken ct)
+    {
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(ct);
+        await using var select = check.CreateCommand();
+        select.CommandText = "SELECT hash, chunk_index, total_chunks FROM entries WHERE source_file = 'doc.md' ORDER BY hash";
+        var rows = new List<(string Hash, long ChunkIndex, long TotalChunks)>();
+        await using var reader = await select.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            rows.Add((reader.GetString(0), reader.GetInt64(1), reader.GetInt64(2)));
+        }
+
+        return rows;
+    }
+
     /// <summary>The post-merge recompute numbers every position partition in id order, and a note stored with its
     /// opening last would come out of it with the opening at the last position; the merge leaves notes in text order.</summary>
     [RetryFact]
