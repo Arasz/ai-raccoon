@@ -8,6 +8,7 @@ using AiRaccoon.Infrastructure.Watch;
 using CommunityToolkit.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
@@ -63,12 +64,13 @@ public interface IChunkBudgetReconciler
 ///     duplicates kept file positions (ADR-0123). Per-row rating/access metadata is the accepted
 ///     loss of any re-chunk.
 /// </summary>
-public sealed class ChunkBudgetReconciler(
+public sealed partial class ChunkBudgetReconciler(
     IFileTypeMatcher fileTypeMatcher,
     IMarkdownChunker noteChunker,
     IEmbeddingService embeddingService,
     TimeProvider timeProvider,
-    Func<IMemoryStore> memoryStore) : IChunkBudgetReconciler
+    Func<IMemoryStore> memoryStore,
+    ILogger<ChunkBudgetReconciler> logger) : IChunkBudgetReconciler
 {
     /// <summary>How many server starts a permanently-unprovable group may withhold the stamp before it is
     /// left terminal for this budget (config-D F5) — the bound that stops the migration re-opening forever.</summary>
@@ -264,6 +266,10 @@ public sealed class ChunkBudgetReconciler(
 
         var report = new ChunkRebudgetReport(budget.MaxTokens, notesRechunked, mirrorsRechunked, unchanged,
             retryable, unprovable, terminal);
+        // Event 448 (config-D F4): the report's counts were discarded before, so a partial migration
+        // (retryable or unprovable skips) was invisible to an operator.
+        Log.RebudgetCompleted(logger, report.Budget, report.NoteGroupsRechunked, report.MirrorGroupsRechunked,
+            report.GroupsUnchanged, report.RetryableSkipped, report.UnprovableSkipped, report.TerminalSkipped);
         return report;
     }
 
@@ -383,6 +389,17 @@ public sealed class ChunkBudgetReconciler(
         string SourceFile);
 
     private sealed record MirrorRow(long Id, string Hash);
+
+    /// <summary>Event 448 (config-D F4): one line per phase run with the report's counts, so a partial
+    /// migration is visible in production — re-chunked, unchanged, retryable, unprovable and terminal.</summary>
+    private static partial class Log
+    {
+        [LoggerMessage(EventId = 448, Level = LogLevel.Information,
+            Message = "Chunk-budget rebudget at {Budget} tokens: {NoteGroupsRechunked} note group(s) and {MirrorGroupsRechunked} mirror group(s) re-chunked, {GroupsUnchanged} unchanged, {RetryableSkipped} retryable, {UnprovableSkipped} unprovable, {TerminalSkipped} terminal")]
+        public static partial void RebudgetCompleted(ILogger logger, int budget, int noteGroupsRechunked,
+            int mirrorGroupsRechunked, int groupsUnchanged, int retryableSkipped, int unprovableSkipped,
+            int terminalSkipped);
+    }
 }
 
 /// <summary>

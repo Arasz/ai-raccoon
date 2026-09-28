@@ -49,7 +49,7 @@ public sealed class ChunkBudgetDriftOpensAMigrationTests : IDisposable
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _time,
             _embeddings, null, null, null, null, null, null, null);
         _reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            _embeddings, _time, () => _store);
+            _embeddings, _time, () => _store, NullLogger<ChunkBudgetReconciler>.Instance);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

@@ -406,7 +406,8 @@ public static partial class AppRegistrations
                 sp => new ChunkBudgetReconciler(sp.GetRequiredService<IFileTypeMatcher>(),
                     sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<TimeProvider>(),
-                    () => sp.GetRequiredService<IMemoryStore>()));
+                    () => sp.GetRequiredService<IMemoryStore>(),
+                    sp.GetRequiredService<ILogger<ChunkBudgetReconciler>>()));
             // The drain's one log + metric surface (LANE P4): registered beside EntryEmbedder so
             // the narrower CLI graph RegisterCoreMemoryServices builds on its own can resolve it
             // too — EmbedDrainService (RegisterEmbedDrainServices) resolves the same singleton.

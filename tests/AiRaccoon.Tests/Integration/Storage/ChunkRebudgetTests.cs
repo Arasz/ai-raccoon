@@ -8,6 +8,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -35,6 +36,7 @@ public sealed class ChunkRebudgetTests : IDisposable
     private const int NewBudget = 1022;
     private const string StampKey = "embedding.chunkBudget";
     private const string RetryAttemptsKey = "embedding.chunkBudget.retryAttempts";
+    private const int RebudgetEventId = 448;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 9, 28, 12, 0, 0, TimeSpan.Zero);
 
@@ -44,6 +46,7 @@ public sealed class ChunkRebudgetTests : IDisposable
     private readonly FakeTimeProvider _time = new(FixedNow);
     private readonly SqliteMemoryStore _store;
     private readonly ChunkBudgetReconciler _reconciler;
+    private readonly FakeLogger<ChunkBudgetReconciler> _log = new();
 
     public ChunkRebudgetTests()
     {
@@ -54,7 +57,7 @@ public sealed class ChunkRebudgetTests : IDisposable
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _time,
             _embeddings, null, null, null, null, null, null, null);
         _reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            _embeddings, _time, () => _store);
+            _embeddings, _time, () => _store, _log);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -105,6 +108,9 @@ public sealed class ChunkRebudgetTests : IDisposable
     private static async Task<string?> RetryAttemptsAsync(SqliteConnection connection) =>
         await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
             "SELECT value FROM settings WHERE key = @key", new { key = RetryAttemptsKey }, cancellationToken: Ct));
+
+    private IReadOnlyList<string> LoggedRebudgetMessages() =>
+        [.. _log.Collector.GetSnapshot().Where(record => record.Id.Id == RebudgetEventId).Select(record => record.Message)];
 
     private IReadOnlyList<string> ExpectedPieces(string content, int budget) =>
         TestData.RealMarkdownChunker().Chunk(content, budget, ChunkingDefaults.OverlayTokens, CountTokens);
@@ -463,6 +469,21 @@ public sealed class ChunkRebudgetTests : IDisposable
         converged.NoteGroupsRechunked.ShouldBe(1, "the proven group re-chunks at the resolved budget");
         (await RetryAttemptsAsync(connection)).ShouldBeNull("a converging pass clears the attempt counter");
         (await StampAsync(connection)).ShouldBe(NewBudget.ToString(), "and stamps the bank");
+    }
+
+    [RetryFact]
+    public async Task Rebudget_Event448_ReadsEveryReportCount()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await using var connection = await OpenAsync();
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        await _reconciler.RunAsync(connection, Ct);
+
+        LoggedRebudgetMessages().ShouldBe([
+            "Chunk-budget rebudget at 1022 tokens: 1 note group(s) and 0 mirror group(s) re-chunked, "
+            + "0 unchanged, 0 retryable, 0 unprovable, 0 terminal"
+        ], "the discarded report is one event-448 line per pass carrying every count (config-D F4)");
     }
 
     private sealed record Row(long Id, string Hash, string Value, string EmbedState, string? AgentId,

@@ -52,7 +52,7 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _time,
             _embeddings, null, null, null, null, null, null, null);
         _reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            _embeddings, _time, () => _store);
+            _embeddings, _time, () => _store, NullLogger<ChunkBudgetReconciler>.Instance);
         _embedder = TestData.CreateEntryEmbedder(_embeddings, new SqliteModelMigrationLease(_time), _time,
             new VecDimensionReconciler(), _reconciler);
     }
