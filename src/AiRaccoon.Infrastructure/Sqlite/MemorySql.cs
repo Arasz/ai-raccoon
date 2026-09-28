@@ -892,6 +892,46 @@ internal static class MemorySql
                                                                      WHERE source_file IS NOT NULL AND ({ContextKeyExpression("")}) = @ctx AND source_file = @sourceFile
                                                                     """;
 
+    // Chunk-budget rebudget (config-D P1, ChunkBudgetReconciler): note groups are exactly the
+    // whole-write groups DeleteMatchPredicate's own definition names — one bucket and path, never a
+    // mirror row (path = source_file) — and mirror groups are ReingestRepair's own mirror rows. The
+    // row selection is bucket-scoped so a group is one write's complete chunk run: its rows reassemble
+    // to the body their path names and nothing else is ever in scope for one replace.
+    public const string SelectRebudgetNoteGroups = """
+                                                   SELECT scope AS Scope, project_id AS ProjectId, context_label AS ContextLabel,
+                                                          workspace_id AS WorkspaceId, path AS Path
+                                                   FROM entries
+                                                   WHERE value IS NOT NULL AND path IS NOT NULL
+                                                     AND (source_file IS NULL OR source_file <> path)
+                                                   GROUP BY scope, project_id, context_label, workspace_id, path
+                                                   """;
+
+    public const string SelectRebudgetGroupRows = """
+                                                 SELECT id AS Id, hash AS Hash, value AS Value, source_file AS SourceFile,
+                                                        section AS Section, scope AS Scope, project_id AS ProjectId,
+                                                        context_label AS ContextLabel, workspace_id AS WorkspaceId,
+                                                        agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId,
+                                                        chunk_index AS ChunkIndex
+                                                 FROM entries
+                                                 WHERE path = @path AND scope IS @scope AND project_id IS @projectId
+                                                   AND context_label IS @contextLabel AND workspace_id IS @workspaceId
+                                                   AND (source_file IS NULL OR source_file <> path)
+                                                 ORDER BY id
+                                                 """;
+
+    public const string SelectRebudgetMirrorGroups = """
+                                                     SELECT DISTINCT project_id AS ProjectId, source_file AS SourceFile
+                                                     FROM entries
+                                                     WHERE source_file IS NOT NULL AND workspace_id IS NULL AND path = source_file
+                                                     """;
+
+    public const string SelectRebudgetMirrorRows = """
+                                                   SELECT id AS Id, hash AS Hash
+                                                   FROM entries
+                                                   WHERE project_id = @projectId AND source_file = @sourceFile
+                                                     AND path = @sourceFile AND workspace_id IS NULL
+                                                   """;
+
     // The vec0 `ctx` column — a partition key until v9, a metadata column since (ADR-0068).
     // Length-prefixed, not
     // ':'-joined, because the naive join collides across project id/label boundaries. Total over

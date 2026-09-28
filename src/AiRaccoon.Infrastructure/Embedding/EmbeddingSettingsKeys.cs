@@ -13,6 +13,13 @@ public static class EmbeddingSettingsKeys
     /// <summary>Engine fingerprint; `ai-raccoon model embedding set` re-embeds when it changes.</summary>
     public const string Engine = "embedding.engine";
 
+    /// <summary>
+    ///     The chunk budget the bank's rows are stored at (config-D P1's drift stamp). The migration
+    ///     drain's chunk-budget rebudget pass writes it only when zero note groups were retryable-skipped,
+    ///     so a group that could not be re-chunked is retried instead of being stamped as done.
+    /// </summary>
+    public const string ChunkBudget = "embedding.chunkBudget";
+
     /// <summary>OpenAI API key, persisted in the settings table (single-channel ruling 2026-08-04).</summary>
     public const string ApiKey = "embedding.apiKey";
 
