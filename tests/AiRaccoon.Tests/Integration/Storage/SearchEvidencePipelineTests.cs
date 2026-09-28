@@ -188,7 +188,9 @@ public sealed class SearchEvidencePipelineTests(ITestOutputHelper output) : IDis
     // same 15 re-proven through the full tools path) and the P7 vector-path pin
     // (LiveSearch_WithVectorLegFiring_IssuesPinnedStatementCount): any search-path query change
     // must reconcile all three.
-    // 15 since the pooled-handle cache (SqliteConnectionFactory.InitializedHandles): a re-open of an
+    // 16 since the pooled-handle cache (SqliteConnectionFactory.InitializedHandles): a re-open of an
     // initialised handle reads the bank state once instead of PRAGMA user_version + application_id.
-    private const int ExpectedStatementCount = 15;
+    // +1 the ADR-0124 every-open vec-trigger-body probe (2026-09-28), the open path's fourth
+    // schema/watch check.
+    private const int ExpectedStatementCount = 16;
 }
