@@ -104,6 +104,15 @@ public interface IMemoryStore : IModelMigrationStore
     Task ReplaceAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    ///     Context-preserving unconditional replace-by-path: the same re-ingest as
+    ///     <see cref="ReplaceAsync(string, string, string, CancellationToken)" />, but under
+    ///     <paramref name="context" /> and pruning only that bucket's rows, so the same path stored
+    ///     in two contexts keeps both.
+    /// </summary>
+    Task ReplaceAsync(string projectId, string path, string fileHash, string? context,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Reads every settings row whose key starts with the prefix (config listing commands).</summary>
     Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
         CancellationToken cancellationToken = default);

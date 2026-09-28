@@ -89,17 +89,34 @@ bucket rules are pinned by tests so the unpadded 17.9 GB footprint cannot return
   quoted roughly 6 minutes for that bank. Embed cost per 1k tokens is flat at 1022 on MLX
   (2026-09-25 record F5), and re-chunking shrinks the row count where content was split, so the
   drain stays minutes-scale — an estimate from those anchors, not a measurement of this migration.
-- **Accepted cost: per-row metadata resets where chunk boundaries move.** Exactly three columns
-  are lost — `rating`, `access_count` and `last_accessed_at` (the same loss `repair reingest`
-  already documents). Nothing else: `path`, `source_file`, `section`, the scope/context/workspace
-  keys, `source_id`, `agent_id` and `created_at` are carried forward to the replacement rows.
-  Carrying a rating across moved boundaries was considered and refused: there is no 1:1 row
-  mapping after boundaries move, and inventing one is policy, not mechanics.
-- **Terminal skips: rows whose source file is gone are not re-chunked.** Mirror rows whose
-  `source_file` no longer resolves on disk (deleted or renamed files) cannot be re-chunked — there
-  is nothing to re-chunk from, and their `path` carries no content commitment a reassembly could be
-  verified against. They keep their stored chunk bounds and are still re-embedded at those bounds
-  by the same migration. The phase report counts them; they do not gate the migration's completion.
+- **Accepted cost: per-row metadata resets where chunk boundaries move.** For a note group exactly
+  three columns are lost — `rating`, `access_count` and `last_accessed_at` (the same loss
+  `repair reingest` already documents). Everything else is carried forward to the replacement
+  rows: `path`, `source_file`, `section`, the scope/context/workspace keys, `source_id`,
+  `agent_id`, `created_at` and `ttl_days`. A mirror group re-chunked from disk re-ingests inside
+  its own scope/context/workspace partition (the same file stored in two contexts keeps both;
+  workspace rows re-chunk like any other bucket) and loses one more column, `ttl_days`: the file
+  content carries no TTL for `FileIngestor` to read, so a mirror row that had a TTL stops expiring
+  until one is set again (`memory_set_ttl`). Carrying a rating across moved boundaries was
+  considered and refused: there is no 1:1 row mapping after boundaries move, and inventing one is
+  policy, not mechanics.
+- **Terminal skips: rows with nothing re-chunkable are not re-chunked.** A mirror group is
+  terminal-skipped when its source file is not usable — deleted or renamed, unreadable, or a path
+  no file-type handler claims — because there is nothing to re-chunk from, and its `path` carries
+  no content commitment a reassembly could be verified against. Those rows keep their stored chunk
+  bounds and are still re-embedded at those bounds by the same migration. The phase report counts
+  them and every other skip class, and is read in production: event 448 logs the counts once per
+  pass. None of the skips gate the migration's completion.
+- **Unproven note groups: bounded retry, then a named residual population.** A note group whose
+  merge no join proves — rows with line-ending mixes `NoteTextOrder` cannot reproduce, a row
+  rewritten outside the product, or a reassembly that exhausts its work bound — is never guessed
+  at. It is retried once per server start while `embedding.chunkBudget.retryAttempts` (keyed by
+  the resolved budget) has windows left; after 3 unproven passes the group is left terminal for
+  this budget and the `embedding.chunkBudget` stamp is written anyway, so one
+  permanently-unprovable group cannot re-open the migration (and its tool-refusal window) forever.
+  The counter clears whenever a pass converges. A single row that already fits the resolved budget
+  counts unchanged — it needs no merge, and would otherwise stay retryable forever. The residual
+  population that ships at old bounds is exactly this class plus the terminal mirror rows above.
 - **Code-corpus re-embed churn (bundled-default code engine only).** For a bank running the
   bundled default for code, the fingerprint change re-embeds the code corpus too, to identical
   vectors — its chunk boundaries never moved (Decision 1). That is accepted churn inside "one

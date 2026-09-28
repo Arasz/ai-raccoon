@@ -8,6 +8,7 @@ using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -23,7 +24,8 @@ namespace AiRaccoon.Tests.Integration.Storage;
 ///     one transaction that carries the insert spec forward (never <c>ChunkBackfill</c>'s nulls).
 ///     Unproven note groups are untouched and retryable-skipped; vanished source files are untouched
 ///     and terminal-skipped; the <c>embedding.chunkBudget</c> stamp is written only at zero
-///     retryable skips.
+///     retryable skips. The F5 retry bound: an unproven group spends at most three passes before it
+///     is counted unprovable — terminal for this budget — and stops gating the stamp.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -33,6 +35,8 @@ public sealed class ChunkRebudgetTests : IDisposable
     private const int OldBudget = 254;
     private const int NewBudget = 1022;
     private const string StampKey = "embedding.chunkBudget";
+    private const string RetryAttemptsKey = "embedding.chunkBudget.retryAttempts";
+    private const int RebudgetEventId = 448;
 
     private static readonly DateTimeOffset FixedNow = new(2026, 9, 28, 12, 0, 0, TimeSpan.Zero);
 
@@ -42,6 +46,7 @@ public sealed class ChunkRebudgetTests : IDisposable
     private readonly FakeTimeProvider _time = new(FixedNow);
     private readonly SqliteMemoryStore _store;
     private readonly ChunkBudgetReconciler _reconciler;
+    private readonly FakeLogger<ChunkBudgetReconciler> _log = new();
 
     public ChunkRebudgetTests()
     {
@@ -52,7 +57,7 @@ public sealed class ChunkRebudgetTests : IDisposable
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _time,
             _embeddings, null, null, null, null, null, null, null);
         _reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            _embeddings, _time, () => _store);
+            _embeddings, _time, () => _store, _log);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -80,14 +85,32 @@ public sealed class ChunkRebudgetTests : IDisposable
                 """
                 SELECT id AS Id, hash AS Hash, value AS Value, embed_state AS EmbedState, agent_id AS AgentId,
                        source_file AS SourceFile, section AS Section, source_id AS SourceId, created_at AS CreatedAt,
-                       chunk_index AS ChunkIndex, total_chunks AS TotalChunks
+                       chunk_index AS ChunkIndex, total_chunks AS TotalChunks, ttl_days AS TtlDays
                 FROM entries WHERE (@path IS NULL OR path = @path) ORDER BY id
+                """, new { path }, cancellationToken: Ct))
+        ];
+
+    /// <summary>Every row of one path with its bucket columns, so a two-context case can be asserted per bucket.</summary>
+    private static async Task<List<BucketRow>> BucketRowsAsync(SqliteConnection connection, string path) =>
+        [
+            .. await connection.QueryAsync<BucketRow>(new CommandDefinition(
+                """
+                SELECT id AS Id, hash AS Hash, value AS Value, scope AS Scope, context_label AS ContextLabel,
+                       workspace_id AS WorkspaceId, embed_state AS EmbedState
+                FROM entries WHERE path = @path ORDER BY id
                 """, new { path }, cancellationToken: Ct))
         ];
 
     private static async Task<string?> StampAsync(SqliteConnection connection) =>
         await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
             "SELECT value FROM settings WHERE key = @key", new { key = StampKey }, cancellationToken: Ct));
+
+    private static async Task<string?> RetryAttemptsAsync(SqliteConnection connection) =>
+        await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT value FROM settings WHERE key = @key", new { key = RetryAttemptsKey }, cancellationToken: Ct));
+
+    private IReadOnlyList<string> LoggedRebudgetMessages() =>
+        [.. _log.Collector.GetSnapshot().Where(record => record.Id.Id == RebudgetEventId).Select(record => record.Message)];
 
     private IReadOnlyList<string> ExpectedPieces(string content, int budget) =>
         TestData.RealMarkdownChunker().Chunk(content, budget, ChunkingDefaults.OverlayTokens, CountTokens);
@@ -233,6 +256,33 @@ public sealed class ChunkRebudgetTests : IDisposable
     }
 
     [RetryFact]
+    public async Task Rebudget_TheSameFileInTwoContexts_RechunksEachBucketInPlace()
+    {
+        var file = Path.Combine(_dataRoot, "twice.md");
+        await File.WriteAllTextAsync(file, FileBody(), Ct);
+        await _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), Ct);
+        await _store.IngestFileAsync(ProjectId, file, null, Ct);
+        await _store.IngestFileAsync(ProjectId, file, "alpha", Ct);
+        await using var connection = await OpenAsync();
+        var before = await BucketRowsAsync(connection, file);
+        before.Count(row => row.Scope == "project").ShouldBeGreaterThan(1, "premise: the file splits at 254");
+        before.Count(row => row.Scope == "custom" && row.ContextLabel == "alpha")
+            .ShouldBe(before.Count(row => row.Scope == "project"));
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        var report = await _reconciler.RunAsync(connection, Ct);
+
+        report.MirrorGroupsRechunked.ShouldBe(2, "one mirror group per context (config-D F1)");
+        var after = await BucketRowsAsync(connection, file);
+        var projectAfter = after.Where(row => row.Scope == "project").ToList();
+        var alphaAfter = after.Where(row => row.Scope == "custom" && row.ContextLabel == "alpha").ToList();
+        projectAfter.Count.ShouldBeLessThan(before.Count(row => row.Scope == "project"),
+            "the project bucket re-chunks at the resolved budget");
+        alphaAfter.Count.ShouldBe(projectAfter.Count, "the custom bucket is preserved, not relabelled or deleted");
+        alphaAfter.ShouldAllBe(row => row.EmbedState == "pending", "its replacement rows arrive pending too");
+    }
+
+    [RetryFact]
     public async Task Rebudget_MirrorGroups_RechunkFromDiskAndVanishedFilesAreTerminalSkipped()
     {
         var kept = Path.Combine(_dataRoot, "kept.md");
@@ -294,6 +344,152 @@ public sealed class ChunkRebudgetTests : IDisposable
             "a later run converges and then stamps");
     }
 
+    [RetryFact]
+    public async Task Rebudget_AMirrorFileInAWorkspace_RechunksInsideItsWorkspaceBucket()
+    {
+        var file = Path.Combine(_dataRoot, "workspace-file.md");
+        await File.WriteAllTextAsync(file, FileBody(), Ct);
+        await _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), Ct);
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('ws-7', @projectId, 'active', 0)",
+            new { projectId = ProjectId }, cancellationToken: Ct));
+        await _store.IngestFileAsync(ProjectId, file, ContextNaming.WorkspaceContext("ws-7"), Ct);
+        var before = await BucketRowsAsync(connection, file);
+        before.Count.ShouldBeGreaterThan(1, "premise: the file splits at 254");
+        before.ShouldAllBe(row => row.Scope == null && row.WorkspaceId == "ws-7",
+            "premise: the rows live in the workspace bucket");
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        var report = await _reconciler.RunAsync(connection, Ct);
+
+        report.MirrorGroupsRechunked.ShouldBe(1,
+            "the workspace-row policy is re-chunk per bucket (config-D F2) — counted, never silently skipped");
+        var after = await BucketRowsAsync(connection, file);
+        after.Count.ShouldBeLessThan(before.Count, "the workspace bucket re-chunks at the resolved budget");
+        after.ShouldAllBe(row => row.Scope == null && row.WorkspaceId == "ws-7",
+            "the rows stay in their workspace bucket — never moved to the project context");
+        after.ShouldAllBe(row => row.EmbedState == "pending", "its replacement rows arrive pending too");
+    }
+
+    [RetryFact]
+    public async Task Rebudget_ANoteWithTtlDays_CarriesTheTtlToItsRechunkedRows()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET ttl_days = 7", cancellationToken: Ct));
+        var before = await RowsAsync(connection);
+        before.Count.ShouldBeGreaterThan(1, "premise: the note splits at 254");
+        before.ShouldAllBe(row => row.TtlDays == 7, "premise: every stored row carries the TTL");
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        var report = await _reconciler.RunAsync(connection, Ct);
+
+        report.NoteGroupsRechunked.ShouldBe(1);
+        var after = await RowsAsync(connection);
+        after.ShouldAllBe(row => row.TtlDays == 7,
+            "ttl_days is the per-entry forgetting knob the re-chunk carries forward (config-D F3)");
+    }
+
+    /// <summary>The F5 rule: a group no join proves is retried once per pass while the persisted
+    /// attempt counter (keyed by the resolved budget) has windows left. The third unproven pass
+    /// re-classifies the group unprovable — untouched, terminal for this budget — and writes the
+    /// stamp anyway, so a permanently-unprovable group can never re-open the migration forever.</summary>
+    [RetryFact]
+    public async Task Rebudget_AnUnprovableGroup_SpendsThreeAttempts_ThenStopsGatingTheStamp()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await using var connection = await OpenAsync();
+        var victim = (await RowsAsync(connection)).MinBy(row => row.Id)!;
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET value = value || ' tampered' WHERE id = @id",
+            new { id = victim.Id }, cancellationToken: Ct));
+        var broken = await RowsAsync(connection);
+        broken.Count.ShouldBeGreaterThan(1, "premise: the note splits at 254 and its merge cannot prove");
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        ChunkRebudgetReport third = null!;
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var report = await _reconciler.RunAsync(connection, Ct);
+            (await RetryAttemptsAsync(connection)).ShouldBe($"{NewBudget}:{attempt}",
+                "each unproven pass spends one persisted attempt (three per budget)");
+            if (attempt < 3)
+            {
+                report.RetryableSkipped.ShouldBe(1, "unproven passes are retried while windows remain");
+                (await StampAsync(connection)).ShouldBeNull("an unproven group withholds the stamp");
+            }
+
+            third = report;
+        }
+
+        third.RetryableSkipped.ShouldBe(0,
+            "the third pass re-classifies the unproven group out of the retryable count");
+        third.UnprovableSkipped.ShouldBe(1,
+            "and counts it unprovable — untouched, terminal for this budget (config-D F5)");
+        third.NoteGroupsRechunked.ShouldBe(0, "nothing re-chunked from an unproven group");
+        (await StampAsync(connection)).ShouldBe(NewBudget.ToString(),
+            "the spent bound writes the stamp — terminal skips do not gate it (config-D F5)");
+        (await RowsAsync(connection)).Select(row => (row.Id, row.Value))
+            .ShouldBe(broken.Select(row => (row.Id, row.Value)), "the unproven group is never touched");
+
+        var fourth = await _reconciler.RunAsync(connection, Ct);
+
+        fourth.RetryableSkipped.ShouldBe(0, "the persisted bound keeps the residual population terminal");
+        (await StampAsync(connection)).ShouldBe(NewBudget.ToString(),
+            "and it never re-gates the stamp — the migration cannot re-open on it");
+    }
+
+    [RetryFact]
+    public async Task Rebudget_AGroupThatConvergesOnALaterPass_ClearsItsRetryAttempts()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await using var connection = await OpenAsync();
+        var victim = (await RowsAsync(connection)).MinBy(row => row.Id)!;
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET value = value || ' tampered' WHERE id = @id",
+            new { id = victim.Id }, cancellationToken: Ct));
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        (await _reconciler.RunAsync(connection, Ct)).RetryableSkipped.ShouldBe(1,
+            "premise: the group is unproven on the first pass");
+        (await RetryAttemptsAsync(connection)).ShouldBe($"{NewBudget}:1",
+            "the unproven pass spends one attempt");
+        (await StampAsync(connection)).ShouldBeNull("an unproven group withholds the stamp");
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET value = @value WHERE id = @id",
+            new { id = victim.Id, value = victim.Value }, cancellationToken: Ct));
+        _time.Advance(TimeSpan.FromHours(1));
+
+        var converged = await _reconciler.RunAsync(connection, Ct);
+
+        converged.RetryableSkipped.ShouldBe(0);
+        converged.NoteGroupsRechunked.ShouldBe(1, "the proven group re-chunks at the resolved budget");
+        (await RetryAttemptsAsync(connection)).ShouldBeNull("a converging pass clears the attempt counter");
+        (await StampAsync(connection)).ShouldBe(NewBudget.ToString(), "and stamps the bank");
+    }
+
+    [RetryFact]
+    public async Task Rebudget_Event448_ReadsEveryReportCount()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await using var connection = await OpenAsync();
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        await _reconciler.RunAsync(connection, Ct);
+
+        LoggedRebudgetMessages().ShouldBe([
+            "Chunk-budget rebudget at 1022 tokens: 1 note group(s) and 0 mirror group(s) re-chunked, "
+            + "0 unchanged, 0 retryable, 0 unprovable, 0 terminal"
+        ], "the discarded report is one event-448 line per pass carrying every count (config-D F4)");
+    }
+
     private sealed record Row(long Id, string Hash, string Value, string EmbedState, string? AgentId,
-        string? SourceFile, string? Section, long? SourceId, long CreatedAt, long ChunkIndex, long TotalChunks);
+        string? SourceFile, string? Section, long? SourceId, long CreatedAt, long ChunkIndex, long TotalChunks,
+        long? TtlDays);
+
+    private sealed record BucketRow(long Id, string Hash, string Value, string? Scope, string? ContextLabel,
+        string? WorkspaceId, string EmbedState);
 }

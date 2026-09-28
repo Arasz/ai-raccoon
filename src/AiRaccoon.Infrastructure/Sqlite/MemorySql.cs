@@ -20,6 +20,19 @@ internal static class MemorySql
                                       ON CONFLICT DO NOTHING
                                       """;
 
+    // config-D F3: the rebudget note replace's insert — InsertEntry plus ttl_days, the per-entry
+    // forgetting knob carried from the group's template row. The file-ingest insert cannot carry it
+    // (FileIngestor reads no TTL), so mirror rows re-ingested from disk lose it; note groups keep it.
+    public const string InsertRebudgetEntry = """
+                                              INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
+                                                                   workspace_id, agent_id, created_at, updated_at, source_id, chunk_index, total_chunks,
+                                                                   ttl_days)
+                                              VALUES (@hash, @path, @value, @sourceFile, @section, @scope, @projectId, @contextLabel,
+                                                      @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId, @chunkIndex, @totalChunks,
+                                                      @ttlDays)
+                                              ON CONFLICT DO NOTHING
+                                              """;
+
     public const string SelectEntryById = """
                                           SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
                                                  project_id AS ProjectId, context_label AS ContextLabel,
@@ -911,7 +924,7 @@ internal static class MemorySql
                                                         section AS Section, scope AS Scope, project_id AS ProjectId,
                                                         context_label AS ContextLabel, workspace_id AS WorkspaceId,
                                                         agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId,
-                                                        chunk_index AS ChunkIndex
+                                                        chunk_index AS ChunkIndex, ttl_days AS TtlDays
                                                  FROM entries
                                                  WHERE path = @path AND scope IS @scope AND project_id IS @projectId
                                                    AND context_label IS @contextLabel AND workspace_id IS @workspaceId
@@ -920,16 +933,19 @@ internal static class MemorySql
                                                  """;
 
     public const string SelectRebudgetMirrorGroups = """
-                                                     SELECT DISTINCT project_id AS ProjectId, source_file AS SourceFile
+                                                     SELECT DISTINCT scope AS Scope, project_id AS ProjectId, context_label AS ContextLabel,
+                                                            workspace_id AS WorkspaceId, source_file AS SourceFile
                                                      FROM entries
-                                                     WHERE source_file IS NOT NULL AND workspace_id IS NULL AND path = source_file
+                                                     WHERE source_file IS NOT NULL AND path = source_file
                                                      """;
 
     public const string SelectRebudgetMirrorRows = """
                                                    SELECT id AS Id, hash AS Hash
                                                    FROM entries
                                                    WHERE project_id = @projectId AND source_file = @sourceFile
-                                                     AND path = @sourceFile AND workspace_id IS NULL
+                                                     AND path = @sourceFile
+                                                     AND scope IS @scope AND context_label IS @contextLabel
+                                                     AND workspace_id IS @workspaceId
                                                    """;
 
     // The vec0 `ctx` column — a partition key until v9, a metadata column since (ADR-0068).
@@ -1034,12 +1050,32 @@ internal static class MemorySql
 
     public const string DeleteChunksForPathExcept = "DELETE FROM entries WHERE " + DeleteChunksForPathExceptPredicate;
 
+    // config-D F1: the context-preserving replace's prune — the same delete as the pair above,
+    // narrowed to one bucket by the ctx partition key, so replacing a path's rows in one context
+    // can never delete the same path's rows in another. ContextKeyExpression covers every bucket,
+    // including a workspace partition; the unscoped pair stays for the legacy replace path.
+    public static readonly string DeleteChunksForPathExceptBucketPredicate = $"""
+                                                                               project_id = @projectId AND path = @path AND hash NOT IN @keep
+                                                                                 AND ({ContextKeyExpression("")}) = @ctx
+                                                                               """;
+
+    public static readonly string DeleteChunksForPathExceptBucket =
+        "DELETE FROM entries WHERE " + DeleteChunksForPathExceptBucketPredicate;
+
     public const string DeleteAllChunksForPathPredicate = """
                                                            project_id = @projectId AND workspace_id IS NULL
                                                              AND path = @path
                                                            """;
 
     public const string DeleteAllChunksForPath = "DELETE FROM entries WHERE " + DeleteAllChunksForPathPredicate;
+
+    public static readonly string DeleteAllChunksForPathBucketPredicate = $"""
+                                                                            project_id = @projectId AND path = @path
+                                                                              AND ({ContextKeyExpression("")}) = @ctx
+                                                                            """;
+
+    public static readonly string DeleteAllChunksForPathBucket =
+        "DELETE FROM entries WHERE " + DeleteAllChunksForPathBucketPredicate;
 
     // #436, code-corpus leg of Defect B: same predicate as DeleteCodeBySourcePath (path or
     // subtree prefix) — inert for a single file, since no sibling file's path can equal
