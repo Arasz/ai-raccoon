@@ -1,4 +1,5 @@
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -281,7 +282,8 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
 
     private static EntryEmbedder NewEmbedder(IEmbeddingService embeddings, ILogger<EntryEmbedder>? logger = null) =>
         new(embeddings, new SqliteModelMigrationLease(TimeProvider.System), TimeProvider.System,
-            new VecDimensionReconciler(), new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, TimeProvider.System),
+            new VecDimensionReconciler(), NoOpChunkBudgetReconciler.Instance,
+            new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, TimeProvider.System),
             TestTelemetry.None, logger ?? new FakeLogger<EntryEmbedder>());
 
     private static async Task ConfigureProviderAsync(SqliteConnection connection) =>

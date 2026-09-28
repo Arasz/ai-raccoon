@@ -43,7 +43,8 @@ public interface IChunkBudgetReconciler
     /// <summary>Read-only drift check: how the stored stamp compares to the resolved budget.</summary>
     Task<ChunkBudgetState> CheckAsync(SqliteConnection connection, CancellationToken cancellationToken = default);
 
-    /// <summary>Re-chunks every group at the resolved budget and stamps it when zero groups were retryable-skipped.</summary>
+    /// <summary>Re-chunks every group at the resolved budget; the <c>embedding.chunkBudget</c> stamp is written
+    /// at zero retryable skips and cleared otherwise, so it exists only for a bank a run converged.</summary>
     Task<ChunkRebudgetReport> RunAsync(SqliteConnection connection, CancellationToken cancellationToken = default);
 }
 
@@ -193,6 +194,10 @@ public sealed class ChunkBudgetReconciler(
             await new NoteChunkOrderRepair().RunAsync(connection, citingPaths, cancellationToken);
         }
 
+        // The stamp gate (review F1 mech 4): the stamp is present only for a bank a run converged at
+        // this budget — written at zero retryable skips, CLEARED otherwise (a mixed or unproven bank
+        // never carries a stale claim), so the drift trigger retries it, once per server start, until
+        // the groups converge. Terminal skips do not gate the stamp (nothing re-chunkable exists).
         if (retryable == 0)
         {
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.UpsertSetting,
@@ -201,6 +206,11 @@ public sealed class ChunkBudgetReconciler(
                     key = EmbeddingSettingsKeys.ChunkBudget,
                     value = budget.MaxTokens.ToString(CultureInfo.InvariantCulture)
                 }, cancellationToken: cancellationToken));
+        }
+        else
+        {
+            await connection.ExecuteAsync(new CommandDefinition(MemorySql.DeleteSetting,
+                new { key = EmbeddingSettingsKeys.ChunkBudget }, cancellationToken: cancellationToken));
         }
 
         return new ChunkRebudgetReport(budget.MaxTokens, notesRechunked, mirrorsRechunked, unchanged, retryable, terminal);
@@ -274,4 +284,25 @@ public sealed class ChunkBudgetReconciler(
     private sealed record MirrorGroup(string ProjectId, string SourceFile);
 
     private sealed record MirrorRow(long Id, string Hash);
+}
+
+/// <summary>
+///     The do-nothing chunk-budget rebudget pass: every construction of <see cref="EntryEmbedder" /> (or
+///     <see cref="IChunkBudgetReconciler" /> consumer) that does not exercise config-D's re-chunk phase gets
+///     this one, so the phase and its drift trigger stay inert wherever they predate it.
+/// </summary>
+public sealed class NoOpChunkBudgetReconciler : IChunkBudgetReconciler
+{
+    /// <summary>The shared instance — stateless, so one serves every inert construction.</summary>
+    public static readonly NoOpChunkBudgetReconciler Instance = new();
+
+    /// <inheritdoc />
+    public Task<ChunkBudgetState> CheckAsync(SqliteConnection connection,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new ChunkBudgetState(true, false, 0));
+
+    /// <inheritdoc />
+    public Task<ChunkRebudgetReport> RunAsync(SqliteConnection connection,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new ChunkRebudgetReport(0, 0, 0, 0, 0, 0));
 }
