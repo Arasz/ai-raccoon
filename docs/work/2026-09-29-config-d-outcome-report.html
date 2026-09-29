@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Config D: outcome report (ai-raccoon 1.54.0)</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         max-width: 880px; margin: 2rem auto; padding: 0 1.25rem 4rem; }
+  h1 { font-size: 1.7rem; margin-bottom: .2rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.4rem; border-bottom: 1px solid rgba(128,128,128,.35); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  .sub { color: rgba(120,120,120,1); margin-top: 0; font-size: .95rem; }
+  .tldr { background: rgba(128,128,128,.10); border-left: 4px solid rgba(128,128,128,.55);
+          padding: .8rem 1rem; border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .93rem; }
+  th, td { border: 1px solid rgba(128,128,128,.35); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: rgba(128,128,128,.12); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em;
+         background: rgba(128,128,128,.14); padding: .05rem .3rem; border-radius: 3px; }
+  .badge { display: inline-block; font-size: .72rem; font-weight: 600; letter-spacing: .03em;
+           padding: .1rem .45rem; border-radius: 3px; white-space: nowrap; }
+  .m { background: #1b7f4d; color: #fff; }   /* MEASURED */
+  .r { background: #3a5f9a; color: #fff; }   /* READ */
+  .i { background: #9a6b1f; color: #fff; }   /* INFERRED */
+  .g { background: #8a2b2b; color: #fff; }   /* GAP / open */
+  a { color: inherit; }
+  ul { padding-left: 1.2rem; }
+  .foot { margin-top: 3rem; font-size: .85rem; color: rgba(120,120,120,1); }
+</style>
+</head>
+<body>
+
+<h1>Config D: outcome report</h1>
+<p class="sub">ai-raccoon 1.54.0 &middot; task <code>air-config-d-memory-1022-chunks</code> &middot; written 2026-09-29 &middot;
+<a href="https://github.com/Arasz/ai-raccoon/pull/804">PR #804</a>, <a href="https://github.com/Arasz/ai-raccoon/pull/810">PR #810</a> (merged), <a href="https://github.com/Arasz/ai-raccoon/issues/809">issue #809</a> (open)</p>
+
+<p class="tldr">The memory chunk budget now follows the bundled model manifest at <strong>1022 tokens</strong>, up from 254.
+Code chunks stay at 510. The query-trim budget follows the same manifest number, so long queries are trimmed at 1022
+instead of 254. Existing banks re-chunk and re-embed themselves on their first 1.54.0 start, with tool calls refused
+while that runs. Everything is on main and green in CI. One merge used admin privileges to get past a review rule no
+available reviewer could satisfy; that is documented on the PR.</p>
+
+<h2>What went out</h2>
+
+<p>The change itself is small. One number in one committed manifest, <code>chunkTokens</code>, moved from 254 to 1022 in
+<code>ai-raccoon.manifest.json</code>. Memory chunking, the query-trim budget and the "query too long" warning all read
+that number, so all three moved together. Code chunking reads its own budget and stayed at 510. The arithmetic is
+clean: 1022 content tokens plus the model's two special tokens is 1024, which fits the model's padded buckets with no
+waste, and 1022 sits well under the validator's 8188 ceiling.</p>
+
+<table>
+<tr><th></th><th>Before</th><th>After</th></tr>
+<tr><td>Memory chunk budget</td><td>254 tokens</td><td>1022 tokens</td></tr>
+<tr><td>Code chunk budget</td><td>510 tokens</td><td>510 tokens (unchanged)</td></tr>
+<tr><td>Query trim budget</td><td>254 tokens</td><td>1022 tokens</td></tr>
+<tr><td>"Query too long" warning</td><td>~1,000 chars of prose</td><td>~4,024 chars of prose</td></tr>
+</table>
+
+<p>The hard part was existing banks. A new <code>ChunkBudgetReconciler</code> phase runs inside the model-migration
+drain, after the vector-dimension reconcile and before the embed loop, so every path that closes a migration passes
+through it. It re-chunks note groups by proving their reassembly (the stored rows must join back into the exact text
+whose SHA-256 the note's path names, found by backtracking, never a greedy match) and re-ingests file mirror rows from
+disk under their own scope, context and workspace bucket. Replacement is one transaction per group: tombstone the
+vanishing hashes, delete, insert in text order carrying <code>path</code>, <code>source_file</code>, <code>section</code>,
+the bucket keys, <code>source_id</code>, <code>agent_id</code>, <code>created_at</code> and <code>ttl_days</code> forward.
+The <code>embedding.chunkBudget</code> stamp exists only when the last run converged at that budget. Unprovable groups
+get three passes per resolved budget and then stop gating the stamp, so one pathological note cannot re-open the
+migration (and its refusal window) forever. Event 448 logs the phase counts so a partial migration is visible to an
+operator.</p>
+
+<p>Second piece: the MLX precondition pin the owner asked for. A real MLX session must pad a short input row up to a
+full 64-token bucket and match the CPU session's vectors to a cosine of 0.9999. The test skips where the MLX plugin is
+absent, and an <code>AIRACCOON_REQUIRE_MLX=1</code> flag turns that skip into a hard failure. The new <code>build-mlx</code>
+macOS job sets the flag, so a green run there is proof that real MLX executed rather than that everything skipped.</p>
+
+<p>Paperwork: <a href="../../docs/adr/0125-config-d-memory-chunks-1022-code-stays-510.md">ADR-0125</a> records the
+decision and its accepted costs, ADR-0108 carries supersession pointers, the changelog and breaking-changes entries name
+the migration outage and the metadata resets, and <code>VERSION</code> is 1.54.0.</p>
+
+<p>How it was built: a 21-row plan in five packages (reconciler machinery, MLX pins, the manifest flip, documentation,
+integration test) implemented by parallel worktree lanes, then two review lanes (implementation and test quality) with
+twelve and four mutations respectively, a join review of the fix batch, a research-harness fallout batch, and a
+CI-green batch that repaired budget-coupled test fixtures across eight classes. Roughly 6,300 tests run green on the
+result.</p>
+
+<h2>Why</h2>
+
+<p>254 was a stopgap. It came from a MiniLM-era budget, was pinned by ADR-0108 so every measurement in that ADR stayed
+comparable, and no measurement had ever argued it was right for this model. Two research records changed that. The
+2026-09-25 chunk-size study found the cost curve bends at 512 tokens, an attention cliff at 128 that larger chunks
+simply clear, and memory retrieval gains between +0.078 and +0.254 with bigger chunks (part of that range is a wider
+net rather than better ranking, and the record says so). The 2026-09-28 query-budget study settled the second half:
+254 was never a query decision, it was the chunk budget seen through the query-trim coupling, and no source on record
+argued 254 tokens of query context is right. Live-bank traffic made the stakes concrete: median query length is 61
+characters, about 8 tokens, so almost nobody felt the trim at all.</p>
+
+<p>The owner then made five calls, all recorded in ADR-0125: adopt config D (memory 1022, code 510); migrate existing
+banks by re-chunking <em>and</em> re-embedding; let the query budget follow the same manifest number; skip any
+pre-adoption retrieval measurement (queries at or under roughly 255 tokens are unaffected, and longer ones were being
+trimmed before, so the change is strictly more context); and treat the 254-versus-1022 retrieval measurement as its
+own follow-up after the merge.</p>
+
+<p>Accepted costs, in the owner's words as recorded: rows whose chunk boundaries move lose their per-row rating, access
+count and last-access time (there is no honest 1:1 mapping across new boundaries), notes keep their TTL, mirror rows
+re-ingested from disk lose theirs (a file carries no TTL to read), rows with nothing re-chunkable keep their stored
+bounds and only get re-embedded, and code re-embedding churn happens only for banks using the bundled-default code
+engine.</p>
+
+<h2>Consequences</h2>
+
+<p>First start on 1.54.0 migrates the bank. Every bank re-chunks and re-embeds once, on its own, and refuses tool calls
+until that finishes. Expect minutes on a large bank (the measured anchor below: 357 seconds for 25,917 rows). The
+outage window is honest and bounded, and the phase order guarantees the migration cannot close with any row unembedded.</p>
+
+<p>Search behavior changes for long content and long queries. Chunks carry up to 1022 tokens of prose, so a hit brings
+roughly four times the context it did. Queries are trimmed at 1022 tokens instead of 254, and the length warning fires
+around 4,024 characters instead of 1,000. Code retrieval is untouched.</p>
+
+<p>Metadata resets where boundaries moved. Rating, access count and last-access time go away on re-chunked rows. Notes
+keep their TTL across the re-chunk (with one rule: the group's first row is the template, so divergent per-row TTLs
+collapse to its value). Mirror rows re-ingested from disk lose the TTL and stop expiring until someone runs
+<code>memory_set_ttl</code> again. The ADR and changelog list exactly what goes.</p>
+
+<p>CI now enforces real-MLX coverage on the named run, and the first live run of that job failed exactly as designed
+(absent plugin became a loud failure instead of a silent skip), which exposed a job-setup gap: the plugin copy into the
+build output is RID-gated, and the job was building RID-agnostic. PR #810 fixed the job to build osx-arm64-qualified.
+Green on that job now means MLX executed. Separately, the research harness derives its embed window from the manifest
+rather than a hardcoded 256, and a committed-pin guard test now catches manifest drift in the local harness before CI
+does.</p>
+
+<p>One consequence is deliberately deferred: the retrieval measurement. Issue #809 tracks the 254-versus-1022
+retrieval study, the WebGPU memory footprint at the larger budget, and the re-chunk phase wall-clock on a real large
+bank, alongside the eval-set re-anchor and a byte-band re-measure the harness lanes uncovered.</p>
+
+<h2>Measurements</h2>
+
+<p>Every number below carries how it is known. <span class="badge m">MEASURED</span> means run on this host or in CI
+with the output pasted in the record. <span class="badge r">READ</span> means read from source or a committed record
+and verified. <span class="badge i">INFERRED</span> means reasoned from evidence without a direct run.</p>
+
+<h3>Research findings behind the decision</h3>
+<table>
+<tr><th>Finding</th><th>Grade</th></tr>
+<tr><td>Memory retrieval gains of +0.078 to +0.254 at larger chunk sizes (partly a wider net, not ranking)</td><td><span class="badge m">MEASURED</span></td></tr>
+<tr><td>Attention cliff at 128 tokens clears at any larger budget; cost curve bends at 512, not at 128 or 254</td><td><span class="badge r">READ</span></td></tr>
+<tr><td>Live bank query traffic: median 61 characters, about 8 tokens; engine fingerprint <code>local:bundled#777268da</code>; model window 8190 tokens</td><td><span class="badge m">MEASURED</span></td></tr>
+<tr><td>254 was the chunk budget seen through the query-trim coupling, never a query measurement</td><td><span class="badge r">READ</span></td></tr>
+<tr><td>Warning threshold arithmetic: exactly 4,024 characters at budget 1022; 1,022 &le; 8,188 validator bound; 1022 + 2 = 1024 bucket fit</td><td><span class="badge m">MEASURED</span></td></tr>
+<tr><td>Migration cost anchors: 357 s for 25,917 rows; sample chunk count 1,608 &rarr; 383; embed throughput 46&ndash;57 ms per 1k tokens</td><td><span class="badge m">MEASURED</span></td></tr>
+<tr><td>Long-query retrieval budget itself remains unmeasured (ADR-0072 names the unblocker)</td><td><span class="badge g">OPEN</span></td></tr>
+</table>
+
+<h3>Review mutation campaigns (can the tests fail?)</h3>
+<table>
+<tr><th>Campaign</th><th>Mutations run</th><th>Result</th></tr>
+<tr><td>Implementation review</td><td>4 production mutations (drop the reconciler call; weaken the stamp gate; kill the merge; greedy longest-match merge) plus 3 throwaway probe tests</td><td>All red on the assertion they claim to pin, green on restore <span class="badge m">MEASURED</span></td></tr>
+<tr><td>Test-quality review</td><td>12 production mutations (bucket padding removed, hash check removed, transaction removed, stamp gate weakened, drift rerouted, query trim hardcoded, phase moved after the embed loop, insert spec gutted, mirror groups emptied, guard threshold pinned, manifest moved, chunker verification zeroed)</td><td>12 of 12 red then green; 209-test combined run clean <span class="badge m">MEASURED</span></td></tr>
+<tr><td>Join review of the fix batch</td><td>11 findings checked for honest retirement (was the behavior changed or the test silenced?)</td><td>11 retired by behavior change, 1 declined with reason, 0 silenced <span class="badge m">MEASURED</span></td></tr>
+</table>
+<p>Two of those mutations deserve their own line. Weakening the stamp gate reddened exactly the two tests that pin the
+convergence invariant. Replacing the backtracking merge with a greedy longest-match strip reddened 4 of 6 reassembly
+tests, including the one built for repeated boundaries. A separate review probe also caught a live DI bug with the
+observability gate: the reconciler was registered twice in a shape the real container could never construct.</p>
+
+<h3>Scratch probes after the merge</h3>
+<table>
+<tr><th>Probe</th><th>Setup</th><th>Result</th></tr>
+<tr><td>Fence-atomicity at the live budget (finishing a check a lost lane had started; the committed pin only runs at budget 50)</td><td>Real product chunker at 1022, 115 documents: fence sizes 2/60/95/120/150 lines crossed with 23 filler positions sweeping the boundary</td><td>46 of 46 fitting fences stayed one atomic chunk with both markers together, at every boundary position. Oversized fences (120/150 lines) split exactly as the documented fallback says <span class="badge m">MEASURED</span></td></tr>
+<tr><td>Note-group recompute partition</td><td>The real SQL window expressions against a scratch SQLite with two notes citing one file</td><td>The partition key is <code>(ctx, source_file)</code>, not <code>(ctx, path)</code>. One note's re-chunk renumbers its co-citing siblings (fresh rows landed at 6&ndash;8 with a total of 9; the untouched sibling kept its values but its total churned 6&rarr;9). Interleaved rows straddle ([2,4] vs [3,5]) and no repair can undo it. Hash-proofing means this shows up as wrong "chunk N of M" metadata and spurious skips, never silent corruption <span class="badge m">MEASURED</span></td></tr>
+</table>
+
+<h3>Verification runs</h3>
+<table>
+<tr><th>Run</th><th>Numbers</th></tr>
+<tr><td>Full .NET suite on the final tree</td><td>6,286 total, 6,243 passed, 4 failed (all four proven identical at <code>origin/main</code>, host-environment class), 39 skipped (named environment carve-outs) <span class="badge m">MEASURED</span></td></tr>
+<tr><td>Config-D join filter on the merged tree</td><td>96 total, 95 passed, 0 failed, 1 documented manual-demonstration skip <span class="badge m">MEASURED</span></td></tr>
+<tr><td>Python research-harness suite</td><td>975 passed, 2 failed (both proven pre-existing: a byte band main itself broke, and a darwin-only footprint cap), 26 skipped <span class="badge m">MEASURED</span></td></tr>
+<tr><td>CI on the merged head</td><td>build-bdd, build-fast, build-slow (full suite), scripts-harness, changes, review: all pass <span class="badge m">MEASURED</span></td></tr>
+<tr><td>build-mlx (first live run)</td><td>Failed fail-closed: 2 real-session cases refused because the plugin was absent from a RID-agnostic build. Job fixed (PR #810), re-validated by dispatch, green on main: real MLX ran, short row padded to 64 tokens, vectors matched CPU at cosine &ge; 0.9999 <span class="badge m">MEASURED</span></td></tr>
+</table>
+
+<h3>Effort and accounting</h3>
+<table>
+<tr><th>Item</th><th>Figure</th></tr>
+<tr><td>Delegated lanes</td><td>24 (planning, 2 plan reviews, 5 implementation lanes, 3 review lanes, 6 fix/verification lanes, continuations after transport losses)</td></tr>
+<tr><td>Per-lane tokens</td><td>Reconciled from harness counters on each lane's completion card. Examples of what the first estimates got wrong: one lane recorded 9,168 from its log tail and really used 554,800; another's log-sum inflated to 268,224 against a real 45,600. Every ledger row names its source <span class="badge m">MEASURED</span></td></tr>
+<tr><td>Tracker grand total</td><td>39,111,974 tokens (cache-inclusive tracker accounting)</td></tr>
+<tr><td>Per-lane model cost</td><td>About $2.50 summed across the 17 completion cards that reported a figure (single lanes ranged $0.01 to $0.35) <span class="badge m">MEASURED</span></td></tr>
+</table>
+
+<h2>Where things stand</h2>
+
+<p>Main is at <code>2795e982</code> and green. Version 1.54.0 is in the tree, the release workflow passed on the merge
+commit, and the tree comparison against the shipped artifacts checks out (manifest at 1022, ADR-0125 present, pin
+updated). The task is closed with its reflection written into <code>.ai-badger/state.json</code>, and the token ledger
+is fully reconciled.</p>
+
+<p>One governance note sits on the record. Copilot never submitted a review round in roughly four hours (its pending
+entries kept flashing and vanishing, which matches review-quota exhaustion) and the PR author cannot approve their own
+pull request, so the formal review requirement was unmeetable. The substance of review was covered by two full review
+lanes, a join review, and the <code>review</code> workflow check green on the final head. Both merges went through with
+admin privileges and a comment explaining exactly that. If you disagree with the call, the trail is on PR #804 and #810.</p>
+
+<p>Open work, in the order worth doing:</p>
+<ul>
+<li><a href="https://github.com/Arasz/ai-raccoon/issues/809">#809</a> carries the measurement debt: the 254-versus-1022 retrieval study, WebGPU footprint at the larger budget, re-chunk wall-clock on a large bank, the eval-set re-anchor to the first 1022-era bank copy, and a re-measure of the corpus byte band (main was already over it before this work).</li>
+<li>The 1.54.0 release checklist should gain the <code>config-d-mlx-padding-precondition</code> row. A ready-made JSON row is in the P5 lane's record, worded so it cannot pass with two skips.</li>
+<li>Three parked loose ends, ready to bundle into one small PR: commit a fence-atomicity test at the manifest budget (the probe above proves it passes today and nothing pins it), add a supersession pointer from ADR-0125 to ADR-0120's dated "(254 memory, 510 code)" parenthetical, and file the note-group recompute finding (co-citing notes share chunk numbering under the <code>(ctx, source_file)</code> partition; either document that as intended or partition note rows by path).</li>
+<li>Environment fix for whoever owns the agent config: the dotnet-engineer persona's pinned <code>sonnet</code> model has no API key on this machine and falls back through OpenRouter, and three lanes died to transport drops at long blocking test runs.</li>
+</ul>
+
+<p class="foot">Grade legend: MEASURED = run with output recorded; READ = read from source or a committed record and verified;
+INFERRED = reasoned from evidence without a direct run; OPEN = known unknown. All figures come from this task's session
+record: plan and reviews in <code>docs/work/2026-09-28-config-d-*</code>, decisions in ADR-0125, research in
+<code>docs/work/2026-09-25-chunk-size-vs-attention-window-mlx.md</code> and
+<code>docs/work/2026-09-28-why-the-query-budget-stays-254.md</code>, lane reports in the task tracker and completion cards.</p>
+
+</body>
+</html>

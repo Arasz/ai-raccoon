@@ -51,9 +51,15 @@ minutes for the task to end; answering late is answering wrong.
    their section's placeholder ("(no task in progress)", "(no plan file)", "(not found)",
    "(no live lanes)") instead of failing the report.
 
-2. Answer with the four sections, in this order, using the script's output as the source of
-   truth: **Current task** (plus any other open tasks), **Progress checklist** (plan
-   packages and checkbox counts), **What's next** (quote `state.json`'s `next` field
+2. Build the **Progress checklist** section from the graph first: `progress_checklist` with
+   `format:"text"` **IS** the "Progress checklist" section verbatim (primary); the status
+   script's plan-file output is the fallback when no graph plan or CLI is reachable. Call the
+   MCP tool, or
+   `uv run --script .ai-badger/skills/task-decomposition/scripts/task_graph_cli.py progress_checklist --json '{"task_id": "<taskId>", "format": "text"}'`
+   when the server is not reachable as a tool (MCP tool absent, or `uv`/the CLI unavailable).
+   Answer with the four sections, in this order: **Current task** (plus any other open
+   tasks), **Progress checklist** (the graph's text verbatim, or the script's plan headings
+   and checkbox counts as the fallback), **What's next** (quote `state.json`'s `next` field
    verbatim), **Sub-agents & delegation** (recorded subagent entries, live lane worktrees,
    untracked worktrees, live sessions with STALE marking).
 
@@ -78,7 +84,7 @@ minutes for the task to end; answering late is answering wrong.
 | Section | Source |
 |---|---|
 | Current task | latest open row (state STARTED or IN_PROGRESS) in the `tasks` table of `.ai-badger/task-tracking/tracking.db` — STARTED is registered work awaiting its first Stop-hook promotion (or a harness with no Stop hook), still open |
-| Progress checklist | `task-tracking/plans/*.md` — package headings + `- [x]` counts |
+| Progress checklist | `progress_checklist` with `format:"text"` — its text **IS** the section verbatim, from the graph (primary); the status script's plan-file parse (`**S<N> …**` step headings, legacy `**P<N>**` package headings, `- [x]` counts) is the fallback when no graph plan or CLI is reachable |
 | What's next | `state.json` `next` field, verbatim |
 | Sub-agents | `token_usage` subagent records + `worktrees/` lanes for open tasks + worktrees matching no tracker row (untracked — work without tracking) + the `sessions` table (dead pids marked STALE) |
 

@@ -53,7 +53,9 @@ shape above holds.
 
 2. **Minimal plan.** Three to six bullets in the working notes — what changes, which files,
    which tests cover it, which docs need updating. No plan file, no ledger record, no
-   tracking artifacts. If the plan needs more than six bullets, escalate.
+   tracking artifacts. If the plan needs more than six bullets, escalate. Do not call
+   `task-decomposition` and do not create graph state — a quick-task has no plan artifact; a
+   change needing decomposition is `task` work; escalate.
 
 3. **Branch from fresh main. Never on main.** `git pull`, then
    `git checkout -b <short-slug>`. No worktree isolation — a quick-task owns one branch

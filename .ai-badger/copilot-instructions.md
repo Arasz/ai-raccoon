@@ -4,7 +4,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon, changelog
-> Scaffolded by ai-badger 0.178.0. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
+> Scaffolded by ai-badger 0.179.0. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
 
 ## Commands
 
@@ -94,6 +94,22 @@ those IDs. Capture visual evidence with `browser_take_screenshot`. Monitor API c
 `browser_network_requests` and debug issues with `browser_console_messages`. For multi-step
 or complex interactions, execute custom Playwright scripts with `browser_run_code_unsafe`.
 Each tool's own description covers the rest.
+
+<!-- task-graph MCP tools -->
+## MCP Tools: task-graph
+
+`task-graph` owns the decomposed task plan — a DAG of `step`s carrying status, acceptance criteria and evidence, persisted beside the task tracker in the project's `tracking.db`.
+
+Plan time: `plan_create` validates and stores the DAG; `plan_replace` revises it before
+execution starts; `steps_ready` returns the dispatchable frontier and its waves. Execution:
+`step_start`, `step_complete` (evidence + AC results), `step_fail`, `step_skip`, `ac_check`;
+`progress_checklist` is the status view, and `plan_get`, `step_get`, `plan_export` read back.
+
+Launched as `uv run --script .ai-badger/skills/task-decomposition/scripts/task_graph_server.py`
+(`uv` on PATH; the PEP 723 env is fetched on first launch). No project `.mcp.json` (Hermes,
+worktree sessions) → use the CLI twin: `task_graph_cli.py <tool> --json`. Hermes operators:
+add the proposed `mcp_servers:` entry to `~/.hermes/config.yaml`, anchoring the script path to
+the project root — the declaration is project-relative.
 
 
 

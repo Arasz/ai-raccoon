@@ -40,7 +40,8 @@ STATE_FILE = ".ai-badger/state.json"
 
 CHECKBOX_RE = re.compile(r"^[-*]\s+\[[ xX]\]\s+")
 DONE_RE = re.compile(r"^[-*]\s+\[[xX]\]\s+")
-PACKAGE_RE = re.compile(r"^\*\*(P\d+[^*]*)\*\*")
+STEP_RE = re.compile(r"^\*\*([PS]\d+[^*]*)\*\*")
+STEP_HEADING_RE = re.compile(r"^S\d+")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 
 NO_TASK = "(no task in progress)"
@@ -163,7 +164,11 @@ def _plan_for(target: Path, task_id: str) -> tuple:
 
 
 def plan_checklist(target: Path, task_id: str) -> Dict[str, Any]:
-    """Progress evidence from the task's plan file: package headings + checkbox counts."""
+    """Progress evidence from the task's plan file: step/package headings + checkbox counts.
+
+    Dual-read (DR10/DR12): graph-rendered `**S<N> …**` plans and legacy `**P<N>**` plans
+    both report. `packages`, `checked` and `total` are frozen for --json consumers.
+    """
     plan, matched = _plan_for(target, task_id)
     if plan is None:
         return {"plan_file": None, "matched": False, "packages": [], "checked": 0, "total": 0}
@@ -172,7 +177,7 @@ def plan_checklist(target: Path, task_id: str) -> Dict[str, Any]:
     except OSError:
         return {"plan_file": str(plan), "matched": False, "packages": [],
                 "checked": 0, "total": 0}
-    packages = [m.group(1).strip() for line in lines if (m := PACKAGE_RE.match(line))]
+    packages = [m.group(1).strip() for line in lines if (m := STEP_RE.match(line))]
     items = [line for line in lines if CHECKBOX_RE.match(line)]
     done = [line for line in items if DONE_RE.match(line)]
     return {"plan_file": str(plan), "matched": matched,
@@ -344,8 +349,9 @@ def render(data: Dict[str, Any]) -> str:
         out.append(f"plan: {progress['plan_file']}")
         if not progress["matched"]:
             out.append("(plan matched by newest-file fallback — check it is this task's plan)")
-        for package in progress["packages"]:
-            out.append(f"  [package] {package}")
+        for heading in progress["packages"]:
+            kind = "step" if STEP_HEADING_RE.match(heading) else "package"
+            out.append(f"  [{kind}] {heading}")
         if progress["total"]:
             out.append(f"checklist: {progress['checked']}/{progress['total']} done")
         else:

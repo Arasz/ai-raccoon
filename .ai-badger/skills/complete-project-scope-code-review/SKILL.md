@@ -177,8 +177,9 @@ reversible.
 
 ## Phase 6 — Waved implementation
 
-Each package runs through `task`, in its own worktree, TDD-first, with its named gate. Waves are
-ordered by the sequencing rules; packages inside a wave run concurrently only where they share no
+Each package runs through `task`, in its own worktree, TDD-first, with its named gate. A review
+work package becomes a `step` when the review plan is handed to `task`. Waves are ordered by the
+sequencing rules; packages inside a wave run concurrently only where they share no
 serialisation point.
 
 Two hazards specific to running many lanes at once:

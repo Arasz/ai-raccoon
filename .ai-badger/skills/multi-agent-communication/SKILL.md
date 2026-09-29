@@ -37,7 +37,7 @@ and merge - ask for review`.
 | Merging to main | `merged` | PR number, what landed — others rebase |
 | Blocked or handing off | `blocked` | what is needed, from whom |
 
-Broadcast at package boundaries, not per commit — the PR UI already narrates commits.
+Broadcast at step/join boundaries, not per commit — the PR UI already narrates commits.
 When no other session is active in the project, skip the bus and just do the work.
 
 ## How to send

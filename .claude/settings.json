@@ -278,7 +278,8 @@
       "mcp__hermes__*",
       "mcp__ai-raccoon__*",
       "mcp__semantica__*",
-      "mcp__playwright__*"
+      "mcp__playwright__*",
+      "mcp__task-graph__*"
     ]
   },
   "enabledMcpjsonServers": [
@@ -286,6 +287,7 @@
     "hermes",
     "ai-raccoon",
     "semantica",
-    "playwright"
+    "playwright",
+    "task-graph"
   ]
 }

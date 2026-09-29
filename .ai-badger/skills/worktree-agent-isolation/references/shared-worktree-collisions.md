@@ -1,6 +1,6 @@
 ## Agents sharing ONE worktree (parallel WIP build collisions)
 
-The isolation model is one worktree per agent, but parallel packages can still
+The isolation model is one worktree per agent, but parallel steps can still
 land in the SAME worktree (e.g. a wave runs two agents on one checkout). When a
 parallel agent's UNCOMMITTED WIP breaks the shared test-project compile, do
 NOT touch their files. Verify YOUR slice with a zero-file-change MSBuild override:

@@ -37,6 +37,17 @@
       "tools": [
         "*"
       ]
+    },
+    "task-graph": {
+      "command": "${HOME}/.local/bin/uv",
+      "args": [
+        "run",
+        "--script",
+        "${CLAUDE_PROJECT_DIR}/.ai-badger/skills/task-decomposition/scripts/task_graph_server.py"
+      ],
+      "tools": [
+        "*"
+      ]
     }
   }
 }

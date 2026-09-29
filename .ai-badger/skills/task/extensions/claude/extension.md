@@ -45,8 +45,8 @@ Anthropic clarifies which article is current.
 
 - **Opus — planning and the quality gate.** Phase 2 decomposition and the Phase 4 correctness +
   architecture review. Also: adversarial review of another agent's claims, money or other
-  derivation-heavy math, non-obvious root-cause debugging, and arbitration when two work
-  packages disagree about a contract. Dispatch `model: "opus"` and prefix the call's
+  derivation-heavy math, non-obvious root-cause debugging, and arbitration when two steps
+  disagree about a contract. Dispatch `model: "opus"` and prefix the call's
   `description` with `"Opus: "` so the lane is visible in the agent panel.
 - **Sonnet — implementation, by default.** Everything that executes an already-decided spec:
   writing code, writing ADRs and docs where the decision is already recorded, mechanical

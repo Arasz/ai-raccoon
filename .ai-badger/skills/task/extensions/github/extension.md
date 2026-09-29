@@ -35,7 +35,7 @@ progress:
 gh pr create --draft --title "<task title>" --body "<summary, links the issue>"
 ```
 
-Commit and push as each work package lands (small, focused commits — not one mega-diff at the
+Commit and push as each step lands (small, focused commits — not one mega-diff at the
 end; these get squashed on merge). Push to the remote branch immediately after each commit.
 
 ## Copilot review-round loop (Phase 5 — Finish protocol)

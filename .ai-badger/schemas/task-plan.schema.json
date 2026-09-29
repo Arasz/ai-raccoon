@@ -1,0 +1,440 @@
+{
+  "$defs": {
+    "AcceptanceCriterion": {
+      "additionalProperties": false,
+      "description": "One checkable requirement on a step; `status` and `evidence` are its only state.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "statement": {
+          "title": "Statement",
+          "type": "string"
+        },
+        "check": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Check"
+        },
+        "status": {
+          "$ref": "#/$defs/CriterionStatus"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "status",
+        "evidence"
+      ],
+      "title": "AcceptanceCriterion",
+      "type": "object"
+    },
+    "Completion": {
+      "additionalProperties": false,
+      "description": "How a step came to rest: who closed it, and the note when force was used.",
+      "properties": {
+        "completed_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed By"
+        },
+        "forced": {
+          "title": "Forced",
+          "type": "boolean"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "forced",
+        "evidence"
+      ],
+      "title": "Completion",
+      "type": "object"
+    },
+    "CriterionStatus": {
+      "description": "Acceptance-criterion verdict; the single source of AC state.",
+      "enum": [
+        "unchecked",
+        "passed",
+        "failed"
+      ],
+      "title": "CriterionStatus",
+      "type": "string"
+    },
+    "Effort": {
+      "description": "Step execution effort.",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "Effort",
+      "type": "string"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "One recorded proof attached to a criterion or a completion.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/EvidenceKind"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ref"
+        },
+        "recorded_at": {
+          "title": "Recorded At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "summary",
+        "recorded_at"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "EvidenceKind": {
+      "description": "What kind of record a piece of evidence is.",
+      "enum": [
+        "command",
+        "test",
+        "artifact",
+        "review",
+        "note"
+      ],
+      "title": "EvidenceKind",
+      "type": "string"
+    },
+    "Level": {
+      "description": "Delegation tier the step asks for (composition with the delegation precedence).",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "title": "Level",
+      "type": "string"
+    },
+    "Loop": {
+      "description": "Task loop the plan belongs to (distinct from per-step effort).",
+      "enum": [
+        "low",
+        "high"
+      ],
+      "title": "Loop",
+      "type": "string"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "description": "One unit of work in the plan graph.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "goal": {
+          "title": "Goal",
+          "type": "string"
+        },
+        "instructions": {
+          "title": "Instructions",
+          "type": "string"
+        },
+        "effort": {
+          "$ref": "#/$defs/Effort"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Level"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "persona": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persona"
+        },
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Depends On",
+          "type": "array"
+        },
+        "acceptance_criteria": {
+          "items": {
+            "$ref": "#/$defs/AcceptanceCriterion"
+          },
+          "title": "Acceptance Criteria",
+          "type": "array"
+        },
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "resources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Resources",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/StepStatus"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "completion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Completion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "goal",
+        "instructions",
+        "effort",
+        "depends_on",
+        "acceptance_criteria",
+        "files",
+        "resources",
+        "status"
+      ],
+      "title": "Step",
+      "type": "object"
+    },
+    "StepStatus": {
+      "description": "Step lifecycle state (transitions are DR7's guard matrix, not the model's).",
+      "enum": [
+        "pending",
+        "in_progress",
+        "complete",
+        "failed",
+        "skipped"
+      ],
+      "title": "StepStatus",
+      "type": "string"
+    },
+    "Workflow": {
+      "additionalProperties": false,
+      "description": "The non-empty step map that is also a DAG.",
+      "properties": {
+        "steps": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Step"
+          },
+          "minProperties": 1,
+          "title": "Steps",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          }
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "title": "Workflow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The persisted task-plan document for the task-graph MCP server. Generated by tooling/task_plan_schema.py from the pydantic model in features/common/skills/task-decomposition/scripts/task_plan_model.py. JSON Schema cannot express the dependency graph: a workflow.steps key equalling its step's id, every depends_on naming a step in the same workflow, and acyclicity (a cycle in depends_on) are pydantic-only invariants enforced on every load, not by this artifact. Timestamp UTC-ness and completion consistency are likewise runtime-enforced.",
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "task_id": {
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_description_ref": {
+      "title": "Task Description Ref",
+      "type": "string"
+    },
+    "research_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Research Ref"
+    },
+    "task_context": {
+      "title": "Task Context",
+      "type": "string"
+    },
+    "loop": {
+      "$ref": "#/$defs/Loop"
+    },
+    "source_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Source Refs",
+      "type": "array"
+    },
+    "$schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "$Schema"
+    },
+    "workflow": {
+      "$ref": "#/$defs/Workflow"
+    },
+    "revision": {
+      "minimum": 0,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "task_id",
+    "task_description_ref",
+    "task_context",
+    "loop",
+    "source_refs",
+    "workflow",
+    "revision",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "TaskPlan",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/task-plan.schema.json"
+}

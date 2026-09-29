@@ -23,12 +23,18 @@ modes that once left a task invisible mid-flight:
   any other worktree name reports as untracked.
 - **Write the plan where status reads it:**
   `.ai-badger/task-tracking/plans/<YYYY-MM-DD>-<taskId>.md` — taskId in the
-  filename, one `**P<N> …**` heading per package, one `- [ ]` checkbox per
-  acceptance point (checked as points land). Only a filename carrying the
-  whole taskId matches; review documents (`.review.md`, `.plan-review-*`)
-  never count as the plan. A plan living only in a delegation brief reports
-  as "(no plan file)": confirm the status script shows it matched (not
-  fallback) before dispatching implementation.
+  filename, one `**S<N> …**` heading per step, one `- [ ]` checkbox per
+  acceptance criterion (checked as criteria pass). The plan is built by
+  `task-decomposition` and stored/rendered by the task-graph server: the file
+  carries a generated banner and is rewritten on every mutation, so it is an
+  output, never the source of truth. With the graph off, write the same shape
+  by hand (banner note `hand-written — graph off`). Legacy in-flight
+  `**P<N>**` plans keep reporting: the status script reads both prefixes.
+  Only a filename carrying the whole taskId matches; review documents
+  (`.review.md`, `.plan-review-*`) never count as the plan. A plan living
+  only in a delegation brief never counts — it reports as "(no plan file)" —
+  so confirm the status script shows it matched (not fallback) before
+  dispatching implementation.
 - **Record `total_tokens` on EVERY delegation completion** before the next
   dispatch — a mid-flight lane is invisible to status until its record lands.
   `--delegation <id>` wherever the harness keeps receipts (pi subagent-logs,

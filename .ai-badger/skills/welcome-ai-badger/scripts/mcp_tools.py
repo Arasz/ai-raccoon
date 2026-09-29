@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json as _json
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
@@ -64,6 +65,27 @@ def only_generated_entries(data: Dict[str, Any]) -> bool:
         return False
     return all(isinstance(entry, dict) and not set(entry) - GENERATED_ENTRY_KEYS
                for entry in section.values())
+
+
+# A project-dir anchor a host's ``agentOverrides`` may add to an argument: `${CLAUDE_PROJECT_DIR}/`
+# or any future host's equivalent. Stripping it makes the #193 comparison see one launch.
+_PROJECT_DIR_ARG = re.compile(r"^\$\{[A-Z0-9_]*PROJECT_DIR\}/")
+
+
+def _normalized_launch_value(key: str, value: Any) -> Any:
+    """One entry value with a leading project-dir anchor removed from every ``args`` element."""
+    if key != "args" or not isinstance(value, list):
+        return value
+    return [_PROJECT_DIR_ARG.sub("", arg) if isinstance(arg, str) else arg for arg in value]
+
+
+def _same_launch(left: Dict[str, Any], right: Dict[str, Any]) -> bool:
+    """True when two rendered entries describe the same launch, a project-dir anchor aside."""
+    if set(left) != set(right):
+        return False
+    return all(_normalized_launch_value(key, value)
+               == _normalized_launch_value(key, right[key])
+               for key, value in left.items())
 
 
 def split_on_whitespace(command: str) -> Tuple[str, List[str]]:
@@ -648,7 +670,9 @@ class McpTools:
 
         The Copilot CLI reads both files with no documented precedence, so a server the two
         describe differently has no knowable configuration.  It is declared once — in
-        ``.mcp.json``, the file both hosts read — and named here for the note.
+        ``.mcp.json``, the file both hosts read — and named here for the note.  Entries that
+        differ only by a project-dir anchor in ``args`` describe the same launch and are not
+        a divergence: dropping the second entry would leave the Copilot CLI with nothing.
         """
         if not self._destination_applies(MCP_JSON, servers):
             return []
@@ -657,10 +681,11 @@ class McpTools:
         for name, entry in entries.items():
             counterpart = {key: value for key, value in theirs.get(name, {}).items()
                            if key != "cwd"}
-            if name not in theirs or counterpart == entry:
+            if name not in theirs or _same_launch(counterpart, entry):
                 continue
             differing = sorted(key for key in set(counterpart) | set(entry)
-                               if counterpart.get(key) != entry.get(key))
+                               if _normalized_launch_value(key, counterpart.get(key))
+                               != _normalized_launch_value(key, entry.get(key)))
             elsewhere.append(name)
             self.ctx.notes.append(
                 f"MCP server '{name}' is declared only in {MCP_JSON.label}: the entry "

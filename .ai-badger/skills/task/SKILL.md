@@ -3,8 +3,8 @@ name: task
 description: >-
   Use when the user wants to start, continue, or finish a backlog task — "/task <id>", "start
   task X", "work on the next task", "finish this task". Runs it end-to-end as a
-  token-tracked unit of work with low/high effort, plan packaging with
-  mandatory integration package, MoE panels for high-effort, and automated task-ID
+  token-tracked unit of work with low/high effort, `task-decomposition` into a `task-plan`
+  whose `workflow` is a DAG of `step`s, MoE panels for high-effort, and automated task-ID
   derivation ({repo-alias}-{key}). Delegates planning/review to high-reasoning models
   and implementation to persona-routed agents. Project specifics from
   .ai-badger/config.json; source-control and PR behaviour from config-gated extensions.
@@ -28,7 +28,7 @@ dead session can be resumed.
 
 **All project specifics come from `.ai-badger/config.json`** — never hardcode a build command,
 a persona name, or a repository. Tracking data lives in `.ai-badger/task-tracking/` (gitignored).
-Scripts live in this skill's `scripts/`. Before hand-writing any tracking store, read `references/file-schemas.md` for its exact shape.
+Scripts live in this skill's `scripts/`. Before hand-writing any tracking store, read `references/file-schemas.md`.
 
 ## When NOT to Use
 
@@ -41,8 +41,8 @@ Scripts live in this skill's `scripts/`. Before hand-writing any tracking store,
 Every task follows a low- or high-effort loop. The loop is the spine; the phases below
 (Phase 0–6) detail its steps.
 
-Before starting, **ask the user whether this is a low- or high-effort task**. When autonomous,
-derive effort after analyze — a best-effort match of effort to scope.
+Before starting, **ask the user whether the task runs the low or high `loop`**. When autonomous,
+derive the loop after analyze — a best-effort match of loop to scope.
 
 ### Low-effort loop
 
@@ -55,8 +55,8 @@ prepare → analyze → plan (MoE) → plan review (MoE) → implementation →
 review implementation (MoE) → apply fixes → QA: test quality & coverage → pr →
 gates → close task → reflect → merge
 
-Integration step: always required in the high-effort variant. Every plan's last package
-is the integration package.
+Integration step: required in the high-effort variant. The plan carries a join step when the
+`workflow` has more than one sink; it depends on every sink and carries the cross-step tests.
 
 ### Step definitions
 
@@ -64,8 +64,8 @@ is the integration package.
 
 **analyze** — Derive `taskId` (`{repo-alias}-{key}`). Extract scope, constraints, criteria.
 
-**plan** — Split work into **packages** (mergable units) and **subpackages**. Last package is the
-**integration package** with cross-package tests. Every package has ACs; plan AC: all checked+met.
+**plan** — Run `task-decomposition` into a `task-plan` whose `workflow` is a DAG of
+`step`s. Every step has ACs; the plan AC: all steps' ACs checked+met.
 
 **plan review (MoE)** — High-effort: MoE panel (3 experts, subject-matched). At least one expert
 different from plan authoring.
@@ -131,20 +131,18 @@ Roles, not models. Which concrete model fills each is bound by the agent-specifi
 
 ### Model tier contract
 
-`effort` (low/high) picks the loop; `level` picks the model tier — they are independent, never bare `level` for effort.
+The task `loop` (low|high) chooses the orchestration loop; a step's `effort` (low|medium|high) drives model-tier selection.
 
 The `level` field is optional (`low`, `medium`, or `high`), resolved to that model tier's preferred registry entry.
-An explicit `model` always wins over `level`.
-With neither `level` nor `model`, the dispatch inherits the session (or parent) default model.
-The registry lives at `.ai-badger/model-groups.json`; it holds the IDs and prices, so this skill names neither.
-See `.ai-badger/delegation.md` (reasoning-model dispatch).
+Precedence: explicit `model` > `level` > the step's `effort` used as the level > the session (or parent) default model.
+An explicit `model` always wins over `level`; with neither, the dispatch inherits the session (or parent) default model.
+Registry: `.ai-badger/model-groups.json`; see `.ai-badger/delegation.md` (reasoning-model dispatch).
 
 Subagent prompts must be self-contained: scope, ACs, files, TDD rules, report-back shape. Parallelise
-independent subagents. **Split work so it *can* run in parallel** — name shared-file sections
-(serialise) vs disjoint ones (parallel).
+independent subagents. **Split work so it *can* run in parallel** — name shared-file steps, which
+serialise by a `depends_on` edge or a merge, versus disjoint steps, which parallelise.
 
-**Isolate every agent, at every depth: its own worktree and its own workspace id.** Disjoint files
-are not isolation — shared build output means a green run proves nothing. Two levels max.
+**Isolate every agent, at every depth: its own worktree and its own workspace id.** Two levels max.
 
 **Write the brief so the lane can improve on it.** Before dispatching an end-to-end lane, read
 `references/lane-dispatch-brief.md`.
@@ -163,10 +161,10 @@ are not isolation — shared build output means a green run proves nothing. Two 
 ## Phase 1 — Start
 
 Entry: previous task finished or parked; clean-enough context.
-Exit: effort chosen, tracker STARTED, worktree exists, five preflight blocks present,
+Exit: loop chosen, tracker STARTED, worktree exists, five preflight blocks present,
 research record gathered, taskId derived.
 
-1. **Determine effort.** Ask user low or high. When autonomous, derive after analyze.
+1. **Determine the loop.** Ask user low or high. When autonomous, derive after analyze.
 2. **Analyze the task.** Resolve the task (issue URL or freeform scope/title). Read referenced docs.
 
    **Derive the taskId** per the derivation formula. Determine repo alias
@@ -203,41 +201,41 @@ research record gathered, taskId derived.
 ## Phase 2 — PLANNING
 
 Entry: research record exists with sources cited.
-Exit: reviewed plan; every point carries criteria and a gate; parallelism named; plan split
-into packages and subpackages.
+Exit: reviewed `task-plan` recorded; every step carries criteria and a gate; shared-file steps
+serialised by an edge; join step present when >1 sink.
 
-1. **Plan from what the research found.** Delegate decomposition to a high-reasoning agent (the
-   `architect` persona), feeding it the task body, the research record and doc excerpts.
+1. **Plan from what the research found.** Delegate decomposition (the `architect` persona),
+   feeding it the task body, the research record and doc excerpts.
 
-   **Split the plan into packages.** Each package is a unit of work delivering a mergable piece.
-   Subpackages are partial units within a package. Every package contains its test scenarios.
-   The **last package is always the integration package** — it ensures all packages are
-   correctly integrated and includes cross-package integration tests. Each package has its own
-   acceptance criteria; the plan's top-level acceptance criterion is: *all packages' ACs are
-   checked and met*.
+   **Split the plan into steps.** Run `task-decomposition`; the result is one validated
+   `task-plan` whose `workflow` is a DAG of `step`s, one lane per step. Record the plan with
+   `plan_create`; with no server available, write the plan file by hand in the frozen shape and
+   say the graph is off. `depends_on` is the only ordering source; the top-level criterion:
+   *all steps' ACs are checked and met*. A task with no plan row keeps its legacy plan file and
+   manual checkboxes — never `plan_create` over an in-flight task.
 
    In the **low-effort** variant, a single high-reasoning agent creates the plan.
    In the **high-effort** variant, delegate to an MoE panel (default 3 experts) matching the
    task's subject area.
 
-   Split the plan into sections that can be worked independently, and say which may run at the
-   same time. Parallelism has to be designed in; it does not arrive on its own.
+   The server derives the ready set and waves via `steps_ready` — say which steps run together;
+   parallelism is designed in via `depends_on` edges, never assumed.
 
-   **Every point carries acceptance criteria and a quality gate** — what must be true, and the run
-   that proves it. A point without them is a wish. Where a point needs a specification or a design
-   before it can be built, produce one, and look for an installed skill that formalises that shape
-   before writing a bespoke document. Before the first failing test, run `design-tests` on the
-   acceptance criteria — the test list is part of the plan, not of the implementation. When a
-   plan point changes architecture or flow, present it with `archify` (Mermaid only when its
-   runtime is missing). When status cannot match the plan, follow `references/tracking-visibility.md`.
+   **Every step carries acceptance criteria and a quality gate** — what must be true, and the run
+   that proves it. A step without them is a wish. Where a step needs a specification or design
+   first, produce one — prefer an installed skill. Run `design-tests` on
+   the acceptance criteria before the first failing test — the test list is part of the plan,
+   not of the implementation. When a step changes architecture or flow, present it with
+   `archify` (Mermaid only when its runtime is missing). When status cannot match the plan,
+   follow `references/tracking-visibility.md`.
 2. **Plan review before dispatch.** In the **low-effort** variant, hand the drafted plan to a
    second high-reasoning agent for review. In the **high-effort** variant, delegate to an MoE
    panel (default 3 experts, at least one different from the plan-authoring experts) and have it
    attack structure, feasibility, budget arithmetic, and testability. Fold MUST/SHOULD findings
    back into the plan before any implementation dispatch. Same join discipline as Phase 4,
    applied early where defects cost least. When consolidating reviewed
-   plan sections into lane briefs, follow `references/lane-dispatch-brief.md` — sections sharing
-   a file serialise, the rest parallelise.
+   plan steps into lane briefs, follow `references/lane-dispatch-brief.md` — steps sharing
+   a file serialise (add a `depends_on` edge or merge them), the rest parallelise.
 
 ## Phase 3 — Execute
 
@@ -254,12 +252,12 @@ into packages and subpackages.
    completion; when harness receipts differ, see `references/tracking-visibility.md`.
 3. Review each result at the seams (matches plan? acceptance criteria?). Send follow-ups back
    rather than rewriting, unless the fix is a few lines.
-4. Commit and push per work package (small commits). If the source-control extension is active,
+4. Commit and push per step (small commits). If the source-control extension is active,
    open a draft PR early per `extensions/github/`.
 
 ## Phase 4 — Quality gate
 
-Entry: all plan points implemented and committed in the worktree.
+Entry: every step complete, all ACs checked and committed in the worktree.
 Exit: CI green (or documented local-gate equivalent); review findings fixed or filed; QA
 test quality reviewed (high-effort variant).
 
@@ -283,7 +281,7 @@ test quality reviewed (high-effort variant).
 
 ### Review every join, not just every part
 
-Each time work is combined — review findings into a plan, sections into one change, branches
+Each time work is combined — review findings into a plan, steps into one change, branches
 into one PR — check the combination. Parts that pass alone fail together: two branches pick
 the same version, one renames what another calls, a guard passes on each half and fails whole.
 
@@ -361,9 +359,9 @@ machine-run gates that close the task.
 
 - [ ] `python3 .ai-badger/skills/task/scripts/task_tracker.py status` shows the task finished and `.ai-badger/state.json` reflects it
 - [ ] All work lives in the worktree `start` created — no stray commits on the main checkout's branch
-- [ ] Every plan point's acceptance gate ran; plan was split into packages with the last being integration
+- [ ] Every step's acceptance gate ran; all step ACs checked; join step carried the cross-step tests
 - [ ] Task-ID derived per the `{repo-alias}-{key}` formula and is unique
-- [ ] Effort was determined (low or high) before implementation began
+- [ ] Task `loop` (low or high) was determined before implementation began
 - [ ] High-effort tasks ran QA test quality & coverage step
 - [ ] `reflect` step examined memory, semantica, and session history for learnings
 - [ ] `finish` left no worktree with unmerged or uncommitted work — `keptBecause` empty or resolved
