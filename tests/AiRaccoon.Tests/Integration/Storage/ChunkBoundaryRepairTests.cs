@@ -429,8 +429,10 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var ids = await IdsAsync(file);
         ids.Count.ShouldBeGreaterThan(2, "premise: the document spans several rows");
         await SetPositionAsync(ids[^1], 1);
-        // A paragraph too large to join the last row, so every stored row is still reproduced.
-        var appended = string.Join(" ", Enumerable.Repeat("The appended paragraph records a step added after the last ingest.", 30));
+        // A paragraph larger than a whole chunk at the shipped budget — too large to join the last
+        // row, so every stored row is still reproduced.
+        var appended = string.Join(" ", Enumerable.Repeat("The appended paragraph records a step added after the last ingest.",
+            TestData.BundledManifestChunkTokens() / 8));
         await File.WriteAllTextAsync(file, document + appended + "\n", TestContext.Current.CancellationToken);
         (await ScanAsync(file)).PositionById.Values.ShouldAllBe(position => position >= 0,
             "premise: the grown file still reproduces every stored row");
@@ -740,10 +742,13 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
             new { file })];
     }
 
-    /// <summary>A markdown document long enough to span several rows.</summary>
+    /// <summary>A markdown document long enough to span several rows: each section repeats its
+    /// paragraph to about one and a half chunks at whatever budget the manifest ships (the shape
+    /// 30 repeats had at the old bundled budget), so any section count spans several rows.</summary>
     private static string SectionedDocument(int sections) =>
         string.Concat(Enumerable.Range(0, sections).Select(i =>
-            $"## Section {i}\n\n" + string.Join(" ", Enumerable.Repeat($"Paragraph {i} of the plan describes step {i} in detail.", 30)) + "\n\n"));
+            $"## Section {i}\n\n" + string.Join(" ", Enumerable.Repeat($"Paragraph {i} of the plan describes step {i} in detail.",
+                TestData.BundledManifestChunkTokens() / 8)) + "\n\n"));
 
     private async Task<List<long>> IdsAsync(string path)
     {
