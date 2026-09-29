@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -147,7 +148,7 @@ public class FileIngestorSectionColumnTests : IDisposable
     public async Task IngestFileAsync_HeadingWouldDangleAtChunkTail_LabelsChunksWithTheirOwnSection()
     {
         var file = Path.Combine(_testDir, "quadrant.md");
-        var levelledBench =
+        var levelledSeed =
             "Before any reading is trusted, the quadrant is set on a leveled bench and its bubble is checked " +
             "against the reference mark until it stops drifting. The technician records the ambient temperature, " +
             "the humidity, and the exact orientation of the bench relative to true north, because thermal " +
@@ -172,6 +173,16 @@ public class FileIngestorSectionColumnTests : IDisposable
             "instrument ages, so the calibration is repeated on a fixed schedule rather than only when a " +
             "reading looks suspicious, because a suspicious reading is often the first symptom of a problem " +
             "that has been quietly growing for months.";
+        var budget = await new ChunkPositionScanner(TestData.RealFileTypeMatcher(), TestData.CreateEmbeddingService())
+            .BudgetAsync(_conn, TestContext.Current.CancellationToken);
+        var residualFirstUnit = residualOffset[..TokenBudget.SplitLength(residualOffset, budget.MaxTokens, budget.CountTokens)];
+        var levelledBench = TestData.GrowUntil(levelledSeed,
+            bench => budget.CountTokens(
+                    $"# Quadrant calibration\n\n## Leveled bench\n\n{bench}\n\n## Residual offset\n\n{residualFirstUnit}\n")
+                > budget.MaxTokens);
+        budget.CountTokens($"# Quadrant calibration\n\n## Leveled bench\n\n{levelledBench}\n\n## Residual offset\n")
+            .ShouldBeLessThanOrEqualTo(budget.MaxTokens,
+                "premise: the heading fits at chunk 0's tail while none of its own section does — the #489 squeeze");
         await File.WriteAllTextAsync(file,
             $"# Quadrant calibration\n\n## Leveled bench\n\n{levelledBench}\n\n## Residual offset\n\n{residualOffset}\n",
             TestContext.Current.CancellationToken);
@@ -211,7 +222,7 @@ public class FileIngestorSectionColumnTests : IDisposable
     public async Task IngestFileAsync_SectionContinuesPastChunkTail_LabelsChunksWithTheirOwnSection()
     {
         var file = Path.Combine(_testDir, "manual.md");
-        var tideCorrection =
+        var tideSeed =
             "Before any reading is trusted, the quadrant is set on a leveled bench and its bubble is checked " +
             "against the reference mark until it stops drifting. The technician records the ambient temperature, " +
             "the humidity, and the exact orientation of the bench relative to true north, because thermal " +
@@ -222,6 +233,14 @@ public class FileIngestorSectionColumnTests : IDisposable
         var line2 = "The offset is found by comparing the instrument against a known star at a well-documented altitude, on a night when refraction tables are considered reliable, and the difference between the observed and the almanac value becomes the correction constant.";
         var line3 = "That constant is engraved on a small brass tag riveted to the pivot screw housing, dated and initialed by whoever ran the comparison, and every subsequent user checks the tag before trusting a sight.";
         var line4 = "A constant left unchecked for too long drifts as the instrument ages, so the calibration is repeated on a fixed schedule rather than only when a reading looks suspicious, because a suspicious reading is often the first symptom of a problem that has been quietly growing for months.";
+        var budget = await new ChunkPositionScanner(TestData.RealFileTypeMatcher(), TestData.CreateEmbeddingService())
+            .BudgetAsync(_conn, TestContext.Current.CancellationToken);
+        var tideCorrection = TestData.GrowUntil(tideSeed,
+            tide => budget.CountTokens(
+                $"# Harbor Manual\n\n## Tide Correction\n\n{tide}\n\n## Boat Registry Cleanup\n\n{line1}\n{line2}\n{line3}\n") > budget.MaxTokens);
+        budget.CountTokens($"# Harbor Manual\n\n## Tide Correction\n\n{tideCorrection}\n\n## Boat Registry Cleanup\n\n{line1}\n{line2}\n")
+            .ShouldBeLessThanOrEqualTo(budget.MaxTokens,
+                "premise: the budget runs out a few body lines after the heading, not before it (#538's shape)");
         await File.WriteAllTextAsync(file,
             $"# Harbor Manual\n\n## Tide Correction\n\n{tideCorrection}\n\n## Boat Registry Cleanup\n\n{line1}\n{line2}\n{line3}\n{line4}\n",
             TestContext.Current.CancellationToken);
@@ -255,7 +274,7 @@ public class FileIngestorSectionColumnTests : IDisposable
     public async Task IngestFileAsync_SectionLongerThanOneChunk_EveryChunkCarriesThatSection()
     {
         var file = Path.Combine(_testDir, "long-section.md");
-        var paragraph = string.Join("\n", Enumerable.Range(1, 12).Select(i =>
+        var paragraph = string.Join("\n", Enumerable.Range(1, TestData.BundledManifestChunkTokens() / 10).Select(i =>
             $"Paragraph {i}: the mooring fee ledger is reconciled against the registry every full moon, and any slip whose fee is paid while its boat has been absent for a season is flagged for the registrar's review before the next tide table is posted."));
         await File.WriteAllTextAsync(file,
             $"# Harbor Manual\n\n## Mooring Fees\n\n{paragraph}\n",
