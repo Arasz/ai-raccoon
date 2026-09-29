@@ -30,8 +30,23 @@ public static class NoteTextOrder
     /// within the work budget.</summary>
     public static IReadOnlyList<NoteRow>? Find(string path, IReadOnlyList<NoteRow> rows) => Find(path, rows, out _);
 
-    internal static IReadOnlyList<NoteRow>? Find(string path, IReadOnlyList<NoteRow> rows, out int work)
+    internal static IReadOnlyList<NoteRow>? Find(string path, IReadOnlyList<NoteRow> rows, out int work) =>
+        FindCore(path, rows, out work, out _);
+
+    /// <summary>The body the rows join back into — the exact text its path's stem hashes, line endings restored —
+    /// or null when no candidate order proves one within the work budget.</summary>
+    internal static string? FindMerged(string path, IReadOnlyList<NoteRow> rows) => FindMerged(path, rows, out _);
+
+    internal static string? FindMerged(string path, IReadOnlyList<NoteRow> rows, out int work)
     {
+        FindCore(path, rows, out work, out var merged);
+        return merged;
+    }
+
+    private static IReadOnlyList<NoteRow>? FindCore(string path, IReadOnlyList<NoteRow> rows, out int work,
+        out string? merged)
+    {
+        merged = null;
         Guard.IsNotNull(path);
         Guard.IsNotNull(rows);
 
@@ -46,12 +61,13 @@ public static class NoteTextOrder
         var share = MaxWork / candidates.Count;
         foreach (var order in candidates)
         {
-            if (Joins(order, bodyHash, ref work, work + share))
+            if (Joins(order, bodyHash, ref work, work + share, out merged))
             {
                 return order;
             }
         }
 
+        merged = null;
         return null;
     }
 
@@ -104,8 +120,9 @@ public static class NoteTextOrder
     /// <summary>Searches the overlay choices at every junction depth first, with an explicit stack so a long note
     /// cannot exhaust the thread's stack, and gives up once <paramref name="work" /> would pass <paramref name="limit" />:
     /// each candidate order gets an equal share, so a wrong one cannot starve the rest.</summary>
-    private static bool Joins(List<NoteRow> order, string bodyHash, ref int work, int limit)
+    private static bool Joins(List<NoteRow> order, string bodyHash, ref int work, int limit, out string? joined)
     {
+        joined = null;
         var text = new StringBuilder(order[0].Value);
         var overlays = new List<int>?[order.Count];
         var tried = new int[order.Count];
@@ -121,7 +138,7 @@ public static class NoteTextOrder
                 }
 
                 work += order.Count;
-                if (Matches(text.ToString(), bodyHash))
+                if (TryMatch(text.ToString(), bodyHash, out joined))
                 {
                     return true;
                 }
@@ -189,8 +206,21 @@ public static class NoteTextOrder
         return overlays;
     }
 
-    private static bool Matches(string joined, string bodyHash) =>
-        BodyLineEndings.Any(ending => string.Equals(
-            ContentHash.OfValue(ending == "\n" ? joined : joined.Replace("\n", ending, StringComparison.Ordinal)),
-            bodyHash, StringComparison.Ordinal));
+    /// <summary>True when one line-ending variant of <paramref name="joined" /> hashes to <paramref name="bodyHash" />;
+    /// <paramref name="matched" /> is the variant that did — the body exactly as sent.</summary>
+    private static bool TryMatch(string joined, string bodyHash, out string matched)
+    {
+        foreach (var ending in BodyLineEndings)
+        {
+            var variant = ending == "\n" ? joined : joined.Replace("\n", ending, StringComparison.Ordinal);
+            if (string.Equals(ContentHash.OfValue(variant), bodyHash, StringComparison.Ordinal))
+            {
+                matched = variant;
+                return true;
+            }
+        }
+
+        matched = "";
+        return false;
+    }
 }

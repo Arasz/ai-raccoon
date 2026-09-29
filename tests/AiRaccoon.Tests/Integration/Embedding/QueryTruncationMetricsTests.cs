@@ -71,7 +71,8 @@ public sealed class QueryTruncationMetricsTests : IDisposable
 
     private static string LongQuery() =>
         string.Join(' ', Enumerable.Repeat(
-            "how does the retrieval pipeline weigh full text against vectors when the corpus is large", 40));
+            "how does the retrieval pipeline weigh full text against vectors when the corpus is large",
+            TestData.BundledManifestChunkTokens() / 5));
 
     private async Task<SqliteConnection> OpenConfiguredAsync()
     {

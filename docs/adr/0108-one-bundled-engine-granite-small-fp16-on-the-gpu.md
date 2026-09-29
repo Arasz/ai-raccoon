@@ -91,6 +91,8 @@ the ceiling, and fp16 (97 MB) does not.
    roughly what unrelated text scored. Without the rescale, a heading-less note (content cosine
    0.959) ranked fifth behind unrelated headed chunks (0.757). Engines that declare no floor,
    MiniLM included, fuse exactly as before.
+
+   > Superseded in part by ADR-0125 (config D, 1.54.0): `chunkTokens` is 1022 from 1.54.0.
 6. **`embedding.device`** (`settings model device auto|gpu|cpu`). `auto`, the default, puts only
    the bundled engine on the GPU. A downloaded int8 model would drift from its stored CPU vectors,
    so it opts in with `gpu`.
@@ -108,6 +110,8 @@ the ceiling, and fp16 (97 MB) does not.
   row on the CPU and lighter on the GPU. The [breaking changes](../reference/breaking-changes.md) page names the cost.
 - The bundled engine's memory chunk budget stays 254 tokens (`chunkTokens`). The code corpus keeps
   its own 510-token chunks, and activation now checks the engine's window, not its memory budget.
+
+  > Superseded in part by ADR-0125 (config D, 1.54.0): `chunkTokens` is 1022 from 1.54.0.
 - The code corpus switches with `model code set default`. A corpus left on code-daemon-embed-v1
   keeps that engine until the command is run.
 - Windows and Linux run on the CPU with the standard package. There, fp16 costs roughly twice

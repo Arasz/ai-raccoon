@@ -628,7 +628,7 @@ public class MemoryToolsTests
 
     // pi-badger-integration F1: the guard's number must track the ACTIVE memory engine, not the
     // bundled default -- a manifest engine's real budget (IEmbeddingService.ResolveChunkBudgetFor)
-    // is wider than 254, so its own threshold is wider too.
+    // is its own number, so its own threshold scales with it.
 
     [Fact]
     public async Task Search_WithAManifestEngineBudget_AQueryOverTheBundledThresholdButWithinItsOwn_HasNoWarning()

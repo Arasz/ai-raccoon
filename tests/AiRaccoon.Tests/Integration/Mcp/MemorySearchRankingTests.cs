@@ -193,8 +193,8 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
     {
         var ct = TestContext.Current.CancellationToken;
         await AllowIngestAsync(ct);
-        var roster = string.Join(" ", Enumerable.Repeat("The roster lists coastal duties, and coastal duties rotate every week.", 12));
-        var duties = string.Join(" ", Enumerable.Repeat("Kittens nap on warm windowsills while gardeners water tomatoes.", 12));
+        var roster = string.Join(" ", Enumerable.Repeat("The roster lists coastal duties, and coastal duties rotate every week.", TestData.BundledManifestChunkTokens() / 20));
+        var duties = string.Join(" ", Enumerable.Repeat("Kittens nap on warm windowsills while gardeners water tomatoes.", TestData.BundledManifestChunkTokens() / 20));
         await IngestAsync("harbour-guide.md", $"# Harbour guide\n\n## Roster\n\n{roster}\n\n## Coastal duties\n\n{duties}\n", ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
 
@@ -281,7 +281,15 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
     public async Task Search_IdentifierInAMultiChunkNote_IsFoundByTheKeywordLeg()
     {
         var ct = TestContext.Current.CancellationToken;
-        var text = LongNoteText(10);
+        ChunkBudget budget;
+        string text;
+        await using (var connection = await _factory.OpenBankAsync(ct))
+        {
+            budget = await new ChunkPositionScanner(TestData.RealFileTypeMatcher(), TestData.CreateEmbeddingService())
+                .BudgetAsync(connection, ct);
+            text = NoteWithTheIdentifierAtTheBudgetCut(budget);
+        }
+
         var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, text), ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
         await using (var connection = await _factory.OpenBankAsync(ct))
@@ -291,8 +299,6 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
             var firstRow = await connection.ExecuteScalarAsync<string>(new CommandDefinition(
                 "SELECT value FROM entries WHERE hash = @hash", new { hash = note.Hash }, cancellationToken: ct));
             firstRow.ShouldNotBeNull().ShouldNotContain("vk83jq", Case.Sensitive, "premise: the identifier lies past the first chunk");
-            var budget = await new ChunkPositionScanner(TestData.RealFileTypeMatcher(), TestData.CreateEmbeddingService())
-                .BudgetAsync(connection, ct);
             var hardCut = TokenBudget.Trim(text, budget.MaxTokens, budget.CountTokens).Length;
             var identifier = text.IndexOf("vk83jq", StringComparison.Ordinal);
             hardCut.ShouldBeInRange(identifier + 1, identifier + 5, "premise: a budget-only cut lands inside the identifier");
@@ -312,7 +318,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
     public async Task Search_TermLongerThanTheChunkBudget_IsFoundByTheKeywordLeg()
     {
         var ct = TestContext.Current.CancellationToken;
-        var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
+        var term = TestData.OverBudgetTerm();
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, $"Release artifact digest {term} was pinned in the lockfile."), ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
         await using (var connection = await _factory.OpenBankAsync(ct))
@@ -328,11 +334,44 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
             .ShouldContain(evidence => evidence.Legs.Any(leg => leg.LegName == "fts"), "the row holding the term's start must match");
     }
 
-    /// <summary>Eight repeats fit one chunk under the bundled model's budget; ten span two.</summary>
+    /// <summary>Few enough repeats to stay one row at whatever budget the manifest ships — the
+    /// fusion test ranks the note's single row against a multi-row neighbour file.</summary>
     private static string LongNoteText(int repeats) =>
-        string.Join(" ", Enumerable.Repeat(
-            "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", repeats))
+        string.Join(" ", Enumerable.Repeat(FeteSentence, repeats))
         + " Invoice reference vk83jq was filed with the parish council.";
+
+    private const string FeteSentence =
+        "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.";
+
+    /// <summary>The village-fete note with its identifier positioned so a budget-only cut lands inside
+    /// it (the shape ten repeats had at the old bundled budget): grown against the shipped budget's own
+    /// counter, single filler words near the boundary, so the whitespace cut the chunker actually makes
+    /// keeps the identifier whole.</summary>
+    private static string NoteWithTheIdentifierAtTheBudgetCut(ChunkBudget budget)
+    {
+        const string tail = " Invoice reference vk83jq was filed with the parish council.";
+        var feteWords = FeteSentence.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var words = new List<string>();
+        while (budget.CountTokens(string.Join(' ', words) + tail) < budget.MaxTokens - 32)
+        {
+            words.Add(feteWords[words.Count % feteWords.Length]);
+        }
+
+        for (var guard = 0; guard < 256; guard++)
+        {
+            var text = string.Join(' ', words) + tail;
+            var cut = TokenBudget.Trim(text, budget.MaxTokens, budget.CountTokens).Length;
+            var identifier = text.IndexOf("vk83jq", StringComparison.Ordinal);
+            if (cut > identifier && cut <= identifier + 5)
+            {
+                return text;
+            }
+
+            words.Add("a");
+        }
+
+        throw new InvalidOperationException("no budget-only cut lands inside the identifier at this budget");
+    }
 
     private static string ObservatoryText()
     {
@@ -343,7 +382,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
             ("Archive", "Reduced spectra are archived with catalogue codes such as qx7 and zr42.")
         };
         return "# Observatory\n\n" + string.Join("\n\n", sections.Select(section =>
-            $"## {section.Item1}\n\n{string.Join(" ", Enumerable.Repeat(section.Item2, 12))}")) + "\n";
+            $"## {section.Item1}\n\n{string.Join(" ", Enumerable.Repeat(section.Item2, TestData.BundledManifestChunkTokens() / 20))}")) + "\n";
     }
 
     private static string RunbookText()
@@ -356,7 +395,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
             ("Verification", "After the deploy the team watches dashboards and confirms synthetic probes stay green.")
         };
         return "# Deploy runbook\n\n" + string.Join("\n\n", sections.Select(section =>
-            $"## {section.Item1}\n\n{string.Join(" ", Enumerable.Repeat(section.Item2, 12))}")) + "\n";
+            $"## {section.Item1}\n\n{string.Join(" ", Enumerable.Repeat(section.Item2, TestData.BundledManifestChunkTokens() / 20))}")) + "\n";
     }
 
     private Task AllowIngestAsync(CancellationToken ct) =>

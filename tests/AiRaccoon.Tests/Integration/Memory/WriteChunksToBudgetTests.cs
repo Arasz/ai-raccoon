@@ -26,8 +26,15 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
 {
     private const string ProjectId = "acme";
 
-    /// <summary>The bundled model's window; a chunk must leave room for [CLS] and [SEP].</summary>
-    private const int BertWindow = 256;
+    /// <summary>The bundled engine's chunk budget plus [CLS]/[SEP], derived from the resolved budget
+    /// (config D: the manifest's chunkTokens) — never a literal window.</summary>
+    private static int BundledWindow()
+    {
+        var bundled = new EmbeddingSettings("local", null, null, null);
+        var service = TestData.CreateEmbeddingService();
+        return service.ResolveChunkBudgetFor(bundled)
+               + service.ResolveTokenizer(bundled)!.SpecialTokenReservation;
+    }
 
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
@@ -73,7 +80,7 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
         var bundled = new EmbeddingSettings("local", null, null, null);
         var engineTokenizer = TestData.CreateEmbeddingService().ResolveTokenizer(bundled)!;
-        var engineWindow = TestData.CreateEmbeddingService().ResolveChunkBudgetFor(bundled) + engineTokenizer.SpecialTokenReservation;
+        var engineWindow = BundledWindow();
         var tokens = rows.Select(row => (row.Hash, Count: engineTokenizer.EncodeToIds(row.Value, true).Count)).ToList();
 
         rows.Count.ShouldBeGreaterThan(1,
@@ -81,6 +88,10 @@ public sealed class WriteChunksToBudgetTests : IAsyncLifetime
             + $"{string.Join(", ", tokens.Select(t => t.Count))} tokens");
         tokens.Where(t => t.Count > engineWindow).ShouldBeEmpty(
             $"every stored row must fit the model that embeds it; worst {tokens.Max(t => t.Count)} tokens");
+        var legacyWindow = OnnxEmbeddingGenerator.MaxContentTokens + engineTokenizer.SpecialTokenReservation;
+        tokens.Max(t => t.Count).ShouldBeGreaterThan(legacyWindow,
+            "the lower bound proves the resolved budget is actually in use: a body this size must produce a row "
+            + $"past the legacy {legacyWindow}-token window, or the ceiling above would pass even chunked at 254");
     }
 
     /// <summary>No text may be lost in the split — the reason the acceptance criteria include a length check.</summary>

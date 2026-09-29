@@ -58,7 +58,7 @@
       "query": "warn when a search query is long enough that the embedding window will trim it",
       "expectedSource": "src:AiRaccoon.Core:Memory:QueryGuard:QueryLengthGuard.cs",
       "expectedHash": null,
-      "answerSpan": "warns when a query is long enough that the bundled model's embedding window will likely trim it",
+      "answerSpan": "warns when a query is long enough that the active engine's chunk budget will likely trim it",
       "targetProjectId": "ai-raccoon",
       "targetScope": "project",
       "kind": "code",

@@ -191,8 +191,9 @@ public sealed partial class EmbeddingService(
             MetricsConfigKeys.SelfMetricsProjectId));
 
     /// <summary>
-    ///     Static bundled-default budget (254 local / window for others), kept for legacy callers.
-    ///     Manifest-aware resolution: <see cref="ResolveChunkBudgetFor" />.
+    ///     Static legacy budget (254 local / context window for others), kept for legacy callers —
+    ///     NOT the bundled engine's live budget, which its manifest's chunkTokens sets (1022 since
+    ///     config D). Manifest-aware resolution: <see cref="ResolveChunkBudgetFor" />.
     /// </summary>
     public static int SafeChunkBudgetFor(string provider, string? model) =>
         provider.ToLowerInvariant() switch
@@ -202,10 +203,11 @@ public sealed partial class EmbeddingService(
         };
 
     /// <summary>
-    ///     The engine's real content-token chunk budget, resolved per engine (D6/D9): bundled and
-    ///     legacy local stay 254; manifest-local models get <c>min(510, ctx − 2)</c> (the ONLY WP3
-    ///     behavior change, confined to manifest models); openai/unknown keep today's min(256, 8191)
-    ///     = 256 cap.
+    ///     The engine's real content-token chunk budget, resolved per engine (D6/D9, ADR-0125): the
+    ///     bundled engine follows its manifest's chunkTokens (1022 since config D); legacy local
+    ///     .onnx files stay 254; a manifest model without chunkTokens gets min(510, ctx − 2); and
+    ///     openai/unknown keep today's min(256, 8191) = 256 cap. The query-trim budget is this same
+    ///     number by design (the coupling is deliberate — ADR-0071's amendment, ADR-0125).
     /// </summary>
     public int ResolveChunkBudgetFor(EmbeddingSettings settings)
     {

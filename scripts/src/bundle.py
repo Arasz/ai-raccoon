@@ -1,5 +1,8 @@
 """Model bundle contract: filenames, URLs, and SHA-256 pins for AiRaccoon's local embedding models."""
 
+import json
+from pathlib import Path
+
 # ADR-0108: the one bundled engine (memory and code) — granite-embedding-small-english-r2, fp16
 # export, laid out as a manifest model directory under Models/. Pinned to the repo commit so a
 # re-upload upstream cannot change what a build packs; the product's own `model download` wrote
@@ -14,7 +17,7 @@ BUNDLED_FILES = (
     ("tokenizer_config.json", _BUNDLED_REPO + "tokenizer_config.json", "ce06781b38bb393db68c9e0709bddd31ef5d88f2c6fbb3fd9f369778fb85e451"),
 )
 # Written by `ai-raccoon model download`, committed beside the model; verified, never fetched.
-BUNDLED_MANIFEST = ("ai-raccoon.manifest.json", "777268daa83ea925bfbfe4e020e62d0232be6df48189280a117a3de65bbd4ff6")
+BUNDLED_MANIFEST = ("ai-raccoon.manifest.json", "ef600cb98e973722d33646a86640270a2a6a968f4842f55f60f7cd52d9e6a502")
 
 # ADR-0110: the opt-in MLX execution provider's rewritten graph — attention as standard ops, Range
 # folded to CumSum — generated from model_fp16.onnx by scripts/src/make_mlx_graph.py. It references
@@ -59,3 +62,10 @@ WEBGPU_CORE_FILES = {
                                                        ("dxcompiler.dll", "dxcompiler.dll"),
                                                        ("dxil.dll", "dxil.dll"))),
 }
+
+
+def bundled_manifest() -> dict:
+    """The committed ai-raccoon.manifest.json beside the bundled model, parsed."""
+    root = Path(__file__).resolve().parents[2]
+    path = root / "src" / "AiRaccoon" / "Models" / BUNDLED_DIR / BUNDLED_MANIFEST[0]
+    return json.loads(path.read_text())

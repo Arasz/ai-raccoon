@@ -127,12 +127,14 @@ public sealed class ChunkBackfillTests : IDisposable
         string.Join("\n\n", Enumerable.Range(0, count).Select(i =>
             $"Paragraph {i}. " + string.Join(' ', Enumerable.Repeat("memory retrieval budget window", 12))));
 
+    /// <summary>Over the window the backfill itself splits at — the manifest-aware resolution, not the
+    /// legacy static budget — counted in the engine's own tokenizer.</summary>
     private static async Task<long> OverWindowCountAsync(SqliteConnection connection)
     {
-        var tokenizer = OnnxEmbeddingGenerator.CreateTokenizer(BundledModel.ResolveVocabPath());
-        var budget = EmbeddingService.SafeChunkBudgetFor("local", null);
+        var budget = await new ChunkPositionScanner(TestData.RealFileTypeMatcher(), TestData.CreateEmbeddingService())
+            .BudgetAsync(connection, TestContext.Current.CancellationToken);
         var values = await connection.QueryAsync<string>("SELECT value FROM entries WHERE value IS NOT NULL");
-        return values.Count(v => tokenizer.CountTokens(v) > budget);
+        return values.Count(v => budget.CountTokens(v) > budget.MaxTokens);
     }
 
     /// <summary>Seeds rows the way the defect made them: one row per document, chunker bypassed.</summary>

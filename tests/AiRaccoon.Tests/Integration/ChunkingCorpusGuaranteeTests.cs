@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using Microsoft.ML.Tokenizers;
 using Shouldly;
 using Xunit;
@@ -10,9 +11,10 @@ namespace AiRaccoon.Tests.Integration;
 /// <summary>
 ///     RAG-F3/RAG-F4 hard invariant (docs/adr/0036): chunking this repo's own docs/**/*.md, plus a
 ///     set of adversarial fixtures, through the production local-engine path must never emit a chunk
-///     whose real BERT WordPiece length exceeds the model's usable content budget
-///     (<see cref="OnnxEmbeddingGenerator.MaxContentTokens" /> = 254, reserving 2 for [CLS]/[SEP]).
-///     This is asserted as a hard ceiling, not a percentage improvement.
+///     whose real BERT WordPiece length exceeds the engine's usable content budget. Run at both
+///     shipped budgets — the legacy 254 (<see cref="OnnxEmbeddingGenerator.MaxContentTokens" />) and
+///     the bundled manifest's 1022 since config D (ADR-0125) — each ceiling reserving 2 for
+///     [CLS]/[SEP]. This is asserted as a hard ceiling, not a percentage improvement.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Nightly)]
@@ -20,9 +22,26 @@ public sealed class ChunkingCorpusGuaranteeTests
 {
     private const int MaxTokens = OnnxEmbeddingGenerator.MaxContentTokens;
 
-    [RetryFact]
-    public void ChunkingDocsCorpus_WithRealBertTokenizer_NoChunkExceedsTheContentBudget()
+    /// <summary>Both shipped memory budgets — the legacy 254 and the bundled manifest's own
+    /// chunkTokens, derived so a manifest move cannot leave this gate green against a stale number
+    /// (plan row 15).</summary>
+    public static TheoryData<int> ShippedMemoryBudgets =>
+    [
+        OnnxEmbeddingGenerator.MaxContentTokens,
+        BundledManifestChunkTokens()
+    ];
+
+    /// <summary>The bundled manifest's chunkTokens — read from the manifest, never a literal.</summary>
+    private static int BundledManifestChunkTokens() =>
+        new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())
+            .Load(BundledModel.ResolveDirectory()).ChunkTokens
+        ?? throw new InvalidOperationException("the bundled manifest must declare chunkTokens");
+
+    [RetryTheory]
+    [MemberData(nameof(ShippedMemoryBudgets))]
+    public void ChunkingDocsCorpus_WithRealBertTokenizer_NoChunkExceedsTheContentBudget(int budget)
     {
+        var ceiling = budget + EngineDescriptor.DefaultSpecialTokenReservation;
         var (chunker, bert) = BuildRealLocalChunker();
         var repoRoot = FindRepoRoot();
         var files = Directory.EnumerateFiles(Path.Combine(repoRoot, "docs"), "*.md", SearchOption.AllDirectories)
@@ -35,12 +54,12 @@ public sealed class ChunkingCorpusGuaranteeTests
         foreach (var file in files)
         {
             var content = File.ReadAllText(file);
-            var chunks = chunker.Chunk(content, MaxTokens, 48);
+            var chunks = chunker.Chunk(content, budget, 48);
             foreach (var chunk in chunks)
             {
                 totalChunks++;
                 var tokens = bert.EncodeToIds(chunk, true, true, true).Count;
-                if (tokens > 256)
+                if (tokens > ceiling)
                 {
                     overBudget.Add((file, tokens));
                 }
@@ -48,7 +67,7 @@ public sealed class ChunkingCorpusGuaranteeTests
         }
 
         overBudget.ShouldBeEmpty(
-            $"{overBudget.Count}/{totalChunks} chunks exceed the model's 256-token window; " +
+            $"{overBudget.Count}/{totalChunks} chunks exceed the {ceiling}-token ceiling ({budget} + specials); " +
             $"worst: {(overBudget.Count > 0 ? overBudget.MaxBy(x => x.Tokens) : default)}");
     }
 
@@ -93,16 +112,18 @@ public sealed class ChunkingCorpusGuaranteeTests
             line.TrimStart().StartsWith("```", StringComparison.Ordinal)
             || line.TrimStart().StartsWith("~~~", StringComparison.Ordinal));
 
-    [RetryFact]
-    public void ChunkingHostileFixtures_NoChunkExceedsTheContentBudget()
+    [RetryTheory]
+    [MemberData(nameof(ShippedMemoryBudgets))]
+    public void ChunkingHostileFixtures_NoChunkExceedsTheContentBudget(int budget)
     {
+        var ceiling = budget + EngineDescriptor.DefaultSpecialTokenReservation;
         var (chunker, bert) = BuildRealLocalChunker();
 
         foreach (var (name, text) in HostileFixtures())
         {
-            var chunks = chunker.Chunk(text, MaxTokens, 48);
-            chunks.ShouldAllBe(chunk => bert.EncodeToIds(chunk, true, true, true).Count <= 256,
-                $"fixture '{name}' produced a chunk over the 256-token window");
+            var chunks = chunker.Chunk(text, budget, 48);
+            chunks.ShouldAllBe(chunk => bert.EncodeToIds(chunk, true, true, true).Count <= ceiling,
+                $"fixture '{name}' produced a chunk over the {ceiling}-token ceiling ({budget} + specials)");
         }
     }
 

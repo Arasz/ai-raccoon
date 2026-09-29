@@ -344,10 +344,10 @@ has not yet reached. The chunker uses the o200k_base tokenizer with code-fence-a
 and an overlay window for context continuity between chunks.
 
 **Chunk bounds** are clamped to the configured embedding engine's maximum input
-tokens: 254 content tokens for the bundled granite-embedding-small-english-r2 engine (a
-256-token window minus 2 reserved special tokens; ADR-0108), 8191 for OpenAI-compatible
-models. An unconfigured bank resolves to the same bundled default: 254 tokens per chunk
-with a 48-token overlay.
+tokens: 1022 content tokens for the bundled granite-embedding-small-english-r2 engine, via
+the bundled manifest's `chunkTokens` (ADR-0125; 254 until 1.54.0, ADR-0108), 8191 for
+OpenAI-compatible models. An unconfigured bank resolves to the same bundled default: 1022
+tokens per chunk with a 48-token overlay (unchanged).
 
 A line longer than the budget is split at the last whitespace inside it, else at the last
 keyword-term boundary (a character outside letters, digits and `_`), so every search term stays
@@ -874,7 +874,7 @@ line/brace based:
 The budget is a fixed **510** tokens — `EmbeddingService.MaxManifestChunkTokens`
 (512 minus the 2-token `<s>`/`</s>` reservation), the same manifest cap
 `ResolveChunkBudgetFor` derives for manifest-local embedding models, never
-the memory chunker's 254. An earlier **126** figure (`min(510,
+the memory chunker's budget (1022 since ADR-0125). An earlier **126** figure (`min(510,
 128 − 2)`) rested on a 128-token context claim the ONNX graph does not have
 (measured on #422, retired by #453). Counting uses `ICodeTokenizer`: since ADR-0108, the
 bundled granite-embedding-small-english-r2 `tokenizer.json` (the same tokenizer the memory

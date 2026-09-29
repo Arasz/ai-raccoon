@@ -3,6 +3,7 @@ using System.Runtime.ExceptionServices;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
+using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -23,6 +24,7 @@ public sealed partial class EntryEmbedder(
     IModelMigrationLease migrationLease,
     TimeProvider timeProvider,
     IVecDimensionReconciler vecDimensions,
+    IChunkBudgetReconciler chunkBudgets,
     EmbedDrainReporter reporter,
     IOperationTelemetry telemetry,
     ILogger<EntryEmbedder> logger) : IEntryEmbedder
@@ -45,13 +47,23 @@ public sealed partial class EntryEmbedder(
     /// the 1012 Warning — one per process per migration, so the 15s relay poll cannot flood (M8).</summary>
     private long? _warnedNoProviderMigration;
 
-    /// <inheritdoc />
+    /// <summary>Spent once this process force-opened its one budget-drift migration: a run whose retryable
+    /// skips withhold the <c>embedding.chunkBudget</c> stamp waits for the next server start to retry (P1c).</summary>
+    private bool _budgetDriftAttempted;
+
+    /// <summary>
+    ///     Opens a migration when the engine fingerprint no longer matches the bank's record, or — config-D
+    ///     P1c, extending <see cref="IEntryEmbedder.ReconcileFingerprintAsync" />'s contract — force-opens a
+    ///     RE-CHUNK-ONLY migration when the <c>embedding.chunkBudget</c> stamp drifts from the resolved budget
+    ///     at an equal fingerprint (stale, or absent on a non-empty bank). A zero-row bank is stamped silently.
+    ///     False when nothing changed, no engine is recorded, a migration is already open, or this process
+    ///     already spent its once-per-server-start drift retry.
+    /// </summary>
     public async Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var stored = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken);
         var settings = await ReadSettingsAsync(connection, cancellationToken);
-        if (stored is null || string.IsNullOrWhiteSpace(settings.Provider)
-                           || string.Equals(stored, embeddings.EngineFingerprint(settings.Provider, settings.Model, settings.BaseUrl), StringComparison.Ordinal))
+        if (stored is null || string.IsNullOrWhiteSpace(settings.Provider))
         {
             return false;
         }
@@ -63,7 +75,48 @@ public sealed partial class EntryEmbedder(
             return false;
         }
 
-        await StartMigrationAsync(connection, settings.Provider, settings.Model, settings.BaseUrl, timeProvider.GetUtcNow(), cancellationToken);
+        var engine = embeddings.EngineFingerprint(settings.Provider, settings.Model, settings.BaseUrl);
+        if (!string.Equals(stored, engine, StringComparison.Ordinal))
+        {
+            await StartMigrationAsync(connection, settings.Provider, settings.Model, settings.BaseUrl,
+                timeProvider.GetUtcNow(), cancellationToken);
+            return true;
+        }
+
+        return await ReconcileChunkBudgetAsync(connection, settings, engine, cancellationToken);
+    }
+
+    /// <summary>
+    ///     The budget-drift trigger (P1c): budget drift is an equal-fingerprint case, so
+    ///     <see cref="StartMigrationAsync" />'s short-circuit would silently no-op it — this force-opens the
+    ///     outbox transaction WITHOUT <c>MarkAllEmbeddedPending</c>: drift moves chunk boundaries, never
+    ///     vectors, so unchanged rows keep the vectors they have (review F4).
+    /// </summary>
+    private async Task<bool> ReconcileChunkBudgetAsync(SqliteConnection connection, EmbeddingSettings settings,
+        string engine, CancellationToken cancellationToken)
+    {
+        if (_budgetDriftAttempted)
+        {
+            return false;
+        }
+
+        var state = await chunkBudgets.CheckAsync(connection, cancellationToken);
+        if (state.Matches)
+        {
+            return false;
+        }
+
+        if (state.BankIsEmpty)
+        {
+            // Nothing to re-chunk and nothing to prove: stamp silently (plan P1c).
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.ChunkBudget,
+                state.ResolvedBudget.ToString(CultureInfo.InvariantCulture), cancellationToken);
+            return false;
+        }
+
+        await OpenMigrationAsync(connection, settings.Provider, settings.Model, settings.BaseUrl, engine,
+            timeProvider.GetUtcNow(), markAllEmbeddedPending: false, cancellationToken);
+        _budgetDriftAttempted = true;
         return true;
     }
 
@@ -84,6 +137,20 @@ public sealed partial class EntryEmbedder(
             return new EmbeddingConfig(provider, model ?? BundledModel, engine);
         }
 
+        return await OpenMigrationAsync(connection, provider, model, baseUrl, engine, now,
+            markAllEmbeddedPending: true, cancellationToken);
+    }
+
+    /// <summary>
+    ///     The outbox transaction both open paths share: the engine settings, the migration-started row,
+    ///     and — only when <paramref name="markAllEmbeddedPending" /> — every embedded row marked pending
+    ///     with its embed attempts reset (a re-embed). The budget-drift trigger passes false: its phase
+    ///     re-chunks, and replacement rows arrive <c>pending</c> on their own (plan P1c, review F4).
+    /// </summary>
+    private async Task<EmbeddingConfig> OpenMigrationAsync(SqliteConnection connection, string provider,
+        string? model, string? baseUrl, string engine, DateTimeOffset now, bool markAllEmbeddedPending,
+        CancellationToken cancellationToken)
+    {
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         try
         {
@@ -103,8 +170,11 @@ public sealed partial class EntryEmbedder(
                     "ai-raccoon: a model migration is already in progress; wait for it to finish before starting another");
             }
 
-            await connection.ExecuteAsync(Def(MemorySql.MarkAllEmbeddedPending, cancellationToken, transaction));
-            await connection.ExecuteAsync(Def(MemorySql.ResetEmbedAttempts, cancellationToken, transaction));
+            if (markAllEmbeddedPending)
+            {
+                await connection.ExecuteAsync(Def(MemorySql.MarkAllEmbeddedPending, cancellationToken, transaction));
+                await connection.ExecuteAsync(Def(MemorySql.ResetEmbedAttempts, cancellationToken, transaction));
+            }
 
             await transaction.CommitAsync(cancellationToken);
         }
@@ -183,6 +253,13 @@ public sealed partial class EntryEmbedder(
             reporter.MigrationStarted(logger, corpus, owed);
 
             await ReconcileVecDimensionsAsync(connection, cancellationToken);
+            // config-D P1c: the chunk-budget rebudget phase runs HERE — after the vec-dimension reconcile,
+            // before the first SelectAllPendingForEmbed — so every vector the loop writes was computed from
+            // post-re-chunk values, replacement rows arrive pending and embed in this same drain, and the
+            // migration cannot close with rows pending. The report is the phase report (plan P1: its skip
+            // counts are what gate the embedding.chunkBudget stamp, which RunAsync writes only at zero
+            // retryable skips).
+            await chunkBudgets.RunAsync(connection, cancellationToken);
 
             // Time-strided, NOT per-batch: a per-batch line floods (1,492 lines on the owner's
             // 47,723-row backlog) and the metric buffer would drop records. One 1013 per lease

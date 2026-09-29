@@ -72,7 +72,7 @@ public sealed class QueryTruncationTests : IDisposable
 
         var message = _logger.Collector.GetSnapshot().First(r => r.Id.Id == QueryTrimmedEventId).Message;
         message.ShouldContain("search query");
-        message.ShouldContain("254");
+        message.ShouldContain("1022");
         message.ShouldContain("shorter");
     }
 
@@ -106,9 +106,11 @@ public sealed class QueryTruncationTests : IDisposable
         _logger.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == QueryTrimmedEventId);
     }
 
+    // Sized well past the 1022-token trim budget (config D), so "a long query" stays over the
+    // window at every shipped budget and the trim path is actually exercised.
     private static string LongQuery() =>
         string.Join(' ', Enumerable.Repeat(
-            "how does the retrieval pipeline weigh full text against vectors when the corpus is large", 40));
+            "how does the retrieval pipeline weigh full text against vectors when the corpus is large", 80));
 
     private async Task<SqliteConnection> OpenConfiguredAsync()
     {

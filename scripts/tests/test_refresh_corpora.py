@@ -2,8 +2,8 @@
 
 Fixture banks only for the contract (no heavy generators); one pinned-copy
 gate (skipped when the copy is absent) proves the real registry reproduces
-`project-corpus-100.json` byte-for-byte and reports the eval-set artifact's
-provenance gap instead of hiding it.
+each committed corpus byte-for-byte from its own pinned snapshot — and that a
+different present copy is reported as the provenance gap it is, never hidden.
 """
 
 import json
@@ -262,6 +262,14 @@ class TestWrapper:
         assert all(r["status"] == "anchor-drift" for r in report["corpora"])
 
 
+@pytest.fixture(scope="module")
+def pinned_copy_refresh(tmp_path_factory):
+    """One registry refresh against PINNED_COPY: (report, records by name)."""
+    report = refresh_corpora.refresh(PINNED_COPY, COMMITTED_CORPORA,
+                                     tmp_path_factory.mktemp("regenerated"))
+    return report, {r["name"]: r for r in report["corpora"]}
+
+
 class TestRegistry:
     def test_default_specs_are_the_two_committed_corpora(self):
         specs = refresh_corpora.default_specs()
@@ -306,14 +314,27 @@ class TestRegistry:
 
     @pytest.mark.skipif(not PINNED_COPY.exists(),
                         reason=f"pinned copy absent: {PINNED_COPY}")
-    def test_pinned_copy_reproduces_every_committed_corpus(self, tmp_path):
-        report = refresh_corpora.refresh(PINNED_COPY, COMMITTED_CORPORA,
-                                         tmp_path / "regenerated")
-        by_name = {r["name"]: r for r in report["corpora"]}
-        assert set(by_name) == {"project-corpus-100.json", "eval-set-100.json"}
-        for name, record in by_name.items():
-            assert record["matchesCommitted"] is True, (name, record["problems"])
-            assert record["status"] == "clean", (name, record["status"])
-            assert record["queryCount"] == 100, name
-        assert report["status"] == "clean"
-        assert report["exitCode"] == 0
+    @pytest.mark.parametrize("name", ["project-corpus-100.json",
+                                     "eval-set-100.json"])
+    def test_pinned_copy_reproduces_every_committed_corpus(self, name,
+                                                          pinned_copy_refresh):
+        # The honest expectation is per corpus, chosen by the corpus's own pin
+        # (the E1 discipline of test_retrieval_tuning_eval_corpus): the pinned
+        # snapshot must reproduce the committed bytes; any other present copy is
+        # a provenance gap the registry must REPORT with both shas and without
+        # ever running a generator over it — a copy advance must never silently
+        # regenerate the instrument.
+        report, by_name = pinned_copy_refresh
+        record = by_name[name]
+        pin = refresh_corpora.snapshot_sha_of(COMMITTED_CORPORA / name)
+        copy_sha = report["copySnapshotSha256"]
+        if pin != copy_sha:
+            assert record["status"] == "snapshot-mismatch", record
+            assert record["matchesCommitted"] is None, record
+            assert record["queryCount"] is None, record
+            assert any(pin[:12] in problem and copy_sha[:12] in problem
+                       for problem in record["problems"]), record["problems"]
+            return
+        assert record["matchesCommitted"] is True, (name, record["problems"])
+        assert record["status"] == "clean", (name, record["status"])
+        assert record["queryCount"] == 100, name
