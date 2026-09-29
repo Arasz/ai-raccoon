@@ -15,8 +15,11 @@ pinned by tests, tests only where a gap exists.
 (3 MUST, 6 SHOULD); all are folded into the sections below in place. Two fold decisions where the
 review offered options: (a) skip classes are split — *retryable* skips (note groups whose hash check
 fails after `NoteTextOrder` backtracking) gate the `embedding.chunkBudget` stamp and are retried via
-the re-chunk-only drift path once per server start until they converge; *terminal* skips (mirror rows
-whose source file is gone — nothing re-chunkable exists) are counted in the phase report, named in
+the re-chunk-only drift path once per server start, for at most three unproven passes per resolved
+budget (join-review correction: the counter is per budget, not per group; after the bound the group
+is left terminal for that budget and the stamp is written anyway — ADR-0125's residual population);
+*terminal* skips (mirror rows whose source file is not usable — gone, unreadable, or no handler
+claims it) are counted in the phase report, named in
 ADR-0125 and breaking-changes, and do not gate the stamp because they cannot converge (F1 mech 4 + F6);
 (b) budget drift opens a **re-chunk-only** migration (no `MarkAllEmbeddedPending`) — chunk boundaries
 are the only thing that changed, so a full re-embed there is the pointless outage F4 identified.
@@ -336,8 +339,11 @@ bank. This package lands the owner's "re-chunk AND re-embed" machinery.
   the phase re-chunks inside it. **Stamp gate (review F1 mech 4, F6):** `embedding.chunkBudget` is
   written only when the phase completes with **zero retryable skips**. Retryable skips (note groups
   unprovable after backtracking) block the stamp and are retried via the re-chunk-only drift path
-  **once per server start** until they converge. Terminal skips (mirror rows whose source file is
-  gone) are counted in the phase report, named in ADR-0125 and breaking-changes as not re-chunked
+  **once per server start**, for at most three unproven passes per resolved budget (join-review
+  correction: the counter is per budget, not per group); after the bound the group is left terminal
+  for that budget and the stamp is written anyway. Terminal skips (mirror rows whose source file is
+  not usable — gone, unreadable, or handler-less) are counted in the phase report, named in
+  ADR-0125 and breaking-changes as not re-chunked
   (still re-embedded at their stored bounds), and do not gate the stamp.
 
 **Files owned:** the three above plus
@@ -409,8 +415,9 @@ ADR + breaking-changes entries say so instead of promising "every bank re-chunks
    `Assert.Fail` when the plugin is absent, set on the named MLX run: the `build-mlx` job in
    `.github/workflows/build.yml` (osx-arm64, `AIRACCOON_REQUIRE_MLX: 1` on the session-test step,
    every push to main and manual dispatch — the same trust-then-promote shape as `build-arm64`).
-   The pre-release manual checklist (`ai-raccoon-manual-checklist`) keeps a named row as the manual
-   backstop. *Gate:* same filter, plus the flag-bearing `build-mlx` run.
+   The pre-release manual checklist (`ai-raccoon-manual-checklist`) *should gain* a named row as the
+   manual backstop when the checklist is next generated (join-review correction: no such row exists
+   yet — `build-mlx` is the only named run today). *Gate:* same filter, plus the flag-bearing `build-mlx` run.
 3. The CPU path stays unpadded (regression pin against someone "fixing" padding onto CPU).
    *Gate:* `--filter "FullyQualifiedName~BundledEngineBucketPaddingTests"` (existing test, kept).
 

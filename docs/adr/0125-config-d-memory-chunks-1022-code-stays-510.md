@@ -93,7 +93,8 @@ bucket rules are pinned by tests so the unpadded 17.9 GB footprint cannot return
   three columns are lost — `rating`, `access_count` and `last_accessed_at` (the same loss
   `repair reingest` already documents). Everything else is carried forward to the replacement
   rows: `path`, `source_file`, `section`, the scope/context/workspace keys, `source_id`,
-  `agent_id`, `created_at` and `ttl_days`. A mirror group re-chunked from disk re-ingests inside
+  `agent_id`, `created_at` and `ttl_days` — the group's first row is the template, so rows with
+  divergent per-row TTLs collapse to its value. A mirror group re-chunked from disk re-ingests inside
   its own scope/context/workspace partition (the same file stored in two contexts keeps both;
   workspace rows re-chunk like any other bucket) and loses one more column, `ttl_days`: the file
   content carries no TTL for `FileIngestor` to read, so a mirror row that had a TTL stops expiring
@@ -111,7 +112,8 @@ bucket rules are pinned by tests so the unpadded 17.9 GB footprint cannot return
   merge no join proves — rows with line-ending mixes `NoteTextOrder` cannot reproduce, a row
   rewritten outside the product, or a reassembly that exhausts its work bound — is never guessed
   at. It is retried once per server start while `embedding.chunkBudget.retryAttempts` (keyed by
-  the resolved budget) has windows left; after 3 unproven passes the group is left terminal for
+  the resolved budget) has windows left; after 3 unproven passes per budget (the counter counts
+  passes of the phase, not passes of one group) the group is left terminal for
   this budget and the `embedding.chunkBudget` stamp is written anyway, so one
   permanently-unprovable group cannot re-open the migration (and its tool-refusal window) forever.
   The counter clears whenever a pass converges. A single row that already fits the resolved budget
