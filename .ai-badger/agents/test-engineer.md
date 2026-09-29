@@ -3,6 +3,7 @@ name: test-engineer
 description: >
   Testing specialist. TDD-first, phased coverage planning, edit-boundary
   discipline between test and production files.
+model: sonnet
 level: medium
 ---
 

@@ -2,6 +2,7 @@
 name: dotnet-engineer
 description: >
   .NET implementation engineer. TDD-first, matches existing conventions.
+model: sonnet
 level: medium
 ---
 

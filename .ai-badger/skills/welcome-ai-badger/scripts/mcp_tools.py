@@ -71,6 +71,15 @@ def only_generated_entries(data: Dict[str, Any]) -> bool:
 # or any future host's equivalent. Stripping it makes the #193 comparison see one launch.
 _PROJECT_DIR_ARG = re.compile(r"^\$\{[A-Z0-9_]*PROJECT_DIR\}/")
 
+# Readers whose config conversion expands ``${HOME}`` and nothing else — the pi-mcp-tools
+# fork's claude conversion (ADR-0023). For such a reader an anchored entry is not a
+# preference it can ignore: its converter drops the whole entry as an unexpanded ``${VAR}``.
+# Where one file is read by both kinds of reader, the file must carry the anchor-free
+# launch: an entry every configured reader can start beats one only the anchored reader
+# can use, and pi resolves the project-relative form against the very directory that holds
+# the file (it reads ``<cwd>/.mcp.json``, never a parent's).
+EXPANDS_HOME_ONLY = frozenset({"pi"})
+
 
 def _normalized_launch_value(key: str, value: Any) -> Any:
     """One entry value with a leading project-dir anchor removed from every ``args`` element."""
@@ -106,7 +115,8 @@ class McpDestination(NamedTuple):
 
     label: str
     # The agents that read this file, most authoritative first: the first one that is
-    # configured supplies the agentOverrides applied here (F-22).
+    # configured supplies the agentOverrides applied here (F-22) — unless a configured
+    # EXPANDS_HOME_ONLY reader forces the anchor-free launch instead (:meth:`_override_reader`).
     readers: Tuple[str, ...]
     requires_reader: bool  # written only for a configured reader, vs written regardless
     pin_cwd: bool
@@ -117,9 +127,11 @@ class McpDestination(NamedTuple):
 
 # ``.mcp.json`` alone expands ``${VAR}`` (documented by Claude Code). The Copilot CLI reads it
 # too, by cwd-upward lookup, which is why it carries the ``tools`` allowlist and why its overrides
-# fall back to Copilot's when Claude is not configured (#193).
+# fall back to Copilot's when Claude is not configured (#193). The pi-mcp-tools fork reads it as
+# well, from its session cwd only (ADR-0023) — so when pi is configured the file carries the
+# project-relative launch (:data:`EXPANDS_HOME_ONLY`) rather than Claude's project-dir anchor.
 MCP_JSON = McpDestination(
-    label=".mcp.json", readers=("claude", "copilot"), requires_reader=False, pin_cwd=False,
+    label=".mcp.json", readers=("claude", "pi", "copilot"), requires_reader=False, pin_cwd=False,
     expand_home=True, all_tools=True,
     consequence=".mcp.json not updated",
 )
@@ -389,9 +401,27 @@ class McpTools:
 
         A generated file's overrides are its reading agent's — never whichever agent happens
         to come first in config.agents (F-22). Where two hosts read one file, the first
-        configured reader in :attr:`McpDestination.readers` wins.
+        configured reader in :attr:`McpDestination.readers` wins — except that a configured
+        :data:`EXPANDS_HOME_ONLY` reader wins instead: its converter drops an anchored entry
+        whole (ADR-0023), and one file cannot carry both launches. What the anchor-preferring
+        reader loses is named in a note.
         """
         reader = self._configured_reader(dest)
+        agents = self.ctx.config.get("agents", [])
+        floor = next((name for name in dest.readers
+                      if name in EXPANDS_HOME_ONLY and name in agents), None)
+        if floor is not None and floor != reader:
+            changed = sorted(name for name, srv in servers.items()
+                             if self._resolve_server_for_agent(srv, reader)
+                             != self._resolve_server_for_agent(srv, floor))
+            if changed:
+                self.ctx.notes.append(
+                    f"{dest.label} resolves its agent overrides for {floor}, not {reader}: "
+                    f"{floor}'s config reader drops entries carrying an unexpanded ${{VAR}} "
+                    f"(ADR-0023), and one file cannot carry both launches — "
+                    f"{', '.join(changed)} get {floor}'s launch instead"
+                )
+            return floor
         if reader is not None:
             return reader
         dropped = sorted(name for name, srv in servers.items() if srv.get("agentOverrides"))
