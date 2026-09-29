@@ -33,6 +33,7 @@ import torch
 from llama_index.core.schema import Document
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
+import bundle
 from . import fts as fts_plan
 from . import scopes
 from retrieval_tuning import repo_data
@@ -64,8 +65,9 @@ EMBED_BATCH_SIZE = repo_data.KNOBS["EMBED_BATCH_SIZE"]
 # Token window handed to SentenceTransformer: mirrors the product's
 # manifest-local chunk budget for granite — EmbeddingService.ManifestContentBudget
 # takes the manifest's explicit chunkTokens (1022 since 1.54.0) ahead of the
-# min(510, ctx-2) fallback, i.e. the budget plus the two special tokens.
-EMBED_MAX_SEQ_LENGTH = repo_data.KNOBS["EMBED_MAX_SEQ_LENGTH"]
+# min(510, ctx-2) fallback, i.e. the budget plus the two special tokens. Read
+# from the bundled manifest so the window cannot drift from the shipped budget.
+EMBED_MAX_SEQ_LENGTH = bundle.bundled_manifest()["chunkTokens"] + 2
 
 # Chroma upsert batching: one call trips the server max-batch cap (5461 at
 # chromadb 1.5.9; production content holds 11,816 rows). 4000 leaves headroom
