@@ -1,5 +1,8 @@
 """Bundle contract: the pinned granite export (ADR-0108) and the legacy MiniLM vocab/GGUF pins."""
 
+import hashlib
+from pathlib import Path
+
 import bundle
 
 
@@ -37,6 +40,20 @@ def test_vocab_pins():
 def test_gguf_pins():
     assert bundle.GGUF_NAME == "all-MiniLM-L6-v2.Q5_K_M.gguf"
     assert bundle.GGUF_SHA256 == "908c82ac3849f9ca23158117cec614bd8ec404040d8794c35b4c81242bf315e3"
+
+
+def test_committed_files_match_their_pins():
+    # The manifest and MLX graph are committed, never fetched (download-embedding-model.py's
+    # gate): their pins must track every committed edit, or CI's verify step is the first to
+    # notice. This test brings that failure into the local harness.
+    root = Path(__file__).resolve().parents[2]
+    target = root / "src" / "AiRaccoon" / "Models" / bundle.BUNDLED_DIR
+    for name, pinned in (bundle.BUNDLED_MANIFEST, bundle.BUNDLED_MLX_GRAPH):
+        committed = target / name
+        assert committed.is_file(), "%s is committed, never fetched" % committed
+        assert hashlib.sha256(committed.read_bytes()).hexdigest() == pinned, (
+            "%s no longer matches its pin in scripts/src/bundle.py" % committed
+        )
 
 
 def test_sha256_pins_are_hex():

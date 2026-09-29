@@ -14,7 +14,7 @@ BUNDLED_FILES = (
     ("tokenizer_config.json", _BUNDLED_REPO + "tokenizer_config.json", "ce06781b38bb393db68c9e0709bddd31ef5d88f2c6fbb3fd9f369778fb85e451"),
 )
 # Written by `ai-raccoon model download`, committed beside the model; verified, never fetched.
-BUNDLED_MANIFEST = ("ai-raccoon.manifest.json", "777268daa83ea925bfbfe4e020e62d0232be6df48189280a117a3de65bbd4ff6")
+BUNDLED_MANIFEST = ("ai-raccoon.manifest.json", "ef600cb98e973722d33646a86640270a2a6a968f4842f55f60f7cd52d9e6a502")
 
 # ADR-0110: the opt-in MLX execution provider's rewritten graph — attention as standard ops, Range
 # folded to CumSum — generated from model_fp16.onnx by scripts/src/make_mlx_graph.py. It references
