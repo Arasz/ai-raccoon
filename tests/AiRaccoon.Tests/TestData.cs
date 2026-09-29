@@ -1,5 +1,6 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.Security.Cryptography;
+using System.Text;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.EventPump;
@@ -355,6 +356,51 @@ public static class TestData
     /// <summary>Options for an EmbeddingService whose data root is never written: only <c>device coreml</c> uses it.</summary>
     public static InfrastructureOptions EmbeddingOptions() =>
         new() { DataRoot = Path.Combine(Path.GetTempPath(), "ai-raccoon-tests-embedding"), Scope = InstallScope.User };
+
+    /// <summary>The bundled manifest's chunkTokens — the shipped chunk budget (config D), read from the
+    /// manifest so a budget-sized fixture follows it wherever it is set.</summary>
+    public static int BundledManifestChunkTokens() =>
+        new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator())
+            .Load(BundledModel.ResolveDirectory()).ChunkTokens
+        ?? throw new InvalidOperationException("the bundled manifest must declare chunkTokens");
+
+    /// <summary>A single unbroken term grown against the engine's own tokenizer until it is over twice
+    /// the shipped chunk budget: the chunker must hard-cut it across rows and no row can hold it whole.</summary>
+    public static string OverBudgetTerm()
+    {
+        var settings = new EmbeddingSettings("local", null, null, null);
+        var embeddings = CreateEmbeddingService();
+        var count = embeddings.ResolveTokenizer(settings)!.CountTokens;
+        var limit = embeddings.ResolveChunkBudgetFor(settings) * 2;
+        var term = new StringBuilder();
+        while (count(term.ToString()) <= limit)
+        {
+            term.Append('q').Append((term.Length / 4).ToString("D3"));
+        }
+
+        return term.ToString();
+    }
+
+    /// <summary>Repeats a fixture's own words until the predicate holds — the way a fixture lands its
+    /// chunk boundary exactly where its test's name says it does, at whatever budget the manifest ships.</summary>
+    public static string GrowUntil(string seed, Func<string, bool> done)
+    {
+        var words = seed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var grown = new List<string>();
+        var text = string.Empty;
+        while (!done(text))
+        {
+            if (grown.Count >= words.Length * 200)
+            {
+                throw new InvalidOperationException("the fixture seed cannot grow far enough to satisfy its predicate");
+            }
+
+            grown.Add(words[grown.Count % words.Length]);
+            text = string.Join(' ', grown);
+        }
+
+        return text;
+    }
 
     /// <summary>
     ///     Bootstraps the pinned sentencepiece fixture (tests/AiRaccoon.Tests/Resources/tokenizers/manifest.json)

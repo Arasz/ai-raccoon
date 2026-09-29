@@ -402,7 +402,10 @@ public static partial class AppRegistrations
             // config-D P1c: the migration drain's chunk-budget rebudget phase, beside IVecDimensionReconciler
             // (plan P1 files). The Func<IMemoryStore> defers store resolution past EntryEmbedder's
             // construction — the store itself takes IEntryEmbedder — and is called only when the phase runs.
-            services.AddRequiredSingleton<IChunkBudgetReconciler, ChunkBudgetReconciler>(
+            // Factory-only on purpose, like IIdentityProver above: the helper would also register the
+            // concrete type for constructor activation, which can never construct — Func<IMemoryStore>
+            // has no registration — so the DI walk's GetServices pass dies on it before this factory runs.
+            services.AddSingleton<IChunkBudgetReconciler>(
                 sp => new ChunkBudgetReconciler(sp.GetRequiredService<IFileTypeMatcher>(),
                     sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<TimeProvider>(),
