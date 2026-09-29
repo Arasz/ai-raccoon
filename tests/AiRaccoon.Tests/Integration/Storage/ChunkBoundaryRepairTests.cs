@@ -249,7 +249,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     [RetryFact]
     public async Task Run_TermLongerThanTheBudget_IsLeftAsItIs()
     {
-        var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
+        var term = TestData.OverBudgetTerm();
         var path = await WriteNoteAsync($"Release artifact digest {term} was pinned in the lockfile.");
         var before = await ValuesAsync(path);
         before.Count.ShouldBeGreaterThan(1, "premise: the term is hard-cut across rows");
@@ -265,7 +265,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     [RetryFact]
     public async Task Run_FileTheChunkerMustCut_IsNotReingested()
     {
-        var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
+        var term = TestData.OverBudgetTerm();
         var file = await IngestFileAsync("lockfile.md", $"Release artifact digest {term} was pinned in the lockfile.\n");
         var stored = (await PositionsAsync(file)).Select(p => p.Value).ToList();
         Enumerable.Range(0, stored.Count - 1).ShouldContain(i => ChunkSeam.CutsATerm(stored[i], stored[i + 1]),

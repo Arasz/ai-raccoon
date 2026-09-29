@@ -312,7 +312,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
     public async Task Search_TermLongerThanTheChunkBudget_IsFoundByTheKeywordLeg()
     {
         var ct = TestContext.Current.CancellationToken;
-        var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
+        var term = TestData.OverBudgetTerm();
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, $"Release artifact digest {term} was pinned in the lockfile."), ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
         await using (var connection = await _factory.OpenBankAsync(ct))

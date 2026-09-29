@@ -83,7 +83,7 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
     [RetryFact]
     public async Task Run_NoteWithATermLongerThanTheBudget_IsPutInTextOrder()
     {
-        var term = string.Concat(Enumerable.Range(0, 300).Select(i => $"q{i:D3}"));
+        var term = TestData.OverBudgetTerm();
         var shorts = string.Concat(Enumerable.Range(0, 12).Select(i => $"Short line {i:D2}.\n"));
         var path = await WriteAsync($"Opening marker zq71 starts the digest note.\n{shorts}Digest {term} was pinned.\n{shorts}Closing line.\n");
         await StoreOpeningLastAsync(path);
