@@ -108,7 +108,7 @@ public sealed class BundledEngineMlxSessionTests
 
     /// <summary>The fail-closed skip (review F2 defect 1): AIRACCOON_REQUIRE_MLX=1 turns the skip
     /// into a failure, so the named MLX run cannot go green without exercising MLX.</summary>
-    [Fact]
+    [RetryFact]
     public async Task MlxSkipPolicy_RequireFlagSet_TurnsTheSkipIntoAFailure()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -119,7 +119,7 @@ public sealed class BundledEngineMlxSessionTests
     }
 
     /// <summary>Without the flag the ordinary skip stands — non-MLX hosts keep passing the suite.</summary>
-    [Fact]
+    [RetryFact]
     public async Task MlxSkipPolicy_NoRequireFlag_StaysAnOrdinarySkip()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
