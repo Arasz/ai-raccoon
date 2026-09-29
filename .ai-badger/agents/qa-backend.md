@@ -3,7 +3,6 @@ name: qa-backend
 description: >
   QA for .NET server-side code. Stack-specific runner, isolation tooling, and
   blind spots (xUnit v3, Testcontainers, Stryker).
-model: opus
 level: high
 ---
 

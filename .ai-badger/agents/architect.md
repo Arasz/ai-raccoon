@@ -3,7 +3,6 @@ name: architect
 description: >
   Architecture and decomposition specialist. Read-only: produces blueprints and
   ADRs, never edits code.
-model: opus
 level: high
 disallowedTools: Edit, MultiEdit, NotebookEdit
 ---
