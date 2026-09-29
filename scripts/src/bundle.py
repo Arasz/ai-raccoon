@@ -1,5 +1,8 @@
 """Model bundle contract: filenames, URLs, and SHA-256 pins for AiRaccoon's local embedding models."""
 
+import json
+from pathlib import Path
+
 # ADR-0108: the one bundled engine (memory and code) — granite-embedding-small-english-r2, fp16
 # export, laid out as a manifest model directory under Models/. Pinned to the repo commit so a
 # re-upload upstream cannot change what a build packs; the product's own `model download` wrote
@@ -59,3 +62,10 @@ WEBGPU_CORE_FILES = {
                                                        ("dxcompiler.dll", "dxcompiler.dll"),
                                                        ("dxil.dll", "dxil.dll"))),
 }
+
+
+def bundled_manifest() -> dict:
+    """The committed ai-raccoon.manifest.json beside the bundled model, parsed."""
+    root = Path(__file__).resolve().parents[2]
+    path = root / "src" / "AiRaccoon" / "Models" / BUNDLED_DIR / BUNDLED_MANIFEST[0]
+    return json.loads(path.read_text())
