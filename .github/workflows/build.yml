@@ -475,7 +475,7 @@ jobs:
         run: python3 scripts/download-mlx-runtime.py
       - name: Build
         if: needs.changes.outputs.code == 'true'
-        run: mkdir -p .nupkg-local && dotnet build --nologo -r osx-arm64
+        run: mkdir -p .nupkg-local && dotnet build tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --nologo -r osx-arm64
       - name: Real MLX session tests (fail-closed)
         if: needs.changes.outputs.code == 'true'
         # The fail-closed switch (review F2 defect 1): with AIRACCOON_REQUIRE_MLX=1 an absent
