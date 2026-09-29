@@ -470,10 +470,12 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         # The plugin's native files are not committed (ADR-0110); the build copies them into the
         # output's mlx/ directory, where ResolveMlxPluginDirectory(AppContext.BaseDirectory) looks.
+        # That copy is RID-gated on osx-arm64 (AiRaccoon.csproj), so this job must build RID-qualified:
+        # a RID-agnostic build copies nothing and the fail-closed switch would (correctly) fail.
         run: python3 scripts/download-mlx-runtime.py
       - name: Build
         if: needs.changes.outputs.code == 'true'
-        run: mkdir -p .nupkg-local && dotnet build --nologo
+        run: mkdir -p .nupkg-local && dotnet build --nologo -r osx-arm64
       - name: Real MLX session tests (fail-closed)
         if: needs.changes.outputs.code == 'true'
         # The fail-closed switch (review F2 defect 1): with AIRACCOON_REQUIRE_MLX=1 an absent
@@ -482,14 +484,14 @@ jobs:
         env:
           AIRACCOON_REQUIRE_MLX: 1
         run: |
-          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineMlxSessionTests
+          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/osx-arm64/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineMlxSessionTests
       - name: Upload test stderr log
         # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: build-mlx-test-stderr
-          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/osx-arm64/test-stderr.log
           if-no-files-found: ignore
 
   scripts-harness:
