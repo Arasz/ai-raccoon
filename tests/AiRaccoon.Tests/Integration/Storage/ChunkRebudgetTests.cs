@@ -7,6 +7,8 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
@@ -112,8 +114,11 @@ public sealed class ChunkRebudgetTests : IDisposable
         await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
             "SELECT value FROM settings WHERE key = @key", new { key = RetryAttemptsKey }, cancellationToken: Ct));
 
+    private IReadOnlyList<FakeLogRecord> LoggedRebudgetRecords() =>
+        [.. _log.Collector.GetSnapshot().Where(record => record.Id.Id == RebudgetEventId)];
+
     private IReadOnlyList<string> LoggedRebudgetMessages() =>
-        [.. _log.Collector.GetSnapshot().Where(record => record.Id.Id == RebudgetEventId).Select(record => record.Message)];
+        [.. LoggedRebudgetRecords().Select(record => record.Message)];
 
     private IReadOnlyList<string> ExpectedPieces(string content, int budget) =>
         TestData.RealMarkdownChunker().Chunk(content, budget, ChunkingDefaults.OverlayTokens, CountTokens);
@@ -488,8 +493,35 @@ public sealed class ChunkRebudgetTests : IDisposable
 
         report.Elapsed.ShouldBe(TimeSpan.FromSeconds(305.5),
             "the phase elapsed is the injected clock's span, not the wall clock's");
-        LoggedRebudgetMessages().ShouldHaveSingleItem()
-            .ShouldEndWith(" in 00:05:05.5000000", customMessage: "event 448 reads the same Elapsed the report carries");
+        var record = LoggedRebudgetRecords().ShouldHaveSingleItem();
+        record.Level.ShouldBe(LogLevel.Information,
+            "448 is documented at Information — a Debug downgrade hides the line from default logs");
+        record.Message.ShouldEndWith(" in 00:05:05.5000000",
+            customMessage: "event 448 reads the same Elapsed the report carries");
+    }
+
+    /// <summary>F3: the elapsed must bracket the budget scan the phase opens with. The scan consumes
+    /// the phase clock through the embedding service's budget resolution, so moving <c>startedAt</c>
+    /// after <c>BudgetAsync</c> drops that span — the named kill “a stopwatch starting after the
+    /// scans” — and reddens the report value and event 448.</summary>
+    [RetryFact]
+    public async Task Rebudget_PhaseElapsed_CoversTheBudgetScan()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await using var connection = await OpenAsync();
+        _embeddings.ChunkBudgetOverride = NewBudget;
+        var scanSpan = TimeSpan.FromSeconds(305.5);
+        var clock = new FakeTimeProvider(FixedNow);
+        var reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+            new BudgetScanAdvancingEmbeddingService(_embeddings, clock, scanSpan), clock, () => _store, _log);
+
+        var report = await reconciler.RunAsync(connection, Ct);
+
+        report.NoteGroupsRechunked.ShouldBe(1);
+        report.Elapsed.ShouldBe(scanSpan,
+            "startedAt is read before BudgetAsync, so the clock work the scan consumes is inside the phase");
+        LoggedRebudgetRecords().ShouldHaveSingleItem().Message.ShouldEndWith(" in 00:05:05.5000000",
+            customMessage: "event 448 carries the same scan-inclusive span");
     }
 
     [RetryFact]
@@ -506,6 +538,70 @@ public sealed class ChunkRebudgetTests : IDisposable
             "Chunk-budget rebudget at 1022 tokens: 1 note group(s) and 0 mirror group(s) re-chunked, "
             + "0 unchanged, 0 retryable, 0 unprovable, 0 terminal in 00:05:05.5000000"
         ], "the discarded report is one event-448 line per pass carrying every count and the phase elapsed");
+        LoggedRebudgetRecords().ShouldHaveSingleItem().Level.ShouldBe(LogLevel.Information,
+            "448 is documented at Information — a Debug downgrade hides the line from default logs");
+    }
+
+    /// <summary>F1: the all-zero fixture cannot tell the retryable and unprovable bindings apart —
+    /// swapping the two arguments in the log call survives it. One healthy note plus one unproven
+    /// note makes those counts differ in a single pass (1 vs 0), so the exact line goes red.</summary>
+    [RetryFact]
+    public async Task Rebudget_Event448_ReadsNonZeroSkipCounts()
+    {
+        var healthy = LongNote();
+        var broken = "Second note.\n\n" + LongNote();
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, healthy), Ct);
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, broken), Ct);
+        await using var connection = await OpenAsync();
+        var brokenPath = NotePath(broken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET value = value || ' tampered' WHERE id = (SELECT MIN(id) FROM entries WHERE path = @path)",
+            new { path = brokenPath }, cancellationToken: Ct));
+        _embeddings.ChunkBudgetOverride = NewBudget;
+        var reconciler = NewReconciler(ScriptedTimeProvider.ForSpan(TimeSpan.FromSeconds(305.5)));
+
+        var report = await reconciler.RunAsync(connection, Ct);
+
+        report.NoteGroupsRechunked.ShouldBe(1, "the healthy group re-chunks");
+        report.RetryableSkipped.ShouldBe(1, "the tampered group's merge cannot prove");
+        var record = LoggedRebudgetRecords().ShouldHaveSingleItem();
+        record.Level.ShouldBe(LogLevel.Information,
+            "448 is documented at Information — a Debug downgrade hides the line from default logs");
+        record.Message.ShouldBe(
+            "Chunk-budget rebudget at 1022 tokens: 1 note group(s) and 0 mirror group(s) re-chunked, "
+            + "0 unchanged, 1 retryable, 0 unprovable, 0 terminal in 00:05:05.5000000",
+            "with a nonzero retryable count, swapping the retryable/unprovable arguments changes this line");
+    }
+
+    /// <summary>Delegates to the fixture's counting service, but advances the phase clock once per
+    /// budget resolution — the embedding-service call <see cref="ChunkPositionScanner.BudgetAsync" />
+    /// makes while it scans — so a test can observe where the elapsed bracket starts.</summary>
+    private sealed class BudgetScanAdvancingEmbeddingService(
+        CountingEmbeddingService inner, FakeTimeProvider clock, TimeSpan scanSpan) : IEmbeddingService
+    {
+        public string EngineFingerprint(string provider, string? model, string? baseUrl) =>
+            inner.EngineFingerprint(provider, model, baseUrl);
+
+        public IEmbeddingGenerator<string, Embedding<float>> CreateGenerator(EmbeddingSettings settings) =>
+            inner.CreateGenerator(settings);
+
+        public string TrimQueryToWindow(EmbeddingSettings settings, string query) =>
+            inner.TrimQueryToWindow(settings, query);
+
+        public string DocumentText(EmbeddingSettings settings, string text) => inner.DocumentText(settings, text);
+
+        public double? RelevanceFloor(EmbeddingSettings settings) => inner.RelevanceFloor(settings);
+
+        public int ResolveChunkBudgetFor(EmbeddingSettings settings)
+        {
+            var budget = inner.ResolveChunkBudgetFor(settings);
+            clock.Advance(scanSpan);
+            return budget;
+        }
+
+        public int ResolveDimensions(EmbeddingSettings settings) => inner.ResolveDimensions(settings);
+
+        public IEmbeddingTokenizer? ResolveTokenizer(EmbeddingSettings settings) => inner.ResolveTokenizer(settings);
     }
 
     private sealed record Row(long Id, string Hash, string Value, string EmbedState, string? AgentId,

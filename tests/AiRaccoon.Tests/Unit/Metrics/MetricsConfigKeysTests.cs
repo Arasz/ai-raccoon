@@ -91,7 +91,7 @@ public sealed class MetricsConfigKeysTests
     ///     family cannot be added on one side only (derive-or-delete).
     /// </summary>
     [Fact]
-    public void InternalSeriesPrefixes_CoversJobDrainWriteAndSearchQueryAndSearchFusion()
+    public void InternalSeriesPrefixes_CoversJobDrainWriteSearchQuerySearchFusionAndRechunk()
     {
         MetricsConfigKeys.InternalSeriesPrefixes.ShouldBe(
             ["job.", "drain.", "write.", "search.query.", "search.fusion.", "chunk.rechunk."]);
