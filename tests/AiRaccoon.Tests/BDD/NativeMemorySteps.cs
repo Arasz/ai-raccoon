@@ -44,9 +44,10 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     private static readonly IChunker RealChunker = TestData.RealMarkdownChunker();
 
     // Real key material is contiguous base62/underscore after a known secret prefix — natural-language
-    // fixture ids like "sk-hub-history-is-user-data" must not match.
+    // fixture ids like "sk-hub-history-is-user-data" must not match, and the word boundary keeps
+    // tool ids like "task-graph__step_complete" from matching the tail of their own name (\bsk-).
     private static readonly Regex SecretValuePattern = new(
-        @"AKIA[0-9A-Z]{16}|sk-(proj-|ant-)?[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9]{10,}",
+        @"AKIA[0-9A-Z]{16}|\bsk-(proj-|ant-)?[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9]{10,}",
         RegexOptions.Compiled);
 
     private static readonly HashSet<string> ScannedExtensions = new(StringComparer.OrdinalIgnoreCase)
