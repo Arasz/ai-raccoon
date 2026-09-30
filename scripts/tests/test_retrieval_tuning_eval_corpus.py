@@ -331,3 +331,65 @@ def test_generator_is_deterministic_and_matches_committed_corpus(tmp_path: Path)
     assert b1 == CORPUS_PATH.read_bytes(), (
         "committed eval-set-100.json differs from a fresh generation of the same inputs"
     )
+
+
+# ---------------------------------------------------------------- composite labels (1022)
+
+
+def test_composite_label_families_resolve_in_copy() -> None:
+    """A 1022-budget chunk joins every leaf section it holds content for into one
+    pipe-separated label ('Decision | Consequences | Alternatives considered'), so a
+    family must match any component of that label — while plain labels keep their
+    exact semantics and unrelated sections never match (a plain substring test would
+    accept 'Alternatives considered' for consequences).
+
+    This is the copy-independent contract; the pinned-copy integration leg is the
+    companion test below (gated the E1 way, so a missing copy cannot mask this one).
+    """
+    mod = _load_generator()
+
+    # The 1022 layout (COPY1022 rows, e.g. 0008 and 0004): the leading component is
+    # the ADR title, so context/consequences only resolve on a non-leading component.
+    assert mod._section_matches("0008 | Context | Decision", "context"), \
+        "a composite label must match its Context component"
+    assert mod._section_matches("Decision | Consequences | Alternatives considered", "consequences"), \
+        "a composite label must match its Consequences component"
+    assert mod._section_matches("Decision | Consequences | Alternatives considered", "decision")
+    assert mod._section_matches("0008 | Context | Decision", "decision")
+    assert not mod._section_matches("0008 | Context | Decision", "consequences")
+    assert not mod._section_matches("Consequences | Non-Goals (explicit)", "context")
+    assert not mod._section_matches("Alternatives considered", "consequences")
+
+    # Plain labels (254-era copies) keep their exact semantics.
+    assert mod._section_matches("Context", "context")
+    assert not mod._section_matches("Context", "decision")
+    assert mod._section_matches("Decision", "decision")
+    assert mod._section_matches("Decision 2 — the kill switch", "decision")
+    assert mod._section_matches("Consequences", "consequences")
+    assert not mod._section_matches("Non-Goals", "consequences")
+    assert mod._section_matches(
+        "The measurement, and a first attempt that was wrong", "the-measurement")
+    assert mod._section_matches("What was rejected", "what-was-rejected")
+    assert mod._section_matches("Decision | What was rejected", "what-was-rejected")
+
+
+@_COPY_SKIP
+def test_every_adr_family_resolves_in_the_pinned_copy() -> None:
+    """Integration leg: for every allowlisted ADR and every family its queries
+    name, the generator resolves a chunk in the pinned copy and that chunk's hash
+    is unique — through a composite label at least once, or the composite path is
+    unexercised by this copy (copy-independent semantics live in the test above).
+    """
+    mod = _load_generator()
+    composite_hits = 0
+    with _copy_conn() as conn:
+        for filename in mod.ADR_ALLOWLIST:
+            for family, _category, _difficulty, _query in mod.ADR_QUERY_SPECS[filename]:
+                row = mod._resolve_adr_target(conn, filename, family)
+                mod._check_hash_unique(conn, row["hash"], f"{filename}@{family}")
+                if "|" in (row["section"] or ""):
+                    composite_hits += 1
+    assert composite_hits > 0, (
+        "no allowlisted family resolved through a composite section label — "
+        "the composite matcher is unexercised by this copy"
+    )

@@ -9,8 +9,9 @@ copy, and emits exactly 100 queries:
   paraphrased queries, one per section family (context / decision /
   consequences; 0053 and 0067 use decision + 2 content queries because they
   lack one of the standard sections).
-- 25 non-file queries: hermes transcripts (project_id='hermes-default',
-  chunk_index=-1) and shared-tier entries without a source_file. Every one
+- 25 non-file queries: hermes transcripts (project_id='hermes-default'; the
+  content marker selects the chunk, since the 1022 re-chunk split those rows)
+  and shared-tier entries without a source_file. Every one
   carries expectedHash (entry hash) and expectedSource=null.
 
 The 4 RESERVED files belong to the 10-query test set and are never targeted
@@ -263,61 +264,64 @@ ADR_QUERY_SPECS: dict[str, list[tuple[str, str, str, str]]] = {
 # Non-file targets: (project_id, scope, chunk_index or None, unique content
 # marker, category, difficulty, query). The entry row is resolved from the copy
 # by the marker (asserted unique within the bucket); hash comes from the row.
+# The hermes transcripts were single-row (chunk_index=-1) until the 1022
+# chunk-budget migration split them; their marker, not the legacy index, is the
+# stable anchor, so they pass None (still asserted unique in the bucket).
 NON_FILE_SPECS: list[tuple[str, str, int | None, str, str, str, str]] = [
-    # --- hermes transcripts (project hermes-default, chunk_index=-1) ---
-    ("hermes-default", "project", -1,
+    # --- hermes transcripts (project hermes-default; marker picks the chunk) ---
+    ("hermes-default", "project", None,
      "ServerProbe`**: Refactored to execute probe attempts via Polly",
      "Non-file (hermes transcript)", "medium",
      "Did we refactor ServerProbe and AssetDownloader to use Polly retry pipelines with exponential backoff and jitter?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "proc_d7cf45a51e69 was the group-6 serve run",
      "Non-file (hermes transcript)", "medium",
      "Is the group-6 serve run still current, or was it superseded by the final full-suite run?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "func-jobsearch-prod still needs a restart to load the rotated OpenRouter key",
      "Non-file (hermes transcript)", "easy",
      "Which production function still needs a restart to load the rotated OpenRouter key?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "installation instructions, metadata, and setup guides for `code-review-graph`",
      "Non-file (hermes transcript)", "easy",
      "Where are the installation instructions and setup guides for the code-review-graph MCP framework?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "rollout-111-done.marker",
      "Non-file (hermes transcript)", "easy",
      "What version of ai-raccoon is installed after the 1.1.1 rollout, and is auto-promotion enabled?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "untracked editor/tool backup files from entering git tracking",
      "Non-file (hermes transcript)", "easy",
      "Did we clean up tracked .bak backup files and add gitignore rules for them?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "manualtest-tar2",
      "Non-file (hermes transcript)", "medium",
      "Which project id was used for the manual 25-tool MCP round-trip test?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "SECURITY DEFECT** note (cloud sync",
      "Non-file (hermes transcript)", "medium",
      "What did the memory sweep of the ai-raccoon project store — which ADR chunks and defect notes?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "RED: lint test suite (10 rules + wiring + real corpus)",
      "Non-file (hermes transcript)", "medium",
      "Which commits landed for the ai-badger skills-lint release 0.87.0?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "preventing API and EasyAuth calls hitting SWA routes",
      "Non-file (hermes transcript)", "medium",
      "How did we stop SWA navigation fallback from rewriting API and EasyAuth requests to index.html?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "PeachPDF generation",
      "Non-file (hermes transcript)", "easy",
      "What did PR 824 add to the PDF renderer — cancellation checks and async behaviour tests?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "all phases PASS, no FAILs, ready to merge once CI is green",
      "Non-file (hermes transcript)", "easy",
      "What was the review verdict posted on ai-raccoon PR 254?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "**Commit**: [`de15ca9f`](https://github.com/Arasz/ai-raccoon/commit/de15ca9f)",
      "Non-file (hermes transcript)", "easy",
      "Which commit re-scaffolded the ai-raccoon project files with ai-badger 0.116.6?"),
-    ("hermes-default", "project", -1,
+    ("hermes-default", "project", None,
      "IMPORTANT / INTERRUPT: STOP IMMEDIATELY. Pause or cancel any running",
      "Non-file (hermes transcript)", "easy",
      "What does the important! interrupt prompt marker tell an agent to do?"),
@@ -374,18 +378,26 @@ def slugify(section: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", section.lower()).strip("-")
 
 
-def _section_matches(section: str, family: str) -> bool:
+def _label_matches(label: str, family: str) -> bool:
     if family == "context":
-        return section == "Context"
+        return label == "Context"
     if family == "decision":
-        return section == "Decision" or section.startswith("Decision")
+        return label.startswith("Decision")
     if family == "consequences":
-        return section == "Consequences"
+        return label == "Consequences"
     if family == "the-measurement":
-        return section.startswith("The measurement")
+        return label.startswith("The measurement")
     if family == "what-was-rejected":
-        return section.startswith("What was rejected")
+        return label.startswith("What was rejected")
     raise ValueError(f"unknown family: {family}")
+
+
+def _section_matches(section: str, family: str) -> bool:
+    """A 1022-budget chunk joins every leaf section it holds content for into
+    one pipe-separated label ('Decision | Consequences | Alternatives
+    considered'): a family matches any component of that label. A plain label
+    is the single-component case of the same rule."""
+    return any(_label_matches(part.strip(), family) for part in section.split("|"))
 
 
 def _answer_span(value: str, limit: int = 120) -> str:
