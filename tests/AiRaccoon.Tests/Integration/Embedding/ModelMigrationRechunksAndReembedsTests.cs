@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -10,6 +11,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -42,6 +44,8 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
     private readonly SqliteMemoryStore _store;
     private readonly ChunkBudgetReconciler _reconciler;
     private readonly EntryEmbedder _embedder;
+    private readonly FakeLogger<ChunkBudgetReconciler> _reconcilerLog = new();
+    private readonly RecordingMeasurementRecorder _measurements = new();
 
     public ModelMigrationRechunksAndReembedsTests()
     {
@@ -52,9 +56,9 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _time,
             _embeddings, null, null, null, null, null, null, null);
         _reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            _embeddings, _time, () => _store, NullLogger<ChunkBudgetReconciler>.Instance);
+            _embeddings, _time, () => _store, _reconcilerLog);
         _embedder = TestData.CreateEntryEmbedder(_embeddings, new SqliteModelMigrationLease(_time), _time,
-            new VecDimensionReconciler(), _reconciler);
+            new VecDimensionReconciler(), _reconciler, measurements: _measurements);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -115,6 +119,48 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
         (await connection.ExecuteScalarAsync<long?>(
             "SELECT finished_at FROM model_migration ORDER BY id DESC LIMIT 1")).ShouldNotBeNull(
             "the migration closes once the drain is done");
+    }
+
+    /// <summary>
+    ///     The migration drain's re-chunk phase reports its duration and group count through the
+    ///     drain's shared reporter. The groups value is checked against the fixture's own known
+    ///     count — exactly one over-budget note, so one group — not only against the reconciler's
+    ///     counters: an independent oracle.
+    /// </summary>
+    [RetryFact]
+    public async Task MigrationDrain_RecordsRechunkMeasurements_AfterDrain()
+    {
+        const int knownRechunkedGroups = 1;
+        var content = LongNote();
+        await using (var setup = await OpenAsync())
+        {
+            await ConfigureEngineAsync(setup);
+            await _store.WriteAsync(new MemoryWriteRequest(ProjectId, content), Ct);
+            await _store.EmbedPendingAsync(ProjectId, null, Ct);
+        }
+
+        await using var connection = await OpenAsync();
+        _embeddings.ChunkBudgetOverride = NewBudget;
+        (await _embedder.ReconcileFingerprintAsync(connection, Ct)).ShouldBeTrue(
+            "the stamp drift opens the re-chunking migration");
+
+        (await _embedder.DrainMigrationAsync(connection, Ct)).ShouldBeTrue();
+
+        _reconcilerLog.Collector.GetSnapshot().Single(record => record.Id.Id == 448).Message
+            .ShouldContain("1 note group(s) and 0 mirror group(s) re-chunked",
+                customMessage: "the reconciler's own counters say one group was replaced");
+
+        var duration = _measurements.Recorded.Single(m => m.Name == "chunk.rechunk.duration_ms");
+        duration.Kind.ShouldBe(MeasurementKind.Histogram);
+        duration.Unit.ShouldBe("ms");
+        duration.ProjectId.ShouldBe(MetricsConfigKeys.SelfMetricsProjectId);
+
+        var groups = _measurements.Recorded.Single(m => m.Name == "chunk.rechunk.groups");
+        groups.Kind.ShouldBe(MeasurementKind.Histogram);
+        groups.Unit.ShouldBe("count");
+        groups.ProjectId.ShouldBe(MetricsConfigKeys.SelfMetricsProjectId);
+        groups.Value.ShouldBe(knownRechunkedGroups,
+            "the fixture wrote exactly one over-budget note: one group re-chunked");
     }
 
     private static async Task ConfigureEngineAsync(SqliteConnection connection)

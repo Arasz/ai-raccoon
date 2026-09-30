@@ -86,14 +86,15 @@ public sealed class MetricsConfigKeysTests
     }
 
     /// <summary>
-    ///     WP11 (log-values-as-metrics) + #601 fusion signals: one constant set both MetricsReportService's discovery and
-    ///     every internal recorder's naming consume, so a sixth family cannot be added on one side
-    ///     only (derive-or-delete).
+    ///     WP11 (log-values-as-metrics) + #601 fusion signals + the re-chunk phase: one constant set both
+    ///     MetricsReportService's discovery and every internal recorder's naming consume, so another
+    ///     family cannot be added on one side only (derive-or-delete).
     /// </summary>
     [Fact]
     public void InternalSeriesPrefixes_CoversJobDrainWriteAndSearchQueryAndSearchFusion()
     {
-        MetricsConfigKeys.InternalSeriesPrefixes.ShouldBe(["job.", "drain.", "write.", "search.query.", "search.fusion."]);
+        MetricsConfigKeys.InternalSeriesPrefixes.ShouldBe(
+            ["job.", "drain.", "write.", "search.query.", "search.fusion.", "chunk.rechunk."]);
     }
 
     [Fact]

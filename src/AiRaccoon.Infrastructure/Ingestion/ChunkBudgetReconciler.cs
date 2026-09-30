@@ -21,6 +21,8 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// <param name="UnprovableSkipped">Note groups that stayed unprovable through the retry bound — untouched,
 /// terminal for this budget.</param>
 /// <param name="TerminalSkipped">Mirror groups whose source file is gone — nothing re-chunkable exists.</param>
+/// <param name="Elapsed">The phase's wall-clock duration, measured from its first read to its stamp
+/// write — the number event 448 carries.</param>
 public sealed record ChunkRebudgetReport(
     int Budget,
     int NoteGroupsRechunked,
@@ -28,7 +30,8 @@ public sealed record ChunkRebudgetReport(
     int GroupsUnchanged,
     int RetryableSkipped,
     int UnprovableSkipped,
-    int TerminalSkipped);
+    int TerminalSkipped,
+    TimeSpan Elapsed);
 
 /// <summary>The bank's chunk-budget state against the resolved engine budget — the drift trigger's verdict.</summary>
 /// <param name="Matches">True when the <c>embedding.chunkBudget</c> stamp already equals the resolved budget.</param>
@@ -108,6 +111,7 @@ public sealed partial class ChunkBudgetReconciler(
     {
         Guard.IsNotNull(connection);
 
+        var startedAt = timeProvider.GetTimestamp();
         var scanner = new ChunkPositionScanner(fileTypeMatcher, embeddingService);
         var budget = await scanner.BudgetAsync(connection, cancellationToken);
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
@@ -265,11 +269,13 @@ public sealed partial class ChunkBudgetReconciler(
         }
 
         var report = new ChunkRebudgetReport(budget.MaxTokens, notesRechunked, mirrorsRechunked, unchanged,
-            retryable, unprovable, terminal);
+            retryable, unprovable, terminal, timeProvider.GetElapsedTime(startedAt));
         // Event 448 (config-D F4): the report's counts were discarded before, so a partial migration
-        // (retryable or unprovable skips) was invisible to an operator.
+        // (retryable or unprovable skips) was invisible to an operator; the phase's wall-clock
+        // duration (#809) is the other fact only this line can carry.
         Log.RebudgetCompleted(logger, report.Budget, report.NoteGroupsRechunked, report.MirrorGroupsRechunked,
-            report.GroupsUnchanged, report.RetryableSkipped, report.UnprovableSkipped, report.TerminalSkipped);
+            report.GroupsUnchanged, report.RetryableSkipped, report.UnprovableSkipped, report.TerminalSkipped,
+            report.Elapsed);
         return report;
     }
 
@@ -390,15 +396,16 @@ public sealed partial class ChunkBudgetReconciler(
 
     private sealed record MirrorRow(long Id, string Hash);
 
-    /// <summary>Event 448 (config-D F4): one line per phase run with the report's counts, so a partial
-    /// migration is visible in production — re-chunked, unchanged, retryable, unprovable and terminal.</summary>
+    /// <summary>Event 448 (config-D F4): one line per phase run with the report's counts and its
+    /// wall-clock duration, so a partial migration is visible in production — re-chunked, unchanged,
+    /// retryable, unprovable, terminal, and how long the phase took.</summary>
     private static partial class Log
     {
         [LoggerMessage(EventId = 448, Level = LogLevel.Information,
-            Message = "Chunk-budget rebudget at {Budget} tokens: {NoteGroupsRechunked} note group(s) and {MirrorGroupsRechunked} mirror group(s) re-chunked, {GroupsUnchanged} unchanged, {RetryableSkipped} retryable, {UnprovableSkipped} unprovable, {TerminalSkipped} terminal")]
+            Message = "Chunk-budget rebudget at {Budget} tokens: {NoteGroupsRechunked} note group(s) and {MirrorGroupsRechunked} mirror group(s) re-chunked, {GroupsUnchanged} unchanged, {RetryableSkipped} retryable, {UnprovableSkipped} unprovable, {TerminalSkipped} terminal in {Elapsed}")]
         public static partial void RebudgetCompleted(ILogger logger, int budget, int noteGroupsRechunked,
             int mirrorGroupsRechunked, int groupsUnchanged, int retryableSkipped, int unprovableSkipped,
-            int terminalSkipped);
+            int terminalSkipped, TimeSpan elapsed);
     }
 }
 
@@ -420,5 +427,5 @@ public sealed class NoOpChunkBudgetReconciler : IChunkBudgetReconciler
     /// <inheritdoc />
     public Task<ChunkRebudgetReport> RunAsync(SqliteConnection connection,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult(new ChunkRebudgetReport(0, 0, 0, 0, 0, 0, 0));
+        Task.FromResult(new ChunkRebudgetReport(0, 0, 0, 0, 0, 0, 0, TimeSpan.Zero));
 }

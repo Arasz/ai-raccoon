@@ -60,6 +60,19 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
     }
 
     /// <summary>
+    ///     The re-chunk phase's two self-metrics, one sample per rebudget pass: its wall-clock
+    ///     duration in milliseconds and the groups it replaced. Bank-wide, like every drain series.
+    /// </summary>
+    public void RechunkFinished(TimeSpan elapsed, int groups)
+    {
+        var now = timeProvider.GetUtcNow();
+        measurements.Record(new Measurement(MetricsConfigKeys.RechunkDurationMetricName,
+            MeasurementKind.Histogram, elapsed.TotalMilliseconds, "ms", now, MetricsConfigKeys.SelfMetricsProjectId));
+        measurements.Record(new Measurement(MetricsConfigKeys.RechunkGroupsMetricName,
+            MeasurementKind.Histogram, groups, "count", now, MetricsConfigKeys.SelfMetricsProjectId));
+    }
+
+    /// <summary>
     ///     1002-1007 moved VERBATIM from EmbedDrainService — same ids, same levels, same
     ///     templates. The whole block moves because splitting it would leave two overlapping
     ///     owners, which EventIdBlocks_DoNotInterleaveBetweenOwners forbids (LANE P4).

@@ -56,9 +56,12 @@ public sealed class ChunkRebudgetTests : IDisposable
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _time,
             _embeddings, null, null, null, null, null, null, null);
-        _reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            _embeddings, _time, () => _store, _log);
+        _reconciler = NewReconciler(_time);
     }
+
+    /// <summary>One reconciler shape, so a test can swap only the clock the phase measures itself with.</summary>
+    private ChunkBudgetReconciler NewReconciler(TimeProvider timeProvider) =>
+        new(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), _embeddings, timeProvider, () => _store, _log);
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
@@ -472,18 +475,37 @@ public sealed class ChunkRebudgetTests : IDisposable
     }
 
     [RetryFact]
+    public async Task Rebudget_PhaseElapsed_MatchesTheScriptedClock()
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
+        await using var connection = await OpenAsync();
+        _embeddings.ChunkBudgetOverride = NewBudget;
+        // The phase brackets two GetTimestamp reads; the scripted provider advances its cursor
+        // between them, so an elapsed measured anywhere but the real bracket reads the wrong number.
+        var reconciler = NewReconciler(ScriptedTimeProvider.ForSpan(TimeSpan.FromSeconds(305.5)));
+
+        var report = await reconciler.RunAsync(connection, Ct);
+
+        report.Elapsed.ShouldBe(TimeSpan.FromSeconds(305.5),
+            "the phase elapsed is the injected clock's span, not the wall clock's");
+        LoggedRebudgetMessages().ShouldHaveSingleItem()
+            .ShouldEndWith(" in 00:05:05.5000000", customMessage: "event 448 reads the same Elapsed the report carries");
+    }
+
+    [RetryFact]
     public async Task Rebudget_Event448_ReadsEveryReportCount()
     {
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
         await using var connection = await OpenAsync();
         _embeddings.ChunkBudgetOverride = NewBudget;
+        var reconciler = NewReconciler(ScriptedTimeProvider.ForSpan(TimeSpan.FromSeconds(305.5)));
 
-        await _reconciler.RunAsync(connection, Ct);
+        await reconciler.RunAsync(connection, Ct);
 
         LoggedRebudgetMessages().ShouldBe([
             "Chunk-budget rebudget at 1022 tokens: 1 note group(s) and 0 mirror group(s) re-chunked, "
-            + "0 unchanged, 0 retryable, 0 unprovable, 0 terminal"
-        ], "the discarded report is one event-448 line per pass carrying every count (config-D F4)");
+            + "0 unchanged, 0 retryable, 0 unprovable, 0 terminal in 00:05:05.5000000"
+        ], "the discarded report is one event-448 line per pass carrying every count and the phase elapsed");
     }
 
     private sealed record Row(long Id, string Hash, string Value, string EmbedState, string? AgentId,

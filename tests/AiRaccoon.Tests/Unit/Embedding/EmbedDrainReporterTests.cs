@@ -79,6 +79,29 @@ public sealed class EmbedDrainReporterTests
         record.Message.ShouldBe("Embed drain pass failed for Memory");
     }
 
+    /// <summary>The re-chunk phase's duration lands in ms, exactly — a seconds/milliseconds
+    /// mix-up would report 305.5 here, not 305500.</summary>
+    [Fact]
+    public void RechunkFinished_Records305500msAndGroups()
+    {
+        var measurements = new RecordingMeasurementRecorder();
+        var reporter = NewReporter(measurements);
+
+        reporter.RechunkFinished(TimeSpan.FromSeconds(305.5), 3);
+
+        var duration = measurements.Recorded.Single(m => m.Name == "chunk.rechunk.duration_ms");
+        duration.Kind.ShouldBe(MeasurementKind.Histogram);
+        duration.Value.ShouldBe(305500, "TotalMilliseconds, never TotalSeconds");
+        duration.Unit.ShouldBe("ms");
+        duration.ProjectId.ShouldBe(MetricsConfigKeys.SelfMetricsProjectId);
+
+        var groups = measurements.Recorded.Single(m => m.Name == "chunk.rechunk.groups");
+        groups.Kind.ShouldBe(MeasurementKind.Histogram);
+        groups.Value.ShouldBe(3);
+        groups.Unit.ShouldBe("count");
+        groups.ProjectId.ShouldBe(MetricsConfigKeys.SelfMetricsProjectId);
+    }
+
     private static EmbedDrainReporter NewReporter(RecordingMeasurementRecorder? measurements = null) =>
         new(measurements ?? new RecordingMeasurementRecorder(), new FakeTimeProvider(FixedNow));
 }
