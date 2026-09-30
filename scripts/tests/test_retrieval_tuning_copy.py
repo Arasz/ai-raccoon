@@ -9,6 +9,8 @@ import importlib.util
 import json
 import random
 import sqlite3
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -349,33 +351,57 @@ def test_target_has_no_pending_wal_frames(tmp_path):
     assert report["journal_mode"] == "delete"
     assert report["wal_frames"] == 0
     assert not Path(str(target) + "-wal").exists()
-    # the main file alone is complete: a mode=ro open cannot create a shm/WAL
+    # the target is DELETE-mode, so a mode=ro read serves the complete main file
+    # and leaves no -wal/-shm behind (a WAL-flagged target would create them)
     ro = sqlite3.connect(f"file:{target.resolve()}?mode=ro", uri=True)
     try:
         assert ro.execute("SELECT count(*) FROM entries").fetchone()[0] == 6
     finally:
         ro.close()
+    assert not Path(str(target) + "-wal").exists()
+    assert not Path(str(target) + "-shm").exists()
 
 
 def test_sidecar_records_sha_counts_settings(tmp_path):
-    """The pin sidecar carries the file sha, copy counts, user_version and non-secret settings."""
+    """The pin sidecar carries the file sha, copy counts, user_version and non-secret settings.
+
+    The source is WAL with a pending frame, so the checkpoint really rewrites the
+    target's bytes: the pin must describe the post-checkpoint file.
+    """
     live = tmp_path / "live.db"
     target = tmp_path / "out" / "memory-copy.db"
-    conn = _make_fixture_live(live, n_rows=6, embedded=4)
-    conn.execute("PRAGMA user_version=17")
-    conn.execute("INSERT INTO settings VALUES ('embedding.device', 'coreml')")
-    conn.execute("INSERT INTO settings VALUES ('embedding.chunkBudget', '1022')")
-    conn.execute("INSERT INTO settings VALUES ('embedding.apiKey', 'sk-secret-must-not-leak')")
-    conn.commit()
-    conn.close()
-
-    report = mc.run_copy_and_verify(str(live), str(target), sample_size=2, rng=random.Random(11))
+    writer = _make_fixture_live(live, n_rows=6, embedded=4)
+    writer.execute("PRAGMA journal_mode=WAL")
+    writer.execute("PRAGMA user_version=17")
+    writer.execute("INSERT INTO settings VALUES ('embedding.device', 'coreml')")
+    writer.execute("INSERT INTO settings VALUES ('embedding.chunkBudget', '1022')")
+    # one credential-shaped key per declared marker, plus a snake_case spelling
+    secret_settings = {
+        "embedding.apiKey": "sk-secret-apikey-must-not-leak",
+        "embedding.api_key": "sk-secret-snake-apikey-must-not-leak",
+        "embedding.apikey": "sk-secret-lower-apikey-must-not-leak",
+        "embedding.secret": "sk-secret-secret-must-not-leak",
+        "embedding.token": "sk-secret-token-must-not-leak",
+        "embedding.password": "sk-secret-password-must-not-leak",
+        "embedding.passwd": "sk-secret-passwd-must-not-leak",
+        "embedding.credential": "sk-secret-credential-must-not-leak",
+    }
+    for key, value in secret_settings.items():
+        writer.execute("INSERT INTO settings VALUES (?, ?)", (key, value))
+    writer.commit()
+    live_wal = Path(str(live) + "-wal")
+    assert live_wal.exists() and live_wal.stat().st_size > 0  # pending frame on the WAL source
+    try:
+        report = mc.run_copy_and_verify(str(live), str(target), sample_size=2, rng=random.Random(11))
+    finally:
+        writer.close()
     assert report["ok"] is True
 
     pin_path = Path(str(target) + ".pin.json")
     assert pin_path.exists()
     assert report["pin_path"] == str(pin_path)
     pin = json.loads(pin_path.read_text(encoding="utf-8"))
+    # sha of the final (post-checkpoint, post-rename) file; a pre-checkpoint hash differs for a WAL source
     assert pin["sha256"] == hashlib.sha256(target.read_bytes()).hexdigest()
     assert pin["bytes"] == target.stat().st_size
     assert pin["entries"] == 6
@@ -388,5 +414,101 @@ def test_sidecar_records_sha_counts_settings(tmp_path):
     # the pin is taken after the checkpoint, never of a WAL-backed file
     assert pin["journalMode"] == "delete"
     assert pin["walFrames"] == 0
-    # a persisted secret must never be copied into the sidecar
-    assert "embedding.apiKey" not in pin["settings"]
+    assert pin["verified"] is True
+    assert pin["sourcePath"] == str(live.resolve())
+    assert pin["vecEntries"] is None
+    # a persisted secret must never be copied into the sidecar, under any marker
+    # spelling or key name: assert the values at file level so a re-keyed leak fails too
+    sidecar_text = pin_path.read_text(encoding="utf-8")
+    for key, value in secret_settings.items():
+        assert key not in pin["settings"], f"credential key leaked into sidecar: {key}"
+        assert value not in sidecar_text, f"credential value leaked into sidecar: {key}"
+
+
+def test_sha256_file_digests_every_chunk(tmp_path):
+    """A file spanning several chunks is hashed in full (the live bank is ~848 MB).
+
+    chunk_size is injected so the loop must iterate more than once; the digest
+    oracle is a single-shot hashlib.sha256 over the same bytes.
+    """
+    payload = bytes(range(256)) * 5  # 1280 bytes, ~183 chunks at chunk_size=7
+    blob = tmp_path / "blob.bin"
+    blob.write_bytes(payload)
+    assert mc.sha256_file(str(blob), chunk_size=7) == hashlib.sha256(payload).hexdigest()
+    # a first-chunk-only read is a different, shorter digest
+    assert mc.sha256_file(str(blob), chunk_size=7) != hashlib.sha256(payload[:7]).hexdigest()
+
+
+def _crashed_wal_db(path: Path) -> None:
+    """Leave a WAL with pending frames behind, as an unclean writer exit would."""
+    code = (
+        "import sqlite3, os\n"
+        f"conn = sqlite3.connect({str(path)!r})\n"
+        "conn.execute('PRAGMA journal_mode=WAL')\n"
+        "conn.execute('CREATE TABLE entries (id INTEGER PRIMARY KEY, value TEXT)')\n"
+        "conn.execute('PRAGMA wal_autocheckpoint=0')\n"
+        "conn.execute(\"INSERT INTO entries VALUES (1, 'x')\")\n"
+        "conn.execute(\"INSERT INTO entries VALUES (2, 'y')\")\n"
+        "conn.commit()\n"
+        "os._exit(0)\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_checkpoint_target_reports_and_truncates_pending_wal_frames(tmp_path):
+    """A WAL with pending frames is checkpointed into the main file and reported.
+
+    An unclean writer exit leaves the -wal behind; checkpoint_target must count
+    the pending frames, remove the WAL, and make the main file whole.
+    """
+    db = tmp_path / "crashed.db"
+    _crashed_wal_db(db)
+    wal = Path(str(db) + "-wal")
+    assert wal.exists() and wal.stat().st_size > 0
+
+    result = mc.checkpoint_target(str(db))
+
+    assert result["journal_mode"] == "delete"
+    assert result["wal_frames"] > 0
+    assert not wal.exists()
+    assert not Path(str(db) + "-shm").exists()
+    ro = sqlite3.connect(f"file:{db.resolve()}?mode=ro", uri=True)
+    try:
+        assert ro.execute("SELECT count(*) FROM entries").fetchone()[0] == 2
+    finally:
+        ro.close()
+
+
+def test_checkpoint_target_issues_truncating_checkpoint(tmp_path, monkeypatch):
+    """The sanctioned wal_checkpoint(TRUNCATE) runs before the mode switch.
+
+    journal_mode=DELETE also checkpoints, so dropping the TRUNCATE call alone is
+    artifact-equivalent (measured: identical main-file sha); this wiring pin keeps
+    the explicit sanctioned checkpoint in the sequence.
+    """
+    db = tmp_path / "plain.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE t (x)")
+    conn.commit()
+    statements = []
+
+    class _RecordingConnection(sqlite3.Connection):
+        def execute(self, sql, *args, **kwargs):
+            statements.append(sql)
+            return super().execute(sql, *args, **kwargs)
+
+    real_connect = sqlite3.connect
+
+    def spy(*args, **kwargs):
+        kwargs["factory"] = _RecordingConnection
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(mc.sqlite3, "connect", spy)
+    result = mc.checkpoint_target(str(db))
+    conn.close()
+
+    assert result["journal_mode"] == "delete"
+    truncate = [i for i, sql in enumerate(statements) if "wal_checkpoint(TRUNCATE)" in sql]
+    mode_switch = [i for i, sql in enumerate(statements) if "journal_mode=DELETE" in sql]
+    assert truncate, f"no TRUNCATE checkpoint issued: {statements}"
+    assert mode_switch and truncate[0] < mode_switch[0], f"TRUNCATE must precede the mode switch: {statements}"

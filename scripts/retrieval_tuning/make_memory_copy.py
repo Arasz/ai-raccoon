@@ -131,8 +131,9 @@ def read_inherited_settings(conn: sqlite3.Connection) -> list[tuple[str, str]]:
 
 
 def _is_secret_key(key: str) -> bool:
-    lowered = key.lower()
-    return any(marker in lowered for marker in _SECRET_KEY_MARKERS)
+    """True when a key names a credential, ignoring case and separators."""
+    normalized = "".join(char for char in key.lower() if char.isalnum())
+    return any(marker in normalized for marker in _SECRET_KEY_MARKERS)
 
 
 def read_settings_snapshot(conn: sqlite3.Connection) -> dict[str, str]:
@@ -217,7 +218,10 @@ def checkpoint_target(path: str) -> dict:
     """
     conn = sqlite3.connect(path)
     try:
-        _, frames, _ = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        # TRUNCATE zeroes its own frame report once the log is truncated, so
+        # measure the pending frames before truncating.
+        _, frames, _ = conn.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         journal_mode = conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0]
     finally:
         conn.close()
