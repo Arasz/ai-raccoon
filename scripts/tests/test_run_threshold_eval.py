@@ -386,3 +386,83 @@ def test_smoke_live_two_queries_two_arms(runner, tmp_path: Path) -> None:
         assert all("queryText" in result for result in arm["results"].values())
     pair = metrics["pairs"]["S001"]
     assert set(pair["expectedHashInTop8"]) == {"off", "threshold"}
+
+
+# ------------------------------------------------------------------
+# Named arm pairs (issue #809): per-arm dll + data root
+# ------------------------------------------------------------------
+
+
+class FakeMcpClient:
+    """Fixture stand-in for StdioMcpClient — records each arm's dll/root/env and
+    returns one canned search response per query. No server process, no network."""
+
+    instances: list["FakeMcpClient"] = []
+
+    def __init__(self, dll, env, stderr_path, data_root=None, response_timeout_s=None):
+        self.dll = Path(dll)
+        self.env = dict(env)
+        self.data_root = Path(data_root) if data_root is not None else None
+        self.calls: list[dict] = []
+        Path(stderr_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(stderr_path).write_text("", encoding="utf-8")
+        FakeMcpClient.instances.append(self)
+
+    def __enter__(self) -> "FakeMcpClient":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def initialize(self) -> None:
+        return None
+
+    def rpc(self, method, params):
+        self.calls.append(params)
+        arm_tag = self.data_root.name if self.data_root is not None else "noroot"
+        hits = [{"hash": f"{arm_tag}-{i:02d}", "ranking": float(9 - i),
+                 "path": f"p/{arm_tag}", "sourceFile": f"{arm_tag}.cs",
+                 "chunkIndex": i, "snippet": f"{arm_tag} chunk {i}"}
+                for i in range(1, 9)]
+        text = json.dumps({"data": {"results": hits, "code": []}})
+        return {"result": {"content": [{"type": "text", "text": text}]}}
+
+
+def test_named_arms_write_per_arm_json_with_per_arm_dll_root(runner, tmp_path, monkeypatch):
+    """A custom-named pair with per-arm dll + data root runs end-to-end through the
+    fixtures (fake client): arm-chunk254.json, arm-chunk1022.json and metrics.json
+    land under the custom names, and each arm's client gets its own dll and root."""
+    corpus = _write_corpus(tmp_path, CORPUS_FIXTURE)
+    dll_254 = tmp_path / "build-254" / "AiRaccoon.dll"
+    dll_1022 = tmp_path / "build-1022" / "AiRaccoon.dll"
+    root_254 = tmp_path / "root-254"
+    root_1022 = tmp_path / "root-1022"
+    spec_path = tmp_path / "arms-spec.json"
+    spec_path.write_text(json.dumps({"arms": [
+        {"name": "chunk254", "dll": str(dll_254), "dataRoot": str(root_254)},
+        {"name": "chunk1022", "dll": str(dll_1022), "dataRoot": str(root_1022)},
+    ]}), encoding="utf-8")
+
+    FakeMcpClient.instances = []
+    monkeypatch.setattr(runner, "StdioMcpClient", FakeMcpClient)
+    out_dir = tmp_path / "out"
+    metrics = runner.run_eval(None, corpus, out_dir, arms=runner.load_arms_spec(spec_path))
+
+    for name in ("arm-chunk254.json", "arm-chunk1022.json", "metrics.json"):
+        assert (out_dir / name).exists(), f"missing artifact: {name}"
+
+    # Each arm ran its own packaged build against its own data root.
+    assert {(client.dll, client.data_root) for client in FakeMcpClient.instances} == {
+        (dll_254, root_254), (dll_1022, root_1022)}
+    for client in FakeMcpClient.instances:
+        assert not any(key.startswith("MMR_") for key in client.env)  # clean arm env
+        assert len(client.calls) == len(CORPUS_FIXTURE["queries"])
+
+    arm_254 = json.loads((out_dir / "arm-chunk254.json").read_text(encoding="utf-8"))
+    arm_1022 = json.loads((out_dir / "arm-chunk1022.json").read_text(encoding="utf-8"))
+    assert arm_254["arm"] == "chunk254" and arm_1022["arm"] == "chunk1022"
+    assert set(arm_254["results"]) == set(QT)
+    # The pair metrics carry the custom names, restoring arm identity after the pass.
+    assert metrics["meta"]["arms"] == ["chunk254", "chunk1022"]
+    assert set(metrics["pairs"]["C001"]["expectedHashInTop8"]) == {"chunk254", "chunk1022"}
+    assert metrics["pairs"]["C001"]["queryText"] == QT["C001"]

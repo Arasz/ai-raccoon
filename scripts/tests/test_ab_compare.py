@@ -307,3 +307,51 @@ def test_ac5_4_distillation_deterministic_runner_log_empty(tmp_path):
     core2 = ab.distill(reasons, top_k=3)
     assert core1 == core2
     assert len(pipe_runner.calls) == calls_before
+
+
+# --------------------------------------------------------------------------
+# Custom-named arm pairs (issue #809)
+# --------------------------------------------------------------------------
+
+
+def test_custom_arm_names_round_trip_blind_and_restore(tmp_path):
+    """A custom-named pair (chunk254/chunk1022) runs blind: the payload surface
+    never names the arms, and the position→arm mapping is restored from the arm
+    artifacts only after grading."""
+    ab = _load()
+    directory = tmp_path / "custom"
+    directory.mkdir(parents=True, exist_ok=True)
+    sample_path = directory / "sample.json"
+    sample_path.write_text(json.dumps(_sample_json(4)), encoding="utf-8")
+    arm_paths = {}
+    for name in ("chunk254", "chunk1022"):
+        arm_path = directory / f"arm-{name}.json"
+        arm_path.write_text(json.dumps(_arm_json(name, 4)), encoding="utf-8")
+        arm_paths[name] = arm_path
+    runner = FakeRunner([_valid_response(p) for p in VALID_PICKS] * 4)
+    forms_dir = tmp_path / "ab-forms"
+    results = ab.run_ab(
+        sample_path,
+        arm_paths["chunk254"],
+        arm_paths["chunk1022"],
+        seed=SEED,
+        runner=runner,
+        out_path=tmp_path / "ab-results.json",
+        forms_dir=forms_dir,
+    )
+
+    # The mapping is restored from the arm artifacts, not from the fixed defaults.
+    for query in results["queries"]:
+        assert {query["firstArm"], query["secondArm"]} == {"chunk254", "chunk1022"}
+        for grader in query["graders"]:
+            expected = query["firstArm"] if grader["pick"] == "first" else query["secondArm"]
+            assert grader["pickArm"] == expected
+    assert results["header"]["armNames"] == ["chunk254", "chunk1022"]
+
+    # Blind surface: the archived payloads name neither arm, and positions stay
+    # labelled only first/second.
+    for query in results["queries"]:
+        payload = (forms_dir / f"{query['queryId']}.payload.txt").read_text(encoding="utf-8")
+        assert "chunk254" not in payload and "chunk1022" not in payload
+        assert payload.count(ab.FIRST_HEADER) == 1
+        assert payload.count(ab.SECOND_HEADER) == 1
