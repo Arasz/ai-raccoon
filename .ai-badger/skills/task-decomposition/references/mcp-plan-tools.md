@@ -93,17 +93,21 @@ $CLI step_complete --json '{"task_id": "aib-demo", "step_id": "s1", "expected_re
 $CLI progress_checklist --json '{"task_id": "aib-demo", "format": "text"}'
 ```
 
-MCP — the same six calls, the arguments identical to the CLI `--json` payloads (the first
-`arguments` is the plan object above):
+MCP (pi) — the same six calls as the model makes them: the declared tool name plus the JSON
+arguments the CLI passes to `--json` (the first call's arguments are the plan object above):
 
-```json
-{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"plan_create","arguments":<the plan object above>}}
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"steps_ready","arguments":{"task_id":"aib-demo"}}}
-{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"step_start","arguments":{"task_id":"aib-demo","step_id":"s1","expected_revision":0}}}
-{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ac_check","arguments":{"task_id":"aib-demo","step_id":"s1","ac_id":"ac1","expected_revision":1,"status":"passed","evidence":[{"kind":"test","summary":"pytest tests/test_api.py","ref":"8 passed"}]}}}
-{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"step_complete","arguments":{"task_id":"aib-demo","step_id":"s1","expected_revision":2}}}
-{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"progress_checklist","arguments":{"task_id":"aib-demo","format":"text"}}}
+```text
+mcp__task-graph__plan_create        <the plan object above>
+mcp__task-graph__steps_ready        {"task_id": "aib-demo"}
+mcp__task-graph__step_start         {"task_id": "aib-demo", "step_id": "s1", "expected_revision": 0}
+mcp__task-graph__ac_check           {"task_id": "aib-demo", "step_id": "s1", "ac_id": "ac1", "expected_revision": 1, "status": "passed", "evidence": [{"kind": "test", "summary": "pytest tests/test_api.py", "ref": "8 passed"}]}
+mcp__task-graph__step_complete      {"task_id": "aib-demo", "step_id": "s1", "expected_revision": 2}
+mcp__task-graph__progress_checklist {"task_id": "aib-demo", "format": "text"}
 ```
+
+Those names reach the model only when the `task-graph` entry in `.pi/mcp.json` carries
+`"exposure": "direct"` — under the `codemode` default they stay undeclared, and codemode
+scripts and `tool_search` reach undeclared tools.
 
 `plan_create` answers `created:true` at revision 0; `step_start` returns 1, `ac_check` 2,
 `step_complete` 3, and the checklist text reads:

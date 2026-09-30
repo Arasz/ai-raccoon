@@ -43,7 +43,7 @@
       "args": [
         "run",
         "--script",
-        ".ai-badger/skills/task-decomposition/scripts/task_graph_server.py"
+        "${CLAUDE_PROJECT_DIR}/.ai-badger/skills/task-decomposition/scripts/task_graph_server.py"
       ],
       "tools": [
         "*"

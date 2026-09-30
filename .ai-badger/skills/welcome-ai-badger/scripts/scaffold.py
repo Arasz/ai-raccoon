@@ -747,6 +747,7 @@ class Scaffolder:
             self.mcp.declared_servers())
         self.mcp.propose_claude_mcp_user(user_servers)
         self.mcp.generate_copilot_mcp_json(project_servers)
+        self.mcp.generate_pi_mcp_json()
         self.copy_engine_and_schemas()
 
         manifest = {

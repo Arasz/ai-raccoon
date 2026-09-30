@@ -1,18 +1,24 @@
 """MCP servers, one of the scaffold's collaborators.
 
 Collects the servers the mcp catalog declares — `stack-mcp.json` and nothing else since
-ADR-0014 step 8 — and writes them into the two project config files ai-badger owns:
-`.mcp.json` and `.github/mcp.json`, the Copilot CLI's repo-committed config (#189). Every
-user-global destination is proposed and never written (ADR-0014 decision 6) —
-`~/.claude/settings.json` here, `~/.hermes/config.yaml` in the Hermes adjustment. A server
-named by `config.mcp.decline` is not declared at all, and is removed from either file if an
-earlier run wrote it (#186).
+ADR-0014 step 8 — and writes them into the three project config files ai-badger owns:
+`.mcp.json` (Claude Code's project config; the Copilot CLI reads it too), the Copilot CLI's
+repo-committed `.github/mcp.json` (#189), and `.pi/mcp.json`, the project config native pi
+reads in a trusted project (F1). Every user-global destination is proposed and never written
+(ADR-0014 decision 6) — `~/.claude/settings.json` here, `~/.hermes/config.yaml` in the Hermes
+adjustment. A server named by `config.mcp.decline` is not declared at all, and is removed
+from any file an earlier run wrote it into (#186).
 
-The Copilot CLI reads **both** project files — `.github/mcp.json` and `.mcp.json`, looked up
-from the cwd upward — and their precedence is undocumented, so one server described twice has no
-knowable configuration. The two entries are therefore identical apart from destination-specific
-fields, and a server whose two renderings cannot be reconciled is declared once, in `.mcp.json`,
-and named in a note (#193).
+`.mcp.json` and `.github/mcp.json` merge by update (ai-badger's rendering wins on refresh).
+`.pi/mcp.json` merges by union under F10/F11/F11a: an entry already present survives a
+re-scaffold byte-identical, including its exposure/toolExposure tuning, user-added servers
+are never dropped, and today's template governs new entries only.
+
+The Copilot CLI reads **both** of its project files — `.github/mcp.json` and `.mcp.json`,
+looked up from the cwd upward — and their precedence is undocumented, so one server described
+twice has no knowable configuration. The two entries are therefore identical apart from
+destination-specific fields, and a server whose two renderings cannot be reconciled is
+declared once, in `.mcp.json`, and named in a note (#193).
 """
 from __future__ import annotations
 
@@ -71,16 +77,6 @@ def only_generated_entries(data: Dict[str, Any]) -> bool:
 # or any future host's equivalent. Stripping it makes the #193 comparison see one launch.
 _PROJECT_DIR_ARG = re.compile(r"^\$\{[A-Z0-9_]*PROJECT_DIR\}/")
 
-# Readers whose config conversion expands ``${HOME}`` and nothing else — the pi-mcp-tools
-# fork's claude conversion (ADR-0023). For such a reader an anchored entry is not a
-# preference it can ignore: its converter drops the whole entry as an unexpanded ``${VAR}``.
-# Where one file is read by both kinds of reader, the file must carry the anchor-free
-# launch: an entry every configured reader can start beats one only the anchored reader
-# can use, and pi resolves the project-relative form against the very directory that holds
-# the file (it reads ``<cwd>/.mcp.json``, never a parent's).
-EXPANDS_HOME_ONLY = frozenset({"pi"})
-
-
 def _normalized_launch_value(key: str, value: Any) -> Any:
     """One entry value with a leading project-dir anchor removed from every ``args`` element."""
     if key != "args" or not isinstance(value, list):
@@ -95,6 +91,18 @@ def _same_launch(left: Dict[str, Any], right: Dict[str, Any]) -> bool:
     return all(_normalized_launch_value(key, value)
                == _normalized_launch_value(key, right[key])
                for key, value in left.items())
+
+
+# The template-identity fields of a pi-native entry (F11a): the launch a server starts, never
+# its decorations. `exposure`, `toolExposure`, `enabled` and unknown keys are preserved whole
+# by the union merge, but they neither shield a template-identical entry from an explicit
+# removal nor count toward identity when deciding whether a launch was hand-edited.
+_LAUNCH_KEYS = ("command", "args", "cwd", "env")
+
+
+def _launch_of(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """The launch fields of *entry*: what the template governs, decorations aside (F11a)."""
+    return {key: entry[key] for key in _LAUNCH_KEYS if key in entry}
 
 
 def split_on_whitespace(command: str) -> Tuple[str, List[str]]:
@@ -115,37 +123,50 @@ class McpDestination(NamedTuple):
 
     label: str
     # The agents that read this file, most authoritative first: the first one that is
-    # configured supplies the agentOverrides applied here (F-22) — unless a configured
-    # EXPANDS_HOME_ONLY reader forces the anchor-free launch instead (:meth:`_override_reader`).
+    # configured supplies the agentOverrides applied here (F-22).
     readers: Tuple[str, ...]
     requires_reader: bool  # written only for a configured reader, vs written regardless
     pin_cwd: bool
-    expand_home: bool  # rewrite a user-tool-dir command to ``${HOME}`` form
+    # The portable form a user-tool-dir executable is rewritten to: "" leaves commands as
+    # declared, "${HOME}" is Claude Code's documented expansion, "~" is pi's (F4 — pi expands
+    # only `~`, so a `${HOME}` command stays literal there).
+    home_prefix: str
     all_tools: bool  # carry the per-server ``tools`` allowlist — Copilot's field, inert for Claude
+    # Stamped on every NEW entry the destination renders ("" = none). pi's default `codemode`
+    # exposure leaves tools undeclared to the model; `direct` makes `mcp__<server>__<tool>`
+    # callable (F4). Later hand-tuning is preserved by the union merge (F11).
+    exposure: str
     consequence: str  # what a refusal to write costs, for the note
 
 
 # ``.mcp.json`` alone expands ``${VAR}`` (documented by Claude Code). The Copilot CLI reads it
-# too, by cwd-upward lookup, which is why it carries the ``tools`` allowlist and why its overrides
-# fall back to Copilot's when Claude is not configured (#193). The pi-mcp-tools fork reads it as
-# well, from its session cwd only (ADR-0023) — so when pi is configured the file carries the
-# project-relative launch (:data:`EXPANDS_HOME_ONLY`) rather than Claude's project-dir anchor.
+# too, by cwd-upward lookup, which is why it carries the ``tools`` allowlist and why its
+# overrides fall back to Copilot's when Claude is not configured (#193). Native pi reads
+# ``.pi/mcp.json``/``~/.pi/agent/mcp.json`` and never this file (F1/F2), so it is no longer a
+# reader here — the fork-era anchor-free resolution is retired with the fork.
 MCP_JSON = McpDestination(
-    label=".mcp.json", readers=("claude", "pi", "copilot"), requires_reader=False, pin_cwd=False,
-    expand_home=True, all_tools=True,
+    label=".mcp.json", readers=("claude", "copilot"), requires_reader=False, pin_cwd=False,
+    home_prefix="${HOME}", all_tools=True, exposure="",
     consequence=".mcp.json not updated",
 )
 # The Copilot CLI's repo-committed config (#189): the same entry ``.mcp.json`` carries, minus
 # the ``cwd`` pin Copilot does not document.
 COPILOT_MCP_JSON = McpDestination(
     label=".github/mcp.json", readers=("copilot",), requires_reader=True, pin_cwd=False,
-    expand_home=False, all_tools=True,
+    home_prefix="", all_tools=True, exposure="",
     consequence="copilot MCP config not updated",
 )
 CLAUDE_USER_SETTINGS = McpDestination(
     label="~/.claude/settings.json", readers=("claude",), requires_reader=True, pin_cwd=False,
-    expand_home=False, all_tools=False,
+    home_prefix="", all_tools=False, exposure="",
     consequence="claude user MCP servers not proposed",
+)
+# The project config native pi reads, in a trusted project only (F1). Its merge is a union
+# under F10/F11/F11a (:meth:`McpTools._merge_pi_mcp_json`), not the update merge above.
+PI_MCP_JSON = McpDestination(
+    label=".pi/mcp.json", readers=("pi",), requires_reader=True, pin_cwd=False,
+    home_prefix="~", all_tools=False, exposure="direct",
+    consequence=".pi/mcp.json not updated",
 )
 
 
@@ -154,6 +175,9 @@ class McpTools:
 
     def __init__(self, ctx: ScaffoldContext):
         self.ctx = ctx
+        # The trust-gate note is per-collaborator state: once per scaffold run, however many
+        # times the destination is rendered.
+        self._pi_trust_noted = False
 
     # -- the mcp catalog ---------------------------------------------------------------
 
@@ -401,27 +425,10 @@ class McpTools:
 
         A generated file's overrides are its reading agent's — never whichever agent happens
         to come first in config.agents (F-22). Where two hosts read one file, the first
-        configured reader in :attr:`McpDestination.readers` wins — except that a configured
-        :data:`EXPANDS_HOME_ONLY` reader wins instead: its converter drops an anchored entry
-        whole (ADR-0023), and one file cannot carry both launches. What the anchor-preferring
-        reader loses is named in a note.
+        configured reader in :attr:`McpDestination.readers` wins; with none configured the
+        base declaration renders and the dropped overrides are named in a note.
         """
         reader = self._configured_reader(dest)
-        agents = self.ctx.config.get("agents", [])
-        floor = next((name for name in dest.readers
-                      if name in EXPANDS_HOME_ONLY and name in agents), None)
-        if floor is not None and floor != reader:
-            changed = sorted(name for name, srv in servers.items()
-                             if self._resolve_server_for_agent(srv, reader)
-                             != self._resolve_server_for_agent(srv, floor))
-            if changed:
-                self.ctx.notes.append(
-                    f"{dest.label} resolves its agent overrides for {floor}, not {reader}: "
-                    f"{floor}'s config reader drops entries carrying an unexpanded ${{VAR}} "
-                    f"(ADR-0023), and one file cannot carry both launches — "
-                    f"{', '.join(changed)} get {floor}'s launch instead"
-                )
-            return floor
         if reader is not None:
             return reader
         dropped = sorted(name for name, srv in servers.items() if srv.get("agentOverrides"))
@@ -454,8 +461,8 @@ class McpTools:
                 self._resolve_server_for_agent(srv, reader) if reader else dict(srv), dest)
             for name, srv in servers.items()
         }
-        if dest.expand_home:
-            self._home_relative_commands(entries)
+        if dest.home_prefix:
+            self._home_relative_commands(entries, dest.home_prefix)
         return entries
 
     def _render_without_notes(
@@ -490,17 +497,24 @@ class McpTools:
             entry["env"] = srv["env"]
         if dest.all_tools:
             entry["tools"] = ["*"]
+        if dest.exposure:
+            entry["exposure"] = dest.exposure
         return entry
 
-    def _home_relative_command(self, name: str, command: str) -> str:
-        """Rewrite a bare executable that lives in a user tool dir to its ``${HOME}`` form.
+    def _home_relative_command(
+        self, name: str, command: str, home_prefix: str = "${HOME}"
+    ) -> str:
+        """Rewrite a bare executable that lives in a user tool dir to its portable home form.
 
-        Leaves anything already pathed, already expandable, or resolvable elsewhere on PATH
-        alone; notes a command that resolves nowhere.
+        *home_prefix* is the form the destination's reader expands: ``${HOME}`` for Claude
+        Code's ``.mcp.json``, ``~`` for pi (F4 — pi expands ``~`` only, so ``${HOME}`` stays
+        literal and must never be emitted there). Leaves anything already pathed, already
+        expandable, or resolvable elsewhere on PATH alone; notes a command that resolves
+        nowhere.
 
         `AI_BADGER_MCP_AVAILABILITY=all` (the freshness guard's deterministic override)
         short-circuits the probe: every declared server is treated as available, so commands
-        stay exactly as declared and nothing is "not found". Without this, the ${HOME} rewrite
+        stay exactly as declared and nothing is "not found". Without this, the home rewrite
         made the generated tree depend on the host's filesystem — a binary present in a user
         tool dir on the author's machine became `${HOME}/...` while the same tree on CI kept
         the bare command, flipping `.github/mcp.json`'s #193 verdict between hosts.
@@ -517,7 +531,7 @@ class McpTools:
             candidate = Path(probe_dir) / executable
             if candidate.is_file() and os.access(str(candidate), os.X_OK):
                 suffix = f" {parts[1]}" if len(parts) > 1 else ""
-                return prefix + "/" + executable + suffix
+                return prefix.replace("${HOME}", home_prefix) + "/" + executable + suffix
         if shutil.which(executable) is None:
             self.ctx.notes.append(
                 f"MCP server '{name}' command '{executable}' was not found on PATH or in any "
@@ -526,11 +540,12 @@ class McpTools:
         return command
 
     def _home_relative_commands(
-        self, entries: Dict[str, Dict[str, Any]]
+        self, entries: Dict[str, Dict[str, Any]], home_prefix: str
     ) -> Dict[str, Dict[str, Any]]:
         """Apply :meth:`_home_relative_command` to each rendered entry's executable."""
         for name, entry in entries.items():
-            entry["command"] = self._home_relative_command(name, entry.get("command", ""))
+            entry["command"] = self._home_relative_command(
+                name, entry.get("command", ""), home_prefix)
         return entries
 
     def _carry_live_cwd(
@@ -589,6 +604,48 @@ class McpTools:
         self.ctx.record_generated_config(path, dest.label)
         return True
 
+    def _merge_pi_mcp_json(
+        self,
+        path: Path,
+        entries: Dict[str, Dict[str, Any]],
+        dest: McpDestination,
+        declined: Sequence[str] = (),
+        unavailable: Sequence[str] = (),
+    ) -> bool:
+        """Union-merge rendered *entries* into ``.pi/mcp.json`` under F10/F11/F11a.
+
+        Unlike :meth:`_merge_mcp_servers_json`, an entry already in the file is never
+        rewritten: template shape governs new entries only, so a recorded launch (and every
+        exposure/toolExposure/enabled decoration beside it) survives re-scaffold untouched.
+        Drift from today's template is noted, never applied. Entries the scaffold does not
+        recognize are kept whole — the merge is a union, never a drop. Returns False without
+        writing when the existing file is not a readable mapping, or when there is neither an
+        entry to add nor a file to clean.
+        """
+        if not entries and not path.exists():
+            return False
+        existing, note = cg.read_json_mapping(path)
+        section = cg.mapping_section(existing, "mcpServers") if existing is not None else None
+        if section is None:
+            note = note or cg.refusal(path, "mcpServers is not a mapping")
+            self.ctx.notes.append(f"{note} ({dest.consequence})")
+            return False
+        for name, entry in entries.items():
+            recorded = section.get(name)
+            if recorded is None:
+                section[name] = entry
+            elif isinstance(recorded, dict) and _launch_of(recorded) != _launch_of(entry):
+                self.ctx.notes.append(
+                    f"{dest.label}: MCP server '{name}' kept as recorded — its launch differs "
+                    f"from today's template, which would write "
+                    f"{_json.dumps(entry, ensure_ascii=False)} (F11: existing entries are "
+                    f"never rewritten). Delete the entry to adopt the template")
+        self._drop_declined(section, declined, dest)
+        self._drop_pi_unavailable(section, unavailable, entries, dest)
+        cg.write_json_with_backup(path, existing)
+        self.ctx.record_generated_config(path, dest.label)
+        return True
+
     @staticmethod
     def _drop_servers(section: Dict[str, Any], names: Sequence[str]) -> List[str]:
         """Remove every named server from *section* and return the ones that were there."""
@@ -617,6 +674,29 @@ class McpTools:
                 f"{dest.label}: removed MCP server(s) {', '.join(removed)} that an earlier run "
                 f"declared here as well as in {MCP_JSON.label} — one server, one declaration")
 
+    @staticmethod
+    def _template_candidates(
+        entry: Dict[str, Any], server: Dict[str, Any], dest: McpDestination
+    ) -> List[Dict[str, Any]]:
+        """*entry* plus the home form this declaration could have been written under.
+
+        Which spelling a run records depends on whether the executable was present when it
+        rendered: a run after the executable is gone renders the bare command while the file
+        still holds the ``~``/``${HOME}`` form.  Identity must count both, so every
+        :data:`USER_TOOL_DIRS` prefix contributes a candidate (F11a).
+        """
+        candidates = [entry]
+        if not dest.home_prefix:
+            return candidates
+        executable, args = split_on_whitespace(server.get("command", ""))
+        for _probe_dir, prefix in USER_TOOL_DIRS:
+            home_entry = dict(entry)
+            home_entry["command"] = prefix.replace("${HOME}", dest.home_prefix) + "/" + executable
+            if args:
+                home_entry["args"] = args
+            candidates.append(home_entry)
+        return candidates
+
     def _drop_unavailable(
         self, section: Dict[str, Any], names: Sequence[str], dest: McpDestination
     ) -> None:
@@ -628,22 +708,65 @@ class McpTools:
             if server is None or name not in section:
                 continue
             expected = self._render_entry(server, dest)
-            candidates = [expected]
-            if dest.expand_home:
-                executable, args = split_on_whitespace(server.get("command", ""))
-                for _probe_dir, prefix in USER_TOOL_DIRS:
-                    home_entry = dict(expected)
-                    home_entry["command"] = prefix + "/" + executable
-                    if args:
-                        home_entry["args"] = args
-                    candidates.append(home_entry)
-            if section[name] in candidates:
+            if section[name] in self._template_candidates(expected, server, dest):
                 generated.append(name)
         removed = self._drop_servers(section, generated)
         if removed:
             self.ctx.notes.append(
                 f"{dest.label}: removed unavailable MCP server(s) {', '.join(removed)} — "
                 "their optional executable is not installed")
+
+    def _drop_pi_unavailable(
+        self,
+        section: Dict[str, Any],
+        names: Sequence[str],
+        entries: Dict[str, Dict[str, Any]],
+        dest: McpDestination,
+    ) -> None:
+        """Remove unavailable pi entries whose launch is still today's template (F11a).
+
+        Identity is template identity — ``command``/``args``/``cwd``/``env`` as this
+        destination renders them, through the same home-rewrite path the write uses (or a
+        ``~/``-form entry never matches and lingers).  The home form is one candidate among
+        every :data:`USER_TOOL_DIRS` spelling, not one live render: after the executable is
+        gone the render is bare while the file still records the ``~/`` form, and both are
+        today's template.  Decorations (`exposure`, `toolExposure`, `enabled`, unknown keys)
+        neither count toward identity nor shield a template-identical entry from removal.  A
+        launch that differs is a hand edit: kept, with a warn-and-leave note (the established
+        `adjust_mcp.py` precedent) — never destroyed.  This destination is project-scoped, so
+        a `scope: user` declaration can never drop an entry from `.pi/mcp.json`.
+        """
+        catalog = {srv.get("name"): srv for srv in self.collect_catalog_mcp_servers()}
+        project_catalog, _ = self.split_servers_by_scope(catalog)
+        pending = {name: project_catalog[name] for name in names
+                   if name in project_catalog and name in section and name not in entries}
+        templates = dict(entries)
+        if pending:
+            templates.update(self._render_without_notes(pending, dest))
+        reader = self._configured_reader(dest)
+        removed, kept = [], []
+        for name in names:
+            server = project_catalog.get(name)
+            template = templates.get(name)
+            recorded = section.get(name)
+            if server is None or template is None or not isinstance(recorded, dict):
+                continue
+            resolved = self._resolve_server_for_agent(server, reader) if reader else dict(server)
+            candidates = self._template_candidates(template, resolved, dest)
+            if any(_launch_of(recorded) == _launch_of(candidate) for candidate in candidates):
+                section.pop(name)
+                removed.append(name)
+            else:
+                kept.append(name)
+        if removed:
+            self.ctx.notes.append(
+                f"{dest.label}: removed unavailable MCP server(s) {', '.join(removed)} — "
+                "their optional executable is not installed")
+        for name in kept:
+            self.ctx.notes.append(
+                f"{dest.label}: kept unavailable MCP server '{name}' — its launch is a hand "
+                f"edit, not today's template (F11), and ai-badger never destroys a user's "
+                f"entry. Delete the entry to adopt the template")
 
     def propose_claude_mcp_user(
         self, user_servers: Dict[str, Dict[str, Any]]
@@ -768,3 +891,29 @@ class McpTools:
             self.ctx.notes.append(
                 f"generated .mcp.json with {len(mcp_servers)} MCP server(s)"
             )
+
+    def generate_pi_mcp_json(self) -> None:
+        """Generate ``.pi/mcp.json`` for a pi-configured project (F10/F11/F11a).
+
+        Native pi reads project MCP config only there, and only in a trusted project; the
+        read gate is named once per run when the file is written. Merge is a union — see
+        :meth:`_merge_pi_mcp_json` — so this refresh never flattens hand-tuned exposure or
+        drops a user's own servers.
+        """
+        project_servers, _ = self.split_servers_by_scope(self.declared_servers())
+        declined = self.declined_servers()
+        unavailable = self._unavailable_servers()
+
+        if not self._destination_applies(PI_MCP_JSON, project_servers, declined + unavailable):
+            return
+
+        entries = self._render_entries(project_servers, PI_MCP_JSON)
+        written = self._merge_pi_mcp_json(
+            self.ctx.target / ".pi" / "mcp.json", entries, PI_MCP_JSON, declined, unavailable)
+        if written and not self._pi_trust_noted:
+            self._pi_trust_noted = True
+            self.ctx.notes.append(
+                f"generated {PI_MCP_JSON.label} with {len(entries)} MCP server(s) — pi reads "
+                f"it only in a trusted project (project trust is recorded per project in "
+                f"~/.pi/agent/trust.json); a headless run with defaultProjectTrust ask|never "
+                f"skips it")
