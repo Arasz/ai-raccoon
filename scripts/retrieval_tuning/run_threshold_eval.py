@@ -44,6 +44,11 @@ Usage:
         --corpus scripts/retrieval_tuning/corpora/project-corpus-100.json \
         --copy <memory.db copy> \
         [--data-root <ready root>] [--output-dir docs/work/threshold-committee-eval]
+
+A custom-named pair (each arm with its own dll and data root) instead:
+    python scripts/retrieval_tuning/run_threshold_eval.py \
+        --arms-spec arms.json \
+        --corpus ... --output-dir ...
 """
 from __future__ import annotations
 
@@ -57,7 +62,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
 
@@ -100,6 +105,19 @@ class EvalQuery:
     query: str
     project_id: str
     expected_hash: str | None
+
+
+@dataclass(frozen=True)
+class ArmSpec:
+    """One arm of a run: the name its artifacts carry, its own dll and data root,
+    env overrides applied over a clean base, and whether marker discipline (the MMR
+    threshold/off contract) is enforced for it."""
+
+    name: str
+    dll: Path
+    data_root: Path | None = None
+    env: Mapping[str, str] = field(default_factory=dict)
+    check_markers: bool = False
 
 
 # ------------------------------------------------------------------ corpus contract
@@ -159,15 +177,55 @@ def _parse_entry(entry: Any, index: int) -> EvalQuery:
 # ------------------------------------------------------------------ arm config
 
 
-def arm_env(arm: str, base: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Exact env for an arm over a clean base: every stray `MMR_*` variable from the
-    invoking shell is stripped first, so a leftover MMR_MODE can never flip an arm."""
-    if arm not in ARMS:
-        raise ValueError(f"unknown arm {arm!r} — arms are exactly {sorted(ARMS)}")
-    env = {key: value for key, value in (os.environ if base is None else base).items()
-           if not key.startswith("MMR_")}
-    env.update(ARMS[arm])
+def _clean_env(base: Mapping[str, str] | None) -> dict[str, str]:
+    """The base env with every stray `MMR_*` variable stripped."""
+    return {key: value for key, value in (os.environ if base is None else base).items()
+            if not key.startswith("MMR_")}
+
+
+def arm_env_for(spec: ArmSpec, base: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Exact env for an arm spec: the clean base plus the spec's own overrides."""
+    env = _clean_env(base)
+    env.update(spec.env)
     return env
+
+
+def default_arm_specs(dll: Path, data_root: Path | None) -> tuple[ArmSpec, ArmSpec]:
+    """The default threshold/off pair: one shared dll and data root, the ARMS env,
+    marker discipline on — exactly the contract the original runner pinned."""
+    specs = [ArmSpec(name, dll, data_root, dict(ARMS[name]), check_markers=True)
+             for name in ARMS]
+    return specs[0], specs[1]
+
+
+def load_arms_spec(path: Path) -> list[ArmSpec]:
+    """Read a custom-pair JSON: `{"arms": [{"name", "dll", "dataRoot"?, "env"?}, ...]}`
+    (a bare list is tolerated). Exactly two entries with distinct names; marker
+    discipline never applies to custom arms."""
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    entries = raw.get("arms") if isinstance(raw, dict) else raw
+    if not isinstance(entries, list) or len(entries) != 2:
+        raise ValueError(f"{path}: expected exactly two arm entries")
+    specs: list[ArmSpec] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"{path}: arm #{index} is not an object")
+        name, dll = entry.get("name"), entry.get("dll")
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"{path}: arm #{index} missing `name`")
+        if not isinstance(dll, str) or not dll:
+            raise ValueError(f"{path}: arm {name!r} missing `dll`")
+        data_root = entry.get("dataRoot")
+        if data_root is not None and not isinstance(data_root, str):
+            raise ValueError(f"{path}: arm {name!r} `dataRoot` must be a string")
+        env = entry.get("env") or {}
+        if not isinstance(env, dict) or not all(isinstance(v, str) for v in env.values()):
+            raise ValueError(f"{path}: arm {name!r} `env` must be a string map")
+        specs.append(ArmSpec(name, Path(dll), Path(data_root) if data_root else None,
+                             dict(env), check_markers=False))
+    if specs[0].name == specs[1].name:
+        raise ValueError(f"{path}: arm names must differ, both are {specs[0].name!r}")
+    return specs
 
 
 def build_search_calls(queries: Sequence[EvalQuery], limit: int = SEARCH_LIMIT,
@@ -448,43 +506,47 @@ def expected_hash_in_top8(expected_hash: str | None,
     return any(hit["hash"] == expected_hash for hit in hits)
 
 
-def compute_metrics(off_arm: Mapping[str, Any], threshold_arm: Mapping[str, Any],
+def compute_metrics(arm_a: Mapping[str, Any], arm_b: Mapping[str, Any],
                     queries: Sequence[EvalQuery]) -> dict[str, Any]:
     """Pair metrics for the two arms' results — the metrics.json payload.
 
-    Reads queryText from the off arm's results (review S6) and expectedHash /
-    projectId from the corpus queries. Raises when the arms disagree on the set of
-    query ids (a query missing from one arm is never silently dropped).
+    The first artifact is the baseline (`off` in the default pair) and the second the
+    candidate; each artifact's `arm` field names it in the output. Reads queryText from
+    the baseline arm's results (review S6) and expectedHash / projectId from the corpus
+    queries. Raises when the artifacts share a name or disagree on the set of query ids
+    (a query missing from one arm is never silently dropped).
     """
-    if off_arm.get("arm") != "off" or threshold_arm.get("arm") != "threshold":
-        raise ValueError("compute_metrics expects the {'arm': 'off'|'threshold'} artifacts")
-    off_results: Mapping[str, Mapping[str, Any]] = off_arm["results"]
-    threshold_results: Mapping[str, Mapping[str, Any]] = threshold_arm["results"]
-    if set(off_results) != set(threshold_results):
+    a_name, b_name = arm_a.get("arm"), arm_b.get("arm")
+    if not isinstance(a_name, str) or not isinstance(b_name, str) or a_name == b_name:
+        raise ValueError(
+            f"compute_metrics expects two distinct named arm artifacts, got {a_name!r} and {b_name!r}")
+    a_results: Mapping[str, Mapping[str, Any]] = arm_a["results"]
+    b_results: Mapping[str, Mapping[str, Any]] = arm_b["results"]
+    if set(a_results) != set(b_results):
         raise ValueError("arms disagree on query ids — a query is missing from one arm")
     by_id = {query.id: query for query in queries}
     pairs: dict[str, dict[str, Any]] = {}
-    for qid, off_result in off_results.items():
+    for qid, a_result in a_results.items():
         query = by_id[qid]
-        off_hits = top8_hits(off_result)
-        threshold_hits = top8_hits(threshold_results[qid])
-        shared, fraction = set_overlap(off_hits, threshold_hits)
-        drop, backfill = drop_backfill(off_hits, threshold_hits)
+        a_hits = top8_hits(a_result)
+        b_hits = top8_hits(b_results[qid])
+        shared, fraction = set_overlap(a_hits, b_hits)
+        drop, backfill = drop_backfill(a_hits, b_hits)
         pairs[qid] = {
-            "queryText": off_result.get("queryText"),
+            "queryText": a_result.get("queryText"),
             "projectId": query.project_id,
             "expectedHash": query.expected_hash,
             "top8SetOverlapCount": shared,
             "top8SetOverlap": fraction,
-            "rbo": rbo([hit["hash"] for hit in off_hits],
-                       [hit["hash"] for hit in threshold_hits]),
+            "rbo": rbo([hit["hash"] for hit in a_hits],
+                       [hit["hash"] for hit in b_hits]),
             "drop": drop,
             "backfill": backfill,
             "expectedHashInTop8": {
-                "off": expected_hash_in_top8(query.expected_hash, off_hits),
-                "threshold": expected_hash_in_top8(query.expected_hash, threshold_hits)},
+                a_name: expected_hash_in_top8(query.expected_hash, a_hits),
+                b_name: expected_hash_in_top8(query.expected_hash, b_hits)},
         }
-    return {"meta": {"arms": list(ARMS), "rboP": RBO_P, "searchLimit": SEARCH_LIMIT,
+    return {"meta": {"arms": [a_name, b_name], "rboP": RBO_P, "searchLimit": SEARCH_LIMIT,
                      "pairCount": len(pairs)},
             "pairs": pairs}
 
@@ -531,42 +593,56 @@ def prepare_data_root(copy: Path, work_dir: Path) -> Path:
     return root
 
 
-def run_arm(arm: str, dll: Path, data_root: Path, queries: Sequence[EvalQuery],
+def run_arm(spec: ArmSpec, queries: Sequence[EvalQuery],
             output_dir: Path, limit: int = SEARCH_LIMIT) -> dict[str, Any]:
     """Run one arm: one serve backend plus one proxy child, every query through it
-    interactively, backend stderr captured to arm-<name>.stderr. Marker discipline is
-    validated BEFORE the arm JSON is written — a failed arm leaves its stderr for
-    debugging but no half-artifact set."""
+    interactively, backend stderr captured to arm-<name>.stderr. Marker discipline
+    (spec.check_markers) is validated BEFORE the arm JSON is written — a failed arm
+    leaves its stderr for debugging but no half-artifact set."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    stderr_path = output_dir / f"arm-{arm}.stderr"
-    calls = build_search_calls(queries, limit=limit, session_id=f"{SESSION_ID}-{arm}")
+    stderr_path = output_dir / f"arm-{spec.name}.stderr"
+    calls = build_search_calls(queries, limit=limit, session_id=f"{SESSION_ID}-{spec.name}")
     results: dict[str, dict[str, Any]] = {}
-    with StdioMcpClient(dll, arm_env(arm), stderr_path, data_root) as client:
+    with StdioMcpClient(spec.dll, arm_env_for(spec), stderr_path, spec.data_root) as client:
         client.initialize()
         for query, call in zip(queries, calls):
             response = client.rpc("tools/call", call)
             results[query.id] = {**extract_results(response), "queryText": query.query}
-    validate_markers(arm, stderr_path.read_text(encoding="utf-8", errors="replace"))
-    arm_json: dict[str, Any] = {"arm": arm, "env": dict(ARMS[arm]), "results": results}
-    write_json(output_dir / f"arm-{arm}.json", arm_json)
+    if spec.check_markers:
+        validate_markers(spec.name, stderr_path.read_text(encoding="utf-8", errors="replace"))
+    arm_json: dict[str, Any] = {"arm": spec.name, "env": dict(spec.env), "results": results}
+    write_json(output_dir / f"arm-{spec.name}.json", arm_json)
     return arm_json
 
 
-def run_eval(dll: Path, corpus_path: Path, output_dir: Path, copy: Path | None = None,
-             data_root: Path | None = None, limit: int = SEARCH_LIMIT) -> dict[str, Any]:
-    """Both arms sequentially (one server at a time — never concurrent), then the pair
-    metrics. Writes arm-off.json, arm-threshold.json, metrics.json and the two arm
-    stderr files under output_dir; returns the metrics payload."""
+def run_eval(dll: Path | None, corpus_path: Path, output_dir: Path,
+             copy: Path | None = None, data_root: Path | None = None,
+             limit: int = SEARCH_LIMIT,
+             arms: Sequence[ArmSpec] | None = None) -> dict[str, Any]:
+    """The pair sequentially (one server at a time — never concurrent), then the pair
+    metrics. Writes arm-<name>.json per arm plus metrics.json under output_dir.
+
+    `arms` carries a custom pair — each arm its own dll, data root and env; otherwise
+    the default threshold/off pair is built from `dll` plus `--copy`/`--data-root`.
+    """
     queries = load_corpus(corpus_path)
     output_dir.mkdir(parents=True, exist_ok=True)
-    if data_root is None:
-        if copy is None:
-            raise ValueError("a bank copy (--copy) or a ready root (--data-root) is required")
-        data_root = prepare_data_root(copy, Path(tempfile.mkdtemp(prefix="threshold-eval-root-")))
-    arms: dict[str, dict[str, Any]] = {}
-    for arm in ARMS:  # insertion order: off, then threshold — strictly sequential
-        arms[arm] = run_arm(arm, dll, data_root, queries, output_dir, limit)
-    metrics = compute_metrics(arms["off"], arms["threshold"], queries)
+    if arms is None:
+        if dll is None:
+            raise ValueError("a dll is required unless custom arms carry their own")
+        if data_root is None:
+            if copy is None:
+                raise ValueError("a bank copy (--copy) or a ready root (--data-root) is required")
+            data_root = prepare_data_root(copy, Path(tempfile.mkdtemp(prefix="threshold-eval-root-")))
+        arms = list(default_arm_specs(dll, data_root))
+    else:
+        arms = list(arms)
+        if data_root is not None or copy is not None:
+            raise ValueError("custom arms carry their own data roots — drop --copy/--data-root")
+    if len(arms) != 2:
+        raise ValueError(f"exactly two arms are required, got {len(arms)}")
+    docs = [run_arm(spec, queries, output_dir, limit) for spec in arms]
+    metrics = compute_metrics(docs[0], docs[1], queries)
     write_json(output_dir / "metrics.json", metrics)
     return metrics
 
@@ -579,19 +655,24 @@ def write_json(path: Path, payload: object) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="P3: sequential two-arm threshold eval runner (plan §P3)")
-    parser.add_argument("--dll", type=Path, required=True, help="built AiRaccoon.dll")
+    parser.add_argument("--dll", type=Path, default=None, help="built AiRaccoon.dll (default pair)")
     parser.add_argument("--corpus", type=Path, required=True, help="P2 corpus JSON")
     parser.add_argument("--copy", type=Path, default=None,
                         help="bank copy (memory.db); ignored with --data-root")
     parser.add_argument("--data-root", type=Path, default=None,
                         help="ready server data-root (skips the copy symlink setup)")
+    parser.add_argument("--arms-spec", type=Path, default=None,
+                        help="custom pair JSON: {\"arms\": [{\"name\", \"dll\", \"dataRoot\"?, \"env\"?}, ...]}")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="artifact directory (default: docs/work/threshold-committee-eval)")
     parser.add_argument("--limit", type=int, default=SEARCH_LIMIT,
                         help="memory_search limit (default: 8)")
     args = parser.parse_args(argv)
+    arms = load_arms_spec(args.arms_spec) if args.arms_spec else None
+    if arms is None and args.dll is None:
+        parser.error("--dll or --arms-spec is required")
     run_eval(dll=args.dll, corpus_path=args.corpus, output_dir=args.output_dir,
-             copy=args.copy, data_root=args.data_root, limit=args.limit)
+             copy=args.copy, data_root=args.data_root, limit=args.limit, arms=arms)
     return 0
 
 

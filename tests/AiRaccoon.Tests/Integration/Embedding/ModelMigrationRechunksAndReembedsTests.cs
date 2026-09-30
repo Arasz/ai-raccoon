@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -9,7 +11,9 @@ using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -42,6 +46,8 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
     private readonly SqliteMemoryStore _store;
     private readonly ChunkBudgetReconciler _reconciler;
     private readonly EntryEmbedder _embedder;
+    private readonly FakeLogger<ChunkBudgetReconciler> _reconcilerLog = new();
+    private readonly RecordingMeasurementRecorder _measurements = new();
 
     public ModelMigrationRechunksAndReembedsTests()
     {
@@ -52,9 +58,9 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _time,
             _embeddings, null, null, null, null, null, null, null);
         _reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            _embeddings, _time, () => _store, NullLogger<ChunkBudgetReconciler>.Instance);
+            _embeddings, _time, () => _store, _reconcilerLog);
         _embedder = TestData.CreateEntryEmbedder(_embeddings, new SqliteModelMigrationLease(_time), _time,
-            new VecDimensionReconciler(), _reconciler);
+            new VecDimensionReconciler(), _reconciler, measurements: _measurements);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -65,6 +71,10 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
         $"Item {i:D2} records that the committee approved the tombola budget line {i * 7:D3} after a vote."));
 
     private static string NotePath(string content) => $"{ContentHash.OfValue(content)}.md";
+
+    private static string FileBody() =>
+        string.Join("\n\n", Enumerable.Range(1, 5).Select(i =>
+            $"## Section {i}\n\n" + string.Join(" ", Enumerable.Repeat($"magnetostrictive section {i} body text", 40))));
 
     private async Task<SqliteConnection> OpenAsync() => await _factory.OpenBankAsync(Ct);
 
@@ -115,6 +125,86 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
         (await connection.ExecuteScalarAsync<long?>(
             "SELECT finished_at FROM model_migration ORDER BY id DESC LIMIT 1")).ShouldNotBeNull(
             "the migration closes once the drain is done");
+    }
+
+    /// <summary>
+    ///     The migration drain's re-chunk phase reports its duration and group count through the
+    ///     drain's shared reporter. The groups value is checked against the fixture's own known
+    ///     counts — exactly one over-budget note and one over-budget file, so one group each — not
+    ///     only against the reconciler's counters: an independent oracle.
+    /// </summary>
+    [RetryFact]
+    public async Task MigrationDrain_RecordsRechunkMeasurements_AfterDrain()
+    {
+        const int knownRechunkedNoteGroups = 1;
+        const int knownRechunkedMirrorGroups = 1;
+        var content = LongNote();
+        var file = Path.Combine(_dataRoot, "migration-file.md");
+        await File.WriteAllTextAsync(file, FileBody(), Ct);
+        await using (var setup = await OpenAsync())
+        {
+            await ConfigureEngineAsync(setup);
+            await _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), Ct);
+            await _store.WriteAsync(new MemoryWriteRequest(ProjectId, content), Ct);
+            await _store.IngestFileAsync(ProjectId, file, null, Ct);
+            await _store.EmbedPendingAsync(ProjectId, null, Ct);
+        }
+
+        await using var connection = await OpenAsync();
+        _embeddings.ChunkBudgetOverride = NewBudget;
+        (await _embedder.ReconcileFingerprintAsync(connection, Ct)).ShouldBeTrue(
+            "the stamp drift opens the re-chunking migration");
+
+        (await _embedder.DrainMigrationAsync(connection, Ct)).ShouldBeTrue();
+
+        var record448 = _reconcilerLog.Collector.GetSnapshot().Single(record => record.Id.Id == 448);
+        record448.Level.ShouldBe(LogLevel.Information,
+            "448 is documented at Information — a Debug downgrade hides it from default logs");
+        record448.Message.ShouldContain($"1 note group(s) and {knownRechunkedMirrorGroups} mirror group(s) re-chunked",
+            customMessage: "the reconciler's own counters say both groups were replaced");
+
+        var duration = _measurements.Recorded.Single(m => m.Name == "chunk.rechunk.duration_ms");
+        duration.Kind.ShouldBe(MeasurementKind.Histogram);
+        duration.Unit.ShouldBe("ms");
+        duration.ProjectId.ShouldBe(MetricsConfigKeys.SelfMetricsProjectId);
+
+        var groups = _measurements.Recorded.Single(m => m.Name == "chunk.rechunk.groups");
+        groups.Kind.ShouldBe(MeasurementKind.Histogram);
+        groups.Unit.ShouldBe("count");
+        groups.ProjectId.ShouldBe(MetricsConfigKeys.SelfMetricsProjectId);
+        groups.Value.ShouldBe(knownRechunkedNoteGroups + knownRechunkedMirrorGroups,
+            "the fixture wrote one over-budget note and one over-budget file: both re-chunked");
+    }
+
+    /// <summary>
+    ///     F2(a): the reporter's own unit test calls it directly, so nothing there can see what the
+    ///     drain passes in. Running the drain's reconciler on a scripted clock of a known span makes
+    ///     a zeroed <c>TimeSpan</c> at the call site show up as 0 ms instead of the phase's elapsed.
+    /// </summary>
+    [RetryFact]
+    public async Task MigrationDrain_PinsThePhaseDurationValue()
+    {
+        var content = LongNote();
+        await using (var setup = await OpenAsync())
+        {
+            await ConfigureEngineAsync(setup);
+            await _store.WriteAsync(new MemoryWriteRequest(ProjectId, content), Ct);
+            await _store.EmbedPendingAsync(ProjectId, null, Ct);
+        }
+
+        await using var connection = await OpenAsync();
+        _embeddings.ChunkBudgetOverride = NewBudget;
+        (await _embedder.ReconcileFingerprintAsync(connection, Ct)).ShouldBeTrue(
+            "the stamp drift opens the re-chunking migration");
+        var reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+            _embeddings, ScriptedTimeProvider.ForSpan(TimeSpan.FromSeconds(305.5)), () => _store, _reconcilerLog);
+        var embedder = TestData.CreateEntryEmbedder(_embeddings, new SqliteModelMigrationLease(_time), _time,
+            new VecDimensionReconciler(), reconciler, measurements: _measurements);
+
+        (await embedder.DrainMigrationAsync(connection, Ct)).ShouldBeTrue();
+
+        _measurements.Recorded.Single(m => m.Name == "chunk.rechunk.duration_ms").Value.ShouldBe(305500,
+            "the drain must pass the phase report's own elapsed (305.5 s), not a zeroed span");
     }
 
     private static async Task ConfigureEngineAsync(SqliteConnection connection)

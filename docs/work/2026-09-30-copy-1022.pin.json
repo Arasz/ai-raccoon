@@ -1,0 +1,127 @@
+{
+  "path": "/Users/arasz/ai-raccoon-eval/copies/memory-1022-2026-09-30.db",
+  "sourcePath": "/Users/arasz/.ai-raccoon/memory.db",
+  "sha256": "d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb",
+  "bytes": 1073446912,
+  "entries": 21765,
+  "embedded": 21765,
+  "vecEntries": null,
+  "userVersion": 17,
+  "journalMode": "delete",
+  "walFrames": 0,
+  "settings": {
+    "embedding.chunkBudget": "1022",
+    "embedding.chunkBudget.retryAttempts": "1022:3",
+    "embedding.codeDimensions": "384",
+    "embedding.codeEngine": "local:bundled#ef600cb98e973722d33646a86640270a2a6a968f4842f55f60f7cd52d9e6a502",
+    "embedding.codeModel": "bundled",
+    "embedding.device": "coreml",
+    "embedding.engine": "local:bundled#ef600cb98e973722d33646a86640270a2a6a968f4842f55f60f7cd52d9e6a502",
+    "embedding.provider": "local",
+    "embedding.threads": "3",
+    "fusion.noRegression.enabled.global": "false",
+    "retrieval.ftsWeight": "1",
+    "retrieval.rrfK": "60",
+    "retrieval.structureAlpha": "0.5",
+    "retrieval.vectorWeight": "1"
+  },
+  "verified": true,
+  "copiedAt": "2026-09-30T09:16:37+00:00",
+  "pinnedAt": "2026-09-30T09:22:00Z",
+  "branch": "FALLBACK",
+  "copy": {
+    "tool": "scripts/retrieval_tuning/make_memory_copy.py",
+    "liveOpenMode": "ro",
+    "copyTimeSha256": "10ed52f864201056e40d56d6efa22954022bb1c5da83fc377c1134d7d0f91cea",
+    "copyTimeVerification": {
+      "exit": 0,
+      "result": "VERIFIED: copy is healthy and matches the live snapshot",
+      "integrity": "ok",
+      "entriesLive": 21765,
+      "entriesCopy": 21765,
+      "embeddedLive": 21765,
+      "embeddedCopy": 21765,
+      "spotChecks": [
+        "fdb85ec74c93 match",
+        "55009cbe0b15 match",
+        "6e0c40948473 match"
+      ],
+      "sidecar": "/tmp/aira-copy1022-converge/evidence/copy-time.pin.json"
+    }
+  },
+  "convergence": {
+    "dataRoot": "/tmp/aira-copy1022-converge",
+    "coremlCacheSymlink": "/Users/arasz/.ai-raccoon/coreml-cache",
+    "build": {
+      "version": "1.55.0",
+      "commit": "0b7a20144944e0eb56eec8256cc782605d76e676",
+      "binary": "src/AiRaccoon/bin/Debug/net10.0/AiRaccoon",
+      "binarySha256": "86d3fee11755c3ae6b89b1fd97bcdcf7a4cd6dfa6f5ca9993a1283a368673ed3",
+      "appDllSha256": "413e4575164794efedd652cd9baf768b3ce7bf0dfd06dab4b8b47d06fb5d5692",
+      "dotnetBuild": "0 warnings, 0 errors",
+      "identityProof": "the built AiRaccoon.Infrastructure.dll embeds 448's message with ' in {Elapsed}'"
+    },
+    "trigger": "budget drift, equal fingerprint (local:bundled#ef600cb98e973722d33646a86640270a2a6a968f4842f55f60f7cd52d9e6a502) -> re-chunk-only migration (MarkAllEmbeddedPending=false)",
+    "retryAttempts": {
+      "before": "1022:2",
+      "after": "1022:3",
+      "note": "inherited 2 -> first disposable pass was the budget's 3rd; ceiling reached, residual reclassified unprovable, stamp written anyway (ADR-0125)"
+    },
+    "passes": [
+      {
+        "pass": 1,
+        "attempt": "3 of 3 (inherited retryAttempts 1022:2)",
+        "startedAt": "2026-09-30T09:17:13Z",
+        "finishedAt": "2026-09-30T09:19:57Z",
+        "event448": "Chunk-budget rebudget at 1022 tokens: 0 note group(s) and 0 mirror group(s) re-chunked, 5501 unchanged, 0 retryable, 14 unprovable, 1 terminal in 00:02:43.8813227",
+        "stampAfter": "1022",
+        "retryAttemptsAfter": "1022:3",
+        "residual": {
+          "unprovable": 14,
+          "terminal": 1,
+          "note": "ADR-0125 residual population; no new re-chunk writes in this pass (0 replaced groups)"
+        }
+      }
+    ],
+    "stampProbe": {
+      "before": {
+        "at": "2026-09-30T09:16:05Z",
+        "embedding.chunkBudget": "ABSENT",
+        "retryAttempts": "1022:2"
+      },
+      "after": {
+        "at": "2026-09-30T09:20:01Z",
+        "embedding.chunkBudget": "1022",
+        "retryAttempts": "1022:3"
+      }
+    },
+    "refusalWindow": {
+      "firstRefusalAt": "2026-09-30T09:17:29Z",
+      "firstRefusalServerLogAt": "2026-09-30T09:17:30.0915380+00:00",
+      "lastRefusalAt": "2026-09-30T09:19:52Z",
+      "lastRefusalServerLogAt": "2026-09-30T09:19:52.6531090+00:00",
+      "closedAt": "2026-09-30T09:19:57Z",
+      "message": "model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes (memory_search)",
+      "probes": {
+        "refused": 25,
+        "ok": 10,
+        "statusLog": "/tmp/aira-copy1022-converge/evidence/refusal-probes.status"
+      }
+    },
+    "migration": {
+      "startedAt": "2026-09-30T09:17:13Z",
+      "finishedAt": "2026-09-30T09:19:57Z",
+      "engine": "local:bundled#ef600cb98e973722d33646a86640270a2a6a968f4842f55f60f7cd52d9e6a502",
+      "kind": "re-chunk-only"
+    },
+    "postConvergence": {
+      "integrity": "ok",
+      "entries": 21765,
+      "embedded": 21765,
+      "pending": 0,
+      "journalMode": "delete",
+      "walFrames": 0,
+      "checkpoint": "wal_checkpoint(TRUNCATE) -> 0|0|0, then journal_mode=DELETE before the final copy"
+    }
+  }
+}

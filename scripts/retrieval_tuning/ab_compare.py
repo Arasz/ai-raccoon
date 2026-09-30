@@ -4,7 +4,9 @@
 Per sampled query this script renders a blind payload — the query plus the two
 arms' 8-chunk lists, positions labelled only ``first``/``second`` — asks each of
 the three graders for a forced choice, and restores the seeded
-position→arm mapping only after grading. The mapping is archived solely in
+position→arm mapping only after grading. The pair is arbitrary: each arm's name
+is read from its own ``arm`` JSON, so custom pairs (``chunk254``/``chunk1022``)
+round-trip without the constants naming them. The mapping is archived solely in
 ``ab-results.json``; the payloads (archived under ``ab-forms/``) never name the
 arms.
 
@@ -74,15 +76,16 @@ PICK_RE = re.compile(r"^PICK:\s*(first|second)\s*$", re.MULTILINE | re.IGNORECAS
 REASON_RE = re.compile(r"^REASON:\s*(.+)$", re.MULTILINE | re.IGNORECASE | re.DOTALL)
 
 
-def other_arm(arm: str) -> str:
-    """The opposite arm name: threshold ↔ off."""
-    return ARM_OFF if arm == ARM_THRESHOLD else ARM_THRESHOLD
+def other_arm(arm: str, arm_a: str = ARM_THRESHOLD, arm_b: str = ARM_OFF) -> str:
+    """The other arm of the pair (threshold ↔ off by default)."""
+    return arm_b if arm == arm_a else arm_a
 
 
-def assign_positions(query_ids: list[str], seed: int) -> dict[str, str]:
-    """Map queryId → arm shown first, randomized by seed (per-query derived seed)."""
+def assign_positions(query_ids: list[str], seed: int,
+                     arm_a: str = ARM_THRESHOLD, arm_b: str = ARM_OFF) -> dict[str, str]:
+    """Map queryId → the arm shown first, randomized by seed (per-query derived seed)."""
     return {
-        qid: ARM_THRESHOLD if random.Random(f"{seed}:{qid}").random() < 0.5 else ARM_OFF
+        qid: arm_a if random.Random(f"{seed}:{qid}").random() < 0.5 else arm_b
         for qid in query_ids
     }
 
@@ -208,9 +211,12 @@ def load_sample(sample_path: Path) -> tuple[list[dict], list[str]]:
     return graders, query_ids
 
 
-def load_arm(arm_path: Path) -> dict[str, dict]:
-    """Read P3's arm JSON by contract → {queryId: {"queryText": str, "chunks": [8 entries]}}."""
+def load_arm(arm_path: Path) -> tuple[str, dict[str, dict]]:
+    """Read P3's arm JSON by contract → (arm name, {queryId: {queryText, chunks}})."""
     data = json.loads(arm_path.read_text(encoding="utf-8"))
+    name = data.get("arm")
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"{arm_path}: missing arm name (`arm`)")
     queries: dict[str, dict] = {}
     for q in data["queries"]:
         results = q["results"]
@@ -222,13 +228,13 @@ def load_arm(arm_path: Path) -> dict[str, dict]:
                 {"hash": c["hash"], "rank": c["rank"], "snippet": c["snippet"]} for c in results
             ],
         }
-    return queries
+    return name, queries
 
 
 def run_ab(
     sample_path: Path,
-    arm_threshold_path: Path,
-    arm_off_path: Path,
+    arm_a_path: Path,
+    arm_b_path: Path,
     *,
     seed: int,
     runner,
@@ -237,14 +243,20 @@ def run_ab(
     forms_dir: Path | None = None,
     top_k: int = DEFAULT_TOP_K,
 ) -> dict:
-    """One blind pass over the sample; returns the ab-results.json document."""
+    """One blind pass over the sample; returns the ab-results.json document.
+
+    The pair is arbitrary: each artifact's `arm` field names it, positions are
+    labelled only first/second in the payloads, and the position→arm mapping is
+    restored into the results after grading."""
     graders, query_ids = load_sample(sample_path)
-    arm_threshold = load_arm(arm_threshold_path)
-    arm_off = load_arm(arm_off_path)
-    missing = [qid for qid in query_ids if qid not in arm_threshold or qid not in arm_off]
+    arm_a_name, arm_a = load_arm(arm_a_path)
+    arm_b_name, arm_b = load_arm(arm_b_path)
+    if arm_a_name == arm_b_name:
+        raise ValueError(f"both arm artifacts are named {arm_a_name!r} — the pair must differ")
+    missing = [qid for qid in query_ids if qid not in arm_a or qid not in arm_b]
     if missing:
         raise ValueError(f"sampled queries missing from an arm JSON: {missing}")
-    mapping = assign_positions(query_ids, seed)
+    mapping = assign_positions(query_ids, seed, arm_a_name, arm_b_name)
     if forms_dir is None:
         forms_dir = out_path.parent / "ab-forms"
     forms_dir.mkdir(parents=True, exist_ok=True)
@@ -256,20 +268,21 @@ def run_ab(
             "trio": graders,
             "topK": top_k,
             "samplePath": str(sample_path),
-            "armThresholdPath": str(arm_threshold_path),
-            "armOffPath": str(arm_off_path),
+            "armNames": [arm_a_name, arm_b_name],
+            "armAPath": str(arm_a_path),
+            "armBPath": str(arm_b_path),
         },
         "queries": [],
     }
     re_asks = 0
     for qid in query_ids:
         first_arm = mapping[qid]
-        second_arm = other_arm(first_arm)
-        query_text = arm_threshold[qid]["queryText"]
-        if arm_off[qid]["queryText"] != query_text:
+        second_arm = other_arm(first_arm, arm_a_name, arm_b_name)
+        query_text = arm_a[qid]["queryText"]
+        if arm_b[qid]["queryText"] != query_text:
             raise ValueError(f"{qid}: arms disagree on queryText")
-        first_chunks = (arm_threshold if first_arm == ARM_THRESHOLD else arm_off)[qid]["chunks"]
-        second_chunks = (arm_threshold if second_arm == ARM_THRESHOLD else arm_off)[qid]["chunks"]
+        first_chunks = (arm_a if first_arm == arm_a_name else arm_b)[qid]["chunks"]
+        second_chunks = (arm_a if second_arm == arm_a_name else arm_b)[qid]["chunks"]
         payload = render_payload(query_text, first_chunks, second_chunks)
         payload_path = forms_dir / f"{qid}.payload.txt"
         payload_path.write_text(payload, encoding="utf-8")
@@ -299,7 +312,7 @@ def run_ab(
             )
         re_asks += sum(g["reAskCount"] for g in grader_records)
         abstentions = sum(1 for g in grader_records if g["abstained"])
-        threshold_picks = sum(1 for g in grader_records if g["pickArm"] == ARM_THRESHOLD)
+        arm_a_picks = sum(1 for g in grader_records if g["pickArm"] == arm_a_name)
         results["queries"].append(
             {
                 "queryId": qid,
@@ -309,8 +322,8 @@ def run_ab(
                 "payloadSha256": hashlib.sha256(payload_path.read_bytes()).hexdigest(),
                 "graders": grader_records,
                 "abstentions": abstentions,
-                "thresholdPicks": threshold_picks,
-                "compScore": comp_score(threshold_picks, abstentions),
+                "thresholdPicks": arm_a_picks,
+                "compScore": comp_score(arm_a_picks, abstentions),
             }
         )
 
@@ -337,8 +350,10 @@ def run_ab(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Blind A/B pass (P5) of the threshold-committee eval")
     parser.add_argument("--sample", required=True, type=Path, help="P4 sample.json")
-    parser.add_argument("--arm-threshold", required=True, type=Path, dest="arm_threshold", help="P3 arm-threshold.json")
-    parser.add_argument("--arm-off", required=True, type=Path, dest="arm_off", help="P3 arm-off.json")
+    parser.add_argument("--arm-a", "--arm-threshold", required=True, type=Path,
+                        dest="arm_a", help="first arm's P3 JSON (--arm-threshold: threshold)")
+    parser.add_argument("--arm-b", "--arm-off", required=True, type=Path,
+                        dest="arm_b", help="second arm's P3 JSON (--arm-off: off)")
     parser.add_argument("--out", required=True, type=Path, help="ab-results.json output path")
     parser.add_argument("--forms-dir", type=Path, default=None, help="payload archive (default: <out>.parent/ab-forms)")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
@@ -348,8 +363,8 @@ def main(argv: list[str] | None = None) -> int:
 
     results = run_ab(
         args.sample,
-        args.arm_threshold,
-        args.arm_off,
+        args.arm_a,
+        args.arm_b,
         seed=args.seed,
         runner=subprocess_runner,
         runner_cmd=args.runner,

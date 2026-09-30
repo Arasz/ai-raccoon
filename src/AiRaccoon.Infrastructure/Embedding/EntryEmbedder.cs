@@ -258,8 +258,10 @@ public sealed partial class EntryEmbedder(
             // post-re-chunk values, replacement rows arrive pending and embed in this same drain, and the
             // migration cannot close with rows pending. The report is the phase report (plan P1: its skip
             // counts are what gate the embedding.chunkBudget stamp, which RunAsync writes only at zero
-            // retryable skips).
-            await chunkBudgets.RunAsync(connection, cancellationToken);
+            // retryable skips). Its wall-clock duration and replaced-group count go to the reporter as
+            // chunk.rechunk.* (#809) — the phase report is the only place they exist.
+            var rechunk = await chunkBudgets.RunAsync(connection, cancellationToken);
+            reporter.RechunkFinished(rechunk.Elapsed, rechunk.NoteGroupsRechunked + rechunk.MirrorGroupsRechunked);
 
             // Time-strided, NOT per-batch: a per-batch line floods (1,492 lines on the owner's
             // 47,723-row backlog) and the metric buffer would drop records. One 1013 per lease

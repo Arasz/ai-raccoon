@@ -104,12 +104,13 @@ public static class TestData
     ///     change once instead of across 38 call sites. The factory's own body absorbs the extra
     ///     dependencies the production constructor gains.
     /// </summary>
+    /// <param name="measurements">Observes the reporter's series; omitted, a no-op recorder swallows them.</param>
     public static EntryEmbedder CreateEntryEmbedder(IEmbeddingService embeddings, IModelMigrationLease migrationLease,
         TimeProvider timeProvider, IVecDimensionReconciler vecDimensionReconciler,
-        IChunkBudgetReconciler? chunkBudgetReconciler = null) =>
+        IChunkBudgetReconciler? chunkBudgetReconciler = null, IMeasurementRecorder? measurements = null) =>
         new(embeddings, migrationLease, timeProvider, vecDimensionReconciler,
             chunkBudgetReconciler ?? NoOpChunkBudgetReconciler.Instance,
-            new EmbedDrainReporter(NoOpMeasurementRecorder.Instance, timeProvider),
+            new EmbedDrainReporter(measurements ?? NoOpMeasurementRecorder.Instance, timeProvider),
             TestTelemetry.None, NullLogger<EntryEmbedder>.Instance);
 
     /// <summary>

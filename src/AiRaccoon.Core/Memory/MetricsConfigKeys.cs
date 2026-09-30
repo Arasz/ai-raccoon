@@ -68,13 +68,23 @@ public static class MetricsConfigKeys
     /// <summary>Prefix for Stage-1 fusion-signal series (#601): <c>search.fusion.top_strength</c>, <c>search.fusion.top_margin</c>, <c>search.fusion.legs_fired</c> (FusionStats.MetricNames).</summary>
     public const string SearchFusionMetricPrefix = "search.fusion.";
 
+    /// <summary>Prefix for the migration drain's re-chunk phase series: one duration_ms and
+    /// one groups histogram per rebudget pass, bank-wide like the drain family.</summary>
+    public const string RechunkMetricPrefix = "chunk.rechunk.";
+
+    /// <summary>The re-chunk phase's wall-clock duration in milliseconds, per rebudget pass.</summary>
+    public const string RechunkDurationMetricName = $"{RechunkMetricPrefix}duration_ms";
+
+    /// <summary>Groups the re-chunk phase replaced, per rebudget pass.</summary>
+    public const string RechunkGroupsMetricName = $"{RechunkMetricPrefix}groups";
+
     /// <summary>
     ///     Every internal-series prefix MetricsReportService's discovery and the internal recorders'
-    ///     own naming both consume — one constant set, so a sixth family cannot be added on one side
+    ///     own naming both consume — one constant set, so another family cannot be added on one side
     ///     only (derive-or-delete).
     /// </summary>
     public static readonly IReadOnlyList<string> InternalSeriesPrefixes =
-        [JobMetricPrefix, DrainMetricPrefix, WriteMetricPrefix, SearchQueryMetricPrefix, SearchFusionMetricPrefix];
+        [JobMetricPrefix, DrainMetricPrefix, WriteMetricPrefix, SearchQueryMetricPrefix, SearchFusionMetricPrefix, RechunkMetricPrefix];
 
     /// <summary>The <c>drain.&lt;corpus&gt;.rows</c> series name for one embed-drain pass.</summary>
     public static string DrainRowsMetricName(string corpus) => $"{DrainMetricPrefix}{corpus}.rows";
