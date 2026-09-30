@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-"""Read-only live-bank copy + verification (plan §5.1, §8; gate G1).
+"""Read-only live-bank copy + verification + pin (plan §5.1, §8; gate G1).
 
 Copies the live memory bank to a scratch target via the sanctioned pattern — the
 source is opened ONLY through a read-only URI connection (``file:...?mode=ro``),
 and SQLite's ``.backup`` reads that connection while writing the target. The copy
-is then verified: integrity check, entry/embedded count parity against a fresh
-live snapshot, a SHA-256 spot check of sampled (hash, value) rows, and a printout
-of the inherited ``retrieval.%`` / ``fusion.%`` settings (the settings-leak the
-tuning harness must write all 9 knobs explicitly to compensate for).
+is checkpointed out of WAL mode (no pending WAL frames; the main file alone is
+the artifact) and immediately sha256-pinned in a sidecar JSON recording the sha,
+row counts, ``user_version`` and the non-secret retrieval/fusion/embedding
+settings snapshot. The copy is then verified: integrity check, entry/embedded
+count parity against a fresh live snapshot, a SHA-256 spot check of sampled
+(hash, value) rows, and a printout of the inherited ``retrieval.%`` /
+``fusion.%`` settings (the settings-leak the tuning harness must write all 9
+knobs explicitly to compensate for).
 
 Usage:
     python make_memory_copy.py [--live ~/.ai-raccoon/memory.db]
                                [--target /tmp/continue-testing-algorithm/datasets/memory-copy.db]
+                               [--pin /path/to/memory-copy.db.pin.json]
                                [--sample-size 3]
 
 Exit code 0 = copy created and verified; 1 = any verification step failed.
@@ -22,10 +27,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import random
 import sqlite3
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_LIVE = str(Path.home() / ".ai-raccoon" / "memory.db")
@@ -35,6 +42,16 @@ SETTINGS_QUERY = (
     "SELECT key, value FROM settings "
     "WHERE key LIKE 'retrieval.%' OR key LIKE 'fusion.%' ORDER BY key"
 )
+
+SETTINGS_SNAPSHOT_QUERY = (
+    "SELECT key, value FROM settings "
+    "WHERE key LIKE 'retrieval.%' OR key LIKE 'fusion.%' OR key LIKE 'embedding.%' "
+    "ORDER BY key"
+)
+
+# A settings key naming a credential is never copied into the sidecar
+# (embedding.apiKey is a persisted secret); the sidecar is a plain file.
+_SECRET_KEY_MARKERS = ("apikey", "secret", "token", "password", "passwd", "credential")
 
 
 def open_readonly(path: str, strict: bool = True) -> sqlite3.Connection:
@@ -113,6 +130,20 @@ def read_inherited_settings(conn: sqlite3.Connection) -> list[tuple[str, str]]:
     return [tuple(row) for row in conn.execute(SETTINGS_QUERY)]
 
 
+def _is_secret_key(key: str) -> bool:
+    lowered = key.lower()
+    return any(marker in lowered for marker in _SECRET_KEY_MARKERS)
+
+
+def read_settings_snapshot(conn: sqlite3.Connection) -> dict[str, str]:
+    """Non-secret retrieval/fusion/embedding settings rows, keyed by name.
+
+    ``embedding.apiKey`` is a persisted secret; any key naming a credential is
+    withheld so the sidecar can never carry one.
+    """
+    return {k: v for k, v in conn.execute(SETTINGS_SNAPSHOT_QUERY) if not _is_secret_key(k)}
+
+
 def verify_copy(
     live_path: str, copy_path: str, sample_size: int = 3, rng: random.Random | None = None
 ) -> dict:
@@ -132,6 +163,8 @@ def verify_copy(
         sample = (rng or random).sample(live_hashes, min(sample_size, len(live_hashes)))
         spot = spot_check_hashes(live, copy, sample)
         settings = read_inherited_settings(copy)
+        settings_snapshot = read_settings_snapshot(copy)
+        user_version = copy.execute("PRAGMA user_version").fetchone()[0]
     finally:
         copy.close()
     live.close()
@@ -158,17 +191,62 @@ def verify_copy(
         "vec_entries_copy": copy_counts["vec_entries"],
         "spot_check": spot,
         "settings": settings,
+        "settings_snapshot": settings_snapshot,
+        "user_version": user_version,
         "target": str(copy_path),
     }
 
 
+def sha256_file(path: str, chunk_size: int = 1024 * 1024) -> str:
+    """SHA-256 of a file on disk, read in chunks (the live bank is ~848 MB)."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def checkpoint_target(path: str) -> dict:
+    """Checkpoint a copy's WAL, then take it out of WAL mode.
+
+    ``wal_checkpoint(TRUNCATE)`` leaves no frames behind; ``journal_mode=DELETE``
+    is persistent in the database header, so no later reader can find pending
+    WAL frames and a sha256 of the main file describes the whole copy. Returns
+    the resulting journal mode and the frame count the checkpoint saw (``-1`` on
+    a database that was already out of WAL mode, normalized to 0).
+    """
+    conn = sqlite3.connect(path)
+    try:
+        _, frames, _ = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        journal_mode = conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0]
+    finally:
+        conn.close()
+    return {"journal_mode": journal_mode, "wal_frames": max(frames, 0)}
+
+
+def write_sidecar(pin_path: str, pin: dict) -> None:
+    """Write the pin sidecar atomically (temp file + replace)."""
+    path = Path(pin_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + f".tmp-{os.getpid()}")
+    tmp.write_text(json.dumps(pin, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def run_copy_and_verify(
-    live_path: str, target_path: str, sample_size: int = 3, rng: random.Random | None = None
+    live_path: str,
+    target_path: str,
+    sample_size: int = 3,
+    rng: random.Random | None = None,
+    pin_path: str | None = None,
 ) -> dict:
     """Copy live_path to target_path (.backup via read-only source) and verify.
 
-    The target is written to a temp path and atomically renamed into place, so a
-    concurrent reader never sees a half-written copy.
+    The target is written to a temp path, checkpointed out of WAL mode, then
+    atomically renamed into place, so a concurrent reader never sees a
+    half-written copy and the final file is self-contained. A sidecar JSON pin
+    (``<target>.pin.json`` unless ``pin_path`` overrides) records the copy's
+    sha256, counts, user_version, journal mode and settings snapshot.
     """
     live = open_readonly(live_path, strict=True)
     target = Path(target_path)
@@ -180,8 +258,29 @@ def run_copy_and_verify(
     finally:
         dst.close()
         live.close()
+    wal = checkpoint_target(str(tmp_target))
     os.replace(tmp_target, target)
-    return verify_copy(live_path, str(target), sample_size=sample_size, rng=rng)
+    report = verify_copy(live_path, str(target), sample_size=sample_size, rng=rng)
+    report.update(wal)
+    pin_path = pin_path or f"{target_path}.pin.json"
+    pin = {
+        "path": str(target.resolve()),
+        "sourcePath": str(Path(live_path).resolve()),
+        "sha256": sha256_file(str(target)),
+        "bytes": target.stat().st_size,
+        "entries": report["entries_copy"],
+        "embedded": report["embedded_copy"],
+        "vecEntries": report["vec_entries_copy"],
+        "userVersion": report["user_version"],
+        "journalMode": report["journal_mode"],
+        "walFrames": report["wal_frames"],
+        "settings": report["settings_snapshot"],
+        "verified": report["ok"],
+        "copiedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    write_sidecar(pin_path, pin)
+    report["pin_path"] = str(pin_path)
+    return report
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -189,6 +288,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--live", default=DEFAULT_LIVE, help="live bank path (read-only access)")
     parser.add_argument("--target", default=DEFAULT_TARGET, help="copy target path")
     parser.add_argument("--sample-size", type=int, default=3, help="spot-check sample size")
+    parser.add_argument(
+        "--pin",
+        default=None,
+        help="sidecar pin path (default: <target>.pin.json; copy runs only)",
+    )
     parser.add_argument(
         "--verify-only",
         action="store_true",
@@ -206,9 +310,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         report = verify_copy(args.live, args.target, sample_size=args.sample_size)
     else:
-        report = run_copy_and_verify(args.live, args.target, sample_size=args.sample_size)
+        report = run_copy_and_verify(
+            args.live, args.target, sample_size=args.sample_size, pin_path=args.pin
+        )
     print(f"live bank:  {args.live}")
     print(f"copy:       {report['target']}")
+    if "pin_path" in report:
+        print(f"pin:        {report['pin_path']}")
     print(f"integrity_check = {report['integrity']}")
     print(f"entries:    live={report['entries_live']}  copy={report['entries_copy']}")
     print(f"embedded:   live={report['embedded_live']}  copy={report['embedded_copy']}")

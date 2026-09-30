@@ -6,6 +6,8 @@ The module is import-safe (no side effects at import time).
 
 import hashlib
 import importlib.util
+import json
+import random
 import sqlite3
 from pathlib import Path
 
@@ -83,6 +85,33 @@ def test_open_readonly_uri_uses_mode_ro(tmp_path):
     # query_only=1 is belt-and-braces on top of the mode=ro URI
     assert conn.execute("PRAGMA query_only").fetchone()[0] == 1
     conn.close()
+
+
+def test_strict_read_only_live_source(tmp_path, monkeypatch):
+    """The live source is only ever connected through the mode=ro URI."""
+    live = tmp_path / "live.db"
+    target = tmp_path / "out" / "memory-copy.db"
+    _make_fixture_live(live)
+
+    seen = []
+    real_connect = sqlite3.connect
+
+    def spy(*args, **kwargs):
+        seen.append((args, kwargs))
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(mc.sqlite3, "connect", spy)
+    report = mc.run_copy_and_verify(str(live), str(target), sample_size=2, rng=random.Random(5))
+    assert report["ok"] is True
+
+    live_uri = f"file:{live.resolve()}?mode=ro"
+    source_opens = [
+        (args, kwargs) for args, kwargs in seen if args and str(live.resolve()) in str(args[0])
+    ]
+    assert source_opens, "run_copy_and_verify never opened the live source"
+    for args, kwargs in source_opens:
+        assert str(args[0]) == live_uri
+        assert kwargs.get("uri") is True
 
 
 # ---------------------------------------------------------------- counts
@@ -294,3 +323,70 @@ def test_main_returns_nonzero_on_verification_failure(tmp_path, capsys):
     assert rc == 1
     out = capsys.readouterr().out
     assert "FAIL" in out
+
+
+# ---------------------------------------------------------------- WAL checkpoint + pin sidecar
+
+def test_target_has_no_pending_wal_frames(tmp_path):
+    """The target is checkpointed out of WAL: no -wal, no pending frames, complete main file."""
+    live = tmp_path / "live.db"
+    target = tmp_path / "out" / "memory-copy.db"
+    writer = _make_fixture_live(live, n_rows=5)
+    writer.execute("PRAGMA journal_mode=WAL")
+    writer.execute(
+        "INSERT INTO entries (id, hash, path, value, scope, project_id, embed_state) "
+        "VALUES (6, 'hash6', '/repo/docs/adr/0006.md', 'value-6', 'project', 'ai-raccoon', 'embedded')"
+    )
+    writer.commit()
+    live_wal = Path(str(live) + "-wal")
+    assert live_wal.exists() and live_wal.stat().st_size > 0  # frames pending on the source
+    try:
+        report = mc.run_copy_and_verify(str(live), str(target), sample_size=2, rng=random.Random(7))
+    finally:
+        writer.close()
+
+    assert report["ok"] is True
+    assert report["journal_mode"] == "delete"
+    assert report["wal_frames"] == 0
+    assert not Path(str(target) + "-wal").exists()
+    # the main file alone is complete: a mode=ro open cannot create a shm/WAL
+    ro = sqlite3.connect(f"file:{target.resolve()}?mode=ro", uri=True)
+    try:
+        assert ro.execute("SELECT count(*) FROM entries").fetchone()[0] == 6
+    finally:
+        ro.close()
+
+
+def test_sidecar_records_sha_counts_settings(tmp_path):
+    """The pin sidecar carries the file sha, copy counts, user_version and non-secret settings."""
+    live = tmp_path / "live.db"
+    target = tmp_path / "out" / "memory-copy.db"
+    conn = _make_fixture_live(live, n_rows=6, embedded=4)
+    conn.execute("PRAGMA user_version=17")
+    conn.execute("INSERT INTO settings VALUES ('embedding.device', 'coreml')")
+    conn.execute("INSERT INTO settings VALUES ('embedding.chunkBudget', '1022')")
+    conn.execute("INSERT INTO settings VALUES ('embedding.apiKey', 'sk-secret-must-not-leak')")
+    conn.commit()
+    conn.close()
+
+    report = mc.run_copy_and_verify(str(live), str(target), sample_size=2, rng=random.Random(11))
+    assert report["ok"] is True
+
+    pin_path = Path(str(target) + ".pin.json")
+    assert pin_path.exists()
+    assert report["pin_path"] == str(pin_path)
+    pin = json.loads(pin_path.read_text(encoding="utf-8"))
+    assert pin["sha256"] == hashlib.sha256(target.read_bytes()).hexdigest()
+    assert pin["bytes"] == target.stat().st_size
+    assert pin["entries"] == 6
+    assert pin["embedded"] == 4
+    assert pin["userVersion"] == 17
+    assert pin["path"] == str(target.resolve())
+    assert pin["settings"]["embedding.device"] == "coreml"
+    assert pin["settings"]["embedding.chunkBudget"] == "1022"
+    assert pin["settings"]["retrieval.structureAlpha"] == "0.5"
+    # the pin is taken after the checkpoint, never of a WAL-backed file
+    assert pin["journalMode"] == "delete"
+    assert pin["walFrames"] == 0
+    # a persisted secret must never be copied into the sidecar
+    assert "embedding.apiKey" not in pin["settings"]
