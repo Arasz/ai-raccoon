@@ -6,6 +6,7 @@ template files, and assembles agent discovery documents.
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
@@ -315,3 +316,22 @@ class TemplateRendering:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(_with_managed_header(carried, name), encoding="utf-8")
         return True
+
+    def copy_carrying_regions(self, src: Path, dest_dir: Path) -> Optional[Path]:
+        """Copy `src` into `dest_dir`, carrying whatever preserved regions `dest` already had.
+
+        Returns the written path, or None when dest's markers are malformed and it was left
+        untouched (the note says so). Nothing carried means a byte-for-byte copy, so the common
+        case keeps exactly the bytes the framework ships.
+        """
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / src.name
+        body = src.read_text(encoding="utf-8")
+        carried = self.carried_body(dest, body)
+        if carried is None:
+            return None
+        if carried == body:
+            shutil.copyfile(src, dest)
+        else:
+            dest.write_text(carried, encoding="utf-8")
+        return dest

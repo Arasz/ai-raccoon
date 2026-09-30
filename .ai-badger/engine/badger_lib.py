@@ -59,9 +59,11 @@ class FeatureType(NamedTuple):
 
 FEATURE_TYPES: Tuple[FeatureType, ...] = (
     FeatureType("skills", "skills", True),
-    FeatureType("personas", "md", True),
-    FeatureType("invariants", "md", True),
-    FeatureType("instructions", "md", True),
+    # copy_file carries a project's keep regions into the fresh framework body, so these three
+    # are no more a byte copy of their source than a rendered template is.
+    FeatureType("personas", "md", True, hashes_source=True),
+    FeatureType("invariants", "md", True, hashes_source=True),
+    FeatureType("instructions", "md", True, hashes_source=True),
     # These three are materialised under names of their own — a rendered/seeded output, a
     # settings.json wiring, a written file per adjustment — so no manifest entry is ever
     # keyed by the index item's name and a "new" report could never clear (ADR-0006).

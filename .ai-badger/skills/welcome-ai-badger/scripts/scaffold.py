@@ -367,13 +367,17 @@ class Scaffolder:
         self.entries.append({**entry, **extra})
 
     def copy_file(self, feature: str, stack: str, item: Dict[str, Any], dest_dir: Path) -> Path:
-        """Copy one index item's source file into dest_dir and record its provenance."""
+        """Copy one index item's source file into dest_dir and record its provenance.
+
+        The copy carries any preserved regions the file already had, the same survival path the
+        managed agent files get (see TemplateRendering.copy_carrying_regions). A file left
+        untouched because its markers are malformed is not recorded.
+        """
         src = self.root / item["path"]
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / src.name
-        shutil.copyfile(src, dest)
-        self.record(feature, stack, item["name"], src, dest)
-        return dest
+        dest = self.rendering.copy_carrying_regions(src, dest_dir)
+        if dest is not None:
+            self.record(feature, stack, item["name"], src, dest)
+        return dest if dest is not None else dest_dir / src.name
 
     def record_template(self, src: Path, dest: Path, seed_once: bool = False) -> None:
         """Record a template's provenance; `seed_once` marks one the scaffold never rewrites."""
