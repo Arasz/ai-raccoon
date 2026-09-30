@@ -148,7 +148,7 @@ if _SCRIPT_DIR not in sys.path:
 
 from _shared import (  # noqa: E402 — re-exported for backward compatibility
     _test_ignore, PROJECT_LOCAL_FILE, MANAGED_HEADER, _MANAGED_PREFIX,
-    cfg_get, requirement_met, _condition_met, _within,
+    cfg_get, requirement_met, _condition_met, _within, strip_model_pin,
 )
 
 # Read from each skill's own `scope:` frontmatter (ADR-0018), against the catalog
@@ -419,10 +419,26 @@ class Scaffolder:
         """Copy every applicable stack's persona files into .ai-badger/agents/.
 
         Reads `bl.applicable_feature_items` — the same rule the Copilot agent delivery
-        applies — so the two hosts deliver the same persona set (#210).
+        applies — so the two hosts deliver the same persona set (#210). `personaModelPins:
+        false` (ADR-0033) strips each `model:` pin as the persona lands, so no scaffold or
+        den-refresh re-adds one the project dropped: routing runs on `level:`, with tier
+        taste in .ai-badger/model-groups.json alone.
         """
+        pins = self.config.get("personaModelPins", True)
         for stack, item in bl.applicable_feature_items(self.index, self.config, "personas"):
-            self.copy_file("personas", stack, item, self.aib / "agents")
+            if pins:
+                self.copy_file("personas", stack, item, self.aib / "agents")
+            else:
+                self._copy_persona_level_only(stack, item)
+
+    def _copy_persona_level_only(self, stack: str, item: Dict[str, Any]) -> Path:
+        """Copy one persona into .ai-badger/agents/ with its `model:` pin stripped (ADR-0033)."""
+        src = self.root / item["path"]
+        dest = self.aib / "agents" / src.name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(strip_model_pin(src.read_text(encoding="utf-8")), encoding="utf-8")
+        self.record("personas", stack, item["name"], src, dest)
+        return dest
 
     def scaffold_instructions(self) -> List[Path]:
         """Copy every applicable stack's instruction files into .ai-badger/instructions/."""

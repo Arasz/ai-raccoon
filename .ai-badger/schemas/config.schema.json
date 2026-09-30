@@ -146,6 +146,11 @@
         }
       }
     },
+    "personaModelPins": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether a scaffolded persona carries a `model:` pin beside its `level:` (ADR-0027 dual-key). false = route by level only (ADR-0033): the `model:` frontmatter entry is stripped as each persona lands in .ai-badger/agents/, so a later scaffold or den-refresh never re-adds a pin the project dropped — routing resolves `level:` through .ai-badger/model-groups.json instead. Default true keeps today's emission unchanged."
+    },
     "skillScope": {
       "enum": [
         "default",
