@@ -17,6 +17,7 @@ headless grader CLI — no subprocess, no network.
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import re
@@ -70,14 +71,17 @@ def _arm_json(arm_name: str, n: int = N_QUERIES) -> dict:
     for i in range(1, n + 1):
         chunks = []
         for j in range(1, 9):
-            snippet = f"q{i} chunk {j} documents a retrieval behaviour detail"
+            # Hashes/snippets derive from the arm name so the two fixture arms are
+            # content-distinct: a payload rendering the wrong arm's chunks is then
+            # visible to an assertion (F2). The name itself never appears, so the
+            # blind-surface check still holds.
+            digest = hashlib.sha256(f"{arm_name}:{i}:{j}".encode("utf-8")).hexdigest()
+            snippet = f"q{i} chunk {j} documents a retrieval behaviour detail [{digest[:8]}]"
             if i == 1 and j == 1:
                 # A chunk may legitimately mention the word — chunk text is
                 # excluded from the AC5.1 assertion (load-bearing exclusion).
                 snippet = "this chunk documents the threshold filter constant"
-            chunks.append(
-                {"hash": f"{i:04d}-{j:02d}-" + "a" * 56, "rank": j, "snippet": snippet}
-            )
+            chunks.append({"hash": digest, "rank": j, "snippet": snippet})
         queries.append(
             {
                 "queryId": f"C{i:03d}",
@@ -348,10 +352,34 @@ def test_custom_arm_names_round_trip_blind_and_restore(tmp_path):
             assert grader["pickArm"] == expected
     assert results["header"]["armNames"] == ["chunk254", "chunk1022"]
 
-    # Blind surface: the archived payloads name neither arm, and positions stay
-    # labelled only first/second.
-    for query in results["queries"]:
+    # Blind surface: the archived payloads name neither arm, positions stay
+    # labelled only first/second, AND the grader's own argv carries exactly the
+    # archived payload — the grader is the only audience blindness protects, so
+    # asserting on the archive alone leaves that channel unwatched (F1).
+    grader_calls = runner.calls
+    assert len(grader_calls) == len(results["queries"]) * 3
+    for index, query in enumerate(results["queries"]):
         payload = (forms_dir / f"{query['queryId']}.payload.txt").read_text(encoding="utf-8")
         assert "chunk254" not in payload and "chunk1022" not in payload
         assert payload.count(ab.FIRST_HEADER) == 1
         assert payload.count(ab.SECOND_HEADER) == 1
+        for call in grader_calls[index * 3:index * 3 + 3]:
+            assert call[-1] == payload
+            assert "chunk254" not in call[-1] and "chunk1022" not in call[-1]
+
+        # Content round trip: each labelled block renders exactly the chunk hashes
+        # of the arm that field names, in rank order, and none of the other arm's
+        # (the fixtures are content-distinct, so a wrong-arm render is visible).
+        first_block, second_block = payload.split(ab.SECOND_HEADER, 1)
+        first_block = first_block.split(ab.FIRST_HEADER, 1)[1]
+        rendered = {
+            "firstArm": re.findall(r"^\d+\. \[([0-9a-f]{64})\]", first_block, re.MULTILINE),
+            "secondArm": re.findall(r"^\d+\. \[([0-9a-f]{64})\]", second_block, re.MULTILINE),
+        }
+        for arm_field, other_field in (("firstArm", "secondArm"), ("secondArm", "firstArm")):
+            arm_doc = json.loads(arm_paths[query[arm_field]].read_text(encoding="utf-8"))
+            arm_query = next(
+                q for q in arm_doc["queries"] if q["queryId"] == query["queryId"]
+            )
+            assert rendered[arm_field] == [chunk["hash"] for chunk in arm_query["results"]]
+            assert not set(rendered[arm_field]) & set(rendered[other_field])

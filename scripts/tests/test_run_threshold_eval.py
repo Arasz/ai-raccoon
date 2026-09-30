@@ -130,33 +130,148 @@ THRESHOLD_ARM = _arm("threshold", {
 # ------------------------------------------------------------------ AC3.1: arm env
 
 
-def test_arm_env_mapping_exact(runner) -> None:
+def _arm_spec(runner, name: str):
+    return runner.ArmSpec(name, Path("/dll/AiRaccoon.dll"), None, dict(runner.ARMS[name]))
+
+
+def test_arm_env_for_mapping_exact(runner) -> None:
     """Owner decision: exactly two arms — off (MMR_DISABLE=1) and threshold
-    (MMR_MODE=threshold MMR_TAU=0.95). MMR was discarded; no third arm exists."""
+    (MMR_MODE=threshold MMR_TAU=0.95). `arm_env_for` is the production seam (the
+    dead `arm_env` name-path was removed): the spec's overrides over a clean base."""
     assert runner.ARMS == {"off": {"MMR_DISABLE": "1"},
                            "threshold": {"MMR_MODE": "threshold", "MMR_TAU": "0.95"}}
     base = {"PATH": "/usr/bin", "HOME": "/x"}
-    assert runner.arm_env("off", base) == {"PATH": "/usr/bin", "HOME": "/x",
-                                           "MMR_DISABLE": "1"}
-    assert runner.arm_env("threshold", base) == {"PATH": "/usr/bin", "HOME": "/x",
-                                                 "MMR_MODE": "threshold", "MMR_TAU": "0.95"}
+    assert runner.arm_env_for(_arm_spec(runner, "off"), base) == {
+        "PATH": "/usr/bin", "HOME": "/x", "MMR_DISABLE": "1"}
+    assert runner.arm_env_for(_arm_spec(runner, "threshold"), base) == {
+        "PATH": "/usr/bin", "HOME": "/x", "MMR_MODE": "threshold", "MMR_TAU": "0.95"}
 
 
-def test_arm_env_strips_stray_shell_mmr_vars(runner, monkeypatch) -> None:
+def test_arm_env_for_strips_stray_shell_mmr_vars(runner, monkeypatch) -> None:
     """A stray MMR_* var in the invoking shell must never flip an arm (P1's proven
     `_session_env` discipline): the base env is stripped before overrides apply."""
     monkeypatch.setenv("MMR_MODE", "mmr")
     monkeypatch.setenv("MMR_TAU", "0.3")
-    env = runner.arm_env("off")
+    env = runner.arm_env_for(_arm_spec(runner, "off"))
     assert env["MMR_DISABLE"] == "1"
     assert "MMR_MODE" not in env and "MMR_TAU" not in env
-    env = runner.arm_env("threshold")
+    env = runner.arm_env_for(_arm_spec(runner, "threshold"))
     assert env["MMR_MODE"] == "threshold" and env["MMR_TAU"] == "0.95"
 
 
-def test_arm_env_unknown_arm_raises(runner) -> None:
-    with pytest.raises(ValueError, match="unknown arm"):
-        runner.arm_env("mmr")
+# ------------------------------------------------- AC3.1: default pair (no arms=)
+
+
+class _DefaultPairClient:
+    """Fixture stand-in for StdioMcpClient on the default (`arms=None`) run path.
+
+    The arm name is read from the stderr filename `arm-<name>.stderr` that run_arm
+    writes — never inferred from the env under test. Records each arm's dll, data
+    root and env; replays one canned search response per query; writes the canned
+    stderr so marker discipline (`check_markers`) has something to judge."""
+
+    instances: list["_DefaultPairClient"] = []
+    stderr_lines: dict[str, str] = {}
+
+    def __init__(self, dll, env, stderr_path, data_root=None, response_timeout_s=None):
+        self.dll = Path(dll)
+        self.env = dict(env)
+        self.data_root = Path(data_root) if data_root is not None else None
+        self.name = Path(stderr_path).stem.removeprefix("arm-")
+        self.calls: list[dict] = []
+        Path(stderr_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(stderr_path).write_text(self.stderr_lines.get(self.name, ""), encoding="utf-8")
+        _DefaultPairClient.instances.append(self)
+
+    def __enter__(self) -> "_DefaultPairClient":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def initialize(self) -> None:
+        return None
+
+    def rpc(self, method, params):
+        self.calls.append(params)
+        hits = [{"hash": f"{self.name}-{i:02d}", "ranking": float(9 - i),
+                 "path": f"p/{self.name}", "sourceFile": f"{self.name}.cs",
+                 "chunkIndex": i, "snippet": f"{self.name} chunk {i}"}
+                for i in range(1, 9)]
+        text = json.dumps({"data": {"results": hits, "code": []}})
+        return {"result": {"content": [{"type": "text", "text": text}]}}
+
+
+def test_default_arm_specs_pin_names_env_and_markers(runner, tmp_path) -> None:
+    """`default_arm_specs` is the single constructor of the default pair: names in
+    ARMS order, each spec's env equals ARMS[name], marker discipline on, one shared
+    dll + data root."""
+    dll = tmp_path / "AiRaccoon.dll"
+    root = tmp_path / "root"
+    off, threshold = runner.default_arm_specs(dll, root)
+    assert (off.name, threshold.name) == ("off", "threshold")
+    assert off.env == runner.ARMS["off"] and threshold.env == runner.ARMS["threshold"]
+    assert off.check_markers is True and threshold.check_markers is True
+    assert (off.dll, off.data_root) == (dll, root) == (threshold.dll, threshold.data_root)
+
+
+def test_default_pair_env_artifacts_and_shared_dll_root(runner, tmp_path, monkeypatch) -> None:
+    """The default pair (run_eval without `arms=`) keeps the original contract:
+    filenames arm-off.json/arm-threshold.json, each arm's ARMS overrides applied
+    over a clean base (stray MMR_* stripped), one shared dll + data root. Kills the
+    `dict(ARMS[name])→{}` and dropped-`env.update(spec.env)` survivors; the
+    `check_markers=True→False` survivor is killed by the leak test beside this one."""
+    corpus = _write_corpus(tmp_path, CORPUS_FIXTURE)
+    dll_path = tmp_path / "build" / "AiRaccoon.dll"
+    data_root = tmp_path / "root"
+    monkeypatch.setenv("MMR_MODE", "mmr")          # stray shell var: must be stripped
+    monkeypatch.setenv("MMR_STRAY", "leak")
+    monkeypatch.setenv("THRESHOLD_EVAL_PROBE", "sentinel")
+    _DefaultPairClient.instances = []
+    _DefaultPairClient.stderr_lines = {
+        "off": "info: off arm clean\n",
+        "threshold": "[mmr-poc] mode=threshold tau=0.95 pool=230 kept=8\n",
+    }
+    monkeypatch.setattr(runner, "StdioMcpClient", _DefaultPairClient)
+    out_dir = tmp_path / "out"
+    metrics = runner.run_eval(dll_path, corpus, out_dir, data_root=data_root)
+
+    assert (out_dir / "arm-off.json").exists()
+    assert (out_dir / "arm-threshold.json").exists()
+    assert metrics["meta"]["arms"] == ["off", "threshold"]
+
+    by_name = {client.name: client for client in _DefaultPairClient.instances}
+    assert set(by_name) == {"off", "threshold"}
+    for client in by_name.values():
+        assert client.dll == dll_path and client.data_root == data_root
+        assert "MMR_STRAY" not in client.env          # stray shell MMR stripped
+        assert client.env["THRESHOLD_EVAL_PROBE"] == "sentinel"
+    assert by_name["off"].env["MMR_DISABLE"] == "1"
+    assert "MMR_MODE" not in by_name["off"].env and "MMR_TAU" not in by_name["off"].env
+    assert by_name["threshold"].env["MMR_MODE"] == "threshold"
+    assert by_name["threshold"].env["MMR_TAU"] == "0.95"
+    assert "MMR_DISABLE" not in by_name["threshold"].env
+
+    for name in ("off", "threshold"):
+        arm_doc = json.loads((out_dir / f"arm-{name}.json").read_text(encoding="utf-8"))
+        assert arm_doc["arm"] == name
+        assert arm_doc["env"] == runner.ARMS[name]
+
+
+def test_default_pair_off_marker_leak_raises(runner, tmp_path, monkeypatch) -> None:
+    """Marker discipline is enforced for the default pair: an off arm that prints
+    `[mmr-poc]` raises MarkerDisciplineError instead of writing a leaky artifact.
+    A `check_markers=True→False` regression turns this test red (no error raised)."""
+    corpus = _write_corpus(tmp_path, CORPUS_FIXTURE)
+    _DefaultPairClient.instances = []
+    _DefaultPairClient.stderr_lines = {
+        "off": "[mmr-poc] leak from the off gate\n",
+        "threshold": "[mmr-poc] engaged\n",
+    }
+    monkeypatch.setattr(runner, "StdioMcpClient", _DefaultPairClient)
+    with pytest.raises(runner.MarkerDisciplineError, match="leaks"):
+        runner.run_eval(tmp_path / "build" / "AiRaccoon.dll", corpus,
+                        tmp_path / "out-leak", data_root=tmp_path / "root")
 
 
 # ------------------------------------------------------------------ AC3.1: scoping

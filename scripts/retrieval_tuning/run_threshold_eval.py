@@ -183,16 +183,6 @@ def _clean_env(base: Mapping[str, str] | None) -> dict[str, str]:
             if not key.startswith("MMR_")}
 
 
-def arm_env(arm: str, base: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Exact env for an arm over a clean base: every stray `MMR_*` variable from the
-    invoking shell is stripped first, so a leftover MMR_MODE can never flip an arm."""
-    if arm not in ARMS:
-        raise ValueError(f"unknown arm {arm!r} — arms are exactly {sorted(ARMS)}")
-    env = _clean_env(base)
-    env.update(ARMS[arm])
-    return env
-
-
 def arm_env_for(spec: ArmSpec, base: Mapping[str, str] | None = None) -> dict[str, str]:
     """Exact env for an arm spec: the clean base plus the spec's own overrides."""
     env = _clean_env(base)
