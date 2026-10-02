@@ -34,7 +34,8 @@ public class VersionContractPackedTests
                 TimeSpan.FromMinutes(3),
                 TestContext.Current.CancellationToken);
 
-            run.ExitCode.ShouldBe(0, run.Stderr);
+            // MSBuild writes its errors to stdout, so the failure message carries both streams.
+            run.ExitCode.ShouldBe(0, $"{run.Stdout}\n{run.Stderr}");
 
             // "dotnet pack" also emits per-RID packages (ai-raccoon.<rid>.<version>.nupkg) because the
             // csproj declares <RuntimeIdentifiers>; the non-RID one is the package registries resolve.
