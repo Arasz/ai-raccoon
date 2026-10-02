@@ -192,6 +192,15 @@ public class S3CloudStoreTests
     }
 
     [Fact]
+    public async Task Push_NonS3ServiceException_PropagatesUnmapped()
+    {
+        var store = Store(ThrowingS3(new AmazonServiceException("boom") { StatusCode = HttpStatusCode.InternalServerError }));
+
+        await Should.ThrowAsync<AmazonServiceException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Push_Conflict_ThrowsSyncConflict()
     {
         var store = Store(ThrowingS3(new AmazonS3Exception("stale") { StatusCode = HttpStatusCode.PreconditionFailed }));
