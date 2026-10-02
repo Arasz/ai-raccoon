@@ -105,6 +105,21 @@ Regenerating the pair needs the full-volume path: re-embedding about 56k rows th
 
 - ~~Regenerate the granite golden overnight.~~ Done 2026-09-27 (#726): [report](2026-09-27-harness-granite-golden-report.md), `results-granite.json`. The run took 48 minutes end to end, not the estimated 13 h (the ingest embedded 70,626 rows in about 45 minutes). Harness hit-rate 0.909, ai-raccoon 0.919, agreement MCC 0.94, 1 stale anchor (C048). The conservation test now runs instead of skipping. The old pinned copy (`e0434a72`, `/tmp/p1-live-copy.db`) no longer existed, so `project-corpus-100.json` was re-pinned to a fresh copy (`cb99fe6e`, 70,763 entries); 98 of its 100 queries changed. The copy now lives at `~/ai-raccoon-eval/copies/cb99fe6ecbe0.db` (the owner's `AI_RACCOON_EVAL_COPY`). `eval-set-100.json` keeps its old pin: it cannot regenerate from the new copy (an ADR 0060 chunk it anchors has moved), and the MiniLM golden-vector tests read its query texts. As a result, the copy-gated `test_pinned_copy_reproduces_every_committed_corpus` cannot pass against any single copy until the eval set is re-anchored. The bank leg ran with `embedding.device auto` (WebGPU) on the quiesced base.
 
+- Re-anchored 2026-09-30 (#809 `eval-reanchor`): `eval-set-100.json` now pins the first
+  1022-era copy `d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb`
+  (`~/ai-raccoon-eval/copies/memory-1022-2026-09-30.db`) and regenerates byte-identically
+  from it. Composite section labels ('Decision | Consequences | …') now match any
+  pipe-separated component: 0 query-text changes, 93 `expectedHash` / 58 `expectedSource` /
+  60 `answerSpan` fields moved, all 100 hashes unique, 25/25 non-file markers unique; the 14
+  hermes transcripts re-chunked off `chunk_index=-1`, so their marker (not the legacy index)
+  selects the chunk. The copy-gated `test_pinned_copy_reproduces_every_committed_corpus` is
+  therefore checked per corpus against its own pin: `project-corpus-100.json` deliberately
+  stays on `cb99fe6e` (granite golden pairing), so the refresh wrapper's exit-2 mixed state
+  (eval-set `OK`, project-corpus `SNAPSHOT-MISMATCH`) is the honest end state, not a
+  single-copy failure. The P3 legacy-parity test's disposition is decided there too: skip
+  with a named reason, since no available copy is one both generators process. Full
+  evidence: [2026-09-30-eval-reanchor-decisions.md](2026-09-30-eval-reanchor-decisions.md).
+
 - The live bank has grown substantially since the corpus was pinned (the
   corpus's `snapshotSha256` predates today's copy by design, and a fresh
   copy always warns on this, per `ingest.py`'s documented behavior). This is

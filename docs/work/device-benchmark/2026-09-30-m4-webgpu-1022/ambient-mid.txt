@@ -1,0 +1,12 @@
+2026-09-30T14:59:09Z
+  PID  %CPU COMM
+ 2100 350.2 /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-254-vs-1022-retrieval-measurement-809/src/AiRaccoon/bin/Release/net10.0/AiRaccoon
+ 5241 206.5 /Volumes/Task Manager TMOG/Task Manager TMOG.app/Contents/MacOS/Task Manager
+ 1783  88.1 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+ 3497  79.0 /Users/arasz/RiderProjects/ai-badger/.venv/bin/python3
+71371  30.9 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  599  28.3 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+57336  15.8 /Applications/OneDrive.app/Contents/MacOS/OneDrive
+71637   5.0 pi
+96938   4.2 pi
+16:59  up 6 days,  5:08, 8 users, load averages: 12.06 9.40 7.07
