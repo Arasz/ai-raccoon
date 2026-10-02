@@ -268,8 +268,7 @@ public sealed class ChunkBoundaryRepair(
         List<Placed> placed = [];
         var written = 0;
 
-        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
+        await connection.InWriteTransactionAsync(async () =>
         {
             foreach (var row in replacements.SelectMany(r => r.Old))
             {
@@ -310,14 +309,7 @@ public sealed class ChunkBoundaryRepair(
                 ];
                 await RenumberPartitionAsync(connection, template, placed, textOrder, cancellationToken);
             }
-
-            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-        }
-        catch
-        {
-            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
-            throw;
-        }
+        }, cancellationToken);
 
         return written;
     }

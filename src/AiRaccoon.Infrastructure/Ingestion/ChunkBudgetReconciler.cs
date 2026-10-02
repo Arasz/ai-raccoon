@@ -335,8 +335,7 @@ public sealed partial class ChunkBudgetReconciler(
         long now, CancellationToken cancellationToken)
     {
         var template = rows[0];
-        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
+        await connection.InWriteTransactionAsync(async () =>
         {
             foreach (var row in rows)
             {
@@ -374,14 +373,7 @@ public sealed partial class ChunkBudgetReconciler(
                         totalChunks = 0
                     }, cancellationToken: cancellationToken));
             }
-
-            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-        }
-        catch
-        {
-            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
-            throw;
-        }
+        }, cancellationToken);
     }
 
     private sealed record NoteGroup(string? Scope, string? ProjectId, string? ContextLabel, string? WorkspaceId,
