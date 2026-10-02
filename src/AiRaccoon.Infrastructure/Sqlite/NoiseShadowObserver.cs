@@ -60,7 +60,6 @@ public sealed partial class NoiseShadowObserver(
         NoiseConfigKeys.ParseLearnerShadowEnabled(
             await connection.ReadSettingAsync(NoiseConfigKeys.LearnerShadowEnabledGlobal, cancellationToken));
 
-
     private static partial class Log
     {
         [LoggerMessage(EventId = 951, Level = LogLevel.Information,

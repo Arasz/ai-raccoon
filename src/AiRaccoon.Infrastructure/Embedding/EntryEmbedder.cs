@@ -680,7 +680,6 @@ public sealed partial class EntryEmbedder(
         return vectors;
     }
 
-
     private static async Task<bool> HasProviderAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var provider = await connection.ReadSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken);
@@ -714,7 +713,6 @@ public sealed partial class EntryEmbedder(
         await connection.ExecuteAsync(value is null
             ? Def(MemorySql.DeleteSetting, new { key }, cancellationToken, transaction)
             : Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken, transaction));
-
 
     internal sealed record EmbedRow
     {

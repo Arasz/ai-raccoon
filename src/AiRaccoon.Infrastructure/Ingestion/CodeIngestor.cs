@@ -135,7 +135,6 @@ public sealed class CodeIngestor(
             await connection.ReadSettingAsync(IngestScopeKeys.ScopeGlobal, cancellationToken))
         ?? [];
 
-
     private static bool IsHidden(string path) => Path.GetFileName(path).StartsWith('.');
 
 }

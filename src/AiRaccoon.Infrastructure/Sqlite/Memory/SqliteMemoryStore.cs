@@ -616,7 +616,6 @@ public sealed partial class SqliteMemoryStore(
         return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart)) { AllTermsMatched = allTermsMatched };
     }
 
-
     /// <summary>
     ///     A workspace row survives discard/consolidate as a Closed record (see IWorkspaceStore); only
     ///     Active is a valid write target, so a missing row and a closed one are the same failure to a caller.
@@ -856,7 +855,6 @@ public sealed partial class SqliteMemoryStore(
 
         return new SourceClassification(SourceType.File, sourceFile);
     }
-
 
     private static partial class Log
     {

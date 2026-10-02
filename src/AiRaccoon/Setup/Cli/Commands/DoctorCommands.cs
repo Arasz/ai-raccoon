@@ -407,7 +407,6 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
             "SELECT EXISTS(SELECT 1 FROM settings WHERE key = @key)", new { key }, cancellationToken: cancellationToken)) > 0;
 
-
     /// <summary>The manifest's own model name when it is still readable, else the directory's leaf —
     /// doctor reports, so an unreadable manifest must not stop it printing the rest.</summary>
     private static string ModelNameFor(string directory)

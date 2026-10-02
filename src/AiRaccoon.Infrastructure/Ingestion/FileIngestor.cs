@@ -422,7 +422,6 @@ public sealed class FileIngestor(
 
     private static bool IsInScope(IReadOnlyList<string> scope, string path) => scope.Any(entry => IngestPath.IsWithinScope(path, entry));
 
-
     private bool IsIndexableFile(string path, [NotNullWhen(true)] out IFileTypeHandler? handler)
     {
         if (!IsHidden(path))
