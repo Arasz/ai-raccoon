@@ -6,6 +6,7 @@ using AiRaccoon.Infrastructure.Sync;
 using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
+using Amazon.S3.Model;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
@@ -136,19 +137,182 @@ public class S3CloudStoreTests
             TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task Pull_MissingObject_ReturnsNull()
+    {
+        var store = Store(ThrowingS3(new AmazonS3Exception("missing") { StatusCode = HttpStatusCode.NotFound }));
+
+        var result = await store.PullAsync("bank.db", TestContext.Current.CancellationToken);
+
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Pull_ExistingObject_ReturnsDataAndUnquotedETag()
+    {
+        var store = Store(RespondingS3(_ => new GetObjectResponse
+        {
+            ResponseStream = new MemoryStream([.. "snapshot"u8]),
+            ETag = "\"abc123\""
+        }));
+
+        var result = await store.PullAsync("bank.db", TestContext.Current.CancellationToken);
+
+        result.ShouldNotBeNull();
+        result.Data.ShouldBe([.. "snapshot"u8]);
+        result.ETag.ShouldBe("abc123");
+    }
+
+    [Fact]
+    public async Task Pull_ServerError_ThrowsSyncNetwork()
+    {
+        var store = Store(ThrowingS3(new AmazonS3Exception("boom") { StatusCode = HttpStatusCode.InternalServerError }));
+
+        var ex = await Should.ThrowAsync<SyncNetworkException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("S3 pull failed: boom");
+    }
+
+    [Fact]
+    public async Task Pull_HttpRequestException_ThrowsSyncNetwork()
+    {
+        var store = Store(ThrowingS3(new HttpRequestException("connection reset")));
+
+        var ex = await Should.ThrowAsync<SyncNetworkException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldBe("S3 pull failed: connection reset");
+    }
+
+    [Fact]
+    public async Task Pull_NonS3ServiceException_PropagatesUnmapped()
+    {
+        var store = Store(ThrowingS3(new AmazonServiceException("boom") { StatusCode = HttpStatusCode.InternalServerError }));
+
+        await Should.ThrowAsync<AmazonServiceException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_NonS3ServiceException_PropagatesUnmapped()
+    {
+        var store = Store(ThrowingS3(new AmazonServiceException("boom") { StatusCode = HttpStatusCode.InternalServerError }));
+
+        await Should.ThrowAsync<AmazonServiceException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_Conflict_ThrowsSyncConflict()
+    {
+        var store = Store(ThrowingS3(new AmazonS3Exception("stale") { StatusCode = HttpStatusCode.PreconditionFailed }));
+
+        await Should.ThrowAsync<SyncConflictException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], "abc",
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_NoCredentials_ThrowsSyncAuthFailed()
+    {
+        var store = Store(ThrowingS3(new AmazonClientException("Failed to resolve AWS credentials")));
+
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_Forbidden_ThrowsSyncAuthFailed()
+    {
+        var store = Store(ThrowingS3(new AmazonS3Exception("Access Denied") { StatusCode = HttpStatusCode.Forbidden }));
+
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_ServerError_ThrowsSyncNetwork()
+    {
+        var store = Store(ThrowingS3(new AmazonS3Exception("boom") { StatusCode = HttpStatusCode.InternalServerError }));
+
+        var ex = await Should.ThrowAsync<SyncNetworkException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("S3 push failed: boom");
+    }
+
+    [Fact]
+    public async Task Push_HttpRequestException_MessageNamesPush()
+    {
+        var store = Store(ThrowingS3(new HttpRequestException("connection reset")));
+
+        var ex = await Should.ThrowAsync<SyncNetworkException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldBe("S3 push failed: connection reset");
+    }
+
+    [Fact]
+    public async Task Push_WithETag_SendsQuotedIfMatchAndReturnsUnquotedETag()
+    {
+        PutObjectRequest? sent = null;
+        var store = Store(RespondingS3(request =>
+        {
+            sent = (PutObjectRequest)request!;
+            return new PutObjectResponse { ETag = "\"new456\"" };
+        }));
+
+        var newEtag = await store.PushAsync("bank.db", [.. "snapshot"u8], "abc", TestContext.Current.CancellationToken);
+
+        newEtag.ShouldBe("new456");
+        sent.ShouldNotBeNull();
+        sent.Headers["If-Match"].ShouldBe("\"abc\"");
+    }
+
+    [Fact]
+    public async Task Push_WithoutETag_SendsNoIfMatch()
+    {
+        PutObjectRequest? sent = null;
+        var store = Store(RespondingS3(request =>
+        {
+            sent = (PutObjectRequest)request!;
+            return new PutObjectResponse { ETag = "\"new456\"" };
+        }));
+
+        await store.PushAsync("bank.db", [.. "snapshot"u8], null, TestContext.Current.CancellationToken);
+
+        sent.ShouldNotBeNull();
+        sent.Headers.Keys.ShouldNotContain("If-Match");
+    }
+
+    [Fact]
+    public async Task Push_MissingResponseETag_ReturnsEmpty()
+    {
+        var store = Store(RespondingS3(_ => new PutObjectResponse()));
+
+        var newEtag = await store.PushAsync("bank.db", [.. "snapshot"u8], null, TestContext.Current.CancellationToken);
+
+        newEtag.ShouldBe("");
+    }
+
     private static S3CloudStore Store(IAmazonS3 s3) => new(s3, "memories", NullLogger<S3CloudStore>.Instance);
 
-    private static IAmazonS3 ThrowingS3(Exception exception)
+    private static IAmazonS3 ThrowingS3(Exception exception) => RespondingS3(_ => throw exception);
+
+    /// <summary>Stubs every IAmazonS3 call: the responder gets the request (or first argument) and returns the response.</summary>
+    private static IAmazonS3 RespondingS3(Func<object?, object?> responder)
     {
-        var proxy = DispatchProxy.Create<IAmazonS3, ThrowingS3Proxy>();
-        ((ThrowingS3Proxy)proxy).Exception = exception;
+        var proxy = DispatchProxy.Create<IAmazonS3, S3Proxy>();
+        ((S3Proxy)proxy).Responder = responder;
         return proxy;
     }
 
-    private class ThrowingS3Proxy : DispatchProxy
+    private class S3Proxy : DispatchProxy
     {
-        public Exception? Exception { get; set; }
+        public Func<object?, object?>? Responder { get; set; }
 
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => throw Exception ?? new InvalidOperationException("no exception configured");
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            var response = Responder!(args?[0]);
+            var payload = targetMethod!.ReturnType.GenericTypeArguments[0];
+            return typeof(Task).GetMethod(nameof(Task.FromResult))!.MakeGenericMethod(payload).Invoke(null, [response]);
+        }
     }
 }
