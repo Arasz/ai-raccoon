@@ -136,5 +136,4 @@ public sealed class CodeIngestor(
         ?? [];
 
     private static bool IsHidden(string path) => Path.GetFileName(path).StartsWith('.');
-
 }

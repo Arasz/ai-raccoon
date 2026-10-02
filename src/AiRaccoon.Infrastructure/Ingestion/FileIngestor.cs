@@ -465,5 +465,4 @@ public sealed class FileIngestor(
         var relative = Path.GetRelativePath(root, path);
         return rules.IsIgnored(relative, false);
     }
-
 }
