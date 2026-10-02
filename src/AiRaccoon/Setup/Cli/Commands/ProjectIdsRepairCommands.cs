@@ -79,32 +79,72 @@ public sealed class ProjectIdsRepairCommands
         var queueOnly = parseResult.GetValue<bool>("--queue-only");
         var mapPath = parseResult.GetValue<string?>("--map");
 
-        ProjectIdAliasMap map;
-        string? mapJson = null;
-        if (mapPath is not null)
+        var loaded = await LoadMapAsync(mapPath, streams);
+        if (loaded is null)
         {
-            try
-            {
-                // Single read: the plan parses these exact bytes and the apply forwards them,
-                // so the CLI dry-run and the server job see identical content (AC3 identity).
-                mapJson = File.ReadAllText(mapPath);
-                map = ProjectIdAliasMap.FromJson(mapJson);
-            }
-            catch (Exception ex) when (ex is FileNotFoundException or JsonException or ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
-            {
-                await streams.WriteErrorLineAsync(
-                    $"project-ids repair: cannot load --map '{mapPath}': {ex.Message}");
-                return ErrorCode.Usage.AliasMapInvalid;
-            }
+            return ErrorCode.Usage.AliasMapInvalid;
         }
-        else
-        {
-            map = ProjectIdAliasMap.Empty;
-        }
+
+        var (map, mapJson) = loaded.Value;
 
         var report = await _repair.ReportProjectIdsAsync(cancellationToken);
         var plan = ProjectIdsFoldPlan.FromCensus(report, map);
+        await WriteScoreboardAsync(report, plan, apply, streams);
+        await WriteBucketsAsync(report, plan, streams);
+        if (mapPath is null && !apply)
+        {
+            await WriteTemplateNoteAsync(dataRoot, report, plan, streams);
+        }
 
+        if (plan.Unresolved.Count > 0)
+        {
+            // The only other re-run guidance (below, apply-only) is about a concurrent-write
+            // hazard racing a single apply pass — a completely different reason to re-run than
+            // "the map still can't place this id." Without this line, an operator watching the
+            // same needsAttention count across repeated runs has no way to tell those two apart.
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: re-running will not clear the {plan.Unresolved.Count} id(s) above that need a " +
+                "human — attribute them, or wait for an alias-map update.");
+        }
+
+        if (!apply)
+        {
+            await WriteSettledSummaryAsync(plan, report, streams);
+            return ErrorCode.Ok.Success;
+        }
+
+        return queueOnly
+            ? await RequestOnceAsync(plan, report, mapJson, streams, cancellationToken)
+            : await RunRepairLoopAsync(map, mapJson, report, plan, streams, cancellationToken);
+    }
+
+    /// <summary>
+    ///     The --map file, read once so the plan parses the exact bytes the apply forwards (AC3
+    ///     identity); the empty map without one; null, with the reason on stderr, when it cannot load.
+    /// </summary>
+    private static async Task<(ProjectIdAliasMap Map, string? Json)?> LoadMapAsync(string? mapPath, StandardStreams streams)
+    {
+        if (mapPath is null)
+        {
+            return (ProjectIdAliasMap.Empty, null);
+        }
+
+        try
+        {
+            var mapJson = File.ReadAllText(mapPath);
+            return (ProjectIdAliasMap.FromJson(mapJson), mapJson);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or JsonException or ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            await streams.WriteErrorLineAsync(
+                $"project-ids repair: cannot load --map '{mapPath}': {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>The opening line counting every censused id into exactly one bucket, then the orphan count.</summary>
+    private static async Task WriteScoreboardAsync(ProjectIdCensusReport report, ProjectIdsFoldPlan plan, bool apply, StandardStreams streams)
+    {
         // Every censused id lands in exactly one bucket: FromCensus's `continue`s are exhaustive
         // (fold, drop, retire, pin) or the id needs nothing further (already canonical under the map,
         // or genuinely empty and unregistered) — `needsAttention` is the one bucket the operator
@@ -126,7 +166,11 @@ public sealed class ProjectIdsRepairCommands
             await streams.WriteOutputLineAsync(
                 $"project-ids repair: {orphans} id(s) own entries with no projects-table registration.");
         }
+    }
 
+    /// <summary>One line per id the plan touches or leaves for a human: folds, pins, retires, drops, unresolved.</summary>
+    private static async Task WriteBucketsAsync(ProjectIdCensusReport report, ProjectIdsFoldPlan plan, StandardStreams streams)
+    {
         foreach (var fold in plan.Folds)
         {
             var loser = report.Rows.SingleOrDefault(row => row.ProjectId == fold.Loser);
@@ -175,79 +219,47 @@ public sealed class ProjectIdsRepairCommands
                 await streams.WriteOutputLineAsync($"  '{id}'{hint}");
             }
         }
+    }
 
-        if (mapPath is null && !apply)
-        {
-            var templatePath = TemplatePathFor(dataRoot);
-            // Template-only runs always plan with the empty map, so no fold/drop can exist here:
-            // registered non-retired ids are exactly the canonical-branch rows worth seeding.
-            var canonicalSeed = report.Rows
-                .Where(row => row.Registered && !plan.RetiredProjects.Contains(row.ProjectId, StringComparer.Ordinal))
-                .Select(row => row.ProjectId)
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            var template = TryWriteTemplate(templatePath, plan.Unresolved, canonicalSeed);
-            await streams.WriteOutputLineAsync(
-                template.Wrote
-                    ? $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
-                      $"Wrote an editable alias-map template to '{templatePath}' (example alias shape, " +
-                      $"__self_metrics__ + {canonicalSeed.Count} registered canonical(s), {plan.Unresolved.Count} unattributed id(s) " +
-                      $"pre-filled in Dropped for review); edit Aliases/Dropped and re-run with --map."
-                    : template.Failure is not null
-                        ? $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
-                          $"Could not write the alias-map template to '{templatePath}': {template.Failure.TrimEnd('.', ' ')}; create it by hand or pass --map."
-                        : $"project-ids repair: no --map supplied — planned with the empty map (no folds). " +
-                          $"Edit the existing template at '{templatePath}' and re-run with --map.");
-        }
-
-        if (needsAttention > 0)
-        {
-            // The only other re-run guidance (below, apply-only) is about a concurrent-write
-            // hazard racing a single apply pass — a completely different reason to re-run than
-            // "the map still can't place this id." Without this line, an operator watching the
-            // same needsAttention count across repeated runs has no way to tell those two apart.
-            await streams.WriteOutputLineAsync(
-                $"project-ids repair: re-running will not clear the {needsAttention} id(s) above that need a " +
-                "human — attribute them, or wait for an alias-map update.");
-        }
-
-        if (apply)
-        {
-            if (queueOnly)
-            {
-                var queued = ActionableCount(plan);
-                if (queued > 0)
-                {
-                    await RequestOnceAsync(plan, mapJson, streams, cancellationToken);
-                    await streams.WriteOutputLineAsync(
-                        $"project-ids repair: summary — repair in progress: {queued} change(s) queued for the server — " +
-                        "the server applies it on its next maintenance poll (~15s).");
-                }
-                else if (await WriteSettledSummaryAsync(plan, report, streams))
-                {
-                    return ErrorCode.Bank.RepairAttentionNeeded;
-                }
-
-                return ErrorCode.Ok.Success;
-            }
-
-            return await RunRepairLoopAsync(map, mapJson, report, plan, streams, cancellationToken);
-        }
-
-        await WriteSettledSummaryAsync(plan, report, streams);
-        return 0;
+    /// <summary>A map-less dry run seeds the editable template beside the bank and says where it is.</summary>
+    private static async Task WriteTemplateNoteAsync(string dataRoot, ProjectIdCensusReport report, ProjectIdsFoldPlan plan, StandardStreams streams)
+    {
+        var templatePath = TemplatePathFor(dataRoot);
+        // Template-only runs always plan with the empty map, so no fold/drop can exist here:
+        // registered non-retired ids are exactly the canonical-branch rows worth seeding.
+        var canonicalSeed = report.Rows
+            .Where(row => row.Registered && !plan.RetiredProjects.Contains(row.ProjectId, StringComparer.Ordinal))
+            .Select(row => row.ProjectId)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var template = TryWriteTemplate(templatePath, plan.Unresolved, canonicalSeed);
+        const string planned = "project-ids repair: no --map supplied — planned with the empty map (no folds). ";
+        await streams.WriteOutputLineAsync(
+            template.Wrote
+                ? planned +
+                  $"Wrote an editable alias-map template to '{templatePath}' (example alias shape, " +
+                  $"__self_metrics__ + {canonicalSeed.Count} registered canonical(s), {plan.Unresolved.Count} unattributed id(s) " +
+                  $"pre-filled in Dropped for review); edit Aliases/Dropped and re-run with --map."
+                : template.Failure is not null
+                    ? planned +
+                      $"Could not write the alias-map template to '{templatePath}': {template.Failure.TrimEnd('.', ' ')}; create it by hand or pass --map."
+                    : planned +
+                      $"Edit the existing template at '{templatePath}' and re-run with --map.");
     }
 
     /// <summary>
-    ///     Fire-and-forget for scripts: commit one request when the first derive is actionable,
-    ///     then exit without polling — and commit nothing on a pinned-only plan (review #614).
+    ///     Fire-and-forget for scripts (--queue-only): commit one request when the first derive is
+    ///     actionable, then exit without polling — and commit nothing on a pinned-only plan.
     /// </summary>
-    private async Task RequestOnceAsync(ProjectIdsFoldPlan plan, string? mapJson, StandardStreams streams, CancellationToken cancellationToken)
+    private async Task<int> RequestOnceAsync(ProjectIdsFoldPlan plan, ProjectIdCensusReport report, string? mapJson,
+        StandardStreams streams, CancellationToken cancellationToken)
     {
-        var actionable = ActionableCount(plan);
-        if (actionable == 0)
+        var queued = ActionableCount(plan);
+        if (queued == 0)
         {
-            return;
+            return await WriteSettledSummaryAsync(plan, report, streams)
+                ? ErrorCode.Bank.RepairAttentionNeeded
+                : ErrorCode.Ok.Success;
         }
 
         await _repair.RequestRepairAsync(RepairKind.ProjectIds, cancellationToken, mapJson);
@@ -259,6 +271,10 @@ public sealed class ProjectIdsRepairCommands
         await streams.WriteOutputLineAsync(
             "project-ids repair: the fold is single-pass — quiesce writers under a folded id, or re-run " +
             "'repair project-ids' until it reports no folds.");
+        await streams.WriteOutputLineAsync(
+            $"project-ids repair: summary — repair in progress: {queued} change(s) queued for the server — " +
+            "the server applies it on its next maintenance poll (~15s).");
+        return ErrorCode.Ok.Success;
     }
 
     /// <summary>
@@ -272,85 +288,104 @@ public sealed class ProjectIdsRepairCommands
     {
         var started = _timeProvider.GetTimestamp();
         var firstTotal = CensusTotal(report);
-        var latestTotal = firstTotal;
         var pass = 0;
-        string? previousSignature = null;
-        var previousMoved = 0L;
-        var previousGrew = false;
+        RepairPass? previous = null;
         while (true)
         {
-            var actionable = ActionableCount(plan);
-            if (actionable == 0)
+            if (await TryStopAsync(report, plan, pass, previous, firstTotal, started, streams) is { } exit)
             {
-                return await WriteSettledSummaryAsync(plan, report, streams)
-                    ? ErrorCode.Bank.RepairAttentionNeeded
-                    : ErrorCode.Ok.Success;
+                return exit;
             }
 
-            var signature = ActionableSignature(plan);
-            if (pass > 0 && string.Equals(signature, previousSignature, StringComparison.Ordinal) && previousMoved == 0 && !previousGrew)
-            {
-                await streams.WriteOutputLineAsync(
-                    $"project-ids repair: stuck — identical actionable set across 2 passes with zero rows moved " +
-                    $"(actionable: {signature}); quiesce writers under folded ids and check the server log for " +
-                    "the job receipt, then re-run 'repair project-ids'.");
-                await streams.WriteOutputLineAsync(
-                    $"project-ids repair: summary — stuck: {CountsLine(plan)} — identical actionable set across " +
-                    "2 passes with zero rows moved; quiesce writers under folded ids, then re-run.");
-                return ErrorCode.Bank.RepairStuck;
-            }
-
-            if (pass >= _options.MaxPasses || _timeProvider.GetElapsedTime(started) >= _options.TotalBudget)
-            {
-                if (latestTotal > firstTotal)
-                {
-                    var stuckIds = string.Join(", ", plan.Folds.Select(fold => $"'{fold.Loser}'"));
-                    await streams.WriteOutputLineAsync(
-                        $"project-ids repair: summary — writers-active: {CountsLine(plan)} — census totals grew " +
-                        $"{firstTotal} → {latestTotal} entries across {pass} pass(es); quiesce writers under " +
-                        $"folded ids ({stuckIds}), then re-run 'repair project-ids'.");
-                    return ErrorCode.Bank.RepairWritersActive;
-                }
-
-                await streams.WriteOutputLineAsync(
-                    $"project-ids repair: summary — stuck: {CountsLine(plan)} — still actionable after " +
-                    $"{pass} pass(es) with no census growth; quiesce writers under folded ids and check " +
-                    "the server log for the job receipt, then re-run.");
-                return ErrorCode.Bank.RepairStuck;
-            }
-
-            var beforeTotal = CensusTotal(report);
-            var beforeActionableEntries = ActionableEntries(report, plan);
-            await _repair.RequestRepairAsync(RepairKind.ProjectIds, cancellationToken, mapJson);
-            await streams.WriteOutputLineAsync(
-                $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — derived {plan.Folds.Count} fold, " +
-                $"{plan.Dropped.Count} drop, {plan.RetiredProjects.Count} retire; request committed; the server " +
-                "applies it on its next maintenance poll (~15s).");
-
-            await Task.Delay(_options.PollInterval, _timeProvider, cancellationToken);
-            var after = await _repair.ReportProjectIdsAsync(cancellationToken);
-            var afterPlan = ProjectIdsFoldPlan.FromCensus(after, map);
-            var moved = Math.Max(0, beforeActionableEntries - ActionableEntries(after, plan));
-            var afterTotal = CensusTotal(after);
-            await streams.WriteOutputLineAsync(
-                $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — reaped: moved {moved} row(s); " +
-                $"census totals {beforeTotal} → {afterTotal} entries.");
-            if (afterTotal > beforeTotal)
-            {
-                await streams.WriteOutputLineAsync(
-                    $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — census totals grew " +
-                    $"({beforeTotal} → {afterTotal}); writers are active under folded ids — quiesce writers, " +
-                    "then the loop re-checks.");
-            }
-
-            previousSignature = signature;
-            previousMoved = moved;
-            previousGrew = afterTotal > beforeTotal;
-            latestTotal = afterTotal;
-            report = after;
-            plan = afterPlan;
+            previous = await RunPassAsync(map, mapJson, report, plan, pass, streams, cancellationToken);
+            report = previous.After;
+            plan = previous.AfterPlan;
             pass++;
         }
+    }
+
+    /// <summary>What one pass saw: the actionable set it committed for, the rows it moved, and the re-derived census.</summary>
+    private sealed record RepairPass(string Signature, long Moved, bool Grew, ProjectIdCensusReport After, ProjectIdsFoldPlan AfterPlan);
+
+    /// <summary>
+    ///     The loop's exit code once a stop condition holds — settled, stuck, or bound reached with
+    ///     or without census growth — having written its closing lines; null to run another pass.
+    /// </summary>
+    private async Task<int?> TryStopAsync(ProjectIdCensusReport report, ProjectIdsFoldPlan plan, int pass, RepairPass? previous,
+        long firstTotal, long started, StandardStreams streams)
+    {
+        if (ActionableCount(plan) == 0)
+        {
+            return await WriteSettledSummaryAsync(plan, report, streams)
+                ? ErrorCode.Bank.RepairAttentionNeeded
+                : ErrorCode.Ok.Success;
+        }
+
+        var signature = ActionableSignature(plan);
+        if (previous is not null && string.Equals(signature, previous.Signature, StringComparison.Ordinal) && previous.Moved == 0 && !previous.Grew)
+        {
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: stuck — identical actionable set across 2 passes with zero rows moved " +
+                $"(actionable: {signature}); quiesce writers under folded ids and check the server log for " +
+                "the job receipt, then re-run 'repair project-ids'.");
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: summary — stuck: {CountsLine(plan)} — identical actionable set across " +
+                "2 passes with zero rows moved; quiesce writers under folded ids, then re-run.");
+            return ErrorCode.Bank.RepairStuck;
+        }
+
+        if (pass < _options.MaxPasses && _timeProvider.GetElapsedTime(started) < _options.TotalBudget)
+        {
+            return null;
+        }
+
+        var latestTotal = CensusTotal(report);
+        if (latestTotal > firstTotal)
+        {
+            var stuckIds = string.Join(", ", plan.Folds.Select(fold => $"'{fold.Loser}'"));
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: summary — writers-active: {CountsLine(plan)} — census totals grew " +
+                $"{firstTotal} → {latestTotal} entries across {pass} pass(es); quiesce writers under " +
+                $"folded ids ({stuckIds}), then re-run 'repair project-ids'.");
+            return ErrorCode.Bank.RepairWritersActive;
+        }
+
+        await streams.WriteOutputLineAsync(
+            $"project-ids repair: summary — stuck: {CountsLine(plan)} — still actionable after " +
+            $"{pass} pass(es) with no census growth; quiesce writers under folded ids and check " +
+            "the server log for the job receipt, then re-run.");
+        return ErrorCode.Bank.RepairStuck;
+    }
+
+    /// <summary>Commits one request, waits one maintenance poll, and reaps the re-derived census.</summary>
+    private async Task<RepairPass> RunPassAsync(ProjectIdAliasMap map, string? mapJson, ProjectIdCensusReport report, ProjectIdsFoldPlan plan,
+        int pass, StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var beforeTotal = CensusTotal(report);
+        var beforeActionableEntries = ActionableEntries(report, plan);
+        await _repair.RequestRepairAsync(RepairKind.ProjectIds, cancellationToken, mapJson);
+        await streams.WriteOutputLineAsync(
+            $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — derived {plan.Folds.Count} fold, " +
+            $"{plan.Dropped.Count} drop, {plan.RetiredProjects.Count} retire; request committed; the server " +
+            "applies it on its next maintenance poll (~15s).");
+
+        await Task.Delay(_options.PollInterval, _timeProvider, cancellationToken);
+        var after = await _repair.ReportProjectIdsAsync(cancellationToken);
+        var moved = Math.Max(0, beforeActionableEntries - ActionableEntries(after, plan));
+        var afterTotal = CensusTotal(after);
+        await streams.WriteOutputLineAsync(
+            $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — reaped: moved {moved} row(s); " +
+            $"census totals {beforeTotal} → {afterTotal} entries.");
+        if (afterTotal > beforeTotal)
+        {
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — census totals grew " +
+                $"({beforeTotal} → {afterTotal}); writers are active under folded ids — quiesce writers, " +
+                "then the loop re-checks.");
+        }
+
+        return new RepairPass(ActionableSignature(plan), moved, afterTotal > beforeTotal, after,
+            ProjectIdsFoldPlan.FromCensus(after, map));
     }
 
     /// <summary>

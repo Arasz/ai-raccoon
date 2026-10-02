@@ -130,8 +130,7 @@ public sealed class ChunkBackfill(
     private static async Task TombstoneAndDeleteRowAsync(SqliteConnection connection, Row row,
         IReadOnlySet<string> survivingHashes, long deletedAt, CancellationToken cancellationToken)
     {
-        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
+        await connection.InWriteTransactionAsync(async () =>
         {
             if (!survivingHashes.Contains(row.Hash))
             {
@@ -142,14 +141,7 @@ public sealed class ChunkBackfill(
 
             await connection.ExecuteAsync(new CommandDefinition(
                     "DELETE FROM entries WHERE id = @id", new { id = row.Id }, cancellationToken: cancellationToken));
-
-            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-        }
-        catch
-        {
-            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
-            throw;
-        }
+        }, cancellationToken);
     }
 
     /// <summary>The same resolution the ingest path uses, read from the same settings. Internal for the

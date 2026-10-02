@@ -37,6 +37,20 @@ P3_BASE = "12a72dfb"
 PINNED_COPY = Path(os.environ.get("AI_RACCOON_EVAL_COPY", "/tmp/p1-live-copy.db"))
 PARITY = os.environ.get("P3_CLI_PARITY") == "1"
 
+
+def _has_composite_sections(copy: Path) -> bool:
+    """True when a copy joins several leaf sections into one label
+    ('Decision | Consequences') — the post-1022 shape the frozen P3_BASE
+    generator refuses (0004-context on COPY1022; 0060-context already on the
+    254-era cb99fe6e), so no present copy is one both generators process."""
+    conn = sqlite3.connect(f"file:{copy.resolve()}?mode=ro", uri=True)
+    try:
+        return conn.execute(
+            "SELECT 1 FROM entries WHERE section LIKE '%|%' LIMIT 1").fetchone() is not None
+    finally:
+        conn.close()
+
+
 pytestmark = [
     pytest.mark.skipif(not PARITY, reason="set P3_CLI_PARITY=1 to run the heavy parity harness"),
     pytest.mark.skipif(subprocess.run(["git", "-C", str(REPO), "cat-file", "-e",
@@ -255,6 +269,19 @@ class TestRefreshParity:
 
     @pytest.mark.skipif(not PINNED_COPY.exists(), reason=f"pinned copy absent: {PINNED_COPY}")
     def test_generators_reproduce_the_legacy_payload(self, tmp_path):
+        # Disposition (2026-09-30 eval-reanchor): the legacy parity premise — one
+        # copy both generators process — is false for every available copy. The
+        # P3_BASE generator predicates a family on the whole section string, so it
+        # refuses composite labels (0004-context on COPY1022; 0060-context already
+        # on cb99fe6e). Skip with that reason rather than diffing across copies.
+        # The project half is additionally red pre-existing (its pinned legacy
+        # debris ids were measured on a copy that no longer exists) — recorded in
+        # docs/work/2026-09-30-eval-reanchor-decisions.md, not papered over here.
+        if _has_composite_sections(PINNED_COPY):
+            pytest.skip(
+                f"frozen P3_BASE {P3_BASE} generator rejects composite section "
+                f"labels, which {PINNED_COPY} carries — no copy both generators "
+                "process is available; disposition: skip, not rescope")
         legacy = _extract_tree(tmp_path)
         legacy_scripts = legacy / "scripts" / "retrieval_tuning"
         for generator in ("build_project_corpus", "build_eval_corpus"):

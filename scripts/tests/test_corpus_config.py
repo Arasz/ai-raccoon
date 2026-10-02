@@ -18,12 +18,18 @@ from corpus_config import PROJECT_ID, select
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Measured 2026-08-22 on the tree that produced docs-memory.db: 199 files, 1 608 970 bytes.
-# The bands are ±35% around that, wide enough to absorb ordinary doc growth and narrow
-# enough that a glob which stopped matching, or one that started swallowing docs/work,
-# fails here instead of quietly hollowing out every rank gate downstream.
-MEASURED_FILES = 199
-MEASURED_BYTES = 1_608_970
+# Measured 2026-09-30 on tree 73b0b0c0 by corpus_config.select: 262 files, 2 202 170 bytes —
+# +63 files / +593 200 bytes (+31.7% / +36.9%) from the previous pin (199 files, 1 608 970
+# bytes, 2026-08-22). The committed docs-memory.db is still the 2026-08-22 build. The ±35%
+# bands are a tripwire for aggregate selection drift, not a tolerance that absorbs this
+# repo's growth: the previous pin went red on the +36.9% byte growth in 39 days while its
+# +31.7% file count stayed green, and halving or doubling the pin fails both tests in both
+# directions. They do not catch every per-glob loss: dropping .ai-badger/skills/*/SKILL.md
+# leaves 209 files / 1 655 355 bytes with all 9 tests green (13 of 14 single-glob losses stay
+# inside the bands; only the docs/adr/*.md loss falls outside) — a stopped non-ADR glob can
+# hide here until something else moves the aggregate past a bound.
+MEASURED_FILES = 262
+MEASURED_BYTES = 2_202_170
 
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
@@ -42,14 +48,14 @@ class TestSelection:
     def test_file_count_stays_in_band(self):
         count = len(selection())
         assert 0.65 * MEASURED_FILES <= count <= 1.35 * MEASURED_FILES, (
-            f"{count} files selected; measured {MEASURED_FILES} when docs-memory.db was built. "
+            f"{count} files selected; the 2026-09-30 live-tree pin is {MEASURED_FILES}. "
             "A collapse means a glob stopped matching; a jump means an excluded tree got in."
         )
 
     def test_byte_total_stays_in_band(self):
         total = sum((REPO_ROOT / f).stat().st_size for f in selection())
         assert 0.65 * MEASURED_BYTES <= total <= 1.35 * MEASURED_BYTES, (
-            f"{total} bytes selected; measured {MEASURED_BYTES} when docs-memory.db was built."
+            f"{total} bytes selected; the 2026-09-30 live-tree pin is {MEASURED_BYTES}."
         )
 
     def test_both_document_families_are_present(self):

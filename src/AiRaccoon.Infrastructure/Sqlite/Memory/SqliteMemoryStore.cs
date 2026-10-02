@@ -866,26 +866,6 @@ public sealed partial class SqliteMemoryStore(
         CancellationToken cancellationToken = default) =>
         new(sql, parameters, cancellationToken: cancellationToken);
 
-    private static async Task<T> InTransactionAsync<T>(SqliteConnection connection, Func<Task<T>> work,
-        CancellationToken cancellationToken)
-    {
-        await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
-        {
-            var result = await work();
-            await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-            return result;
-        }
-        catch
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
-            throw;
-        }
-    }
-
     private static partial class Log
     {
         [LoggerMessage(EventId = 897, Level = LogLevel.Warning,
