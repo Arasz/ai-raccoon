@@ -504,6 +504,36 @@ public sealed class DoctorCommandsTests : IDisposable
         outp.ShouldNotContain("status:");
     }
 
+    /// <summary>A bank the read-only open itself cannot open is reported as such, never as corruption or a crash.</summary>
+    [RetryFact]
+    public async Task Doctor_BankTheReadOnlyOpenCannotOpen_ExitsOpenFailed_AndNamesTheOpen()
+    {
+        if (OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess)
+        {
+            Assert.Skip("needs POSIX modes that bind the caller; root reads a 000 file anyway");
+        }
+        else
+        {
+            await using (await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+            {
+            }
+
+            File.SetUnixFileMode(_factory.BankPath, UnixFileMode.None);
+            try
+            {
+                var (exit, outp, err) = await Run(CreateDoctor(), ["doctor"]);
+
+                exit.ShouldBe(ErrorCode.Bank.OpenFailed);
+                outp.ShouldBeEmpty();
+                err.ShouldStartWith("ai-raccoon: doctor: could not open the bank read-only: ");
+            }
+            finally
+            {
+                File.SetUnixFileMode(_factory.BankPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+        }
+    }
+
     /// <summary>R2 A9: an unresolvable encryption key must not print any report line either.</summary>
     [RetryFact]
     public async Task Doctor_KeyResolutionFails_PrintsNoReportLinesAtAll()

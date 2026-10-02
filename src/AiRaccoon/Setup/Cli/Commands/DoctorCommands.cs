@@ -30,35 +30,16 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             return ErrorCode.Bank.NoBank;
         }
 
-        ResolvedKey resolvedKey;
-        try
+        var (resolvedKey, keyFailure) = await TryResolveKeyAsync(streams, cancellationToken);
+        if (resolvedKey is null)
         {
-            resolvedKey = await keyResolver.ResolveAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            Log.FailedToResolveEncryptionKey(logger, ex);
-            await streams.WriteErrorLineAsync($"ai-raccoon: doctor: could not resolve the encryption key: {ex.Message}");
-            return CliFailureErrorCode.For(ex, ErrorCode.Key.Unresolved);
+            return keyFailure;
         }
 
-        SqliteConnection connection;
-        try
+        var (connection, openFailure) = await TryOpenAsync(bankPath, resolvedKey, streams, cancellationToken);
+        if (connection is null)
         {
-            connection = await OpenBankReadOnlyAsync(bankPath, resolvedKey.Passphrase, cancellationToken);
-        }
-        catch (SqliteException ex) when (ex.SqliteErrorCode == NotADatabaseErrorCode)
-        {
-            // Microsoft.Data.Sqlite's "file is not a database" verdict can surface here (a probe
-            // inside the read-only open itself) or, for a bank that opens but fails its first real
-            // statement, from DiagnoseAsync below — both catch sites report the same way.
-            return await ReportNotADatabaseAsync(bankPath, resolvedKey, ex, streams);
-        }
-        catch (SqliteException ex)
-        {
-            Log.FailedToOpenBank(logger, bankPath, ex);
-            await streams.WriteErrorLineAsync($"ai-raccoon: doctor: could not open the bank read-only: {ex.Message}");
-            return CliFailureErrorCode.For(ex);
+            return openFailure;
         }
 
         await using (connection)
@@ -73,17 +54,62 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
                 return await ReportNotADatabaseAsync(bankPath, resolvedKey, ex, streams);
             }
 
-            var engines = new Dictionary<CorpusEngineProbe, CorpusEngineState>();
-            foreach (var probe in CorpusEngineProbe.All)
-            {
-                engines[probe] = await ReadCorpusEngineStateAsync(connection, probe, cancellationToken);
-            }
-
-            var threads = await ReadEmbeddingThreadsStateAsync(connection, cancellationToken);
-            var migration = await ReadModelMigrationStateAsync(connection, cancellationToken);
-            var coreMl = await ReadCoreMlLineAsync(connection, cancellationToken);
-            return await ReportAsync(bankPath, report, engines, threads, coreMl, migration, streams);
+            return await ReadAndReportAsync(connection, bankPath, report, streams, cancellationToken);
         }
+    }
+
+    /// <summary>The resolved key, or null with the exit code once the failure is logged and on stderr.</summary>
+    private async Task<(ResolvedKey? Key, int Exit)> TryResolveKeyAsync(StandardStreams streams, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await keyResolver.ResolveAsync(cancellationToken), ErrorCode.Ok.Success);
+        }
+        catch (Exception ex)
+        {
+            Log.FailedToResolveEncryptionKey(logger, ex);
+            await streams.WriteErrorLineAsync($"ai-raccoon: doctor: could not resolve the encryption key: {ex.Message}");
+            return (null, CliFailureErrorCode.For(ex, ErrorCode.Key.Unresolved));
+        }
+    }
+
+    /// <summary>The bank opened read-only, or null with the exit code once the failure is reported.</summary>
+    private async Task<(SqliteConnection? Connection, int Exit)> TryOpenAsync(string bankPath, ResolvedKey resolvedKey,
+        StandardStreams streams, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await OpenBankReadOnlyAsync(bankPath, resolvedKey.Passphrase, cancellationToken), ErrorCode.Ok.Success);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == NotADatabaseErrorCode)
+        {
+            // Microsoft.Data.Sqlite's "file is not a database" verdict can surface here (a probe
+            // inside the read-only open itself) or, for a bank that opens but fails its first real
+            // statement, from DiagnoseAsync — both catch sites report the same way.
+            return (null, await ReportNotADatabaseAsync(bankPath, resolvedKey, ex, streams));
+        }
+        catch (SqliteException ex)
+        {
+            Log.FailedToOpenBank(logger, bankPath, ex);
+            await streams.WriteErrorLineAsync($"ai-raccoon: doctor: could not open the bank read-only: {ex.Message}");
+            return (null, CliFailureErrorCode.For(ex));
+        }
+    }
+
+    /// <summary>Reads the engine, threads, migration and Core ML state beside the schema verdict, then writes the report.</summary>
+    private async Task<int> ReadAndReportAsync(SqliteConnection connection, string bankPath, SchemaDoctorReport report,
+        StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var engines = new Dictionary<CorpusEngineProbe, CorpusEngineState>();
+        foreach (var probe in CorpusEngineProbe.All)
+        {
+            engines[probe] = await ReadCorpusEngineStateAsync(connection, probe, cancellationToken);
+        }
+
+        var threads = await ReadEmbeddingThreadsStateAsync(connection, cancellationToken);
+        var migration = await ReadModelMigrationStateAsync(connection, cancellationToken);
+        var coreMl = await ReadCoreMlLineAsync(connection, cancellationToken);
+        return await ReportAsync(bankPath, report, engines, threads, coreMl, migration, streams);
     }
 
     /// <summary>
