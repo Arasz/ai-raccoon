@@ -119,32 +119,9 @@ internal partial class NodeRunner(
         var serverHost = McpServerSetup.CreateWebHost(descriptor.ToServerConfig());
         try
         {
-            var probeResolvingEncryptionKey = await encryptionKeyResolver.ProbeResolvingEncryptionKeyAsync(ctx);
-            if (!probeResolvingEncryptionKey.IsSuccess)
+            if (await PrepareBankAsync(descriptor, streams, ctx) is { } refused)
             {
-                await streams.WriteErrorLineAsync(
-                    $"ai-raccoon: could not resolve the encryption key: {probeResolvingEncryptionKey.Exception?.Message ?? "no key source answered"}");
-                return CliFailureErrorCode.For(probeResolvingEncryptionKey.Exception, ErrorCode.Key.Unresolved);
-            }
-
-            var probeUsingEncryptionKey = await connectionFactory.ProbeUsingEncryptionKey(probeResolvingEncryptionKey.Key.Passphrase, ctx);
-            if (!probeUsingEncryptionKey.IsCorrectKey)
-            {
-                await streams.WriteErrorLineAsync(
-                    $"ai-raccoon: could not open the bank at {SqliteConnectionFactory.BankPathFor(descriptor.LaunchConfig.Options)}: {probeUsingEncryptionKey.Exception?.Message ?? "the key does not open it"}");
-                return CliFailureErrorCode.For(probeUsingEncryptionKey.Exception, ErrorCode.Bank.OpenFailed);
-            }
-
-            await embeddingAvailability.EnsureEmbeddingAvailabilityAsync(ctx);
-
-            // D3: vec0 must match the configured engine's dimension before the first tool call —
-            // a serverless `model embedding set` (no server around to drain it) leaves vec0 stale otherwise.
-            // Server-only by construction (`cli-asks-the-server-acts`): NodeRunner is the one path
-            // that becomes the server, never a CLI verb.
-            await using (var connection = await connectionFactory.OpenBankAsync(ctx))
-            {
-                await entryEmbedder.ReconcileVecDimensionsAsync(connection, ctx);
-                await codeEmbedder.ReconcileVecCodeDimensionsAsync(connection, ctx);
+                return refused;
             }
 
             await serverHost.StartAsync(ctx);
@@ -164,6 +141,43 @@ internal partial class NodeRunner(
         }
 
         return ErrorCode.Ok.Success;
+    }
+
+    /// <summary>
+    ///     Readies the bank before the listener binds: the key resolves and opens it, the embedding
+    ///     engines are available, and vec0 matches their dimensions. An exit code when it cannot.
+    /// </summary>
+    private async Task<int?> PrepareBankAsync(NodeLaunchDescriptor descriptor, StandardStreams streams, CancellationToken ctx)
+    {
+        var probeResolvingEncryptionKey = await encryptionKeyResolver.ProbeResolvingEncryptionKeyAsync(ctx);
+        if (!probeResolvingEncryptionKey.IsSuccess)
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: could not resolve the encryption key: {probeResolvingEncryptionKey.Exception?.Message ?? "no key source answered"}");
+            return CliFailureErrorCode.For(probeResolvingEncryptionKey.Exception, ErrorCode.Key.Unresolved);
+        }
+
+        var probeUsingEncryptionKey = await connectionFactory.ProbeUsingEncryptionKey(probeResolvingEncryptionKey.Key.Passphrase, ctx);
+        if (!probeUsingEncryptionKey.IsCorrectKey)
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: could not open the bank at {SqliteConnectionFactory.BankPathFor(descriptor.LaunchConfig.Options)}: {probeUsingEncryptionKey.Exception?.Message ?? "the key does not open it"}");
+            return CliFailureErrorCode.For(probeUsingEncryptionKey.Exception, ErrorCode.Bank.OpenFailed);
+        }
+
+        await embeddingAvailability.EnsureEmbeddingAvailabilityAsync(ctx);
+
+        // D3: vec0 must match the configured engine's dimension before the first tool call —
+        // a serverless `model embedding set` (no server around to drain it) leaves vec0 stale otherwise.
+        // Server-only by construction (`cli-asks-the-server-acts`): NodeRunner is the one path
+        // that becomes the server, never a CLI verb.
+        await using (var connection = await connectionFactory.OpenBankAsync(ctx))
+        {
+            await entryEmbedder.ReconcileVecDimensionsAsync(connection, ctx);
+            await codeEmbedder.ReconcileVecCodeDimensionsAsync(connection, ctx);
+        }
+
+        return null;
     }
 
     private async Task EmitBoundUrl(NodeLaunchDescriptor descriptor, StandardStreams streams, WebApplication serverHost)
