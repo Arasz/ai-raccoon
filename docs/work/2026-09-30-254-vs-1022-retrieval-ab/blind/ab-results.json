@@ -1,0 +1,430 @@
+{
+  "header": {
+    "seed": 20260909,
+    "runnerCmd": "pi -p",
+    "trio": [
+      {
+        "name": "grader-1",
+        "provider": null,
+        "model": null
+      },
+      {
+        "name": "grader-2",
+        "provider": "openrouter",
+        "model": "meta/muse-spark-1.3-contributor"
+      },
+      {
+        "name": "grader-3",
+        "provider": "openrouter",
+        "model": "xiaomi/mimo-v2.5-pro"
+      }
+    ],
+    "topK": 5,
+    "samplePath": "/tmp/aira-ab-254-vs-1022/blind/sample-p5.json",
+    "armNames": [
+      "chunk254",
+      "chunk1022"
+    ],
+    "armAPath": "/tmp/aira-ab-254-vs-1022/blind/arm-chunk254.json",
+    "armBPath": "/tmp/aira-ab-254-vs-1022/blind/arm-chunk1022.json",
+    "graderCalls": 27,
+    "reAsks": 0
+  },
+  "queries": [
+    {
+      "queryId": "E082",
+      "queryText": "Which project id was used for the manual 25-tool MCP round-trip test?",
+      "firstArm": "chunk1022",
+      "secondArm": "chunk254",
+      "payloadSha256": "7200889aac3cfa4f513c14b5f33733f3981d032e57fd65f02e4cf5c050a682a8",
+      "graders": [
+        {
+          "name": "grader-1",
+          "provider": null,
+          "model": null,
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "The second list ranks the manual 25-tool MCP test coverage chunks at the top (including the accepted `mcp-full-tool-surface-25-tools` test and the `MCP_SERVER_PROJECT_PATH` config chunk directly bearing on the project id), whereas the first list buries its few relevant items and mixes in unrelated PR/test-telemetry chunks.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-2",
+          "provider": "openrouter",
+          "model": "meta/muse-spark-1.3-contributor",
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "The second list ranks the decisive chunk naming project manualtest-tar2 third while the first list contains no chunk with the project id.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-3",
+          "provider": "openrouter",
+          "model": "xiaomi/mimo-v2.5-pro",
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "The second list contains a chunk (#5) that explicitly shows the project id `mcp-full-tool-surface-25-tools` associated with the 25-tool MCP test acceptance, directly answering the query, while the first list has no chunk that surfaces a project id.",
+          "reAskCount": 0,
+          "abstained": false
+        }
+      ],
+      "abstentions": 0,
+      "thresholdPicks": 3,
+      "compScore": 1.0
+    },
+    {
+      "queryId": "E015",
+      "queryText": "What is lost by never syncing settings \u2014 can a shared project-wide default like an embedding endpoint ride along with entries?",
+      "firstArm": "chunk1022",
+      "secondArm": "chunk254",
+      "payloadSha256": "f6ad6171121f74b557aa741424f1f089b1a2925dedac7aad90b2a4a73a4df898",
+      "graders": [
+        {
+          "name": "grader-1",
+          "provider": null,
+          "model": null,
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "The second list concentrates on the sync boundary itself \u2014 that sync only ever moves `entries`, that the embedding endpoint/API key are configured independently, and settings merge semantics (issue #121) \u2014 whereas the first spends more ranks on tangential permissions/policy/bank-history chunks while its strongest hits largely duplicate the second list's.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-2",
+          "provider": "openrouter",
+          "model": "meta/muse-spark-1.3-contributor",
+          "pick": "first",
+          "pickArm": "chunk1022",
+          "reason": "First list keeps top ranks focused on endpoint/settings sync loss and its whole-bank cause while second drifts to server defaults/policy and demotes the key mitigation chunk to last.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-3",
+          "provider": "openrouter",
+          "model": "xiaomi/mimo-v2.5-pro",
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "The second list better covers the \"what is lost\" question by including chunks about credentials and embedding endpoint being managed independently (rank 2), the sync mechanism only moving `entries` (rank 2 and 6), and the SyncService snapshot behavior (rank 6), providing a more complete answer than the first list which has several lower-relevance items.",
+          "reAskCount": 0,
+          "abstained": false
+        }
+      ],
+      "abstentions": 0,
+      "thresholdPicks": 2,
+      "compScore": 0.6666666666666666
+    },
+    {
+      "queryId": "E004",
+      "queryText": "How do I find the server's process id to use with dotnet-counters and dotnet-trace?",
+      "firstArm": "chunk254",
+      "secondArm": "chunk1022",
+      "payloadSha256": "900ec132d962260073b75ca022c46b40b53158594d6c25b42d4c6e4c057fcabf",
+      "graders": [
+        {
+          "name": "grader-1",
+          "provider": null,
+          "model": null,
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "The first list ranks the PID-relevant chunks higher (the `observability pid` command, the `dotnet-trace collect -p` usage, and the live-server README pointer all appear in the top 4), whereas the second list buries its two process-id chunks at ranks 3 and 6 below instrument/metric listings that don't address finding the PID.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-2",
+          "provider": "openrouter",
+          "model": "meta/muse-spark-1.3-contributor",
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "First ranks the live-server dotnet-counters/trace guide first and surfaces PID usage early while second buries it behind instrument discussion.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-3",
+          "provider": "openrouter",
+          "model": "xiaomi/mimo-v2.5-pro",
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "The first list ranks the most directly relevant chunk (\"to watch a live server with dotnet-counters and dotnet-trace\") at position 1 and the PID chunk at position 4, providing a better lead-in to the answer, whereas the second list leads with the less relevant \"container-scoped instruments\" chunk and buries the \"watch a live server\" chunk at rank 5.",
+          "reAskCount": 0,
+          "abstained": false
+        }
+      ],
+      "abstentions": 0,
+      "thresholdPicks": 3,
+      "compScore": 1.0
+    },
+    {
+      "queryId": "E095",
+      "queryText": "Why does redirecting stdout with StringWriter in a test miss output from a spawned child process?",
+      "firstArm": "chunk1022",
+      "secondArm": "chunk254",
+      "payloadSha256": "8aedd30976714ca6e4d571585c0ddf66060c8b3eedb91d7dc9c4b6b181e52191",
+      "graders": [
+        {
+          "name": "grader-1",
+          "provider": null,
+          "model": null,
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "The second list's top chunk directly names the StringWriter/child-process stdout leak that the query asks about, with the remaining chunks covering stdout routing and process redirection, whereas the first list is dominated by tangential port-leasing and process-lifecycle material.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-2",
+          "provider": "openrouter",
+          "model": "meta/muse-spark-1.3-contributor",
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "Second list ranks first a chunk directly explaining that Console.SetOut with StringWriter cannot capture child-process OS-level stdout, while first list offers only generic spawned-process mentions without that explanation.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-3",
+          "provider": "openrouter",
+          "model": "xiaomi/mimo-v2.5-pro",
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "The second list's top chunk directly explains the core issue\u2014`Console.SetOut(new StringWriter())` does not capture child process stdout\u2014while the first list lacks any chunk that names the specific mechanism.",
+          "reAskCount": 0,
+          "abstained": false
+        }
+      ],
+      "abstentions": 0,
+      "thresholdPicks": 3,
+      "compScore": 1.0
+    },
+    {
+      "queryId": "E036",
+      "queryText": "What did the noise-store cleanup remove, and what remains as the training-data source?",
+      "firstArm": "chunk254",
+      "secondArm": "chunk1022",
+      "payloadSha256": "812faf3a76451436d069986122c6e75a783069f6ce431d8b0f7ec17ed28efb7e",
+      "graders": [
+        {
+          "name": "grader-1",
+          "provider": null,
+          "model": null,
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "The first list concentrates on the cleanup's actual removals (`noise_entries`, `SqliteNoiseStore`, the reject log) and repeatedly confirms the noise store as the surviving training-data source at the top ranks, whereas the second list buries the key answer at rank 2 behind a revival aside and pads with tangential shadow-mode, auditability, and Protocol B chunks.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-2",
+          "provider": "openrouter",
+          "model": "meta/muse-spark-1.3-contributor",
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "The first list ranks the keep-cleaned-store-as-source chunk first and covers both removals whereas the second list leads with revival boilerplate and tangential shadow-mode chunks.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-3",
+          "provider": "openrouter",
+          "model": "xiaomi/mimo-v2.5-pro",
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "The first list ranks the most directly relevant chunks higher (noise store as training-data source, explicit mention of removing `noise_entries` and `SqliteNoiseStore`), while the second list buries key details and leads with a tangential \"retiring the idea\" chunk.",
+          "reAskCount": 0,
+          "abstained": false
+        }
+      ],
+      "abstentions": 0,
+      "thresholdPicks": 3,
+      "compScore": 1.0
+    },
+    {
+      "queryId": "E032",
+      "queryText": "How is the chunk budget now counted with the real BERT tokenizer, and what is the guaranteed split floor?",
+      "firstArm": "chunk1022",
+      "secondArm": "chunk254",
+      "payloadSha256": "a4cd17e9b9972a2bceda79509585ca3628734ce217440fa1447ea7169b954d14",
+      "graders": [
+        {
+          "name": "grader-1",
+          "provider": null,
+          "model": null,
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "The second list ranks the primary \"Engine-aware chunk token budget with a guaranteed split floor\" documents and the \"How chunk size is calculated\" explanation at the top, directly answering both the BERT-tokenizer counting and the guaranteed split floor, whereas the first list only touches these indirectly through scattered fragments \u2014 despite some duplication in the second list, its top hits give the clearest, most complete answer.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-2",
+          "provider": "openrouter",
+          "model": "meta/muse-spark-1.3-contributor",
+          "pick": "first",
+          "pickArm": "chunk1022",
+          "reason": "The first list ranks the complete decision chunks explaining 254 content tokens via the real BertTokenizer and the verified binary-search split floor, while the second list leads with a title-only fragment and small duplicated partials.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-3",
+          "provider": "openrouter",
+          "model": "xiaomi/mimo-v2.5-pro",
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "The second list places chunks with the exact phrase \"guaranteed split floor\" in the title at positions 1-2, includes a chunk explicitly labeled \"How chunk size is calculated\" at position 4, and ends with a chunk directly addressing \"The token-level split floor,\" providing better top-ranked coverage of both parts of the query.",
+          "reAskCount": 0,
+          "abstained": false
+        }
+      ],
+      "abstentions": 0,
+      "thresholdPicks": 2,
+      "compScore": 0.6666666666666666
+    },
+    {
+      "queryId": "E029",
+      "queryText": "How does the snippet for a vector-only hit get centered on query terms, and how are promoted shared copies deduped by content?",
+      "firstArm": "chunk254",
+      "secondArm": "chunk1022",
+      "payloadSha256": "09e4c6236edf79c80a452d4679c3d506b5fa080cef8522590306cc77397d40f5",
+      "graders": [
+        {
+          "name": "grader-1",
+          "provider": null,
+          "model": null,
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "Both lists cover the vector-only snippet centering, but only the first addresses the second half of the query with chunks on content-keyed dedup of promoted shared-tier copies (items 1, 4, 6), whereas the second drifts into unrelated dual-vector/\u03b1-tuning material.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-2",
+          "provider": "openrouter",
+          "model": "meta/muse-spark-1.3-contributor",
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "First list directly covers both query-centered snippet construction and content-keyed dedup of promoted copies while second drifts to unrelated retrieval tuning.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-3",
+          "provider": "openrouter",
+          "model": "xiaomi/mimo-v2.5-pro",
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "The first list better addresses both aspects of the query\u2014query-centered snippets for vector-only hits and content-keyed deduplication\u2014through a focused, relevant summary chunk, while the second list includes more irrelevant chunks and lacks explicit deduplication coverage.",
+          "reAskCount": 0,
+          "abstained": false
+        }
+      ],
+      "abstentions": 0,
+      "thresholdPicks": 3,
+      "compScore": 1.0
+    },
+    {
+      "queryId": "E014",
+      "queryText": "Are settings stripped from every pushed snapshot and completely ignored on pull?",
+      "firstArm": "chunk254",
+      "secondArm": "chunk1022",
+      "payloadSha256": "94fd300e5bb3d33f89e2dbba6ce65bc7859b6954ae32c8096d713c413d41dd8f",
+      "graders": [
+        {
+          "name": "grader-1",
+          "provider": null,
+          "model": null,
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "Both cover the push-side strip well, but only the first list includes the pull-side answer (\"pull never reads `remote.settings` and never names the\u2026\"), so it addresses both halves of the query while the second drifts into related-but-off-topic chunks (repair policy, telemetry).",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-2",
+          "provider": "openrouter",
+          "model": "meta/muse-spark-1.3-contributor",
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "First list covers both push stripping and pull ignoring remote settings while second covers only push stripping.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-3",
+          "provider": "openrouter",
+          "model": "xiaomi/mimo-v2.5-pro",
+          "pick": "first",
+          "pickArm": "chunk254",
+          "reason": "The first list uniquely contains chunk [8b9d4c0e] which directly addresses the \"ignored on pull\" part of the query (\"pull never reads remote.settings\"), while both lists cover the \"stripped from every pushed snapshot\" aspect equally well, giving first superior coverage of the full question.",
+          "reAskCount": 0,
+          "abstained": false
+        }
+      ],
+      "abstentions": 0,
+      "thresholdPicks": 3,
+      "compScore": 1.0
+    },
+    {
+      "queryId": "E087",
+      "queryText": "What was the review verdict posted on ai-raccoon PR 254?",
+      "firstArm": "chunk1022",
+      "secondArm": "chunk254",
+      "payloadSha256": "3bfbb0de563080683f70f2188fd45328251fdea8a0e506e5a7dae98a52fe2e8d",
+      "graders": [
+        {
+          "name": "grader-1",
+          "provider": null,
+          "model": null,
+          "pick": "first",
+          "pickArm": "chunk1022",
+          "reason": "The first list centers on ai-raccoon PR review-round records with explicit verdict/head states (e.g., \"no approval posted at this head,\" reviews posted against the PR head) that plausibly cover PR 254's outcome, whereas the second list is dominated by verdicts for unrelated PRs (482, 457, 570) and generic monitor noise.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-2",
+          "provider": "openrouter",
+          "model": "meta/muse-spark-1.3-contributor",
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "Neither list mentions PR 254 but the second list ranks explicit verdict statements first while the first list leads with an irrelevant monitor-script note.",
+          "reAskCount": 0,
+          "abstained": false
+        },
+        {
+          "name": "grader-3",
+          "provider": "openrouter",
+          "model": "xiaomi/mimo-v2.5-pro",
+          "pick": "second",
+          "pickArm": "chunk254",
+          "reason": "The second list includes a chunk about PR #482 verdict with a direct GitHub comment link and an APPROVE summary mention at the top, making it more likely to surface relevant review verdict context for ai-raccoon PRs, while neither list directly addresses PR #254.",
+          "reAskCount": 0,
+          "abstained": false
+        }
+      ],
+      "abstentions": 0,
+      "thresholdPicks": 2,
+      "compScore": 0.6666666666666666
+    }
+  ],
+  "distilled": {
+    "topK": 5,
+    "coreSentences": [
+      "The second list ranks the manual 25-tool MCP test coverage chunks at the top (including the accepted `mcp-full-tool-surface-25-tools` test and the `MCP_SERVER_PROJECT_PATH` config chunk directly bearing on the project id), whereas the first list buries its few relevant items and mixes in unrelated PR/test-telemetry chunks.",
+      "The second list ranks the decisive chunk naming project manualtest-tar2 third while the first list contains no chunk with the project id.",
+      "The second list contains a chunk (#5) that explicitly shows the project id `mcp-full-tool-surface-25-tools` associated with the 25-tool MCP test acceptance, directly answering the query, while the first list has no chunk that surfaces a project id.",
+      "The second list concentrates on the sync boundary itself \u2014 that sync only ever moves `entries`, that the embedding endpoint/API key are configured independently, and settings merge semantics (issue #121) \u2014 whereas the first spends more ranks on tangential permissions/policy/bank-history chunks while its strongest hits largely duplicate the second list's.",
+      "First list keeps top ranks focused on endpoint/settings sync loss and its whole-bank cause while second drifts to server defaults/policy and demotes the key mitigation chunk to last."
+    ],
+    "frequencies": {
+      "The second list ranks the manual 25-tool MCP test coverage chunks at the top (including the accepted `mcp-full-tool-surface-25-tools` test and the `MCP_SERVER_PROJECT_PATH` config chunk directly bearing on the project id), whereas the first list buries its few relevant items and mixes in unrelated PR/test-telemetry chunks.": 1,
+      "The second list ranks the decisive chunk naming project manualtest-tar2 third while the first list contains no chunk with the project id.": 1,
+      "The second list contains a chunk (#5) that explicitly shows the project id `mcp-full-tool-surface-25-tools` associated with the 25-tool MCP test acceptance, directly answering the query, while the first list has no chunk that surfaces a project id.": 1,
+      "The second list concentrates on the sync boundary itself \u2014 that sync only ever moves `entries`, that the embedding endpoint/API key are configured independently, and settings merge semantics (issue #121) \u2014 whereas the first spends more ranks on tangential permissions/policy/bank-history chunks while its strongest hits largely duplicate the second list's.": 1,
+      "First list keeps top ranks focused on endpoint/settings sync loss and its whole-bank cause while second drifts to server defaults/policy and demotes the key mitigation chunk to last.": 1
+    }
+  }
+}

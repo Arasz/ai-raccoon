@@ -1,0 +1,18 @@
+started_utc=2026-09-30T14:42:26Z
+binary=/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-254-vs-1022-retrieval-measurement-809/src/AiRaccoon/bin/Release/net10.0/AiRaccoon
+1.55.0+ba2e3982f9304949bea0a625d9185e343f36641f
+16:42  up 6 days,  4:51, 8 users, load averages: 4.26 5.45 5.52
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=35520611)	76%; AC attached; not charging present: true
+  PID  %CPU COMM
+  599  29.6 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 5241  23.1 /Volumes/Task Manager TMOG/Task Manager TMOG.app/Contents/MacOS/Task Manager
+71371  20.9 /Applications/iTerm.app/Contents/MacOS/iTerm2
+57336  18.0 /Applications/OneDrive.app/Contents/MacOS/OneDrive
+96938   9.4 pi
+85292   5.9 pi
+71637   5.5 pi
+73309   4.8 ai-raccoon
+17010   4.2 /Applications/JetBrains Toolbox.app/Contents/MacOS/jetbrains-toolbox
+34703   3.6 /Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge
+96891   3.2 /Applications/Microsoft Edge.app/Contents/Frameworks/Microsoft Edge Framework.framework/Versions/154.0.4258.37/Helpers/Microsoft Edge Helper (Renderer).app/Contents/MacOS/Microsoft Edge Helper (Renderer)

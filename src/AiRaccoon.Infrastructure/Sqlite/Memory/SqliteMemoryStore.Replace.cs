@@ -112,20 +112,10 @@ public sealed partial class SqliteMemoryStore
     private async Task PruneChunksNotIn(SqliteConnection connection, string projectId, string path,
         IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken)
     {
-        await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
+        await connection.InWriteTransactionAsync(async () =>
         {
             await PruneAsync(connection, projectId, path, keep, keepCode, null, cancellationToken);
-            await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-        }
-        catch
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
-            throw;
-        }
+        }, cancellationToken);
     }
 
     /// <summary>
