@@ -48,7 +48,7 @@ public sealed class CodeChunker : ICodeChunker
             return [];
         }
 
-        var lines = SplitLines(NormalizeLineEndings(text));
+        var lines = TextLines.Split(TextLines.NormalizeLineEndings(text));
         if (lines.Count == 0 || lines.All(IsBlank))
         {
             return [];
@@ -229,31 +229,6 @@ public sealed class CodeChunker : ICodeChunker
     }
 
     private static bool IsBlank(string line) => string.IsNullOrWhiteSpace(line);
-
-    private static List<string> SplitLines(string text)
-    {
-        List<string> lines = [];
-        var start = 0;
-        for (var i = 0; i < text.Length; i++)
-        {
-            if (text[i] != '\n')
-            {
-                continue;
-            }
-
-            lines.Add(text[start..(i + 1)]);
-            start = i + 1;
-        }
-
-        if (start < text.Length)
-        {
-            lines.Add(text[start..]);
-        }
-
-        return lines;
-    }
-
-    private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
     /// <summary>One packable unit: its own line span and the cumulative file-wide brace balance
     /// right after it ends (a crude, non-AST heuristic — braces inside strings/comments count too).</summary>

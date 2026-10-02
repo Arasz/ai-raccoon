@@ -117,7 +117,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var total = 0;
         foreach (var fold in plan.Folds)
         {
-            total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
+            total += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition(
                         $"""
                         UPDATE entries
@@ -139,7 +139,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var total = 0;
         foreach (var fold in plan.Folds)
         {
-            total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
+            total += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition(
                         """
                         UPDATE code_entries
@@ -161,7 +161,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var tombstoned = 0;
         foreach (var fold in plan.Folds)
         {
-            var step = await InWriteTransactionAsync(connection, async () =>
+            var step = await connection.InWriteTransactionAsync(async () =>
             {
                 // Content-addressed fold: a row whose (path, hash, label) already lives under the
                 // winner is the same content — the winner's row survives and the loser's deletes
@@ -195,7 +195,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
 
         foreach (var dropped in plan.Dropped)
         {
-            var step = await InWriteTransactionAsync(connection, async () =>
+            var step = await connection.InWriteTransactionAsync(async () =>
             {
                 var stepTombstoned = await connection.ExecuteAsync(new CommandDefinition(
                         """
@@ -223,7 +223,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var deduped = 0;
         foreach (var fold in plan.Folds)
         {
-            var step = await InWriteTransactionAsync(connection, async () =>
+            var step = await connection.InWriteTransactionAsync(async () =>
             {
                 // Code never syncs, so a leftover is an exact (path, hash) duplicate of a winner
                 // row — dropped outright, no tombstone. code_fts/code-vec shadows are rowid-keyed:
@@ -249,7 +249,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
 
         foreach (var dropped in plan.Dropped)
         {
-            deduped += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
+            deduped += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM code_entries WHERE project_id = @dropped",
                         new { dropped }, cancellationToken: cancellationToken)),
                 cancellationToken);
@@ -271,7 +271,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var removed = 0;
         foreach (var fold in plan.Folds)
         {
-            var step = await InWriteTransactionAsync(connection, async () =>
+            var step = await connection.InWriteTransactionAsync(async () =>
             {
                 var stepMerged = await connection.ExecuteAsync(new CommandDefinition(
                         """
@@ -307,7 +307,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
 
         foreach (var dropped in plan.Dropped)
         {
-            removed += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
+            removed += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM promotion_queue WHERE project_id = @dropped",
                         new { dropped }, cancellationToken: cancellationToken)),
                 cancellationToken);
@@ -327,7 +327,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var total = 0;
         foreach (var fold in plan.Folds)
         {
-            total += await InWriteTransactionAsync(connection, async () =>
+            total += await connection.InWriteTransactionAsync(async () =>
             {
                 await connection.ExecuteAsync(new CommandDefinition(
                         """
@@ -343,7 +343,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
 
         foreach (var dropped in plan.Dropped)
         {
-            total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
+            total += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM promotion_discards WHERE project_id = @dropped",
                         new { dropped }, cancellationToken: cancellationToken)),
                 cancellationToken);
@@ -358,7 +358,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var total = 0;
         foreach (var fold in plan.Folds)
         {
-            total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
+            total += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition("UPDATE search_quality SET project_id = @winner WHERE project_id = @loser",
                         new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken)),
                 cancellationToken);
@@ -368,7 +368,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         // unattributed (NULL project_id) in the metric.
         foreach (var dropped in plan.Dropped)
         {
-            total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
+            total += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM search_quality WHERE project_id = @dropped",
                         new { dropped }, cancellationToken: cancellationToken)),
                 cancellationToken);
@@ -391,7 +391,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var noise = 0;
         foreach (var fold in plan.Folds)
         {
-            var step = await InWriteTransactionAsync(connection, async () =>
+            var step = await connection.InWriteTransactionAsync(async () =>
             {
                 var stepMetrics = await connection.ExecuteAsync(new CommandDefinition(
                         "UPDATE metrics SET project_id = @winner WHERE project_id = @loser",
@@ -425,7 +425,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         {
             foreach (var fold in plan.Folds)
             {
-                total += await InWriteTransactionAsync(connection, async () =>
+                total += await connection.InWriteTransactionAsync(async () =>
                 {
                     // UPDATE-first preserves the row (and its scan lease) in the common case;
                     // a same-path leftover means the winner already holds that path, so it deletes.
@@ -442,7 +442,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
 
             foreach (var dropped in plan.Dropped)
             {
-                total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
+                total += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                         new CommandDefinition($"DELETE FROM {table} WHERE project_id = @dropped",
                             new { dropped }, cancellationToken: cancellationToken)),
                     cancellationToken);
@@ -464,7 +464,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         foreach (var fold in plan.Folds)
         {
             var pairs = SettingsKeyPairs(fold.Loser, fold.Winner).ToList();
-            total += await InWriteTransactionAsync(connection, async () =>
+            total += await connection.InWriteTransactionAsync(async () =>
             {
                 var handled = 0;
                 foreach (var (loserKey, winnerKey) in pairs)
@@ -501,7 +501,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         foreach (var dropped in plan.Dropped)
         {
             var keys = SettingsKeysFor(dropped);
-            total += await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
+            total += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM settings WHERE key IN @keys",
                         new { keys }, cancellationToken: cancellationToken)),
                 cancellationToken);
@@ -538,7 +538,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var winners = plan.Folds.Select(fold => fold.Winner).Distinct(StringComparer.Ordinal).ToList();
         if (winners.Count > 0)
         {
-            ensured = await InWriteTransactionAsync(connection, async () =>
+            ensured = await connection.InWriteTransactionAsync(async () =>
             {
                 var count = 0;
                 foreach (var winner in winners)
@@ -559,7 +559,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
             .ToList();
         if (removals.Count > 0)
         {
-            removed = await InWriteTransactionAsync(connection, () => connection.ExecuteAsync(
+            removed = await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM projects WHERE id IN @ids",
                         new { ids = removals }, cancellationToken: cancellationToken)),
                 cancellationToken);
@@ -581,7 +581,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         var rewritten = 0;
         foreach (var fold in plan.Folds)
         {
-            rewritten += await InWriteTransactionAsync(connection, async () =>
+            rewritten += await connection.InWriteTransactionAsync(async () =>
             {
                 await connection.ExecuteAsync(new CommandDefinition(
                         """
@@ -614,24 +614,6 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
         // Created counts ride on the entries step (dropped deletes tombstone inline, next to the
         // rows they describe) — this step rewrites only.
         return rewritten;
-    }
-
-    /// <summary>One step, one BEGIN IMMEDIATE transaction: writers serialize on the write lock instead of failing with SQLITE_BUSY.</summary>
-    private static async Task<T> InWriteTransactionAsync<T>(SqliteConnection connection, Func<Task<T>> step,
-        CancellationToken cancellationToken)
-    {
-        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
-        {
-            var result = await step();
-            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-            return result;
-        }
-        catch
-        {
-            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
-            throw;
-        }
     }
 
     private readonly record struct EntryFold(int Moved, int Deduped, int Tombstoned);
