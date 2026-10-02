@@ -249,7 +249,7 @@ public sealed class ProjectIdsRepairCommands
 
     /// <summary>
     ///     Fire-and-forget for scripts (--queue-only): commit one request when the first derive is
-    ///     actionable, then exit without polling — and commit nothing on a pinned-only plan (review #614).
+    ///     actionable, then exit without polling — and commit nothing on a pinned-only plan.
     /// </summary>
     private async Task<int> RequestOnceAsync(ProjectIdsFoldPlan plan, ProjectIdCensusReport report, string? mapJson,
         StandardStreams streams, CancellationToken cancellationToken)
