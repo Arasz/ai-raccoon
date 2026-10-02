@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Maintenance;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -127,21 +128,7 @@ public sealed partial class WatchHostedService : BackgroundService
     /// </summary>
     internal async Task ReconcileAsync(CancellationToken cancellationToken = default)
     {
-        using var pass = _telemetry.Begin(OperationName);
-        try
-        {
-            await ReconcilePassAsync(pass, cancellationToken);
-            pass.Succeeded();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw; // shutdown cut the pass short: abandoned, not failed
-        }
-        catch (Exception ex)
-        {
-            pass.Failed(ex);
-            throw;
-        }
+        await _telemetry.RunPassAsync(OperationName, ReconcilePassAsync, cancellationToken);
     }
 
     private async Task ReconcilePassAsync(IOperationScope pass, CancellationToken cancellationToken)

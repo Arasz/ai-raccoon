@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
+using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -27,79 +28,45 @@ public sealed partial class ExtractionHostedService(
     {
         using var timer = new PeriodicTimer(await ReadIntervalSafeAsync(stoppingToken),
             timeProvider);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            try
-            {
-                await RunOnceAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex) when (ex.IsBankBusy())
-            {
-                // Transient contention: one line, no stack trace, and the loop retries on the next tick.
-                Log.RunDeferred(logger);
-            }
-            catch (Exception ex)
-            {
-                Log.RunFailed(logger, ex);
-            }
-
-            // Re-read the interval so config changes apply without a restart.
-            timer.Period = await ReadIntervalSafeAsync(stoppingToken);
-        }
+        await timer.RunTicksAsync(RunOnceAsync, OnPassFailed, stoppingToken,
+            readInterval: ReadIntervalSafeAsync);
     }
 
     /// <summary>Interval from settings with a default fallback: a store failure must not kill the loop.</summary>
-    private async Task<TimeSpan> ReadIntervalSafeAsync(CancellationToken cancellationToken)
+    private Task<TimeSpan> ReadIntervalSafeAsync(CancellationToken cancellationToken) =>
+        BackgroundLoop.ReadOrFallbackAsync(ReadIntervalAsync,
+            TimeSpan.FromMinutes(ExtractionConfigKeys.DefaultIntervalMinutes), OnIntervalReadFailed,
+            cancellationToken);
+
+    // Transient contention: one line, no stack trace, and the loop retries on the next tick.
+    private void OnPassFailed(Exception ex)
     {
-        try
+        if (ex.IsBankBusy())
         {
-            return await ReadIntervalAsync(cancellationToken);
+            Log.RunDeferred(logger);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        else
         {
-            throw;
+            Log.RunFailed(logger, ex);
         }
-        catch (Exception ex) when (ex.IsBankBusy())
+    }
+
+    private void OnIntervalReadFailed(Exception ex)
+    {
+        if (ex.IsBankBusy())
         {
             Log.IntervalReadDeferred(logger);
-            return TimeSpan.FromMinutes(ExtractionConfigKeys.DefaultIntervalMinutes);
         }
-        catch (Exception ex)
+        else
         {
             Log.IntervalReadFailed(logger, ex);
-            return TimeSpan.FromMinutes(ExtractionConfigKeys.DefaultIntervalMinutes);
         }
     }
 
     /// <summary>One extraction pass: enabled check, per-project propose/promote. Test seam.</summary>
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        using var pass = telemetry.Begin(OperationName);
-        try
-        {
-            var failures = await RunPassAsync(pass, cancellationToken);
-            if (failures > 0)
-            {
-                pass.PartiallyFailed(failures);
-            }
-            else
-            {
-                pass.Succeeded();
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw; // shutdown cut the pass short: abandoned, not failed
-        }
-        catch (Exception ex)
-        {
-            pass.Failed(ex);
-            throw;
-        }
+        await telemetry.RunPassCountingFailuresAsync(OperationName, RunPassAsync, cancellationToken);
     }
 
     /// <summary>
