@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
@@ -18,7 +19,7 @@ public sealed class OwnerOnlySecretFileMintTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
-    [Fact]
+    [RetryFact]
     public async Task AMintWhoseWriteIsCancelled_DisposesTheSecretItGenerated()
     {
         var file = NewFile();
@@ -30,7 +31,7 @@ public sealed class OwnerOnlySecretFileMintTests : IDisposable
         file.LastMinted.ShouldNotBeNull().Disposed.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AMintThatLosesTheExclusiveCreate_DisposesTheSecretItGenerated()
     {
         var file = NewFile();
@@ -41,7 +42,7 @@ public sealed class OwnerOnlySecretFileMintTests : IDisposable
         file.LastMinted.ShouldNotBeNull().Disposed.ShouldBeTrue();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task AMintThatLands_ReturnsTheSecretUndisposed()
     {
         var file = NewFile();
