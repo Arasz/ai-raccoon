@@ -50,35 +50,19 @@ public sealed class ExtractCommands(IPromotionQueuePruneStore promotionQueuePrun
         return 0;
     }
 
-    public async Task<int> SetIntervalAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams, CancellationToken cancellationToken)
-    {
-        var minutes = parseResult.GetValue<string>("minutes");
-        if (!int.TryParse(minutes, out var parsed) || parsed <= 0)
-        {
-            await streams.WriteErrorLineAsync("ai-raccoon: interval must be a positive number of minutes");
-            return ErrorCode.Usage.InvalidValue;
-        }
+    private static readonly IntSetting Interval = new(ExtractionConfigKeys.IntervalMinutesGlobal, "minutes",
+        "interval", "minutes", value => $"extraction interval: {value} min");
 
-        await store.SetSettingAsync(ExtractionConfigKeys.IntervalMinutesGlobal, parsed.ToString(),
-            cancellationToken);
-        await streams.WriteOutputLineAsync($"extraction interval: {parsed} min");
-        return 0;
-    }
+    private static readonly IntSetting Capacity = new(ExtractionConfigKeys.QueueCapacityGlobal, "capacity",
+        "capacity", "queued candidates", value => $"propose-tier capacity: {value} candidates");
 
-    public async Task<int> SetCapacityAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams, CancellationToken cancellationToken)
-    {
-        var capacity = parseResult.GetValue<string>("capacity");
-        if (!int.TryParse(capacity, out var parsed) || parsed <= 0)
-        {
-            await streams.WriteErrorLineAsync("ai-raccoon: capacity must be a positive number of queued candidates");
-            return ErrorCode.Usage.InvalidValue;
-        }
+    public Task<int> SetIntervalAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        Interval.SetAsync(parseResult, store, streams, cancellationToken);
 
-        await store.SetSettingAsync(ExtractionConfigKeys.QueueCapacityGlobal, parsed.ToString(),
-            cancellationToken);
-        await streams.WriteOutputLineAsync($"propose-tier capacity: {parsed} candidates");
-        return 0;
-    }
+    public Task<int> SetCapacityAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
+        CancellationToken cancellationToken) =>
+        Capacity.SetAsync(parseResult, store, streams, cancellationToken);
 
     public async Task<int> SetAutoPromoteThresholdAsync(ParseResult parseResult, IMemoryStore store,
         StandardStreams streams, CancellationToken cancellationToken)

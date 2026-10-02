@@ -74,6 +74,25 @@ public sealed class CliSetterTranscriptTests
         }
     }
 
+    [Fact]
+    public async Task PerformanceList_PrintsExactTranscript()
+    {
+        var store = new FakeConfigStore();
+        store.Settings[MetricsConfigKeys.BufferCapacityGlobal] = "5000";
+        store.Settings[MetricsConfigKeys.FlushIntervalSecondsGlobal] = "10";
+        store.Settings[MetricsConfigKeys.RetentionDaysGlobal] = "14";
+
+        var result = await CliRun.RunAsync(["settings", "performance", "list"],
+            TestData.CreateConfigCommands(store, performance: new PerformanceCommands()));
+
+        result.Exit.ShouldBe(0);
+        result.Out.ShouldBe((
+            "buffer capacity: 5000 measurements (takes effect on the next server restart)\n" +
+            "flush interval: 10s (takes effect on the next flush tick)\n" +
+            "retention: 14 days (takes effect on the next maintenance pass)\n").Replace("\n", Nl));
+        result.Err.ShouldBe("");
+    }
+
     [Theory]
     [InlineData(false, "chunk-index repair: 4 source group(s) examined, 2 row(s) would reposition (dry run; pass --apply to queue it), 1 row(s) set to the unknown position (-1), 3 row(s) given their partition's row count as total_chunks\n")]
     [InlineData(true, "chunk-index repair: 4 source group(s) examined, 2 row(s) queued for the server to reposition, 1 row(s) set to the unknown position (-1), 3 row(s) given their partition's row count as total_chunks\nchunk-index repair: request committed; the server applies it on its next maintenance poll (~15s).\n")]
