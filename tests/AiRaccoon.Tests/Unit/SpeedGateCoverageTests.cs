@@ -24,7 +24,7 @@ public sealed class SpeedGateCoverageTests
             .ToList();
 
         ungated.ShouldBeEmpty(
-            "these classes carry no Speed trait, so no CI job runs them: " + string.Join(", ", ungated));
+            $"these classes carry no Speed trait, so no CI job runs them: {string.Join(", ", ungated)}");
     }
 
     [Fact]

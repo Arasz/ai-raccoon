@@ -136,8 +136,7 @@ public class ToolInventoryTests
         }
 
         offenders.ShouldBeEmpty(
-            "a tool names projectId/projectIds exactly when its body gates via gate.RequireAsync: "
-            + string.Join("; ", offenders));
+            $"a tool names projectId/projectIds exactly when its body gates via gate.RequireAsync: {string.Join("; ", offenders)}");
     }
 
     /// <summary>Every [McpServerTool] method's name in a class's source file, mapped to whether its body calls gate.RequireAsync — one read and one parse per class file.</summary>

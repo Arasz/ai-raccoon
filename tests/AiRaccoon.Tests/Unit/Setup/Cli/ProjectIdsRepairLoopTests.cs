@@ -51,8 +51,7 @@ public sealed class ProjectIdsRepairLoopTests
         stdout.ShouldContain("pass 2");
         stdout.ShouldContain("moved");
         LastNonEmptyLine(stdout).ShouldBe(
-            "project-ids repair: summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, " +
-            P3Armed + ".");
+            $"project-ids repair: summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, {P3Armed}.");
     }
 
     /// <summary>
@@ -99,9 +98,7 @@ public sealed class ProjectIdsRepairLoopTests
         store.RequestCalls.ShouldBe(0, "a pinned-only first derive commits nothing");
         store.ReportCalls.ShouldBe(1, "nothing to request means nothing to poll — one derive, then the verdict");
         LastNonEmptyLine(stdout).ShouldBe(
-            "project-ids repair: summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, " +
-            "2 pinned (pinned-shared-only: 'a', pinned-telemetry-only: 't'), " +
-            P3Armed + ".");
+            $"project-ids repair: summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, 2 pinned (pinned-shared-only: 'a', pinned-telemetry-only: 't'), {P3Armed}.");
     }
 
     /// <summary>
@@ -295,7 +292,7 @@ public sealed class ProjectIdsRepairLoopTests
         if (Environment.GetEnvironmentVariable("REPAIR_TRANSCRIPT_DUMP") is { } dump)
         {
             Directory.CreateDirectory(dump);
-            await File.WriteAllTextAsync(Path.Combine(dump, "loop-" + scenario + ".txt"), actual, TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(dump, $"loop-{scenario}.txt"), actual, TestContext.Current.CancellationToken);
         }
 
         actual.TrimEnd().ShouldBe(LoopTranscripts[scenario].TrimEnd());

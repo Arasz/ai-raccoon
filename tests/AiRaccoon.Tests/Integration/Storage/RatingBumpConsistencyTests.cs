@@ -59,8 +59,7 @@ public sealed class RatingBumpConsistencyTests : IDisposable
             RatingPolicy.DefaultBaseScore, accessCount, ageDays, RatingPolicy.DefaultHalfLifeDays);
 
         rating.ShouldBe(expected, 1e-9,
-            $"rating {rating} does not match the rating of the stored access_count {accessCount} " +
-            $"({expected}); a bump's rating contribution was lost while its count survived");
+            $"rating {rating} does not match the rating of the stored access_count {accessCount} ({expected}); a bump's rating contribution was lost while its count survived");
     }
 
     [RetryFact]

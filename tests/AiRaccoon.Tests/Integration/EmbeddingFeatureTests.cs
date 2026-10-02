@@ -214,11 +214,11 @@ public sealed class EmbeddingFeatureTests : IAsyncLifetime
 
 
                                """;
-        await _store.WriteAsync(new MemoryWriteRequest("acme", heading + "Step one."),
+        await _store.WriteAsync(new MemoryWriteRequest("acme", $"{heading}Step one."),
             TestContext.Current.CancellationToken);
-        await _store.WriteAsync(new MemoryWriteRequest("acme", heading + "Step two."),
+        await _store.WriteAsync(new MemoryWriteRequest("acme", $"{heading}Step two."),
             TestContext.Current.CancellationToken);
-        await _store.WriteAsync(new MemoryWriteRequest("acme", heading + "Step three."),
+        await _store.WriteAsync(new MemoryWriteRequest("acme", $"{heading}Step three."),
             TestContext.Current.CancellationToken);
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),

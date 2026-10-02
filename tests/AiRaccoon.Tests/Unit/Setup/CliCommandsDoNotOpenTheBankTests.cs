@@ -88,8 +88,7 @@ public sealed class CliCommandsDoNotOpenTheBankTests : IDisposable
         }
 
         violations.ShouldBeEmpty(
-            $"the CLI must never construct a command holding a live bank connection outside " +
-            $"{nameof(BankCapableCliCommandAllowlist)}; offenders:\n{string.Join('\n', violations)}");
+            $"the CLI must never construct a command holding a live bank connection outside {nameof(BankCapableCliCommandAllowlist)}; offenders:\n{string.Join('\n', violations)}");
     }
 
     /// <summary>

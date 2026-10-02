@@ -88,7 +88,7 @@ public sealed class ChunkBackfillTombstoneTests : IDisposable
 
     private static string Paragraphs(int count) =>
         string.Join("\n\n", Enumerable.Range(0, count).Select(i =>
-            $"Paragraph {i}. " + string.Join(' ', Enumerable.Repeat("memory retrieval budget window", 12))));
+            $"Paragraph {i}. {string.Join(' ', Enumerable.Repeat("memory retrieval budget window", 12))}"));
 
     private async Task<SqliteConnection> OpenSeededAsync(string path, string hash, string value)
     {

@@ -87,8 +87,7 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
         var lines = File.ReadAllLines(path).Length;
 
         lines.ShouldBeLessThanOrEqualTo(MaxLines,
-            $"SqliteMemoryStore.cs is now {lines} lines (cap {MaxLines}, measured on work/wave2c-gates). " +
-            "WP8 (docs/plans/2026-08-14-code-quality-improvement-plan.md) is the decomposition — split it, don't raise the cap.");
+            $"SqliteMemoryStore.cs is now {lines} lines (cap {MaxLines}, measured on work/wave2c-gates). WP8 (docs/plans/2026-08-14-code-quality-improvement-plan.md) is the decomposition — split it, don't raise the cap.");
     }
 
     [Fact]
@@ -99,8 +98,7 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
             .Length;
 
         members.ShouldBeLessThanOrEqualTo(MaxMembers,
-            $"IMemoryStore is now a {members}-member port (cap {MaxMembers}, measured on work/wave2c-gates). " +
-            "WP8 (docs/plans/2026-08-14-code-quality-improvement-plan.md) is the decomposition — split it, don't raise the cap.");
+            $"IMemoryStore is now a {members}-member port (cap {MaxMembers}, measured on work/wave2c-gates). WP8 (docs/plans/2026-08-14-code-quality-improvement-plan.md) is the decomposition — split it, don't raise the cap.");
     }
 
     private static string FindRepoRoot()
@@ -117,6 +115,6 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
         }
 
         throw new InvalidOperationException(
-            "Could not find repo root (AiRaccoon.slnx) walking up from " + AppContext.BaseDirectory);
+            $"Could not find repo root (AiRaccoon.slnx) walking up from {AppContext.BaseDirectory}");
     }
 }

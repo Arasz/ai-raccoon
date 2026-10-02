@@ -368,7 +368,7 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
             "dropped-id watches delete with their id");
         (await ScalarAsync(connection, "SELECT name FROM projects WHERE id = 'jsaa'", ct))
             .ShouldBe("jsaa", "the unregistered winner canonical gains its registry row");
-        (await ScalarAsync(connection, "SELECT count(*) FROM projects WHERE id IN ('" + GuidLoser + "','" + RetiredGuid + "','" + DroppedSweep + "')", ct))
+        (await ScalarAsync(connection, $"SELECT count(*) FROM projects WHERE id IN ('{GuidLoser}','{RetiredGuid}','{DroppedSweep}')", ct))
             .ShouldBe(0);
         (await CountAsync(connection, "watches", Winner, "1 = 1", ct)).ShouldBe(2);
         (await ScalarAsync(connection, "SELECT scan_owner FROM watches WHERE project_id = 'jsaa' AND path = '/repo/a'", ct))

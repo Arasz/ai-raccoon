@@ -32,9 +32,8 @@ public sealed class GateQueryVectorRegenerationTool(ITestOutputHelper output)
     {
         if (Environment.GetEnvironmentVariable(RunEnvVar) != "1")
         {
-            Assert.Skip($"{RunEnvVar} not set — this tool overwrites the committed " +
-                        $"tests/AiRaccoon.Tests/Resources/{PinnedQueryVectors.FileName} fixture with vectors " +
-                        $"from this host's arithmetic path (docs/adr/0049, docs/adr/0050). Set {RunEnvVar}=1 to run it.");
+            Assert.Skip(
+                $"{RunEnvVar} not set — this tool overwrites the committed tests/AiRaccoon.Tests/Resources/{PinnedQueryVectors.FileName} fixture with vectors from this host's arithmetic path (docs/adr/0049, docs/adr/0050). Set {RunEnvVar}=1 to run it.");
             return;
         }
 
@@ -80,7 +79,5 @@ public sealed class GateQueryVectorRegenerationTool(ITestOutputHelper output)
 
     /// <summary>The ISA facts that decide which u8s8 kernel ONNX Runtime picks (docs/adr/0049).</summary>
     private static string DescribeArithmeticPath() =>
-        $"{RuntimeInformation.OSDescription} {RuntimeInformation.ProcessArchitecture}; " +
-        $"AdvSimd={AdvSimd.IsSupported} Dp={Dp.IsSupported} Avx2={Avx2.IsSupported} " +
-        $"Avx512F={Avx512F.IsSupported} AvxVnni={AvxVnni.IsSupported}";
+        $"{RuntimeInformation.OSDescription} {RuntimeInformation.ProcessArchitecture}; AdvSimd={AdvSimd.IsSupported} Dp={Dp.IsSupported} Avx2={Avx2.IsSupported} Avx512F={Avx512F.IsSupported} AvxVnni={AvxVnni.IsSupported}";
 }

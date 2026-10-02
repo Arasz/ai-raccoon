@@ -36,7 +36,7 @@ public class JsonFileTypeChunkerTests
             properties.Add($"\"key_{i}\": \"This is value number {i} with a detailed description to exceed token budget\"");
         }
 
-        var json = "{\n" + string.Join(",\n", properties) + "\n}";
+        var json = $"{{\n{string.Join(",\n", properties)}\n}}";
 
         var chunks = chunker.Chunk(json, maxTokens: 60, overlayTokens: 0);
 
@@ -53,7 +53,7 @@ public class JsonFileTypeChunkerTests
             properties.Add($"\"key_{i}\": \"This is value number {i} with a detailed description to exceed token budget\"");
         }
 
-        var json = "{\n" + string.Join(",\n", properties) + "\n}";
+        var json = $"{{\n{string.Join(",\n", properties)}\n}}";
 
         // The structural grouping is key/item-bounded and non-overlapping by design (D5):
         // overlayTokens must not change the emitted chunks, or it would duplicate whole

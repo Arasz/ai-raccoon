@@ -65,8 +65,7 @@ public sealed class LayeringRulesTests
         var offenders = NetworkingDependenciesInCore();
 
         offenders.ShouldBeEmpty(
-            "networking is an infrastructure concern; the domain layer must stay framework-free: "
-            + string.Join("; ", offenders));
+            $"networking is an infrastructure concern; the domain layer must stay framework-free: {string.Join("; ", offenders)}");
     }
 
     /// <summary>
@@ -121,8 +120,7 @@ public sealed class LayeringRulesTests
         }
 
         offenders.ShouldBeEmpty(
-            "a tool class must depend on ports, not on the concrete types behind them: "
-            + string.Join("; ", offenders));
+            $"a tool class must depend on ports, not on the concrete types behind them: {string.Join("; ", offenders)}");
     }
 
     private static bool HasMcpTool(Type type) =>
@@ -184,9 +182,7 @@ public sealed class LayeringRulesTests
             .ToList();
 
         offenders.ShouldBeEmpty(
-            "IMemoryStore (including the interfaces it extends) must not expose a direct Configure* "
-            + "path; embedding configuration goes through IModelMigrationStore.StartModelMigrationAsync "
-            + "(ADR-0076): " + string.Join(", ", offenders));
+            $"IMemoryStore (including the interfaces it extends) must not expose a direct Configure* path; embedding configuration goes through IModelMigrationStore.StartModelMigrationAsync (ADR-0076): {string.Join(", ", offenders)}");
     }
 
     private static IEnumerable<MethodInfo> AllMethodsIncludingBaseInterfaces(Type interfaceType) =>
@@ -221,9 +217,7 @@ public sealed class LayeringRulesTests
             .ToList();
 
         offenders.ShouldBeEmpty(
-            "a port reachable from a CLI command must never expose a reconcile/vec-DDL-shaped member — "
-            + "a CLI verb calling through it would run exactly the bank write `cli-asks-the-server-acts` "
-            + $"forbids: {string.Join("; ", offenders)}");
+            $"a port reachable from a CLI command must never expose a reconcile/vec-DDL-shaped member — a CLI verb calling through it would run exactly the bank write `cli-asks-the-server-acts` forbids: {string.Join("; ", offenders)}");
     }
 
     /// <summary>

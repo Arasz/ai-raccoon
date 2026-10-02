@@ -70,9 +70,8 @@ public sealed class PlatformNumericsProbe : IDisposable
     {
         if (Environment.GetEnvironmentVariable(RunEnvVar) != "1")
         {
-            Assert.Skip($"{RunEnvVar} not set — this probe reports host CPU capability, the ONNX " +
-                        "query-embedding fingerprint and AdrNdcg5 together (docs/adr/0049). It asserts " +
-                        $"nothing; set {RunEnvVar}=1 to run it.");
+            Assert.Skip(
+                $"{RunEnvVar} not set — this probe reports host CPU capability, the ONNX query-embedding fingerprint and AdrNdcg5 together (docs/adr/0049). It asserts nothing; set {RunEnvVar}=1 to run it.");
             return;
         }
 
@@ -80,17 +79,16 @@ public sealed class PlatformNumericsProbe : IDisposable
         _output.WriteLine("=== HOST ===");
         _output.WriteLine($"OS={RuntimeInformation.OSDescription}");
         _output.WriteLine($"Arch={RuntimeInformation.ProcessArchitecture} ProcessorCount={Environment.ProcessorCount}");
-        _output.WriteLine($"Avx2={Avx2.IsSupported} Avx512F={Avx512F.IsSupported} " +
-                          $"Avx512BW={Avx512BW.IsSupported} AvxVnni={AvxVnni.IsSupported} " +
-                          $"Sse41={Sse41.IsSupported} AdvSimd={AdvSimd.IsSupported} Dp={Dp.IsSupported}");
+        _output.WriteLine(
+            $"Avx2={Avx2.IsSupported} Avx512F={Avx512F.IsSupported} Avx512BW={Avx512BW.IsSupported} AvxVnni={AvxVnni.IsSupported} Sse41={Sse41.IsSupported} AdvSimd={AdvSimd.IsSupported} Dp={Dp.IsSupported}");
         _output.WriteLine($"VectorFloatCount={Vector<float>.Count}");
         if (File.Exists("/proc/cpuinfo"))
         {
             var model = File.ReadLines("/proc/cpuinfo").FirstOrDefault(l => l.StartsWith("model name", StringComparison.Ordinal));
             var flags = File.ReadLines("/proc/cpuinfo").FirstOrDefault(l => l.StartsWith("flags", StringComparison.Ordinal)) ?? "";
             _output.WriteLine($"cpuinfo {model}");
-            _output.WriteLine("vnni-ish flags: " + string.Join(" ", flags.Split(' ')
-                .Where(f => f.Contains("vnni", StringComparison.Ordinal) || f.Contains("avx", StringComparison.Ordinal))));
+            _output.WriteLine($"vnni-ish flags: {string.Join(" ", flags.Split(' ')
+                .Where(f => f.Contains("vnni", StringComparison.Ordinal) || f.Contains("avx", StringComparison.Ordinal)))}");
         }
 
         _output.WriteLine("=== EMBEDDING FINGERPRINT ===");
@@ -103,8 +101,7 @@ public sealed class PlatformNumericsProbe : IDisposable
             var bytes = new byte[vector.Length * 4];
             Buffer.BlockCopy(vector, 0, bytes, 0, bytes.Length);
             _output.WriteLine(
-                $"{query.Id}: sha256={Convert.ToHexString(SHA256.HashData(bytes))[..16]} " +
-                $"v[0..3]=[{string.Join(",", vector.Take(3).Select(v => v.ToString("R")))}]");
+                $"{query.Id}: sha256={Convert.ToHexString(SHA256.HashData(bytes))[..16]} v[0..3]=[{string.Join(",", vector.Take(3).Select(v => v.ToString("R")))}]");
         }
 
         _output.WriteLine("=== RETRIEVAL ===");
@@ -128,8 +125,7 @@ public sealed class PlatformNumericsProbe : IDisposable
             scores.Add(ndcg);
             var hits = string.Join(",", hashes.Select((h, i) => relevant.Contains(h) ? (i + 1).ToString() : null)
                 .Where(x => x is not null));
-            _output.WriteLine($"{query.Id}: ndcg@5={ndcg:F4} relevantRanks=[{hits}] " +
-                              $"top3Scores=[{string.Join(",", results.Take(3).Select(r => r.Ranking.ToString("F6")))}]");
+            _output.WriteLine($"{query.Id}: ndcg@5={ndcg:F4} relevantRanks=[{hits}] top3Scores=[{string.Join(",", results.Take(3).Select(r => r.Ranking.ToString("F6")))}]");
         }
 
         _output.WriteLine($"=== AdrNdcg5 = {scores.Average():R} ===");

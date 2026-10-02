@@ -29,8 +29,7 @@ public sealed class DecoderEmbeddingModelTests
         var modelPath = Path.Combine(modelDir, root.GetProperty("model").GetString()!);
         if (!File.Exists(modelPath))
         {
-            Assert.Skip($"set {TokenizerJsonParityTests.FixturesDirEnvVar} to a directory holding "
-                        + "onnx-community_Qwen3-Embedding-0.6B-ONNX/{tokenizer.json,onnx/model_int8.onnx}");
+            Assert.Skip($"set {TokenizerJsonParityTests.FixturesDirEnvVar} to a directory holding onnx-community_Qwen3-Embedding-0.6B-ONNX/{{tokenizer.json,onnx/model_int8.onnx}}");
         }
 
         string[] inputNames;

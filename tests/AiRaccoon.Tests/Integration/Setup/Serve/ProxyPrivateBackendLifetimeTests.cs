@@ -72,8 +72,7 @@ public sealed class ProxyPrivateBackendLifetimeTests : IDisposable
             await sessions.DisposeAsync();
 
             (await PortIsFreeAsync(port, TestContext.Current.CancellationToken)).ShouldBeTrue(
-                $"the private fallback on port {port} still holds the port after the proxy shut down — " +
-                "the proxy must stop the backend it started, not leave it to the idle watchdog");
+                $"the private fallback on port {port} still holds the port after the proxy shut down — the proxy must stop the backend it started, not leave it to the idle watchdog");
         }
         finally
         {

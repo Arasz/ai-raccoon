@@ -98,7 +98,7 @@ public sealed class ProxyLaunchE2ETests : IAsyncLifetime
         var maintenance = _backend.Services.GetServices<IHostedService>()
             .OfType<BankMaintenanceHostedService>().Single();
         await maintenance.Ticks.WaitAsync(1, TestContext.Current.CancellationToken);
-        var walPath = bank + "-wal";
+        var walPath = $"{bank}-wal";
         (File.Exists(walPath) ? new FileInfo(walPath).Length : 0)
             .ShouldBe(0L, "the startup maintenance pass must have nothing left to checkpoint before the overwrite below races it");
 

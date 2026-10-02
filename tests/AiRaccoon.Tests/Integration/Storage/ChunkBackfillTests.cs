@@ -125,7 +125,7 @@ public sealed class ChunkBackfillTests : IDisposable
 
     private static string Paragraphs(int count) =>
         string.Join("\n\n", Enumerable.Range(0, count).Select(i =>
-            $"Paragraph {i}. " + string.Join(' ', Enumerable.Repeat("memory retrieval budget window", 12))));
+            $"Paragraph {i}. {string.Join(' ', Enumerable.Repeat("memory retrieval budget window", 12))}"));
 
     /// <summary>Over the window the backfill itself splits at — the manifest-aware resolution, not the
     /// legacy static budget — counted in the engine's own tokenizer.</summary>

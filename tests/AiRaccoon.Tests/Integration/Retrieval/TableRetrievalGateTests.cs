@@ -59,8 +59,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
     {
         var (ndcg, mrr) = await ScoreAllAsync(fixture.Bank, reverse: false);
 
-        output.WriteLine($"mean nDCG@5={ndcg.Average():F6} (floor {MeanNdcg5Floor}) " +
-                         $"mean MRR@10={mrr.Average():F6} (floor {MeanMrr10Floor})");
+        output.WriteLine($"mean nDCG@5={ndcg.Average():F6} (floor {MeanNdcg5Floor}) mean MRR@10={mrr.Average():F6} (floor {MeanMrr10Floor})");
         ndcg.Average().ShouldBeGreaterThanOrEqualTo(MeanNdcg5Floor);
         mrr.Average().ShouldBeGreaterThanOrEqualTo(MeanMrr10Floor);
     }
@@ -143,8 +142,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
             .Select((score, index) => Math.Abs(score - perturbed.Ndcg[index]))
             .Count(delta => delta > MovementTolerance);
 
-        output.WriteLine($"{fixture.Bank.Chunks.Count} chunks -> {rechunked.Chunks.Count} chunks; " +
-                         $"{moved}/{baseline.Ndcg.Count} per-query nDCG@5 scores moved");
+        output.WriteLine($"{fixture.Bank.Chunks.Count} chunks -> {rechunked.Chunks.Count} chunks; {moved}/{baseline.Ndcg.Count} per-query nDCG@5 scores moved");
         moved.ShouldBeGreaterThanOrEqualTo(MinimumMovedQueries,
             "a chunking change must move this corpus's scores — a gate that cannot see the change " +
             "under test measures nothing (docs/adr/0077)");
@@ -177,12 +175,10 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
                 SpanAnchoredRelevance.IsFromFile(chunk.SourceFile, query.ExpectedSource));
             spanSizes.Add(span);
             fileGrowth.Add((double)fileAfter / fileBefore);
-            output.WriteLine($"{query.Id}: span-anchored {fixture.Bank.RelevantFor(query).Count} -> {span}; " +
-                             $"whole-file {fileBefore} -> {fileAfter}");
+            output.WriteLine($"{query.Id}: span-anchored {fixture.Bank.RelevantFor(query).Count} -> {span}; whole-file {fileBefore} -> {fileAfter}");
         }
 
-        output.WriteLine($"corpus grew {growth:F1}x; largest span-anchored set {spanSizes.Max()}; " +
-                         $"mean whole-file growth {fileGrowth.Average():F1}x");
+        output.WriteLine($"corpus grew {growth:F1}x; largest span-anchored set {spanSizes.Max()}; mean whole-file growth {fileGrowth.Average():F1}x");
         spanSizes.Max().ShouldBeLessThanOrEqualTo(4,
             "a span-anchored relevance set must stay a handful of chunks however finely the corpus is cut");
         fileGrowth.Average().ShouldBeGreaterThan(spanSizes.Max(),
@@ -225,9 +221,7 @@ public sealed class TableRetrievalGateTests(TableCorpusFixture fixture, ITestOut
             var anchor = bank.Chunks.First(chunk => relevant.Contains(chunk.Hash));
             var tableChars = TableCorpusCatalog.TableLines(anchor.Value).Sum(line => line.Length + 1);
             output.WriteLine(
-                $"{query.Id}: nDCG@5={RetrievalMetrics.NdcgAtK([.. ranked.Take(RankCutoff)], relevant, RankCutoff):F4} " +
-                $"MRR@10={RetrievalMetrics.Mrr(ranked, relevant):F4} relevant={relevant.Count} " +
-                $"anchorTableShare={Math.Min(1.0, (double)tableChars / anchor.Value.Length):F2} {query.ExpectedSource}");
+                $"{query.Id}: nDCG@5={RetrievalMetrics.NdcgAtK([.. ranked.Take(RankCutoff)], relevant, RankCutoff):F4} MRR@10={RetrievalMetrics.Mrr(ranked, relevant):F4} relevant={relevant.Count} anchorTableShare={Math.Min(1.0, (double)tableChars / anchor.Value.Length):F2} {query.ExpectedSource}");
         }
     }
 

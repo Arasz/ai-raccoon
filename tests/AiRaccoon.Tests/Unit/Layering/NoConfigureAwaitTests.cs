@@ -17,7 +17,7 @@ public sealed class NoConfigureAwaitTests
         var root = RepositoryRoot();
         var offenders = new[] { "src", "tests", "benchmarks" }
             .SelectMany(dir => Directory.EnumerateFiles(Path.Combine(root, dir), "*.cs", SearchOption.AllDirectories))
-            .Where(p => !IsBuildOutput(p) && !p.EndsWith(nameof(NoConfigureAwaitTests) + ".cs", StringComparison.Ordinal))
+            .Where(p => !IsBuildOutput(p) && !p.EndsWith($"{nameof(NoConfigureAwaitTests)}.cs", StringComparison.Ordinal))
             .Where(p => File.ReadAllText(p).Contains(".ConfigureAwait(", StringComparison.Ordinal))
             .Select(p => Path.GetRelativePath(root, p).Replace(Path.DirectorySeparatorChar, '/'))
             .Order(StringComparer.Ordinal)

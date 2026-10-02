@@ -1708,8 +1708,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
                     "SELECT hash AS Hash, path AS Path FROM entries WHERE project_id = @winner AND scope = 'project' AND context_label IS NULL",
                     new { winner }))).ToHashSet();
                 actual.SetEquals(expected).ShouldBeTrue(
-                    $"folded mirrors land under {winner} with their content intact " +
-                    $"(expected {expected.Count} distinct keys, found {actual.Count})");
+                    $"folded mirrors land under {winner} with their content intact (expected {expected.Count} distinct keys, found {actual.Count})");
             }
         }
         _mirrorsAssertedOnce = true;

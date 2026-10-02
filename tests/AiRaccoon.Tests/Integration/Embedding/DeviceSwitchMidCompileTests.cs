@@ -71,8 +71,7 @@ public sealed class DeviceSwitchMidCompileTests(ITestOutputHelper output) : IDis
         recompiled.Compile.IsCompleted.ShouldBeTrue();
         OnnxEmbeddingGenerator.GpuGateIsFree().ShouldBeTrue();
 
-        output.WriteLine($"abandoned compile: disposed in {disposeSeconds:F2} s with {startedBuckets} bucket directories started, " +
-                         $"still compiling when coreml restarted: {stillCompiling}");
+        output.WriteLine($"abandoned compile: disposed in {disposeSeconds:F2} s with {startedBuckets} bucket directories started, still compiling when coreml restarted: {stillCompiling}");
         output.WriteLine($"mlx: provider MLX, cosine min {mlxCosine:F6}");
         output.WriteLine($"coreml again: provider CoreML, cosine min {coreMlCosine:F6}, ready in {settleSeconds:F1} s, {settled}");
     }

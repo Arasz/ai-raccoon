@@ -70,8 +70,7 @@ public class LoggerMessageEventIdTests
         var documented = DeclaredCount();
 
         documented.ShouldBe(Entries().Count,
-            $"docs/reference/logging-event-ids.md declares {documented} [LoggerMessage] methods; " +
-            "re-measure it against src/ and update the prose and the table together");
+            $"docs/reference/logging-event-ids.md declares {documented} [LoggerMessage] methods; re-measure it against src/ and update the prose and the table together");
     }
 
     [Fact]
@@ -87,8 +86,7 @@ public class LoggerMessageEventIdTests
             .ToList();
 
         undocumented.ShouldBeEmpty(
-            "these EventIds exist in src/ but fall outside every block in the allocation table: " +
-            string.Join(", ", undocumented));
+            $"these EventIds exist in src/ but fall outside every block in the allocation table: {string.Join(", ", undocumented)}");
     }
 
     private static string Registry() => File.ReadAllText(TestData.RepoFile("docs/reference/logging-event-ids.md"));

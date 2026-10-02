@@ -307,7 +307,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     {
         var real = Ctx.MapPath(virtualPath);
         Directory.CreateDirectory(real);
-        await File.WriteAllTextAsync(Path.Combine(real, IgnoreRulesProvider.FileName), pattern + "\n");
+        await File.WriteAllTextAsync(Path.Combine(real, IgnoreRulesProvider.FileName), $"{pattern}\n");
         await Ctx.SetWatchEnabledGlobalAsync(true);
         await Ctx.AddWatchScopeGlobalAsync(real);
     }
@@ -409,7 +409,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     public async Task WhenIgnoreFileEditedToList(string pattern)
     {
         var ignorePath = Path.Combine(Ctx.RepoDir, IgnoreRulesProvider.FileName);
-        Ctx.WriteFile(ignorePath, pattern + "\n");
+        Ctx.WriteFile(ignorePath, $"{pattern}\n");
         Ctx.Pipeline.Enqueue(new WatchEvent(DefaultProject, ignorePath, WatchEventKind.Changed));
         await Ctx.Pipeline.TickOnceAsync(CancellationToken.None);
         await Ctx.StepUntilAsync(async () => await CountCodeEntriesForPathAsync(_lastFilePath!) == 0);

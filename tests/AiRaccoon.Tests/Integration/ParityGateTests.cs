@@ -95,8 +95,7 @@ public sealed class ParityGateTests(ManagedHarnessFixture fixture, ITestOutputHe
 
         var p95 = TestData.Percentile(fixture.SweepQueryLatenciesMs, 0.95);
         p95.ShouldBeLessThanOrEqualTo(P95LatencyBudgetMs,
-            $"p95 managed query latency {p95:F1} ms exceeds the {P95LatencyBudgetMs:F0} ms budget over " +
-            $"{fixture.SweepQueryLatenciesMs.Count} queries");
+            $"p95 managed query latency {p95:F1} ms exceeds the {P95LatencyBudgetMs:F0} ms budget over {fixture.SweepQueryLatenciesMs.Count} queries");
     }
 
     [Fact]

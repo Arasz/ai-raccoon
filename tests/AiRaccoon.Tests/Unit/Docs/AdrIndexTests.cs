@@ -51,8 +51,8 @@ public class AdrIndexTests
             .Except(RecordedSkips())
             .ToList();
 
-        gaps.ShouldBeEmpty($"docs/adr has unrecorded gaps at {string.Join(", ", gaps.Select(n => n.ToString("D4")))}; " +
-                           "either the file is missing or the skip belongs in the index's \"Numbers never used\" table");
+        gaps.ShouldBeEmpty(
+            $"docs/adr has unrecorded gaps at {string.Join(", ", gaps.Select(n => n.ToString("D4")))}; either the file is missing or the skip belongs in the index's \"Numbers never used\" table");
     }
 
     /// <summary>A recorded skip that a document later filled is a stale note, not a licence.</summary>
@@ -64,8 +64,7 @@ public class AdrIndexTests
         var contradicted = RecordedSkips().Intersect(onDisk.Keys).Order().ToList();
 
         contradicted.ShouldBeEmpty(
-            $"the index records {string.Join(", ", contradicted.Select(n => n.ToString("D4")))} as never used, " +
-            "but those ADRs exist");
+            $"the index records {string.Join(", ", contradicted.Select(n => n.ToString("D4")))} as never used, but those ADRs exist");
     }
 
     /// <summary>
@@ -89,9 +88,7 @@ public class AdrIndexTests
             .ToList();
 
         lying.ShouldBeEmpty(
-            $"the index records {string.Join(", ", lying.Select(n => n.ToString("D4")))} as superseded or " +
-            "reversed, but the ADR's own Status line still reads Accepted — a reader who opens the file " +
-            "directly sees a live decision. Follow ADR-0002's pattern and say so in the Status line");
+            $"the index records {string.Join(", ", lying.Select(n => n.ToString("D4")))} as superseded or reversed, but the ADR's own Status line still reads Accepted — a reader who opens the file directly sees a live decision. Follow ADR-0002's pattern and say so in the Status line");
     }
 
     /// <summary>ADRs whose own index row says they were superseded or reversed *by* something else.</summary>

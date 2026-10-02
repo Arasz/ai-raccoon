@@ -177,7 +177,7 @@ public sealed class ReingestRepairTests : IDisposable
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var id = await connection.ExecuteScalarAsync<long>(
             "SELECT id FROM entries WHERE source_file = @file ORDER BY id LIMIT 1", new { file });
-        var staleHash = "stale-" + Guid.NewGuid().ToString("N");
+        var staleHash = $"stale-{Guid.NewGuid():N}";
         await connection.ExecuteAsync(
             "UPDATE entries SET hash = @staleHash, chunk_index = -1 WHERE id = @id", new { staleHash, id });
         return staleHash;

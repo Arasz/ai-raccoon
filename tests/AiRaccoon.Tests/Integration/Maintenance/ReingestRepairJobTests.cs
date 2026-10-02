@@ -119,7 +119,7 @@ public sealed class ReingestRepairJobTests : IDisposable
             TestContext.Current.CancellationToken);
         await _memoryStore.IngestFileAsync(ProjectId, file, null, TestContext.Current.CancellationToken);
 
-        var staleHash = "stale-" + Guid.NewGuid().ToString("N");
+        var staleHash = $"stale-{Guid.NewGuid():N}";
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var id = await connection.ExecuteScalarAsync<long>(
             "SELECT id FROM entries WHERE source_file = @file ORDER BY id LIMIT 1", new { file });

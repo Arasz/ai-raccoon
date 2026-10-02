@@ -27,7 +27,7 @@ public sealed class EvidenceCarryChainTests
         string hash,
         double ranking,
         string? sourceFile = null,
-        int chunkIndex = 0) => new(hash, ranking, hash + ".md", "snippet", sourceFile, chunkIndex);
+        int chunkIndex = 0) => new(hash, ranking, $"{hash}.md", "snippet", sourceFile, chunkIndex);
 
     /// <summary>
     ///     The S1 capture fixture: "lone" fires in both legs at rank 1 (strength 1.0),

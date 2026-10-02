@@ -41,8 +41,7 @@ public sealed class Vec0PartitionKeyProbe : IDisposable
         if (Environment.GetEnvironmentVariable(RunEnvVar) is null)
         {
             _output.WriteLine(
-                $"{RunEnvVar} not set — this probe measures vec0 chunk allocation and KNN latency for "
-                + "three partition shapes (WP5). It asserts nothing about the product; set the variable to run it.");
+                $"{RunEnvVar} not set — this probe measures vec0 chunk allocation and KNN latency for three partition shapes (WP5). It asserts nothing about the product; set the variable to run it.");
             return;
         }
 
@@ -102,13 +101,11 @@ public sealed class Vec0PartitionKeyProbe : IDisposable
             ("metadata-ctx", "ctx TEXT, embedding float[384] distance_metric=cosine", row => row.Item2)
         };
 
-        _output.WriteLine($"corpus: {vectors.Count} vectors, "
-                          + $"{vectors.Select(v => v.Ctx).Distinct().Count()} distinct ctx, "
-                          + $"{vectors.Select(v => v.Scope).Distinct().Count()} distinct scope");
+        _output.WriteLine($"corpus: {vectors.Count} vectors, {vectors.Select(v => v.Ctx).Distinct().Count()} distinct ctx, {vectors.Select(v => v.Scope).Distinct().Count()} distinct scope");
 
         foreach (var (name, ddl, key) in shapes)
         {
-            var table = "probe_" + name.Split(' ')[0].Replace('-', '_');
+            var table = $"probe_{name.Split(' ')[0].Replace('-', '_')}";
             await connection.ExecuteAsync($"CREATE VIRTUAL TABLE {table} USING vec0({ddl});");
 
             var partitioned = !ddl.StartsWith("embedding", StringComparison.Ordinal);

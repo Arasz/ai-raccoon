@@ -70,12 +70,10 @@ public sealed class CliSettingsSharedBackendTests : IAsyncLifetime
 
             var info = await FetchServerInfoAsync(_port, TestContext.Current.CancellationToken);
             info.ShouldNotBeNull(
-                $"command {i} left no shared backend answering on the configured port {_port} — it must have " +
-                "started its own instead of attaching");
+                $"command {i} left no shared backend answering on the configured port {_port} — it must have started its own instead of attaching");
             firstPid ??= info!.Pid;
             info!.Pid.ShouldBe(firstPid.Value,
-                $"command {i} was served by pid {info.Pid}, not the backend (pid {firstPid}) the first command " +
-                "left running on the configured port — each command started its own backend instead of reusing one");
+                $"command {i} was served by pid {info.Pid}, not the backend (pid {firstPid}) the first command left running on the configured port — each command started its own backend instead of reusing one");
         }
     }
 

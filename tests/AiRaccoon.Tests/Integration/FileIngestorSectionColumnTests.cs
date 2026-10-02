@@ -36,7 +36,7 @@ public class FileIngestorSectionColumnTests : IDisposable
 
     public FileIngestorSectionColumnTests()
     {
-        _testDir = Path.Combine(Path.GetTempPath(), "airaccoon_section_test_" + Guid.NewGuid().ToString("N"));
+        _testDir = Path.Combine(Path.GetTempPath(), $"airaccoon_section_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testDir);
 
         var opts = new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User };

@@ -123,8 +123,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
             if (fakeSpent >= TimeSpan.FromSeconds(maxFakeSeconds))
             {
                 TestContext.Current.TestOutputHelper?.WriteLine(
-                    $"StepUntilAsync gave up after {steps} steps: fake-time budget expired " +
-                    $"(fake {fakeSpent.TotalSeconds:F1}s/{maxFakeSeconds}s)");
+                    $"StepUntilAsync gave up after {steps} steps: fake-time budget expired (fake {fakeSpent.TotalSeconds:F1}s/{maxFakeSeconds}s)");
                 return false;
             }
 

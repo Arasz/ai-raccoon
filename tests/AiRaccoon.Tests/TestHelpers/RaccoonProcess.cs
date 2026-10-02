@@ -73,8 +73,7 @@ public static class RaccoonProcess
             KillTree(process);
             var (killedOut, killedErr) = (await DrainAsync(stdout), await DrainAsync(stderr));
             throw new TimeoutException(
-                $"'{executable}' did not exit within {hardCap}; its process tree was killed. " +
-                $"stderr: {killedErr} stdout: {killedOut}");
+                $"'{executable}' did not exit within {hardCap}; its process tree was killed. stderr: {killedErr} stdout: {killedOut}");
         }
         finally
         {

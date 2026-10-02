@@ -27,8 +27,7 @@ public sealed class CorpusFixtureGuardTests
         var path = Path.Combine(RepoRoot(), ForbiddenBankRelativePath);
 
         File.Exists(path).ShouldBeFalse(
-            $"{ForbiddenBankRelativePath} is a bank built from the private job-search-ai-assistant " +
-            "tree (ai-raccoon#414). It must never be committed again — see ADR-0090.");
+            $"{ForbiddenBankRelativePath} is a bank built from the private job-search-ai-assistant tree (ai-raccoon#414). It must never be committed again — see ADR-0090.");
     }
 
     [Fact]
@@ -45,8 +44,7 @@ public sealed class CorpusFixtureGuardTests
             .ToList();
 
         offenders.ShouldBeEmpty(
-            "no test source may name the private jsaa bank; the public corpus is Resources/docs-memory.db " +
-            $"(ADR-0090). Offenders: {string.Join(", ", offenders)}");
+            $"no test source may name the private jsaa bank; the public corpus is Resources/docs-memory.db (ADR-0090). Offenders: {string.Join(", ", offenders)}");
     }
 
     // Measured 2026-08-22 on arm64: 17 231 872 bytes from 199 tracked doc files / 2049 chunks.
@@ -69,11 +67,9 @@ public sealed class CorpusFixtureGuardTests
 
         var bytes = new FileInfo(path).Length;
         bytes.ShouldBeLessThanOrEqualTo(BankCeilingBytes,
-            $"docs-memory.db is {bytes:N0} bytes; measured {MeasuredBankBytes:N0} when pinned. " +
-            "A jump means the corpus selection widened — check scripts/src/corpus_config.py.");
+            $"docs-memory.db is {bytes:N0} bytes; measured {MeasuredBankBytes:N0} when pinned. A jump means the corpus selection widened — check scripts/src/corpus_config.py.");
         bytes.ShouldBeGreaterThanOrEqualTo(BankFloorBytes,
-            $"docs-memory.db is only {bytes:N0} bytes; measured {MeasuredBankBytes:N0} when pinned. " +
-            "A collapse means the selection lost a glob, and the rank gates now pass on almost nothing.");
+            $"docs-memory.db is only {bytes:N0} bytes; measured {MeasuredBankBytes:N0} when pinned. A collapse means the selection lost a glob, and the rank gates now pass on almost nothing.");
     }
 
     private static bool IsBuildOutput(string path) =>

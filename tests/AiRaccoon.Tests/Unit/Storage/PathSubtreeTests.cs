@@ -17,15 +17,15 @@ public sealed class PathSubtreeTests
     private const string Dir = "/repo/.ai-badger/task-tracking/tracking.db";
 
     [Theory]
-    [InlineData(Dir + "/a.md", true)]
-    [InlineData(Dir + "/deep/er/b.md", true)]
-    [InlineData(Dir + "/", true)]
+    [InlineData($"{Dir}/a.md", true)]
+    [InlineData($"{Dir}/deep/er/b.md", true)]
+    [InlineData($"{Dir}/", true)]
     [InlineData(Dir, false)]
-    [InlineData(Dir + "-shm", false)]
-    [InlineData(Dir + "-wal", false)]
-    [InlineData(Dir + ".bak", false)]
-    [InlineData(Dir + "0", false)]
-    [InlineData(Dir + "_x/c.md", false)]
+    [InlineData($"{Dir}-shm", false)]
+    [InlineData($"{Dir}-wal", false)]
+    [InlineData($"{Dir}.bak", false)]
+    [InlineData($"{Dir}0", false)]
+    [InlineData($"{Dir}_x/c.md", false)]
     [InlineData("/repo/.ai-badger/task-tracking/tracking.dc/a.md", false)]
     public void Range_HoldsExactlyThePathsUnderTheDirectory(string candidate, bool expected)
     {
@@ -51,6 +51,6 @@ public sealed class PathSubtreeTests
             .ShouldNotBeEmpty("no MemorySql query cascades over a path subtree any more");
         var likePrefixes = queries.Where(q => q.Sql.Contains("path LIKE @", StringComparison.Ordinal))
             .Select(q => q.Name).ToList();
-        likePrefixes.ShouldBeEmpty("these path cascades still use LIKE: " + string.Join(", ", likePrefixes));
+        likePrefixes.ShouldBeEmpty($"these path cascades still use LIKE: {string.Join(", ", likePrefixes)}");
     }
 }

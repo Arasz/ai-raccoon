@@ -77,7 +77,7 @@ public sealed class SqliteProjectRegistryTests : IDisposable
     [RetryFact]
     public async Task RegisterAsync_StoresTheCanonicalLowercaseDForm()
     {
-        var braced = "{" + GuidV7.ToUpperInvariant() + "}";
+        var braced = $"{{{GuidV7.ToUpperInvariant()}}}";
 
         await _registry.RegisterAsync(braced, null, TestContext.Current.CancellationToken);
 

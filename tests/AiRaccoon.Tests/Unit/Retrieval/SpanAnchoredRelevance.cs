@@ -44,9 +44,7 @@ public static class SpanAnchoredRelevance
         if (relevant.Count == 0)
         {
             throw new InvalidOperationException(
-                $"SpanAnchoredRelevance: no chunk of '{expectedSource}' ({ofFile.Count} chunks) carries the " +
-                $"answer span '{Truncate(answerSpan)}'. Either the span straddles a chunk boundary under this " +
-                "arm — a real finding to record, not to paper over — or the graded span no longer matches the source.");
+                $"SpanAnchoredRelevance: no chunk of '{expectedSource}' ({ofFile.Count} chunks) carries the answer span '{Truncate(answerSpan)}'. Either the span straddles a chunk boundary under this arm — a real finding to record, not to paper over — or the graded span no longer matches the source.");
         }
 
         return relevant;

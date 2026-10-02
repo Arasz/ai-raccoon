@@ -325,7 +325,7 @@ public class MarkdownChunkerDeferralTests
     {
         // #549: the 200-char line cannot sit beside "## Section A", so the text is cut mid-word
         // into headerless chunks; their label comes from the heading context, not their text.
-        var text = "# Title\n\n## Section A\n" + new string('x', 200) + "\n";
+        var text = $"# Title\n\n## Section A\n{new string('x', 200)}\n";
 
         var chunks = new MarkdownChunker(CharCount).ChunkWithHeadings(text, 30);
 

@@ -87,7 +87,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
             source_locator TEXT NOT NULL,
             section TEXT NULL,
             heading_path TEXT NULL);
-        {{(withAliasTable ? ProjectIdAliases.TableDdl + ";" : "")}}
+        {{(withAliasTable ? $"{ProjectIdAliases.TableDdl};" : "")}}
         """;
 
     private async Task CreateBankAsync(string path, bool withAliasTable, CancellationToken ct,
@@ -157,8 +157,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         await CreateBankAsync(BankPath, withAliasTable: true, ct);
         await CreateBankAsync(RemotePath, withAliasTable: true, ct);
         await ExecAsync(RemotePath,
-            "INSERT INTO project_id_aliases (alias, winner, kind, applied_at) VALUES " +
-            $"('{Loser}', '{Winner}', 'alias', 1), ('{Dropped}', NULL, 'drop', 1)", ct);
+            $"INSERT INTO project_id_aliases (alias, winner, kind, applied_at) VALUES ('{Loser}', '{Winner}', 'alias', 1), ('{Dropped}', NULL, 'drop', 1)", ct);
 
         var cloud = new FakeCloudStore();
         cloud.Set("test-object", await File.ReadAllBytesAsync(RemotePath, ct));
@@ -185,8 +184,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
             $"INSERT INTO project_id_aliases (alias, winner, kind, applied_at) VALUES ('{Loser}', '{Winner}', 'alias', 1)",
             ct);
         await ExecAsync(RemotePath,
-            "INSERT INTO project_id_aliases (alias, winner, kind, applied_at) VALUES " +
-            $"('{Loser}', '{Winner}', 'alias', 2), ('remote-only', 'remote-winner', 'alias', 2)", ct);
+            $"INSERT INTO project_id_aliases (alias, winner, kind, applied_at) VALUES ('{Loser}', '{Winner}', 'alias', 2), ('remote-only', 'remote-winner', 'alias', 2)", ct);
 
         var cloud = new FakeCloudStore();
         cloud.Set("test-object", await File.ReadAllBytesAsync(RemotePath, ct));
@@ -284,8 +282,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         await CreateBankAsync(BankPath, withAliasTable: true, ct);
         await ExecAsync(BankPath,
-            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) " +
-            $"VALUES ('loser-hash', 'loser.md', 'loser content', 'project', '{Loser}', 1, 1)", ct);
+            $"INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) VALUES ('loser-hash', 'loser.md', 'loser content', 'project', '{Loser}', 1, 1)", ct);
         await ExecAsync(BankPath,
             $"INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES ('{Loser}', 'gone-hash', 'project', 1)",
             ct);
@@ -314,11 +311,9 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         await CreateBankAsync(BankPath, withAliasTable: true, ct);
         await ExecAsync(BankPath,
-            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) " +
-            $"VALUES ('twin-hash', 'twin.md', 'twin content', 'project', '{Loser}', 1, 1)", ct);
+            $"INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) VALUES ('twin-hash', 'twin.md', 'twin content', 'project', '{Loser}', 1, 1)", ct);
         await ExecAsync(BankPath,
-            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) " +
-            $"VALUES ('twin-hash', 'twin.md', 'twin content', 'project', '{Winner}', 1, 1)", ct);
+            $"INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) VALUES ('twin-hash', 'twin.md', 'twin content', 'project', '{Winner}', 1, 1)", ct);
 
         var cloud = new FakeCloudStore();
         await NewService(cloud, FixtureMap()).MemorySyncAsync("acme", "test-object", ct);
@@ -372,8 +367,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         await CreateBankAsync(BankPath, withAliasTable: true, ct);
         await ExecAsync(BankPath,
-            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) " +
-            $"VALUES ('shared-hash', 'shared.md', 'shared content', 'shared', '{Loser}', 1, 1)", ct);
+            $"INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) VALUES ('shared-hash', 'shared.md', 'shared content', 'shared', '{Loser}', 1, 1)", ct);
 
         var cloud = new FakeCloudStore();
         await NewService(cloud, FixtureMap()).MemorySyncAsync("acme", "test-object", ct);
@@ -397,8 +391,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         await CreateBankAsync(BankPath, withAliasTable: true, ct);
         await CreateBankAsync(RemotePath, withAliasTable: true, ct);
         await ExecAsync(RemotePath,
-            "INSERT INTO entries (hash, path, value, scope, project_id, context_label, created_at, updated_at) " +
-            $"VALUES ('custom-hash', 'custom.md', 'custom content', 'custom', '{Loser}', 'notes', 1, 1)", ct);
+            $"INSERT INTO entries (hash, path, value, scope, project_id, context_label, created_at, updated_at) VALUES ('custom-hash', 'custom.md', 'custom content', 'custom', '{Loser}', 'notes', 1, 1)", ct);
 
         var cloud = new FakeCloudStore();
         cloud.Set("test-object", await File.ReadAllBytesAsync(RemotePath, ct));
@@ -487,8 +480,7 @@ public sealed class SyncServiceAliasMapTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         await CreateBankAsync(BankPath, withAliasTable: true, ct);
         await ExecAsync(BankPath,
-            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) " +
-            $"VALUES ('loser-hash', 'loser.md', 'loser content', 'project', '{Loser}', 1, 1)", ct);
+            $"INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) VALUES ('loser-hash', 'loser.md', 'loser content', 'project', '{Loser}', 1, 1)", ct);
 
         var cloud = new FakeCloudStore();
         await NewService(cloud, ProjectIdAliasMap.Empty).MemorySyncAsync("acme", "test-object", ct);

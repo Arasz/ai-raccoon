@@ -190,8 +190,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         chosen.S2FileRank.ShouldNotBeNull("S2 expected file must appear in the top 10");
         chosen.S2FileRank!.Value.ShouldBeLessThanOrEqualTo(3, "S2 expected file must rank <= 3 (re-pinned)");
         chosen.ExactAt3Count.ShouldBeGreaterThanOrEqualTo(14,
-            $"exact-chunk @3 must hold >= 14/19 (measured on the public corpus; jsaa was 4/11); " +
-            $"got {chosen.ExactAt3Count}/19");
+            $"exact-chunk @3 must hold >= 14/19 (measured on the public corpus; jsaa was 4/11); got {chosen.ExactAt3Count}/19");
 
         // Gate (a): grid-optimality on the re-pinned corpus (docs/adr/0006-rrf-parameter-optimization.md);
         // no grid point beats the chosen point while holding the gates.
@@ -227,16 +226,13 @@ public sealed class RrfParameterSweepTests : IDisposable
         var beaters = rows.Where(row => row.AdrNdcg5 > chosen.AdrNdcg5 && HoldsAllGates(row)).ToList();
         _output.WriteLine(beaters.Count == 0
             ? "grid-optimality holds: no gate-holding point beats the chosen point."
-            : $"grid-optimality FINDING (WP3b handoff): {beaters.Count} gate-holding point(s) beat the " +
-              $"chosen point on nDCG@5, up to {beaters.Max(row => row.AdrNdcg5):F3} " +
-              $"(best: {beaters.OrderByDescending(row => row.AdrNdcg5).First().Point}).");
+            : $"grid-optimality FINDING (WP3b handoff): {beaters.Count} gate-holding point(s) beat the chosen point on nDCG@5, up to {beaters.Max(row => row.AdrNdcg5):F3} (best: {beaters.OrderByDescending(row => row.AdrNdcg5).First().Point}).");
 
         _output.WriteLine($"pinned-vector AdrNdcg5 (exact) = {chosen.AdrNdcg5:R}");
         _output.WriteLine(
             $"chosen k={ChosenK} w={ChosenFtsWeight}:{ChosenVectorWeight} minScore={ChosenMinScore} window={ChosenWindow}: nDCG@5={chosen.AdrNdcg5:F3} MRR={chosen.AdrMrr:F3} recall@5={chosen.AdrRecall5:F3} C2={chosen.C2ExactRank} exact@3={chosen.ExactAt3Count}/11 S2={chosen.S2ExactRank} A6 file={chosen.A6FileRank} exact={chosen.A6ExactRank} A1/A4 file={chosen.A1FileRank}/{chosen.A4FileRank} A7 exact={chosen.A7ExactRank}");
         _output.WriteLine(
-            $"grid-optimality: {holders.Count} gate-holding points; {beaters.Count} beat the chosen point's " +
-            $"nDCG@5 while still holding every gate (see the FINDING line above).");
+            $"grid-optimality: {holders.Count} gate-holding points; {beaters.Count} beat the chosen point's nDCG@5 while still holding every gate (see the FINDING line above).");
 
         var top = rows.OrderByDescending(r => r.AdrNdcg5).Take(5);
         foreach (var row in top)
@@ -476,8 +472,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         builder.AppendLine("Measured by RrfParameterSweepTests (limit 10, Wave 3 source-affinity fixed at λ=0.1, thr=0.1, Max).");
         builder.AppendLine();
         builder.AppendLine(
-            $"**Chosen configuration: k = {ChosenK}, weights = {ChosenFtsWeight}:{ChosenVectorWeight}, minScore = {ChosenMinScore.ToString("0.0", invariant)}, candidate window = {ChosenWindow}** (the SearchQuery defaults). " +
-            "**No longer the grid optimum on the regenerated corpus — see the finding below.**");
+            $"**Chosen configuration: k = {ChosenK}, weights = {ChosenFtsWeight}:{ChosenVectorWeight}, minScore = {ChosenMinScore.ToString("0.0", invariant)}, candidate window = {ChosenWindow}** (the SearchQuery defaults). **No longer the grid optimum on the regenerated corpus — see the finding below.**");
         builder.AppendLine();
         builder.AppendLine("Gates at the chosen point: C1 exact = 1 ✓, C5 exact ≤ 5 ✓, no fusion regression on A1/A2/A4/C1 " +
                            "(hybrid exact ≤ best single modality) ✓, A1 file ≤ 2 ✓ (re-pinned from 1), A4 file = 1 ✓, " +
@@ -497,9 +492,7 @@ public sealed class RrfParameterSweepTests : IDisposable
 
         builder.AppendLine();
         builder.AppendLine(
-            $"Chosen point on the regenerated corpus (k=60, 1:1, minScore=0.0, Max3x100): nDCG@5 {current.AdrNdcg5.ToString("0.000", invariant)}, MRR {current.AdrMrr.ToString("0.000", invariant)}, recall@5 {current.AdrRecall5.ToString("0.000", invariant)} " +
-            "— down from the pre-regeneration Wave 3 merged state (0.722 / 0.929 / 0.617; re-pinned once already to 0.674 " +
-            "/ 0.881 / 0.564 for the 2026-08-06 corpus re-pin, see docs/adr/0006-rrf-parameter-optimization.md).");
+            $"Chosen point on the regenerated corpus (k=60, 1:1, minScore=0.0, Max3x100): nDCG@5 {current.AdrNdcg5.ToString("0.000", invariant)}, MRR {current.AdrMrr.ToString("0.000", invariant)}, recall@5 {current.AdrRecall5.ToString("0.000", invariant)} — down from the pre-regeneration Wave 3 merged state (0.722 / 0.929 / 0.617; re-pinned once already to 0.674 / 0.881 / 0.564 for the 2026-08-06 corpus re-pin, see docs/adr/0006-rrf-parameter-optimization.md).");
         builder.AppendLine();
         builder.AppendLine("### Fusion gate at the chosen point (hybrid vs single modalities)");
         builder.AppendLine();
@@ -523,12 +516,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         {
             var best = reportBeaters.OrderByDescending(row => row.AdrNdcg5).First();
             builder.AppendLine(
-                $"- {reportBeaters.Count} gate-holding points beat the chosen point's nDCG@5 ({chosen.AdrNdcg5:F3}); " +
-                $"the best is {best.Point} at nDCG@5 {best.AdrNdcg5:F3} / MRR {best.AdrMrr:F3}. This is WP4 " +
-                "(docs/plans/2026-08-14-code-quality-improvement-plan.md) regenerating the corpus through the " +
-                "production FileIngestor, not a re-tune of RRF parameters — that is WP3b's mandate " +
-                "(\"measured on WP4's corpus\"), so the chosen defaults are left as-is here and this gap is " +
-                "reported rather than silently re-picked.");
+                $"- {reportBeaters.Count} gate-holding points beat the chosen point's nDCG@5 ({chosen.AdrNdcg5:F3}); the best is {best.Point} at nDCG@5 {best.AdrNdcg5:F3} / MRR {best.AdrMrr:F3}. This is WP4 (docs/plans/2026-08-14-code-quality-improvement-plan.md) regenerating the corpus through the production FileIngestor, not a re-tune of RRF parameters — that is WP3b's mandate (\"measured on WP4's corpus\"), so the chosen defaults are left as-is here and this gap is reported rather than silently re-picked.");
         }
 
         builder.AppendLine(
@@ -572,8 +560,7 @@ public sealed class RrfParameterSweepTests : IDisposable
         }
 
         throw new InvalidOperationException(
-            $"ParseExpectedSource: unrecognized prefix in '{expectedSource}' — add a case if a new " +
-            "RrfGateQueryIds entry needs it.");
+            $"ParseExpectedSource: unrecognized prefix in '{expectedSource}' — add a case if a new RrfGateQueryIds entry needs it.");
     }
 
     private static BaselineQuery[] LoadQueries() =>

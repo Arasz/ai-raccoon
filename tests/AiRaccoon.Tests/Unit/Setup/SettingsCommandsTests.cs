@@ -491,8 +491,7 @@ public class SettingsCommandsTests
         var (exit, stdout, _) = await Run(["settings", "queryguard", "show"], new FakeConfigStore());
 
         exit.ShouldBe(0);
-        stdout.Trim().ShouldBe("enabled: True  shadow: False  structural: False  " +
-                               $"threshold: {QueryGuardConfigKeys.DefaultStructuralThreshold.ToString(CultureInfo.InvariantCulture)}");
+        stdout.Trim().ShouldBe($"enabled: True  shadow: False  structural: False  threshold: {QueryGuardConfigKeys.DefaultStructuralThreshold.ToString(CultureInfo.InvariantCulture)}");
     }
 
     /// <summary>The kill switch round-trips through the same parse MemoryTools.Search reads it with.</summary>

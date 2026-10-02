@@ -73,7 +73,7 @@ public sealed class CodeChunkerTests
             "",
             "public void Small() { }"
         };
-        var text = string.Join('\n', lines) + "\n";
+        var text = $"{string.Join('\n', lines)}\n";
 
         var chunks = Chunker(CodeChunker.DefaultBudget).Chunk(text);
 
@@ -93,10 +93,10 @@ public sealed class CodeChunkerTests
         CodeChunker.DefaultBudget.ShouldNotBe(126,
             "126 came from the spike's '128-token hard cap', which the graph contradicts");
 
-        var overBudget = Chunker(CodeChunker.DefaultBudget).Chunk(new string('x', 800) + "\n");
+        var overBudget = Chunker(CodeChunker.DefaultBudget).Chunk($"{new string('x', 800)}\n");
         overBudget.Count.ShouldBeGreaterThanOrEqualTo(2, "an 800-char line exceeds the 510 budget and must split");
 
-        var underBudget = Chunker(CodeChunker.DefaultBudget).Chunk(new string('y', 500) + "\n");
+        var underBudget = Chunker(CodeChunker.DefaultBudget).Chunk($"{new string('y', 500)}\n");
         underBudget.Count.ShouldBe(1, "a 500-char line fits the 510 budget in one chunk");
     }
 
@@ -106,7 +106,7 @@ public sealed class CodeChunkerTests
         var contentLines = Enumerable.Range(1, 40)
             .Select(i => i % 5 == 0 ? "" : $"statement{i:D2}();")
             .ToList();
-        var text = string.Join('\n', contentLines) + "\n";
+        var text = $"{string.Join('\n', contentLines)}\n";
 
         var chunks = Chunker(60).Chunk(text);
 
@@ -123,7 +123,7 @@ public sealed class CodeChunkerTests
     public void Chunk_LineRanges_WithAHardSplitLine_StillCoverTheFile_OnlyTheSplitLineRepeats()
     {
         var lines = new List<string> { "a();", "b();", new string('z', 300), "c();" };
-        var text = string.Join('\n', lines) + "\n";
+        var text = $"{string.Join('\n', lines)}\n";
 
         // Its own budget, not DefaultBudget: this pins hard-split line accounting, and a budget wide
         // enough to swallow the long line would leave the split path untested while still passing.
@@ -144,7 +144,7 @@ public sealed class CodeChunkerTests
     public void Chunk_BlankLines_ArePreferredSplitPoints()
     {
         var blocks = new[] { "void A() { }", "void B() { }", "void C() { }", "void D() { }", "void E() { }" };
-        var text = string.Join("\n\n", blocks) + "\n";
+        var text = $"{string.Join("\n\n", blocks)}\n";
 
         var chunks = Chunker(30).Chunk(text);
         var chunkerLines = SplitIntoChunkerLines(text);
@@ -177,7 +177,7 @@ public sealed class CodeChunkerTests
     [Fact]
     public void Chunk_SingleLineOverflow_HardSplitsTheLine()
     {
-        var text = new string('x', 300) + "\n";
+        var text = $"{new string('x', 300)}\n";
 
         // See the note in Chunk_LineRanges_WithAHardSplitLine: the split path needs a budget the
         // fixture actually overflows, independent of what DefaultBudget happens to be.
@@ -222,7 +222,7 @@ public sealed class CodeChunkerTests
         lines.AddRange(Enumerable.Range(0, 40).Select(i => $"        statement{i:D2} = compute({i});"));
         lines.Add("    }");
         lines.Add("}");
-        var text = string.Join('\n', lines) + "\n";
+        var text = $"{string.Join('\n', lines)}\n";
 
         var chunks = Chunker(CodeChunker.DefaultBudget).Chunk(text);
 
@@ -266,7 +266,7 @@ public sealed class CodeChunkerTests
     [Fact]
     public void Chunk_OverBudgetLineOfIdentifiers_SplitsBetweenIdentifiers()
     {
-        var line = string.Join(" ", Enumerable.Range(0, 40).Select(i => $"register_handler_{i:D2}")) + "\n";
+        var line = $"{string.Join(" ", Enumerable.Range(0, 40).Select(i => $"register_handler_{i:D2}"))}\n";
 
         var chunks = Chunker(90).Chunk(line);
 

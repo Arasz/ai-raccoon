@@ -88,7 +88,7 @@ public sealed class EndpointGuardTests : IAsyncLifetime
         [
             .. _app.Services.GetRequiredService<EndpointDataSource>().Endpoints
                 .OfType<RouteEndpoint>()
-                .Select(endpoint => "/" + endpoint.RoutePattern.RawText?.TrimStart('/'))
+                .Select(endpoint => $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}")
                 .Distinct(StringComparer.Ordinal)
                 .Order(StringComparer.Ordinal)
         ];

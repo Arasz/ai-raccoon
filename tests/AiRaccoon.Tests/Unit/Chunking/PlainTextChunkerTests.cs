@@ -30,7 +30,7 @@ public class PlainTextChunkerTests
     [InlineData("~~~\n")]
     public void Chunk_FenceMarkerLines_AreKeptVerbatim(string marker)
     {
-        var text = "intro line\n" + marker + string.Concat(Enumerable.Range(0, 30).Select(i => $"line {i} of a log\n"));
+        var text = $"intro line\n{marker}{string.Concat(Enumerable.Range(0, 30).Select(i => $"line {i} of a log\n"))}";
 
         var chunks = new PlainTextChunker(CharCount).Chunk(text, 60);
 
@@ -43,8 +43,7 @@ public class PlainTextChunkerTests
     public void Chunk_TextWithoutMarkdownSyntax_MatchesTheMarkdownChunker(int overlayTokens)
     {
         var text = string.Join("\n\n", Enumerable.Range(0, 12).Select(i =>
-            $"Paragraph {i}: the harbour log records tides, fog and the ferry timetable for the week.\n"
-            + new string('x', i * 9)));
+            $"Paragraph {i}: the harbour log records tides, fog and the ferry timetable for the week.\n{new string('x', i * 9)}"));
 
         var plain = new PlainTextChunker(CharCount).Chunk(text, 120, overlayTokens);
         var markdown = new MarkdownChunker(CharCount).Chunk(text, 120, overlayTokens);

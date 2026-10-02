@@ -29,8 +29,7 @@ internal sealed class FakeClockPoller(FakeTimeProvider time)
             if (fakeSpent >= TimeSpan.FromSeconds(maxFakeSeconds))
             {
                 onGiveUp?.Invoke(
-                    $"StepUntilAsync gave up after {steps} steps: fake-time budget expired " +
-                    $"(fake {fakeSpent.TotalSeconds:F1}s/{maxFakeSeconds}s)");
+                    $"StepUntilAsync gave up after {steps} steps: fake-time budget expired (fake {fakeSpent.TotalSeconds:F1}s/{maxFakeSeconds}s)");
                 return false;
             }
 

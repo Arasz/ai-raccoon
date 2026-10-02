@@ -119,7 +119,7 @@ public sealed class ModelSetLocalDirectoryValidationTests
     [Fact]
     public async Task ModelSetLocal_LegacyOnnxFile_IsUnchanged()
     {
-        var file = Path.Combine(Path.GetTempPath(), "ai-raccoon-model-set-tests", Guid.NewGuid().ToString("N") + ".onnx");
+        var file = Path.Combine(Path.GetTempPath(), "ai-raccoon-model-set-tests", $"{Guid.NewGuid():N}.onnx");
         File.WriteAllText(file, "model");
         var store = new FakeConfigStore();
 

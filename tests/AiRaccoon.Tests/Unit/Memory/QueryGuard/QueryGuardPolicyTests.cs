@@ -94,7 +94,7 @@ public class QueryGuardPolicyTests
     [Fact]
     public void Evaluate_WithLeadingWhitespaceBeforeTheHermesPrefix_StillRefuses()
     {
-        var verdict = QueryGuardPolicy.Evaluate("   " + RealHermesProcessNotification);
+        var verdict = QueryGuardPolicy.Evaluate($"   {RealHermesProcessNotification}");
 
         verdict.Tier.ShouldBe(QueryGuardTier.Refuse);
     }

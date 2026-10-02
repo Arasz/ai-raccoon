@@ -62,7 +62,7 @@ internal static class TableChunkingArms
                     sentence.Append(cells[i].EndsWith('.') ? " " : ". ");
                 }
 
-                return sentence.ToString().TrimEnd() + "\n";
+                return $"{sentence.ToString().TrimEnd()}\n";
             })
         ];
     }
@@ -180,6 +180,6 @@ internal static class TableChunkingArms
             return dashes > 0;
         }
 
-        private static string WithNewline(string line) => line.EndsWith('\n') ? line : line + "\n";
+        private static string WithNewline(string line) => line.EndsWith('\n') ? line : $"{line}\n";
     }
 }

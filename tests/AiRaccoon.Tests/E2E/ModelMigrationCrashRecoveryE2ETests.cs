@@ -215,11 +215,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         if (!relayStarted)
         {
             relayStarted.ShouldBeTrue(
-                "the migration relay never acquired the drain lease within " + RelayStartCap +
-                " — no row ever moved (or the drain finished before this test could observe it); " +
-                "the captured serve logs and bank ledger say whether the poll never ran (513) or " +
-                "every attempt failed (526):" + Environment.NewLine +
-                await BuildEvidenceAsync());
+                $"the migration relay never acquired the drain lease within {RelayStartCap} — no row ever moved (or the drain finished before this test could observe it); the captured serve logs and bank ledger say whether the poll never ran (513) or every attempt failed (526):{Environment.NewLine}{await BuildEvidenceAsync()}");
         }
 
         // Phase 2 — kill the instant some rows have moved but not all: proof the kill lands inside
@@ -244,10 +240,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         if (!caughtMidDrain)
         {
             caughtMidDrain.ShouldBeTrue(
-                "the relay held the lease for " + PartialDrainCap + " without an observable " +
-                "partial drain — the first batch never completed, or the drain finished between " +
-                "polls; the counts and logs below say which:" + Environment.NewLine +
-                await BuildEvidenceAsync());
+                $"the relay held the lease for {PartialDrainCap} without an observable partial drain — the first batch never completed, or the drain finished between polls; the counts and logs below say which:{Environment.NewLine}{await BuildEvidenceAsync()}");
         }
 
         embeddedAtKill.ShouldBeInRange(1, MidDrainRowCount - 1);
@@ -349,8 +342,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         try
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"entries: embedded={await CountByStateAsync("embedded")} " +
-                          $"pending={await CountByStateAsync("pending")}");
+            sb.AppendLine($"entries: embedded={await CountByStateAsync("embedded")} pending={await CountByStateAsync("pending")}");
             await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
             {
                 var startedAt = await connection.QuerySingleAsync<long?>(new CommandDefinition(

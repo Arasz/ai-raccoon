@@ -34,8 +34,7 @@ public sealed class OverWindowRowProbe
         if (bank is null)
         {
             _output.WriteLine(
-                $"{BankEnvVar} not set — this probe counts rows whose WordPiece length exceeds the "
-                + "embedding window (WP3 step 4's baseline and its post-backfill check). Set it to a bank path to run it.");
+                $"{BankEnvVar} not set — this probe counts rows whose WordPiece length exceeds the embedding window (WP3 step 4's baseline and its post-backfill check). Set it to a bank path to run it.");
             return;
         }
 

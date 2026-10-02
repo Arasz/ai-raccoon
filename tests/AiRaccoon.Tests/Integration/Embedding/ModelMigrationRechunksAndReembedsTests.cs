@@ -74,7 +74,7 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
 
     private static string FileBody() =>
         string.Join("\n\n", Enumerable.Range(1, 5).Select(i =>
-            $"## Section {i}\n\n" + string.Join(" ", Enumerable.Repeat($"magnetostrictive section {i} body text", 40))));
+            $"## Section {i}\n\n{string.Join(" ", Enumerable.Repeat($"magnetostrictive section {i} body text", 40))}"));
 
     private async Task<SqliteConnection> OpenAsync() => await _factory.OpenBankAsync(Ct);
 

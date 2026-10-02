@@ -144,7 +144,7 @@ public sealed class FtsQueryNormalizerTests
 
         var plan = FtsQueryNormalizer.BuildPlan(term);
 
-        plan.Expression.ShouldBe(term[..FtsQueryNormalizer.PrefixLength] + "*",
+        plan.Expression.ShouldBe($"{term[..FtsQueryNormalizer.PrefixLength]}*",
             "a term longer than a chunk is stored hard-cut; its first piece still starts with this prefix");
     }
 
@@ -161,8 +161,8 @@ public sealed class FtsQueryNormalizerTests
     {
         var term = new string('z', FtsQueryNormalizer.PrefixLength + 10);
 
-        var plan = FtsQueryNormalizer.BuildPlan("digest " + term);
+        var plan = FtsQueryNormalizer.BuildPlan($"digest {term}");
 
-        plan.Expression.ShouldBe("digest AND " + new string('z', FtsQueryNormalizer.PrefixLength) + "*");
+        plan.Expression.ShouldBe($"digest AND {new string('z', FtsQueryNormalizer.PrefixLength)}*");
     }
 }

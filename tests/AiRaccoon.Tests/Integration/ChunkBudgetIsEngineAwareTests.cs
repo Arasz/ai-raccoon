@@ -109,7 +109,7 @@ public sealed class ChunkBudgetIsEngineAwareTests : IAsyncLifetime
     {
         var tokenizer = new CodeTokenizer();
         var chunker = new CodeChunker(tokenizer);
-        var pathologicalLine = string.Concat(Enumerable.Range(0, 400).Select(i => $"x{i:D3}")) + "\n";
+        var pathologicalLine = $"{string.Concat(Enumerable.Range(0, 400).Select(i => $"x{i:D3}"))}\n";
 
         var chunks = chunker.Chunk(pathologicalLine);
 

@@ -33,8 +33,7 @@ public sealed class TokenizerJsonParityTests
         var fixturesDir = Environment.GetEnvironmentVariable(FixturesDirEnvVar);
         if (string.IsNullOrWhiteSpace(fixturesDir) || !Directory.Exists(fixturesDir))
         {
-            Assert.Skip($"set {FixturesDirEnvVar} to the directory holding <source>/tokenizer.json per "
-                        + "tokenizer-golden.json entry to run the real-model parity gate");
+            Assert.Skip($"set {FixturesDirEnvVar} to the directory holding <source>/tokenizer.json per tokenizer-golden.json entry to run the real-model parity gate");
         }
 
         using var golden = Golden();
@@ -72,7 +71,7 @@ public sealed class TokenizerJsonParityTests
         failures.ShouldBeEmpty($"{modelKey} ({source}):{Environment.NewLine}{string.Join(Environment.NewLine, failures)}");
     }
 
-    private static string Truncate(string text) => text.Length > 40 ? text[..40] + "…" : text;
+    private static string Truncate(string text) => text.Length > 40 ? $"{text[..40]}…" : text;
 
     private static JsonDocument Golden() =>
         JsonDocument.Parse(File.ReadAllText(TestData.RepoFile("tests/AiRaccoon.Tests/TestData/Tokenizers/tokenizer-golden.json")));

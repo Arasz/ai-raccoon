@@ -145,22 +145,20 @@ public sealed class ChunkBackfillChunkerRoutingTests : IDisposable
             new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
 
     private static string HeadingsAndFenceInput(string marker) =>
-        $"# Heading One ({marker})\n\n" + Paragraphs(marker, 0, 30) +
-        "\n\n```\ncode fence line one\ncode fence line two\n```\n\n" +
-        $"## Heading Two ({marker})\n\n" + Paragraphs(marker, 30, 20);
+        $"# Heading One ({marker})\n\n{Paragraphs(marker, 0, 30)}\n\n```\ncode fence line one\ncode fence line two\n```\n\n## Heading Two ({marker})\n\n{Paragraphs(marker, 30, 20)}";
 
     /// <summary>Every word is keyed by its own paragraph and slot index, so no two chunk boundaries
     /// the real chunker picks can ever land on byte-identical text — <c>InsertEntry</c> is ON
     /// CONFLICT DO NOTHING, and a repeated piece would silently drop instead of asserting.</summary>
     private static string Paragraphs(string marker, int startIndex, int count) =>
         string.Join("\n\n", Enumerable.Range(startIndex, count).Select(i =>
-            $"Paragraph {marker}-{i}. " + string.Join(' ', Enumerable.Range(0, 12).Select(w => $"{marker}word{i}-{w}"))));
+            $"Paragraph {marker}-{i}. {string.Join(' ', Enumerable.Range(0, 12).Select(w => $"{marker}word{i}-{w}"))}"));
 
     private static string LargeJsonObject(string marker)
     {
         var props = Enumerable.Range(0, 40).Select(i =>
             $"  \"{marker}_field_{i}\": \"{string.Join(' ', Enumerable.Range(0, 8).Select(w => $"{marker}word{i}-{w}"))}\"");
-        return "{\n" + string.Join(",\n", props) + "\n}";
+        return $"{{\n{string.Join(",\n", props)}\n}}";
     }
 
     private static async Task<List<string>> StoredPiecesAsync(SqliteConnection connection, string path) =>

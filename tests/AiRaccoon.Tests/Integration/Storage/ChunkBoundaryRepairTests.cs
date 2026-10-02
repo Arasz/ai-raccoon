@@ -55,15 +55,14 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     }
 
     private static string LongNote() =>
-        string.Join(" ", Enumerable.Repeat(
-            "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", 10))
-        + " Invoice reference vk83jq was filed with the parish council.";
+        $"{string.Join(" ", Enumerable.Repeat(
+            "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", 10))} Invoice reference vk83jq was filed with the parish council.";
 
     /// <summary>A note whose middle row is cut inside "vk83jq", framed by an opening and a closing row.</summary>
     private static string[] FramedPieces()
     {
         var (head, tail) = CutInside(LongNote(), "vk83jq");
-        return ["Opening line of the minutes.\n", head, tail + "\n", "Closing line of the minutes.\n"];
+        return ["Opening line of the minutes.\n", head, $"{tail}\n", "Closing line of the minutes.\n"];
     }
 
     private static (string Head, string Tail) CutInside(string text, string word)
@@ -188,11 +187,11 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     [RetryFact]
     public async Task Run_FencedLineCutMidWord_IsReingestedFromTheFile()
     {
-        var line = string.Join(" ", Enumerable.Range(0, 120).Select(i => $"handler{i:D3}();")) + " dispatch_vk83jq();";
-        var text = "```\n" + line + "\n```\n";
+        var line = $"{string.Join(" ", Enumerable.Range(0, 120).Select(i => $"handler{i:D3}();"))} dispatch_vk83jq();";
+        var text = $"```\n{line}\n```\n";
         var file = await IngestFileAsync("dispatch.md", text);
         var (head, tail) = CutInside(line, "vk83jq");
-        await ResplitAsync(file, ["```\n" + head + "\n```\n", "```\n" + tail + "\n```\n"], noteOrder: false);
+        await ResplitAsync(file, [$"```\n{head}\n```\n", $"```\n{tail}\n```\n"], noteOrder: false);
         (await KeywordHitsAsync("dispatch_vk83jq")).ShouldBe(0, "premise: the seeded sub-fences split the identifier");
 
         var report = await RepairAsync();
@@ -205,10 +204,10 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     public async Task Run_FileGoneFromDisk_IsRepairedFromItsRowsWithPositionsInOrder()
     {
         const string closing = "Closing paragraph: the parish council thanked the committee.\n";
-        var text = LongNote() + "\n" + closing;
+        var text = $"{LongNote()}\n{closing}";
         var file = await IngestFileAsync("gone.md", text);
         var (head, tail) = CutInside(LongNote(), "vk83jq");
-        await ResplitAsync(file, [head, tail + "\n", closing], noteOrder: false);
+        await ResplitAsync(file, [head, $"{tail}\n", closing], noteOrder: false);
         File.Delete(file);
 
         var report = await RepairAsync();
@@ -227,10 +226,10 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     public async Task Run_FileGoneFromDiskCitedByANote_IsRepairedWithTheNoteAfterTheFileRows()
     {
         const string closing = "Closing paragraph: the parish council thanked the committee.\n";
-        var text = LongNote() + "\n" + closing;
+        var text = $"{LongNote()}\n{closing}";
         var file = await IngestFileAsync("gone-cited.md", text);
         var (head, tail) = CutInside(LongNote(), "vk83jq");
-        await ResplitAsync(file, [head, tail + "\n", closing], noteOrder: false);
+        await ResplitAsync(file, [head, $"{tail}\n", closing], noteOrder: false);
         var note = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "The minutes were read aloud.", SourceFile: file),
             TestContext.Current.CancellationToken);
         await SetPositionAsync(await IdOfAsync(note.Hash), 1);
@@ -433,7 +432,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         // row, so every stored row is still reproduced.
         var appended = string.Join(" ", Enumerable.Repeat("The appended paragraph records a step added after the last ingest.",
             TestData.BundledManifestChunkTokens() / 8));
-        await File.WriteAllTextAsync(file, document + appended + "\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(file, $"{document}{appended}\n", TestContext.Current.CancellationToken);
         (await ScanAsync(file)).PositionById.Values.ShouldAllBe(position => position >= 0,
             "premise: the grown file still reproduces every stored row");
 
@@ -508,7 +507,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService(), null, null, null, null, new CodeChunker(new CharCountTokenizer(), 90), null, null);
         var file = Path.Combine(_dataRoot, "digest.cs");
-        await File.WriteAllTextAsync(file, "var digest = \"" + string.Concat(Enumerable.Range(0, 60).Select(i => $"q{i:D3}")) + "\";\n", ct);
+        await File.WriteAllTextAsync(file, $"var digest = \"{string.Concat(Enumerable.Range(0, 60).Select(i => $"q{i:D3}"))}\";\n", ct);
         await codeStore.IngestFileAsync(ProjectId, file, null, ct);
         await using (var premise = await _factory.OpenBankAsync(ct))
         {
@@ -531,7 +530,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var codeStore = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService(), null, null, null, null, new CodeChunker(new CharCountTokenizer(), 90), null, null);
-        var line = string.Join(" ", Enumerable.Range(0, 20).Select(i => $"register_handler_{i:D2}();")) + " dispatch_vk83jq();\n";
+        var line = $"{string.Join(" ", Enumerable.Range(0, 20).Select(i => $"register_handler_{i:D2}();"))} dispatch_vk83jq();\n";
         var file = Path.Combine(_dataRoot, "dispatch.cs");
         await File.WriteAllTextAsync(file, line, ct);
         await codeStore.IngestFileAsync(ProjectId, file, null, ct);
@@ -747,8 +746,8 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     /// 30 repeats had at the old bundled budget), so any section count spans several rows.</summary>
     private static string SectionedDocument(int sections) =>
         string.Concat(Enumerable.Range(0, sections).Select(i =>
-            $"## Section {i}\n\n" + string.Join(" ", Enumerable.Repeat($"Paragraph {i} of the plan describes step {i} in detail.",
-                TestData.BundledManifestChunkTokens() / 8)) + "\n\n"));
+            $"## Section {i}\n\n{string.Join(" ", Enumerable.Repeat($"Paragraph {i} of the plan describes step {i} in detail.",
+                TestData.BundledManifestChunkTokens() / 8))}\n\n"));
 
     private async Task<List<long>> IdsAsync(string path)
     {

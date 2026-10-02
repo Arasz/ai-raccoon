@@ -77,7 +77,7 @@ public sealed class ChunkRebudgetTests : IDisposable
 
     private static string FileBody() =>
         string.Join("\n\n", Enumerable.Range(1, 5).Select(i =>
-            $"## Section {i}\n\n" + string.Join(" ", Enumerable.Repeat($"magnetostrictive section {i} body text", 40))));
+            $"## Section {i}\n\n{string.Join(" ", Enumerable.Repeat($"magnetostrictive section {i} body text", 40))}"));
 
     private int CountTokens(string value) =>
         _embeddings.ResolveTokenizer(new EmbeddingSettings("local", null, null, null))!.CountTokens(value);
@@ -327,9 +327,9 @@ public sealed class ChunkRebudgetTests : IDisposable
     public async Task Rebudget_TheStampIsWrittenAtZeroRetryableSkips_AfterALaterRunConverges()
     {
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote()), Ct);
-        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "Second note.\n\n" + LongNote()), Ct);
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, $"Second note.\n\n{LongNote()}"), Ct);
         await using var connection = await OpenAsync();
-        var brokenPath = NotePath("Second note.\n\n" + LongNote());
+        var brokenPath = NotePath($"Second note.\n\n{LongNote()}");
         await connection.ExecuteAsync(new CommandDefinition(
             "UPDATE entries SET value = value || ' tampered' WHERE id = (SELECT MIN(id) FROM entries WHERE path = @path)",
             new { path = brokenPath }, cancellationToken: Ct));
@@ -549,7 +549,7 @@ public sealed class ChunkRebudgetTests : IDisposable
     public async Task Rebudget_Event448_ReadsNonZeroSkipCounts()
     {
         var healthy = LongNote();
-        var broken = "Second note.\n\n" + LongNote();
+        var broken = $"Second note.\n\n{LongNote()}";
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, healthy), Ct);
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, broken), Ct);
         await using var connection = await OpenAsync();

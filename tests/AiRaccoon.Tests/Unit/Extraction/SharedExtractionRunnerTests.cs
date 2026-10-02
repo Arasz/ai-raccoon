@@ -44,8 +44,7 @@ public sealed class SharedExtractionRunnerTests
     public async Task ProposeAsync_QueuesTheFullValueAndSourceFile()
     {
         var (store, queue, _, runner) = NewStack();
-        var value = string.Join(" ", Enumerable.Repeat("Documented migration step details for the record.", 30)) +
-                    " beta";
+        var value = $"{string.Join(" ", Enumerable.Repeat("Documented migration step details for the record.", 30))} beta";
         store.Candidates["acme"] = [Row("h1", value, sourceFile: "docs/beta.md")];
 
         var candidates = await runner.ProposeAsync("acme", EmptyIndex,

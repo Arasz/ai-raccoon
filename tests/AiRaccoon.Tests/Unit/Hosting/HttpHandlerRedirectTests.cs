@@ -26,8 +26,7 @@ public sealed class HttpHandlerRedirectTests
             .ToList();
 
         unguarded.ShouldBeEmpty(
-            "these files construct a SocketsHttpHandler without AllowAutoRedirect = false, so a redirect "
-            + "could carry the loopback token off-machine: " + string.Join(", ", unguarded));
+            $"these files construct a SocketsHttpHandler without AllowAutoRedirect = false, so a redirect could carry the loopback token off-machine: {string.Join(", ", unguarded)}");
     }
 
     [Fact]

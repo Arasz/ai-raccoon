@@ -67,8 +67,7 @@ public sealed class ChunkingCorpusGuaranteeTests
         }
 
         overBudget.ShouldBeEmpty(
-            $"{overBudget.Count}/{totalChunks} chunks exceed the {ceiling}-token ceiling ({budget} + specials); " +
-            $"worst: {(overBudget.Count > 0 ? overBudget.MaxBy(x => x.Tokens) : default)}");
+            $"{overBudget.Count}/{totalChunks} chunks exceed the {ceiling}-token ceiling ({budget} + specials); worst: {(overBudget.Count > 0 ? overBudget.MaxBy(x => x.Tokens) : default)}");
     }
 
     /// <summary>
@@ -103,8 +102,7 @@ public sealed class ChunkingCorpusGuaranteeTests
         }
 
         unbalanced.ShouldBeEmpty(
-            $"{unbalanced.Count}/{totalChunks} chunks end in a different fence state than they began, so a " +
-            $"boundary fell inside a code block; first: {(unbalanced.Count > 0 ? unbalanced[0] : default)}");
+            $"{unbalanced.Count}/{totalChunks} chunks end in a different fence state than they began, so a boundary fell inside a code block; first: {(unbalanced.Count > 0 ? unbalanced[0] : default)}");
     }
 
     private static int FenceDelimiterCount(string chunk) =>
@@ -157,8 +155,8 @@ public sealed class ChunkingCorpusGuaranteeTests
         yield return ("hex/base64 blob", string.Join(" ", Enumerable.Range(0, 40)
             .Select(i => Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(BitConverter.GetBytes(i))))));
 
-        yield return ("minified JSON line", "{" + string.Join(",", Enumerable.Range(0, 300)
-            .Select(i => $"\"key{i}\":\"value{i}withSomeAdditionalPaddingTextToMakeThisRealisticallyLong\"")) + "}");
+        yield return ("minified JSON line", $"{{{string.Join(",", Enumerable.Range(0, 300)
+            .Select(i => $"\"key{i}\":\"value{i}withSomeAdditionalPaddingTextToMakeThisRealisticallyLong\""))}}}");
 
         yield return ("CJK paragraph", string.Concat(Enumerable.Repeat(
             "这是一个用于测试的中文段落,包含很多汉字,用来验证分块器在处理连续的中日韩文字时是否会产生超过预算的分块。", 40)));

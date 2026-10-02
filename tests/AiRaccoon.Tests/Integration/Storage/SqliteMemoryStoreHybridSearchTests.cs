@@ -106,7 +106,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
 
         var filler = string.Join(" ", Enumerable.Range(1, 60).Select(i =>
             $"sentence number {i} with enough prose to push the target term well past the two hundred character window"));
-        var longValue = filler + " the target term giraffemigrationprotocol appears only here near the very end.";
+        var longValue = $"{filler} the target term giraffemigrationprotocol appears only here near the very end.";
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", longValue), TestContext.Current.CancellationToken);
 
@@ -165,8 +165,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         var entries = new List<MemoryEntry>();
         for (var i = 0; i < 8; i++)
         {
-            var longValue = $"zebra opens candidate {i}. " + string.Join(" ", Enumerable.Range(1, 40).Select(n =>
-                $"sentence number {n} with enough prose to exceed the two hundred character window"));
+            var longValue = $"zebra opens candidate {i}. {string.Join(" ", Enumerable.Range(1, 40).Select(n =>
+                $"sentence number {n} with enough prose to exceed the two hundred character window"))}";
             entries.Add(await _store.WriteAsync(
                 new MemoryWriteRequest("acme", longValue), TestContext.Current.CancellationToken));
         }
@@ -191,8 +191,8 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         await TestData.ConfigureAndDrainEmbeddingAsync(_store, _factory, TestData.CreateEmbeddingService(),
             "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken, _clock);
 
-        var longValue = "zebra opens the paragraph. " + string.Join(" ", Enumerable.Range(1, 40).Select(n =>
-            $"sentence number {n} with enough prose to exceed the two hundred character window"));
+        var longValue = $"zebra opens the paragraph. {string.Join(" ", Enumerable.Range(1, 40).Select(n =>
+            $"sentence number {n} with enough prose to exceed the two hundred character window"))}";
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", longValue), TestContext.Current.CancellationToken);
 

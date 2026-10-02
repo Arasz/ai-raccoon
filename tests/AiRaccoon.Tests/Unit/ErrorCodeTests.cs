@@ -47,7 +47,7 @@ public sealed class ErrorCodeTests
         var outOfRange = FailureCodes().Where(code => code.Value is < 10 or > 99)
             .Select(code => $"{code.Name} = {code.Value}").ToList();
 
-        outOfRange.ShouldBeEmpty("a failure code is 10-99: " + string.Join("; ", outOfRange));
+        outOfRange.ShouldBeEmpty($"a failure code is 10-99: {string.Join("; ", outOfRange)}");
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed class ErrorCodeTests
         var misplaced = FailureCodes().Where(code => code.Value / 10 != CategoryDigits[code.Category])
             .Select(code => $"{code.Name} = {code.Value} (category digit {CategoryDigits[code.Category]})").ToList();
 
-        misplaced.ShouldBeEmpty("these codes sit in another category's decade: " + string.Join("; ", misplaced));
+        misplaced.ShouldBeEmpty($"these codes sit in another category's decade: {string.Join("; ", misplaced)}");
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed class ErrorCodeTests
         var duplicates = all.GroupBy(code => code.Value).Where(group => group.Count() > 1)
             .Select(group => $"{group.Key} = {string.Join(", ", group.Select(code => code.Name))}").ToList();
 
-        duplicates.ShouldBeEmpty("these codes share a value: " + string.Join("; ", duplicates));
+        duplicates.ShouldBeEmpty($"these codes share a value: {string.Join("; ", duplicates)}");
         all.Count.ShouldBeGreaterThan(CategoryDigits.Count, "the guard must actually see the codes");
     }
 
@@ -78,7 +78,7 @@ public sealed class ErrorCodeTests
         var crowded = Categories().Where(category => Constants(category).Count > 10)
             .Select(category => $"{category.Name} ({Constants(category).Count})").ToList();
 
-        crowded.ShouldBeEmpty("a category has ten ones digits: " + string.Join("; ", crowded));
+        crowded.ShouldBeEmpty($"a category has ten ones digits: {string.Join("; ", crowded)}");
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public sealed class ErrorCodeTests
         var missing = CategoryDigits.Where(pair => !FailureCodes().Any(code => code.Category == pair.Key && code.Value == pair.Value * 10))
             .Select(pair => pair.Key).ToList();
 
-        missing.ShouldBeEmpty("x0 is each category's most general case: " + string.Join(", ", missing));
+        missing.ShouldBeEmpty($"x0 is each category's most general case: {string.Join(", ", missing)}");
     }
 
     private static IEnumerable<Type> Categories() =>

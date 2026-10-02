@@ -123,8 +123,7 @@ public sealed class HeldOutRetrievalGateTests : IDisposable
         }
 
         reversed.Average().ShouldBeLessThan(HeldOutMeanFloor - Tolerance,
-            $"a reversed ranking must fail the held-out mean floor of {HeldOutMeanFloor:F6}; " +
-            "a floor a reversal survives is not a gate");
+            $"a reversed ranking must fail the held-out mean floor of {HeldOutMeanFloor:F6}; a floor a reversal survives is not a gate");
     }
 
     /// <summary>

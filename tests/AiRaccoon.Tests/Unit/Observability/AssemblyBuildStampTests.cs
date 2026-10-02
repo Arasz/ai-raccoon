@@ -84,12 +84,11 @@ public class AssemblyBuildStampTests
     {
         if (BuiltAt() < head.CommittedAt)
         {
-            Assert.Skip($"{Assembly.GetName().Name}.dll was built at {BuiltAt():O}, before HEAD {head.Sha} was committed at " +
-                        $"{head.CommittedAt:O}; its stamp describes an older commit — run `dotnet build` and rerun");
+            Assert.Skip(
+                $"{Assembly.GetName().Name}.dll was built at {BuiltAt():O}, before HEAD {head.Sha} was committed at {head.CommittedAt:O}; its stamp describes an older commit — run `dotnet build` and rerun");
         }
     }
 
     private static string StaleHint(Head head) =>
-        $"the assembly (built {BuiltAt():O}) should carry HEAD {head.Sha}; if HEAD moved without an MSBuild pass " +
-        "(a build the IDE skipped as up to date, or --no-build), run `dotnet build` and rerun";
+        $"the assembly (built {BuiltAt():O}) should carry HEAD {head.Sha}; if HEAD moved without an MSBuild pass (a build the IDE skipped as up to date, or --no-build), run `dotnet build` and rerun";
 }

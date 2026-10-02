@@ -107,7 +107,7 @@ public sealed class WriteEmbedsTheChunkNotTheDocumentTests : IDisposable
 
     private static string Document(int paragraphs) =>
         string.Join("\n\n", Enumerable.Range(0, paragraphs).Select(i =>
-            $"Paragraph {i}. " + string.Join(' ', Enumerable.Repeat("memory retrieval budget window", 12))));
+            $"Paragraph {i}. {string.Join(' ', Enumerable.Repeat("memory retrieval budget window", 12))}"));
 
     private async Task ConfigureLocalAsync()
     {

@@ -87,8 +87,7 @@ public sealed class PromotionContentEvidenceTests
                                "downstream consumer that depends on a clean, bisectable commit log.");
         var padding = string.Concat(Enumerable.Repeat("The release train keeps a changelog entry for every " +
                                                       "commit so history stays reviewable. ", 6));
-        var mentionedLate = Evaluate(padding + "A practice later adopted by proj-beta as well, long after " +
-                                     "this paragraph opened its case and said nothing about it.");
+        var mentionedLate = Evaluate($"{padding}A practice later adopted by proj-beta as well, long after this paragraph opened its case and said nothing about it.");
 
         subject.Reasons.ShouldContain("foreign-subject");
         mentionedLate.Reasons.ShouldNotContain("foreign-subject");

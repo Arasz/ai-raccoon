@@ -43,7 +43,7 @@ public class CliFailureFormattingTests
     [Fact]
     public void PathTooLong_NamesTheDataRootAndSuggestsAShorterOne()
     {
-        var ex = new IOException("File name too long : '" + DataRoot + "'");
+        var ex = new IOException($"File name too long : '{DataRoot}'");
 
         var message = CliFailureFormatting.Format(ex, DataRoot);
 

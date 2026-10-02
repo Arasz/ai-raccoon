@@ -16,9 +16,8 @@ public class ChunkWordBoundaryTests
     private static int CharCount(string text) => text.Length;
 
     private static string LongNote() =>
-        string.Join(" ", Enumerable.Repeat(
-            "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", 10))
-        + " Invoice reference vk83jq was filed with the parish council.";
+        $"{string.Join(" ", Enumerable.Repeat(
+            "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.", 10))} Invoice reference vk83jq was filed with the parish council.";
 
     private static string[] Words(string text) => text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
@@ -67,7 +66,7 @@ public class ChunkWordBoundaryTests
     public void Chunk_OverBudgetFencedLine_CutsOnlyAtWhitespace()
     {
         var line = string.Join(" ", Enumerable.Range(0, 60).Select(i => $"call_handler_{i:D2}(ref{i});"));
-        var text = "```csharp\n" + line + "\n```\n";
+        var text = $"```csharp\n{line}\n```\n";
 
         var chunks = new MarkdownChunker(CharCount).Chunk(text, 120);
 
@@ -81,7 +80,7 @@ public class ChunkWordBoundaryTests
     public void Chunk_WordLongerThanTheBudget_IsTheOnlyWordCut()
     {
         var giant = string.Concat(Enumerable.Range(0, 60).Select(i => $"x{i:D2}"));
-        var text = "alpha bravo charlie delta echo foxtrot " + giant + " golf hotel india juliet kilo lima";
+        var text = $"alpha bravo charlie delta echo foxtrot {giant} golf hotel india juliet kilo lima";
 
         var chunks = new MarkdownChunker(CharCount).Chunk(text, 50);
 

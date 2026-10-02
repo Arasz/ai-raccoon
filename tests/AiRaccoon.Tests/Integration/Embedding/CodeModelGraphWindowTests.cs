@@ -100,9 +100,8 @@ public sealed class CodeModelGraphWindowTests
         var configured = Environment.GetEnvironmentVariable(ModelDirEnvVar);
         if (string.IsNullOrWhiteSpace(configured) || !Directory.Exists(configured))
         {
-            Assert.Skip($"set {ModelDirEnvVar} to a downloaded faxenoff/code-daemon-embed-v1 directory "
-                        + $"('{CodeEngineSetup.DefaultModelCommand}' puts one at <data-root>/models/); "
-                        + "the weights are too large to ship with the suite");
+            Assert.Skip(
+                $"set {ModelDirEnvVar} to a downloaded faxenoff/code-daemon-embed-v1 directory ('{CodeEngineSetup.DefaultModelCommand}' puts one at <data-root>/models/); the weights are too large to ship with the suite");
         }
 
         modelDirectory = Path.GetFullPath(configured);

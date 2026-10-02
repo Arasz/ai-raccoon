@@ -45,8 +45,7 @@ public sealed class ShareExtractScoringScopeTests
         var scoreViaLoop = queue.LastCandidates!.Single(c => c.Hash == "h1").Score;
 
         scoreViaTool.ShouldBe(scoreViaLoop,
-            $"memory_share_extract scored h1 at {scoreViaTool}, the background loop scored it at " +
-            $"{scoreViaLoop} — same candidate, same bank, different scoring scope");
+            $"memory_share_extract scored h1 at {scoreViaTool}, the background loop scored it at {scoreViaLoop} — same candidate, same bank, different scoring scope");
     }
 
     [Fact]

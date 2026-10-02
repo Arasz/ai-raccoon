@@ -49,7 +49,7 @@ public sealed class CandidateFeatureExtractorTests
             "The release train keeps a changelog entry for every commit so history stays reviewable. ", 6));
 
         var features = CandidateFeatureExtractor.Extract(
-            padding + "A practice later adopted by ai-raccoon as well, long after this paragraph opened.",
+            $"{padding}A practice later adopted by ai-raccoon as well, long after this paragraph opened.",
             "ai-badger", AllProjects);
 
         features.ForeignSubject.ShouldBeFalse();

@@ -58,11 +58,8 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
         var manifestPath = Environment.GetEnvironmentVariable(FixtureEnvVar);
         if (string.IsNullOrWhiteSpace(manifestPath))
         {
-            Assert.Skip($"{FixtureEnvVar} not set — local-only verification against the real labeled " +
-                        "candidate pool (docs/adr/0018-promotion-scoring-v2.md). Build a fixture with " +
-                        "docs/work/promotion-scoring-eval/rebuild_fixture.py, write a manifest declaring " +
-                        "it (see FixtureManifest), and point this env var at the manifest — fixtures are " +
-                        "never committed to this public repo.");
+            Assert.Skip(
+                $"{FixtureEnvVar} not set — local-only verification against the real labeled candidate pool (docs/adr/0018-promotion-scoring-v2.md). Build a fixture with docs/work/promotion-scoring-eval/rebuild_fixture.py, write a manifest declaring it (see FixtureManifest), and point this env var at the manifest — fixtures are never committed to this public repo.");
             return;
         }
 
@@ -232,7 +229,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
 
     private static string CreateTempDir()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "airaccoon-scoring-gate-tests-" + Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(Path.GetTempPath(), $"airaccoon-scoring-gate-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
         return dir;
     }
@@ -308,9 +305,7 @@ public sealed class PromotionScoringRealDataTests(ITestOutputHelper output)
             if (delta > tolerance)
             {
                 failures.Add(
-                    $"{fixture.Name}: full-set Spearman {fullSpearman.ToString("F3", CultureInfo.InvariantCulture)} " +
-                    $"misses python prototype parity ({prototype.ToString("F3", CultureInfo.InvariantCulture)} " +
-                    $"± {tolerance.ToString("F2", CultureInfo.InvariantCulture)})");
+                    $"{fixture.Name}: full-set Spearman {fullSpearman.ToString("F3", CultureInfo.InvariantCulture)} misses python prototype parity ({prototype.ToString("F3", CultureInfo.InvariantCulture)} ± {tolerance.ToString("F2", CultureInfo.InvariantCulture)})");
             }
         }
 

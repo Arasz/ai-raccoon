@@ -75,8 +75,7 @@ public sealed class GraphPooledOutputParityTests
             engineVector.Length.ShouldBe(graphPooled.Length,
                 $"input {i}: the engine and the graph must agree on the vector's length");
             Cosine(engineVector, Normalize(graphPooled)).ShouldBe(1.0, 1e-5,
-                $"input {i}: pooling '{descriptor.Pooling}' over '{descriptor.TokenEmbeddingsOutput}' must reproduce "
-                + $"the graph's own '{descriptor.EmbeddingOutput}' for model '{descriptor.Model}'");
+                $"input {i}: pooling '{descriptor.Pooling}' over '{descriptor.TokenEmbeddingsOutput}' must reproduce the graph's own '{descriptor.EmbeddingOutput}' for model '{descriptor.Model}'");
         }
     }
 
@@ -116,8 +115,8 @@ public sealed class GraphPooledOutputParityTests
         var configured = Environment.GetEnvironmentVariable(ModelDirEnvVar);
         if (string.IsNullOrWhiteSpace(configured) || !Directory.Exists(configured))
         {
-            Assert.Skip($"set {ModelDirEnvVar} to a local model directory containing {EmbeddingManifest.FileName} "
-                        + "(a dual-output model such as bge-m3); the weights are too large to ship with the suite");
+            Assert.Skip(
+                $"set {ModelDirEnvVar} to a local model directory containing {EmbeddingManifest.FileName} (a dual-output model such as bge-m3); the weights are too large to ship with the suite");
         }
 
         modelDirectory = Path.GetFullPath(configured);

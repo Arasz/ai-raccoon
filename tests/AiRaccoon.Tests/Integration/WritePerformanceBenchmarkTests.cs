@@ -16,7 +16,7 @@ public class WritePerformanceBenchmarkTests(ITestOutputHelper output)
     public async Task WriteAsync_PerformanceMeasurement_BaselineVsZeroShotFiltering()
     {
         // Arrange: Setup test data root
-        var dataRoot = Path.Combine(Path.GetTempPath(), "airaccoon_write_bench_" + Guid.NewGuid().ToString("N"));
+        var dataRoot = Path.Combine(Path.GetTempPath(), $"airaccoon_write_bench_{Guid.NewGuid():N}");
         Directory.CreateDirectory(dataRoot);
 
         try

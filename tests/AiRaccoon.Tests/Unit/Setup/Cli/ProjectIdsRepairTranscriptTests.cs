@@ -43,7 +43,7 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
         if (dump is not null)
         {
             Directory.CreateDirectory(dump);
-            await File.WriteAllTextAsync(Path.Combine(dump, scenario + ".txt"), actual, TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(Path.Combine(dump, $"{scenario}.txt"), actual, TestContext.Current.CancellationToken);
         }
 
         actual.TrimEnd().ShouldBe(Expected[scenario].TrimEnd());
@@ -83,8 +83,7 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
             .RunAsync(parsed!.ParsedCliArgs, _dataRoot, new StandardStreams(TextReader.Null, stdout, stderr),
                 TestContext.Current.CancellationToken);
 
-        return $"exit {exit}; requested {store.LastRepairRequest?.ToString() ?? "nothing"}\n" +
-               $"--- stdout\n{stdout}--- stderr\n{stderr}".Replace(_dataRoot, "<root>").Replace("\r\n", "\n");
+        return $"exit {exit}; requested {store.LastRepairRequest?.ToString() ?? "nothing"}\n{$"--- stdout\n{stdout}--- stderr\n{stderr}".Replace(_dataRoot, "<root>").Replace("\r\n", "\n")}";
     }
 
     private string WriteMap() => WriteFile("map.json", new ProjectIdAliasMap(

@@ -26,7 +26,7 @@ public sealed class EmbeddingServiceInstructionTests
     {
         var settings = ManifestSettings(QueryPrompt, DocumentPrompt);
 
-        Service().TrimQueryToWindow(settings, "hybrid search").ShouldBe(QueryPrompt + "hybrid search");
+        Service().TrimQueryToWindow(settings, "hybrid search").ShouldBe($"{QueryPrompt}hybrid search");
     }
 
     [RetryFact]
@@ -34,7 +34,7 @@ public sealed class EmbeddingServiceInstructionTests
     {
         var settings = ManifestSettings(QueryPrompt, DocumentPrompt);
 
-        Service().DocumentText(settings, "stored note").ShouldBe(DocumentPrompt + "stored note");
+        Service().DocumentText(settings, "stored note").ShouldBe($"{DocumentPrompt}stored note");
     }
 
     [RetryFact]

@@ -244,13 +244,12 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
     {
         var records = logs.Collector.GetSnapshot()
             .Where(r => r.Level >= LogLevel.Warning)
-            .Select(r => $"  [{r.Level}] {r.Category}: {r.Message}"
-                         + (r.Exception is null ? string.Empty : $"\n    -> {r.Exception.GetType().FullName}: {r.Exception.Message}"))
+            .Select(r => $"  [{r.Level}] {r.Category}: {r.Message}{(r.Exception is null ? string.Empty : $"\n    -> {r.Exception.GetType().FullName}: {r.Exception.Message}")}")
             .ToList();
 
         return records.Count == 0
             ? "The server logged nothing at Warning or above."
-            : "Server log records at Warning and above:\n" + string.Join("\n", records);
+            : $"Server log records at Warning and above:\n{string.Join("\n", records)}";
     }
 
     private static async Task AssertRefusalOverRealServerAsync(string dataRoot, string toolName,

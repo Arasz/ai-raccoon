@@ -122,7 +122,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             dir = dir.Parent;
         }
 
-        throw new InvalidOperationException("Could not find repo root (AiRaccoon.slnx) walking up from " + AppContext.BaseDirectory);
+        throw new InvalidOperationException($"Could not find repo root (AiRaccoon.slnx) walking up from {AppContext.BaseDirectory}");
     }
 
     private static IEnumerable<string> ScanTextFiles(string root) =>

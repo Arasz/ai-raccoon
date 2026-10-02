@@ -70,7 +70,7 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
     /// <summary>A five-section document; the markdown chunker splits it into more than one chunk.</summary>
     private static string LargeContent() =>
         string.Join("\n\n", Enumerable.Range(1, 5).Select(i =>
-            $"## Section {i}\n\n" + string.Join(" ", Enumerable.Repeat($"magnetostrictive section {i} body text", 40))));
+            $"## Section {i}\n\n{string.Join(" ", Enumerable.Repeat($"magnetostrictive section {i} body text", 40))}"));
 
     /// <summary>B1 — the defect itself.</summary>
     [RetryFact]

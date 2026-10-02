@@ -67,8 +67,7 @@ public sealed class SettingsChannelExitCodeTests
             File.WriteAllText(Path.Combine(dir, "model.onnx"), "model");
             File.Copy(TestData.RepoFile("tests/AiRaccoon.Tests/Resources/ManifestFixtures/code-daemon-embed-v1.json"),
                 Path.Combine(dir, EmbeddingManifest.FileName));
-            var reason = $"Manifest '{dir}' resolves to a 126-token chunk budget, narrower than the " +
-                         $"{CodeChunker.DefaultBudget}-token chunks the code corpus's chunker emits";
+            var reason = $"Manifest '{dir}' resolves to a 126-token chunk budget, narrower than the {CodeChunker.DefaultBudget}-token chunks the code corpus's chunker emits";
             var codeEngine = new ThrowingCodeEngineStore(new CodeEngineActivationRefusedException(reason));
             var commands = TestData.CreateConfigCommands(new FakeConfigStore(), settings: new SettingsCommands(),
                 codeEngine: codeEngine);

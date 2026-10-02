@@ -336,9 +336,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
 
     /// <summary>Few enough repeats to stay one row at whatever budget the manifest ships — the
     /// fusion test ranks the note's single row against a multi-row neighbour file.</summary>
-    private static string LongNoteText(int repeats) =>
-        string.Join(" ", Enumerable.Repeat(FeteSentence, repeats))
-        + " Invoice reference vk83jq was filed with the parish council.";
+    private static string LongNoteText(int repeats) => $"{string.Join(" ", Enumerable.Repeat(FeteSentence, repeats))} Invoice reference vk83jq was filed with the parish council.";
 
     private const string FeteSentence =
         "The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.";
@@ -381,8 +379,8 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
             ("Calibration", "Calibration frames subtract detector noise before the spectra are reduced."),
             ("Archive", "Reduced spectra are archived with catalogue codes such as qx7 and zr42.")
         };
-        return "# Observatory\n\n" + string.Join("\n\n", sections.Select(section =>
-            $"## {section.Item1}\n\n{string.Join(" ", Enumerable.Repeat(section.Item2, TestData.BundledManifestChunkTokens() / 20))}")) + "\n";
+        return $"# Observatory\n\n{string.Join("\n\n", sections.Select(section =>
+            $"## {section.Item1}\n\n{string.Join(" ", Enumerable.Repeat(section.Item2, TestData.BundledManifestChunkTokens() / 20))}"))}\n";
     }
 
     private static string RunbookText()
@@ -394,8 +392,8 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
             ("Rollback", "Kittens nap on warm windowsills while gardeners water tomatoes and bees drift between blossoms."),
             ("Verification", "After the deploy the team watches dashboards and confirms synthetic probes stay green.")
         };
-        return "# Deploy runbook\n\n" + string.Join("\n\n", sections.Select(section =>
-            $"## {section.Item1}\n\n{string.Join(" ", Enumerable.Repeat(section.Item2, TestData.BundledManifestChunkTokens() / 20))}")) + "\n";
+        return $"# Deploy runbook\n\n{string.Join("\n\n", sections.Select(section =>
+            $"## {section.Item1}\n\n{string.Join(" ", Enumerable.Repeat(section.Item2, TestData.BundledManifestChunkTokens() / 20))}"))}\n";
     }
 
     private Task AllowIngestAsync(CancellationToken ct) =>

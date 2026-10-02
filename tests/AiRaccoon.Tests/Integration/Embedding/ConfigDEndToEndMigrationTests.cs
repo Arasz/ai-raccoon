@@ -315,7 +315,7 @@ public sealed class ConfigDEndToEndMigrationTests : IDisposable
 
     private static string FileBody() =>
         string.Join("\n\n", Enumerable.Range(1, 5).Select(i =>
-            $"## Section {i}\n\n" + string.Join(" ", Enumerable.Repeat($"magnetostrictive section {i} body text", 40))));
+            $"## Section {i}\n\n{string.Join(" ", Enumerable.Repeat($"magnetostrictive section {i} body text", 40))}"));
 
     private static string CodeBody() => string.Join("\n\n", Enumerable.Range(0, 60).Select(i =>
         $"public static int Method{i}(int value)\n{{\n    // handler {i} keeps the ledger balanced\n    return value + {i};\n}}"));

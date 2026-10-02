@@ -122,7 +122,7 @@ public sealed class WatchDigestConcurrencyTests
             IngestScopeKeys.Serialize([watchDir]), token);
         // Raw loser key on purpose: the factory folds at construction now, so only a pre-repair
         // bank still holds this spelling — half of the transient window below.
-        await one.Memory.SetSettingAsync("ingest.scope." + loser,
+        await one.Memory.SetSettingAsync($"ingest.scope.{loser}",
             IngestScopeKeys.Serialize([watchDir]), token);
         await one.WatchStore.AddWatchAsync(loser, watchDir, 0, 0, token);
         bank.Write($"{Sentinel} v1body");
@@ -269,8 +269,7 @@ public sealed class WatchDigestConcurrencyTests
             {
                 var update = table == "watches"
                     ? WatchesFoldReplaySql
-                    : $"UPDATE {table} SET project_id = @w WHERE project_id = @l " +
-                      $"AND NOT EXISTS (SELECT 1 FROM {table} t WHERE t.project_id = @w AND t.path = {table}.path)";
+                    : $"UPDATE {table} SET project_id = @w WHERE project_id = @l AND NOT EXISTS (SELECT 1 FROM {table} t WHERE t.project_id = @w AND t.path = {table}.path)";
                 await replayBank.ExecuteAsync(new CommandDefinition(update,
                     new { w = winner, l = loser }, cancellationToken: token));
                 await replayBank.ExecuteAsync(new CommandDefinition(

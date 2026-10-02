@@ -122,7 +122,7 @@ public sealed class PathSubtreeCascadeDeleteTests : IDisposable
         await using var connection = await _factory.OpenBankAsync(ct);
 
         var plan = (await connection.QueryAsync<(long Id, long Parent, long NotUsed, string Detail)>(
-            new CommandDefinition("EXPLAIN QUERY PLAN " + sql,
+            new CommandDefinition($"EXPLAIN QUERY PLAN {sql}",
                 new { projectId = "acme", path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path), keep = new[] { "h" } },
                 cancellationToken: ct))).Select(r => r.Detail).ToList();
 

@@ -18,9 +18,9 @@ namespace AiRaccoon.Tests.Unit.Embedding;
 public sealed class AneGraphSharesProductWeightsTests
 {
     private const string ModelDir = "src/AiRaccoon/Models/granite-embedding-small-english-r2";
-    private const string ProductGraphRelativePath = ModelDir + "/model_fp16.onnx";
-    private const string AneGraphRelativePath = ModelDir + "/model_fp16_ane.onnx";
-    private const string ManifestRelativePath = ModelDir + "/ai-raccoon.manifest.json";
+    private const string ProductGraphRelativePath = $"{ModelDir}/model_fp16.onnx";
+    private const string AneGraphRelativePath = $"{ModelDir}/model_fp16_ane.onnx";
+    private const string ManifestRelativePath = $"{ModelDir}/ai-raccoon.manifest.json";
     private const string ProductDataFileName = "model_fp16.onnx_data";
     private const string AneGraphFileName = "model_fp16_ane.onnx";
 
@@ -81,8 +81,7 @@ public sealed class AneGraphSharesProductWeightsTests
             reference.Location.ShouldBe(ProductDataFileName,
                 $"ANE initializer '{reference.InitializerName}' reads '{reference.Location}', not the product's own {ProductDataFileName}");
             productSlices.ShouldContain((reference.Offset, reference.Length),
-                $"ANE initializer '{reference.InitializerName}' reads offset {reference.Offset}/length {reference.Length}, " +
-                "which is not one of the product graph's own weight slices");
+                $"ANE initializer '{reference.InitializerName}' reads offset {reference.Offset}/length {reference.Length}, which is not one of the product graph's own weight slices");
         }
     }
 

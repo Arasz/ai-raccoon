@@ -14,7 +14,7 @@ namespace AiRaccoon.Tests.Unit.Embedding.NeuralEngine;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class CoreMlGraphDimensionsTests
 {
-    private const string AneGraph = "src/AiRaccoon/Models/granite-embedding-small-english-r2/" + CoreMlGraph.FileName;
+    private const string AneGraph = $"src/AiRaccoon/Models/granite-embedding-small-english-r2/{CoreMlGraph.FileName}";
 
     [Fact]
     public void InputIds_AreBatchBySequence()

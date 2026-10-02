@@ -21,7 +21,7 @@ public sealed class ProvenanceArchetypeClassifierTests
     [Fact]
     public void ContentAddressedHexFilename_IsOrganicNote_EvenWithSourceFile()
     {
-        var hex = new string('a', 40) + ".md";
+        var hex = $"{new string('a', 40)}.md";
 
         var archetype = ProvenanceArchetypeClassifier.Classify(hex, sourceFile: "somewhere.md", value: "a fact");
 
@@ -35,7 +35,7 @@ public sealed class ProvenanceArchetypeClassifierTests
     [Fact]
     public void HexPathWithDocumentShapedSourceFile_IsStillOrganicNote_NotTheCitedChannel()
     {
-        var hex = new string('a', 40) + ".md";
+        var hex = $"{new string('a', 40)}.md";
 
         var archetype = ProvenanceArchetypeClassifier.Classify(
             hex, sourceFile: ".remember/2026-08-01-status.md", value: "a fact");
@@ -260,7 +260,7 @@ public sealed class ProvenanceArchetypeClassifierTests
         var prose = string.Concat(Enumerable.Repeat("This paragraph exists only to push the transcript well " +
                                                       "past the rescue threshold before anything tool-shaped " +
                                                       "appears in the text at all. ", 4));
-        var value = prose + "<invoke name=\"Bash\">...</invoke><invoke name=\"Read\">...</invoke>";
+        var value = $"{prose}<invoke name=\"Bash\">...</invoke><invoke name=\"Read\">...</invoke>";
 
         var archetype = ProvenanceArchetypeClassifier.Classify(
             "docs/work/notes.md", sourceFile: "docs/work/notes.md", value: value);
@@ -302,7 +302,7 @@ public sealed class ProvenanceArchetypeClassifierTests
     [Fact]
     public void HermesConversationIdSourceFile_OutranksOrganicRouting_OnAHexPath()
     {
-        var hex = new string('a', 40) + ".md";
+        var hex = $"{new string('a', 40)}.md";
 
         var archetype = ProvenanceArchetypeClassifier.Classify(
             hex, sourceFile: "hermes/20260806_215718_fd7f66", value: "a conversation recap");

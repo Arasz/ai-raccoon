@@ -365,7 +365,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     private async Task SeedOrphanedPromotionQueueRowAsync(CancellationToken cancellationToken)
     {
         var queueStore = new SqlitePromotionQueueStore(_factory, TimeProvider.System);
-        var hash = "orphan-" + Guid.NewGuid().ToString("N");
+        var hash = $"orphan-{Guid.NewGuid():N}";
         await queueStore.UpsertAsync("acme", [new QueueCandidate(hash, $"{hash}.md", "gone", null, 1.0, ["organic-write"])],
             cancellationToken);
     }
@@ -381,7 +381,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
             INSERT INTO entries (hash, path, value, source_file, scope, project_id, created_at, updated_at, embed_state, chunk_index, total_chunks)
             VALUES (@hash, @path, @value, @sourceFile, 'project', 'acme', 0, 0, 'embedded', -1, 1)
             """,
-            new { hash = "stale-" + Guid.NewGuid().ToString("N"), path = file, value = "stale content", sourceFile = file });
+            new { hash = $"stale-{Guid.NewGuid():N}", path = file, value = "stale content", sourceFile = file });
     }
 
     /// <summary>Three chunks seeded out of the order a fresh chunk of the file would produce — ChunkIndexRepairJobTests.OpenSeededAsync's technique.</summary>

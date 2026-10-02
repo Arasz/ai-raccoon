@@ -60,8 +60,7 @@ public sealed partial class ToolMethodSizeTests
         }
 
         offenders.ShouldBeEmpty(
-            $"a tool maps onto the service behind it and holds no logic of its own (cap {MaxBodyLines}): "
-            + string.Join("; ", offenders));
+            $"a tool maps onto the service behind it and holds no logic of its own (cap {MaxBodyLines}): {string.Join("; ", offenders)}");
     }
 
     /// <summary>The scan must see the tools; an empty sweep passes for the same reason a broken one does.</summary>

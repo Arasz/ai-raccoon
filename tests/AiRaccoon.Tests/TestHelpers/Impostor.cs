@@ -72,7 +72,7 @@ internal sealed class Impostor : IDisposable
     /// <summary>The secrets from <paramref name="secrets"/> that appear anywhere in any recorded request byte.</summary>
     public IReadOnlyList<string> SecretsSeen(IEnumerable<string> secrets)
     {
-        var wire = string.Join("\n", Requests.Select(request => request.Headers + "\r\n\r\n" + request.BodyText));
+        var wire = string.Join("\n", Requests.Select(request => $"{request.Headers}\r\n\r\n{request.BodyText}"));
         return [.. secrets.Where(secret => secret.Length > 0 && wire.Contains(secret, StringComparison.Ordinal))];
     }
 
@@ -146,8 +146,7 @@ internal sealed class Impostor : IDisposable
 
     private static byte[] Response(int status, string body) =>
         Encoding.UTF8.GetBytes(
-            $"HTTP/1.1 {status.ToString(CultureInfo.InvariantCulture)} X\r\nContent-Type: application/json\r\n" +
-            $"Content-Length: {Encoding.UTF8.GetByteCount(body).ToString(CultureInfo.InvariantCulture)}\r\nConnection: close\r\n\r\n{body}");
+            $"HTTP/1.1 {status.ToString(CultureInfo.InvariantCulture)} X\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(body).ToString(CultureInfo.InvariantCulture)}\r\nConnection: close\r\n\r\n{body}");
 
     /// <summary>Reads the header block, then the body by Content-Length or chunked framing, bounded.</summary>
     private static async Task<CapturedRequest?> ReadRequestAsync(NetworkStream stream)

@@ -50,8 +50,7 @@ public sealed class CliContractTests : IAsyncLifetime
         // auto-start (ADR-0075 §5.1) and is the only one that logs the 633 starting line — every
         // scenario after this reuses the same live server and carries only the 687 disclosure.
         new(["settings", "sweep", "threshold", "set", "0.5"], 0, "sweep threshold set to 0.5",
-            "info: AiRaccoon.Hosting.Proxy.BackendLauncher[633]\n      ai-raccoon: starting the backend on port {PORT}\n" +
-            BackendOutlivesCommand),
+            $"info: AiRaccoon.Hosting.Proxy.BackendLauncher[633]\n      ai-raccoon: starting the backend on port {{PORT}}\n{BackendOutlivesCommand}"),
         new(["settings", "sweep", "threshold", "set", "5"], 10, "",
             "ai-raccoon: invalid threshold '5' (expected a number in 0..1)"),
         new(["settings", "sweep", "show"], 0, "enabled: True  interval: 24 h  threshold: 0.5", BackendOutlivesCommand),

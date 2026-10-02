@@ -31,9 +31,8 @@ public sealed class DocsCorpusRegenerationTool(ITestOutputHelper output)
     {
         if (Environment.GetEnvironmentVariable(RunEnvVar) != "1")
         {
-            Assert.Skip($"{RunEnvVar} not set — this tool overwrites the committed " +
-                        "tests/AiRaccoon.Tests/Resources/docs-memory.db fixture from this repository's " +
-                        $"own docs. Set {RunEnvVar}=1 on an arm64 host to run it (ADR-0049/0050).");
+            Assert.Skip(
+                $"{RunEnvVar} not set — this tool overwrites the committed tests/AiRaccoon.Tests/Resources/docs-memory.db fixture from this repository's own docs. Set {RunEnvVar}=1 on an arm64 host to run it (ADR-0049/0050).");
             return;
         }
 
@@ -44,8 +43,7 @@ public sealed class DocsCorpusRegenerationTool(ITestOutputHelper output)
         {
             var (projectId, files) = ListCorpusFiles(repoRoot);
             files.ShouldNotBeEmpty();
-            output.WriteLine($"corpus root {repoRoot}: {files.Count} curated files selected " +
-                             $"for project '{projectId}'");
+            output.WriteLine($"corpus root {repoRoot}: {files.Count} curated files selected for project '{projectId}'");
 
             var ensured = await TestData.CreateBundledModel().EnsureAsync(cancellationToken);
             ensured.AllPresent.ShouldBeTrue(
@@ -124,8 +122,7 @@ public sealed class DocsCorpusRegenerationTool(ITestOutputHelper output)
             output.WriteLine($"wrote {targetPath} ({sizeBytes:N0} bytes, {sizeBytes / 1024.0 / 1024.0:F2} MiB)");
 
             var (total, withStructure, distinctHeadings) = await CountStructureAsync(targetPath, cancellationToken);
-            output.WriteLine($"regenerated corpus: {total} rows, {withStructure} with structure_embedding, " +
-                             $"{distinctHeadings} distinct heading paths");
+            output.WriteLine($"regenerated corpus: {total} rows, {withStructure} with structure_embedding, {distinctHeadings} distinct heading paths");
             total.ShouldBeGreaterThan(0);
             withStructure.ShouldBeGreaterThan(0, "at least one chunk must carry an H1/H2 to exercise the structure modality");
         }

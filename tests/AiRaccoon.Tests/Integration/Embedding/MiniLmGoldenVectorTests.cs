@@ -124,9 +124,7 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
                 }
 
                 mismatchedBits.ShouldBe(0,
-                    $"entry {entry.Id}: {mismatchedBits}/{expected.Length} float32 values differ bit-for-bit from the golden capture "
-                    + $"(captured on ONNX Runtime {golden.Provenance.OnnxRuntimeVersion ?? "unrecorded"}, running {CurrentOnnxRuntimeVersion()}) — "
-                    + "the engine output changed; a runtime bump re-captures, anything else is a regression");
+                    $"entry {entry.Id}: {mismatchedBits}/{expected.Length} float32 values differ bit-for-bit from the golden capture (captured on ONNX Runtime {golden.Provenance.OnnxRuntimeVersion ?? "unrecorded"}, running {CurrentOnnxRuntimeVersion()}) — the engine output changed; a runtime bump re-captures, anything else is a regression");
             }
 
             // Numeric secondary. 1e-6 is a SAME-ARCH bound: the bundled model is qint8, and x64
@@ -151,8 +149,7 @@ public sealed class MiniLmGoldenVectorTests : IAsyncLifetime
                 // bound on CI needs a per-architecture golden capture.
                 var cosine = Cosine(expected, actual);
                 cosine.ShouldBeGreaterThanOrEqualTo(0.95,
-                    $"entry {entry.Id}: cosine {cosine} against the golden capture — far below cross-architecture "
-                    + "requantisation drift; the engine's behaviour changed");
+                    $"entry {entry.Id}: cosine {cosine} against the golden capture — far below cross-architecture requantisation drift; the engine's behaviour changed");
             }
 
             // Token-id secondary: the tokenizer seam must reproduce the pinned EncodeToIds(text, true, true, true) ids.

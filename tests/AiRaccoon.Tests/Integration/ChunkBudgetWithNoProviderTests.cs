@@ -79,9 +79,7 @@ public sealed class ChunkBudgetWithNoProviderTests : IAsyncLifetime
             .ToList();
 
         oversized.ShouldBeEmpty(
-            $"{oversized.Count} of {entries.Count} chunks exceed the bundled model's {engineWindow}-token "
-            + $"window; worst {(oversized.Count == 0 ? 0 : oversized.Max(row => row.Tokens))} tokens. "
-            + "Configuring the engine later re-embeds but never re-chunks, so these boundaries are permanent.");
+            $"{oversized.Count} of {entries.Count} chunks exceed the bundled model's {engineWindow}-token window; worst {(oversized.Count == 0 ? 0 : oversized.Max(row => row.Tokens))} tokens. Configuring the engine later re-embeds but never re-chunks, so these boundaries are permanent.");
     }
 
     /// <summary>Real repo prose: synthetic filler tokenizes with a lower BERT/o200k ratio and does

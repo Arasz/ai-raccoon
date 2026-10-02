@@ -26,8 +26,7 @@ public sealed class RetrySurfaceGateTests
             .ToList();
 
         offenders.ShouldBeEmpty(
-            "the retry surface must use [RetryFact]/[RetryTheory], not bare [Fact]/[Theory]: "
-            + string.Join(", ", offenders));
+            $"the retry surface must use [RetryFact]/[RetryTheory], not bare [Fact]/[Theory]: {string.Join(", ", offenders)}");
     }
 
     /// <summary>An empty sweep passes for the same reason a broken one does.</summary>

@@ -24,8 +24,7 @@ public sealed class BddGateCoverageTests
             .ToList();
 
         untagged.ShouldBeEmpty(
-            $"these feature files need a @{GateCategory} tag or their scenarios never gate a PR: "
-            + string.Join(", ", untagged));
+            $"these feature files need a @{GateCategory} tag or their scenarios never gate a PR: {string.Join(", ", untagged)}");
     }
 
     [Fact]

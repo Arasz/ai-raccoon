@@ -62,9 +62,7 @@ public sealed class TableChunkingArmComparison(ITestOutputHelper output)
 
             var scored = ndcg.Count;
             output.WriteLine(
-                $"{name}: chunks={bank.Chunks.Count} scored={scored}/{queries.Count} " +
-                $"meanNdcg5={(scored > 0 ? ndcg.Average() : 0):F6} meanMrr10={(scored > 0 ? mrr.Average() : 0):F6} " +
-                $"meanRelevantSet={(scored > 0 ? relevantSizes.Average() : 0):F2} maxRelevantSet={(scored > 0 ? relevantSizes.Max() : 0)}");
+                $"{name}: chunks={bank.Chunks.Count} scored={scored}/{queries.Count} meanNdcg5={(scored > 0 ? ndcg.Average() : 0):F6} meanMrr10={(scored > 0 ? mrr.Average() : 0):F6} meanRelevantSet={(scored > 0 ? relevantSizes.Average() : 0):F2} maxRelevantSet={(scored > 0 ? relevantSizes.Max() : 0)}");
             if (unanchored.Count > 0)
             {
                 output.WriteLine($"    span not found verbatim under this arm: {string.Join(", ", unanchored)}");

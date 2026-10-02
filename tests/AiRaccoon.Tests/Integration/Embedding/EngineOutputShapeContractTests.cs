@@ -59,8 +59,7 @@ public sealed class EngineOutputShapeContractTests : IAsyncLifetime
         for (var i = 0; i < result.Count; i++)
         {
             result[i].Vector.Length.ShouldBe(declared,
-                $"input {i} ({CountTokens(MixedLengthBatch[i])} tokens) pooled to {result[i].Vector.Length} values "
-                + $"under '{pooling}'; a pooled vector is 'dimensions' long regardless of sequence length");
+                $"input {i} ({CountTokens(MixedLengthBatch[i])} tokens) pooled to {result[i].Vector.Length} values under '{pooling}'; a pooled vector is 'dimensions' long regardless of sequence length");
         }
     }
 
@@ -137,8 +136,7 @@ public sealed class EngineOutputShapeContractTests : IAsyncLifetime
             for (var j = i + 1; j < vectors.Count; j++)
             {
                 Cosine(vectors[i], vectors[j]).ShouldBeLessThan(0.999,
-                    $"inputs {i} and {j} are different sentences but pooled to the same direction under '{pooling}' "
-                    + "— the batch rows are being read from one slice");
+                    $"inputs {i} and {j} are different sentences but pooled to the same direction under '{pooling}' — the batch rows are being read from one slice");
             }
         }
     }

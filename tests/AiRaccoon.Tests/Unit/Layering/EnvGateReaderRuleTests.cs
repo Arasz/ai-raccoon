@@ -33,9 +33,7 @@ public sealed class EnvGateReaderRuleTests
             .ToList();
 
         offenders.ShouldBeEmpty(
-            "a class that stands up the real host reads AIRACCOON_DB_PASSPHRASE whether it means to or "
-            + "not, so it must hold TestData.EnvVarGate for the duration (docs/adr/0066): "
-            + string.Join("; ", offenders));
+            $"a class that stands up the real host reads AIRACCOON_DB_PASSPHRASE whether it means to or not, so it must hold TestData.EnvVarGate for the duration (docs/adr/0066): {string.Join("; ", offenders)}");
     }
 
     /// <summary>An empty sweep passes for the same reason a broken one does.</summary>

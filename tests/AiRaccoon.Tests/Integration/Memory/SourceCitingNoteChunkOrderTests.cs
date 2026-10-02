@@ -45,10 +45,8 @@ public sealed class SourceCitingNoteChunkOrderTests : IAsyncLifetime
     /// of them that the note spans several rows at whatever budget the manifest ships (about five rows:
     /// the shape 60 items had at the old bundled budget).</summary>
     public static string LongNote() =>
-        "Opening marker zq71 starts the parish minutes.\n\n"
-        + string.Join("\n\n", Enumerable.Range(0, TestData.BundledManifestChunkTokens() / 4).Select(i =>
-            $"Item {i:D2} records that the committee approved the tombola budget line number {i * 7:D3} after a vote."))
-        + "\n\nClosing marker xw42 ends the parish minutes.";
+        $"Opening marker zq71 starts the parish minutes.\n\n{string.Join("\n\n", Enumerable.Range(0, TestData.BundledManifestChunkTokens() / 4).Select(i =>
+            $"Item {i:D2} records that the committee approved the tombola budget line number {i * 7:D3} after a vote."))}\n\nClosing marker xw42 ends the parish minutes.";
 
     [RetryFact]
     public async Task Write_SourceCitingNote_ChunkIndexFollowsTheTextOrder()

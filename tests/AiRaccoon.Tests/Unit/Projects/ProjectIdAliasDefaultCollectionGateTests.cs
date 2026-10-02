@@ -72,9 +72,7 @@ public class ProjectIdAliasDefaultCollectionGateTests
         }
 
         offenders.ShouldBeEmpty(
-            "a test that replaces the process-wide alias cache must serialize with the other Default " +
-            "readers and reset it afterwards, or it leaks into whatever runs beside it — " +
-            $"found:{Environment.NewLine}{string.Join(Environment.NewLine, offenders)}");
+            $"a test that replaces the process-wide alias cache must serialize with the other Default readers and reset it afterwards, or it leaks into whatever runs beside it — found:{Environment.NewLine}{string.Join(Environment.NewLine, offenders)}");
     }
 
     private static string GateSource() => $"{nameof(ProjectIdAliasDefaultCollectionGateTests)}.cs";

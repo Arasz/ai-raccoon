@@ -174,8 +174,7 @@ public sealed class SourceAffinitySweepTests : IDisposable
         // that wide, and a negative gap is an improvement that must not fail the build.
         var gapVsBaseline = baseline.AdrNdcg5 - chosen.AdrNdcg5;
         gapVsBaseline.ShouldBeLessThanOrEqualTo(0.005,
-            "the chosen source-affinity config must not fall materially behind the λ=0 baseline; got " +
-            $"{gapVsBaseline:F4} (chosen {chosen.AdrNdcg5:F4}, baseline {baseline.AdrNdcg5:F4})");
+            $"the chosen source-affinity config must not fall materially behind the λ=0 baseline; got {gapVsBaseline:F4} (chosen {chosen.AdrNdcg5:F4}, baseline {baseline.AdrNdcg5:F4})");
 
         // Gate (d): C1 holds hybrid rank 1; C5 holds rank <= 5 (secrets/config ADRs outrank it).
         // C2's hybrid rank collapsed on the re-pinned corpus — its FTS-only rank-1 gate lives in

@@ -115,7 +115,7 @@ public sealed class ModelResetGuardEndpointTests : IAsyncLifetime
     {
         await SeedAsync(openMigration: true);
 
-        var response = await _client.DeleteAsync("/settings?key=" + EmbeddingSettingsKeys.Model,
+        var response = await _client.DeleteAsync($"/settings?key={EmbeddingSettingsKeys.Model}",
             TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);

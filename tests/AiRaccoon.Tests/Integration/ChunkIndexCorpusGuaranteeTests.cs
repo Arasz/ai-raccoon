@@ -77,8 +77,7 @@ public sealed class ChunkIndexCorpusGuaranteeTests : IDisposable
         }
 
         outOfOrder.ShouldBeEmpty(
-            $"{outOfOrder.Count}/{rows.Select(r => r.SourceFile).Distinct().Count()} files have a chunk_index sequence " +
-            $"that does not match source-text order; first: {(outOfOrder.Count > 0 ? outOfOrder[0] : "")}");
+            $"{outOfOrder.Count}/{rows.Select(r => r.SourceFile).Distinct().Count()} files have a chunk_index sequence that does not match source-text order; first: {(outOfOrder.Count > 0 ? outOfOrder[0] : "")}");
     }
 
     private static string FindRepoRoot()

@@ -493,7 +493,7 @@ public sealed class WatchIntegrationTests
         await AssertFullCoverageAsync(stack, "Widget.cs", v1, TestContext.Current.CancellationToken);
 
         // Insert lines at the top.
-        var v2 = "// zephyrtop header\n// second header line\n\n" + v1;
+        var v2 = $"// zephyrtop header\n// second header line\n\n{v1}";
         stack.Write("Widget.cs", v2);
         (await stack.StepUntilAsync(
                 async () => await stack.CodeEntryHasValueContainingAsync(stack.File("Widget.cs"), "zephyrtop",
@@ -511,7 +511,7 @@ public sealed class WatchIntegrationTests
         await AssertFullCoverageAsync(stack, "Widget.cs", v3, TestContext.Current.CancellationToken);
 
         // Append a new block at the end.
-        var v4 = v3 + "\nclass DeltaZephyrTail\n{\n}\n";
+        var v4 = $"{v3}\nclass DeltaZephyrTail\n{{\n}}\n";
         stack.Write("Widget.cs", v4);
         (await stack.StepUntilAsync(
                 async () => await stack.CodeEntryHasValueContainingAsync(stack.File("Widget.cs"), "DeltaZephyrTail",
@@ -875,12 +875,8 @@ public sealed class WatchIntegrationTests
             var fingerprints = await connection.QueryAsync<string>(new CommandDefinition(
                 "SELECT path FROM watch_files WHERE project_id = @p", new { p = Project }, cancellationToken: cancellationToken));
             var statuses = Pipeline.GetStatuses(Project).Select(st => $"{st.Path}:{st.State}");
-            return $"entries=[{string.Join(", ", states.Select(x => $"{Path.GetFileName(x.SourceFile)}:{x.State}x{x.Count}"))}] " +
-                   $"fingerprints=[{string.Join(", ", fingerprints.Select(Path.GetFileName))}] " +
-                   $"watches=[{string.Join(", ", statuses)}] errors=[{string.Join(" | ", Errors.Select(e => e.ToString()))}] " +
-                   $"fsEvents=[{string.Join(", ", FsEvents.ToArray().Select(e => $"{e.Kind}:{Path.GetFileName(e.Path)}{(e.OldPath is null ? "" : "<-" + Path.GetFileName(e.OldPath))}"))}] " +
-                   $"scans started={ScanGuard.StartedScans} skipped={ScanGuard.SkippedScans} lastScanDone={CatchUp.LastScan?.IsCompleted} fakeNow={Time.GetUtcNow():O} " +
-                   $"log=[{string.Join(" | ", _logs.GetSnapshot().Select(r => $"[{r.Id.Id}] {r.Message}{(r.Exception is null ? "" : $" :: {r.Exception.GetType().Name}: {r.Exception.Message}")}"))}]";
+            return
+                $"entries=[{string.Join(", ", states.Select(x => $"{Path.GetFileName(x.SourceFile)}:{x.State}x{x.Count}"))}] fingerprints=[{string.Join(", ", fingerprints.Select(Path.GetFileName))}] watches=[{string.Join(", ", statuses)}] errors=[{string.Join(" | ", Errors.Select(e => e.ToString()))}] fsEvents=[{string.Join(", ", FsEvents.ToArray().Select(e => $"{e.Kind}:{Path.GetFileName(e.Path)}{(e.OldPath is null ? "" : $"<-{Path.GetFileName(e.OldPath)}")}"))}] scans started={ScanGuard.StartedScans} skipped={ScanGuard.SkippedScans} lastScanDone={CatchUp.LastScan?.IsCompleted} fakeNow={Time.GetUtcNow():O} log=[{string.Join(" | ", _logs.GetSnapshot().Select(r => $"[{r.Id.Id}] {r.Message}{(r.Exception is null ? "" : $" :: {r.Exception.GetType().Name}: {r.Exception.Message}")}"))}]";
         }
 
         public async Task<int> CountEntriesUnderAsync(string dirPrefix, CancellationToken cancellationToken)

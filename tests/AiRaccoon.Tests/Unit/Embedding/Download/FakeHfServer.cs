@@ -64,7 +64,7 @@ public class HfTreeClientTests : IDisposable
         var tree = await Client().GetTreeAsync("big/repo", "main", TestContext.Current.CancellationToken);
 
         _server.Hits.Count(h => h.Key.Contains("/tree/", StringComparison.Ordinal))
-            .ShouldBe(2, "the Link header must be followed: " + string.Join(";", _server.Hits.Select(h => $"{h.Key}={h.Value}")));
+            .ShouldBe(2, $"the Link header must be followed: {string.Join(";", _server.Hits.Select(h => $"{h.Key}={h.Value}"))}");
         tree.Count.ShouldBe(1003);
         tree[^1].Path.ShouldBe("tail-c.bin");
     }
@@ -107,7 +107,7 @@ internal sealed class FakeHfServer : IDisposable
     private FakeHfServer(int port)
     {
         BaseUrl = $"http://127.0.0.1:{port}";
-        _listener.Prefixes.Add(BaseUrl + "/");
+        _listener.Prefixes.Add($"{BaseUrl}/");
         _listener.Start();
         _ = Task.Run(AcceptLoopAsync);
     }
@@ -145,7 +145,7 @@ internal sealed class FakeHfServer : IDisposable
     public void Resolve(string repo, string path, byte[] bytes, int status = 200)
     {
         var prefix = $"/{repo}/resolve/";
-        On(prefix, rest => rest.EndsWith("/" + path, StringComparison.Ordinal)
+        On(prefix, rest => rest.EndsWith($"/{path}", StringComparison.Ordinal)
             ? new FakeHfResponse(status, bytes, null)
             : null);
     }
@@ -154,7 +154,7 @@ internal sealed class FakeHfServer : IDisposable
     public void Raw(string repo, string path, string content, int status = 200)
     {
         var prefix = $"/{repo}/raw/";
-        On(prefix, rest => rest.EndsWith("/" + path, StringComparison.Ordinal)
+        On(prefix, rest => rest.EndsWith($"/{path}", StringComparison.Ordinal)
             ? new FakeHfResponse(status, Encoding.UTF8.GetBytes(content), null)
             : null);
     }

@@ -24,11 +24,9 @@ public sealed class PinnedQueryVectorFixtureTests
         var catalogTexts = catalog.Select(q => q.Query).ToHashSet(StringComparer.Ordinal);
 
         catalogTexts.Except(pinnedTexts, StringComparer.Ordinal).ShouldBeEmpty(
-            $"every query in {BaselineQueryCatalog.RelativePath} needs a pinned vector; regenerate with " +
-            $"{GateQueryVectorRegenerationTool.RunEnvVar}=1");
+            $"every query in {BaselineQueryCatalog.RelativePath} needs a pinned vector; regenerate with {GateQueryVectorRegenerationTool.RunEnvVar}=1");
         pinnedTexts.Except(catalogTexts, StringComparer.Ordinal).ShouldBeEmpty(
-            $"the fixture pins query text no longer in {BaselineQueryCatalog.RelativePath}; regenerate with " +
-            $"{GateQueryVectorRegenerationTool.RunEnvVar}=1");
+            $"the fixture pins query text no longer in {BaselineQueryCatalog.RelativePath}; regenerate with {GateQueryVectorRegenerationTool.RunEnvVar}=1");
         pinned.Vectors.Select(v => v.Id).ShouldBe(catalog.Select(q => q.Id), ignoreOrder: true);
     }
 

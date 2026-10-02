@@ -30,8 +30,7 @@ public sealed class BackgroundInstrumentationCoverageTests
             .ToList();
 
         dark.ShouldBeEmpty(
-            $"Uninstrumented background service(s): {string.Join(", ", dark)}. Take IOperationTelemetry "
-            + "and open a scope per pass, or the pass is invisible to the collector.");
+            $"Uninstrumented background service(s): {string.Join(", ", dark)}. Take IOperationTelemetry and open a scope per pass, or the pass is invisible to the collector.");
     }
 
     /// <summary>
@@ -51,9 +50,7 @@ public sealed class BackgroundInstrumentationCoverageTests
             .ToList();
 
         dark.ShouldBeEmpty(
-            $"Hosted service(s) that never call NoteWork(): {string.Join(", ", dark)}. Taking "
-            + "IOperationTelemetry is not enough — without a NoteWork() call somewhere in the pass, "
-            + "no pass this service runs can ever produce a span, however much work it did.");
+            $"Hosted service(s) that never call NoteWork(): {string.Join(", ", dark)}. Taking IOperationTelemetry is not enough — without a NoteWork() call somewhere in the pass, no pass this service runs can ever produce a span, however much work it did.");
     }
 
     /// <summary>The guard's reach, not a second copy of the list: a walk that found nothing would

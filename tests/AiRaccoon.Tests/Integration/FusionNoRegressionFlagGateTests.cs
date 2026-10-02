@@ -110,8 +110,7 @@ public sealed class FusionNoRegressionFlagGateTests : IDisposable
             var bestSingle = Min(ftsRank, vectorRank);
 
             _output.WriteLine(
-                $"{query.Id}: hybrid={hybridRank?.ToString() ?? "-"} fts={ftsRank?.ToString() ?? "-"} " +
-                $"vector={vectorRank?.ToString() ?? "-"} bestSingle={bestSingle?.ToString() ?? "-"}");
+                $"{query.Id}: hybrid={hybridRank?.ToString() ?? "-"} fts={ftsRank?.ToString() ?? "-"} vector={vectorRank?.ToString() ?? "-"} bestSingle={bestSingle?.ToString() ?? "-"}");
 
             if (MeasuredHybridRankWithFlagOn.ContainsKey(query.Id))
             {
@@ -127,8 +126,7 @@ public sealed class FusionNoRegressionFlagGateTests : IDisposable
             if (hybridRank is null || hybridRank.Value > bestSingle.Value)
             {
                 violations.Add(
-                    $"{query.Id}: hybrid {hybridRank?.ToString() ?? "-"} > best single leg {bestSingle} " +
-                    $"(fts {ftsRank?.ToString() ?? "-"}, vector {vectorRank?.ToString() ?? "-"})");
+                    $"{query.Id}: hybrid {hybridRank?.ToString() ?? "-"} > best single leg {bestSingle} (fts {ftsRank?.ToString() ?? "-"}, vector {vectorRank?.ToString() ?? "-"})");
             }
         }
 
@@ -138,8 +136,7 @@ public sealed class FusionNoRegressionFlagGateTests : IDisposable
         foreach (var (id, measuredRank) in MeasuredHybridRankWithFlagOn)
         {
             pinnedRanks[id].ShouldBe(measuredRank,
-                $"{id}: flag-enabled hybrid rank drifted from the 2026-09-24 measurement ({measuredRank}) — " +
-                "re-measure and update docs/work/2026-09-24-fusion-no-regression-flag-measured.md");
+                $"{id}: flag-enabled hybrid rank drifted from the 2026-09-24 measurement ({measuredRank}) — re-measure and update docs/work/2026-09-24-fusion-no-regression-flag-measured.md");
         }
     }
 

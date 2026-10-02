@@ -140,8 +140,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
             if (!await PortIsFreeAsync())
             {
                 throw new InvalidOperationException(
-                    $"port {_port} is still held but /observability never named a pid, so the spawned " +
-                    $"serve could not be killed; it still holds {_dataRoot}");
+                    $"port {_port} is still held but /observability never named a pid, so the spawned serve could not be killed; it still holds {_dataRoot}");
             }
 
             return;

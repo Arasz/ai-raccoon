@@ -20,9 +20,9 @@ public sealed class BinaryContentTests
 
     [Fact]
     public void NulAtTheLastInspectedCharacter_IsBinary() =>
-        BinaryContent.IsBinary(new string('a', BinaryContent.InspectedLength - 1) + "\0").ShouldBeTrue();
+        BinaryContent.IsBinary($"{new string('a', BinaryContent.InspectedLength - 1)}\0").ShouldBeTrue();
 
     [Fact]
     public void NulPastTheInspectedPrefix_IsNotBinary() =>
-        BinaryContent.IsBinary(new string('a', BinaryContent.InspectedLength) + "\0").ShouldBeFalse();
+        BinaryContent.IsBinary($"{new string('a', BinaryContent.InspectedLength)}\0").ShouldBeFalse();
 }

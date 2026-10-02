@@ -259,7 +259,7 @@ public sealed class ProjectIdCensusTests
     private static async Task<List<string>> ExplainAsync(SqliteConnection connection, string sql, CancellationToken ct)
     {
         var rows = await connection.QueryAsync<PlanRow>(new CommandDefinition(
-            "EXPLAIN QUERY PLAN " + sql, cancellationToken: ct));
+            $"EXPLAIN QUERY PLAN {sql}", cancellationToken: ct));
         return rows.Select(r => r.Detail).ToList();
     }
 

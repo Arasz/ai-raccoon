@@ -194,7 +194,7 @@ public class MarkdownChunkerHeadingPathTests
     [Fact]
     public void ChunkWithHeadings_Sections_FollowTheContentNotTheHeadingLines()
     {
-        var text = "# T\n\n## A\nAAAA\n\n## B\n" + string.Concat(Enumerable.Repeat("BBBB\n", 6));
+        var text = $"# T\n\n## A\nAAAA\n\n## B\n{string.Concat(Enumerable.Repeat("BBBB\n", 6))}";
 
         var chunks = new MarkdownChunker(CharCount).ChunkWithHeadings(text, 24, 0);
 

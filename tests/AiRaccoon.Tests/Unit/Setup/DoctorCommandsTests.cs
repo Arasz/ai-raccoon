@@ -847,9 +847,7 @@ public sealed class DoctorCommandsTests : IDisposable
         exit.ShouldBe(ErrorCode.Bank.Corrupted);
         outp.ShouldBeEmpty();
         err.Trim().ShouldBe(
-            $"ai-raccoon: doctor: the bank at {_factory.BankPath} exists but is not a SQLite database (SQLite error 26); " +
-            "wrong key or corrupt bank — check the encryption key source if this data root was working before, " +
-            "or restore the bank from a backup if the file itself is damaged");
+            $"ai-raccoon: doctor: the bank at {_factory.BankPath} exists but is not a SQLite database (SQLite error 26); wrong key or corrupt bank — check the encryption key source if this data root was working before, or restore the bank from a backup if the file itself is damaged");
         err.ShouldNotContain("Parameter");
     }
 

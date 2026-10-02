@@ -110,9 +110,7 @@ public sealed class MemorySchemaDdlStatementCountTests
         - statements.Count(s => s.Contains("table_info('search_quality')", StringComparison.Ordinal))
         - statements.Count(s => s.Contains("FROM watches", StringComparison.Ordinal));
 
-    private static string Report(List<string> statements) =>
-        $"{statements.Count} statements traced, {CountDdl(statements)} of them Ddl:\n"
-        + string.Join("\n---\n", statements);
+    private static string Report(List<string> statements) => $"{statements.Count} statements traced, {CountDdl(statements)} of them Ddl:\n{string.Join("\n---\n", statements)}";
 
     private static async Task<SqliteConnection> OpenAsync()
     {

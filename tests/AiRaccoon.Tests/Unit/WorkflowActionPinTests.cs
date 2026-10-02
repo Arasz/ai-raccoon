@@ -26,8 +26,7 @@ public sealed class WorkflowActionPinTests
             .ToList();
 
         offenders.ShouldBeEmpty(
-            "these actions are referenced by a mutable tag or branch instead of a commit SHA: " +
-            string.Join(", ", offenders));
+            $"these actions are referenced by a mutable tag or branch instead of a commit SHA: {string.Join(", ", offenders)}");
     }
 
     [Fact]
@@ -63,6 +62,6 @@ public sealed class WorkflowActionPinTests
         }
 
         throw new InvalidOperationException(
-            "Could not find repo root (AiRaccoon.slnx) walking up from " + AppContext.BaseDirectory);
+            $"Could not find repo root (AiRaccoon.slnx) walking up from {AppContext.BaseDirectory}");
     }
 }

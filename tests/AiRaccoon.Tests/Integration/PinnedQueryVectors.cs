@@ -38,8 +38,7 @@ internal static class PinnedQueryVectors
         if (!File.Exists(path))
         {
             throw new FileNotFoundException(
-                $"Pinned query-vector fixture not found at '{path}'. Regenerate it with " +
-                $"{GateQueryVectorRegenerationTool.RunEnvVar}=1 (docs/adr/0050).", path);
+                $"Pinned query-vector fixture not found at '{path}'. Regenerate it with {GateQueryVectorRegenerationTool.RunEnvVar}=1 (docs/adr/0050).", path);
         }
 
         return JsonSerializer.Deserialize<PinnedQueryVectorFile>(File.ReadAllText(path), JsonOptions)
@@ -155,8 +154,7 @@ internal sealed class PinnedQueryEmbeddingService(PinnedQueryVectorFile file) : 
                 if (!_byQuery.TryGetValue(text, out var vector))
                 {
                     throw new KeyNotFoundException(
-                        $"No pinned vector for '{text}'. This fixture only covers scripts/baseline-queries.json; " +
-                        $"regenerate it with {GateQueryVectorRegenerationTool.RunEnvVar}=1 (docs/adr/0050).");
+                        $"No pinned vector for '{text}'. This fixture only covers scripts/baseline-queries.json; regenerate it with {GateQueryVectorRegenerationTool.RunEnvVar}=1 (docs/adr/0050).");
                 }
 
                 embeddings.Add(new Embedding<float>(vector));

@@ -71,8 +71,7 @@ public class ProjectRowsSingleDefinitionTests
         }
 
         offenders.ShouldBeEmpty(
-            "a project-membership test must go through ProjectRows, not a copied literal — " +
-            $"found:{Environment.NewLine}{string.Join(Environment.NewLine, offenders)}");
+            $"a project-membership test must go through ProjectRows, not a copied literal — found:{Environment.NewLine}{string.Join(Environment.NewLine, offenders)}");
     }
 
     private static string SourceRoot()

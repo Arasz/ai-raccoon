@@ -26,7 +26,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
 
     public FileIngestorCodeRoutingTests()
     {
-        _testDir = Path.Combine(Path.GetTempPath(), "airaccoon_code_routing_" + Guid.NewGuid().ToString("N"));
+        _testDir = Path.Combine(Path.GetTempPath(), $"airaccoon_code_routing_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testDir);
 
         var opts = new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User };

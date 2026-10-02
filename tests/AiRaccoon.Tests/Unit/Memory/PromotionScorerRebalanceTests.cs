@@ -36,10 +36,9 @@ public sealed class PromotionScorerRebalanceTests
         var filler = string.Concat(Enumerable.Repeat(
             "The queue processes items in arrival order at the front door, keeping memory pressure " +
             "steady across long sessions with no operator input. ", 12));
-        var sparse = Evaluate(filler + "Never bypass the invalidation queue.");
+        var sparse = Evaluate($"{filler}Never bypass the invalidation queue.");
         var sustained = Evaluate(
-            filler + "Never bypass the invalidation queue. This limit is a hard invariant recorded " +
-            "here for every future reader.");
+            $"{filler}Never bypass the invalidation queue. This limit is a hard invariant recorded here for every future reader.");
 
         sparse.Reasons.ShouldNotContain("rule-language");
         sustained.Reasons.ShouldContain("rule-language");

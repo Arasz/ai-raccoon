@@ -32,7 +32,7 @@ public sealed class MergeConflictMarkerTests
 
         matches.ExitCode.ShouldBeLessThan(2, $"git grep failed: {matches.Stderr}");
         matches.ExitCode.ShouldBe(1,
-            "these tracked files still carry an unresolved merge-conflict marker: " + matches.Stdout.Trim());
+            $"these tracked files still carry an unresolved merge-conflict marker: {matches.Stdout.Trim()}");
     }
 
     /// <summary>

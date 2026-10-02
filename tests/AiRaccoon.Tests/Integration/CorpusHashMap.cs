@@ -48,8 +48,7 @@ internal static class CorpusHashMap
             var (relSuffix, section) = ParseExpectedSource(expected);
             var group = byFile.SingleOrDefault(g => g.Key.EndsWith(relSuffix, StringComparison.Ordinal))
                         ?? throw new InvalidOperationException(
-                            $"CorpusHashMap.Build: no source_file in the regenerated corpus ends with " +
-                            $"'{relSuffix}' (expectedSource '{expected}')");
+                            $"CorpusHashMap.Build: no source_file in the regenerated corpus ends with '{relSuffix}' (expectedSource '{expected}')");
             var chunks = group.OrderBy(row => row.ChunkIndex).ToList();
             var match = section is null
                 ? chunks[0]
@@ -68,8 +67,7 @@ internal static class CorpusHashMap
             if (match.Hash is null)
             {
                 throw new InvalidOperationException(
-                    $"CorpusHashMap.Build: no chunk of '{relSuffix}' has heading_path '{section}' " +
-                    $"(expectedSource '{expected}')");
+                    $"CorpusHashMap.Build: no chunk of '{relSuffix}' has heading_path '{section}' (expectedSource '{expected}')");
             }
 
             hashMap[expected] = match.Hash;
@@ -125,7 +123,6 @@ internal static class CorpusHashMap
         }
 
         throw new InvalidOperationException(
-            $"CorpusHashMap.ParseExpectedSource: unrecognized prefix in '{expectedSource}' — add a case if a " +
-            "new expectedSource needs it.");
+            $"CorpusHashMap.ParseExpectedSource: unrecognized prefix in '{expectedSource}' — add a case if a new expectedSource needs it.");
     }
 }

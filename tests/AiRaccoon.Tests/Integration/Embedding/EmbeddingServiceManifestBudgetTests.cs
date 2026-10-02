@@ -93,7 +93,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     [RetryFact]
     public void ResolveChunkBudgetFor_LegacyOnnxFile_Stays254()
     {
-        var onnx = Path.Combine(Path.GetTempPath(), "ai-raccoon-budget-tests", Guid.NewGuid().ToString("N") + ".onnx");
+        var onnx = Path.Combine(Path.GetTempPath(), "ai-raccoon-budget-tests", $"{Guid.NewGuid():N}.onnx");
         File.WriteAllText(onnx, "model");
 
         Service().ResolveChunkBudgetFor(new EmbeddingSettings("local", onnx, null, null))
@@ -215,9 +215,8 @@ public sealed class EmbeddingServiceManifestBudgetTests
     {
         var dir = WriteManifestDir(Manifest(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
         var manifestPath = Path.Combine(dir, EmbeddingManifest.FileName);
-        var expected = "local:" + Path.GetFullPath(dir) + "#" +
-                       Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(manifestPath)))
-                           .ToLowerInvariant();
+        var expected = $"local:{Path.GetFullPath(dir)}#{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(manifestPath)))
+            .ToLowerInvariant()}";
 
         Service().EngineFingerprint("local", dir, null).ShouldBe(expected);
     }
@@ -240,7 +239,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     public void EngineFingerprint_Bundled_IsStableAndHashesTheBundledManifest_LegacyFileUnchanged()
     {
         var manifest = File.ReadAllBytes(Path.Combine(BundledModel.ResolveDirectory(), EmbeddingManifest.FileName));
-        var expected = "local:bundled#" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(manifest)).ToLowerInvariant();
+        var expected = $"local:bundled#{Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(manifest)).ToLowerInvariant()}";
 
         Service().EngineFingerprint("local", null, null).ShouldBe(expected);
         Service().EngineFingerprint("local", BundledModel.SettingValue, null).ShouldBe(expected,

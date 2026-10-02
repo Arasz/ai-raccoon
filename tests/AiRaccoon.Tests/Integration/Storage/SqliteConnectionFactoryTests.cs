@@ -265,7 +265,7 @@ public sealed class SqliteConnectionFactoryTests : IDisposable
             statements.ShouldNotContain(sql => sql == "PRAGMA user_version" || sql == "PRAGMA application_id",
                 string.Join(" | ", statements));
             statements.ShouldContain(sql => sql.Contains("FROM watches", StringComparison.Ordinal),
-                "the watch-overlap prune runs on every open: " + string.Join(" | ", statements));
+                $"the watch-overlap prune runs on every open: {string.Join(" | ", statements)}");
         }
         finally
         {

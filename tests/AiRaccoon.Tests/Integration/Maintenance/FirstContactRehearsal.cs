@@ -80,7 +80,7 @@ public sealed class FirstContactRehearsal(ITestOutputHelper output)
         output.WriteLine($"migration        : {migrateElapsed.TotalSeconds:F1}s");
         foreach (var outcome in outcomes)
         {
-            output.WriteLine($"job {outcome.Name,-15}: {(outcome.Ran ? "ran" : "skipped")}{(outcome.Error is null ? "" : " — " + outcome.Error)}");
+            output.WriteLine($"job {outcome.Name,-15}: {(outcome.Ran ? "ran" : "skipped")}{(outcome.Error is null ? "" : $" — {outcome.Error}")}");
         }
 
         output.WriteLine($"jobs total       : {jobsElapsed.TotalSeconds:F1}s");
@@ -105,10 +105,8 @@ public sealed class FirstContactRehearsal(ITestOutputHelper output)
             var elapsed = DateTimeOffset.UtcNow - started;
 
             var perRow = elapsed.TotalMilliseconds / Math.Max(1, embedded);
-            output.WriteLine($"embed sample     : {embedded} rows in {elapsed.TotalSeconds:F1}s "
-                             + $"({perRow:F0} ms/row)");
-            output.WriteLine($"drain estimate   : {TimeSpan.FromMilliseconds(perRow * pending).TotalMinutes:F1} min "
-                             + $"for {pending:N0} rows — EXTRAPOLATED from {embedded}, not measured whole");
+            output.WriteLine($"embed sample     : {embedded} rows in {elapsed.TotalSeconds:F1}s ({perRow:F0} ms/row)");
+            output.WriteLine($"drain estimate   : {TimeSpan.FromMilliseconds(perRow * pending).TotalMinutes:F1} min for {pending:N0} rows — EXTRAPOLATED from {embedded}, not measured whole");
         }
 
         outcomes.ShouldAllBe(o => o.Error == null, "a job that errors on a real bank is the finding");

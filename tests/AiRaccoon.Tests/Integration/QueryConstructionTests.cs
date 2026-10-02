@@ -109,8 +109,7 @@ public sealed class QueryConstructionTests : IDisposable
             "S2's AND primary ('adr AND 0006 AND decide') matches only docs/adr/0088 and " +
             "docs/adr/0078, excluding ADR-0006 entirely; the OR fallback must restore it");
         rank.Value.ShouldBe(1,
-            $"ADR-0006 measured at exactly rank 1 once the OR fallback runs (Limit=30, " +
-            $"FtsWeight=1/VectorWeight=0), got {rank}");
+            $"ADR-0006 measured at exactly rank 1 once the OR fallback runs (Limit=30, FtsWeight=1/VectorWeight=0), got {rank}");
     }
 
     /// <summary>A provably zero-matching AND primary must retry with the OR fallback (results equal the OR-only expression).</summary>
@@ -260,8 +259,7 @@ public sealed class QueryConstructionTests : IDisposable
             _output.WriteLine($"{id} hybrid top-5: {string.Join(", ", top5.Select(h => hashMap.FirstOrDefault(p => p.Value == h).Key ?? h))}");
             rank.ShouldNotBeNull($"{id} must find its expected file (baseline rank {baselineRank})");
             rank.Value.ShouldBeLessThanOrEqualTo(baselineRank,
-                $"{id} must not regress past its measured baseline rank {baselineRank} on the public " +
-                $"docs corpus (ADR-0090), now {rank}");
+                $"{id} must not regress past its measured baseline rank {baselineRank} on the public docs corpus (ADR-0090), now {rank}");
         }
 
         // A1/A4 rank flips are same-knowledge alternatives from the dual-vector structure
