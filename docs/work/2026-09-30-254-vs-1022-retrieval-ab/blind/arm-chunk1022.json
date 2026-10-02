@@ -1,0 +1,420 @@
+{
+  "arm": "chunk1022",
+  "env": {},
+  "queries": [
+    {
+      "queryId": "E082",
+      "queryText": "Which project id was used for the manual 25-tool MCP round-trip test?",
+      "results": [
+        {
+          "hash": "1c05b99cd9cd0d0f95629275be520c7ee65fd05211a4c54a6d3cf25e804f1ece",
+          "rank": 1,
+          "snippet": "\u2026the PR.\n\n**PR #377:** [feat(mcp): add venv check/install scripts for\u2026"
+        },
+        {
+          "hash": "d4ca0061094d880a83620078e5c57c4c101fcf4603a14211d9326e706962d1aa",
+          "rank": 2,
+          "snippet": "\u2026The issue is the un-re-derived sibling test. Waiting for the\u2026"
+        },
+        {
+          "hash": "625471a51b6902af2d909ec31cee7c0f25f8141840f7cec6155b2b399eae8d34",
+          "rank": 3,
+          "snippet": "\u20266 build for manual tool sweep\n2. Test all MCP tools against\u2026"
+        },
+        {
+          "hash": "571a332c3b72f18e37c184ad3b1e5546d62ab7e74a0fe6c4c6f611b725013e53",
+          "rank": 4,
+          "snippet": "\u2026on the head \u2014 `ToolTelemetryProjectionTests.EveryToolWithoutAProjection_DeclaresAProjectIdArgument` breaks because `project_id_token_get\u2026"
+        },
+        {
+          "hash": "824f31af0b34798ff33c1da641b7f2ff9212e65e3be34405d482cf3ffa429f4d",
+          "rank": 5,
+          "snippet": "\u2026the approval stands for this code state.\n\n**#565** (WP6-6c unregistered-project\u2026"
+        },
+        {
+          "hash": "4ce7dac6a25b3ab985d5d8790c72231b38fcd034e15cc59e3deb1137216465cb",
+          "rank": 6,
+          "snippet": "\u20267. **All 25 MCP Tools**: Exercise full 25-tool surface without exceptions\u2026"
+        },
+        {
+          "hash": "482cd238c8d9ad22398258ce1dcf30da71006d8311e8af615abae861323762e8",
+          "rank": 7,
+          "snippet": "\u2026the architect persona's system prompt) and the **MCP memory round trip\u2026"
+        },
+        {
+          "hash": "7411a1c130fe9efdde2aa523eee21531037ce7942b799e097bbf0bc8932ba320",
+          "rank": 8,
+          "snippet": "\u2026Here's the summary:\n\n**ai-raccoon MCP tool index updated: 22 \u2192 33\u2026"
+        }
+      ]
+    },
+    {
+      "queryId": "E015",
+      "queryText": "What is lost by never syncing settings \u2014 can a shared project-wide default like an embedding endpoint ride along with entries?",
+      "results": [
+        {
+          "hash": "5dcf12d11981e3375878a793310e69ccbaab4b2b045de71cb996fe95a238b9d5",
+          "rank": 1,
+          "snippet": "\u2026project-wide default\n  (e.g. a shared embedding endpoint) cannot ride along\u2026"
+        },
+        {
+          "hash": "aadc2b826e33551df0d8130961b86e6822b46e7f7580c204578b40e55a98f8da",
+          "rank": 2,
+          "snippet": "\u2026along with the OpenAI API key. Only mitigation today is that an\u2026"
+        },
+        {
+          "hash": "adf5445f5f0c296c6911828b2d6fee45cfb79b1587a7d8b6fd92370f4585f17c",
+          "rank": 3,
+          "snippet": "\u2026same reason settings don't: a\npushed snapshot is a whole-bank\u2026"
+        },
+        {
+          "hash": "30f6550173eb460eb34996a45ee46864f6460a7bd8fe9ee70cda334150431139",
+          "rank": 4,
+          "snippet": "\u2026default is already bank-wide and targeted-by-state, not by project\u2026"
+        },
+        {
+          "hash": "0d30e5c27fa05d8b90d08285c3ab40a09afa491a3613a47f3f310d0edf01f5fd",
+          "rank": 5,
+          "snippet": "\u2026who may do what per project\nai-raccoon settings access default set\u2026"
+        },
+        {
+          "hash": "4ea7893f726986b74d36a5740504ce056453821a792dc5d6d296d4043971cd31",
+          "rank": 6,
+          "snippet": "\u2026a per-project override |\n| `settings access list` (alias `show`) | Lists the default\u2026"
+        },
+        {
+          "hash": "356d9360826f87aa9c10de8d2f950f355a3714db9b5e4d6b4a1ef76de8f6e2f2",
+          "rank": 7,
+          "snippet": "\u2026can never change. | Concrete failure mode: a bank created before the `entries\u2026"
+        },
+        {
+          "hash": "b5965cf6e385508e34f3a18cac30ab063ae59509e81e5d64ea6e51c2b8d1b054",
+          "rank": 8,
+          "snippet": "\u2026On-by-default is a statement about the *policy* an operator gets\u2026"
+        }
+      ]
+    },
+    {
+      "queryId": "E004",
+      "queryText": "How do I find the server's process id to use with dotnet-counters and dotnet-trace?",
+      "results": [
+        {
+          "hash": "9fa64e7be34f09545db61bfcb0938461573ef8a3ca86785596e71f5bcb0a1da6",
+          "rank": 1,
+          "snippet": "\u2026Most\ninstruments are container-scoped and inapplicable to a local process; the\u2026"
+        },
+        {
+          "hash": "b658eb6019b59bb547a8ebd770e8f36af73be57fc9b9424ee0494fb116a3c368",
+          "rank": 2,
+          "snippet": "\u202618 instruments: `dotnet.process.cpu.time`,\n`dotnet.process.memory.working_set`, `dotnet\u2026"
+        },
+        {
+          "hash": "fdbe524e5b5fa3e7acf3fca56b9fe14f6d5fac4fd3fe9d46a400acaaa2ed6f4c",
+          "rank": 3,
+          "snippet": "\u2026process ID (PID)\nai-raccoon serve observability pid\n\n# Launch dotnet-counters monitoring\u2026"
+        },
+        {
+          "hash": "aa7df0d8434c8722b3f86732c3302f4eaf28862c61c426c786abe0f59574eb91",
+          "rank": 4,
+          "snippet": "- Blazor, SignalR, Authentication/Authorization meters \u2014 subsystems we do not use.\n\n## Part 2\u2026"
+        },
+        {
+          "hash": "e535d772636e2c15f827581f7e54c709255d5e9337f069b067ad37637bad96b6",
+          "rank": 5,
+          "snippet": "\u2026to watch a live server with `dotnet-counters` and\n`dotnet-trace` (README\u2026"
+        },
+        {
+          "hash": "5117c304dc18e3aa604fd382fa3ab2ed3b430b95648fdb02ff5709a31c720439",
+          "rank": 6,
+          "snippet": "\u2026to-run\ndiagnostic command for the **running** server, with its process id\u2026"
+        },
+        {
+          "hash": "cb994d8b0540db723d7698c5ae3dd34cd2d6e89355994e12a8bccb9998bb90b9",
+          "rank": 7,
+          "snippet": "\u2026To answer \"how many times did project X call tool Y\":\n  dotnet\u2026"
+        },
+        {
+          "hash": "ac552b38a4eefc3b5fc9f59117995d08b93dde148352f4c50cdca0d306bf787f",
+          "rank": 8,
+          "snippet": "\u2026the server answered with a status or body the CLI cannot use\u2026"
+        }
+      ]
+    },
+    {
+      "queryId": "E095",
+      "queryText": "Why does redirecting stdout with StringWriter in a test miss output from a spawned child process?",
+      "results": [
+        {
+          "hash": "cd5b16e3fd9def909e6b4d7e554d24fd9ef812c7ad1c79d9496f3790c67c833e",
+          "rank": 1,
+          "snippet": "\u2026spawned a `serve` grandchild | `:137-144` | CRITICAL | `finally { if (!process.HasExited) process\u2026"
+        },
+        {
+          "hash": "03bd4e2aa5bff27ac4eb90f4ea1e4d4a5a12f3e0d49c39b2c1396fee6e17be2a",
+          "rank": 2,
+          "snippet": "\u2026TOCTOU on a port handed to a spawned process | `:31` | HIGH | `PortLease\u2026"
+        },
+        {
+          "hash": "c4c6fe66e555c96b975fa89e454fa36b325d2e4814876c2120a5a1f93f93bca1",
+          "rank": 3,
+          "snippet": "\u2026child stdout in full (the probe clipping is pinned by a test).\n"
+        },
+        {
+          "hash": "2693b600e28515b1d7d4990b2f3bf8678c0cc1d58078a29c44c72561ec1eefaf",
+          "rank": 4,
+          "snippet": "\u2026if the test spawned a throwaway that is still alive \u2192\n`terminate()` \u2192 `wait\u2026"
+        },
+        {
+          "hash": "0f0522949b860a155e11314c082406016f58066d1c1891622dc4aa2440213069",
+          "rank": 5,
+          "snippet": "\u2026spawned processes | `:59`, `:89` | HIGH | `PortLease` |\n| **Correct already:** gate acquired with a\u2026"
+        },
+        {
+          "hash": "e82b8151c24c61aafacd15b5164ee49980b022e01033b2df849e184aaffd61f9",
+          "rank": 6,
+          "snippet": "\u2026Split A3: (a) `--port 0` \u2192 assert the bound URL in stdout **post\u2026"
+        },
+        {
+          "hash": "3912171d76592ddf98914a97cfb3d017569b4703948353b125064628357d103a",
+          "rank": 7,
+          "snippet": "\u2026process on a benign executable (e.g. `/bin/echo`) \u2192 exit 0 + stdout\u2026"
+        },
+        {
+          "hash": "73b8d91854802d5c080a6a2b5a1c4c8ce44a634995049a9cb133226fda449a36",
+          "rank": 8,
+          "snippet": "\u2026No other stdout source\nof the verb exists in a failing run\u2026"
+        }
+      ]
+    },
+    {
+      "queryId": "E036",
+      "queryText": "What did the noise-store cleanup remove, and what remains as the training-data source?",
+      "results": [
+        {
+          "hash": "81084ad5fd385374dca6d9eebebfb69a5a644ee3808e1fb3ba4bfe72285b899b",
+          "rank": 1,
+          "snippet": "\u2026as\nretiring the idea.\n\n**What a revival would need**, so the next\u2026"
+        },
+        {
+          "hash": "4d26e50acb286d7b9c0cd9c840490dfbdc3ee73bb08cc0069e6c86803dee3a41",
+          "rank": 2,
+          "snippet": "\u2026keep the noise store (it stays the training-data\nsource), but clean\u2026"
+        },
+        {
+          "hash": "a7b6e4f8af2e555c70dc8a4129baf7384d7bfe0e9971c2c4b56ac4e8a873ce62",
+          "rank": 3,
+          "snippet": "\u2026defaults off \u2014 but the training-data half (`noise_entries`) now actually accumulates\u2026"
+        },
+        {
+          "hash": "7f7b10c66641df3664b6d097b00d8595e0e47fa79d25f33e6e3b88d8d4b81d9a",
+          "rank": 4,
+          "snippet": "\u2026preserving the raw noise data for future evaluation or training of local\u2026"
+        },
+        {
+          "hash": "908b59702cb73fa980c7aa510c11ed37efa12b2bc13d022cf1dabc7440d0b015",
+          "rank": 5,
+          "snippet": "\u2026without touching the store, the feedback path, or the write-path\n  hook\u2026"
+        },
+        {
+          "hash": "c03337186c2d0c0efe74440b1b5af00825438433d82618e9e78c7ecaede9564f",
+          "rank": 6,
+          "snippet": "\u2026Shadow observations are never fed back into the store as training data\u2026"
+        },
+        {
+          "hash": "2f6f297acc800fcfd4f16f6a9da66e1ea19c2274ad6d0102bc28e264ff48363d",
+          "rank": 7,
+          "snippet": "\u2026for auditability and training data without polluting the primary memory bank.\n- **Performance\u2026"
+        },
+        {
+          "hash": "8ccf9a46b51cb01cab226ce6932fe7a686a51a96650498f2e5063191ac2b1ab6",
+          "rank": 8,
+          "snippet": "\u2026as well as a noise family (its \"Protocol B\") showed the calibrated\u2026"
+        }
+      ]
+    },
+    {
+      "queryId": "E032",
+      "queryText": "How is the chunk budget now counted with the real BERT tokenizer, and what is the guaranteed split floor?",
+      "results": [
+        {
+          "hash": "4621facd56c2f8036add9826cc8bfad678d014b959afc5e517bfbba99b371668",
+          "rank": 1,
+          "snippet": "\u2026the o200k-counted budget of 256 produced entries whose real\n   BERT WordPiece\u2026"
+        },
+        {
+          "hash": "aea215290bf6d3070ae7f612ebcee11c3d9e58f44a2269287beed5c92dcf8268",
+          "rank": 2,
+          "snippet": "\u2026The budget is derived from the engine's real window, not guessed\u2026"
+        },
+        {
+          "hash": "8de53863b419509e06a12d244aa2336a28d96f7cc7896865c509fb3fc0c19c06",
+          "rank": 3,
+          "snippet": "\u2026the interface's contract is \"counts tokens the way the *bundled* local\u2026"
+        },
+        {
+          "hash": "683c03b83b20a9bd83339896b46e8b6ed785f92bcf2ee895d6e5307de897cd59",
+          "rank": 4,
+          "snippet": "\u2026This is invisible to a\nbudget ceiling check (the offending chunk measures\u2026"
+        },
+        {
+          "hash": "88f8bb76250a744615ff478b8d2c8fd2eae15c80b9be1737471644891366381f",
+          "rank": 5,
+          "snippet": "\u2026chunk against the real tokenizer, binary-search split floor) is tokenizer-agnostic\u2026"
+        },
+        {
+          "hash": "a47f3a329c02c861a5ac8bcc7bc020e01d8587eeaa4714563d9c83a20635ea78",
+          "rank": 6,
+          "snippet": "\u2026with the real tokenizer and vocab, so it is unaffected by\nhow\u2026"
+        },
+        {
+          "hash": "94e86d58a026e83ccd006edc08152d210010c08a0a15f18ae7105a8e2d38f526",
+          "rank": 7,
+          "snippet": "\u2026BERT counting + budget 254, but\n  without the joined-chunk verification and split\u2026"
+        },
+        {
+          "hash": "da0d9750562a08007f82d8c783d9d2912294437a2cdef89ca2045baf8ebebe4c",
+          "rank": 8,
+          "snippet": "\u2026budget`, counted with the engine tokenizer. **Owner/retrieval-lane decision:** what the\u2026"
+        }
+      ]
+    },
+    {
+      "queryId": "E029",
+      "queryText": "How does the snippet for a vector-only hit get centered on query terms, and how are promoted shared copies deduped by content?",
+      "results": [
+        {
+          "hash": "100b5f09678214f2f8b14cda8881328dba6d8aa008765e10bd42d3ecac852e20",
+          "rank": 1,
+          "snippet": "\u2026hit was `memory_search`'s snippet, and for\na vector-only hit\u2026"
+        },
+        {
+          "hash": "5a27b3ffb27a53f21c0fea02052b47705bca27847b457c076510e1696fb021e0",
+          "rank": 2,
+          "snippet": "\u2026the only read path.\n- **Positive:** a vector-only hit's snippet is\u2026"
+        },
+        {
+          "hash": "dfd3d65b303414206fd815793cef49d772992cd9ab9d641fd2e77a9dd36c2d2b",
+          "rank": 3,
+          "snippet": "\u2026is a\nsmall tool. Separately make the vector-hit snippet query-relevant\u2026"
+        },
+        {
+          "hash": "d87feeb07c522374939264ef5e64d16bc2a95cee5a8f2c3a3bc68399b46be0e0",
+          "rank": 4,
+          "snippet": "\u2026memory_get` rests on the snippet. For the hits only\nvector search\u2026"
+        },
+        {
+          "hash": "65842c01684a530f6f7ec27f1c2e0294116f82e0889f538cc3a676d0497ea53c",
+          "rank": 5,
+          "snippet": "\u2026Top-10 matches for the query embedding (pure vector leg, `fts=0\u2026"
+        },
+        {
+          "hash": "0a4f3ecec6c1285e9c720d880266214e825aec9a54efc4d0026034cdc3eb78a4",
+          "rank": 6,
+          "snippet": "# Per-Query \u03b1 Tuning for Dual-Vector Structure-Aware Retrieval\n\n**Date**: 2026\u2026"
+        },
+        {
+          "hash": "becae98c598b404da986c37230064ed349a1c6fa3ed56a8c5aa9fa94ffb01b55",
+          "rank": 7,
+          "snippet": "\u2026storage + second vector + fusion) and does NOT depend on the source_file\u2026"
+        },
+        {
+          "hash": "8a6783d3111c54378111d2cdc7462427981fa35e2e73a9152bb0b9f3f9e3dccb",
+          "rank": 8,
+          "snippet": "\u2026BEATS content-only iff \u22652\n  query flips on section-level hit@5\u2026"
+        }
+      ]
+    },
+    {
+      "queryId": "E014",
+      "queryText": "Are settings stripped from every pushed snapshot and completely ignored on pull?",
+      "results": [
+        {
+          "hash": "5dcf12d11981e3375878a793310e69ccbaab4b2b045de71cb996fe95a238b9d5",
+          "rank": 1,
+          "snippet": "\u2026settings from crossing the sync boundary, check\nintegrity on every pushed snapshot\u2026"
+        },
+        {
+          "hash": "adf5445f5f0c296c6911828b2d6fee45cfb79b1587a7d8b6fd92370f4585f17c",
+          "rank": 2,
+          "snippet": "\u2026The mechanism differs from the settings strip on purpose. Settings are\nrow\u2026"
+        },
+        {
+          "hash": "2bf38a89faa3c67b06f6d7e27195c04390e15b313e885072720d5c74093063cf",
+          "rank": 3,
+          "snippet": "\u2026settings` table (cloud credentials, embedding endpoint/key)\nis stripped from every snapshot\u2026"
+        },
+        {
+          "hash": "aadc2b826e33551df0d8130961b86e6822b46e7f7580c204578b40e55a98f8da",
+          "rank": 4,
+          "snippet": "\u2026NULL` from the pre-push VACUUM INTO snapshot; the `settings` table is\u2026"
+        },
+        {
+          "hash": "edfc33ef225f93e7a1996cbffee7ff2332bbccc5efbe0b060e2aacbf22b33e00",
+          "rank": 5,
+          "snippet": "\u2026digest-DDL path) from every pushed snapshot, on all three\npush paths\u2026"
+        },
+        {
+          "hash": "2074a76189ea36f9504683cd2f2283477e3f08f5f657854dea7a1f13aed4a7eb",
+          "rank": 6,
+          "snippet": "\u2026from every pushed snapshot (mirroring the settings strip)\" with gate\n\"pushed snapshot\u2026"
+        },
+        {
+          "hash": "babab29aab8062a3c05d8fa71b5ba7f3a60c84b16c8f5ee8ed9dd255cc565784",
+          "rank": 7,
+          "snippet": "\u2026The rule is therefore RUN REPAIR LOCALLY ON EVERY REPLICA BEFORE PUSH\u2026"
+        },
+        {
+          "hash": "01bdf0f2276b40b2c0aa10f2c13809d02eda71e8bc301282e61a456148c38a16",
+          "rank": 8,
+          "snippet": "\u2026tables in every pushed snapshot. Telemetry left the\nmachine on each push\u2026"
+        }
+      ]
+    },
+    {
+      "queryId": "E087",
+      "queryText": "What was the review verdict posted on ai-raccoon PR 254?",
+      "results": [
+        {
+          "hash": "a054741ea7ee2f67821a9da339c7f0745ef0757f62cd62dbabfd8994484cda64",
+          "rank": 1,
+          "snippet": "\u2026I also patched `/Users/arasz/.hermes/scripts/ai-raccoon-pr-monitor.py\u2026"
+        },
+        {
+          "hash": "e680624045defb11064a61de1a3c5c8732ba78c420f927531fa502da085a1669",
+          "rank": 2,
+          "snippet": "**PR review round \u2014 Arasz/ai-raccoon**\n\n**#463 (draft=true, head moved \u2192 READY\u2026"
+        },
+        {
+          "hash": "f969bb3ab203b5cada3243e744e90a781b4c679dff4c4d782cbeb6d8f969ba01",
+          "rank": 3,
+          "snippet": "**PR #457 \u2014 reviewed, verdict APPROVE.** Verified on GitHub (comment 5379997057): all six\u2026"
+        },
+        {
+          "hash": "a7886884ecb3f23ff73f0f984f7c45c8e6bed459cd2fa4df9c22013276f825b2",
+          "rank": 4,
+          "snippet": "\u2026never review drafts).\n\n**PR #518** (FileIngestor required dependencies; embedInline removed) \u2014 fired on\u2026"
+        },
+        {
+          "hash": "c095319234f0f73810ec84769f949fd8f8137dd6d7e3fb095a4ca367f56808b2",
+          "rank": 5,
+          "snippet": "\u2026review drafts).\n\n**PR #517** (WP11-C embed-rows-per-run) \u2014 fired on\u2026"
+        },
+        {
+          "hash": "dd86968be6dbfdb2f23dfbeb4e140ccf84dd3145acad34351ec17849e59005be",
+          "rank": 6,
+          "snippet": "\u2026re-review. No approval posted at this head; waiting on the author\u2026"
+        },
+        {
+          "hash": "f4ea7ae123b865fa41cf52232b5dfad3d4bdd027d6f25a4dd27fe9814f149351",
+          "rank": 7,
+          "snippet": "\u2026the ADR text.\n- Posted the summary checklist review (`[ox-alpha review]`, VERDICT\u2026"
+        },
+        {
+          "hash": "cb9ec197fae5d1e97530848d4edde469db072f29292b44a6fd6cae89baec603c",
+          "rank": 8,
+          "snippet": "\u2026the live head, newer than what the monitor saw) against the PR\u2026"
+        }
+      ]
+    }
+  ]
+}
