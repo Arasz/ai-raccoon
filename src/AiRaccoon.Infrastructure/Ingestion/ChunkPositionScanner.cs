@@ -185,8 +185,7 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
             return;
         }
 
-        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
+        await connection.InWriteTransactionAsync(async () =>
         {
             foreach (var move in moves)
             {
@@ -195,14 +194,7 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
                     new { id = move.Id, chunkIndex = move.ChunkIndex, totalChunks = move.TotalChunks, section = move.Section },
                     cancellationToken: cancellationToken));
             }
-
-            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-        }
-        catch
-        {
-            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
-            throw;
-        }
+        }, cancellationToken);
     }
 
     /// <summary>The same resolution the ingest path uses, read from the same settings (mirrors <see cref="Ingestion.ChunkBackfill" />'s BudgetAsync).</summary>

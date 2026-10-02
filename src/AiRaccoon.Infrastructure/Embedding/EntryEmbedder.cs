@@ -544,9 +544,7 @@ public sealed partial class EntryEmbedder(
         var embeddingBlobs = result.Select(r => EmbeddingBlob.ToBytes(r.Vector)).ToList();
 
         var affected = 0;
-        await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
+        await connection.InWriteTransactionAsync(async () =>
         {
             for (var i = 0; i < batch.Count; i++)
             {
@@ -562,16 +560,7 @@ public sealed partial class EntryEmbedder(
                         },
                         cancellationToken));
             }
-
-            await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-        }
-        catch
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
-            throw;
-        }
+        }, cancellationToken);
 
         return affected;
     }

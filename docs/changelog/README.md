@@ -9,5 +9,5 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
-- [1.55.1 — 254-vs-1022 measurement record and eval re-anchor](1.55.1-809-measurement.md)
+- [1.55.5 — `doctor` handler split into named steps](1.55.5-doctor-run-split.md)
 - [1.55.0 — re-chunk phase instrumentation](1.55.0-rechunk-phase-instrumentation.md)

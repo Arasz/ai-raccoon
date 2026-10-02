@@ -435,19 +435,16 @@ Build pins carried from the A/B record: VERSION `1.55.0`, source commit
 
 ## 8. Version bump and what this step rejected
 
-**Version bump: `1.55.0` to `1.55.1`, a patch bump**, applied through `scripts/version-bump.py patch`
-so the single hand-written version marker moved with its drift check. Rationale: this change set is
-documentation plus measurement/eval pins only. No runtime behaviour changes, no new feature, no
-breaking change; the instrumentation feature that this measurement exercised already shipped in
-1.55.0 (PR #811), and the eval re-anchor is the follow-up 1.54.0 named. Patch is the only accurate
-semver level for a no-behaviour-change release.
+**No version bump in this change.** This step first bumped `1.55.0` to `1.55.1` and wrote
+`docs/changelog/1.55.1-809-measurement.md`. The owner later folded this PR and a refactor series
+into one later release, so the branch takes `main`'s `VERSION` and carries no changelog file of its
+own. The release text moved to the PR body under "Release" and goes into that later release's entry.
+The change set is still documentation plus measurement and eval pins, with no runtime behaviour
+change, so it adds nothing above a patch level to that release.
 
-- **A second changelog name.** PR-1.R6 flagged two conflicting patterns
-  (`{version}-809-measurement.md` vs `<version>-<slug>.md`). One canonical name is used:
-  `docs/changelog/1.55.1-809-measurement.md`.
 - **A minor or major version bump.** No user-visible feature and no breaking change: this change
   set is docs plus measurement pins only, and the instrumentation feature already shipped in
-  1.55.0. Patch `1.55.1` is the accurate semantic level.
+  1.55.0.
 - **Merging live and copy-run numbers into one table.** PR-1.R8 names exactly this drop path; the
   live counts live only in block (a) and the copy counts only in block (b).
 - **Stating the WebGPU verdict as the bare 2,662,883 KiB number.** The verdict is stated against
@@ -495,6 +492,9 @@ $ cat VERSION
 $ test -f "docs/changelog/$(cat VERSION)-809-measurement.md" && grep -q "$(cat VERSION)" docs/changelog/README.md && echo AC4-OK
 AC4-OK
 ```
+
+Superseded after the run above. The owner folded this PR into a later release, so the branch now
+carries `main`'s `VERSION` and no changelog file of its own (section 8).
 
 AC5, stamp-gate outcome and disposition recorded (PR-1.R5; gate went FALLBACK, not GATED):
 

@@ -49,7 +49,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         Guard.IsGreaterThanOrEqualTo(overlayTokens, 0);
         Guard.IsLessThan(overlayTokens, maxTokens);
 
-        var units = BuildUnits(SplitLines(NormalizeLineEndings(text)), countTokens, maxTokens, markdown);
+        var units = BuildUnits(TextLines.Split(TextLines.NormalizeLineEndings(text)), countTokens, maxTokens, markdown);
         List<string> chunks = [];
         List<Unit>? previousUnits = null;
         var cursor = 0;
@@ -72,7 +72,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         Guard.IsGreaterThanOrEqualTo(overlayTokens, 0);
         Guard.IsLessThan(overlayTokens, maxTokens);
 
-        var units = BuildUnits(SplitLines(NormalizeLineEndings(text)), countTokens, maxTokens, markdown);
+        var units = BuildUnits(TextLines.Split(TextLines.NormalizeLineEndings(text)), countTokens, maxTokens, markdown);
         var contexts = BuildContexts(units);
         List<TextChunk> chunks = [];
         List<Unit>? previousUnits = null;
@@ -575,31 +575,6 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
         return level;
     }
-
-    private static List<string> SplitLines(string text)
-    {
-        List<string> lines = [];
-        var start = 0;
-        for (var i = 0; i < text.Length; i++)
-        {
-            if (text[i] != '\n')
-            {
-                continue;
-            }
-
-            lines.Add(text[start..(i + 1)]);
-            start = i + 1;
-        }
-
-        if (start < text.Length)
-        {
-            lines.Add(text[start..]);
-        }
-
-        return lines;
-    }
-
-    private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
     private sealed record Unit(List<string> Lines, int TokenCount)
     {
