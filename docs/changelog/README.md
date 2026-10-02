@@ -9,4 +9,5 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.55.7 — `serve` start split into bank preparation and host lifetime](1.55.7-serve-start-split.md)
 - [1.55.0 — re-chunk phase instrumentation](1.55.0-rechunk-phase-instrumentation.md)
