@@ -76,9 +76,7 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
-        await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
+        await connection.InWriteTransactionAsync(async () =>
         {
             await connection.ExecuteAsync(
                     new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
@@ -86,15 +84,7 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
             await connection.ExecuteAsync(
                     new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path },
                         cancellationToken: cancellationToken));
-            await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-        }
-        catch
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
-            throw;
-        }
+        }, cancellationToken);
     }
 
     public async Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,
@@ -103,9 +93,7 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
         AssertCanonical(projectId);
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
-        await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
+        return await connection.InWriteTransactionAsync(async () =>
         {
             // S4 TOCTOU close: read the project's CURRENT watches and resolve the candidate against
             // them from INSIDE the same write-locked transaction that then commits the outcome — a
@@ -144,16 +132,8 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
                             }, cancellationToken: cancellationToken));
             }
 
-            await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
             return decision;
-        }
-        catch
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
-            throw;
-        }
+        }, cancellationToken);
     }
 
     public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(

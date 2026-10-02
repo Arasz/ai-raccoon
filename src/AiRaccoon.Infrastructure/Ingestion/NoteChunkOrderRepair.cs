@@ -110,22 +110,14 @@ public sealed class NoteChunkOrderRepair
     private static async Task MoveAsync(SqliteConnection connection, IReadOnlyList<(long Id, long ChunkIndex)> moves,
         CancellationToken cancellationToken)
     {
-        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
-        try
+        await connection.InWriteTransactionAsync(async () =>
         {
             foreach (var (id, chunkIndex) in moves)
             {
                 await connection.ExecuteAsync(new CommandDefinition("UPDATE entries SET chunk_index = @chunkIndex WHERE id = @id",
                     new { id, chunkIndex }, cancellationToken: cancellationToken));
             }
-
-            await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-        }
-        catch
-        {
-            await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
-            throw;
-        }
+        }, cancellationToken);
     }
 
     // A plain class, not a record: Ctx is a computed column, which an empty result set reports as byte[] —
