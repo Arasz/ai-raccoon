@@ -108,7 +108,7 @@ public class SweepServiceTests
         store.Deleted.ShouldContain("old-low");
     }
 
-    private sealed class FakeStore : FakeMemoryStore
+    private sealed class FakeStore : PermissiveFakeMemoryStore
     {
         public double? Rating { get; set; } = 0.1;
 
@@ -150,24 +150,6 @@ public class SweepServiceTests
             Task.FromResult<EntryMetadata?>(Rating is null
                 ? null
                 : new EntryMetadata(Rating.Value, TtlDays));
-
-        public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>(null);
-
-        public override Task SetSettingAsync(string key, string value,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public override Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
-
-        public override Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public override Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
     }
 
     /// <summary>Minimal recording IMemoryStore backing one sweep-eligible entry ("old-low", rating 0.1,
