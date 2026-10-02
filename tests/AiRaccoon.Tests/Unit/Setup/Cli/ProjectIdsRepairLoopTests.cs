@@ -266,6 +266,98 @@ public sealed class ProjectIdsRepairLoopTests
     ///     A census row owning project-scope entries under the test map's aliases: the alias
     ///     target 'w' is canonical (needs nothing), every other id folds to it.
     /// </summary>
+    public static TheoryData<string> LoopScenarios() => ["converges", "writers-active", "bound-without-growth", "new-loser-appears"];
+
+    /// <summary>Every line of the loop's multi-pass runs, in order: the pins a restructured loop must keep.</summary>
+    [Theory]
+    [MemberData(nameof(LoopScenarios))]
+    public async Task Loop_Transcript_IsUnchanged(string scenario)
+    {
+        using var scope = new TempScope();
+        ProjectIdCensusReport[] snapshots = scenario switch
+        {
+            "converges" => [Report(("a", 2), ("b", 2), ("w", 0)), Report(("b", 2), ("w", 2)), Report(("w", 4))],
+            "writers-active" => [Report(("a", 2), ("w", 0)), Report(("a", 2), ("w", 2)), Report(("a", 2), ("w", 4)), Report(("a", 2), ("w", 6))],
+            "bound-without-growth" => [Report(("a", 4), ("w", 0)), Report(("a", 3), ("w", 1)), Report(("a", 2), ("w", 2)), Report(("a", 1), ("w", 3))],
+            // Moved rows count against the plan the pass committed for, not the re-derived one.
+            "new-loser-appears" => [Report(("a", 2), ("w", 0)), Report(("b", 2), ("w", 2)), Report(("w", 4))],
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario))
+        };
+        var store = new SequenceRepairStore(snapshots);
+        CliArgs.TryParse(["repair", "project-ids", "--apply", "--map", scope.MapPath], out var parsed).ShouldBeTrue();
+        var stdout = new StringWriter();
+
+        var exit = await new ProjectIdsRepairCommands(store, ProjectIdsRepairCommands.RepairLoopOptions.Test, TimeProvider.System)
+            .RunAsync(parsed!.ParsedCliArgs, scope.DataRoot, new StandardStreams(TextReader.Null, stdout, new StringWriter()),
+                TestContext.Current.CancellationToken);
+
+        var actual = $"exit {exit}; requests {store.RequestCalls}; reports {store.ReportCalls}\n{stdout}".Replace("\r\n", "\n");
+        if (Environment.GetEnvironmentVariable("REPAIR_TRANSCRIPT_DUMP") is { } dump)
+        {
+            Directory.CreateDirectory(dump);
+            await File.WriteAllTextAsync(Path.Combine(dump, "loop-" + scenario + ".txt"), actual, TestContext.Current.CancellationToken);
+        }
+
+        actual.TrimEnd().ShouldBe(LoopTranscripts[scenario].TrimEnd());
+    }
+
+    private static readonly Dictionary<string, string> LoopTranscripts = new(StringComparer.Ordinal)
+    {
+        ["converges"] = """
+            exit 0; requests 2; reports 3
+            project-ids repair: 3 id(s) censused — 2 fold, 0 drop (test residue), 0 retire (registered, empty), 0 need a human to attribute, 1 need nothing (already correct or empty). Request will be queued for the server.
+            project-ids repair: 2 id(s) own entries with no projects-table registration.
+            project-ids repair: 'a' owns 2 entries (0 NULL-context, fold), 0 queued — folds to 'w'
+            project-ids repair: 'b' owns 2 entries (0 NULL-context, fold), 0 queued — folds to 'w'
+            project-ids repair: pass 1/3 — derived 2 fold, 0 drop, 0 retire; request committed; the server applies it on its next maintenance poll (~15s).
+            project-ids repair: pass 1/3 — reaped: moved 2 row(s); census totals 4 → 4 entries.
+            project-ids repair: pass 2/3 — derived 1 fold, 0 drop, 0 retire; request committed; the server applies it on its next maintenance poll (~15s).
+            project-ids repair: pass 2/3 — reaped: moved 2 row(s); census totals 4 → 4 entries.
+            project-ids repair: summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, P3 armed (2 alias, 0 dropped).
+            """,
+        ["writers-active"] = """
+            exit 38; requests 3; reports 4
+            project-ids repair: 2 id(s) censused — 1 fold, 0 drop (test residue), 0 retire (registered, empty), 0 need a human to attribute, 1 need nothing (already correct or empty). Request will be queued for the server.
+            project-ids repair: 1 id(s) own entries with no projects-table registration.
+            project-ids repair: 'a' owns 2 entries (0 NULL-context, fold), 0 queued — folds to 'w'
+            project-ids repair: pass 1/3 — derived 1 fold, 0 drop, 0 retire; request committed; the server applies it on its next maintenance poll (~15s).
+            project-ids repair: pass 1/3 — reaped: moved 0 row(s); census totals 2 → 4 entries.
+            project-ids repair: pass 1/3 — census totals grew (2 → 4); writers are active under folded ids — quiesce writers, then the loop re-checks.
+            project-ids repair: pass 2/3 — derived 1 fold, 0 drop, 0 retire; request committed; the server applies it on its next maintenance poll (~15s).
+            project-ids repair: pass 2/3 — reaped: moved 0 row(s); census totals 4 → 6 entries.
+            project-ids repair: pass 2/3 — census totals grew (4 → 6); writers are active under folded ids — quiesce writers, then the loop re-checks.
+            project-ids repair: pass 3/3 — derived 1 fold, 0 drop, 0 retire; request committed; the server applies it on its next maintenance poll (~15s).
+            project-ids repair: pass 3/3 — reaped: moved 0 row(s); census totals 6 → 8 entries.
+            project-ids repair: pass 3/3 — census totals grew (6 → 8); writers are active under folded ids — quiesce writers, then the loop re-checks.
+            project-ids repair: summary — writers-active: 1 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned — census totals grew 2 → 8 entries across 3 pass(es); quiesce writers under folded ids ('a'), then re-run 'repair project-ids'.
+            """,
+        ["bound-without-growth"] = """
+            exit 37; requests 3; reports 4
+            project-ids repair: 2 id(s) censused — 1 fold, 0 drop (test residue), 0 retire (registered, empty), 0 need a human to attribute, 1 need nothing (already correct or empty). Request will be queued for the server.
+            project-ids repair: 1 id(s) own entries with no projects-table registration.
+            project-ids repair: 'a' owns 4 entries (0 NULL-context, fold), 0 queued — folds to 'w'
+            project-ids repair: pass 1/3 — derived 1 fold, 0 drop, 0 retire; request committed; the server applies it on its next maintenance poll (~15s).
+            project-ids repair: pass 1/3 — reaped: moved 1 row(s); census totals 4 → 4 entries.
+            project-ids repair: pass 2/3 — derived 1 fold, 0 drop, 0 retire; request committed; the server applies it on its next maintenance poll (~15s).
+            project-ids repair: pass 2/3 — reaped: moved 1 row(s); census totals 4 → 4 entries.
+            project-ids repair: pass 3/3 — derived 1 fold, 0 drop, 0 retire; request committed; the server applies it on its next maintenance poll (~15s).
+            project-ids repair: pass 3/3 — reaped: moved 1 row(s); census totals 4 → 4 entries.
+            project-ids repair: summary — stuck: 1 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned — still actionable after 3 pass(es) with no census growth; quiesce writers under folded ids and check the server log for the job receipt, then re-run.
+            """,
+        ["new-loser-appears"] = """
+            exit 0; requests 2; reports 3
+            project-ids repair: 2 id(s) censused — 1 fold, 0 drop (test residue), 0 retire (registered, empty), 0 need a human to attribute, 1 need nothing (already correct or empty). Request will be queued for the server.
+            project-ids repair: 1 id(s) own entries with no projects-table registration.
+            project-ids repair: 'a' owns 2 entries (0 NULL-context, fold), 0 queued — folds to 'w'
+            project-ids repair: pass 1/3 — derived 1 fold, 0 drop, 0 retire; request committed; the server applies it on its next maintenance poll (~15s).
+            project-ids repair: pass 1/3 — reaped: moved 2 row(s); census totals 2 → 4 entries.
+            project-ids repair: pass 1/3 — census totals grew (2 → 4); writers are active under folded ids — quiesce writers, then the loop re-checks.
+            project-ids repair: pass 2/3 — derived 1 fold, 0 drop, 0 retire; request committed; the server applies it on its next maintenance poll (~15s).
+            project-ids repair: pass 2/3 — reaped: moved 2 row(s); census totals 4 → 4 entries.
+            project-ids repair: summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, P3 armed (2 alias, 0 dropped).
+            """
+    };
+
     /// <summary>
     ///     The durable map an applied bank holds under the test map ('a' and 'b' fold to 'w'):
     ///     every fake census carries it, so the D6 (iv) clause reads real rows instead of a
