@@ -11,8 +11,7 @@ public sealed class SqliteSettingsStore(ISqliteConnectionFactory factory) : ISet
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
-        return await connection.QuerySingleOrDefaultAsync<string?>(
-                new CommandDefinition(MemorySql.SelectSetting, new { key }, cancellationToken: cancellationToken));
+        return await connection.ReadSettingAsync(key, cancellationToken);
     }
 
     public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)

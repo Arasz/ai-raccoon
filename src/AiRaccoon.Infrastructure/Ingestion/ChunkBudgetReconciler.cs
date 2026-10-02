@@ -90,8 +90,7 @@ public sealed partial class ChunkBudgetReconciler(
 
         var budget = await new ChunkPositionScanner(fileTypeMatcher, embeddingService)
             .BudgetAsync(connection, cancellationToken);
-        var stamp = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-            MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.ChunkBudget }, cancellationToken: cancellationToken));
+        var stamp = await connection.ReadSettingAsync(EmbeddingSettingsKeys.ChunkBudget, cancellationToken);
         if (int.TryParse(stamp, NumberStyles.Integer, CultureInfo.InvariantCulture, out var stamped)
             && stamped == budget.MaxTokens)
         {
@@ -295,8 +294,7 @@ public sealed partial class ChunkBudgetReconciler(
     private static async Task<int> ReadRetryAttemptsAsync(SqliteConnection connection, int budget,
         CancellationToken cancellationToken)
     {
-        var stored = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-            MemorySql.SelectSetting, new { key = RetryAttemptsKey }, cancellationToken: cancellationToken));
+        var stored = await connection.ReadSettingAsync(RetryAttemptsKey, cancellationToken);
         if (stored is null)
         {
             return 0;

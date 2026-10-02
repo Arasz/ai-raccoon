@@ -247,13 +247,13 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             var settingsExist = await TableExistsAsync(connection, "settings", cancellationToken);
             var provider = probe.ProviderKey is null || !settingsExist
                 ? null
-                : await ReadSettingAsync(connection, probe.ProviderKey, cancellationToken);
+                : await connection.ReadSettingAsync(probe.ProviderKey, cancellationToken);
             var model = !settingsExist
                 ? null
-                : await ReadSettingAsync(connection, probe.ModelKey, cancellationToken);
+                : await connection.ReadSettingAsync(probe.ModelKey, cancellationToken);
             var baseUrl = probe.BaseUrlKey is null || !settingsExist
                 ? null
-                : await ReadSettingAsync(connection, probe.BaseUrlKey, cancellationToken);
+                : await connection.ReadSettingAsync(probe.BaseUrlKey, cancellationToken);
             // Presence only, never the value: embedding.apiKey is a persisted secret (R1 S5).
             var apiKeySet = probe.ApiKeyKey is null || !settingsExist
                 ? true
@@ -316,7 +316,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         try
         {
             var raw = await TableExistsAsync(connection, "settings", cancellationToken)
-                ? await ReadSettingAsync(connection, EmbeddingSettingsKeys.Threads, cancellationToken)
+                ? await connection.ReadSettingAsync(EmbeddingSettingsKeys.Threads, cancellationToken)
                 : null;
             var (threads, source) = EmbeddingService.ResolveThreadCountForDisplay(raw);
             return new EmbeddingThreadsState(threads, source);
@@ -367,7 +367,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         try
         {
             return EmbeddingDeviceSetting.Parse(await TableExistsAsync(connection, "settings", cancellationToken)
-                ? await ReadSettingAsync(connection, EmbeddingSettingsKeys.Device, cancellationToken)
+                ? await connection.ReadSettingAsync(EmbeddingSettingsKeys.Device, cancellationToken)
                 : null);
         }
         catch (SqliteException)
@@ -406,11 +406,6 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
             "SELECT EXISTS(SELECT 1 FROM settings WHERE key = @key)", new { key }, cancellationToken: cancellationToken)) > 0;
-
-    private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
-        CancellationToken cancellationToken) =>
-        await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
-            MemorySql.SelectSetting, new { key }, cancellationToken: cancellationToken));
 
     /// <summary>The manifest's own model name when it is still readable, else the directory's leaf —
     /// doctor reports, so an unreadable manifest must not stop it printing the rest.</summary>

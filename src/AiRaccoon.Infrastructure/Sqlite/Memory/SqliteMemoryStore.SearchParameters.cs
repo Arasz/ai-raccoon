@@ -2,6 +2,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
@@ -19,8 +20,7 @@ public sealed partial class SqliteMemoryStore
         var rows = (await connection.QueryAsync<SettingRow>(
                     Def(MemorySql.SelectSettingsByPrefix, new { prefix = "retrieval." }, cancellationToken)))
             .ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
-        var fusionFlag = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = FusionConfigKeys.NoRegressionEnabledGlobal }, cancellationToken));
+        var fusionFlag = await connection.ReadSettingAsync(FusionConfigKeys.NoRegressionEnabledGlobal, cancellationToken);
         return new SettingsBackedSearchParameters(rows, fusionFlag);
     }
 

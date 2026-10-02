@@ -6,6 +6,7 @@ using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
@@ -61,7 +62,7 @@ public sealed partial class EntryEmbedder(
     /// </summary>
     public async Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var stored = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken);
+        var stored = await connection.ReadSettingAsync(EmbeddingSettingsKeys.Engine, cancellationToken);
         var settings = await ReadSettingsAsync(connection, cancellationToken);
         if (stored is null || string.IsNullOrWhiteSpace(settings.Provider))
         {
@@ -124,7 +125,7 @@ public sealed partial class EntryEmbedder(
     public async Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider,
         string? model, string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var previous = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Engine, cancellationToken);
+        var previous = await connection.ReadSettingAsync(EmbeddingSettingsKeys.Engine, cancellationToken);
         var engine = embeddings.EngineFingerprint(provider, model, baseUrl);
 
         if (previous is null || string.Equals(previous, engine, StringComparison.Ordinal))
@@ -328,7 +329,7 @@ public sealed partial class EntryEmbedder(
     public async Task EmbedIfConfiguredAsync(SqliteConnection connection, long id, string value,
         CancellationToken cancellationToken)
     {
-        var provider = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken);
+        var provider = await connection.ReadSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken);
         if (string.IsNullOrWhiteSpace(provider))
         {
             return;
@@ -417,12 +418,12 @@ public sealed partial class EntryEmbedder(
 
     public async Task<EmbeddingSettings> ReadSettingsAsync(SqliteConnection connection,
         CancellationToken cancellationToken) =>
-        new(await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken) ?? "",
-            await ReadSettingAsync(connection, EmbeddingSettingsKeys.Model, cancellationToken),
-            await ReadSettingAsync(connection, EmbeddingSettingsKeys.BaseUrl, cancellationToken),
-            await ReadSettingAsync(connection, EmbeddingSettingsKeys.ApiKey, cancellationToken),
+        new(await connection.ReadSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken) ?? "",
+            await connection.ReadSettingAsync(EmbeddingSettingsKeys.Model, cancellationToken),
+            await connection.ReadSettingAsync(EmbeddingSettingsKeys.BaseUrl, cancellationToken),
+            await connection.ReadSettingAsync(EmbeddingSettingsKeys.ApiKey, cancellationToken),
             int.TryParse(
-                await ReadSettingAsync(connection, EmbeddingSettingsKeys.Dimensions, cancellationToken),
+                await connection.ReadSettingAsync(EmbeddingSettingsKeys.Dimensions, cancellationToken),
                 NumberStyles.Integer, CultureInfo.InvariantCulture, out var dimensions)
                 ? dimensions
                 : null);
@@ -679,14 +680,9 @@ public sealed partial class EntryEmbedder(
         return vectors;
     }
 
-    private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
-        CancellationToken cancellationToken) =>
-        await connection.QuerySingleOrDefaultAsync<string?>(
-            Def(MemorySql.SelectSetting, new { key }, cancellationToken));
-
     private static async Task<bool> HasProviderAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var provider = await ReadSettingAsync(connection, EmbeddingSettingsKeys.Provider, cancellationToken);
+        var provider = await connection.ReadSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken);
         return !string.IsNullOrWhiteSpace(provider);
     }
 
@@ -717,14 +713,6 @@ public sealed partial class EntryEmbedder(
         await connection.ExecuteAsync(value is null
             ? Def(MemorySql.DeleteSetting, new { key }, cancellationToken, transaction)
             : Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken, transaction));
-
-    private static CommandDefinition Def(string sql, object? parameters, CancellationToken cancellationToken,
-        SqliteTransaction? transaction = null) =>
-        new(sql, parameters, transaction, cancellationToken: cancellationToken);
-
-    private static CommandDefinition Def(string sql, CancellationToken cancellationToken,
-        SqliteTransaction? transaction = null) =>
-        new(sql, transaction: transaction, cancellationToken: cancellationToken);
 
     internal sealed record EmbedRow
     {

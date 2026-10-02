@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Memory;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 

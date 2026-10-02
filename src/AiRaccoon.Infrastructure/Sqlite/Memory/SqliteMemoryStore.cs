@@ -10,6 +10,7 @@ using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Rating;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -78,14 +79,14 @@ public sealed partial class SqliteMemoryStore(
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         var noiseEnabled = NoiseConfigKeys.ParseEnabled(
-            await ReadSettingAsync(connection, NoiseConfigKeys.EnabledGlobal, cancellationToken));
+            await connection.ReadSettingAsync(NoiseConfigKeys.EnabledGlobal, cancellationToken));
         if (noiseEnabled)
         {
             var noiseResult = await noiseFilteringService.EvaluatePreWriteAsync(request, cancellationToken);
             if (noiseResult.IsNoise)
             {
                 var retentionDays = NoiseConfigKeys.ParseRetentionDays(
-                    await ReadSettingAsync(connection, NoiseConfigKeys.RetentionDaysGlobal, cancellationToken));
+                    await connection.ReadSettingAsync(NoiseConfigKeys.RetentionDaysGlobal, cancellationToken));
                 var expiresAt = timeProvider.GetUtcNow().AddDays(retentionDays).ToUnixTimeSeconds();
                 await _noiseEntryStore.RecordAsync(request, noiseResult.PolicyName!, expiresAt, now, cancellationToken);
 
@@ -222,9 +223,7 @@ public sealed partial class SqliteMemoryStore(
                     new { projectId, includeTtlRows = includeTtlRows ? 1 : 0 }, cancellationToken));
 
         var excluded = ExtractionConfigKeys.ParseExcludePrefixes(
-            await connection.QueryFirstOrDefaultAsync<string?>(
-                    Def(MemorySql.SelectSetting,
-                        new { key = ExtractionConfigKeys.ExcludePrefixesGlobal }, cancellationToken)));
+            await connection.ReadSettingAsync(ExtractionConfigKeys.ExcludePrefixesGlobal, cancellationToken));
         return
         [
             .. rows
@@ -238,7 +237,7 @@ public sealed partial class SqliteMemoryStore(
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         var rows = await connection.QueryAsync<SharedRow>(
-                Def(MemorySql.SelectSharedIndex, cancellationToken, cancellationToken));
+                Def(MemorySql.SelectSharedIndex, cancellationToken));
         var indexed = rows.ToList();
         return new SharedIndex(
             [.. indexed.Select(r => r.Value)],
@@ -617,11 +616,6 @@ public sealed partial class SqliteMemoryStore(
         return new FtsSearchResult(ftsResults, timeProvider.GetElapsedTime(ftsStart)) { AllTermsMatched = allTermsMatched };
     }
 
-    private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
-        CancellationToken cancellationToken) =>
-        await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key }, cancellationToken));
-
     /// <summary>
     ///     A workspace row survives discard/consolidate as a Closed record (see IWorkspaceStore); only
     ///     Active is a valid write target, so a missing row and a closed one are the same failure to a caller.
@@ -861,10 +855,6 @@ public sealed partial class SqliteMemoryStore(
 
         return new SourceClassification(SourceType.File, sourceFile);
     }
-
-    private static CommandDefinition Def(string sql, object? parameters = null,
-        CancellationToken cancellationToken = default) =>
-        new(sql, parameters, cancellationToken: cancellationToken);
 
     private static partial class Log
     {

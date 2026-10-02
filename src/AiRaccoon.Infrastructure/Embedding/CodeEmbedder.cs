@@ -212,9 +212,7 @@ public sealed partial class CodeEmbedder(
             return false;
         }
 
-        var stored = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-            MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.CodeDimensions },
-            cancellationToken: cancellationToken));
+        var stored = await connection.ReadSettingAsync(EmbeddingSettingsKeys.CodeDimensions, cancellationToken);
         var target = int.TryParse(stored, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
             : CodeCorpusSchema.EmbeddingDimensions;
@@ -239,13 +237,11 @@ public sealed partial class CodeEmbedder(
 
     private static async Task<string?> ReadCodeModelAsync(SqliteConnection connection,
         CancellationToken cancellationToken) =>
-        await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(MemorySql.SelectSetting,
-                new { key = EmbeddingSettingsKeys.CodeModel }, cancellationToken: cancellationToken));
+        await connection.ReadSettingAsync(EmbeddingSettingsKeys.CodeModel, cancellationToken);
 
     private static async Task<string?> ReadCodeEngineAsync(SqliteConnection connection,
         CancellationToken cancellationToken) =>
-        await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(MemorySql.SelectSetting,
-                new { key = EmbeddingSettingsKeys.CodeEngine }, cancellationToken: cancellationToken));
+        await connection.ReadSettingAsync(EmbeddingSettingsKeys.CodeEngine, cancellationToken);
 
     /// <summary>
     ///     #466: a code row that cannot embed used to reach the attempt ceiling and drop out of the
