@@ -288,85 +288,104 @@ public sealed class ProjectIdsRepairCommands
     {
         var started = _timeProvider.GetTimestamp();
         var firstTotal = CensusTotal(report);
-        var latestTotal = firstTotal;
         var pass = 0;
-        string? previousSignature = null;
-        var previousMoved = 0L;
-        var previousGrew = false;
+        RepairPass? previous = null;
         while (true)
         {
-            var actionable = ActionableCount(plan);
-            if (actionable == 0)
+            if (await TryStopAsync(report, plan, pass, previous, firstTotal, started, streams) is { } exit)
             {
-                return await WriteSettledSummaryAsync(plan, report, streams)
-                    ? ErrorCode.Bank.RepairAttentionNeeded
-                    : ErrorCode.Ok.Success;
+                return exit;
             }
 
-            var signature = ActionableSignature(plan);
-            if (pass > 0 && string.Equals(signature, previousSignature, StringComparison.Ordinal) && previousMoved == 0 && !previousGrew)
-            {
-                await streams.WriteOutputLineAsync(
-                    $"project-ids repair: stuck — identical actionable set across 2 passes with zero rows moved " +
-                    $"(actionable: {signature}); quiesce writers under folded ids and check the server log for " +
-                    "the job receipt, then re-run 'repair project-ids'.");
-                await streams.WriteOutputLineAsync(
-                    $"project-ids repair: summary — stuck: {CountsLine(plan)} — identical actionable set across " +
-                    "2 passes with zero rows moved; quiesce writers under folded ids, then re-run.");
-                return ErrorCode.Bank.RepairStuck;
-            }
-
-            if (pass >= _options.MaxPasses || _timeProvider.GetElapsedTime(started) >= _options.TotalBudget)
-            {
-                if (latestTotal > firstTotal)
-                {
-                    var stuckIds = string.Join(", ", plan.Folds.Select(fold => $"'{fold.Loser}'"));
-                    await streams.WriteOutputLineAsync(
-                        $"project-ids repair: summary — writers-active: {CountsLine(plan)} — census totals grew " +
-                        $"{firstTotal} → {latestTotal} entries across {pass} pass(es); quiesce writers under " +
-                        $"folded ids ({stuckIds}), then re-run 'repair project-ids'.");
-                    return ErrorCode.Bank.RepairWritersActive;
-                }
-
-                await streams.WriteOutputLineAsync(
-                    $"project-ids repair: summary — stuck: {CountsLine(plan)} — still actionable after " +
-                    $"{pass} pass(es) with no census growth; quiesce writers under folded ids and check " +
-                    "the server log for the job receipt, then re-run.");
-                return ErrorCode.Bank.RepairStuck;
-            }
-
-            var beforeTotal = CensusTotal(report);
-            var beforeActionableEntries = ActionableEntries(report, plan);
-            await _repair.RequestRepairAsync(RepairKind.ProjectIds, cancellationToken, mapJson);
-            await streams.WriteOutputLineAsync(
-                $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — derived {plan.Folds.Count} fold, " +
-                $"{plan.Dropped.Count} drop, {plan.RetiredProjects.Count} retire; request committed; the server " +
-                "applies it on its next maintenance poll (~15s).");
-
-            await Task.Delay(_options.PollInterval, _timeProvider, cancellationToken);
-            var after = await _repair.ReportProjectIdsAsync(cancellationToken);
-            var afterPlan = ProjectIdsFoldPlan.FromCensus(after, map);
-            var moved = Math.Max(0, beforeActionableEntries - ActionableEntries(after, plan));
-            var afterTotal = CensusTotal(after);
-            await streams.WriteOutputLineAsync(
-                $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — reaped: moved {moved} row(s); " +
-                $"census totals {beforeTotal} → {afterTotal} entries.");
-            if (afterTotal > beforeTotal)
-            {
-                await streams.WriteOutputLineAsync(
-                    $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — census totals grew " +
-                    $"({beforeTotal} → {afterTotal}); writers are active under folded ids — quiesce writers, " +
-                    "then the loop re-checks.");
-            }
-
-            previousSignature = signature;
-            previousMoved = moved;
-            previousGrew = afterTotal > beforeTotal;
-            latestTotal = afterTotal;
-            report = after;
-            plan = afterPlan;
+            previous = await RunPassAsync(map, mapJson, report, plan, pass, streams, cancellationToken);
+            report = previous.After;
+            plan = previous.AfterPlan;
             pass++;
         }
+    }
+
+    /// <summary>What one pass saw: the actionable set it committed for, the rows it moved, and the re-derived census.</summary>
+    private sealed record RepairPass(string Signature, long Moved, bool Grew, ProjectIdCensusReport After, ProjectIdsFoldPlan AfterPlan);
+
+    /// <summary>
+    ///     The loop's exit code once a stop condition holds — settled, stuck, or bound reached with
+    ///     or without census growth — having written its closing lines; null to run another pass.
+    /// </summary>
+    private async Task<int?> TryStopAsync(ProjectIdCensusReport report, ProjectIdsFoldPlan plan, int pass, RepairPass? previous,
+        long firstTotal, long started, StandardStreams streams)
+    {
+        if (ActionableCount(plan) == 0)
+        {
+            return await WriteSettledSummaryAsync(plan, report, streams)
+                ? ErrorCode.Bank.RepairAttentionNeeded
+                : ErrorCode.Ok.Success;
+        }
+
+        var signature = ActionableSignature(plan);
+        if (previous is not null && string.Equals(signature, previous.Signature, StringComparison.Ordinal) && previous.Moved == 0 && !previous.Grew)
+        {
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: stuck — identical actionable set across 2 passes with zero rows moved " +
+                $"(actionable: {signature}); quiesce writers under folded ids and check the server log for " +
+                "the job receipt, then re-run 'repair project-ids'.");
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: summary — stuck: {CountsLine(plan)} — identical actionable set across " +
+                "2 passes with zero rows moved; quiesce writers under folded ids, then re-run.");
+            return ErrorCode.Bank.RepairStuck;
+        }
+
+        if (pass < _options.MaxPasses && _timeProvider.GetElapsedTime(started) < _options.TotalBudget)
+        {
+            return null;
+        }
+
+        var latestTotal = CensusTotal(report);
+        if (latestTotal > firstTotal)
+        {
+            var stuckIds = string.Join(", ", plan.Folds.Select(fold => $"'{fold.Loser}'"));
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: summary — writers-active: {CountsLine(plan)} — census totals grew " +
+                $"{firstTotal} → {latestTotal} entries across {pass} pass(es); quiesce writers under " +
+                $"folded ids ({stuckIds}), then re-run 'repair project-ids'.");
+            return ErrorCode.Bank.RepairWritersActive;
+        }
+
+        await streams.WriteOutputLineAsync(
+            $"project-ids repair: summary — stuck: {CountsLine(plan)} — still actionable after " +
+            $"{pass} pass(es) with no census growth; quiesce writers under folded ids and check " +
+            "the server log for the job receipt, then re-run.");
+        return ErrorCode.Bank.RepairStuck;
+    }
+
+    /// <summary>Commits one request, waits one maintenance poll, and reaps the re-derived census.</summary>
+    private async Task<RepairPass> RunPassAsync(ProjectIdAliasMap map, string? mapJson, ProjectIdCensusReport report, ProjectIdsFoldPlan plan,
+        int pass, StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var beforeTotal = CensusTotal(report);
+        var beforeActionableEntries = ActionableEntries(report, plan);
+        await _repair.RequestRepairAsync(RepairKind.ProjectIds, cancellationToken, mapJson);
+        await streams.WriteOutputLineAsync(
+            $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — derived {plan.Folds.Count} fold, " +
+            $"{plan.Dropped.Count} drop, {plan.RetiredProjects.Count} retire; request committed; the server " +
+            "applies it on its next maintenance poll (~15s).");
+
+        await Task.Delay(_options.PollInterval, _timeProvider, cancellationToken);
+        var after = await _repair.ReportProjectIdsAsync(cancellationToken);
+        var moved = Math.Max(0, beforeActionableEntries - ActionableEntries(after, plan));
+        var afterTotal = CensusTotal(after);
+        await streams.WriteOutputLineAsync(
+            $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — reaped: moved {moved} row(s); " +
+            $"census totals {beforeTotal} → {afterTotal} entries.");
+        if (afterTotal > beforeTotal)
+        {
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — census totals grew " +
+                $"({beforeTotal} → {afterTotal}); writers are active under folded ids — quiesce writers, " +
+                "then the loop re-checks.");
+        }
+
+        return new RepairPass(ActionableSignature(plan), moved, afterTotal > beforeTotal, after,
+            ProjectIdsFoldPlan.FromCensus(after, map));
     }
 
     /// <summary>
