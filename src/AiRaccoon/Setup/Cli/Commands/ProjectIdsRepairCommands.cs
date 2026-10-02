@@ -286,23 +286,22 @@ public sealed class ProjectIdsRepairCommands
     /// </summary>
     private async Task<int> RunRepairLoopAsync(ProjectIdAliasMap map, string? mapJson, ProjectIdCensusReport report, ProjectIdsFoldPlan plan, StandardStreams streams, CancellationToken cancellationToken)
     {
-        var started = _timeProvider.GetTimestamp();
-        var firstTotal = CensusTotal(report);
-        var pass = 0;
-        RepairPass? previous = null;
+        var loop = new RepairLoop(report, plan, Pass: 0, Previous: null, CensusTotal(report), _timeProvider.GetTimestamp());
         while (true)
         {
-            if (await TryStopAsync(report, plan, pass, previous, firstTotal, started, streams) is { } exit)
+            if (await TryStopAsync(loop, streams) is { } exit)
             {
                 return exit;
             }
 
-            previous = await RunPassAsync(map, mapJson, report, plan, pass, streams, cancellationToken);
-            report = previous.After;
-            plan = previous.AfterPlan;
-            pass++;
+            var pass = await RunPassAsync(map, mapJson, loop, streams, cancellationToken);
+            loop = loop with { Report = pass.After, Plan = pass.AfterPlan, Pass = loop.Pass + 1, Previous = pass };
         }
     }
+
+    /// <summary>The loop's state between passes: the latest census and plan, the pass count, the last pass, and where the run started.</summary>
+    private sealed record RepairLoop(ProjectIdCensusReport Report, ProjectIdsFoldPlan Plan, int Pass, RepairPass? Previous,
+        long FirstTotal, long Started);
 
     /// <summary>What one pass saw: the actionable set it committed for, the rows it moved, and the re-derived census.</summary>
     private sealed record RepairPass(string Signature, long Moved, bool Grew, ProjectIdCensusReport After, ProjectIdsFoldPlan AfterPlan);
@@ -311,9 +310,9 @@ public sealed class ProjectIdsRepairCommands
     ///     The loop's exit code once a stop condition holds — settled, stuck, or bound reached with
     ///     or without census growth — having written its closing lines; null to run another pass.
     /// </summary>
-    private async Task<int?> TryStopAsync(ProjectIdCensusReport report, ProjectIdsFoldPlan plan, int pass, RepairPass? previous,
-        long firstTotal, long started, StandardStreams streams)
+    private async Task<int?> TryStopAsync(RepairLoop loop, StandardStreams streams)
     {
+        var (report, plan, pass, previous, firstTotal, started) = loop;
         if (ActionableCount(plan) == 0)
         {
             return await WriteSettledSummaryAsync(plan, report, streams)
@@ -358,9 +357,10 @@ public sealed class ProjectIdsRepairCommands
     }
 
     /// <summary>Commits one request, waits one maintenance poll, and reaps the re-derived census.</summary>
-    private async Task<RepairPass> RunPassAsync(ProjectIdAliasMap map, string? mapJson, ProjectIdCensusReport report, ProjectIdsFoldPlan plan,
-        int pass, StandardStreams streams, CancellationToken cancellationToken)
+    private async Task<RepairPass> RunPassAsync(ProjectIdAliasMap map, string? mapJson, RepairLoop loop, StandardStreams streams,
+        CancellationToken cancellationToken)
     {
+        var (report, plan, pass, _, _, _) = loop;
         var beforeTotal = CensusTotal(report);
         var beforeActionableEntries = ActionableEntries(report, plan);
         await _repair.RequestRepairAsync(RepairKind.ProjectIds, cancellationToken, mapJson);
