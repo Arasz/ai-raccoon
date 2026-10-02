@@ -53,11 +53,11 @@ internal static partial class CliSettingsBackend
                 $"cannot dial --port {config.Port}: expected 1-65535, and 0 means \"any free port\"; pass a fixed --port");
         }
 
+        BankPresenceGuard.EnsureExists(config.Options);
+
         var executable = BackendLaunchArguments.Executable(processPath) ??
                          throw new SettingsServerUnavailableException(ErrorCode.Reach.AutoStartUnsupported,
                              $"ai-raccoon: {BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)}");
-
-        BankPresenceGuard.EnsureExists(config.Options);
 
         BackendSessions.AcquireOutcome acquired;
         try

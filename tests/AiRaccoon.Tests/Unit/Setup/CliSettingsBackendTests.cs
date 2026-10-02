@@ -160,32 +160,71 @@ public sealed class CliSettingsBackendTests
     }
 
     [Fact]
+    public async Task AcquireAsync_WhenTheBankIsMissing_RefusesNoBank_HoweverTheProcessWasLaunched()
+    {
+        var dataRoot = TestData.CreateTempRoot("cli-settings-backend-no-bank");
+        try
+        {
+            foreach (var processPath in new[] { AppHost, DotnetHost, null })
+            {
+                var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54222/mcp", null));
+
+                await Should.ThrowAsync<BankMissingException>(() =>
+                    CliSettingsBackend.AcquireAsync(launcher, new FakeIdentityProver(), new FakeServerProbe(ProbeVerdict.Answered),
+                        processPath, Config(54222, dataRoot), new FakeLogger(), TestContext.Current.CancellationToken));
+
+                launcher.Calls.ShouldBe(0);
+            }
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
+    [Fact]
     public async Task AcquireAsync_WhenTheProcessIsTheDotnetHost_ThrowsUnavailable_WithoutCallingTheLauncher()
     {
-        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54220/mcp", null));
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("cli-settings-backend-dotnet-host", TestContext.Current.CancellationToken);
+        try
+        {
+            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54220/mcp", null));
 
-        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
-            CliSettingsBackend.AcquireAsync(launcher, new FakeIdentityProver(), new FakeServerProbe(ProbeVerdict.Answered),
-                DotnetHost, Config(54220, "/tmp/unused"), new FakeLogger(), TestContext.Current.CancellationToken));
+            var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+                CliSettingsBackend.AcquireAsync(launcher, new FakeIdentityProver(), new FakeServerProbe(ProbeVerdict.Answered),
+                    DotnetHost, Config(54220, dataRoot), new FakeLogger(), TestContext.Current.CancellationToken));
 
-        error.Message.ShouldContain("dotnet host");
-        error.Code.ShouldBe(ErrorCode.Reach.AutoStartUnsupported);
-        error.Message.ShouldContain("serve --port 54220");
-        launcher.Calls.ShouldBe(0);
+            error.Message.ShouldContain("dotnet host");
+            error.Code.ShouldBe(ErrorCode.Reach.AutoStartUnsupported);
+            error.Message.ShouldContain("serve --port 54220");
+            launcher.Calls.ShouldBe(0);
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
     }
 
     [Fact]
     public async Task AcquireAsync_WhenTheProcessPathIsUnknown_ThrowsUnavailable_WithoutCallingTheLauncher()
     {
-        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54221/mcp", null));
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("cli-settings-backend-unknown-path", TestContext.Current.CancellationToken);
+        try
+        {
+            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54221/mcp", null));
 
-        var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
-            CliSettingsBackend.AcquireAsync(launcher, new FakeIdentityProver(), new FakeServerProbe(ProbeVerdict.Answered),
-                null, Config(54221, "/tmp/unused"), new FakeLogger(), TestContext.Current.CancellationToken));
+            var error = await Should.ThrowAsync<SettingsServerUnavailableException>(() =>
+                CliSettingsBackend.AcquireAsync(launcher, new FakeIdentityProver(), new FakeServerProbe(ProbeVerdict.Answered),
+                    null, Config(54221, dataRoot), new FakeLogger(), TestContext.Current.CancellationToken));
 
-        error.Message.ShouldContain("unknown");
-        error.Code.ShouldBe(ErrorCode.Reach.AutoStartUnsupported);
-        launcher.Calls.ShouldBe(0);
+            error.Message.ShouldContain("unknown");
+            error.Code.ShouldBe(ErrorCode.Reach.AutoStartUnsupported);
+            launcher.Calls.ShouldBe(0);
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(dataRoot);
+        }
     }
 
     [Fact]
