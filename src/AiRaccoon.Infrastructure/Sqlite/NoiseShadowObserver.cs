@@ -58,11 +58,8 @@ public sealed partial class NoiseShadowObserver(
 
     private static async Task<bool> IsShadowEnabledAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         NoiseConfigKeys.ParseLearnerShadowEnabled(
-            await ReadSettingAsync(connection, NoiseConfigKeys.LearnerShadowEnabledGlobal, cancellationToken));
+            await connection.ReadSettingAsync(NoiseConfigKeys.LearnerShadowEnabledGlobal, cancellationToken));
 
-    private static Task<string?> ReadSettingAsync(SqliteConnection connection, string key, CancellationToken cancellationToken) =>
-        connection.ExecuteScalarAsync<string?>(
-            new CommandDefinition("SELECT value FROM settings WHERE key = @key", new { key }, cancellationToken: cancellationToken));
 
     private static partial class Log
     {

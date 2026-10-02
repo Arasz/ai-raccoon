@@ -4,6 +4,7 @@ using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;

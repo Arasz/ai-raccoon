@@ -6,6 +6,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 using AiRaccoon.Infrastructure.Watch;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -377,12 +378,10 @@ public sealed class FileIngestor(
     /// </summary>
     private async Task<ChunkSize> ChunkSizeForAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var configured = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Provider }, cancellationToken));
+        var configured = await connection.ReadSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken);
         var provider = string.IsNullOrWhiteSpace(configured) ? BundledProvider : configured;
 
-        var model = await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key = EmbeddingSettingsKeys.Model }, cancellationToken));
+        var model = await connection.ReadSettingAsync(EmbeddingSettingsKeys.Model, cancellationToken);
         var settings = new EmbeddingSettings(provider, model, null, null);
         var maxTokens = embeddingService.ResolveChunkBudgetFor(settings);
         var overlayTokens = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, maxTokens - 1));
@@ -407,9 +406,9 @@ public sealed class FileIngestor(
     private static async Task<IReadOnlyList<string>> ReadScopeAsync(SqliteConnection connection, string projectId,
         CancellationToken cancellationToken) =>
         IngestScopeKeys.Parse(
-            await ReadSettingAsync(connection, IngestScopeKeys.ScopeProject(projectId), cancellationToken))
+            await connection.ReadSettingAsync(IngestScopeKeys.ScopeProject(projectId), cancellationToken))
         ?? IngestScopeKeys.Parse(
-            await ReadSettingAsync(connection, IngestScopeKeys.ScopeGlobal, cancellationToken))
+            await connection.ReadSettingAsync(IngestScopeKeys.ScopeGlobal, cancellationToken))
         ?? [];
 
     private static void RequireInScope(IReadOnlyList<string> scope, string path)
@@ -423,10 +422,6 @@ public sealed class FileIngestor(
 
     private static bool IsInScope(IReadOnlyList<string> scope, string path) => scope.Any(entry => IngestPath.IsWithinScope(path, entry));
 
-    private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
-        CancellationToken cancellationToken) =>
-        await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key }, cancellationToken));
 
     private bool IsIndexableFile(string path, [NotNullWhen(true)] out IFileTypeHandler? handler)
     {
@@ -472,7 +467,4 @@ public sealed class FileIngestor(
         return rules.IsIgnored(relative, false);
     }
 
-    private static CommandDefinition Def(string sql, object? parameters = null,
-        CancellationToken cancellationToken = default) =>
-        new(sql, parameters, cancellationToken: cancellationToken);
 }

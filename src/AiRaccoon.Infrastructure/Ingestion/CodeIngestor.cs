@@ -2,6 +2,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -129,19 +130,12 @@ public sealed class CodeIngestor(
     private static async Task<IReadOnlyList<string>> ReadScopeAsync(SqliteConnection connection, string projectId,
         CancellationToken cancellationToken) =>
         IngestScopeKeys.Parse(
-            await ReadSettingAsync(connection, IngestScopeKeys.ScopeProject(projectId), cancellationToken))
+            await connection.ReadSettingAsync(IngestScopeKeys.ScopeProject(projectId), cancellationToken))
         ?? IngestScopeKeys.Parse(
-            await ReadSettingAsync(connection, IngestScopeKeys.ScopeGlobal, cancellationToken))
+            await connection.ReadSettingAsync(IngestScopeKeys.ScopeGlobal, cancellationToken))
         ?? [];
 
-    private static async Task<string?> ReadSettingAsync(SqliteConnection connection, string key,
-        CancellationToken cancellationToken) =>
-        await connection.QuerySingleOrDefaultAsync<string?>(
-                Def(MemorySql.SelectSetting, new { key }, cancellationToken));
 
     private static bool IsHidden(string path) => Path.GetFileName(path).StartsWith('.');
 
-    private static CommandDefinition Def(string sql, object? parameters = null,
-        CancellationToken cancellationToken = default) =>
-        new(sql, parameters, cancellationToken: cancellationToken);
 }
