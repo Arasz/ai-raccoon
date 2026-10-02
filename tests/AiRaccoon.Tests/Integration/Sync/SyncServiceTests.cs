@@ -1,3 +1,4 @@
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Embedding;
@@ -15,86 +16,20 @@ namespace AiRaccoon.Tests.Integration.Sync;
 public class SyncServiceTests : IDisposable
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("sync-test");
+    private readonly SyncTestBank _bank;
+
+    public SyncServiceTests() => _bank = new SyncTestBank(BankPath);
 
     private string BankPath => Path.Combine(_dataRoot, "memory.db");
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
-
-    /// <summary>Read-write open of a snapshot file: the workspace strip DELETEs + VACUUMs it.</summary>
-    private static async Task<SqliteConnection> OpenSnapshotAsync(string path, CancellationToken ct)
-    {
-        var c = new SqliteConnection($"Data Source={path}");
-        await c.OpenAsync(ct);
-        return c;
-    }
-
-    private static async Task<SqliteConnection> CreateAndOpenAsync(string path, CancellationToken ct = default)
-    {
-        var conn = new SqliteConnection($"Data Source={path}");
-        await conn.OpenAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-                          CREATE TABLE IF NOT EXISTS entries (
-                              id INTEGER PRIMARY KEY,
-                              hash TEXT,
-                              path TEXT,
-                              value TEXT,
-                              source_file TEXT NULL,
-                              section TEXT NULL,
-                              scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
-                              project_id TEXT NULL,
-                              context_label TEXT NULL,
-                              workspace_id TEXT NULL,
-                              agent_id TEXT NULL,
-                              created_at INTEGER NOT NULL,
-                              updated_at INTEGER NOT NULL,
-                              access_count INTEGER NOT NULL DEFAULT 0,
-                              last_accessed_at INTEGER NULL,
-                              rating REAL NOT NULL DEFAULT 0.5,
-                              ttl_days INTEGER NULL,
-                              embed_state TEXT NOT NULL DEFAULT 'pending',
-                              embedding BLOB NULL,
-                              heading_path TEXT NULL,
-                              structure_embedding BLOB NULL,
-                              chunk_index INTEGER NOT NULL DEFAULT 0,
-                              total_chunks INTEGER NOT NULL DEFAULT 0,
-                              source_id INTEGER NULL
-                          );
-                          CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-                          CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, agent_id TEXT NULL,
-                              name TEXT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, closed_at INTEGER NULL);
-                          CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-                          CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NULL, created_at INTEGER NOT NULL);
-                          CREATE TABLE IF NOT EXISTS sync_tombstones (project_id TEXT NOT NULL, hash TEXT NOT NULL, scope TEXT NOT NULL,
-                              context_label TEXT NULL, deleted_at INTEGER NOT NULL, received_at INTEGER NULL, PRIMARY KEY (project_id, hash, scope));
-                          CREATE TABLE IF NOT EXISTS memory_source (
-                              id INTEGER PRIMARY KEY,
-                              source_type TEXT NOT NULL,
-                              source_locator TEXT NOT NULL,
-                              section TEXT NULL,
-                              heading_path TEXT NULL);
-                          CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source_identity
-                              ON memory_source(source_type, source_locator, COALESCE(section, ''));
-                          CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id);
-                          """;
-        await cmd.ExecuteNonQueryAsync(ct);
-        return conn;
-    }
 
     [RetryFact]
     public async Task MemorySync_WithoutConfiguredCloudStore_ThrowsSyncNotConfigured()
     {
         var cloud = new NullCloudStore();
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
         await Should.ThrowAsync<SyncNotConfiguredException>(() =>
             service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
     }
@@ -108,15 +43,10 @@ public class SyncServiceTests : IDisposable
             ct =>
             {
                 openBankCalls++;
-                return CreateAndOpenAsync(BankPath, ct);
+                return _bank.CreateAndOpenAsync(BankPath, ct);
             },
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+            _bank.OpenSnapshotAsync,
+            _bank.OpenReadOnlyAsync, TimeProvider.System, NullLogger<SyncService>.Instance);
 
         await Should.ThrowAsync<SyncNotConfiguredException>(() =>
             service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
@@ -129,15 +59,7 @@ public class SyncServiceTests : IDisposable
     public async Task MemorySync_WithNoObjectKey_DefaultsToMemoryDashProjectId()
     {
         var cloud = new FakeCloudStore();
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -150,15 +72,7 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
         var result = await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         result.Sent.ShouldBeGreaterThanOrEqualTo(0);
@@ -176,7 +90,7 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -186,21 +100,7 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => Task.FromResult(new SqliteConnection($"Data Source={BankPath}"))
-                .ContinueWith(async t =>
-                {
-                    var c = t.Result;
-                    await c.OpenAsync(ct);
-                    return c;
-                }).Unwrap(),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         var bankBytes = await File.ReadAllBytesAsync(BankPath, TestContext.Current.CancellationToken);
@@ -236,15 +136,9 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        async Task<SqliteConnection> OpenBank(CancellationToken ct)
-        {
-            var conn = await CreateAndOpenAsync(BankPath, ct);
-            return conn;
-        }
-
         if (!File.Exists(BankPath))
         {
-            var _ = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken);
+            var _ = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken);
         }
 
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
@@ -258,14 +152,7 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud, OpenBank,
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
@@ -305,7 +192,7 @@ public class SyncServiceTests : IDisposable
 
         // Deliberately wrong chunk columns: proves the post-merge recompute actually ran, not
         // that the seed happened to already be correct.
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -321,7 +208,7 @@ public class SyncServiceTests : IDisposable
         // tombstone-apply path must remove h2 locally. deleted_at must be at or after the
         // row's created_at (2) — the K3 age guard leaves newer re-creations alone.
         var remotePath = Path.Combine(_dataRoot, "remote.db");
-        await using (var remote = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        await using (var remote = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
         {
             await using var tomb = remote.CreateCommand();
             tomb.CommandText = "INSERT INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES ('acme', 'h2', 'project', 100)";
@@ -330,15 +217,7 @@ public class SyncServiceTests : IDisposable
 
         cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -367,7 +246,7 @@ public class SyncServiceTests : IDisposable
     {
         var ct = TestContext.Current.CancellationToken;
         var cloud = new FakeCloudStore();
-        await using (var conn = await CreateAndOpenAsync(BankPath, ct))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, ct))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -380,20 +259,12 @@ public class SyncServiceTests : IDisposable
         }
 
         var remotePath = Path.Combine(_dataRoot, "remote.db");
-        await using (await CreateAndOpenAsync(remotePath, ct))
+        await using (await _bank.CreateAndOpenAsync(remotePath, ct))
         {
         }
 
         cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, ct));
-        var service = new SyncService(cloud,
-            token => CreateAndOpenAsync(BankPath, token),
-            OpenSnapshotAsync,
-            async (snapshot, token) =>
-            {
-                var c = new SqliteConnection($"Data Source={snapshot}");
-                await c.OpenAsync(token);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", ct);
 
@@ -419,7 +290,7 @@ public class SyncServiceTests : IDisposable
     public async Task MemorySync_Merge_KeepsTheHolesAndUnknownFileRowsARepairLeft()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using (var conn = await CreateAndOpenAsync(BankPath, ct))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, ct))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -443,7 +314,7 @@ public class SyncServiceTests : IDisposable
     public async Task MemorySync_Merge_PositionsAFileRowItAdds_AfterTheKeptRows()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using (var conn = await CreateAndOpenAsync(BankPath, ct))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, ct))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -467,7 +338,7 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
         var remotePath = Path.Combine(_dataRoot, "remote.db");
-        await using (var remote = await CreateAndOpenAsync(remotePath, ct))
+        await using (var remote = await _bank.CreateAndOpenAsync(remotePath, ct))
         {
             if (remoteSql is not null)
             {
@@ -478,15 +349,7 @@ public class SyncServiceTests : IDisposable
         }
 
         cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, ct));
-        var service = new SyncService(cloud,
-            token => CreateAndOpenAsync(BankPath, token),
-            OpenSnapshotAsync,
-            async (snapshot, token) =>
-            {
-                var c = new SqliteConnection($"Data Source={snapshot}");
-                await c.OpenAsync(token);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", ct);
     }
@@ -517,7 +380,7 @@ public class SyncServiceTests : IDisposable
         var cloud = new FakeCloudStore();
         string[] pieces = ["Opening part of the note.\n", "Middle part of the note.\n", "Closing part of the note."];
         var path = $"{ContentHash.OfValue(string.Concat(pieces))}.md";
-        await using (var conn = await CreateAndOpenAsync(BankPath, ct))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, ct))
         {
             foreach (var i in new[] { 1, 2, 0 })
             {
@@ -534,20 +397,12 @@ public class SyncServiceTests : IDisposable
         }
 
         var remotePath = Path.Combine(_dataRoot, "remote.db");
-        await using (await CreateAndOpenAsync(remotePath, ct))
+        await using (await _bank.CreateAndOpenAsync(remotePath, ct))
         {
         }
 
         cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, ct));
-        var service = new SyncService(cloud,
-            token => CreateAndOpenAsync(BankPath, token),
-            OpenSnapshotAsync,
-            async (snapshot, token) =>
-            {
-                var c = new SqliteConnection($"Data Source={snapshot}");
-                await c.OpenAsync(token);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", ct);
 
@@ -573,7 +428,7 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -585,7 +440,7 @@ public class SyncServiceTests : IDisposable
         }
 
         var remotePath = Path.Combine(_dataRoot, "remote.db");
-        await using (var remote = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        await using (var remote = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
         {
             await using var tomb = remote.CreateCommand();
             tomb.CommandText = """
@@ -597,15 +452,7 @@ public class SyncServiceTests : IDisposable
 
         cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -631,7 +478,7 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var ws = conn.CreateCommand();
             ws.CommandText = """
@@ -648,15 +495,7 @@ public class SyncServiceTests : IDisposable
             await entry.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         var cloudObj = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
@@ -690,7 +529,7 @@ public class SyncServiceTests : IDisposable
         var bankA = Path.GetTempFileName();
         try
         {
-            await using (var conn = await CreateAndOpenAsync(bankA, TestContext.Current.CancellationToken))
+            await using (var conn = await _bank.CreateAndOpenAsync(bankA, TestContext.Current.CancellationToken))
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
@@ -707,15 +546,7 @@ public class SyncServiceTests : IDisposable
             File.Delete(bankA);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
@@ -734,7 +565,7 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var ws = conn.CreateCommand();
             ws.CommandText = "INSERT INTO workspaces (id, project_id, status, created_at) VALUES ('ws-1', 'acme', 'Active', 1)";
@@ -748,15 +579,7 @@ public class SyncServiceTests : IDisposable
             await entry.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         var cloudObj = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
@@ -790,7 +613,7 @@ public class SyncServiceTests : IDisposable
         var remotePath = Path.GetTempFileName();
         try
         {
-            await using (var conn = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+            await using (var conn = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
@@ -807,7 +630,7 @@ public class SyncServiceTests : IDisposable
             File.Delete(remotePath);
         }
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -817,15 +640,7 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         await using (var conn = new SqliteConnection($"Data Source={BankPath}"))
@@ -855,7 +670,7 @@ public class SyncServiceTests : IDisposable
         var remotePath = Path.GetTempFileName();
         try
         {
-            await using (var conn = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+            await using (var conn = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
@@ -872,7 +687,7 @@ public class SyncServiceTests : IDisposable
             File.Delete(remotePath);
         }
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -882,15 +697,7 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         // The pull must complete — a CHECK violation on the scopeless row would abort the whole
         // merge transaction, losing the local row's chance to push too.
@@ -919,15 +726,7 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         cloud.Set("test-object", [0x00, 0x01, 0x02]); // not a valid SQLite file
@@ -965,7 +764,7 @@ public class SyncServiceTests : IDisposable
     {
         var cloud = new FakeCloudStore();
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = $"""
@@ -974,15 +773,7 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
         var cloudObj = await cloud.PullAsync("test-object", TestContext.Current.CancellationToken);
@@ -1017,7 +808,7 @@ public class SyncServiceTests : IDisposable
         var remoteBankPath = Path.GetTempFileName();
         try
         {
-            await using (var conn = await CreateAndOpenAsync(remoteBankPath, TestContext.Current.CancellationToken))
+            await using (var conn = await _bank.CreateAndOpenAsync(remoteBankPath, TestContext.Current.CancellationToken))
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
@@ -1034,7 +825,7 @@ public class SyncServiceTests : IDisposable
             File.Delete(remoteBankPath);
         }
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = $"""
@@ -1043,15 +834,7 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -1076,7 +859,7 @@ public class SyncServiceTests : IDisposable
         var remoteSeedPath = Path.GetTempFileName();
         try
         {
-            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            await using (var conn = await _bank.CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
@@ -1093,7 +876,7 @@ public class SyncServiceTests : IDisposable
             File.Delete(remoteSeedPath);
         }
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var settings = conn.CreateCommand();
             settings.CommandText = $"""
@@ -1116,15 +899,7 @@ public class SyncServiceTests : IDisposable
             await entry.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -1170,7 +945,7 @@ public class SyncServiceTests : IDisposable
         var remoteSeedPath = Path.GetTempFileName();
         try
         {
-            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            await using (var conn = await _bank.CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
@@ -1187,7 +962,7 @@ public class SyncServiceTests : IDisposable
             File.Delete(remoteSeedPath);
         }
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var settings = conn.CreateCommand();
             settings.CommandText = $"""
@@ -1210,15 +985,7 @@ public class SyncServiceTests : IDisposable
             await entry.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -1263,7 +1030,7 @@ public class SyncServiceTests : IDisposable
         var remoteSeedPath = Path.GetTempFileName();
         try
         {
-            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            await using (var conn = await _bank.CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = $"""
@@ -1279,7 +1046,7 @@ public class SyncServiceTests : IDisposable
             File.Delete(remoteSeedPath);
         }
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = $"""
@@ -1288,15 +1055,7 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -1374,7 +1133,7 @@ public class SyncServiceTests : IDisposable
         byte[] remoteSeedBytes;
         try
         {
-            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            await using (var conn = await _bank.CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
@@ -1392,7 +1151,7 @@ public class SyncServiceTests : IDisposable
             File.Delete(remoteSeedPath);
         }
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -1414,7 +1173,7 @@ public class SyncServiceTests : IDisposable
             {
                 localSnapshotPath ??= path;
                 lastSnapshotPath = path;
-                return await OpenSnapshotAsync(path, ct);
+                return await _bank.OpenSnapshotAsync(path, ct);
             }
 
             async Task<SqliteConnection> OpenReadOnly(string path, CancellationToken ct)
@@ -1426,10 +1185,7 @@ public class SyncServiceTests : IDisposable
                 return c;
             }
 
-            var service = new SyncService(cloud,
-                ct => CreateAndOpenAsync(BankPath, ct),
-                OpenSnapshot,
-                OpenReadOnly,
+            var service = new SyncService(cloud, _bank.OpenBankAsync, OpenSnapshot, OpenReadOnly,
                 TimeProvider.System, NullLogger<SyncService>.Instance);
 
             await Should.ThrowAsync<SyncCorruptFileException>(() =>
@@ -1458,7 +1214,7 @@ public class SyncServiceTests : IDisposable
         byte[] remoteSeedBytes;
         try
         {
-            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            await using (var conn = await _bank.CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
@@ -1476,7 +1232,7 @@ public class SyncServiceTests : IDisposable
             File.Delete(remoteSeedPath);
         }
 
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -1498,7 +1254,7 @@ public class SyncServiceTests : IDisposable
             {
                 localSnapshotPath ??= path;
                 lastSnapshotPath = path;
-                return await OpenSnapshotAsync(path, ct);
+                return await _bank.OpenSnapshotAsync(path, ct);
             }
 
             async Task<SqliteConnection> OpenReadOnly(string path, CancellationToken ct)
@@ -1510,10 +1266,7 @@ public class SyncServiceTests : IDisposable
                 return c;
             }
 
-            var service = new SyncService(cloud,
-                ct => CreateAndOpenAsync(BankPath, ct),
-                OpenSnapshot,
-                OpenReadOnly,
+            var service = new SyncService(cloud, _bank.OpenBankAsync, OpenSnapshot, OpenReadOnly,
                 TimeProvider.System, NullLogger<SyncService>.Instance);
 
             await Should.ThrowAsync<SyncCorruptFileException>(() =>
@@ -1539,7 +1292,7 @@ public class SyncServiceTests : IDisposable
 
         // Two chunks of the same remote source file, sharing a (ctx, source_file) group.
         var remotePath = Path.Combine(_dataRoot, "remote.db");
-        await using (var conn = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -1552,15 +1305,7 @@ public class SyncServiceTests : IDisposable
 
         cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -1596,7 +1341,7 @@ public class SyncServiceTests : IDisposable
         var remoteSeedPath = Path.GetTempFileName();
         try
         {
-            await using (var conn = await CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
+            await using (var conn = await _bank.CreateAndOpenAsync(remoteSeedPath, TestContext.Current.CancellationToken))
             {
                 await using var insert = conn.CreateCommand();
                 insert.CommandText = """
@@ -1618,7 +1363,7 @@ public class SyncServiceTests : IDisposable
         }
 
         // Local also has a row of its own, to prove the merge never runs at all.
-        await using (var conn = await CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -1628,15 +1373,7 @@ public class SyncServiceTests : IDisposable
             await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await Should.ThrowAsync<UnsupportedSchemaVersionException>(() =>
             service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken));
@@ -1658,7 +1395,7 @@ public class SyncServiceTests : IDisposable
         var cloud = new FakeCloudStore();
 
         var remotePath = Path.Combine(_dataRoot, "remote.db");
-        await using (var conn = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -1672,15 +1409,7 @@ public class SyncServiceTests : IDisposable
 
         cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -1722,7 +1451,7 @@ public class SyncServiceTests : IDisposable
         var cloud = new FakeCloudStore();
 
         var remotePath = Path.Combine(_dataRoot, "remote.db");
-        await using (var conn = await CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        await using (var conn = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
         {
             await using var insert = conn.CreateCommand();
             insert.CommandText = """
@@ -1734,15 +1463,7 @@ public class SyncServiceTests : IDisposable
 
         cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
 
-        var service = new SyncService(cloud,
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+        var service = _bank.CreateService(cloud);
 
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 
@@ -1764,20 +1485,12 @@ public class SyncServiceTests : IDisposable
         // The resolver runs inside each sync cycle, so `sync add/remove` settings writes take
         // effect without a restart — two calls resolve twice.
         var resolutions = 0;
-        var service = new SyncService(
+        var service = _bank.CreateService(
             _ =>
             {
                 resolutions++;
                 return Task.FromResult<ICloudStore>(new FakeCloudStore());
-            },
-            ct => CreateAndOpenAsync(BankPath, ct),
-            OpenSnapshotAsync,
-            async (path, ct) =>
-            {
-                var c = new SqliteConnection($"Data Source={path}");
-                await c.OpenAsync(ct);
-                return c;
-            }, TimeProvider.System, NullLogger<SyncService>.Instance);
+            });
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
         await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
 

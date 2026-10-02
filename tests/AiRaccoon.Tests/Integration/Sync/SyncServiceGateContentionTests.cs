@@ -1,3 +1,4 @@
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Infrastructure.Sync;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,62 +28,13 @@ public sealed class SyncServiceGateContentionTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("sync-gate-contention");
 
+    private readonly SyncTestBank _bank;
+
+    public SyncServiceGateContentionTests() => _bank = new SyncTestBank(BankPath);
+
     private string BankPath => Path.Combine(_dataRoot, "memory.db");
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
-
-    private static async Task<SqliteConnection> CreateAndOpenAsync(string path, CancellationToken ct = default)
-    {
-        var conn = new SqliteConnection($"Data Source={path}");
-        await conn.OpenAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-                          CREATE TABLE IF NOT EXISTS entries (
-                              id INTEGER PRIMARY KEY,
-                              hash TEXT,
-                              path TEXT,
-                              value TEXT,
-                              source_file TEXT NULL,
-                              section TEXT NULL,
-                              scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
-                              project_id TEXT NULL,
-                              context_label TEXT NULL,
-                              workspace_id TEXT NULL,
-                              agent_id TEXT NULL,
-                              created_at INTEGER NOT NULL,
-                              updated_at INTEGER NOT NULL,
-                              access_count INTEGER NOT NULL DEFAULT 0,
-                              last_accessed_at INTEGER NULL,
-                              rating REAL NOT NULL DEFAULT 0.5,
-                              ttl_days INTEGER NULL,
-                              embed_state TEXT NOT NULL DEFAULT 'pending',
-                              embedding BLOB NULL,
-                              heading_path TEXT NULL,
-                              structure_embedding BLOB NULL,
-                              chunk_index INTEGER NOT NULL DEFAULT 0,
-                              total_chunks INTEGER NOT NULL DEFAULT 0,
-                              source_id INTEGER NULL
-                          );
-                          CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-                          CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, agent_id TEXT NULL,
-                              name TEXT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, closed_at INTEGER NULL);
-                          CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-                          CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NULL, created_at INTEGER NOT NULL);
-                          CREATE TABLE IF NOT EXISTS sync_tombstones (project_id TEXT NOT NULL, hash TEXT NOT NULL, scope TEXT NOT NULL,
-                              context_label TEXT NULL, deleted_at INTEGER NOT NULL, received_at INTEGER NULL, PRIMARY KEY (project_id, hash, scope));
-                          CREATE TABLE IF NOT EXISTS memory_source (
-                              id INTEGER PRIMARY KEY,
-                              source_type TEXT NOT NULL,
-                              source_locator TEXT NOT NULL,
-                              section TEXT NULL,
-                              heading_path TEXT NULL);
-                          CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source_identity
-                              ON memory_source(source_type, source_locator, COALESCE(section, ''));
-                          CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id);
-                          """;
-        await cmd.ExecuteNonQueryAsync(ct);
-        return conn;
-    }
 
     private static async Task<SqliteConnection> OpenPlainAsync(string path, CancellationToken ct)
     {
@@ -152,7 +104,7 @@ public sealed class SyncServiceGateContentionTests : IDisposable
         async Task<SqliteConnection> OpenBankAsync(CancellationToken ct)
         {
             Record("openBank");
-            return await CreateAndOpenAsync(BankPath, ct);
+            return await _bank.CreateAndOpenAsync(BankPath, ct);
         }
 
         async Task<SqliteConnection> OpenReadOnlyAsync(string path, CancellationToken ct)
@@ -221,11 +173,8 @@ public sealed class SyncServiceGateContentionTests : IDisposable
         {
             var bankPath = Path.Combine(dataRoot, "memory.db");
             var cloud = new FakeCloudStore();
-            var service = new SyncService(cloud,
-                ct => CreateAndOpenAsync(bankPath, ct),
-                OpenPlainAsync,
-                OpenPlainAsync,
-                TimeProvider.System, NullLogger<SyncService>.Instance);
+            var service = new SyncService(cloud, new SyncTestBank(bankPath).OpenBankAsync,
+                OpenPlainAsync, OpenPlainAsync, TimeProvider.System, NullLogger<SyncService>.Instance);
 
             using var start = new Barrier(2);
             var task1 = Task.Run(async () =>
