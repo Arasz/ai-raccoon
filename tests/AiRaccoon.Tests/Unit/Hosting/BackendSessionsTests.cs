@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
@@ -7,8 +9,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
-using System.Net;
-using System.Net.Sockets;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Hosting;
@@ -27,15 +27,15 @@ public sealed class BackendSessionsTests
     private const string AppHost = "/opt/ai-raccoon/ai-raccoon";
     private const string DotnetHost = "/usr/local/share/dotnet/dotnet";
 
-    private static ServerConfig Config(int port, string dataRoot) =>
-        new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User });
+    private static ServerConfig Config(int port, string dataRoot) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User });
 
     private static BackendSessions Subject(IBackendLauncher launcher, string? processPath, ServerConfig config,
         IIdentityProver? prover = null, IServerProbe? probe = null, ILoggerFactory? loggerFactory = null,
-        Func<string, bool>? fileExists = null, string? userProfileDirectory = null, string? pathVariable = null) =>
+        Func<string, bool>? fileExists = null, string? userProfileDirectory = null, string? pathVariable = null,
+        string? currentProcessPath = null) =>
         new(launcher, prover ?? new FakeIdentityProver(), probe ?? new FakeServerProbe(ProbeVerdict.NotListening),
             new PlainHttpClientFactory(), loggerFactory ?? NullLoggerFactory.Instance, processPath, config,
-            fileExists ?? (_ => true), userProfileDirectory, pathVariable);
+            fileExists ?? (_ => true), userProfileDirectory, pathVariable, currentProcessPath ?? processPath);
 
     private static Task<BackendSessions.AcquireOutcome> AcquireAsync(IServerProbe probe, IIdentityProver prover,
         IBackendLauncher launcher, ServerConfig config, ILogger? logger = null, TimeSpan? fallbackIdle = null) =>
@@ -482,6 +482,39 @@ public sealed class BackendSessionsTests
         }
     }
 
+    /// <summary>
+    ///     The fallback's whole remit is the process's own executable, deleted mid-run by `dotnet
+    ///     tool update` (ADR-0116). An explicitly named executable that is gone is a launch
+    ///     failure, not a licence to spawn whatever `ai-raccoon` the shim or PATH happens to offer.
+    /// </summary>
+    [Fact]
+    public async Task OpenAsync_WhenAnExplicitlyNamedExecutableIsGone_NeverSwapsItForAnotherBinary()
+    {
+        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-explicit-gone", TestContext.Current.CancellationToken);
+        var launcher = new FakeBackendLauncher(new BackendResult(null, 3, "boom"));
+        var explicitPath = Path.Combine(dataRoot, "no-such-ai-raccoon");
+        var shim = BackendLaunchArguments.GlobalToolShimPath("/home/rafal")!;
+        var (loggerFactory, logs) = FallbackLogging();
+        try
+        {
+            // currentProcessPath stands in for the real Environment.ProcessPath: the explicit path
+            // above is deliberately not it, which is exactly what must never be swapped.
+            await using var sessions = Subject(launcher, explicitPath, Config(54284, dataRoot), loggerFactory: loggerFactory,
+                fileExists: path => path == shim, userProfileDirectory: "/home/rafal", currentProcessPath: AppHost);
+
+            await Should.ThrowAsync<BackendUnavailableException>(() => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+
+            launcher.FileName.ShouldBe(explicitPath,
+                "an explicitly named executable must reach the launcher unchanged, never the shim or a PATH hit");
+            logs.Collector.GetSnapshot().ShouldNotContain(r => r.Id.Id == 693);
+        }
+        finally
+        {
+            loggerFactory.Dispose();
+            TestData.DeleteTempRoot(dataRoot);
+        }
+    }
+
     [Fact]
     public async Task OpenAsync_WhenTheOwnExecutableIsMissingWithNoFallback_KeepsTheOwnPath_WithoutLogging()
     {
@@ -527,7 +560,7 @@ public sealed class BackendSessionsTests
             var config = Config(54260, dataRoot);
             await using var sessions = new BackendSessions(launcher, prover,
                 new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
-                NullLoggerFactory.Instance, AppHost, config, _ => true, null, null);
+                NullLoggerFactory.Instance, AppHost, config, _ => true, null, null, currentProcessPath: AppHost);
 
             // The session cannot open against the unreachable fake URL; the acquire has already run.
             await Should.ThrowAsync<BackendUnavailableException>(() =>
@@ -568,7 +601,7 @@ public sealed class BackendSessionsTests
             var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54261/mcp", null));
             await using var sessions = new BackendSessions(launcher, prover,
                 new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
-                NullLoggerFactory.Instance, AppHost, Config(54261, dataRoot), _ => true, null, null);
+                NullLoggerFactory.Instance, AppHost, Config(54261, dataRoot), _ => true, null, null, currentProcessPath: AppHost);
 
             try
             {
@@ -607,7 +640,7 @@ public sealed class BackendSessionsTests
                 privateResult: new BackendResult("http://127.0.0.1:54295/mcp", null));
             await using var sessions = new BackendSessions(launcher, prover,
                 new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
-                NullLoggerFactory.Instance, AppHost, Config(54262, dataRoot), _ => true, null, null);
+                NullLoggerFactory.Instance, AppHost, Config(54262, dataRoot), _ => true, null, null, currentProcessPath: AppHost);
 
             for (var open = 0; open < 2; open++)
             {
@@ -639,8 +672,6 @@ public sealed class BackendSessionsTests
         private readonly Queue<IdentityProofFailure?> _pending = new([failure]);
         private IdentityProofFailure? _last;
 
-        public void AnswerNext(IdentityProofFailure? next) => _pending.Enqueue(next);
-
         public Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx)
         {
             log.Add($"prove {endpoint}");
@@ -651,6 +682,8 @@ public sealed class BackendSessionsTests
 
             return Task.FromResult(_last);
         }
+
+        public void AnswerNext(IdentityProofFailure? next) => _pending.Enqueue(next);
     }
 
     /// <summary>Logs every proof like <see cref="RecordingProver" />; only the squatted endpoint fails.</summary>
@@ -688,9 +721,9 @@ public sealed class BackendSessionsTests
 
     private sealed class FakeBackendLauncher : IBackendLauncher
     {
-        private readonly Exception? _throws;
-        private readonly BackendResult _result;
         private readonly BackendResult? _privateResult;
+        private readonly BackendResult _result;
+        private readonly Exception? _throws;
 
         public FakeBackendLauncher(BackendResult result, BackendResult? privateResult = null)
         {

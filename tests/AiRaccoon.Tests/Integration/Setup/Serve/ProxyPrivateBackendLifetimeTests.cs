@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
@@ -8,10 +7,9 @@ using AiRaccoon.Setup;
 using AiRaccoon.Tests.E2E;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
-using ModelContextProtocol.Client;
 using Shouldly;
-using Xunit;
 using xRetry.v3;
+using Xunit;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
@@ -32,6 +30,8 @@ public sealed class ProxyPrivateBackendLifetimeTests : IDisposable
 
     private readonly string _dataRoot = TestData.CreateTempRoot("proxy-private-backend-lifetime");
     private int? _privatePort;
+
+    private static string ServeExecutable => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "AiRaccoon.exe" : "AiRaccoon");
 
     public void Dispose()
     {
@@ -133,11 +133,10 @@ public sealed class ProxyPrivateBackendLifetimeTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
         var sessions = new BackendSessions(launcher, new NeverProven(), TestData.CreateServerProbe(),
             new PlainHttpClientFactory(), NullLoggerFactory.Instance, ServeExecutable, config,
-            File.Exists, null, null);
+            File.Exists, null, null, currentProcessPath: ServeExecutable);
         try
         {
-            await Should.ThrowAsync<BackendUnavailableException>(
-                () => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+            await Should.ThrowAsync<BackendUnavailableException>(() => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
 
             var child = launcher.ChildPid.ShouldNotBeNull("the gate needs a live fallback child that then failed its proof");
             (await ExitsWithinAsync(child, TimeSpan.FromSeconds(10))).ShouldBeTrue(
@@ -192,11 +191,31 @@ public sealed class ProxyPrivateBackendLifetimeTests : IDisposable
         }
     }
 
+    /// <summary>True once nothing holds the port; a backend shutting down keeps it a moment longer.</summary>
+    private static Task<bool> PortIsFreeAsync(int port, CancellationToken cancellationToken) =>
+        WaitByPolling.WaitForAsync(() =>
+            {
+                using var taken = LoopbackPort.TryOccupy(port);
+                return ValueTask.FromResult(taken is not null);
+            }, WaitByPolling.DefaultFirstTick, WaitByPolling.DefaultMaxTick, StopDeadline, TimeProvider.System,
+            cancellationToken).AsTask();
+
+    private BackendSessions Subject(int port)
+    {
+        var config = new ServerConfig(port, McpTransport.Http,
+            new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
+        return new BackendSessions(
+            new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
+                TimeProvider.System, NullLogger<BackendLauncher>.Instance),
+            new IdentityProver(config.Options, new HttpClient()),
+            TestData.CreateServerProbe(), new PlainHttpClientFactory(), NullLoggerFactory.Instance,
+            ServeExecutable, config, File.Exists, null, null, currentProcessPath: ServeExecutable);
+    }
+
     /// <summary>A verifier every listener fails, the fallback child included.</summary>
     private sealed class NeverProven : IIdentityProver
     {
-        public Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx) =>
-            Task.FromResult<IdentityProofFailure?>(IdentityProofFailure.BadSignature);
+        public Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx) => Task.FromResult<IdentityProofFailure?>(IdentityProofFailure.BadSignature);
     }
 
     /// <summary>The real launcher, noting the pid the private child reports while it is still live.</summary>
@@ -220,30 +239,6 @@ public sealed class ProxyPrivateBackendLifetimeTests : IDisposable
             CancellationToken ctx) =>
             inner.AcquireAsync(port, fileName, arguments, ctx);
     }
-
-    /// <summary>True once nothing holds the port; a backend shutting down keeps it a moment longer.</summary>
-    private static Task<bool> PortIsFreeAsync(int port, CancellationToken cancellationToken) =>
-        WaitByPolling.WaitForAsync(() =>
-        {
-            using var taken = LoopbackPort.TryOccupy(port);
-            return ValueTask.FromResult(taken is not null);
-        }, WaitByPolling.DefaultFirstTick, WaitByPolling.DefaultMaxTick, StopDeadline, TimeProvider.System,
-            cancellationToken).AsTask();
-
-    private BackendSessions Subject(int port)
-    {
-        var config = new ServerConfig(port, McpTransport.Http,
-            new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
-        return new BackendSessions(
-            new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
-                TimeProvider.System, NullLogger<BackendLauncher>.Instance),
-            new IdentityProver(config.Options, new HttpClient()),
-            TestData.CreateServerProbe(), new PlainHttpClientFactory(), NullLoggerFactory.Instance,
-            ServeExecutable, config, File.Exists, null, null);
-    }
-
-    private static string ServeExecutable =>
-        Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "AiRaccoon.exe" : "AiRaccoon");
 
     private sealed class PlainHttpClientFactory : IHttpClientFactory
     {

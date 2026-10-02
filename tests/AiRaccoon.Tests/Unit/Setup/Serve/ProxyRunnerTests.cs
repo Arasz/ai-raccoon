@@ -59,8 +59,14 @@ public sealed class ProxyRunnerTests : IDisposable
         lease.ReleaseForBind();
 
         var config = new ServerConfig(lease.Port, McpTransport.Proxy, options);
+
+        // A regression on this line once hung a test run for over 90 minutes (the ADR-0116 fallback
+        // swapped the missing path for an installed ai-raccoon and the proxy entered its stdio
+        // serve loop): bound the wait so the next regression fails fast instead of hanging.
+        using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        watchdog.CancelAfter(TimeSpan.FromSeconds(30));
         var exit = await TestData.CreateProxyRunner().RunAsync(config, new StandardStreams(TextReader.Null, TextWriter.Null, stderr),
-            Path.Combine(_dataRoot, "no-such-ai-raccoon"), TestContext.Current.CancellationToken);
+            Path.Combine(_dataRoot, "no-such-ai-raccoon"), watchdog.Token);
 
         exit.ShouldBe(ErrorCode.Reach.StartFailed, stderr.ToString());
         stderr.ToString().ShouldContain("could not start");

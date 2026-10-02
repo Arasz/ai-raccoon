@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Globalization;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
@@ -18,12 +16,15 @@ namespace AiRaccoon.Hosting.Proxy;
 ///     2026-09-22): shutdown proves it again and stops it over the token-guarded /shutdown, while
 ///     a proven shared server is never touched. A fallback child that fails its own proof is sent
 ///     nothing and stopped through its process at once.
-///     processPath is this process's own path (Environment.ProcessPath in production): the backend
-///     is another ai-raccoon started as `serve`, so an unpackaged host cannot be it. When that
-///     resolved path no longer exists (ADR-0116: `dotnet tool update` deleted it out from under a
-///     still-running proxy), <see cref="BackendLaunchArguments.ResolveExecutable" /> falls back to
-///     the dotnet global-tool shim, then PATH — fileExists/userProfileDirectory/pathVariable are its
-///     injectable seams so a test never touches the real machine.
+///     processPath is the executable the backend is spawned from: this process's own path in
+///     production (Environment.ProcessPath), so an unpackaged host cannot be it. When that is the
+///     process's own path and it no longer exists (ADR-0116: `dotnet tool update` deleted it out
+///     from under a still-running proxy), <see cref="BackendLaunchArguments.ResolveExecutable" />
+///     falls back to the dotnet global-tool shim, then PATH — never for an explicitly named
+///     alternative, which is used verbatim and fails to start as named. currentProcessPath
+///     (production's Environment.ProcessPath) names that one rescuable path;
+///     fileExists/userProfileDirectory/pathVariable are the injectable seams so a test never
+///     touches the real machine.
 /// </summary>
 public sealed partial class BackendSessions(
     IBackendLauncher backendLauncher,
@@ -35,20 +36,10 @@ public sealed partial class BackendSessions(
     ServerConfig config,
     Func<string, bool> fileExists,
     string? userProfileDirectory,
-    string? pathVariable) : IBackendSessions
+    string? pathVariable,
+    string? currentProcessPath) : IBackendSessions
 {
     private const string BackendName = "ai-raccoon-backend";
-
-    private readonly IIdentityProver _prover = identityProver;
-    private readonly IServerProbe _probe = serverProbe;
-
-    /// <summary>
-    ///     What one attach-or-start attempt produced. A non-null <see cref="BackendResult.Url" /> is
-    ///     always an endpoint that proved it holds this root's identity key; <see cref="Fallback" />
-    ///     says the configured port could not be proven and a private ephemeral backend was started
-    ///     instead.
-    /// </summary>
-    internal readonly record struct AcquireOutcome(BackendResult Result, bool Fallback, ProbeVerdict Verdict, IdentityProofFailure? ProofFailure);
 
     /// <summary>How often the stop path re-checks that the private backend let go of its port.</summary>
     private static readonly TimeSpan StopPollInterval = TimeSpan.FromMilliseconds(200);
@@ -67,14 +58,79 @@ public sealed partial class BackendSessions(
     /// <summary>The /mcp endpoints of the private fallback backends this proxy started; empty when it attached to or started a shared server.</summary>
     private readonly List<Uri> _privateBackends = [];
 
+    private readonly IServerProbe _probe = serverProbe;
+
+    private readonly IIdentityProver _prover = identityProver;
+
     private readonly List<McpClient> _sessions = [];
+    private readonly McpTokenFile _tokenFile = new(config.Options);
 
     /// <summary>Makes disposal idempotent: a second dispose must not re-stop (or re-fail) anything.</summary>
     private bool _disposed;
-    private readonly McpTokenFile _tokenFile = new(config.Options);
 
     /// <summary>The endpoint the last successful acquire returned; empty until one succeeds.</summary>
     public string Url { get; private set; } = string.Empty;
+
+    public async Task<McpClient> OpenAsync(string? revision, CancellationToken ctx)
+    {
+        var acquired = await AcquireBackend(ctx);
+        if (acquired.Result.Url is null)
+        {
+            var reason = acquired.Fallback
+                ? $"the listener on port {config.Port} did not prove it serves this data root ({acquired.ProofFailure?.ToString() ?? "no key"}) and no private backend could be started (serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})"
+                : $"no MCP backend at {ServerProbe.EndpointFor(config.Port)} (serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})";
+            throw new BackendUnavailableException(
+                acquired.Fallback ? ErrorCode.Reach.PrivateFallbackFailed : ErrorCode.Reach.BackendUnavailable,
+                Unavailable(reason + (acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty)));
+        }
+
+        if (acquired.Fallback)
+        {
+            // The proxy owns this child's lifetime (K1a): recorded here — before any later failure
+            // can skip the rest of this method — so shutdown stops it even when the open fails.
+            // A proven listener, and the shared instance started on the configured port, are never
+            // recorded: they serve other clients too.
+            var endpoint = new Uri(acquired.Result.Url);
+            if (!_privateBackends.Contains(endpoint))
+            {
+                _privateBackends.Add(endpoint);
+            }
+        }
+
+        // ADR-0107 PC.4: acquired.Result.Url is only ever non-null once identity is already proven
+        // (attach) or this process spawned the backend itself, so "another data root" never applies
+        // here — RefusalReason (e.g. a chmod-700 remedy) is the real, actionable cause when set.
+        var token = _tokenFile.Read() ?? throw new BackendUnavailableException(ErrorCode.Server.NoToken, Unavailable(
+            $"the {(acquired.Fallback ? "private backend" : "backend")} at {acquired.Result.Url} is listening but has no usable token for this data root " +
+            $"({_tokenFile.RefusalReason ?? $"{_tokenFile.Path} holds no token yet"})"));
+
+        Url = acquired.Result.Url;
+        var session = await OpenSessionAsync(new Uri(acquired.Result.Url), token, revision, ctx);
+        lock (_sessions)
+        {
+            _sessions.Add(session);
+        }
+
+        return session;
+    }
+
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        foreach (var session in Snapshot())
+        {
+            await session.DisposeAsync();
+        }
+
+        await StopPrivateBackendsAsync();
+        _httpClient.Dispose();
+    }
 
 
     internal static async Task<AcquireOutcome> AcquireSharedAsync(
@@ -149,67 +205,6 @@ public sealed partial class BackendSessions(
         // holds its process, so it stops it now rather than leaving it to its idle timeout.
         await BackendLauncher.StopChildAsync(result.Child);
         return new AcquireOutcome(result with { Url = null, Child = null }, true, verdict, failure);
-    }
-
-    public async Task<McpClient> OpenAsync(string? revision, CancellationToken ctx)
-    {
-        var acquired = await AcquireBackend(ctx);
-        if (acquired.Result.Url is null)
-        {
-            var reason = acquired.Fallback
-                ? $"the listener on port {config.Port} did not prove it serves this data root ({acquired.ProofFailure?.ToString() ?? "no key"}) and no private backend could be started (serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})"
-                : $"no MCP backend at {ServerProbe.EndpointFor(config.Port)} (serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})";
-            throw new BackendUnavailableException(
-                acquired.Fallback ? ErrorCode.Reach.PrivateFallbackFailed : ErrorCode.Reach.BackendUnavailable,
-                Unavailable(reason + (acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty)));
-        }
-
-        if (acquired.Fallback)
-        {
-            // The proxy owns this child's lifetime (K1a): recorded here — before any later failure
-            // can skip the rest of this method — so shutdown stops it even when the open fails.
-            // A proven listener, and the shared instance started on the configured port, are never
-            // recorded: they serve other clients too.
-            var endpoint = new Uri(acquired.Result.Url);
-            if (!_privateBackends.Contains(endpoint))
-            {
-                _privateBackends.Add(endpoint);
-            }
-        }
-
-        // ADR-0107 PC.4: acquired.Result.Url is only ever non-null once identity is already proven
-        // (attach) or this process spawned the backend itself, so "another data root" never applies
-        // here — RefusalReason (e.g. a chmod-700 remedy) is the real, actionable cause when set.
-        var token = _tokenFile.Read() ?? throw new BackendUnavailableException(ErrorCode.Server.NoToken, Unavailable(
-            $"the {(acquired.Fallback ? "private backend" : "backend")} at {acquired.Result.Url} is listening but has no usable token for this data root " +
-            $"({_tokenFile.RefusalReason ?? $"{_tokenFile.Path} holds no token yet"})"));
-
-        Url = acquired.Result.Url;
-        var session = await OpenSessionAsync(new Uri(acquired.Result.Url), token, revision, ctx);
-        lock (_sessions)
-        {
-            _sessions.Add(session);
-        }
-
-        return session;
-    }
-
-
-    public async ValueTask DisposeAsync()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        foreach (var session in Snapshot())
-        {
-            await session.DisposeAsync();
-        }
-
-        await StopPrivateBackendsAsync();
-        _httpClient.Dispose();
     }
 
     /// <summary>
@@ -288,14 +283,13 @@ public sealed partial class BackendSessions(
         return false;
     }
 
-    private static Uri ShutdownUriFor(Uri endpoint) =>
-        new($"{endpoint.Scheme}://{endpoint.Authority}{ShutdownEndpoint.Path}");
+    private static Uri ShutdownUriFor(Uri endpoint) => new($"{endpoint.Scheme}://{endpoint.Authority}{ShutdownEndpoint.Path}");
 
     private async Task<AcquireOutcome> AcquireBackend(CancellationToken ctx)
     {
         var own = BackendLaunchArguments.Executable(processPath) ?? throw new BackendUnavailableException(
             ErrorCode.Reach.AutoStartUnsupported, Unavailable(BackendLaunchArguments.UnavailableExecutableMessage(processPath, config)));
-        var executable = BackendLaunchArguments.ResolveExecutable(own, _logger, fileExists, userProfileDirectory, pathVariable);
+        var executable = BackendLaunchArguments.ResolveExecutable(own, currentProcessPath, _logger, fileExists, userProfileDirectory, pathVariable);
 
         BankPresenceGuard.EnsureExists(config.Options);
 
@@ -364,14 +358,24 @@ public sealed partial class BackendSessions(
     /// <summary>Every way the backend can be unusable ends on the same line, with the same serve pointer.</summary>
     private static string Unavailable(string reason) => $"ai-raccoon: {reason}; no in-process fallback exists — start the backend first: ai-raccoon serve --port <port>";
 
+    /// <summary>
+    ///     What one attach-or-start attempt produced. A non-null <see cref="BackendResult.Url" /> is
+    ///     always an endpoint that proved it holds this root's identity key; <see cref="Fallback" />
+    ///     says the configured port could not be proven and a private ephemeral backend was started
+    ///     instead.
+    /// </summary>
+    internal readonly record struct AcquireOutcome(BackendResult Result, bool Fallback, ProbeVerdict Verdict, IdentityProofFailure? ProofFailure);
+
     internal static partial class Log
     {
         [LoggerMessage(EventId = 690, Level = LogLevel.Warning,
-            Message = "ai-raccoon: the listener on port {Port} did not prove it serves this data root ({Reason}); starting a private backend on an ephemeral port instead — stop the listener on port {Port} to reuse the shared server")]
+            Message =
+                "ai-raccoon: the listener on port {Port} did not prove it serves this data root ({Reason}); starting a private backend on an ephemeral port instead — stop the listener on port {Port} to reuse the shared server")]
         public static partial void FallbackOnUnprovenListener(ILogger logger, int port, IdentityProofFailure? reason);
 
         [LoggerMessage(EventId = 691, Level = LogLevel.Warning,
-            Message = "ai-raccoon: the private backend at {Url} no longer proves it serves this data root ({Reason}); sending it nothing and leaving it to its idle timeout — stop it yourself if it must go now")]
+            Message =
+                "ai-raccoon: the private backend at {Url} no longer proves it serves this data root ({Reason}); sending it nothing and leaving it to its idle timeout — stop it yourself if it must go now")]
         public static partial void PrivateBackendNotProved(ILogger logger, Uri url, IdentityProofFailure? reason);
 
         [LoggerMessage(EventId = 688, Level = LogLevel.Information,

@@ -30,7 +30,10 @@ public partial class ProxyRunner(
         // reading it from a DI singleton would tie the proof to whichever root registered first.
         var prover = new IdentityProver(serverConfig.Options, httpClientFactory);
         await using var backendSessions = new BackendSessions(backendLauncher, prover, serverProbe, httpClientFactory, loggerFactory, processPath, serverConfig,
-            File.Exists, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable("PATH"));
+            File.Exists, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable("PATH"),
+            // The ADR-0116 rescue names this one path: only the process's own vanished executable
+            // may fall back to the shim/PATH, never an explicitly named alternative.
+            Environment.ProcessPath);
 
         McpClient backend;
         try

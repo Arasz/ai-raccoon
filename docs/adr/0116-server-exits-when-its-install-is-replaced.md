@@ -79,7 +79,12 @@ shutdown mechanism.
   `ai-raccoon` resolved on `PATH`; neither found keeps the pre-existing refusal.
   `BackendLaunchArguments.ResolveExecutable` does the check and the fallback (file-existence,
   home-directory and `PATH` lookups are injected, never touching the real machine in a test), and
-  logs once, naming the missing path and the fallback used.
+  logs once, naming the missing path and the fallback used. **Narrowed 2026-10-02**: the fallback
+  rescues exactly one path — the process's own executable (`currentProcessPath`, production's
+  `Environment.ProcessPath`). An explicitly named alternative that is gone is used verbatim and
+  fails to start as named (`could not start`), never swapped for the shim or a `PATH` hit: what a
+  test run with a real installed tool observed as a silent spawn of that tool is the bug this gate
+  closes, not just a test artifact.
 
 ## Non-Goals
 

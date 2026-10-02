@@ -117,16 +117,26 @@ internal static partial class BackendLaunchArguments
     }
 
     /// <summary>
-    ///     <paramref name="own" /> when it still exists; otherwise the ADR-0116 follow-up fallback —
-    ///     the dotnet global-tool shim, then <c>PATH</c> — for a proxy whose resolved
-    ///     <c>Environment.ProcessPath</c> was deleted from under it by <c>dotnet tool update</c>.
-    ///     Neither found, <paramref name="own" /> is returned unchanged so the launcher's existing
-    ///     refusal applies exactly as before. A fallback in use is logged once.
+    ///     <paramref name="own" /> when it still exists. Otherwise — and only when it is the
+    ///     process's own executable (<paramref name="currentProcessPath" />), deleted from under a
+    ///     still-running proxy by <c>dotnet tool update</c> (ADR-0116) — the follow-up fallback: the
+    ///     dotnet global-tool shim, then <c>PATH</c>. An explicitly named executable that is gone is
+    ///     never swapped for another binary: it is returned unchanged and fails to start as named.
+    ///     Neither fallback found, <paramref name="own" /> is returned unchanged so the launcher's
+    ///     existing refusal applies exactly as before. A fallback in use is logged once.
     /// </summary>
     internal static string ResolveExecutable(
-        string own, ILogger logger, Func<string, bool> fileExists, string? userProfileDirectory, string? pathVariable)
+        string own, string? currentProcessPath, ILogger logger, Func<string, bool> fileExists, string? userProfileDirectory, string? pathVariable)
     {
         if (fileExists(own))
+        {
+            return own;
+        }
+
+        // ADR-0116's remit is exactly one path: the executable this process was started from. A
+        // caller-named alternative that no longer exists is a launch failure, not a licence to
+        // spawn whatever ai-raccoon the shim or PATH happens to offer.
+        if (!string.Equals(own, currentProcessPath, StringComparison.Ordinal))
         {
             return own;
         }

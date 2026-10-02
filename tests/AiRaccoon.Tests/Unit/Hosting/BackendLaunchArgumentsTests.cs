@@ -21,32 +21,26 @@ public sealed class BackendLaunchArgumentsTests
     [InlineData("/usr/local/share/dotnet/dotnet")]
     [InlineData("dotnet.exe")]
     [InlineData("DOTNET")]
-    public void AnUnpackagedInvocation_IsDetected(string processPath) =>
-        BackendLaunchArguments.IsUnpackagedInvocation(processPath).ShouldBeTrue();
+    public void AnUnpackagedInvocation_IsDetected(string processPath) => BackendLaunchArguments.IsUnpackagedInvocation(processPath).ShouldBeTrue();
 
     [Theory]
     [InlineData("/usr/local/bin/ai-raccoon")]
     [InlineData("AiRaccoon.exe")]
     [InlineData(null)]
-    public void APackagedApphostOrUnknownPath_IsNotFlaggedAsUnpackaged(string? processPath) =>
-        BackendLaunchArguments.IsUnpackagedInvocation(processPath).ShouldBeFalse();
+    public void APackagedApphostOrUnknownPath_IsNotFlaggedAsUnpackaged(string? processPath) => BackendLaunchArguments.IsUnpackagedInvocation(processPath).ShouldBeFalse();
 
     [Fact]
-    public void Executable_ForAnUnpackagedProcessPath_ReturnsNull() =>
-        BackendLaunchArguments.Executable("/usr/local/share/dotnet/dotnet").ShouldBeNull();
+    public void Executable_ForAnUnpackagedProcessPath_ReturnsNull() => BackendLaunchArguments.Executable("/usr/local/share/dotnet/dotnet").ShouldBeNull();
 
     [Fact]
-    public void Executable_ForAPackagedApphostPath_ReturnsThatPath() =>
-        BackendLaunchArguments.Executable("/usr/local/bin/ai-raccoon").ShouldBe("/usr/local/bin/ai-raccoon");
+    public void Executable_ForAPackagedApphostPath_ReturnsThatPath() => BackendLaunchArguments.Executable("/usr/local/bin/ai-raccoon").ShouldBe("/usr/local/bin/ai-raccoon");
 
     [Fact]
-    public void Executable_ForAnUnknownProcessPath_ReturnsNull() =>
-        BackendLaunchArguments.Executable(null).ShouldBeNull();
+    public void Executable_ForAnUnknownProcessPath_ReturnsNull() => BackendLaunchArguments.Executable(null).ShouldBeNull();
 
     /// <summary>Pins the real seam: the no-arg overload reads live Environment.ProcessPath.</summary>
     [Fact]
-    public void Executable_WithNoArguments_DelegatesToTheLiveProcessPath() =>
-        BackendLaunchArguments.Executable().ShouldBe(BackendLaunchArguments.Executable(Environment.ProcessPath));
+    public void Executable_WithNoArguments_DelegatesToTheLiveProcessPath() => BackendLaunchArguments.Executable().ShouldBe(BackendLaunchArguments.Executable(Environment.ProcessPath));
 
     /// <summary>
     ///     F70/K1: the private path pins --port 0 so the OS picks the ephemeral port the launcher
@@ -89,16 +83,14 @@ public sealed class BackendLaunchArgumentsTests
         message.ShouldNotContain("dotnet host");
     }
 
-    private static ServerConfig Config(int port, string dataRoot) =>
-        new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User });
+    private static ServerConfig Config(int port, string dataRoot) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = dataRoot, Scope = InstallScope.User });
 
     // ── Executable fallback: the own process path was deleted by `dotnet tool update` (ADR-0116) ──
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    public void GlobalToolShimPath_ForAnUnknownUserProfile_ReturnsNull(string? userProfileDirectory) =>
-        BackendLaunchArguments.GlobalToolShimPath(userProfileDirectory).ShouldBeNull();
+    public void GlobalToolShimPath_ForAnUnknownUserProfile_ReturnsNull(string? userProfileDirectory) => BackendLaunchArguments.GlobalToolShimPath(userProfileDirectory).ShouldBeNull();
 
     [Fact]
     public void GlobalToolShimPath_JoinsTheUserProfileDotnetToolsAndTheExecutableFileName() =>
@@ -108,8 +100,7 @@ public sealed class BackendLaunchArgumentsTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    public void PathExecutable_ForAnUnknownPathVariable_ReturnsNull(string? pathVariable) =>
-        BackendLaunchArguments.PathExecutable(pathVariable, _ => true).ShouldBeNull();
+    public void PathExecutable_ForAnUnknownPathVariable_ReturnsNull(string? pathVariable) => BackendLaunchArguments.PathExecutable(pathVariable, _ => true).ShouldBeNull();
 
     [Fact]
     public void PathExecutable_ReturnsTheFirstDirectoryThatHoldsIt()
@@ -133,7 +124,7 @@ public sealed class BackendLaunchArgumentsTests
     {
         var logger = new FakeLogger();
 
-        var resolved = BackendLaunchArguments.ResolveExecutable("/opt/ai-raccoon/ai-raccoon", logger, _ => true, "/home/rafal", "/usr/bin");
+        var resolved = BackendLaunchArguments.ResolveExecutable("/opt/ai-raccoon/ai-raccoon", currentProcessPath: "/opt/ai-raccoon/ai-raccoon", logger, _ => true, "/home/rafal", "/usr/bin");
 
         resolved.ShouldBe("/opt/ai-raccoon/ai-raccoon");
         logger.Collector.GetSnapshot().ShouldBeEmpty();
@@ -146,7 +137,7 @@ public sealed class BackendLaunchArgumentsTests
         var shim = BackendLaunchArguments.GlobalToolShimPath("/home/rafal")!;
         var logger = new FakeLogger();
 
-        var resolved = BackendLaunchArguments.ResolveExecutable(own, logger, path => path == shim, "/home/rafal", "/usr/bin");
+        var resolved = BackendLaunchArguments.ResolveExecutable(own, currentProcessPath: own, logger, path => path == shim, "/home/rafal", "/usr/bin");
 
         resolved.ShouldBe(shim);
         var record = logger.Collector.GetSnapshot().Single(r => r.Id == 693);
@@ -161,7 +152,7 @@ public sealed class BackendLaunchArgumentsTests
         var onPath = Path.Combine("/usr/local/bin", BackendLaunchArguments.ExecutableFileName);
         var logger = new FakeLogger();
 
-        var resolved = BackendLaunchArguments.ResolveExecutable(own, logger, path => path == onPath, "/home/rafal", "/usr/local/bin");
+        var resolved = BackendLaunchArguments.ResolveExecutable(own, currentProcessPath: own, logger, path => path == onPath, "/home/rafal", "/usr/local/bin");
 
         resolved.ShouldBe(onPath);
         logger.Collector.GetSnapshot().Single(r => r.Id == 693).Message.ShouldContain(own);
@@ -173,9 +164,25 @@ public sealed class BackendLaunchArgumentsTests
         const string own = "/opt/ai-raccoon/.store/ai-raccoon/1.52.0/ai-raccoon/ai-raccoon";
         var logger = new FakeLogger();
 
-        var resolved = BackendLaunchArguments.ResolveExecutable(own, logger, _ => false, "/home/rafal", "/usr/bin");
+        var resolved = BackendLaunchArguments.ResolveExecutable(own, currentProcessPath: own, logger, _ => false, "/home/rafal", "/usr/bin");
 
         resolved.ShouldBe(own);
+        logger.Collector.GetSnapshot().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void ResolveExecutable_WhenThePathIsNotTheCurrentProcessOne_ReturnsItUnchanged_EvenWhenEveryFallbackExists()
+    {
+        const string named = "/opt/elsewhere/no-such-ai-raccoon";
+        var shim = BackendLaunchArguments.GlobalToolShimPath("/home/rafal")!;
+        var onPath = Path.Combine("/usr/local/bin", BackendLaunchArguments.ExecutableFileName);
+        var logger = new FakeLogger();
+
+        var resolved = BackendLaunchArguments.ResolveExecutable(named,
+            currentProcessPath: "/opt/ai-raccoon/.store/ai-raccoon/1.52.0/ai-raccoon/ai-raccoon", logger,
+            path => path == shim || path == onPath, "/home/rafal", "/usr/local/bin");
+
+        resolved.ShouldBe(named, "an explicitly named executable is never swapped for the shim or a PATH hit");
         logger.Collector.GetSnapshot().ShouldBeEmpty();
     }
 }

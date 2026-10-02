@@ -1,5 +1,4 @@
 using AiRaccoon.Hosting.Common;
-using AiRaccoon.Hosting.Node;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
@@ -7,8 +6,8 @@ using AiRaccoon.Setup;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
-using Xunit;
 using xRetry.v3;
+using Xunit;
 
 namespace AiRaccoon.Tests.Integration.Setup.Serve;
 
@@ -26,6 +25,8 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
     private static readonly TimeSpan PortFreeDeadline = TimeSpan.FromSeconds(30);
 
     private readonly string _dataRoot = TestData.CreateTempRoot("backend-sessions-attach-or-start");
+
+    private static string ServeExecutable => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "AiRaccoon.exe" : "AiRaccoon");
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
@@ -168,16 +169,15 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
         }
     }
 
-    private static IReadOnlyList<string> RequestLines(Squatter squatter) =>
-        [.. squatter.Requests.Select(request => request.Split("\r\n")[0])];
+    private static IReadOnlyList<string> RequestLines(Squatter squatter) => [.. squatter.Requests.Select(request => request.Split("\r\n")[0])];
 
     /// <summary>True once nothing holds the port; a backend shutting down keeps it a moment longer.</summary>
     private static Task<bool> WaitForPortFreeAsync(int port, CancellationToken cancellationToken) =>
         WaitByPolling.WaitForAsync(() =>
-        {
-            using var taken = LoopbackPort.TryOccupy(port);
-            return ValueTask.FromResult(taken is not null);
-        }, WaitByPolling.DefaultFirstTick, WaitByPolling.DefaultMaxTick, PortFreeDeadline, TimeProvider.System,
+            {
+                using var taken = LoopbackPort.TryOccupy(port);
+                return ValueTask.FromResult(taken is not null);
+            }, WaitByPolling.DefaultFirstTick, WaitByPolling.DefaultMaxTick, PortFreeDeadline, TimeProvider.System,
             cancellationToken).AsTask();
 
     private BackendSessions Subject(int port, IBackendLauncher launcher)
@@ -186,16 +186,14 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
             new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
         return new BackendSessions(launcher, new IdentityProver(config.Options, new HttpClient()),
             TestData.CreateServerProbe(), new PlainHttpClientFactory(), NullLoggerFactory.Instance,
-            ServeExecutable, config, File.Exists, null, null);
+            ServeExecutable, config, File.Exists, null, null, currentProcessPath: ServeExecutable);
     }
 
-    private static BackendLauncher RealLauncher() => new(TestData.CreateServerProbe(),
-        BackendLauncher.DefaultBudget, TimeProvider.System, NullLogger<BackendLauncher>.Instance);
+    private static BackendLauncher RealLauncher() =>
+        new(TestData.CreateServerProbe(),
+            BackendLauncher.DefaultBudget, TimeProvider.System, NullLogger<BackendLauncher>.Instance);
 
     private static string UrlFor(int port) => $"http://127.0.0.1:{port}/mcp";
-
-    private static string ServeExecutable =>
-        Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "AiRaccoon.exe" : "AiRaccoon");
 
     /// <summary>Any launcher call is a gate failure: the proven path must never consult it.</summary>
     private sealed class ThrowingBackendLauncher : IBackendLauncher
