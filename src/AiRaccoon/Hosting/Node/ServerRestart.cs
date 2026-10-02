@@ -61,6 +61,26 @@ public sealed partial class ServerRestart : IServerRestart
     {
         Guard.IsNotNull(tokenFile);
 
+        if (await SettleBeforeIdentifyAsync(port, ctx) is { } settled)
+        {
+            return settled;
+        }
+
+        if (await IdentifyAsync(port, ctx) is not { Name: ServerInfo.ServerName } info)
+        {
+            Log.Foreign(_logger, port);
+            return new RestartResult(RestartOutcome.Foreign);
+        }
+
+        return await StopAsync(port, tokenFile, info, ctx);
+    }
+
+    /// <summary>
+    ///     The outcome when the cycle ends before anything is asked of the listener — nothing there,
+    ///     no answer, or no proof of this root's key; null once a listener answered and proved.
+    /// </summary>
+    private async Task<RestartResult?> SettleBeforeIdentifyAsync(int port, CancellationToken ctx)
+    {
         if (RestartTransition.FromProbe(await _probe.ProbeAsync(port, ctx)) is { } settled)
         {
             if (settled is RestartOutcome.Unknown)
@@ -79,12 +99,12 @@ public sealed partial class ServerRestart : IServerRestart
             return new RestartResult(RestartOutcome.Unproven, Reason: failure);
         }
 
-        if (await IdentifyAsync(port, ctx) is not { Name: ServerInfo.ServerName } info)
-        {
-            Log.Foreign(_logger, port);
-            return new RestartResult(RestartOutcome.Foreign);
-        }
+        return null;
+    }
 
+    /// <summary>Asks the identified server to stop with the token and waits for its port to free; reports NoToken when there is no token to send.</summary>
+    private async Task<RestartResult> StopAsync(int port, McpTokenFile tokenFile, ServerInfo info, CancellationToken ctx)
+    {
         var found = new RestartResult(RestartOutcome.Stopped, info.Pid, info.Version);
         if (tokenFile.Read() is not { } token)
         {

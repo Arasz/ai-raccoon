@@ -1,0 +1,49 @@
+{
+  "ids": [
+    "E090",
+    "E091",
+    "E092",
+    "E093",
+    "E094",
+    "E095",
+    "E096",
+    "E097",
+    "E098",
+    "E099",
+    "E100"
+  ],
+  "zeroInBothArms": {
+    "chunk254": [
+      "E090",
+      "E091",
+      "E092",
+      "E093",
+      "E094",
+      "E095",
+      "E096",
+      "E097",
+      "E098",
+      "E099",
+      "E100"
+    ],
+    "chunk1022": [
+      "E090",
+      "E091",
+      "E092",
+      "E093",
+      "E094",
+      "E095",
+      "E096",
+      "E097",
+      "E098",
+      "E099",
+      "E100"
+    ]
+  },
+  "example": {
+    "queryId": "E090",
+    "anchorHash": "2c6cb7cda4f4f15bcd1858895c9b8589ea5f0da789471b55a1775e0983fabf47",
+    "servedProjectTwin": "4f397ecadf338b8e0e5151a63e4fd8794371e0318cbbc262defee99590ee8352",
+    "note": "identical value prefix; retrieval serves the project-scope row in both arms"
+  }
+}

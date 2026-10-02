@@ -1,0 +1,110 @@
+{
+  "repeatCount": 3,
+  "runs": [
+    {
+      "repeat": 1,
+      "arms": {
+        "chunk254": {
+          "arm": "chunk254",
+          "dataRoot": "/tmp/aira-ab-254-vs-1022/roots/arm-254",
+          "dll": "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-254-vs-1022-retrieval-measurement-809/src/AiRaccoon/bin/Debug/net10.0/AiRaccoon.dll",
+          "memoryEngineBundled": false,
+          "warmup": null,
+          "wallSeconds": 111.1,
+          "epEvidence": [
+            "Embedding session created: intra-op threads 3 (setting), execution provider CPU",
+            "Loading the Neural Engine sessions in the background (cache /tmp/aira-ab-254-vs-1022/roots/arm-254/coreml-cache/e6d04965a67d/1.30.0/CPUAndNeuralEngine/bucket-256); WebGPU serves until they are ready.",
+            "Embedding session created: intra-op threads 3 (setting), execution provider WebGPU (CoreML compiling)",
+            "Embedding now runs on the Neural Engine: sessions loaded from cache in 0.8 s and passed the parity probe."
+          ]
+        },
+        "chunk1022": {
+          "arm": "chunk1022",
+          "dataRoot": "/tmp/aira-ab-254-vs-1022/roots/arm-1022",
+          "dll": "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-254-vs-1022-retrieval-measurement-809/src/AiRaccoon/bin/Debug/net10.0/AiRaccoon.dll",
+          "memoryEngineBundled": true,
+          "warmup": {
+            "outcome": "neural-engine",
+            "seconds": 2.0
+          },
+          "wallSeconds": 67.1,
+          "epEvidence": [
+            "Loading the Neural Engine sessions in the background (cache /tmp/aira-ab-254-vs-1022/roots/arm-1022/coreml-cache/e6d04965a67d/1.30.0/CPUAndNeuralEngine/bucket-256); WebGPU serves until they are ready.",
+            "Embedding session created: intra-op threads 3 (setting), execution provider WebGPU (CoreML compiling)",
+            "Embedding now runs on the Neural Engine: sessions loaded from cache in 1.0 s and passed the parity probe."
+          ]
+        }
+      }
+    },
+    {
+      "repeat": 2,
+      "arms": {
+        "chunk254": {
+          "arm": "chunk254",
+          "dataRoot": "/tmp/aira-ab-254-vs-1022/roots/arm-254",
+          "dll": "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-254-vs-1022-retrieval-measurement-809/src/AiRaccoon/bin/Debug/net10.0/AiRaccoon.dll",
+          "memoryEngineBundled": false,
+          "warmup": null,
+          "wallSeconds": 132.8,
+          "epEvidence": [
+            "Embedding session created: intra-op threads 3 (setting), execution provider CPU",
+            "Loading the Neural Engine sessions in the background (cache /tmp/aira-ab-254-vs-1022/roots/arm-254/coreml-cache/e6d04965a67d/1.30.0/CPUAndNeuralEngine/bucket-256); WebGPU serves until they are ready.",
+            "Embedding session created: intra-op threads 3 (setting), execution provider WebGPU (CoreML compiling)",
+            "Embedding now runs on the Neural Engine: sessions loaded from cache in 1.1 s and passed the parity probe."
+          ]
+        },
+        "chunk1022": {
+          "arm": "chunk1022",
+          "dataRoot": "/tmp/aira-ab-254-vs-1022/roots/arm-1022",
+          "dll": "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-254-vs-1022-retrieval-measurement-809/src/AiRaccoon/bin/Debug/net10.0/AiRaccoon.dll",
+          "memoryEngineBundled": true,
+          "warmup": {
+            "outcome": "neural-engine",
+            "seconds": 2.0
+          },
+          "wallSeconds": 72.6,
+          "epEvidence": [
+            "Loading the Neural Engine sessions in the background (cache /tmp/aira-ab-254-vs-1022/roots/arm-1022/coreml-cache/e6d04965a67d/1.30.0/CPUAndNeuralEngine/bucket-256); WebGPU serves until they are ready.",
+            "Embedding session created: intra-op threads 3 (setting), execution provider WebGPU (CoreML compiling)",
+            "Embedding now runs on the Neural Engine: sessions loaded from cache in 0.9 s and passed the parity probe."
+          ]
+        }
+      }
+    },
+    {
+      "repeat": 3,
+      "arms": {
+        "chunk254": {
+          "arm": "chunk254",
+          "dataRoot": "/tmp/aira-ab-254-vs-1022/roots/arm-254",
+          "dll": "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-254-vs-1022-retrieval-measurement-809/src/AiRaccoon/bin/Debug/net10.0/AiRaccoon.dll",
+          "memoryEngineBundled": false,
+          "warmup": null,
+          "wallSeconds": 142.3,
+          "epEvidence": [
+            "Embedding session created: intra-op threads 3 (setting), execution provider CPU",
+            "Loading the Neural Engine sessions in the background (cache /tmp/aira-ab-254-vs-1022/roots/arm-254/coreml-cache/e6d04965a67d/1.30.0/CPUAndNeuralEngine/bucket-256); WebGPU serves until they are ready.",
+            "Embedding session created: intra-op threads 3 (setting), execution provider WebGPU (CoreML compiling)",
+            "Embedding now runs on the Neural Engine: sessions loaded from cache in 1.1 s and passed the parity probe."
+          ]
+        },
+        "chunk1022": {
+          "arm": "chunk1022",
+          "dataRoot": "/tmp/aira-ab-254-vs-1022/roots/arm-1022",
+          "dll": "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-254-vs-1022-retrieval-measurement-809/src/AiRaccoon/bin/Debug/net10.0/AiRaccoon.dll",
+          "memoryEngineBundled": true,
+          "warmup": {
+            "outcome": "neural-engine",
+            "seconds": 2.0
+          },
+          "wallSeconds": 132.6,
+          "epEvidence": [
+            "Loading the Neural Engine sessions in the background (cache /tmp/aira-ab-254-vs-1022/roots/arm-1022/coreml-cache/e6d04965a67d/1.30.0/CPUAndNeuralEngine/bucket-256); WebGPU serves until they are ready.",
+            "Embedding session created: intra-op threads 3 (setting), execution provider WebGPU (CoreML compiling)",
+            "Embedding now runs on the Neural Engine: sessions loaded from cache in 1.0 s and passed the parity probe."
+          ]
+        }
+      }
+    }
+  ]
+}
