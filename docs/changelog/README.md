@@ -9,5 +9,6 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.55.4 — project-ids repair loop split into stop check and pass](1.55.4-repair-loop-split.md)
 - [1.55.3 — `repair project-ids` handler split into named steps](1.55.3-repair-run-split.md)
 - [1.55.0 — re-chunk phase instrumentation](1.55.0-rechunk-phase-instrumentation.md)
