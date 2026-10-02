@@ -9,4 +9,5 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.55.6 — `serve --restart` cycle split into settle and stop](1.55.6-restart-cycle-split.md)
 - [1.55.0 — re-chunk phase instrumentation](1.55.0-rechunk-phase-instrumentation.md)

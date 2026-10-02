@@ -102,7 +102,7 @@ public sealed partial class ServerRestart : IServerRestart
         return null;
     }
 
-    /// <summary>Asks the identified server to stop with the token, then waits for its port to free.</summary>
+    /// <summary>Asks the identified server to stop with the token and waits for its port to free; reports NoToken when there is no token to send.</summary>
     private async Task<RestartResult> StopAsync(int port, McpTokenFile tokenFile, ServerInfo info, CancellationToken ctx)
     {
         var found = new RestartResult(RestartOutcome.Stopped, info.Pid, info.Version);
