@@ -40,56 +40,14 @@ public sealed partial class SweepHostedService(
         using var timer = new PeriodicTimer(await ReadIntervalSafeAsync(stoppingToken),
             timeProvider);
         TimerArmed.Increment();
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            try
-            {
-                await RunOnceAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                Log.RunFailed(logger, ex);
-            }
-            finally
-            {
-                Ticks.Increment();
-            }
-
-            // Re-read the interval so config changes apply without a restart.
-            timer.Period = await ReadIntervalSafeAsync(stoppingToken);
-            IntervalReReads.Increment();
-        }
+        await timer.RunTicksAsync(RunOnceAsync, ex => Log.RunFailed(logger, ex), stoppingToken,
+            Ticks.Increment, ReadIntervalSafeAsync, IntervalReReads.Increment);
     }
 
     /// <summary>One sweep pass: kill-switch check, then a per-project sweep. Test seam.</summary>
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        using var pass = telemetry.Begin(OperationName);
-        try
-        {
-            var failures = await RunPassAsync(pass, cancellationToken);
-            if (failures > 0)
-            {
-                pass.PartiallyFailed(failures);
-            }
-            else
-            {
-                pass.Succeeded();
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw; // shutdown cut the pass short: abandoned, not failed
-        }
-        catch (Exception ex)
-        {
-            pass.Failed(ex);
-            throw;
-        }
+        await telemetry.RunPassCountingFailuresAsync(OperationName, RunPassAsync, cancellationToken);
     }
 
     /// <summary>
@@ -204,24 +162,11 @@ public sealed partial class SweepHostedService(
     }
 
     /// <summary>Interval from settings with a default fallback: a store failure must not kill the loop.</summary>
-    private async Task<TimeSpan> ReadIntervalSafeAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            var hours = SweepConfigKeys.ParseIntervalHours(
-                await store.GetSettingAsync(SweepConfigKeys.IntervalHoursGlobal, cancellationToken));
-            return TimeSpan.FromHours(hours);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Log.IntervalReadFailed(logger, ex);
-            return TimeSpan.FromHours(SweepConfigKeys.DefaultIntervalHours);
-        }
-    }
+    private Task<TimeSpan> ReadIntervalSafeAsync(CancellationToken cancellationToken) =>
+        BackgroundLoop.ReadOrFallbackAsync(async ct => TimeSpan.FromHours(SweepConfigKeys.ParseIntervalHours(
+                await store.GetSettingAsync(SweepConfigKeys.IntervalHoursGlobal, ct))),
+            TimeSpan.FromHours(SweepConfigKeys.DefaultIntervalHours), ex => Log.IntervalReadFailed(logger, ex),
+            cancellationToken);
 
     private static partial class Log
     {

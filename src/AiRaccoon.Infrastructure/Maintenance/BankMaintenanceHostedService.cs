@@ -116,29 +116,8 @@ public sealed partial class BankMaintenanceHostedService(
 
     private async Task RunHeavyPassLoopAsync(PeriodicTimer timer, CancellationToken stoppingToken)
     {
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            try
-            {
-                await RunOnceAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                Log.RunFailed(logger, ex);
-            }
-            finally
-            {
-                Ticks.Increment();
-            }
-
-            // Re-read the interval so config changes apply without a restart.
-            timer.Period = await ReadCheckpointIntervalSafeAsync(stoppingToken);
-            IntervalReReads.Increment();
-        }
+        await timer.RunTicksAsync(RunOnceAsync, ex => Log.RunFailed(logger, ex), stoppingToken,
+            Ticks.Increment, ReadCheckpointIntervalSafeAsync, IntervalReReads.Increment);
     }
 
     /// <summary>
@@ -156,30 +135,16 @@ public sealed partial class BankMaintenanceHostedService(
         }
 
         using var poll = new PeriodicTimer(OnDemandPollInterval, timeProvider);
-        while (await poll.WaitForNextTickAsync(stoppingToken))
-        {
-            try
+        // Same message as the heavy pass's own failure (513): both are "one maintenance
+        // loop iteration failed, retried next time" — a second, near-duplicate EventId
+        // for the on-demand loop would also have interleaved with MaintenanceJobRunner's
+        // adjacent 525-526 block (EventIdBlocks_DoNotInterleaveBetweenOwners).
+        await poll.RunTicksAsync(async ct =>
             {
-                await using var connection = await factory.OpenBankAsync(stoppingToken);
-                await _jobRunner.RunDueAsync(connection, _jobs, stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                // Same message as the heavy pass's own failure (513): both are "one maintenance
-                // loop iteration failed, retried next time" — a second, near-duplicate EventId
-                // for the on-demand loop would also have interleaved with MaintenanceJobRunner's
-                // adjacent 525-526 block (EventIdBlocks_DoNotInterleaveBetweenOwners).
-                Log.RunFailed(logger, ex);
-            }
-            finally
-            {
-                OnDemandPolls.Increment();
-            }
-        }
+                await using var connection = await factory.OpenBankAsync(ct);
+                await _jobRunner.RunDueAsync(connection, _jobs, ct);
+            },
+            ex => Log.RunFailed(logger, ex), stoppingToken, OnDemandPolls.Increment);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
@@ -207,21 +172,7 @@ public sealed partial class BankMaintenanceHostedService(
     /// <summary>One maintenance pass: WAL checkpoint, then vacuum+analyze if due. Test seam.</summary>
     internal async Task RunOnceAsync(CancellationToken cancellationToken)
     {
-        using var pass = telemetry.Begin(OperationName);
-        try
-        {
-            await RunPassAsync(pass, cancellationToken);
-            pass.Succeeded();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw; // shutdown cut the pass short: abandoned, not failed
-        }
-        catch (Exception ex)
-        {
-            pass.Failed(ex);
-            throw;
-        }
+        await telemetry.RunPassAsync(OperationName, RunPassAsync, cancellationToken);
     }
 
     private async Task RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
@@ -368,45 +319,25 @@ public sealed partial class BankMaintenanceHostedService(
         await busy.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private async Task<TimeSpan> ReadCheckpointIntervalSafeAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var connection = await factory.OpenBankAsync(cancellationToken);
-            var minutes = await ReadIntervalAsync(connection,
-                BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal,
-                BankMaintenanceConfigKeys.ParseCheckpointIntervalMinutes, cancellationToken);
-            return TimeSpan.FromMinutes(minutes);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Log.IntervalReadFailed(logger, ex);
-            return TimeSpan.FromMinutes(BankMaintenanceConfigKeys.DefaultCheckpointIntervalMinutes);
-        }
-    }
+    private Task<TimeSpan> ReadCheckpointIntervalSafeAsync(CancellationToken cancellationToken) =>
+        BackgroundLoop.ReadOrFallbackAsync(async ct =>
+            {
+                await using var connection = await factory.OpenBankAsync(ct);
+                var minutes = await ReadIntervalAsync(connection,
+                    BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal,
+                    BankMaintenanceConfigKeys.ParseCheckpointIntervalMinutes, ct);
+                return TimeSpan.FromMinutes(minutes);
+            },
+            TimeSpan.FromMinutes(BankMaintenanceConfigKeys.DefaultCheckpointIntervalMinutes),
+            ex => Log.IntervalReadFailed(logger, ex), cancellationToken);
 
-    private async Task<int> ReadVacuumIntervalDaysSafeAsync(SqliteConnection connection,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await ReadIntervalAsync(connection, BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal,
-                BankMaintenanceConfigKeys.ParseVacuumIntervalDays, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Log.IntervalReadFailed(logger, ex);
-            return BankMaintenanceConfigKeys.DefaultVacuumIntervalDays;
-        }
-    }
+    private Task<int> ReadVacuumIntervalDaysSafeAsync(SqliteConnection connection,
+        CancellationToken cancellationToken) =>
+        BackgroundLoop.ReadOrFallbackAsync(
+            ct => ReadIntervalAsync(connection, BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal,
+                BankMaintenanceConfigKeys.ParseVacuumIntervalDays, ct),
+            BankMaintenanceConfigKeys.DefaultVacuumIntervalDays, ex => Log.IntervalReadFailed(logger, ex),
+            cancellationToken);
 
     private static async Task<int> ReadIntervalAsync(SqliteConnection connection, string key,
         Func<string?, int> parse, CancellationToken cancellationToken)
