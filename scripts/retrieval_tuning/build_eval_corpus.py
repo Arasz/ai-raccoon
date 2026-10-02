@@ -8,11 +8,16 @@ copy, and emits exactly 100 queries:
 - 75 file-targeted queries: 25 ADR files (explicit allowlist below) x 3
   paraphrased queries, one per section family (context / decision /
   consequences; 0053 and 0067 use decision + 2 content queries because they
-  lack one of the standard sections).
+  lack one of the standard sections). Each family targets the first chunk
+  carrying it, so where the bank's chunker merged two families' sections into
+  one chunk (a 1022-budget composite label) those queries share that chunk.
 - 25 non-file queries: hermes transcripts (project_id='hermes-default'; the
   content marker selects the chunk, since the 1022 re-chunk split those rows)
   and shared-tier entries without a source_file. Every one
   carries expectedHash (entry hash) and expectedSource=null.
+
+Every expectedHash that several queries share is declared, with its reason, in
+header.sharedTargets; an undeclared or unmerged share fails the build or the tests.
 
 The 4 RESERVED files belong to the 10-query test set and are never targeted
 (plan §5.2 holdout discipline). The 25-file allowlist is explicit and fixed;
@@ -435,6 +440,53 @@ def _check_hash_unique(conn: sqlite3.Connection, hash_value: str, label: str) ->
     corpus_anchors.assert_hash_unique(conn, hash_value, label)
 
 
+def shared_targets(queries: list[dict], origins: dict[str, dict]) -> list[dict]:
+    """Declare every expectedHash that several queries share, with the reason.
+
+    A shared ADR target is legitimate only when the chunk's section label carries
+    every member's family (the chunker merged those sections into one chunk); a
+    shared non-file target is one row holding several markers. Anything else raises.
+    """
+    by_hash: dict[str, list[str]] = {}
+    for query in queries:
+        by_hash.setdefault(query["expectedHash"], []).append(query["id"])
+    declared: list[dict] = []
+    for hash_value, ids in by_hash.items():
+        if len(ids) < 2:
+            continue
+        members = [origins[i] for i in ids]
+        if all("family" in m for m in members):
+            section = members[0]["section"]
+            filename = members[0]["file"]
+            for query_id, member in zip(ids, members):
+                if not _section_matches(member["section"], member["family"]):
+                    raise RuntimeError(
+                        f"{query_id}: shared target section {member['section']!r} does not "
+                        f"carry family {member['family']!r}")
+            families = {i: m["family"] for i, m in zip(ids, members)}
+            declared.append({
+                "expectedHash": hash_value,
+                "ids": ids,
+                "kind": "merged-sections",
+                "section": section,
+                "families": families,
+                "reason": (f"{filename}: the {', '.join(families.values())} sections share one "
+                           f"chunk at this budget ({section!r}); each family's first chunk is it"),
+            })
+        elif not any("family" in m for m in members):
+            declared.append({
+                "expectedHash": hash_value,
+                "ids": ids,
+                "kind": "merged-markers",
+                "section": None,
+                "reason": (f"the markers of {', '.join(ids)} all lie in one "
+                           f"{members[0]['bucket']} row at this budget"),
+            })
+        else:
+            raise RuntimeError(f"{ids}: an ADR and a non-file query share target {hash_value[:16]}")
+    return declared
+
+
 def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -> dict:
     """Resolve all anchors from the copy and write the {header, queries} corpus JSON."""
     copy_path = Path(copy_path)
@@ -453,6 +505,7 @@ def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -
 
     conn = corpus_anchors.open_copy(copy_path)
     queries: list[dict] = []
+    origins: dict[str, dict] = {}
 
     try:
         # 75 ADR file-targeted queries, in allowlist order (deterministic).
@@ -461,8 +514,10 @@ def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -
                 row = _resolve_adr_target(conn, filename, family)
                 _check_hash_unique(conn, row["hash"], f"{filename}@{row['chunk_index']}")
                 section = row["section"] or ""
+                query_id = f"E{len(queries) + 1:03d}"
+                origins[query_id] = {"file": filename, "family": family, "section": section}
                 queries.append({
-                    "id": f"E{len(queries) + 1:03d}",
+                    "id": query_id,
                     "category": category,
                     "query": query_text,
                     "expectedSource": f"docs:adr:{filename}#{slugify(section)}",
@@ -485,8 +540,10 @@ def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -
                 f"{row['project_id']}/{row['scope']}"
             )
             _check_hash_unique(conn, row["hash"], f"non-file {marker[:40]!r}")
+            query_id = f"E{len(queries) + 1:03d}"
+            origins[query_id] = {"bucket": f"{project_id}/{scope}"}
             queries.append({
-                "id": f"E{len(queries) + 1:03d}",
+                "id": query_id,
                 "category": category,
                 "query": query_text,
                 "expectedSource": None,
@@ -513,6 +570,7 @@ def generate(copy_path: Path, output_path: Path, docs_dir: Path | None = None) -
             "seed": SEED,
             "queryCount": len(queries),
             "snapshotSha256": corpus_anchors.sha256_file(copy_path),
+            "sharedTargets": shared_targets(queries, origins),
         },
         "queries": queries,
     }

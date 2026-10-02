@@ -393,3 +393,80 @@ def test_every_adr_family_resolves_in_the_pinned_copy() -> None:
         "no allowlisted family resolved through a composite section label — "
         "the composite matcher is unexercised by this copy"
     )
+
+
+# ---------------------------------------------------------------- shared targets (1022)
+
+_CATEGORY_FAMILY = {
+    "ADR (Context)": "context",
+    "ADR (Decision)": "decision",
+    "ADR (Consequences)": "consequences",
+}
+
+
+def _shared_groups(entries: list[dict]) -> dict[str, list[str]]:
+    by_hash: dict[str, list[str]] = {}
+    for entry in entries:
+        by_hash.setdefault(entry["expectedHash"], []).append(entry["id"])
+    return {h: ids for h, ids in by_hash.items() if len(ids) > 1}
+
+
+def test_every_shared_target_is_declared() -> None:
+    """Two queries may share an expectedHash only where the bank merged their targets
+    into one chunk; the header declares each such group, and only those."""
+    entries = _load_corpus()
+    declared = {t["expectedHash"]: t["ids"]
+                for t in (_load_header() or {}).get("sharedTargets", [])}
+    actual = _shared_groups(entries)
+    undeclared = {h[:12]: ids for h, ids in actual.items() if declared.get(h) != ids}
+    stale = {h[:12]: ids for h, ids in declared.items() if actual.get(h) != ids}
+    assert not undeclared and not stale, (
+        f"{len(entries)} queries carry {len({e['expectedHash'] for e in entries})} distinct "
+        f"targets; undeclared shared targets {undeclared}; stale declarations {stale}"
+    )
+
+
+def test_declared_shared_targets_are_merges() -> None:
+    """A declared ADR group names one file and one composite section that carries every
+    member's family; a declared non-file group stays inside one project/scope bucket."""
+    entries = {e["id"]: e for e in _load_corpus()}
+    for target in (_load_header() or {}).get("sharedTargets", []):
+        members = [entries[i] for i in target["ids"]]
+        assert target["reason"].strip(), f"{target['expectedHash'][:12]}: empty reason"
+        if target["kind"] == "merged-sections":
+            assert len({m["expectedSource"] for m in members}) == 1, target["ids"]
+            anchor = members[0]["expectedSource"].split("#", 1)[1]
+            assert anchor == _slugify(target["section"]), (target["ids"], anchor)
+            for member in members:
+                family = target["families"][member["id"]]
+                assert _CATEGORY_FAMILY.get(member["category"], family) == family, member["id"]
+                assert _slugify(family) in anchor, (member["id"], family, anchor)
+        else:
+            assert target["kind"] == "merged-markers", target["kind"]
+            assert all(m["nonFileTarget"] for m in members), target["ids"]
+            assert len({(m["targetProjectId"], m["targetScope"]) for m in members}) == 1
+
+
+def test_shared_targets_declares_merged_sections_and_rejects_unmerged() -> None:
+    mod = _load_generator()
+    queries = [
+        {"id": "E001", "expectedHash": "aa"},
+        {"id": "E002", "expectedHash": "aa"},
+        {"id": "E003", "expectedHash": "bb"},
+    ]
+    origins = {
+        "E001": {"file": "0008-x.md", "family": "context", "section": "0008 | Context | Decision"},
+        "E002": {"file": "0008-x.md", "family": "decision", "section": "0008 | Context | Decision"},
+        "E003": {"file": "0008-x.md", "family": "consequences", "section": "Consequences"},
+    }
+    declared = mod.shared_targets(queries, origins)
+    assert [(t["expectedHash"], t["ids"], t["kind"], t["families"]) for t in declared] == [
+        ("aa", ["E001", "E002"], "merged-sections", {"E001": "context", "E002": "decision"})
+    ]
+    assert "0008-x.md" in declared[0]["reason"]
+    assert mod.shared_targets(queries[::2], origins) == []
+
+    origins["E002"] = {"file": "0008-x.md", "family": "consequences",
+                       "section": "0008 | Context | Decision"}
+    with pytest.raises(RuntimeError, match="does not carry"):
+        mod.shared_targets(queries, origins)

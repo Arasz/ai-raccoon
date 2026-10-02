@@ -3,6 +3,296 @@
     "generator": "build_eval_corpus.py",
     "queryCount": 100,
     "seed": 42,
+    "sharedTargets": [
+      {
+        "expectedHash": "e535d772636e2c15f827581f7e54c709255d5e9337f069b067ad37637bad96b6",
+        "families": {
+          "E004": "context",
+          "E005": "decision"
+        },
+        "ids": [
+          "E004",
+          "E005"
+        ],
+        "kind": "merged-sections",
+        "reason": "0008-live-pid-discovery-for-monitoring.md: the context, decision sections share one chunk at this budget ('0008 | Context | Decision'); each family's first chunk is it",
+        "section": "0008 | Context | Decision"
+      },
+      {
+        "expectedHash": "d3e31faf717c5105e78ded6ead6f8fa0200c9bf3b8a3da357db14b92dcd8be6b",
+        "families": {
+          "E007": "context",
+          "E008": "decision"
+        },
+        "ids": [
+          "E007",
+          "E008"
+        ],
+        "kind": "merged-sections",
+        "reason": "0011-schema-versioning.md: the context, decision sections share one chunk at this budget ('0011 — Schema versioning | Context | Decision'); each family's first chunk is it",
+        "section": "0011 — Schema versioning | Context | Decision"
+      },
+      {
+        "expectedHash": "e2dd14e09f638dd44fd9c959f8349e41107f8d831621b48a3fd0920c3a01ae14",
+        "families": {
+          "E010": "context",
+          "E011": "decision",
+          "E012": "consequences"
+        },
+        "ids": [
+          "E010",
+          "E011",
+          "E012"
+        ],
+        "kind": "merged-sections",
+        "reason": "0013-extension-host-hook-surface.md: the context, decision, consequences sections share one chunk at this budget ('0013 — Extension host hook surface | Context | Decision | Consequences'); each family's first chunk is it",
+        "section": "0013 — Extension host hook surface | Context | Decision | Consequences"
+      },
+      {
+        "expectedHash": "5dcf12d11981e3375878a793310e69ccbaab4b2b045de71cb996fe95a238b9d5",
+        "families": {
+          "E013": "context",
+          "E014": "decision",
+          "E015": "consequences"
+        },
+        "ids": [
+          "E013",
+          "E014",
+          "E015"
+        ],
+        "kind": "merged-sections",
+        "reason": "0014-settings-never-sync.md: the context, decision, consequences sections share one chunk at this budget ('0014 | Context | Decision | Consequences | Evidence'); each family's first chunk is it",
+        "section": "0014 | Context | Decision | Consequences | Evidence"
+      },
+      {
+        "expectedHash": "98f3b6898bf4ce1a4adc62a75777d4b4471b6621afcbdee7ea9adc029c1f2549",
+        "families": {
+          "E016": "context",
+          "E017": "decision"
+        },
+        "ids": [
+          "E016",
+          "E017"
+        ],
+        "kind": "merged-sections",
+        "reason": "0017-tensorprimitives-in-core.md: the context, decision sections share one chunk at this budget ('0017 | Context | Decision'); each family's first chunk is it",
+        "section": "0017 | Context | Decision"
+      },
+      {
+        "expectedHash": "c631f874ee72faa42867729bda911fd62dcc861dbc4fceae85d7af1dd5ba094e",
+        "families": {
+          "E025": "context",
+          "E026": "decision"
+        },
+        "ids": [
+          "E025",
+          "E026"
+        ],
+        "kind": "merged-sections",
+        "reason": "0025-the-sweep-reaper.md: the context, decision sections share one chunk at this budget ('0025 — The sweep reaper | Context | Decision 1 — on by default, not off'); each family's first chunk is it",
+        "section": "0025 — The sweep reaper | Context | Decision 1 — on by default, not off"
+      },
+      {
+        "expectedHash": "100b5f09678214f2f8b14cda8881328dba6d8aa008765e10bd42d3ecac852e20",
+        "families": {
+          "E028": "context",
+          "E029": "decision"
+        },
+        "ids": [
+          "E028",
+          "E029"
+        ],
+        "kind": "merged-sections",
+        "reason": "0035-memory-get-and-query-relevant-snippets.md: the context, decision sections share one chunk at this budget ('0035. `memory_get`, plus query-relevant snippets and content-keyed dedup | Status | Context | Decision'); each family's first chunk is it",
+        "section": "0035. `memory_get`, plus query-relevant snippets and content-keyed dedup | Status | Context | Decision"
+      },
+      {
+        "expectedHash": "1f88bb753be8560c86c618a61c9ba42a4a0692dec0fd9bfaad3920b71ced80f0",
+        "families": {
+          "E037": "context",
+          "E038": "decision"
+        },
+        "ids": [
+          "E037",
+          "E038"
+        ],
+        "kind": "merged-sections",
+        "reason": "0044-section-fts-weight.md: the context, decision sections share one chunk at this budget (\"0044. The section column's FTS weight is 4, not 16 | Context | Decision\"); each family's first chunk is it",
+        "section": "0044. The section column's FTS weight is 4, not 16 | Context | Decision"
+      },
+      {
+        "expectedHash": "bb75a5ab0d8fa1dfa7f836369c008749279a6b047a992dd178961104568b5234",
+        "families": {
+          "E040": "context",
+          "E041": "decision"
+        },
+        "ids": [
+          "E040",
+          "E041"
+        ],
+        "kind": "merged-sections",
+        "reason": "0046-project-membership-has-one-definition.md: the context, decision sections share one chunk at this budget ('0046. \"Rows belonging to this project\" has one definition | Context | Decision'); each family's first chunk is it",
+        "section": "0046. \"Rows belonging to this project\" has one definition | Context | Decision"
+      },
+      {
+        "expectedHash": "0738d42cb63e3e7f4fe7e654dba5b02deb249fd94c5c7021df1653ff85a1f140",
+        "families": {
+          "E047": "decision",
+          "E048": "consequences"
+        },
+        "ids": [
+          "E047",
+          "E048"
+        ],
+        "kind": "merged-sections",
+        "reason": "0053-rating-is-computed-where-it-is-stored.md: the decision, consequences sections share one chunk at this budget ('Decision | Consequences | Evidence'); each family's first chunk is it",
+        "section": "Decision | Consequences | Evidence"
+      },
+      {
+        "expectedHash": "13992be74d290c93f2b3a95059f39ad9ee2bc1ac666444f199fa8cc6306e82e6",
+        "families": {
+          "E049": "context",
+          "E050": "decision",
+          "E051": "consequences"
+        },
+        "ids": [
+          "E049",
+          "E050",
+          "E051"
+        ],
+        "kind": "merged-sections",
+        "reason": "0060-an-unrecognised-verb-must-not-launch-anything.md: the context, decision, consequences sections share one chunk at this budget ('0060. An unrecognised verb must not launch anything | Context | Decision | Consequences'); each family's first chunk is it",
+        "section": "0060. An unrecognised verb must not launch anything | Context | Decision | Consequences"
+      },
+      {
+        "expectedHash": "e48bd59f91cbcaa21c7067fd43120064c1307997b891f725b9ceefe9a40d9341",
+        "families": {
+          "E052": "context",
+          "E053": "decision",
+          "E054": "consequences"
+        },
+        "ids": [
+          "E052",
+          "E053",
+          "E054"
+        ],
+        "kind": "merged-sections",
+        "reason": "0064-memory-write-chunks-like-everything-else.md: the context, decision, consequences sections share one chunk at this budget ('0064. `memory_write` chunks like everything else | Context | Decision | Consequences'); each family's first chunk is it",
+        "section": "0064. `memory_write` chunks like everything else | Context | Decision | Consequences"
+      },
+      {
+        "expectedHash": "5606a01217be04b483da39a92238ebefba4e3ea45264a5712323da8222636af7",
+        "families": {
+          "E055": "context",
+          "E056": "decision",
+          "E057": "what-was-rejected"
+        },
+        "ids": [
+          "E055",
+          "E056",
+          "E057"
+        ],
+        "kind": "merged-sections",
+        "reason": "0067-naming-shared-asks-for-promotion.md: the context, decision, what-was-rejected sections share one chunk at this budget ('0067. Naming `shared` asks for promotion; it does not perform one | Context | Decision | What was rejected'); each family's first chunk is it",
+        "section": "0067. Naming `shared` asks for promotion; it does not perform one | Context | Decision | What was rejected"
+      },
+      {
+        "expectedHash": "5bc5871725c68a65d40bf2790a375dada20c7fdb37677ae202007a6cfb75860f",
+        "families": {
+          "E058": "context",
+          "E059": "decision"
+        },
+        "ids": [
+          "E058",
+          "E059"
+        ],
+        "kind": "merged-sections",
+        "reason": "0068-ctx-is-a-vec0-metadata-column-not-a-partition-key.md: the context, decision sections share one chunk at this budget ('0068. `ctx` is a vec0 metadata column, not a partition key | Context | Decision'); each family's first chunk is it",
+        "section": "0068. `ctx` is a vec0 metadata column, not a partition key | Context | Decision"
+      },
+      {
+        "expectedHash": "c43c16ce7bc6998c349548dff5b2c7a414a4f86c6bb142afad1fba5dc171b049",
+        "families": {
+          "E061": "context",
+          "E062": "decision"
+        },
+        "ids": [
+          "E061",
+          "E062"
+        ],
+        "kind": "merged-sections",
+        "reason": "0071-a-query-is-trimmed-deliberately-and-said-so.md: the context, decision sections share one chunk at this budget ('0071. A query is trimmed deliberately, and says so | Context | Decision'); each family's first chunk is it",
+        "section": "0071. A query is trimmed deliberately, and says so | Context | Decision"
+      },
+      {
+        "expectedHash": "f47384678e94751fb18ab7db9412f5e34c67cc96491ace8f0378d3f04977bffe",
+        "families": {
+          "E065": "decision",
+          "E066": "consequences"
+        },
+        "ids": [
+          "E065",
+          "E066"
+        ],
+        "kind": "merged-sections",
+        "reason": "0072-a-term-budget-for-long-queries-is-not-adjudicable.md: the decision, consequences sections share one chunk at this budget ('Decision | Consequences | Amendment (2026-08-22) — \"event 416\" above is now event 418'); each family's first chunk is it",
+        "section": "Decision | Consequences | Amendment (2026-08-22) — \"event 416\" above is now event 418"
+      },
+      {
+        "expectedHash": "fc101701adf4616072eda284ec344f2d9db7eae3b5cc3a0bd26a68fa767b8c4f",
+        "families": {
+          "E071": "decision",
+          "E072": "consequences"
+        },
+        "ids": [
+          "E071",
+          "E072"
+        ],
+        "kind": "merged-sections",
+        "reason": "0080-the-phases-close-against-search-total-not-the-tool-total.md: the decision, consequences sections share one chunk at this budget ('Decision | Compatibility with ADR-0062 | Consequences | Evidence'); each family's first chunk is it",
+        "section": "Decision | Compatibility with ADR-0062 | Consequences | Evidence"
+      },
+      {
+        "expectedHash": "7eb9b15f5d26813f7aef5671cc5bcb30719fcba07ae0d6ff7fac48effd47f23f",
+        "ids": [
+          "E091",
+          "E098"
+        ],
+        "kind": "merged-markers",
+        "reason": "the markers of E091, E098 all lie in one ai-raccoon/shared row at this budget",
+        "section": null
+      },
+      {
+        "expectedHash": "81bd3d1cd1d0150abbd29061e0e2ab9cbbc0a07eee5c2b2b12ab67aab30f4a5c",
+        "ids": [
+          "E092",
+          "E093"
+        ],
+        "kind": "merged-markers",
+        "reason": "the markers of E092, E093 all lie in one ai-raccoon/shared row at this budget",
+        "section": null
+      },
+      {
+        "expectedHash": "d943c50fd16bec8c89a0cb647cead578794f5856fdcd2be86d136edc2fe3156e",
+        "ids": [
+          "E094",
+          "E095"
+        ],
+        "kind": "merged-markers",
+        "reason": "the markers of E094, E095 all lie in one ai-raccoon/shared row at this budget",
+        "section": null
+      },
+      {
+        "expectedHash": "b620c2a09420be486c73e5c4871da23eb1b46773a0f2ca453f0d8e7a1c17200a",
+        "ids": [
+          "E099",
+          "E100"
+        ],
+        "kind": "merged-markers",
+        "reason": "the markers of E099, E100 all lie in one ai-badger/shared row at this budget",
+        "section": null
+      }
+    ],
     "snapshotSha256": "d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb"
   },
   "queries": [
