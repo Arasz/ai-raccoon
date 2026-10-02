@@ -11,65 +11,29 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// </summary>
 public sealed class PerformanceCommands
 {
-    public async Task<int> SetBufferCapacityAsync(ParseResult parseResult, IMemoryStore store,
-        StandardStreams streams, CancellationToken cancellationToken)
-    {
-        var raw = parseResult.GetValue<string>("capacity");
-        if (!int.TryParse(raw, out var parsed) || parsed <= 0)
-        {
-            await streams.WriteErrorLineAsync("ai-raccoon: buffer capacity must be a positive number of measurements");
-            return ErrorCode.Usage.InvalidValue;
-        }
+    private static readonly IntSetting BufferCapacity = new(MetricsConfigKeys.BufferCapacityGlobal, "capacity",
+        "buffer capacity", "measurements",
+        value => $"buffer capacity: {value} measurements (takes effect on the next server restart)",
+        MetricsConfigKeys.MaxBufferCapacity);
 
-        if (parsed > MetricsConfigKeys.MaxBufferCapacity)
-        {
-            await streams.WriteErrorLineAsync(
-                $"ai-raccoon: buffer capacity must be at most {MetricsConfigKeys.MaxBufferCapacity} measurements");
-            return ErrorCode.Usage.InvalidValue;
-        }
+    private static readonly IntSetting FlushInterval = new(MetricsConfigKeys.FlushIntervalSecondsGlobal, "seconds",
+        "flush interval", "seconds", value => $"flush interval: {value}s (takes effect on the next flush tick)");
 
-        await store.SetSettingAsync(MetricsConfigKeys.BufferCapacityGlobal, parsed.ToString(), cancellationToken);
-        await streams.WriteOutputLineAsync(
-            $"buffer capacity: {parsed} measurements (takes effect on the next server restart)");
-        return 0;
-    }
+    private static readonly IntSetting RetentionDays = new(MetricsConfigKeys.RetentionDaysGlobal, "days",
+        "retention", "days", value => $"retention: {value} days (takes effect on the next maintenance pass)",
+        MetricsConfigKeys.MaxRetentionDays);
 
-    public async Task<int> SetFlushIntervalAsync(ParseResult parseResult, IMemoryStore store,
-        StandardStreams streams, CancellationToken cancellationToken)
-    {
-        var raw = parseResult.GetValue<string>("seconds");
-        if (!int.TryParse(raw, out var parsed) || parsed <= 0)
-        {
-            await streams.WriteErrorLineAsync("ai-raccoon: flush interval must be a positive number of seconds");
-            return ErrorCode.Usage.InvalidValue;
-        }
+    public Task<int> SetBufferCapacityAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, CancellationToken cancellationToken) =>
+        BufferCapacity.SetAsync(parseResult, store, streams, cancellationToken);
 
-        await store.SetSettingAsync(MetricsConfigKeys.FlushIntervalSecondsGlobal, parsed.ToString(), cancellationToken);
-        await streams.WriteOutputLineAsync($"flush interval: {parsed}s (takes effect on the next flush tick)");
-        return 0;
-    }
+    public Task<int> SetFlushIntervalAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, CancellationToken cancellationToken) =>
+        FlushInterval.SetAsync(parseResult, store, streams, cancellationToken);
 
-    public async Task<int> SetRetentionDaysAsync(ParseResult parseResult, IMemoryStore store,
-        StandardStreams streams, CancellationToken cancellationToken)
-    {
-        var raw = parseResult.GetValue<string>("days");
-        if (!int.TryParse(raw, out var parsed) || parsed <= 0)
-        {
-            await streams.WriteErrorLineAsync("ai-raccoon: retention must be a positive number of days");
-            return ErrorCode.Usage.InvalidValue;
-        }
-
-        if (parsed > MetricsConfigKeys.MaxRetentionDays)
-        {
-            await streams.WriteErrorLineAsync(
-                $"ai-raccoon: retention must be at most {MetricsConfigKeys.MaxRetentionDays} days");
-            return ErrorCode.Usage.InvalidValue;
-        }
-
-        await store.SetSettingAsync(MetricsConfigKeys.RetentionDaysGlobal, parsed.ToString(), cancellationToken);
-        await streams.WriteOutputLineAsync($"retention: {parsed} days (takes effect on the next maintenance pass)");
-        return 0;
-    }
+    public Task<int> SetRetentionDaysAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, CancellationToken cancellationToken) =>
+        RetentionDays.SetAsync(parseResult, store, streams, cancellationToken);
 
     public async Task<int> ListAsync(IMemoryStore store, StandardStreams streams, CancellationToken cancellationToken)
     {
@@ -80,10 +44,9 @@ public sealed class PerformanceCommands
         var retentionDays = MetricsConfigKeys.ParseRetentionDays(
             await store.GetSettingAsync(MetricsConfigKeys.RetentionDaysGlobal, cancellationToken));
 
-        await streams.WriteOutputLineAsync(
-            $"buffer capacity: {bufferCapacity} measurements (takes effect on the next server restart)");
-        await streams.WriteOutputLineAsync($"flush interval: {flushInterval}s (takes effect on the next flush tick)");
-        await streams.WriteOutputLineAsync($"retention: {retentionDays} days (takes effect on the next maintenance pass)");
+        await streams.WriteOutputLineAsync(BufferCapacity.Confirmation(bufferCapacity));
+        await streams.WriteOutputLineAsync(FlushInterval.Confirmation(flushInterval));
+        await streams.WriteOutputLineAsync(RetentionDays.Confirmation(retentionDays));
         return 0;
     }
 }

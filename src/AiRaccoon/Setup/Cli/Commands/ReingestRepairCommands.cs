@@ -1,42 +1,30 @@
-using System.CommandLine;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
-/// <summary>
-///     `repair reingest` handler: a thin client over <see cref="IRepairStore" />
-///     — the report is scanned server-side and never opens the bank from the CLI process; --apply
-///     commits a request the server applies, rather than writing here.
-/// </summary>
+/// <summary>`repair reingest` handler: re-chunks and re-embeds files server-side (see <see cref="ReportThenApplyRepairCommands{TReport}" />).</summary>
 public sealed class ReingestRepairCommands(IRepairStore repair)
+    : ReportThenApplyRepairCommands<ReingestRepairReport>(repair, RepairKind.Reingest)
 {
-    public async Task<int> RunAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
+    protected override string AppliedMessage =>
+        "reingest repair: request committed; the server applies it and drains the resulting embeddings " +
+        "on its next maintenance poll (~15s) — nothing left to run by hand.";
+
+    protected override Task<ReingestRepairReport> ReportAsync(IRepairStore repair, CancellationToken cancellationToken) =>
+        repair.ReportReingestAsync(cancellationToken);
+
+    protected override IEnumerable<string> Describe(ReingestRepairReport report, bool apply)
     {
-        var apply = parseResult.GetValue<bool>("--apply");
-
-        var report = await repair.ReportReingestAsync(cancellationToken);
-
         var verb = apply ? "queued for the server to reingest" : "would reingest (dry run; pass --apply to queue it)";
-        await streams.WriteOutputLineAsync(
-            $"reingest repair: {report.FilesToReingest} file(s) {verb}, {report.RowsAffected} row(s) affected, " +
-            $"{report.ChunksToEmbed} chunk(s) to embed");
+        yield return $"reingest repair: {report.FilesToReingest} file(s) {verb}, {report.RowsAffected} row(s) affected, " +
+                     $"{report.ChunksToEmbed} chunk(s) to embed";
         if (report.RowsAffected > 0)
         {
             var lossVerb = apply ? "will be discarded for the" : "would be discarded for the";
-            await streams.WriteOutputLineAsync(
-                $"reingest repair: per-row metadata (rating, access_count, last_accessed_at) {lossVerb} " +
-                $"{report.RowsAffected} affected row(s) — a re-chunk moves chunk boundaries, so hashes change " +
-                "and there is no 1:1 row to carry it onto.");
+            yield return $"reingest repair: per-row metadata (rating, access_count, last_accessed_at) {lossVerb} " +
+                         $"{report.RowsAffected} affected row(s) — a re-chunk moves chunk boundaries, so hashes change " +
+                         "and there is no 1:1 row to carry it onto.";
         }
-
-        if (apply)
-        {
-            await repair.RequestRepairAsync(RepairKind.Reingest, cancellationToken);
-            await streams.WriteOutputLineAsync(
-                "reingest repair: request committed; the server applies it and drains the resulting embeddings " +
-                "on its next maintenance poll (~15s) — nothing left to run by hand.");
-        }
-
-        return 0;
     }
 }

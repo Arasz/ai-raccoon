@@ -18,44 +18,21 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
 {
     private string StatsSidecarPath => Path.Combine(Path.GetDirectoryName(SqliteConnectionFactory.BankPathFor(options))!, "maintenance-stats.json");
 
-    public async Task<int> SetCheckpointIntervalAsync(ParseResult parseResult, IMemoryStore store,
-        StandardStreams streams, CancellationToken cancellationToken)
-    {
-        var minutes = parseResult.GetValue<string>("minutes");
-        if (!int.TryParse(minutes, out var parsed) || parsed <= 0)
-        {
-            await streams.WriteErrorLineAsync("ai-raccoon: checkpoint interval must be a positive number of minutes");
-            return ErrorCode.Usage.InvalidValue;
-        }
+    private static readonly IntSetting CheckpointInterval = new(
+        BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal, "minutes", "checkpoint interval", "minutes",
+        value => $"checkpoint interval: {value} min");
 
-        await store.SetSettingAsync(BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal, parsed.ToString(),
-            cancellationToken);
-        await streams.WriteOutputLineAsync($"checkpoint interval: {parsed} min");
-        return 0;
-    }
+    private static readonly IntSetting VacuumInterval = new(
+        BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal, "days", "vacuum interval", "days",
+        value => $"vacuum interval: {value} days", BankMaintenanceConfigKeys.MaxVacuumIntervalDays);
 
-    public async Task<int> SetVacuumIntervalAsync(ParseResult parseResult, IMemoryStore store,
-        StandardStreams streams, CancellationToken cancellationToken)
-    {
-        var days = parseResult.GetValue<string>("days");
-        if (!int.TryParse(days, out var parsed) || parsed <= 0)
-        {
-            await streams.WriteErrorLineAsync("ai-raccoon: vacuum interval must be a positive number of days");
-            return ErrorCode.Usage.InvalidValue;
-        }
+    public Task<int> SetCheckpointIntervalAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, CancellationToken cancellationToken) =>
+        CheckpointInterval.SetAsync(parseResult, store, streams, cancellationToken);
 
-        if (parsed > BankMaintenanceConfigKeys.MaxVacuumIntervalDays)
-        {
-            await streams.WriteErrorLineAsync(
-                $"ai-raccoon: vacuum interval must be at most {BankMaintenanceConfigKeys.MaxVacuumIntervalDays} days");
-            return ErrorCode.Usage.InvalidValue;
-        }
-
-        await store.SetSettingAsync(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal, parsed.ToString(),
-            cancellationToken);
-        await streams.WriteOutputLineAsync($"vacuum interval: {parsed} days");
-        return 0;
-    }
+    public Task<int> SetVacuumIntervalAsync(ParseResult parseResult, IMemoryStore store,
+        StandardStreams streams, CancellationToken cancellationToken) =>
+        VacuumInterval.SetAsync(parseResult, store, streams, cancellationToken);
 
     /// <summary>
     ///     Sets the embed rows-per-run cap; takes effect on the drain's next pass, no restart.
