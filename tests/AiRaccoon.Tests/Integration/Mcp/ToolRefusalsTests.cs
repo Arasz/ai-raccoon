@@ -13,7 +13,6 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
-using AiRaccoon.Setup;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;

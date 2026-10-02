@@ -173,7 +173,8 @@ public sealed class SyncServiceGateContentionTests : IDisposable
         {
             var bankPath = Path.Combine(dataRoot, "memory.db");
             var cloud = new FakeCloudStore();
-            var service = new SyncTestBank(bankPath).CreateService(cloud);
+            var service = new SyncService(cloud, new SyncTestBank(bankPath).OpenBankAsync,
+                OpenPlainAsync, OpenPlainAsync, TimeProvider.System, NullLogger<SyncService>.Instance);
 
             using var start = new Barrier(2);
             var task1 = Task.Run(async () =>
