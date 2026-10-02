@@ -50,35 +50,15 @@ public sealed partial class S3CloudStore : ICloudStore
             await using var stream = response.ResponseStream;
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms, cancellationToken);
-            // ETag from S3 comes quoted; strip quotes.
-            var etag = response.ETag?.Trim('"');
-            return new CloudObject(ms.ToArray(), etag);
+            return new CloudObject(ms.ToArray(), CloudEtag.Strip(response.ETag));
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
         }
-        catch (AmazonClientException ex)
+        catch (Exception ex) when (IsMapped(ex))
         {
-            Log.AuthFailed(_logger, ex.Message);
-            throw new SyncAuthFailedException(
-                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon settings sync show'.", ex);
-        }
-        catch (AmazonServiceException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
-        {
-            Log.AuthFailed(_logger, ex.Message);
-            throw new SyncAuthFailedException(
-                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon settings sync show'.", ex);
-        }
-        catch (AmazonS3Exception ex)
-        {
-            Log.PullFailed(_logger, ex.Message);
-            throw new SyncNetworkException($"S3 pull failed: {ex.Message}", ex);
-        }
-        catch (HttpRequestException ex)
-        {
-            Log.PullFailed(_logger, ex.Message);
-            throw new SyncNetworkException($"S3 pull failed: {ex.Message}", ex);
+            throw MapFailure(ex, "pull", Log.PullFailed);
         }
     }
 
@@ -102,35 +82,33 @@ public sealed partial class S3CloudStore : ICloudStore
 
             var response = await _s3.PutObjectAsync(request, cancellationToken);
 
-            // S3 returns ETag quoted; strip for storage compatibility.
-            return response.ETag?.Trim('"') ?? "";
+            return CloudEtag.Strip(response.ETag) ?? "";
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.PreconditionFailed)
         {
             throw new SyncConflictException("Remote changed since last pull — If-Match precondition failed.");
         }
-        catch (AmazonClientException ex)
+        catch (Exception ex) when (IsMapped(ex))
+        {
+            throw MapFailure(ex, "push", Log.PushFailed);
+        }
+    }
+
+    private static bool IsMapped(Exception ex) =>
+        ex is AmazonClientException or AmazonS3Exception or HttpRequestException
+        || ex is AmazonServiceException { StatusCode: HttpStatusCode.Forbidden };
+
+    private Exception MapFailure(Exception ex, string operation, Action<ILogger, string> logFailed)
+    {
+        if (ex is AmazonClientException or AmazonServiceException { StatusCode: HttpStatusCode.Forbidden })
         {
             Log.AuthFailed(_logger, ex.Message);
-            throw new SyncAuthFailedException(
+            return new SyncAuthFailedException(
                 "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon settings sync show'.", ex);
         }
-        catch (AmazonServiceException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
-        {
-            Log.AuthFailed(_logger, ex.Message);
-            throw new SyncAuthFailedException(
-                "AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon settings sync show'.", ex);
-        }
-        catch (AmazonS3Exception ex)
-        {
-            Log.PushFailed(_logger, ex.Message);
-            throw new SyncNetworkException($"S3 push failed: {ex.Message}", ex);
-        }
-        catch (HttpRequestException ex)
-        {
-            Log.PushFailed(_logger, ex.Message);
-            throw new SyncNetworkException($"S3 push failed: {ex.Message}", ex);
-        }
+
+        logFailed(_logger, ex.Message);
+        return new SyncNetworkException($"S3 {operation} failed: {ex.Message}", ex);
     }
 
     /// <summary>

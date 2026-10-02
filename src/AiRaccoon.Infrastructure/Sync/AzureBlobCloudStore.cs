@@ -47,38 +47,16 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
             var blob = _blobs.GetBlobContainerClient(_container).GetBlobClient(objectKey);
             var response = await blob.DownloadContentAsync(cancellationToken);
 
-            // Azure returns the ETag quoted; strip quotes (matches the S3 storage format).
-            var etag = response.Value.Details.ETag.ToString().Trim('"');
+            var etag = CloudEtag.Strip(response.Value.Details.ETag.ToString());
             return new CloudObject(response.Value.Content.ToArray(), etag);
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
             return null;
         }
-        catch (CredentialUnavailableException ex)
+        catch (Exception ex) when (IsMapped(ex))
         {
-            Log.AuthFailed(_logger, ex.Message);
-            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
-        }
-        catch (AuthenticationFailedException ex)
-        {
-            Log.AuthFailed(_logger, ex.Message);
-            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
-        }
-        catch (RequestFailedException ex) when (ex.Status is 401 or 403)
-        {
-            Log.AuthFailed(_logger, ex.Message);
-            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
-        }
-        catch (RequestFailedException ex)
-        {
-            Log.PullFailed(_logger, ex.Message);
-            throw new SyncNetworkException($"Azure pull failed: {ex.Message}", ex);
-        }
-        catch (HttpRequestException ex)
-        {
-            Log.PullFailed(_logger, ex.Message);
-            throw new SyncNetworkException($"Azure pull failed: {ex.Message}", ex);
+            throw MapFailure(ex, "pull", Log.PullFailed);
         }
     }
 
@@ -101,38 +79,33 @@ public sealed partial class AzureBlobCloudStore : ICloudStore
 
             var response = await blob.UploadAsync(BinaryData.FromBytes(data), options, cancellationToken);
 
-            // Azure returns the ETag quoted; strip for storage compatibility.
-            return response.Value.ETag.ToString().Trim('"');
+            return CloudEtag.Strip(response.Value.ETag.ToString());
         }
         catch (RequestFailedException ex) when (ex.Status == 412)
         {
             throw new SyncConflictException("Remote changed since last pull — If-Match precondition failed.");
         }
-        catch (CredentialUnavailableException ex)
+        catch (Exception ex) when (IsMapped(ex))
+        {
+            throw MapFailure(ex, "push", Log.PushFailed);
+        }
+    }
+
+    private static bool IsMapped(Exception ex) =>
+        ex is CredentialUnavailableException or AuthenticationFailedException or RequestFailedException
+            or HttpRequestException;
+
+    private Exception MapFailure(Exception ex, string operation, Action<ILogger, string> logFailed)
+    {
+        if (ex is CredentialUnavailableException or AuthenticationFailedException
+            || ex is RequestFailedException { Status: 401 or 403 })
         {
             Log.AuthFailed(_logger, ex.Message);
-            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
+            return new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
         }
-        catch (AuthenticationFailedException ex)
-        {
-            Log.AuthFailed(_logger, ex.Message);
-            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
-        }
-        catch (RequestFailedException ex) when (ex.Status is 401 or 403)
-        {
-            Log.AuthFailed(_logger, ex.Message);
-            throw new SyncAuthFailedException("Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).", ex);
-        }
-        catch (RequestFailedException ex)
-        {
-            Log.PushFailed(_logger, ex.Message);
-            throw new SyncNetworkException($"Azure push failed: {ex.Message}", ex);
-        }
-        catch (HttpRequestException ex)
-        {
-            Log.PushFailed(_logger, ex.Message);
-            throw new SyncNetworkException($"Azure push failed: {ex.Message}", ex);
-        }
+
+        logFailed(_logger, ex.Message);
+        return new SyncNetworkException($"Azure {operation} failed: {ex.Message}", ex);
     }
 
     /// <summary>
