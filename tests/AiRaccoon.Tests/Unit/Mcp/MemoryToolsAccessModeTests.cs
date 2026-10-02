@@ -242,7 +242,7 @@ public sealed class MemoryToolsAccessModeTests
     }
 
     /// <summary>Permits every guarded call, so a denial in a test comes from the access mode and not the store.</summary>
-    private sealed class FakeStore : FakeMemoryStore
+    private sealed class FakeStore : PermissiveFakeMemoryStore
     {
         public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
 
@@ -286,40 +286,6 @@ public sealed class MemoryToolsAccessModeTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Stats);
 
-        public override Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntryResult(new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1), true));
-
-        public override Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
-            bool includeTtlRows, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<ExtractionCandidateRow>>([]);
-
-        public override Task<SharedIndex> GetSharedIndexAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SharedIndex([], []));
-
-        public override Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<string>>(["acme-web"]);
-
-        public override Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult("{\"root\":\"\"}");
-
-        public override Task<int> IngestFileAsync(string projectId, string path, string? context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
-
-        public override Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
-
-        public override Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EmbedPendingResult(0, 0));
-
-        public override Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content,
-            string? context, string? sourceFile = null, string? section = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntryResult(new MemoryEntry("new-hash", path, context ?? "project:acme-web", content, 1), true));
-
         public override Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(EntriesByContext.TryGetValue(context, out var entries) ? entries : []);
@@ -348,10 +314,6 @@ public sealed class MemoryToolsAccessModeTests
             Settings.Remove(key);
             return Task.CompletedTask;
         }
-
-        public override Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
     }
 
     private sealed class FakeSyncService() : SyncService(new FakeCloudStore(), _ => Task.FromResult<SqliteConnection>(null!),

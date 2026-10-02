@@ -204,7 +204,7 @@ public class MemoryToolsInstrumentationTests
 
     // ── Minimal fake implementations ──
 
-    private sealed class SimpleFakeStore : FakeMemoryStore
+    private sealed class SimpleFakeStore : PermissiveFakeMemoryStore
     {
         public MemoryEntry? Entry { get; init; }
         public bool ThrowOnWrite { get; init; }
@@ -219,72 +219,6 @@ public class MemoryToolsInstrumentationTests
 
             return Task.FromResult(Entry ?? new MemoryEntry("h1", "p.md", "project:test", "content", 1));
         }
-
-        public override Task<SearchResults> SearchAsync(SearchQuery query,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SearchResults([], SearchTimings.Empty));
-
-        public override Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult("{}");
-
-        public override Task<MemoryStats> GetStatsAsync(string projectId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryStats(0, 0, []));
-
-        public override Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntryResult(new MemoryEntry(hash, "p.md", "shared", "content", 1), true));
-
-        public override Task<int> DeleteAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
-
-        public override Task<int> DeleteContextAsync(string projectId, string context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
-
-        public override Task<int> IngestFileAsync(string projectId, string path, string? context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
-
-        public override Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(2);
-
-        public override Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EmbedPendingResult(0, 0));
-
-        public override Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content,
-            string? context, string? sourceFile = null, string? section = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntryResult(new MemoryEntry("h", path, context ?? "project:test", content, 1), true));
-
-        public override Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
-
-        public override Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<EntryMetadata?>(null);
-
-        public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>(null);
-
-        public override Task SetSettingAsync(string key, string value,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public override Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
-
-        public override Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public override Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
     }
 
     private sealed class SimpleFakeSyncService() : SyncService(new SimpleFakeCloudStore(),

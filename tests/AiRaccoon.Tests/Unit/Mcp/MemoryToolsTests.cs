@@ -936,7 +936,6 @@ public class MemoryToolsTests
         result.Data!.Deleted.Count.ShouldBe(0);
     }
 
-
     // A refused path is an answer the agent must be able to read, not an internal error — the
     // CallToolFilter turns this into "path-outside-scope:" (see ToolRefusalsTests); a direct call
     // sees the domain exception.
@@ -962,7 +961,7 @@ public class MemoryToolsTests
         ex.Message.ShouldContain("/etc");
     }
 
-    private sealed class FakeStore : FakeMemoryStore
+    private sealed class FakeStore : PermissiveFakeMemoryStore
     {
         public MemoryEntry Entry { get; set; } = new("h", "p.md", "project:acme", "v", 0);
 
@@ -1013,16 +1012,8 @@ public class MemoryToolsTests
             return Task.FromResult(new SearchResults([], SearchTimings.Empty, Fusion));
         }
 
-        public override Task<int> DeleteAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
-
         public override Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
             Task.FromResult(GetEntry);
-
-        public override Task<int> DeleteContextAsync(string projectId, string context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(0);
 
         public override Task<MemoryStats> GetStatsAsync(string projectId,
             CancellationToken cancellationToken = default) =>
@@ -1056,15 +1047,6 @@ public class MemoryToolsTests
             CancellationToken cancellationToken = default) =>
             IngestError is not null ? Task.FromException<int>(IngestError) : Task.FromResult(1);
 
-        public override Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EmbedPendingResult(0, 0));
-
-        public override Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content,
-            string? context, string? sourceFile = null, string? section = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntryResult(new MemoryEntry("new-hash", path, context ?? "project:acme", content, 1), true));
-
         public override Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(EntriesByContext.TryGetValue(context, out var e) ? e : []);
@@ -1093,10 +1075,6 @@ public class MemoryToolsTests
             Settings.Remove(key);
             return Task.CompletedTask;
         }
-
-        public override Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
     }
 
     private sealed class FakeSyncService() : SyncService(new FakeCloudStore(), _ => Task.FromResult<SqliteConnection>(null!),

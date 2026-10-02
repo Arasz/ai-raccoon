@@ -170,7 +170,7 @@ public sealed class AccessModeGuardTests
     }
 
     /// <summary>Permits every guarded call, so a denial in a test comes from the guard and not the store.</summary>
-    private sealed class FakeStore : FakeMemoryStore
+    private sealed class FakeStore : PermissiveFakeMemoryStore
     {
         public Dictionary<string, string> Settings { get; } = new(StringComparer.Ordinal);
 
@@ -203,54 +203,6 @@ public sealed class AccessModeGuardTests
             Task.FromResult<EntryMetadata?>(TtlByHash.TryGetValue(hash, out var ttl)
                 ? new EntryMetadata(0.5, ttl)
                 : null);
-
-        public override Task<MemoryEntry> WriteAsync(MemoryWriteRequest request,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntry("h", "p.md", "project:acme", "v", 1));
-
-        public override Task<SearchResults> SearchAsync(SearchQuery query,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SearchResults([], SearchTimings.Empty));
-
-        public override Task<int> DeleteAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
-
-        public override Task<int> DeleteContextAsync(string projectId, string context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(0);
-
-        public override Task<MemoryStats> GetStatsAsync(string projectId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryStats(0, 0, []));
-
-        public override Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntryResult(new MemoryEntry(hash, "p.md", ContextNaming.SharedContext, "v", 1), true));
-
-        public override Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult("{\"root\":\"\"}");
-
-        public override Task<int> IngestFileAsync(string projectId, string path, string? context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
-
-        public override Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
-
-        public override Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EmbedPendingResult(0, 0));
-
-        public override Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content,
-            string? context, string? sourceFile = null, string? section = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MemoryEntryResult(new MemoryEntry("new-hash", path, context ?? "project:acme", content, 1), true));
-
-        public override Task<IReadOnlyList<MemoryEntry>> ListContextAsync(string projectId, string context,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
     }
 
     /// <summary>Counts every settings read, regardless of shape, so a batched read is distinguishable from two single-key reads.</summary>

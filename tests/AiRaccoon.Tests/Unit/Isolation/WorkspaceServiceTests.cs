@@ -333,7 +333,7 @@ public class WorkspaceServiceTests
         store.DeletedContexts.ShouldContain("workspace:ws-1");
     }
 
-    private sealed class FakeStore : FakeMemoryStore
+    private sealed class FakeStore : PermissiveFakeMemoryStore
     {
         public Dictionary<string, IReadOnlyList<MemoryEntry>> EntriesByContext { get; } = [];
 
@@ -357,10 +357,6 @@ public class WorkspaceServiceTests
                 content, 1), true));
         }
 
-        public override Task<int> DeleteAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(1);
-
         public override Task<int> DeleteContextAsync(string projectId, string context,
             CancellationToken cancellationToken = default)
         {
@@ -374,28 +370,6 @@ public class WorkspaceServiceTests
             LastListedContext = context;
             return Task.FromResult(EntriesByContext.TryGetValue(context, out var entries) ? entries : []);
         }
-
-        public override Task<EntryMetadata?> GetMetadataAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<EntryMetadata?>(new EntryMetadata(0.5, null));
-
-        public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.FromResult<string?>(null);
-
-        public override Task SetSettingAsync(string key, string value,
-            CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public override Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>());
-
-        public override Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-
-        public override Task<bool> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
     }
 
     private sealed class FakeWorkspaceStore : IWorkspaceStore
