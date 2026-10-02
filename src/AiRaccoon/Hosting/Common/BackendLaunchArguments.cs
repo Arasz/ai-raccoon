@@ -1,5 +1,4 @@
 using System.Globalization;
-using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Hosting.Common;
 
@@ -14,6 +13,15 @@ internal static partial class BackendLaunchArguments
     /// <summary>The dotnet host's own file name: what `Environment.ProcessPath` names under `dotnet run`,
     /// `dotnet exec`, or a dotnet-tool published without an apphost (a `dotnet &lt;dll&gt;` shim).</summary>
     private const string DotnetMuxerFileName = "dotnet";
+
+    /// <summary>
+    ///     How long a one-shot settings command's private fallback outlives it when the configured
+    ///     port could not be proven: the command exits immediately, so nothing else can stop it.
+    /// </summary>
+    public static readonly TimeSpan FallbackIdleTimeout = TimeSpan.FromMinutes(5);
+
+    /// <summary>This binary's own filename on the dotnet global-tool shim and on PATH (".exe" on Windows).</summary>
+    internal static string ExecutableFileName => OperatingSystem.IsWindows() ? "ai-raccoon.exe" : "ai-raccoon";
 
     /// <summary>
     ///     This very binary: the backend is another ai-raccoon, started as `serve`. Null when the
@@ -40,8 +48,7 @@ internal static partial class BackendLaunchArguments
 
     internal static string UnavailableExecutableMessage(string? processPath, ServerConfig config) =>
         IsUnpackagedInvocation(processPath)
-            ? "this process was started through the dotnet host, which cannot auto-start a backend; " +
-              $"start the server manually first: ai-raccoon {string.Join(' ', ServeArguments(config))}, then retry"
+            ? $"this process was started through the dotnet host, which cannot auto-start a backend; start the server manually first: ai-raccoon {string.Join(' ', ServeArguments(config))}, then retry"
             : "the running executable path is unknown";
 
     public static string[] ServeArguments(ServerConfig config) => Arguments(config, config.Port);
@@ -60,12 +67,6 @@ internal static partial class BackendLaunchArguments
     /// </summary>
     public static string[] PrivateServeArguments(ServerConfig config, TimeSpan? idleTimeout) =>
         idleTimeout is { } idle ? [.. Arguments(config, 0), "--idle-timeout", FormatIdleTimeout(idle)] : Arguments(config, 0);
-
-    /// <summary>
-    ///     How long a one-shot settings command's private fallback outlives it when the configured
-    ///     port could not be proven: the command exits immediately, so nothing else can stop it.
-    /// </summary>
-    public static readonly TimeSpan FallbackIdleTimeout = TimeSpan.FromMinutes(5);
 
     private static string FormatIdleTimeout(TimeSpan idle) =>
         idle.TotalSeconds % 60 == 0
@@ -87,9 +88,6 @@ internal static partial class BackendLaunchArguments
         arguments.AddRange(["serve", "--port", port.ToString(CultureInfo.InvariantCulture)]);
         return [.. arguments];
     }
-
-    /// <summary>This binary's own filename on the dotnet global-tool shim and on PATH (".exe" on Windows).</summary>
-    internal static string ExecutableFileName => OperatingSystem.IsWindows() ? "ai-raccoon.exe" : "ai-raccoon";
 
     /// <summary>
     ///     The dotnet global-tool shim's own path (<c>~/.dotnet/tools/ai-raccoon[.exe]</c>), or null
@@ -141,13 +139,13 @@ internal static partial class BackendLaunchArguments
         }
 
         var onPath = PathExecutable(pathVariable, fileExists);
-        if (onPath is not null)
+        if (onPath is null)
         {
-            Log.ExecutableFallback(logger, own, onPath);
-            return onPath;
+            return own;
         }
 
-        return own;
+        Log.ExecutableFallback(logger, own, onPath);
+        return onPath;
     }
 
     internal static partial class Log

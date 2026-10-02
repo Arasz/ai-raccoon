@@ -1,4 +1,5 @@
 using AiRaccoon.Hosting.Common;
+using JetBrains.Annotations;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Server;
 
@@ -8,7 +9,14 @@ namespace AiRaccoon.Hosting.Proxy;
 ///     The bare-launch composition root (docs/adr/0020-always-on-http-stdio-proxy.md): acquire one
 ///     HTTP backend and relay every stdio message to it. Resolves no key, opens no bank, loads no model.
 /// </summary>
-public partial class ProxyRunner(IProxyForwarder proxyForwarder, IBackendLauncher backendLauncher, IServerProbe serverProbe, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, ILogger<ProxyRunner> logger) : IProxyRunner
+[UsedImplicitly]
+public partial class ProxyRunner(
+    IProxyForwarder proxyForwarder,
+    IBackendLauncher backendLauncher,
+    IServerProbe serverProbe,
+    IHttpClientFactory httpClientFactory,
+    ILoggerFactory loggerFactory,
+    ILogger<ProxyRunner> logger) : IProxyRunner
 {
     public async Task<int> RunAsync(ServerConfig serverConfig, StandardStreams streams, string? processPath, CancellationToken ctx)
     {

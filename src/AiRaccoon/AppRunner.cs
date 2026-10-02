@@ -16,10 +16,10 @@ namespace AiRaccoon;
 
 public sealed partial class AppRunner
 {
-    private readonly CancellationTokenSource _cts = new();
-    private readonly StandardStreams _streams = new(Console.In, Console.Out, Console.Error);
     private readonly Func<ServerConfig, ILoggerFactory, CancellationToken, Task<ISettingsStore>> _acquireServerSettingsStore;
+    private readonly CancellationTokenSource _cts = new();
     private readonly string? _processPath;
+    private readonly StandardStreams _streams = new(Console.In, Console.Out, Console.Error);
 
     public AppRunner() : this(CliSettingsBackend.AcquireAsync)
     {
@@ -94,15 +94,6 @@ public sealed partial class AppRunner
         _cts.Cancel();
     }
 
-    private sealed class ShutdownSignalRegistration(PosixSignalRegistration first, PosixSignalRegistration second) : IDisposable
-    {
-        public void Dispose()
-        {
-            first.Dispose();
-            second.Dispose();
-        }
-    }
-
     private async Task<int> RunCliCommand(CliInput cliInput)
     {
         using var shutdown = RegisterShutdownCancellation();
@@ -157,8 +148,8 @@ public sealed partial class AppRunner
         ConfigureConsoleLogging(services, cliInput.ServerConfig.Options);
         services.RegisterCoreMemoryServices(cliInput.ServerConfig.Options);
         services.RegisterProxyServices();
-        await using var providder = services.BuildServiceProvider();
-        var proxyRunner = providder.GetRequiredService<IProxyRunner>();
+        await using var provider = services.BuildServiceProvider();
+        var proxyRunner = provider.GetRequiredService<IProxyRunner>();
         return await proxyRunner.RunAsync(cliInput.ServerConfig, _streams, _processPath, Token);
     }
 
@@ -179,6 +170,15 @@ public sealed partial class AppRunner
         else
         {
             builder.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+        }
+    }
+
+    private sealed class ShutdownSignalRegistration(PosixSignalRegistration first, PosixSignalRegistration second) : IDisposable
+    {
+        public void Dispose()
+        {
+            first.Dispose();
+            second.Dispose();
         }
     }
 }

@@ -1,8 +1,8 @@
-using AiRaccoon.Tests.TestHelpers;
-using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 
@@ -53,10 +53,12 @@ public sealed class ProxyRunnerTests : IDisposable
         var bankPath = SqliteConnectionFactory.BankPathFor(options);
         Directory.CreateDirectory(Path.GetDirectoryName(bankPath)!);
         await File.WriteAllBytesAsync(bankPath, [], TestContext.Current.CancellationToken);
-        using var lease = LoopbackPort.Reserve();
-        lease.ReleaseForBind();
-        var config = new ServerConfig(lease.Port, McpTransport.Proxy, options);
 
+        using var lease = LoopbackPort.Reserve();
+
+        lease.ReleaseForBind();
+
+        var config = new ServerConfig(lease.Port, McpTransport.Proxy, options);
         var exit = await TestData.CreateProxyRunner().RunAsync(config, new StandardStreams(TextReader.Null, TextWriter.Null, stderr),
             Path.Combine(_dataRoot, "no-such-ai-raccoon"), TestContext.Current.CancellationToken);
 
