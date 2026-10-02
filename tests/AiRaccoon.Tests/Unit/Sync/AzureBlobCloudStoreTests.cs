@@ -122,6 +122,83 @@ public class AzureBlobCloudStoreTests
     }
 
     [Fact]
+    public async Task Pull_AuthenticationFailed_ThrowsSyncAuthFailed()
+    {
+        var store = Store(new ThrowingBlobHandler(new AuthenticationFailedException("bad token")));
+
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_NoAzureLogin_ThrowsSyncAuthFailed()
+    {
+        var store = Store(new ThrowingBlobHandler(new CredentialUnavailableException("no az login state")));
+
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_AuthenticationFailed_ThrowsSyncAuthFailed()
+    {
+        var store = Store(new ThrowingBlobHandler(new AuthenticationFailedException("bad token")));
+
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Push_Forbidden_ThrowsSyncAuthFailed()
+    {
+        var store = Store(new CannedBlobHandler(_ => Error(403)));
+
+        await Should.ThrowAsync<SyncAuthFailedException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Pull_HttpRequestException_MessageNamesPull()
+    {
+        var store = Store(new ThrowingBlobHandler(new HttpRequestException("connection reset")));
+
+        var ex = await Should.ThrowAsync<SyncNetworkException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldBe("Azure pull failed: connection reset");
+    }
+
+    [Fact]
+    public async Task Push_HttpRequestException_ThrowsSyncNetworkNamingPush()
+    {
+        var store = Store(new ThrowingBlobHandler(new HttpRequestException("connection reset")));
+
+        var ex = await Should.ThrowAsync<SyncNetworkException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldBe("Azure push failed: connection reset");
+    }
+
+    [Fact]
+    public async Task Pull_ServerError_MessageNamesPull()
+    {
+        var store = Store(new CannedBlobHandler(_ => Error(500)));
+
+        var ex = await Should.ThrowAsync<SyncNetworkException>(() => store.PullAsync("bank.db", TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("Azure pull failed:");
+    }
+
+    [Fact]
+    public async Task Push_ServerError_MessageNamesPush()
+    {
+        var store = Store(new CannedBlobHandler(_ => Error(500)));
+
+        var ex = await Should.ThrowAsync<SyncNetworkException>(() => store.PushAsync("bank.db", [.. "snapshot"u8], null,
+            TestContext.Current.CancellationToken));
+
+        ex.Message.ShouldStartWith("Azure push failed:");
+    }
+
+    [Fact]
     public async Task Pull_ExistingBlob_ReturnsDataAndUnquotedETag()
     {
         var handler = new CannedBlobHandler(_ => Ok([.. "snapshot"u8], "0x8Dabc"));
