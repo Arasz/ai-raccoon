@@ -9,7 +9,6 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -19,7 +18,6 @@ using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
 using FluentValidation;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
@@ -199,41 +197,16 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             await SeedProjectRegistrationAsync(dataRoot, "acme", TestContext.Current.CancellationToken);
             await SeedForwardSchemaVersionAsync(dataRoot, TestContext.Current.CancellationToken);
 
-            var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
-            {
-                var started = McpServerSetup.CreateServerHost(
-                    new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
-                await started.StartAsync(TestContext.Current.CancellationToken);
-                return (candidate, started);
-            });
-            try
-            {
-                using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
-                var transport = new HttpClientTransport(
-                    new HttpClientTransportOptions
-                    {
-                        Name = "tool-refusals-test",
-                        Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
-                        TransportMode = HttpTransportMode.StreamableHttp
-                    },
-                    httpClient,
-                    NullLoggerFactory.Instance,
-                    true);
-                await using var client = await McpClient.CreateAsync(transport,
-                    cancellationToken: TestContext.Current.CancellationToken);
+            await using var server = await RealMcpServerFixture.StartAsync(dataRoot, TestContext.Current.CancellationToken);
+            var client = await server.ConnectAsync("tool-refusals-test", TestContext.Current.CancellationToken);
 
-                var result = await client.CallToolAsync("memory_write",
-                    new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x" },
-                    cancellationToken: TestContext.Current.CancellationToken);
+            var result = await client.CallToolAsync("memory_write",
+                new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x" },
+                cancellationToken: TestContext.Current.CancellationToken);
 
-                result.IsError.ShouldBe(true);
-                var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
-                text.ShouldStartWith("schema-version-unsupported:");
-            }
-            finally
-            {
-                await host.StopAsync(TestContext.Current.CancellationToken);
-            }
+            result.IsError.ShouldBe(true);
+            var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+            text.ShouldStartWith("schema-version-unsupported:");
         }
         finally
         {
@@ -292,51 +265,25 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         }
 
         var fakeLogs = new FakeLoggerProvider();
-        var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
-        {
-            var started = McpServerSetup.CreateServerHost(
-                new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
-            started.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
-            await started.StartAsync(TestContext.Current.CancellationToken);
-            return (candidate, started);
-        });
-        try
-        {
-            using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
-            var transport = new HttpClientTransport(
-                new HttpClientTransportOptions
-                {
-                    Name = "tool-refusals-test",
-                    Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
-                    TransportMode = HttpTransportMode.StreamableHttp
-                },
-                httpClient,
-                NullLoggerFactory.Instance,
-                true);
-            await using var client = await McpClient.CreateAsync(transport,
-                cancellationToken: TestContext.Current.CancellationToken);
+        await using var server = await RealMcpServerFixture.StartAsync(dataRoot, TestContext.Current.CancellationToken, fakeLogs);
+        var client = await server.ConnectAsync("tool-refusals-test", TestContext.Current.CancellationToken);
 
-            var result = await client.CallToolAsync(toolName, arguments,
-                cancellationToken: TestContext.Current.CancellationToken);
+        var result = await client.CallToolAsync(toolName, arguments,
+            cancellationToken: TestContext.Current.CancellationToken);
 
-            result.IsError.ShouldBe(true);
-            var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+        result.IsError.ShouldBe(true);
+        var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
 
-            // When the prefix is missing the tool threw something ToolRefusals does not map, and the
-            // SDK replaces it with "An error occurred invoking '<tool>'." — eleven words carrying
-            // neither the type nor the message. Without the server's own log records in the failure,
-            // a CI-only failure here cannot be diagnosed at all; that is what made this class's
-            // intermittent reds unreadable (2026-08-15 project-scope review, WP19).
-            text.ShouldStartWith($"{expectedPrefix}:", customMessage: ServerDiagnostics(fakeLogs));
+        // When the prefix is missing the tool threw something ToolRefusals does not map, and the
+        // SDK replaces it with "An error occurred invoking '<tool>'." — eleven words carrying
+        // neither the type nor the message. Without the server's own log records in the failure,
+        // a CI-only failure here cannot be diagnosed at all; that is what made this class's
+        // intermittent reds unreadable (2026-08-15 project-scope review, WP19).
+        text.ShouldStartWith($"{expectedPrefix}:", customMessage: ServerDiagnostics(fakeLogs));
 
-            // Every fail-level log record here is a real crash, never a refusal.
-            var errors = fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error).ToList();
-            errors.ShouldBeEmpty(string.Join('\n', errors.Select(e => e.Message)));
-        }
-        finally
-        {
-            await host.StopAsync(TestContext.Current.CancellationToken);
-        }
+        // Every fail-level log record here is a real crash, never a refusal.
+        var errors = fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error).ToList();
+        errors.ShouldBeEmpty(string.Join('\n', errors.Select(e => e.Message)));
     }
 
     /// <summary>Writes the per-project access mode row directly (same DataRoot the server host reads per call — see McpServerFactory).</summary>
@@ -406,49 +353,23 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         {
             await SeedProjectRegistrationAsync(dataRoot, "acme", TestContext.Current.CancellationToken);
             var fakeLogs = new FakeLoggerProvider();
-            var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
-            {
-                var started = McpServerSetup.CreateServerHost(
-                    new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
-                started.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
-                await started.StartAsync(TestContext.Current.CancellationToken);
-                return (candidate, started);
-            });
-            try
-            {
-                using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
-                var transport = new HttpClientTransport(
-                    new HttpClientTransportOptions
-                    {
-                        Name = "tool-refusals-warning-test",
-                        Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
-                        TransportMode = HttpTransportMode.StreamableHttp
-                    },
-                    httpClient,
-                    NullLoggerFactory.Instance,
-                    true);
-                await using var client = await McpClient.CreateAsync(transport,
-                    cancellationToken: TestContext.Current.CancellationToken);
+            await using var server = await RealMcpServerFixture.StartAsync(dataRoot, TestContext.Current.CancellationToken, fakeLogs);
+            var client = await server.ConnectAsync("tool-refusals-warning-test", TestContext.Current.CancellationToken);
 
-                var result = await client.CallToolAsync("memory_share",
-                    new Dictionary<string, object?>
-                    {
-                        ["projectId"] = "acme",
-                        ["hash"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
-                    },
-                    cancellationToken: TestContext.Current.CancellationToken);
+            var result = await client.CallToolAsync("memory_share",
+                new Dictionary<string, object?>
+                {
+                    ["projectId"] = "acme",
+                    ["hash"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
+                },
+                cancellationToken: TestContext.Current.CancellationToken);
 
-                result.IsError.ShouldBe(true);
-                var record = fakeLogs.Collector.GetSnapshot()
-                    .Single(r => r.Message.Contains("unknown-hash", StringComparison.Ordinal));
-                record.Level.ShouldBe(LogLevel.Warning);
-                record.Exception.ShouldBeNull();
-                record.Message.ShouldNotContain("No entry with hash");
-            }
-            finally
-            {
-                await host.StopAsync(TestContext.Current.CancellationToken);
-            }
+            result.IsError.ShouldBe(true);
+            var record = fakeLogs.Collector.GetSnapshot()
+                .Single(r => r.Message.Contains("unknown-hash", StringComparison.Ordinal));
+            record.Level.ShouldBe(LogLevel.Warning);
+            record.Exception.ShouldBeNull();
+            record.Message.ShouldNotContain("No entry with hash");
         }
         finally
         {
@@ -463,61 +384,37 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         try
         {
             var fakeLogs = new FakeLoggerProvider();
-            var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
-            {
-                var started = McpServerSetup.CreateServerHost(
-                    new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
-                started.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
-                await started.StartAsync(TestContext.Current.CancellationToken);
-                return (candidate, started);
-            });
-            try
-            {
-                using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
-                var transport = new HttpClientTransport(
-                    new HttpClientTransportOptions
-                    {
-                        Name = "tool-refusals-bare-mcpexception-test",
-                        Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
-                        TransportMode = HttpTransportMode.StreamableHttp
-                    },
-                    httpClient, NullLoggerFactory.Instance, true);
-                await using var client = await McpClient.CreateAsync(transport,
-                    cancellationToken: TestContext.Current.CancellationToken);
+            await using var server = await RealMcpServerFixture.StartAsync(dataRoot, TestContext.Current.CancellationToken, fakeLogs);
+            var client = await server.ConnectAsync("tool-refusals-bare-mcpexception-test", TestContext.Current.CancellationToken);
 
-                var result = await client.CallToolAsync("memory_search",
-                    new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x", ["sessionId"] = "sess-test" },
-                    cancellationToken: TestContext.Current.CancellationToken);
+            var result = await client.CallToolAsync("memory_search",
+                new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x", ["sessionId"] = "sess-test" },
+                cancellationToken: TestContext.Current.CancellationToken);
 
-                // (a) caller-facing text unchanged in shape — the enriched cwd-aware refusal;
-                // cwd-tolerant matching because the process cwd is shared and mutable.
-                result.IsError.ShouldBe(true);
-                var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
-                text.ShouldStartWith(
-                    "invalid-params: projectId is required (no registered project's scope contains cwd ");
-                text.ShouldContain(
-                    "; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)");
+            // (a) caller-facing text unchanged in shape — the enriched cwd-aware refusal;
+            // cwd-tolerant matching because the process cwd is shared and mutable.
+            result.IsError.ShouldBe(true);
+            var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+            text.ShouldStartWith(
+                "invalid-params: projectId is required (no registered project's scope contains cwd ");
+            text.ShouldContain(
+                "; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)");
 
-                // (b) the log carries the real reason after "refused: ".
-                var record = fakeLogs.Collector.GetSnapshot()
-                    .Single(r => r.Message.Contains(
-                        "refused: invalid-params: projectId is required (no registered project's scope contains cwd",
-                        StringComparison.Ordinal));
-                // (c) level is Information for a non-WarningPrefix refusal.
-                record.Level.ShouldBe(LogLevel.Information);
-                // (d) no exception attached — 5d511748's anti-flood property.
-                record.Exception.ShouldBeNull();
-                // (e) the zero-information literal is gone.
-                record.Message.ShouldNotContain("refused: refused");
+            // (b) the log carries the real reason after "refused: ".
+            var record = fakeLogs.Collector.GetSnapshot()
+                .Single(r => r.Message.Contains(
+                    "refused: invalid-params: projectId is required (no registered project's scope contains cwd",
+                    StringComparison.Ordinal));
+            // (c) level is Information for a non-WarningPrefix refusal.
+            record.Level.ShouldBe(LogLevel.Information);
+            // (d) no exception attached — 5d511748's anti-flood property.
+            record.Exception.ShouldBeNull();
+            // (e) the zero-information literal is gone.
+            record.Message.ShouldNotContain("refused: refused");
 
-                // No fail-level records — the bare refusal must not read as a crash.
-                fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error)
-                    .ShouldBeEmpty();
-            }
-            finally
-            {
-                await host.StopAsync(TestContext.Current.CancellationToken);
-            }
+            // No fail-level records — the bare refusal must not read as a crash.
+            fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error)
+                .ShouldBeEmpty();
         }
         finally
         {
@@ -539,46 +436,33 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         var dataRoot = TestData.CreateTempRoot("tool-refusals-raw-http-envelope");
         try
         {
-            var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
-            {
-                var started = McpServerSetup.CreateServerHost(
-                    new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(dataRoot)));
-                await started.StartAsync(TestContext.Current.CancellationToken);
-                return (candidate, started);
-            });
-            try
-            {
-                // Test hosts carry no McpToken (McpServerSetup gates only when one is set),
-                // so raw HTTP needs no credential here — production `serve` mints one.
-                using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
-                http.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/event-stream");
+            await using var server = await RealMcpServerFixture.StartAsync(dataRoot, TestContext.Current.CancellationToken);
+            // Test hosts carry no McpToken (McpServerSetup gates only when one is set),
+            // so raw HTTP needs no credential here — production `serve` mints one.
+            using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.Port}/") };
+            http.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/event-stream");
 
-                var freshId = Guid.CreateVersion7().ToString("N");
-                var call = JsonSerializer.Serialize(new
+            var freshId = Guid.CreateVersion7().ToString("N");
+            var call = JsonSerializer.Serialize(new
+            {
+                jsonrpc = "2.0",
+                id = 1,
+                method = "tools/call",
+                @params = new
                 {
-                    jsonrpc = "2.0",
-                    id = 1,
-                    method = "tools/call",
-                    @params = new
-                    {
-                        name = "memory_write",
-                        arguments = new { projectId = freshId, content = "x" }
-                    }
-                });
-                using var response = await http.PostAsync("mcp",
-                    new StringContent(call, Encoding.UTF8, "application/json"),
-                    TestContext.Current.CancellationToken);
-                response.EnsureSuccessStatusCode();
-                response.Content.Headers.ContentType?.MediaType.ShouldBe("text/event-stream");
-                var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+                    name = "memory_write",
+                    arguments = new { projectId = freshId, content = "x" }
+                }
+            });
+            using var response = await http.PostAsync("mcp",
+                new StringContent(call, Encoding.UTF8, "application/json"),
+                TestContext.Current.CancellationToken);
+            response.EnsureSuccessStatusCode();
+            response.Content.Headers.ContentType?.MediaType.ShouldBe("text/event-stream");
+            var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
-                body.ShouldContain("\"isError\":true");
-                body.ShouldContain("project-not-registered:");
-            }
-            finally
-            {
-                await host.StopAsync(TestContext.Current.CancellationToken);
-            }
+            body.ShouldContain("\"isError\":true");
+            body.ShouldContain("project-not-registered:");
         }
         finally
         {

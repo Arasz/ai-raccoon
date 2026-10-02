@@ -1,11 +1,7 @@
-using AiRaccoon.Hosting.Common;
 using AiRaccoon.Tests.TestHelpers;
-using AiRaccoon.Setup;
 using AiRaccoon.Tools;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
-using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
@@ -72,50 +68,25 @@ public sealed class UnmappedExceptionDiagnosticsTests : IAsyncLifetime
             TestContext.Current.CancellationToken);
 
         var fakeLogs = new FakeLoggerProvider();
-        var (port, host) = await LoopbackPort.BindWithRetryAsync(async candidate =>
-        {
-            var started = McpServerSetup.CreateServerHost(
-                new ServerConfig(candidate, McpTransport.Http, TestData.CreateInfrastructureOptions(_dataRoot)));
-            started.Services.GetRequiredService<ILoggerFactory>().AddProvider(fakeLogs);
-            await started.StartAsync(TestContext.Current.CancellationToken);
-            return (candidate, started);
-        });
+        await using var server = await RealMcpServerFixture.StartAsync(_dataRoot, TestContext.Current.CancellationToken, fakeLogs);
+        var client = await server.ConnectAsync("unmapped-exception-test", TestContext.Current.CancellationToken);
 
-        try
-        {
-            using var httpClient = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
-            var transport = new HttpClientTransport(
-                new HttpClientTransportOptions
-                {
-                    Name = "unmapped-exception-test",
-                    Endpoint = new Uri($"http://127.0.0.1:{port}/mcp"),
-                    TransportMode = HttpTransportMode.StreamableHttp
-                },
-                httpClient, Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance, true);
-            await using var client = await McpClient.CreateAsync(transport,
-                cancellationToken: TestContext.Current.CancellationToken);
+        var result = await client.CallToolAsync("memory_stats",
+            new Dictionary<string, object?> { ["projectId"] = "anything" },
+            cancellationToken: TestContext.Current.CancellationToken);
 
-            var result = await client.CallToolAsync("memory_stats",
-                new Dictionary<string, object?> { ["projectId"] = "anything" },
-                cancellationToken: TestContext.Current.CancellationToken);
+        result.IsError.ShouldBe(true);
+        var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
 
-            result.IsError.ShouldBe(true);
-            var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+        text.ShouldStartWith("unexpected-error: ",
+            customMessage: $"the caller must learn what failed, not just that something did; got: {text}");
+        text.Length.ShouldBeGreaterThan("unexpected-error: ".Length,
+            "the prefix alone is no better than the eleven words it replaced");
 
-            text.ShouldStartWith("unexpected-error: ",
-                customMessage: $"the caller must learn what failed, not just that something did; got: {text}");
-            text.Length.ShouldBeGreaterThan("unexpected-error: ".Length,
-                "the prefix alone is no better than the eleven words it replaced");
-
-            var errors = fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error).ToList();
-            errors.ShouldNotBeEmpty(
-                "catching the exception must not cost the Error record the SDK used to produce");
-            errors.ShouldContain(r => r.Exception != null,
-                "the Error record carries the exception, so the server side keeps the full detail");
-        }
-        finally
-        {
-            await host.StopAsync(TestContext.Current.CancellationToken);
-        }
+        var errors = fakeLogs.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Error).ToList();
+        errors.ShouldNotBeEmpty(
+            "catching the exception must not cost the Error record the SDK used to produce");
+        errors.ShouldContain(r => r.Exception != null,
+            "the Error record carries the exception, so the server side keeps the full detail");
     }
 }

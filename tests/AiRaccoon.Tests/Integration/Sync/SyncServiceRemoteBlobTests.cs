@@ -1,3 +1,4 @@
+using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Sync;
 using Microsoft.Data.Sqlite;
@@ -28,119 +29,23 @@ public class SyncServiceRemoteBlobTests : IDisposable
     private const string Key = "remote-blob-test-key";
     private readonly string _dataRoot = TestData.CreateTempRoot("sync-remote-blob-test");
 
+    private readonly SyncTestBank _encrypted;
+    private readonly SyncTestBank _plain;
+
+    public SyncServiceRemoteBlobTests()
+    {
+        _encrypted = new SyncTestBank(BankPath, Key);
+        _plain = new SyncTestBank(BankPath);
+    }
+
     private string BankPath => Path.Combine(_dataRoot, "memory.db");
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    private static string EntriesSchema => """
-                                            CREATE TABLE IF NOT EXISTS entries (
-                                                id INTEGER PRIMARY KEY,
-                                                hash TEXT,
-                                                path TEXT,
-                                                value TEXT,
-                                                source_file TEXT NULL,
-                                                section TEXT NULL,
-                                                scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
-                                                project_id TEXT NULL,
-                                                context_label TEXT NULL,
-                                                workspace_id TEXT NULL,
-                                                agent_id TEXT NULL,
-                                                created_at INTEGER NOT NULL,
-                                                updated_at INTEGER NOT NULL,
-                                                access_count INTEGER NOT NULL DEFAULT 0,
-                                                last_accessed_at INTEGER NULL,
-                                                rating REAL NOT NULL DEFAULT 0.5,
-                                                ttl_days INTEGER NULL,
-                                                embed_state TEXT NOT NULL DEFAULT 'pending',
-                                                embedding BLOB NULL,
-                                                heading_path TEXT NULL,
-                                                structure_embedding BLOB NULL,
-                                                chunk_index INTEGER NOT NULL DEFAULT 0,
-                                                total_chunks INTEGER NOT NULL DEFAULT 0,
-                                                source_id INTEGER NULL
-                                            );
-                                            CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-                                            CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, agent_id TEXT NULL,
-                                                name TEXT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, closed_at INTEGER NULL);
-                                            CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-                                            CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NULL, created_at INTEGER NOT NULL);
-                                            CREATE TABLE IF NOT EXISTS sync_tombstones (project_id TEXT NOT NULL, hash TEXT NOT NULL, scope TEXT NOT NULL,
-                                                context_label TEXT NULL, deleted_at INTEGER NOT NULL, received_at INTEGER NULL, PRIMARY KEY (project_id, hash, scope));
-                                            CREATE TABLE IF NOT EXISTS memory_source (
-                                                id INTEGER PRIMARY KEY,
-                                                source_type TEXT NOT NULL,
-                                                source_locator TEXT NOT NULL,
-                                                section TEXT NULL,
-                                                heading_path TEXT NULL);
-                                            CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source_identity
-                                                ON memory_source(source_type, source_locator, COALESCE(section, ''));
-                                            CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id);
-                                            """;
-
-    private static async Task<SqliteConnection> CreateAndOpenEncryptedAsync(string path, CancellationToken ct = default)
-    {
-        var conn = new SqliteConnection($"Data Source={path};Password={Key}");
-        await conn.OpenAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = EntriesSchema;
-        await cmd.ExecuteNonQueryAsync(ct);
-        return conn;
-    }
-
-    private static async Task<SqliteConnection> CreateAndOpenUnencryptedAsync(string path, CancellationToken ct = default)
-    {
-        var conn = new SqliteConnection($"Data Source={path}");
-        await conn.OpenAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = EntriesSchema;
-        await cmd.ExecuteNonQueryAsync(ct);
-        return conn;
-    }
-
-    private static Func<string, CancellationToken, Task<SqliteConnection>> OpenSnapshot() =>
-        async (path, ct) =>
-        {
-            var conn = new SqliteConnection($"Data Source={path};Password={Key}");
-            await conn.OpenAsync(ct);
-            conn.EnableExtensions();
-            conn.LoadVector();
-            return conn;
-        };
-
-    private static Func<string, CancellationToken, Task<SqliteConnection>> OpenReadOnly() =>
-        async (path, ct) =>
-        {
-            var conn = new SqliteConnection($"Data Source={path};Password={Key};Mode=ReadOnly");
-            await conn.OpenAsync(ct);
-            conn.EnableExtensions();
-            conn.LoadVector();
-            return conn;
-        };
-
-    private static Func<string, CancellationToken, Task<SqliteConnection>> OpenSnapshotUnencrypted() =>
-        async (path, ct) =>
-        {
-            var conn = new SqliteConnection($"Data Source={path}");
-            await conn.OpenAsync(ct);
-            conn.EnableExtensions();
-            conn.LoadVector();
-            return conn;
-        };
-
-    private static Func<string, CancellationToken, Task<SqliteConnection>> OpenReadOnlyUnencrypted() =>
-        async (path, ct) =>
-        {
-            var conn = new SqliteConnection($"Data Source={path};Mode=ReadOnly");
-            await conn.OpenAsync(ct);
-            conn.EnableExtensions();
-            conn.LoadVector();
-            return conn;
-        };
-
-    private static async Task InsertEntryAsync(string path, string hash, string entryPath, string value,
+    private async Task InsertEntryAsync(string path, string hash, string entryPath, string value,
         CancellationToken ct)
     {
-        await using var conn = await CreateAndOpenEncryptedAsync(path, ct);
+        await using var conn = await _encrypted.CreateAndOpenAsync(path, ct);
         await using var insert = conn.CreateCommand();
         insert.CommandText = """
                              INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
@@ -152,10 +57,10 @@ public class SyncServiceRemoteBlobTests : IDisposable
         await insert.ExecuteNonQueryAsync(ct);
     }
 
-    private static async Task InsertEntryUnencryptedAsync(string path, string hash, string entryPath, string value,
+    private async Task InsertEntryUnencryptedAsync(string path, string hash, string entryPath, string value,
         CancellationToken ct)
     {
-        await using var conn = await CreateAndOpenUnencryptedAsync(path, ct);
+        await using var conn = await _plain.CreateAndOpenAsync(path, ct);
         await using var insert = conn.CreateCommand();
         insert.CommandText = """
                              INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at)
@@ -180,10 +85,10 @@ public class SyncServiceRemoteBlobTests : IDisposable
         Func<string, CancellationToken, Task<SqliteConnection>> countingOpenReadOnly = async (path, ct) =>
         {
             openReadOnlyCallCount++;
-            return await OpenReadOnly()(path, ct);
+            return await _encrypted.OpenReadOnlyAsync(path, ct);
         };
 
-        var service = new SyncService(cloud, ct => CreateAndOpenEncryptedAsync(BankPath, ct), OpenSnapshot(),
+        var service = new SyncService(cloud, _encrypted.OpenBankAsync, _encrypted.OpenSnapshotAsync,
             countingOpenReadOnly, TimeProvider.System, NullLoggerFor());
 
         await InsertEntryAsync(BankPath, "h1", "p1.md", "original", TestContext.Current.CancellationToken);
@@ -244,7 +149,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
             "second call would mean quick_check (and therefore ATTACH, right after it) was reached for the " +
             "remote blob, proving the authenticity check ran too late");
 
-        await using (var conn = await CreateAndOpenEncryptedAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _encrypted.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var check = conn.CreateCommand();
             check.CommandText = "SELECT COUNT(*) FROM entries WHERE hash = 'tampered-hash'";
@@ -272,19 +177,17 @@ public class SyncServiceRemoteBlobTests : IDisposable
 
         // A prior push from a peer bank, using the real push path, establishes an authenticated
         // remote — not a manually-seeded raw VACUUM INTO snapshot.
-        var remoteService = new SyncService(cloud, ct => CreateAndOpenEncryptedAsync(remoteBankPath, ct), OpenSnapshot(),
-            OpenReadOnly(), TimeProvider.System, NullLoggerFor());
+        var remoteService = new SyncTestBank(remoteBankPath, Key).CreateService(cloud);
         await remoteService.MemorySyncAsync("acme", "obj", TestContext.Current.CancellationToken);
 
         await InsertEntryAsync(BankPath, "h1", "p1.md", "v1", TestContext.Current.CancellationToken);
 
-        var service = new SyncService(cloud, ct => CreateAndOpenEncryptedAsync(BankPath, ct), OpenSnapshot(),
-            OpenReadOnly(), TimeProvider.System, NullLoggerFor());
+        var service = _encrypted.CreateService(cloud);
 
         var result = await service.MemorySyncAsync("acme", "obj", TestContext.Current.CancellationToken);
         result.Received.ShouldBeGreaterThanOrEqualTo(1);
 
-        await using (var conn = await CreateAndOpenEncryptedAsync(BankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _encrypted.CreateAndOpenAsync(BankPath, TestContext.Current.CancellationToken))
         {
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT COUNT(*) FROM entries";
@@ -309,7 +212,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
         var remoteBankPath = Path.Combine(_dataRoot, "remote.db");
         await InsertEntryAsync(remoteBankPath, "h2", "p2.md", "v2", TestContext.Current.CancellationToken);
         var remoteSnapshotPath = Path.Combine(_dataRoot, "remote-snapshot.db");
-        await using (var conn = await CreateAndOpenEncryptedAsync(remoteBankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _encrypted.CreateAndOpenAsync(remoteBankPath, TestContext.Current.CancellationToken))
         {
             await using var vac = conn.CreateCommand();
             vac.CommandText = $"VACUUM INTO '{remoteSnapshotPath}'";
@@ -322,8 +225,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
         await InsertEntryAsync(BankPath, "h1", "p1.md", "v1", TestContext.Current.CancellationToken);
 
         var logger = new FakeLogger<SyncService>();
-        var service = new SyncService(cloud, ct => CreateAndOpenEncryptedAsync(BankPath, ct), OpenSnapshot(),
-            OpenReadOnly(), TimeProvider.System, logger);
+        var service = _encrypted.CreateService(cloud, logger);
 
         var result = await service.MemorySyncAsync("acme", "obj", TestContext.Current.CancellationToken);
         result.Received.ShouldBeGreaterThanOrEqualTo(1, "a legacy remote blob without a tag must still merge — accept-with-warning, not refusal");
@@ -343,8 +245,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
     public async Task ADowngradeToAHeaderlessBlob_AfterATagHasBeenSeenForThisObjectKey_IsRefused()
     {
         var cloud = new FakeCloudStore();
-        var service = new SyncService(cloud, ct => CreateAndOpenEncryptedAsync(BankPath, ct), OpenSnapshot(),
-            OpenReadOnly(), TimeProvider.System, NullLoggerFor());
+        var service = _encrypted.CreateService(cloud);
 
         await InsertEntryAsync(BankPath, "h1", "p1.md", "original", TestContext.Current.CancellationToken);
         await service.MemorySyncAsync("acme", "obj", TestContext.Current.CancellationToken);
@@ -367,8 +268,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
     public async Task MemorySync_UnencryptedBank_PushesRawBytesWithoutAWrapHeader()
     {
         var cloud = new FakeCloudStore();
-        var service = new SyncService(cloud, ct => CreateAndOpenUnencryptedAsync(BankPath, ct), OpenSnapshotUnencrypted(),
-            OpenReadOnlyUnencrypted(), TimeProvider.System, NullLoggerFor());
+        var service = _plain.CreateService(cloud);
 
         await InsertEntryUnencryptedAsync(BankPath, "h1", "p1.md", "v1", TestContext.Current.CancellationToken);
         await service.MemorySyncAsync("acme", "obj", TestContext.Current.CancellationToken);
@@ -390,7 +290,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
         var remoteBankPath = Path.Combine(_dataRoot, "remote.db");
         await InsertEntryUnencryptedAsync(remoteBankPath, "h2", "p2.md", "v2", TestContext.Current.CancellationToken);
         var remoteSnapshotPath = Path.Combine(_dataRoot, "remote-snapshot.db");
-        await using (var conn = await CreateAndOpenUnencryptedAsync(remoteBankPath, TestContext.Current.CancellationToken))
+        await using (var conn = await _plain.CreateAndOpenAsync(remoteBankPath, TestContext.Current.CancellationToken))
         {
             await using var vac = conn.CreateCommand();
             vac.CommandText = $"VACUUM INTO '{remoteSnapshotPath}'";
@@ -402,8 +302,7 @@ public class SyncServiceRemoteBlobTests : IDisposable
         await InsertEntryUnencryptedAsync(BankPath, "h1", "p1.md", "v1", TestContext.Current.CancellationToken);
 
         var logger = new FakeLogger<SyncService>();
-        var service = new SyncService(cloud, ct => CreateAndOpenUnencryptedAsync(BankPath, ct), OpenSnapshotUnencrypted(),
-            OpenReadOnlyUnencrypted(), TimeProvider.System, logger);
+        var service = _plain.CreateService(cloud, logger);
 
         await service.MemorySyncAsync("acme", "obj", TestContext.Current.CancellationToken);
 

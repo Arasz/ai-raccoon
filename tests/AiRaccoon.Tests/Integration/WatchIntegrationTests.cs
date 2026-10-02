@@ -38,14 +38,7 @@ public sealed class WatchIntegrationTests
     public async Task CreatedFile_BecomesSearchable()
     {
         using var stack = new Stack();
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         stack.Write("a.md", "zephyralpha seed");
 
@@ -102,14 +95,7 @@ public sealed class WatchIntegrationTests
     public async Task ChangedFile_ReplacesItsContentInSearch()
     {
         using var stack = new Stack();
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         stack.Write("a.md", "zephyralpha v1");
         (await stack.StepUntilAsync(
@@ -131,14 +117,7 @@ public sealed class WatchIntegrationTests
     public async Task ChangedFile_LeavesManualRowsCitingItAsSourceFileAlone()
     {
         using var stack = new Stack();
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         stack.Write("a.md", "zephyrciteorigin alone");
         (await stack.StepUntilAsync(
@@ -172,14 +151,7 @@ public sealed class WatchIntegrationTests
     public async Task DeletedFile_RemovesItsChunks()
     {
         using var stack = new Stack();
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         stack.Write("a.md", "zephyrgamma content");
         (await stack.StepUntilAsync(
@@ -200,14 +172,7 @@ public sealed class WatchIntegrationTests
     public async Task RenamedFile_MovesItsMemory_AndLeavesNothingUnderTheOldPath()
     {
         using var stack = new Stack();
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         stack.Write("old.md", "zephyrdelta content");
         (await stack.StepUntilAsync(
@@ -230,14 +195,7 @@ public sealed class WatchIntegrationTests
     public async Task RenameOntoExistingPath_KeepsOnlyTheIncomingContent()
     {
         using var stack = new Stack();
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         stack.Write("target.md", "zephyrepilon target");
         (await stack.StepUntilAsync(
@@ -270,18 +228,12 @@ public sealed class WatchIntegrationTests
     public async Task Restart_ReWatches_AndCatchUpReDigestsChangedFiles_SkippingUnchangedOnes()
     {
         using var first = new Stack("restart", FixedNow, false);
-        await first.EnableAsync(TestContext.Current.CancellationToken);
-        await first.AllowScopeAsync(TestContext.Current.CancellationToken);
         first.Write("a.md", "zephyrone v1");
         first.Write("c.md", "zephyrthree stable");
         first.Age("a.md", TimeSpan.FromMinutes(1));
         first.Age("c.md", TimeSpan.FromMinutes(1));
-        await first.AddWatchAsync(TestContext.Current.CancellationToken);
-        await first.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (first.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+
+        await first.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         (await first.StepUntilAsync(async () =>
         {
@@ -327,14 +279,7 @@ public sealed class WatchIntegrationTests
     public async Task DeletedDirectory_Cascades_RemovesChunksAndFingerprintsOfNestedFiles()
     {
         using var stack = new Stack();
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         Directory.CreateDirectory(stack.File("sub"));
         stack.Write("sub/a.md", "zephyrnest one");
@@ -373,18 +318,12 @@ public sealed class WatchIntegrationTests
     public async Task Restart_CatchUp_RemovesChunksOfFilesDeletedWhileTheServerWasDown()
     {
         using var first = new Stack("restart-delete", FixedNow, false);
-        await first.EnableAsync(TestContext.Current.CancellationToken);
-        await first.AllowScopeAsync(TestContext.Current.CancellationToken);
         first.Write("a.md", "zephyrdoomed v1");
         first.Write("c.md", "zephyrsurvivor stable");
         first.Age("a.md", TimeSpan.FromMinutes(1));
         first.Age("c.md", TimeSpan.FromMinutes(1));
-        await first.AddWatchAsync(TestContext.Current.CancellationToken);
-        await first.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (first.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+
+        await first.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         (await first.StepUntilAsync(async () =>
         {
@@ -467,18 +406,11 @@ public sealed class WatchIntegrationTests
         }
 
         using var stack = new Stack();
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
         stack.Write("secret.md", "zephyrsecret hidden");
         stack.Age("secret.md", TimeSpan.FromMinutes(1));
         File.SetUnixFileMode(stack.File("secret.md"), UnixFileMode.None);
 
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         (await stack.StepUntilAsync(async () =>
         {
@@ -550,14 +482,7 @@ public sealed class WatchIntegrationTests
     public async Task EditedCodeFile_InsertModifyAppend_CoversEveryNonBlankLineAfterEachEdit()
     {
         using var stack = new Stack(codeChunker: new StubCodeChunker());
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         var v1 = "class Alpha\n{\n}\n\nclass Beta\n{\n}\n\nclass Gamma\n{\n}\n";
         stack.Write("Widget.cs", v1);
@@ -602,14 +527,7 @@ public sealed class WatchIntegrationTests
     public async Task EditedCodeFile_ViaAtomicRename_CoversEveryNonBlankLine()
     {
         using var stack = new Stack(codeChunker: new StubCodeChunker());
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         var v1 = "class Alpha\n{\n}\n\nclass Beta\n{\n}\n";
         stack.Write("Widget.cs", v1);
@@ -681,16 +599,10 @@ public sealed class WatchIntegrationTests
     public async Task RemoveThenReAdd_ReIngestsEveryFile_WithoutDuplicateEntries()
     {
         using var stack = new Stack();
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
         stack.Write("a.md", "zephyrkappa alpha body");
         stack.Write("b.md", "zephyrkappa beta body");
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         (await stack.StepUntilAsync(
                 async () => (await stack.SearchAsync("zephyrkappa", TestContext.Current.CancellationToken)).Any(),
@@ -740,14 +652,7 @@ public sealed class WatchIntegrationTests
     public async Task FileIngest_CreatesSourceId_ForIngestedChunks()
     {
         using var stack = new Stack();
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         stack.Write("a.md", "zephyrsourceid ingest proof");
 
@@ -774,14 +679,7 @@ public sealed class WatchIntegrationTests
     public async Task EventsUnderHiddenOrDeniedDirectories_LeaveBothCorporaEmpty()
     {
         using var stack = new Stack(codeChunker: new StubCodeChunker());
-        await stack.EnableAsync(TestContext.Current.CancellationToken);
-        await stack.AllowScopeAsync(TestContext.Current.CancellationToken);
-        await stack.AddWatchAsync(TestContext.Current.CancellationToken);
-        await stack.Hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        if (stack.CatchUp.LastScan is { } initial)
-        {
-            await initial;
-        }
+        await stack.StartWatchingAsync(TestContext.Current.CancellationToken);
 
         // Anchor first: an ordinary code file under the same watch reaches the code corpus.
         var control = stack.WriteNested("src/keep.js", "const zephyrkeep = 1;");
@@ -910,6 +808,20 @@ public sealed class WatchIntegrationTests
                 IngestScopeKeys.Serialize([WatchDir]), cancellationToken);
 
         public Task AddWatchAsync(CancellationToken cancellationToken) => Service.AddAsync(Project, WatchDir, cancellationToken);
+
+        /// <summary>The setup every watch test shares and must change together: enable the tier, allow the scope,
+        /// add the watch dir, reconcile, then let the initial catch-up scan finish.</summary>
+        public async Task StartWatchingAsync(CancellationToken cancellationToken)
+        {
+            await EnableAsync(cancellationToken);
+            await AllowScopeAsync(cancellationToken);
+            await AddWatchAsync(cancellationToken);
+            await Hosted.ReconcileAsync(cancellationToken);
+            if (CatchUp.LastScan is { } initial)
+            {
+                await initial;
+            }
+        }
 
         /// <summary>Writes the file and stamps its mtime at the CURRENT fake time.</summary>
         public void Write(string name, string content)
