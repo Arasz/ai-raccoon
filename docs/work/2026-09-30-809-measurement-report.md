@@ -228,6 +228,41 @@ Source: `docs/work/2026-09-30-254-vs-1022-retrieval-ab/shared-tier-artifact.json
 11 zero scores depress both arms by the same denominator, so they do not change the comparison's
 sign.
 
+### 1.6 Shared 1022 targets
+
+At 1022 the 100 queries resolve to 74 distinct target chunks. arm-254's anchors resolve to 100.
+21 chunks carry 47 queries. In 17 of them the chunker merged two or three of an ADR's sections into
+one chunk (for example `0013 — Extension host hook surface | Context | Decision | Consequences`), so
+the first chunk carrying each of those families is the same chunk. The other 4 are shared-tier rows
+that hold two queries' markers. Each group is declared with its reason under `header.sharedTargets`
+in `scripts/retrieval_tuning/corpora/eval-set-100.json`, and the corpus tests fail on any
+undeclared share. MEASURED.
+
+Only one group had another candidate. ADR 0025's decision family also has chunks of its own
+(`Decision 2` at chunk 1, then Decisions 3 to 5). E026 stays on the merged `Context | Decision 1`
+chunk because arm-254's anchor for E026 is its `Decision 1` chunk. Moving arm-1022 to `Decision 2`
+would score the two arms against different sections. Confound 5(d) covers E026's query text.
+
+None of the numbers in 1.1 to 1.4 change. No anchor changed, and the committed corpus is the
+arm-1022 anchor set that was scored: on the 82 queries whose two top-8 lists share no hash, every
+anchor sits at the committed first relevant rank (`scripts/verify-809-report.py`, check
+`D.corpus-is-scored-anchor-set`). The shared targets do not produce the 1022 lead:
+
+| subset | queries | chunk254 nDCG@5 | chunk1022 nDCG@5 | delta |
+|---|---|---|---|---|
+| all queries (1.1) | 100 | 0.4038 | 0.5848 | +0.1811 |
+| ADR queries on a shared 1022 target | 39 | 0.4901 | 0.7605 | +0.2704 |
+| ADR queries on an unshared 1022 target | 36 | 0.3092 | 0.5665 | +0.2573 |
+| each 1022 target counted once | 74 targets | 0.3973 | 0.5629 | +0.1656 |
+
+Counted once per target, chunk1022 higher on 34 targets, chunk254 higher on 11, tied on 29. Counted
+that way, 1022 still clears the G4 floor and 254 stays below it. Grade: arithmetic on MEASURED
+per-query scores (`scores-chunk{254,1022}.json`).
+
+This does not remove a related effect. A 1022 chunk is larger, so hash-level gold gives a merged
+chunk credit for every section it holds. That granularity is part of the budget treatment, and it
+is one reason the blind grader (1.3) stays a separate instrument. INFERRED.
+
 ---
 
 ## 2. WebGPU footprint at 1022 (SCRATCH-RUN)
@@ -285,6 +320,7 @@ that diff; see the spot audit). The copy is the FALLBACK-converged pin `d23ee28e
 | E026 anchor drift | family-first-match picks the merged Context+Decision-1 chunk | re-anchor note, Known drift; `docs/work/2026-09-30-254-vs-1022-retrieval-ab.md` 5(d) | MEASURED |
 | P3 legacy parity | skip with a copy-conditioned reason; no copy both generators process exists | re-anchor note, Decision 3 | MEASURED |
 | hermes markers | 25/25 resolve to exactly one row | re-anchor note, Decision 2 | MEASURED |
+| shared targets | 100 queries on 74 distinct chunks; 21 merged chunks carry 47 queries, each declared in `header.sharedTargets` | eval-set-100.json header; section 1.6 | MEASURED |
 
 The re-anchor is generator output, not hand edits; a fresh generator run is byte-identical. The
 rowid stability behind `ORDER BY chunk_index` ties is a HYPOTHESIS in the source note.

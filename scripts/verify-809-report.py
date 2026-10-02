@@ -11,6 +11,8 @@ mismatch. Classes:
   F  refusal  pass-1/pass-2 windows vs quiet.log and the probe loop; convergence vs the pin json
   A  ab       objective means, regressions, floor, paired, blind vs metrics.json/paired.json/blind
   E  eval     query/field change counts vs the pre-rebase commit; hashes resolve in the pinned copy
+  D  shared   duplicate 1022 targets are the declared ones, the corpus is the scored anchor set,
+              and the shared-vs-unshared and per-target A/B views match the report
 
 Usage: python3 scripts/verify-809-report.py [--raw-rechunk-root DIR] [--self-test]
 
@@ -473,6 +475,67 @@ def check_eval(root: Path, ck: Checker) -> None:
         ck.info("copy-db", f"pinned copy not on disk ({copy_db}); resolution check skipped")
 
 
+def check_shared_targets(root: Path, ck: Checker) -> None:
+    ck.start("D", "shared 1022 targets: declared, scored as committed, and their effect on the A/B")
+    docs = {"report": read_text(root, REPORT), "record": read_text(root, AB_RECORD)}
+    corpus = json.loads((root / EVAL_SET).read_text())
+
+    def carried(needle: str) -> None:
+        for name, text in docs.items():
+            ck.contains(f"{name}-number", text, needle)
+    queries = corpus["queries"]
+    groups: dict[str, list[str]] = collections.defaultdict(list)
+    for q in queries:
+        groups[q["expectedHash"]].append(q["id"])
+    shared = {h: ids for h, ids in groups.items() if len(ids) > 1}
+    declared = {t["expectedHash"]: t["ids"] for t in corpus["header"].get("sharedTargets", [])}
+    ck.eq("distinct-targets", 74, len(groups))
+    ck.eq("shared-groups", 21, len(shared))
+    ck.eq("undeclared-or-stale-shares", [],
+          sorted(ids for h, ids in (shared | declared).items()
+                 if shared.get(h) != declared.get(h)))
+
+    # The corpus is the arm-1022 anchor set that was scored: for every query whose two top-8
+    # lists share no hash, paired.json's backfill list is arm-1022's full ranked top-8, so the
+    # anchor's position there must equal the committed first relevant rank.
+    paired = json.loads(read_text(root, f"{AB_DIR}/paired.json"))["perQuery"]
+    scores = {arm: json.loads(read_text(root, f"{AB_DIR}/scores-chunk{arm}.json"))["perQuery"]
+              for arm in ("254", "1022")}
+    mismatched, checked = [], 0
+    for q in queries:
+        pair = paired[q["id"]]
+        if pair["top8SetOverlapCount"]:
+            continue
+        ranked = [hit["hash"] for hit in pair["backfill"]][:5]
+        position = ranked.index(q["expectedHash"]) + 1 if q["expectedHash"] in ranked else None
+        checked += 1
+        if position != scores["1022"][q["id"]]["perRepeat"][0]["first_relevant_rank"]:
+            mismatched.append(q["id"])
+    ck.eq("corpus-is-scored-anchor-set", (82, []), (checked, mismatched))
+
+    def mean(ids: list[str], arm: str) -> float:
+        return sum(scores[arm][i]["meanNdcg5"] for i in ids) / len(ids)
+
+    adr = [q["id"] for q in queries if not q["nonFileTarget"]]
+    shared_ids = {i for ids in shared.values() for i in ids}
+    rows = (
+        ("ADR queries on a shared 1022 target", [i for i in adr if i in shared_ids], 39),
+        ("ADR queries on an unshared 1022 target", [i for i in adr if i not in shared_ids], 36),
+    )
+    for label, ids, count in rows:
+        ck.eq(f"subset-size {label}", count, len(ids))
+        a, b = mean(ids, "254"), mean(ids, "1022")
+        carried(f"| {label} | {count} | {a:.4f} | {b:.4f} | {b - a:+.4f} |")
+    targets = list(groups.values())
+    a = sum(mean(ids, "254") for ids in targets) / len(targets)
+    b = sum(mean(ids, "1022") for ids in targets) / len(targets)
+    carried(f"| each 1022 target counted once | 74 targets | {a:.4f} | {b:.4f} | {b - a:+.4f} |")
+    higher = sum(1 for ids in targets if mean(ids, "1022") > mean(ids, "254"))
+    lower = sum(1 for ids in targets if mean(ids, "1022") < mean(ids, "254"))
+    carried(f"chunk1022 higher on {higher} targets, chunk254 higher on {lower}, "
+            f"tied on {len(targets) - higher - lower}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw-rechunk-root",
@@ -503,6 +566,7 @@ def main(argv: list[str] | None = None) -> int:
     check_rechunk(root, ck, Path(args.raw_rechunk_root))
     check_ab(root, ck)
     check_eval(root, ck)
+    check_shared_targets(root, ck)
     print(f"== SUMMARY: {ck.passed} passed, {len(ck.failures)} failed")
     if ck.failures:
         print("FAILURES: " + ", ".join(ck.failures))

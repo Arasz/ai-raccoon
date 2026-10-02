@@ -108,6 +108,13 @@ Command: `python3 scripts/retrieval_tuning/build_eval_corpus.py --copy <COPY1022
   artifact (determinism test, twice per run).
 - 100/100 `expectedHash` values resolve to exactly one copy row (`_check_hash_unique` inside
   `generate`), and 25/25 non-file markers resolve to exactly one row.
+- Unique per row is not unique per query: the 100 queries sit on 74 distinct chunks. 21 chunks
+  carry 47 queries. 17 are ADR chunks whose composite label holds every member's family (the 1022
+  chunker merged those sections), and 4 are shared-tier rows that hold two markers each. Added
+  after review: the generator writes each group and its reason to `header.sharedTargets`, raises
+  on a shared ADR chunk whose label lacks a member's family, and the corpus tests fail on any
+  undeclared share. No query field changed. Effect on the A/B:
+  `docs/work/2026-09-30-254-vs-1022-retrieval-ab.md` 4.7.
 - `project-corpus-100.json` is deliberately untouched (stays on `cb99fe6e`, the granite golden
   pairing), so the refresh wrapper's honest end state is exit 2: eval-set `OK,
   committed-match=True`, project-corpus `SNAPSHOT-MISMATCH`.
@@ -125,6 +132,9 @@ Command: `python3 scripts/retrieval_tuning/build_eval_corpus.py --copy <COPY1022
   legacy-debris pin needs its own deliberate re-measure.
 - **Re-pinning `project-corpus-100.json`**: the A/B's granite golden pairing requires it to
   stay on `cb99fe6e`.
+- **Exclusive family targets** (each family takes a chunk no sibling holds). It would move only
+  E026 to 0025's `Decision 2` chunk at 1022 while arm-254 keeps `Decision 1`, which scores the
+  arms against different sections. Every other merged group has no alternative chunk to move to.
 
 ## Host overlap and grades
 
