@@ -3,6 +3,7 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
+using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -65,10 +66,8 @@ public sealed class VacuumJob(Func<SqliteConnection, CancellationToken, Task<Tim
             return;
         }
 
-        var raw = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = @key",
-                new { key = BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal },
-                cancellationToken: cancellationToken));
+        var raw = await connection.ReadSettingAsync(BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal,
+            cancellationToken);
         _resolved = raw is null ? null : TimeSpan.FromDays(BankMaintenanceConfigKeys.ParseVacuumIntervalDays(raw));
     }
 }
@@ -161,9 +160,7 @@ public sealed class MetricsRetentionJob(TimeProvider timeProvider) : IMaintenanc
     private static async Task<int> ReadRetentionDaysAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
     {
-        var raw = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = @key",
-                new { key = MetricsConfigKeys.RetentionDaysGlobal }, cancellationToken: cancellationToken));
+        var raw = await connection.ReadSettingAsync(MetricsConfigKeys.RetentionDaysGlobal, cancellationToken);
         return MetricsConfigKeys.ParseRetentionDays(raw);
     }
 }
