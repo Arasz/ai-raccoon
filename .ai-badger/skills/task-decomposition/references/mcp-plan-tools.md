@@ -141,7 +141,9 @@ uv run --script .ai-badger/skills/task-decomposition/scripts/jev_choice.py plan.
 ```
 
 It never blocks the plan: with the flags off it prints `{"status": "off"}` and touches no
-network, and a failed call leaves the deterministic result standing. Tier proposals are
+network, and a failed call leaves the deterministic result standing. OpenRouter's endpoint
+also needs `AI_BADGER_ALLOW_THIRD_PARTY=1` and no `dataPolicy` lock; a loopback
+`AI_BADGER_JEV_ENDPOINT` does not (see `decomposition-method.md`). Tier proposals are
 upgrades only; wave hints only add serialization. `references/decomposition-method.md`
 explains how to fold them into the plan.
 

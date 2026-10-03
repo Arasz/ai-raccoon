@@ -230,6 +230,7 @@ from skill_delivery import SkillDelivery, prune_namespaces, relink_hermes_skills
 from skills_argv import resolve_requested_skills  # noqa: E402
 from superseded_prune import SupersededPrune  # noqa: E402
 from project_id import mint_project_id  # noqa: E402
+from config_writer import write_config  # noqa: E402
 from local_invariants import append_rendered  # noqa: E402
 from model_registry import deliver as deliver_model_registry  # noqa: E402
 from gitignore_block import gitignore_managed_block, merge_gitignore, write_gitignore_block  # noqa
@@ -738,9 +739,8 @@ class Scaffolder:
         self._record_progress("hooks")
         plugin_cmds = self.install_plugins()
         dep_result = self._check_dependencies()
-        written_config = dict(self.config)
-        written_config["frameworkVersion"] = self.index["frameworkVersion"]
-        bl.dump_json(self.aib / "config.json", written_config)
+        written_config = write_config(self.aib, self.config, self.index["frameworkVersion"],
+                                      self.notes, self.root)
         self.mcp.generate_mcp_json()
         self._record_progress("config-and-mcp")
         project_servers, user_servers = self.mcp.split_servers_by_scope(

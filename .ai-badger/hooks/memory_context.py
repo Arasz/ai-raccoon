@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional
+from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Tuple
 
 ENV_NAMES = (
     "AI_BADGER_PROJECT_ID",
@@ -27,6 +27,11 @@ ENV_NAMES = (
     "AI_BADGER_MEMORY_CONTEXT_PLANNER_MODEL",
     "AI_BADGER_MEMORY_CONTEXT_TEST_OPENROUTER_BASE",
     "OPENROUTER_API_KEY",
+    "AI_BADGER_ALLOW_THIRD_PARTY",
+    "https_proxy",
+    "HTTPS_PROXY",
+    "no_proxy",
+    "NO_PROXY",
 )
 KILL_SWITCH = "AI_BADGER_MEMORY_CONTEXT"
 PIPELINE_SWITCH = "AI_BADGER_MEMORY_CONTEXT_PIPELINE"
@@ -59,6 +64,18 @@ CLIENT_INFO = {"name": "ai-badger-memory-context", "version": "1"}
 # ------------------------------------------------------------------ pure core
 
 CONTROL_WORDS = frozenset({"stop", "continue", "exit", "quit", "clear", "help", "ping"})
+
+# Turns a harness writes, not a person: a prompt starting with one is never searched.
+INJECTED_PREFIXES = (
+    "<task-notification>",
+    "<agent-message from=",
+    "<cross-session-message from=",
+    "[Cross-session idle notice]",
+    "[SYSTEM NOTIFICATION",
+    "Another Claude session sent a message:",
+    "[Subagent hand-back]",
+    "<system-reminder>",
+)
 
 NOISE_WORDS = frozenset({
     "the", "and", "for", "are", "but", "not", "you", "all", "any", "can",
@@ -100,11 +117,38 @@ def unique_long_words(text: str) -> set:
             if len(token) >= 3 and token not in NOISE_WORDS}
 
 
+REMINDER_OPEN, REMINDER_CLOSE = "<system-reminder>", "</system-reminder>"
+
+
+def without_reminders(prompt: str) -> str:
+    """*prompt* trimmed, minus leading closed `<system-reminder>` blocks; "" when one is unclosed."""
+    text = js_trim(prompt or "")
+    while text.startswith(REMINDER_OPEN):
+        end = text.find(REMINDER_CLOSE)
+        if end == -1:
+            return ""
+        text = js_trim(text[end + len(REMINDER_CLOSE):])
+    return text
+
+
+def injected_turn(prompt: str) -> bool:
+    """True when *prompt* is harness-written: only reminder blocks, or, after them, text that
+    starts with one of `INJECTED_PREFIXES`."""
+    if not js_trim(prompt or ""):
+        return False
+    text = without_reminders(prompt)
+    return not text or text.startswith(INJECTED_PREFIXES)
+
+
 def should_enrich(prompt: str, min_chars: int = 20, min_words: int = 6) -> Decision:
-    """pi's `shouldEnrich` without the `/skill:` rules: every leading `/` is a command."""
+    """pi's `shouldEnrich` without the `/skill:` rules (every leading `/` is a command), plus an
+    `injected-turn` skip for harness-written turns, which pi never receives."""
     text = js_trim(prompt or "")
     if not text:
         return Decision(False, "empty", "", 0)
+    if injected_turn(text):
+        return Decision(False, "injected-turn", "", 0)
+    text = without_reminders(text)
     if text.lower() in CONTROL_WORDS:
         return Decision(False, "control-word", "", 0)
     if text.startswith("/"):
@@ -542,6 +586,32 @@ def _project_id(cwd: str, env: Mapping[str, str]) -> Optional[str]:
     return found.strip() if isinstance(found, str) and found.strip() else None
 
 
+def _override(env: Mapping[str, str]) -> Optional[str]:
+    """`AI_BADGER_PROJECT_ID` stripped, from *env* else the process env (where the store's
+    resolution falls back to); None when both are blank or unset."""
+    for value in (env.get(PROJECT_ID_ENV), os.environ.get(PROJECT_ID_ENV)):
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
+def _walked_id(cwd: str) -> Tuple[Optional[str], str]:
+    """The id in the nearest `.ai-badger/project-id` above *cwd* (never the override) and, when
+    there is none, why: `store-unavailable`, `no-file`, or `unreadable` (a read error or a blank
+    file); `differs` when an id was found, for the caller to report if it does not match."""
+    store = load_badger_store()
+    if store is None:
+        return None, "store-unavailable"
+    found = store._nearest_project_id_file(cwd)  # pylint: disable=protected-access
+    if found is None:
+        return None, "no-file"
+    try:
+        walked = found.read_text(encoding="utf-8").strip()
+    except (OSError, ValueError):
+        return None, "unreadable"
+    return (walked, "differs") if walked else (None, "unreadable")
+
+
 def resolver_path() -> Optional[Path]:
     """The one `model_groups.py` this layout may load: the task skill's in the skill layout,
     a flat sibling otherwise; None when it is absent or resolves elsewhere."""
@@ -602,9 +672,14 @@ def stage_limits(total: float) -> tuple:
     return (total, PLANNER_SECONDS * scale, SEARCH_SECONDS * scale, SCORE_SECONDS * scale)
 
 
-def pipeline_for(env: Mapping[str, str], cwd: str, limits: Any) -> Optional[Pipeline]:
-    """The pipeline when the switch is not `"0"`, the key is set and every sibling loads;
-    *limits* is `(total, planner, search, score)`, pi's when None."""
+def pipeline_for(env: Mapping[str, str], cwd: str, limits: Any, *,
+                 on_error: Optional[Callable[[str], None]] = None) -> Optional[Pipeline]:
+    """The pipeline when the switch is not `"0"`, the key is set, every sibling loads, a set
+    `AI_BADGER_PROJECT_ID` names the project *cwd* walks to, and the client's egress rule admits the
+    base and its proxy; *limits* is `(total, planner, search, score)`. An opted-in refusal is
+    handed to *on_error* once: a refusal names the config that denies the base (`bad-base` when no
+    lock does), a project-id mismatch names why but neither id, and a refused proxy names only its
+    cause."""
     if env.get(PIPELINE_SWITCH) == "0":
         return None
     try:
@@ -616,16 +691,55 @@ def pipeline_for(env: Mapping[str, str], cwd: str, limits: Any) -> Optional[Pipe
         if key is None:
             return None
         base = client.api_base(env, key)
+        if base is None:
+            return None
+        override = _override(env)
+        if override is not None:
+            walked, why = _walked_id(cwd)
+            if override != walked:
+                if client.opted_in(env):
+                    _report(f"memory_context.project-id-mismatch: {why}", on_error)
+                return None
+        if not client.egress_allowed(base, env, cwd):
+            if client.opted_in(env):
+                lock = client.denying_lock(base, cwd)
+                reason = lock.reason() if lock is not None else "bad-base"
+                _report("memory_context.egress-refused " + reason, on_error)
+            return None
+        cause = _proxy_refusal(client, base, env)
+        if cause is not None:
+            _report(f"memory_context.proxy-refused: {cause}", on_error)
+            return None
         model = planner_model(env, cwd, stages)
         limits = stages.Limits(*(limits or stage_limits(PIPELINE_TOTAL_SECONDS)))
+        post = functools.partial(client.post_json, env=env, cwd=cwd)
         return Pipeline(
             stages,
-            functools.partial(stages.plan, post=client.post_json, base=base, key=key,
-                              model=model),
-            functools.partial(stages.score, post=client.post_json, base=base, key=key),
+            functools.partial(stages.plan, post=post, base=base, key=key, model=model),
+            functools.partial(stages.score, post=post, base=base, key=key),
             limits)
     except Exception:  # pylint: disable=broad-exception-caught
+        _report("memory_context.pipeline_for", on_error)
         return None
+
+
+def _proxy_refusal(client: Any, base: str, env: Mapping[str, str]) -> Optional[str]:
+    """`malformed` or `unsupported` when the client refuses the proxy *env* names for *base*."""
+    try:
+        client.proxy_for(base, env)
+    except ValueError as err:
+        return getattr(err, "cause", client.MALFORMED)
+    return None
+
+
+def _report_proxy_faults(env: Mapping[str, str],
+                         on_error: Optional[Callable[[str], None]]) -> None:
+    """Drain the client's proxy fault tokens; when opted in, hand each to *on_error* once."""
+    client = _load_sibling("openrouter_client")
+    faults = client.take_proxy_faults() if client is not None else set()
+    if faults and client.opted_in(env):
+        for token in sorted(faults):
+            _report(f"memory_context.proxy-refused: {token}", on_error)
 
 
 # Failures a working install meets (no proxy, a dead pipe, a timeout) stay silent; any other
@@ -652,8 +766,8 @@ def build(prompt: str, cwd: str, session_id: Optional[str], *,
     """The memory-context block for *prompt*, or None; never raises, and returns within the
     budget plus the proxy reap.
 
-    With a key and the pipeline switch not `"0"`, runs the query pipeline (stage *limits*,
-    pi's by default) over one proxy session; otherwise one search on the prompt. An exception
+    With a key, the pipeline switch not `"0"` and egress allowed (`pipeline_for`), runs the query
+    pipeline over one proxy session; otherwise one search on the prompt. An exception
     outside `EXPECTED_ERRORS` is handed to *on_error* (called inside the handler) once.
     """
     try:
@@ -669,7 +783,7 @@ def build(prompt: str, cwd: str, session_id: Optional[str], *,
         exe = find_executable(env, home if home is not None else env.get("HOME"))
         if exe is None:
             return None
-        pipeline = pipeline_for(env, cwd, limits)
+        pipeline = pipeline_for(env, cwd, limits, on_error=on_error)
         if budget is not None:
             run_budget = budget
         else:
@@ -681,6 +795,7 @@ def build(prompt: str, cwd: str, session_id: Optional[str], *,
         try:
             if pipeline:
                 mem, code = pipeline.run(decision.query, session, run_budget)
+                _report_proxy_faults(env, on_error)
             else:
                 found = session.search(decision.query, run_budget)
                 mem, code = found if found else ([], [])

@@ -1,6 +1,6 @@
 # Delegation map — AiRaccoon
 
-> Scaffolded by ai-badger 0.184.1. Regenerated on every scaffold; do not edit.
+> Scaffolded by ai-badger 0.187.1. Regenerated on every scaffold; do not edit.
 
 ## Stacks
 

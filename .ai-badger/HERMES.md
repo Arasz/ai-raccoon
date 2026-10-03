@@ -4,7 +4,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon, changelog
-> Scaffolded by ai-badger 0.184.1. Source of truth for this file: `.ai-badger/HERMES.md`.
+> Scaffolded by ai-badger 0.187.1. Source of truth for this file: `.ai-badger/HERMES.md`.
 
 ## Commands
 
@@ -113,6 +113,7 @@ Browser automation over accessibility snapshots: `browser_navigate`, then `brows
 element refs, then `browser_click`/`browser_type` on those refs. Each tool's own description
 covers the rest.
 
+<!-- task-graph MCP tools -->
 ## MCP Tools: task-graph
 
 `task-graph` owns the decomposed task plan — a DAG of `step`s carrying status, acceptance criteria and evidence, persisted beside the task tracker in the project's `tracking.db`.

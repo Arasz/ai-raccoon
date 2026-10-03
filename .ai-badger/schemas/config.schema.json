@@ -286,6 +286,39 @@
           "description": "Wire the capture wrapper into .claude/settings.json. Off by default: statusLine is a personal setting and a project-level entry overrides the user's own."
         }
       }
+    },
+    "dataPolicy": {
+      "description": "Lock this project to loopback-only model calls: ai-badger's OpenRouter client sends no prompt, plan, memory or code to a non-loopback host even when AI_BADGER_ALLOW_THIRD_PARTY=1. The key's presence locks, in this directory and every directory below it; any other value, or a config that cannot be read, also locks (fail closed). The object form relaxes the lock for the https hosts in allowHosts, and only for a session that opted in; nested locks allow only the hosts every one of them lists, and a malformed list allows none while the config still locks.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "local-only"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "allowHosts"
+          ],
+          "properties": {
+            "mode": {
+              "const": "local-only"
+            },
+            "allowHosts": {
+              "type": "array",
+              "uniqueItems": true,
+              "description": "Exact host names (no wildcard, port, scheme or path; at least one dot; a last label that starts with a letter, so no IP address) a session opted in with AI_BADGER_ALLOW_THIRD_PARTY=1 may reach over https from this locked project. Matching ignores case, a trailing dot and the URL's port.",
+              "items": {
+                "type": "string",
+                "pattern": "^(?!.*\\n)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.?$"
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
