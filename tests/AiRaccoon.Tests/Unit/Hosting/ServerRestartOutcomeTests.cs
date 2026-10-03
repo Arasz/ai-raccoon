@@ -134,7 +134,8 @@ public sealed class ServerRestartOutcomeTests : IDisposable
 
         prover ??= new FakeIdentityProver();
         var http = new StubHttp(identify, new ServerInfo(name, Version, Pid, new OtlpInfo(false, null, null)), shutdown);
-        var restart = new ServerRestart(probe, http, TimeSpan.FromMilliseconds(300), TimeProvider.System, prover,
+        prover.Channel = http;
+        var restart = new ServerRestart(probe, TimeSpan.FromMilliseconds(300), TimeProvider.System, prover,
             NullLogger<ServerRestart>.Instance);
 
         var result = await restart.CycleAsync(Port, tokenFile, TestContext.Current.CancellationToken);
@@ -156,14 +157,12 @@ public sealed class ServerRestartOutcomeTests : IDisposable
         public Task<ProbeVerdict> ProbeAsync(Uri endpoint, CancellationToken ctx) => throw new NotSupportedException();
     }
 
-    /// <summary>The server side of /observability and /shutdown; a null shutdown status drops the connection.</summary>
-    private sealed class StubHttp(HttpStatusCode identify, ServerInfo info, HttpStatusCode? shutdown) : HttpMessageHandler, IHttpClientFactory
+    /// <summary>The server side of /observability and /shutdown, reached only through the proven channel; a null shutdown status drops the connection.</summary>
+    private sealed class StubHttp(HttpStatusCode identify, ServerInfo info, HttpStatusCode? shutdown) : HttpMessageHandler
     {
         public List<string> Requests { get; } = [];
 
         public string? ShutdownToken { get; private set; }
-
-        public HttpClient CreateClient(string name) => new(this, disposeHandler: false);
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {

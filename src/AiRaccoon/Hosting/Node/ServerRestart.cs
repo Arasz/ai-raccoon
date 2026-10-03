@@ -11,7 +11,8 @@ namespace AiRaccoon.Hosting.Node;
 ///     Cycles the ai-raccoon server on a loopback port for `serve --restart` (ADR-0022): prove it
 ///     holds this root's identity key (ADR-0106), identify it, ask it to stop over the token-guarded
 ///     /shutdown, then wait for the port to free. Never signals or kills a process. Nothing but the
-///     probe and the challenge reaches a listener before it proves (D5).
+///     probe and the challenge reaches a listener before it proves (D5), and everything after the
+///     proof rides the connection it proved on.
 /// </summary>
 public sealed partial class ServerRestart : IServerRestart
 {
@@ -38,17 +39,15 @@ public sealed partial class ServerRestart : IServerRestart
 
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger _logger;
     private readonly TimeSpan _portFreeWithin;
     private readonly IIdentityProver _prover;
     private readonly IServerProbe _probe;
     private readonly TimeProvider _timeProvider;
 
-    public ServerRestart(IServerProbe probe, IHttpClientFactory httpClientFactory, TimeSpan portFreeWithin, TimeProvider timeProvider, IIdentityProver prover, ILogger<ServerRestart> logger)
+    public ServerRestart(IServerProbe probe, TimeSpan portFreeWithin, TimeProvider timeProvider, IIdentityProver prover, ILogger<ServerRestart> logger)
     {
         _probe = probe;
-        _httpClientFactory = httpClientFactory;
         _logger = logger;
         _portFreeWithin = portFreeWithin;
         _timeProvider = timeProvider;
@@ -61,26 +60,6 @@ public sealed partial class ServerRestart : IServerRestart
     {
         Guard.IsNotNull(tokenFile);
 
-        if (await SettleBeforeIdentifyAsync(port, ctx) is { } settled)
-        {
-            return settled;
-        }
-
-        if (await IdentifyAsync(port, ctx) is not { Name: ServerInfo.ServerName } info)
-        {
-            Log.Foreign(_logger, port);
-            return new RestartResult(RestartOutcome.Foreign);
-        }
-
-        return await StopAsync(port, tokenFile, info, ctx);
-    }
-
-    /// <summary>
-    ///     The outcome when the cycle ends before anything is asked of the listener — nothing there,
-    ///     no answer, or no proof of this root's key; null once a listener answered and proved.
-    /// </summary>
-    private async Task<RestartResult?> SettleBeforeIdentifyAsync(int port, CancellationToken ctx)
-    {
         if (RestartTransition.FromProbe(await _probe.ProbeAsync(port, ctx)) is { } settled)
         {
             if (settled is RestartOutcome.Unknown)
@@ -92,18 +71,26 @@ public sealed partial class ServerRestart : IServerRestart
         }
 
         // ADR-0106 D5: an unproven listener receives only the probe and the challenge. The proof
-        // comes first, so the identify read, the token read and the shutdown all wait for it.
-        if (await _prover.ProveAsync(ServerProbe.EndpointFor(port), ctx) is { } failure)
+        // comes first, and the identify read and the shutdown ride the connection it proved on,
+        // so a server that lets go of the port in between takes the token's only route with it.
+        using var channel = await _prover.ProveChannelAsync(ServerProbe.EndpointFor(port), ctx);
+        if (channel.Client is not { } proven)
         {
-            Log.Unproven(_logger, port, failure);
-            return new RestartResult(RestartOutcome.Unproven, Reason: failure);
+            Log.Unproven(_logger, port, channel.Failure);
+            return new RestartResult(RestartOutcome.Unproven, Reason: channel.Failure);
         }
 
-        return null;
+        if (await IdentifyAsync(proven, port, ctx) is not { Name: ServerInfo.ServerName } info)
+        {
+            Log.Foreign(_logger, port);
+            return new RestartResult(RestartOutcome.Foreign);
+        }
+
+        return await StopAsync(proven, port, tokenFile, info, ctx);
     }
 
     /// <summary>Asks the identified server to stop with the token and waits for its port to free; reports NoToken when there is no token to send.</summary>
-    private async Task<RestartResult> StopAsync(int port, McpTokenFile tokenFile, ServerInfo info, CancellationToken ctx)
+    private async Task<RestartResult> StopAsync(HttpClient proven, int port, McpTokenFile tokenFile, ServerInfo info, CancellationToken ctx)
     {
         var found = new RestartResult(RestartOutcome.Stopped, info.Pid, info.Version);
         if (tokenFile.Read() is not { } token)
@@ -112,7 +99,7 @@ public sealed partial class ServerRestart : IServerRestart
         }
 
         Log.Stopping(_logger, port, info.Pid, info.Version ?? UnknownVersion);
-        var status = await RequestShutdownAsync(port, token, ctx);
+        var status = await RequestShutdownAsync(proven, port, token, ctx);
         switch (status)
         {
             case HttpStatusCode.Unauthorized:
@@ -134,17 +121,19 @@ public sealed partial class ServerRestart : IServerRestart
     }
 
     /// <summary>The server's own account of itself, or null when the listener will not identify.</summary>
-    private async Task<ServerInfo?> IdentifyAsync(int port, CancellationToken ctx)
+    private static async Task<ServerInfo?> IdentifyAsync(HttpClient proven, int port, CancellationToken ctx)
     {
         try
         {
-            using var response = await _httpClientFactory.CreateClient(nameof(ServerRestart)).GetAsync($"{BaseUrl}:{port}/observability", ctx);
+            using var bound = CancellationTokenSource.CreateLinkedTokenSource(ctx);
+            bound.CancelAfter(RequestTimeout);
+            using var response = await proven.GetAsync($"{BaseUrl}:{port}/observability", bound.Token);
             if (!response.IsSuccessStatusCode)
             {
                 return null;
             }
 
-            return await response.Content.ReadFromJsonAsync<ServerInfo>(JsonOptions, ctx);
+            return await response.Content.ReadFromJsonAsync<ServerInfo>(JsonOptions, bound.Token);
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException
                                        or OperationCanceledException && !ctx.IsCancellationRequested)
@@ -155,16 +144,19 @@ public sealed partial class ServerRestart : IServerRestart
 
     /// <summary>
     ///     The status /shutdown answered. A connection that dies mid-request counts as accepted:
-    ///     the server may have gone before it could flush, and the port poll is the real verdict.
+    ///     the server may have gone before it could flush, and the port poll is the real verdict. So
+    ///     does a proven connection already closed, which is never re-dialled.
     /// </summary>
-    private async Task<HttpStatusCode> RequestShutdownAsync(int port, string token,
+    private static async Task<HttpStatusCode> RequestShutdownAsync(HttpClient proven, int port, string token,
         CancellationToken ctx)
     {
         try
         {
+            using var bound = CancellationTokenSource.CreateLinkedTokenSource(ctx);
+            bound.CancelAfter(RequestTimeout);
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}:{port}{ShutdownEndpoint.Path}");
             request.Headers.Add(McpTokenGate.HeaderName, token);
-            using var response = await _httpClientFactory.CreateClient(nameof(ServerRestart)).SendAsync(request, ctx);
+            using var response = await proven.SendAsync(request, bound.Token);
             return response.StatusCode;
         }
         catch (Exception ex) when (ex is HttpRequestException

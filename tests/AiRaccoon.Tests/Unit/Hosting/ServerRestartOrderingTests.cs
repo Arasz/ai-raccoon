@@ -18,7 +18,7 @@ namespace AiRaccoon.Tests.Unit.Hosting;
 public sealed class ServerRestartOrderingTests
 {
     private static ServerRestart Subject(IIdentityProver prover) =>
-        new(new FakeServerProbe(ProbeVerdict.Answered), new PlainHttpClientFactory(), TimeSpan.FromMilliseconds(50),
+        new(new FakeServerProbe(ProbeVerdict.Answered), TimeSpan.FromMilliseconds(50),
             TimeProvider.System, prover, NullLogger<ServerRestart>.Instance);
 
     [Fact]
@@ -43,10 +43,5 @@ public sealed class ServerRestartOrderingTests
         {
             TestData.DeleteTempRoot(dataRoot);
         }
-    }
-
-    private sealed class PlainHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new();
     }
 }

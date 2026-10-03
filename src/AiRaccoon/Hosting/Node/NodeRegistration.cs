@@ -18,13 +18,8 @@ public static class NodeRegistration
             serviceCollection.AddSingleton<IServerProbe>(sp => sp.GetRequiredService<ServerProbe>());
             serviceCollection.AddHttpClient(nameof(ObservabilityRunner)).RemoveAllLoggers().ConfigureHttpClient(client => client.Timeout = ObservabilityRunner.RequestTimeout);
             serviceCollection.AddRequiredSingleton<IObservabilityRunner, ObservabilityRunner>();
-            serviceCollection.AddHttpClient(nameof(ServerRestart))
-                .RemoveAllLoggers()
-                .ConfigurePrimaryHttpMessageHandler(_ => new SocketsHttpHandler { AllowAutoRedirect = false })
-                .ConfigureHttpClient(c => c.Timeout = ServerRestart.RequestTimeout);
             serviceCollection.AddRequiredSingleton<IServerRestart, ServerRestart>(sp => new ServerRestart(
                 sp.GetRequiredService<IServerProbe>(),
-                sp.GetRequiredService<IHttpClientFactory>(),
                 ServerRestart.PortFreeWithin,
                 sp.GetRequiredService<TimeProvider>(),
                 sp.GetRequiredService<IIdentityProver>(),
