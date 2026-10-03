@@ -114,6 +114,21 @@ public sealed class FtsQueryNormalizerTests
         plan.Expression.ShouldBe(string.Join(" OR ", words.Take(FtsQueryNormalizer.MaxOrTerms)));
     }
 
+    [Fact]
+    public void BuildPlan_FewContentWordsInALongQuery_CapsTheOrFallbackToo()
+    {
+        // Four content words padded with stopwords take the AND path; its OR fallback runs when
+        // the AND under-matches, so it carries the same cap as the long-query OR join.
+        var padding = string.Join(' ', Enumerable.Repeat("the", FtsQueryNormalizer.MaxOrTerms * 2));
+
+        var plan = FtsQueryNormalizer.BuildPlan($"apple {padding} banana cherry date");
+
+        plan.Expression.ShouldBe("apple AND banana AND cherry AND date");
+        plan.Fallback.ShouldBe(
+            "apple OR banana OR cherry OR date OR " +
+            "\"apple banana\" OR \"banana cherry\" OR \"cherry date\"");
+    }
+
     [Theory]
     [InlineData("alpha AND beta", "alpha AND beta")]
     [InlineData("alpha OR beta", "alpha AND beta")]

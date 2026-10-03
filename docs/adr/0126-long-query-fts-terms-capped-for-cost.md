@@ -38,7 +38,11 @@ and `bm25()` scores every match before `LIMIT` applies.
 
 ## Decision
 
-The long-query OR join is capped at `FtsQueryNormalizer.MaxOrTerms` = **64** terms.
+Every OR join `FtsQueryNormalizer` builds is capped at **64** terms (`SearchDefaults.MaxKeywordTerms`
+in Core, which `QueryLengthGuard`'s warning reads too). Two joins are capped: the long-query
+primary, and the OR fallback of a query with four or fewer content words. The fallback runs when
+the AND primary under-matches, so four content words in a long run of stopwords would otherwise
+still send the uncapped OR.
 
 - A query of **≤ 64 raw tokens** keeps the existing verbatim OR join, stopwords and repeats
   included. All 44 catalog queries are ≤ 10 raw tokens (ADR-0072), so every gate query takes
@@ -58,7 +62,7 @@ The cap is a **cost bound, not a quality claim**. ADR-0072's quality findings st
 
 64 was chosen on latency alone. It is the largest of the timed caps (16, 32, 48, 64, 96, 128)
 that kept every measured long query under 0.3 s. Code search shares `BuildPlan` and gets the same
-bound.
+bound on both joins.
 
 ## Consequences
 
