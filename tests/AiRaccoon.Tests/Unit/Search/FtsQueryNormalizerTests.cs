@@ -77,6 +77,43 @@ public sealed class FtsQueryNormalizerTests
         plan.Fallback.ShouldBeNull();
     }
 
+    [Fact]
+    public void BuildPlan_QueryAtTheTermCap_KeepsTheVerbatimOrJoin()
+    {
+        // Ordinary long queries keep stopwords and repeats: the cap only engages above it.
+        var words = Enumerable.Range(0, FtsQueryNormalizer.MaxOrTerms - 2).Select(i => $"w{i}");
+        var plan = FtsQueryNormalizer.BuildPlan(string.Join(' ', words.Append("the").Append("w0")));
+
+        var terms = plan.Expression.Split(" OR ");
+        terms.Length.ShouldBe(FtsQueryNormalizer.MaxOrTerms);
+        terms.ShouldContain("the");
+        terms.Count(term => term == "w0").ShouldBe(2);
+    }
+
+    [Fact]
+    public void BuildPlan_QueryOverTheTermCap_DropsStopwordsAndRepeats()
+    {
+        // A pasted dump repeats boilerplate and common words; every extra OR term costs bm25
+        // work on nearly every row, so above the cap each content word is searched once.
+        var words = Enumerable.Range(0, 10).Select(i => $"w{i}");
+        var query = string.Join(' ', Enumerable.Repeat($"the {string.Join(' ', words)} to", 8));
+
+        var plan = FtsQueryNormalizer.BuildPlan(query);
+
+        plan.Expression.ShouldBe(string.Join(" OR ", words));
+        plan.Fallback.ShouldBeNull();
+    }
+
+    [Fact]
+    public void BuildPlan_QueryOverTheTermCap_KeepsTheFirstDistinctTermsUpToTheCap()
+    {
+        var words = Enumerable.Range(0, FtsQueryNormalizer.MaxOrTerms * 3).Select(i => $"w{i}").ToList();
+
+        var plan = FtsQueryNormalizer.BuildPlan(string.Join(' ', words));
+
+        plan.Expression.ShouldBe(string.Join(" OR ", words.Take(FtsQueryNormalizer.MaxOrTerms)));
+    }
+
     [Theory]
     [InlineData("alpha AND beta", "alpha AND beta")]
     [InlineData("alpha OR beta", "alpha AND beta")]

@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Memory.QueryGuard;
 using Shouldly;
 using Xunit;
+using FtsQueryNormalizer = AiRaccoon.Infrastructure.Sqlite.Memory.FtsQueryNormalizer;
 
 namespace AiRaccoon.Tests.Unit.Memory.QueryGuard;
 
@@ -49,17 +50,17 @@ public class QueryLengthGuardTests
     }
 
     [Fact]
-    public void Evaluate_Guidance_SaysKeywordMatchingStillSeesTheWholeQuery()
+    public void Evaluate_Guidance_SaysKeywordMatchingIsCappedToo()
     {
-        // The FTS leg builds its plan from the full query text even though the embedding is
-        // trimmed (SqliteMemoryStore.SearchAsync) -- the guidance has to say so, or it misleads
-        // the caller into thinking the whole query was dropped rather than just the semantic leg.
+        // The FTS leg searches at most FtsQueryNormalizer.MaxOrTerms distinct words of a long
+        // query; the guidance names that cap so the caller knows the paste's tail is not searched.
         var query = new string('a', QueryLengthGuard.WarnThresholdChars + 1);
 
         var verdict = QueryLengthGuard.Evaluate(query);
 
         verdict.Guidance.ShouldNotBeNullOrWhiteSpace();
-        verdict.Guidance!.ShouldContain("keyword");
+        verdict.Guidance!.ShouldContain($"first {FtsQueryNormalizer.MaxOrTerms} distinct words");
+        verdict.Guidance!.ShouldNotContain("in full");
     }
 
     [Fact]
