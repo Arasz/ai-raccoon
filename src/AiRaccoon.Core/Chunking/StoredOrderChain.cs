@@ -23,8 +23,8 @@ public static class StoredOrderChain
         Guard.IsNotNull(rows);
         Guard.IsNotNull(content);
 
-        var values = rows.Select(row => Normalize(row.Value)).ToArray();
-        var occurrences = Occurrences(Normalize(content), values.Where(value => value.Length > 0));
+        var values = rows.Select(row => TextLines.NormalizeLineEndings(row.Value)).ToArray();
+        var occurrences = Occurrences(TextLines.NormalizeLineEndings(content), values.Where(value => value.Length > 0));
         var heavy = rows.Count + 1;
 
         // Max-weight chain of (row, offset) nodes, offsets strictly increasing along stored order. Each row's
@@ -58,10 +58,6 @@ public static class StoredOrderChain
 
         return rows.Where(row => !row.Reproduced && !kept.Contains(row.Id)).Select(row => row.Id).ToHashSet();
     }
-
-    /// <summary>The text as the chunkers read it: `\r\n` and lone `\r` become `\n` before any slicing.</summary>
-    private static string Normalize(string value) =>
-        value.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
     /// <summary>Every offset at which each value occurs in <paramref name="text" />, overlaps included, found in one
     /// vectorized pass over the text rather than one pass per value.</summary>

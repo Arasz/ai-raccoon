@@ -1,6 +1,5 @@
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
-using Dapper;
 
 namespace AiRaccoon.Observability;
 
@@ -17,9 +16,7 @@ public sealed partial class BankEngineReporter(ISqliteConnectionFactory factory,
         try
         {
             await using var connection = await factory.OpenBankAsync(cancellationToken);
-            var engine = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                    "SELECT value FROM settings WHERE key = @key",
-                    new { key = EmbeddingSettingsKeys.Engine }, cancellationToken: cancellationToken));
+            var engine = await connection.ReadSettingAsync(EmbeddingSettingsKeys.Engine, cancellationToken);
 
             // "unset" rather than an absent line: a bank whose engine was never configured is the
             // case that produced the drift (ADR-0063), and silence would read as nothing to report.

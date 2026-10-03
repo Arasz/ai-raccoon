@@ -88,6 +88,16 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         return connection;
     }
 
+    private static async Task<SqliteConnection> OpenBankWithoutSettingsAsync(CancellationToken cancellationToken)
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        await using var create = connection.CreateCommand();
+        create.CommandText = "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)";
+        await create.ExecuteNonQueryAsync(cancellationToken);
+        return connection;
+    }
+
     private static IFileTypeMatcher Matcher() => new FileTypeMatcher(
         [new MarkdownFileTypeHandler(new MarkdownChunker(new TokenCount(new O200kTokenizer().CountTokens)))]);
 
@@ -146,5 +156,40 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         budget.CountTokens("The quick brown fox jumps over the lazy dog.")
             .ShouldBe(new O200kTokenizer().CountTokens("The quick brown fox jumps over the lazy dog."),
                 "openai counts with the same o200k proxy the ingest path's chunker-default counter uses (D9)");
+    }
+
+    /// <summary>docs/adr/0063: an unset provider chunks for the bundled local engine, in the repair family as at ingest.</summary>
+    [RetryFact]
+    public async Task BudgetAsync_UnsetProvider_ResolvesTheBundledLocalEngine()
+    {
+        await using var connection = await OpenBankWithoutSettingsAsync(TestContext.Current.CancellationToken);
+        var local = Service().ResolveChunkBudgetFor(new EmbeddingSettings("local", null, null, null));
+        const string probe = "The quick brown fox jumps over the lazy dog.";
+
+        var scanner = new ChunkPositionScanner(Matcher(), Service());
+        var scannerBudget = await scanner.BudgetAsync(connection, TestContext.Current.CancellationToken);
+        var backfill = new ChunkBackfill(Matcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
+            TimeProvider.System, Service());
+        var backfillBudget = await backfill.BudgetAsync(connection, TestContext.Current.CancellationToken);
+
+        scannerBudget.MaxTokens.ShouldBe(local);
+        backfillBudget.MaxTokens.ShouldBe(local);
+        scannerBudget.CountTokens(probe).ShouldBe(new LocalTokenizer().CountTokens(probe));
+        backfillBudget.CountTokens(probe).ShouldBe(new LocalTokenizer().CountTokens(probe));
+    }
+
+    [RetryFact]
+    public async Task ChunkBackfill_BudgetAsync_OpenAi_UsesTheO200kProxyCounter()
+    {
+        await using var connection = await OpenBankWithSettingsAsync("openai", "text-embedding-3-small",
+            TestContext.Current.CancellationToken);
+
+        var backfill = new ChunkBackfill(Matcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
+            TimeProvider.System, Service());
+        var budget = await backfill.BudgetAsync(connection, TestContext.Current.CancellationToken);
+
+        budget.MaxTokens.ShouldBe(256);
+        budget.CountTokens("The quick brown fox jumps over the lazy dog.")
+            .ShouldBe(new O200kTokenizer().CountTokens("The quick brown fox jumps over the lazy dog."));
     }
 }

@@ -340,13 +340,8 @@ public sealed partial class BankMaintenanceHostedService(
             cancellationToken);
 
     private static async Task<int> ReadIntervalAsync(SqliteConnection connection, string key,
-        Func<string?, int> parse, CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT value FROM settings WHERE key = @key LIMIT 1";
-        command.Parameters.AddWithValue("@key", key);
-        return parse(Convert.ToString(await command.ExecuteScalarAsync(cancellationToken)));
-    }
+        Func<string?, int> parse, CancellationToken cancellationToken) =>
+        parse(await connection.ReadSettingAsync(key, cancellationToken));
 
     private static partial class Log
     {
