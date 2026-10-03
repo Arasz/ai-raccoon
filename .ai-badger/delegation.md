@@ -1,6 +1,6 @@
 # Delegation map — AiRaccoon
 
-> Scaffolded by ai-badger 0.187.1. Regenerated on every scaffold; do not edit.
+> Scaffolded by ai-badger 0.187.3. Regenerated on every scaffold; do not edit.
 
 ## Stacks
 
@@ -76,6 +76,6 @@ prescriptive persona descriptions are appropriate.
 
 - `ai-raccoon` — AiRaccoon is the project memory server
 - `code-review-graph` — This project has a knowledge graph
-- `playwright` — The Playwright MCP server provides browser automation capabilities through the Model Context Protocol, enabling LLMs to interact with web pages using structured accessibility snapshots without requiring vision models
+- `playwright` — Browser automation over accessibility snapshots: browser_navigate, then browser_snapshot for element refs, then browser_click/browser_type on those refs
 - `semantica` — Semantica is the project knowledge graph
 - `task-graph` — task-graph owns the decomposed task plan — a DAG of steps carrying status, acceptance criteria and evidence, persisted beside the task tracker in the project's tracking.db
