@@ -210,24 +210,25 @@ public sealed partial class BackendSessions(
     /// <summary>
     ///     Stops every private fallback backend this proxy started, so none outlives it (owner
     ///     ruling 2026-09-22): the token-guarded /shutdown is the product's own stop path, and the
-    ///     URL is the one that child printed. The proof runs first (ADR-0106 F3): a listener that
-    ///     cannot prove it serves this root is sent nothing and reported as not stopped. A backend
-    ///     that cannot be stopped is reported and left to its idle timeout — this never kills a
-    ///     process. A shared server is never touched: it serves other clients too.
+    ///     URL is the one that child printed. The proof runs first (ADR-0106 F3) and the stop rides
+    ///     the connection it proved on, so a child that dies in between takes the token's only
+    ///     route with it: a listener that cannot prove it serves this root is sent nothing and
+    ///     reported as not stopped. A backend that cannot be stopped is reported and left to its
+    ///     idle timeout — this never kills a process. A shared server is never touched: it serves
+    ///     other clients too.
     /// </summary>
     private async ValueTask StopPrivateBackendsAsync()
     {
         foreach (var endpoint in _privateBackends)
         {
-            // F3/ADR-0106: prove before every token-bearing request, this one included. A listener
-            // that cannot prove at stop time is sent nothing and reported as not stopped.
-            if (await _prover.ProveAsync(endpoint, CancellationToken.None) is { } failure)
+            using var channel = await _prover.ProveChannelAsync(endpoint, CancellationToken.None);
+            if (channel.Client is not { } proven)
             {
-                Log.PrivateBackendNotProved(_logger, endpoint, failure);
+                Log.PrivateBackendNotProved(_logger, endpoint, channel.Failure);
                 continue;
             }
 
-            if (await RequestStopAsync(endpoint, _tokenFile.Read()))
+            if (await RequestStopAsync(endpoint, _tokenFile.Read(), proven))
             {
                 Log.PrivateBackendStopped(_logger, endpoint);
             }
@@ -239,11 +240,12 @@ public sealed partial class BackendSessions(
     }
 
     /// <summary>
-    ///     Asks the backend to stop and waits until its port is provably free. True once the
-    ///     connection is refused (ADR-0043: the one verdict that proves the port is free); false at
-    ///     the bound, or when no token can authorize the stop.
+    ///     Asks the backend to stop over <paramref name="proven" /> — the connection its proof rode —
+    ///     and waits until its port is provably free. True once the connection is refused
+    ///     (ADR-0043: the one verdict that proves the port is free); false at the bound, or when no
+    ///     token can authorize the stop.
     /// </summary>
-    private async Task<bool> RequestStopAsync(Uri endpoint, string? token)
+    private async Task<bool> RequestStopAsync(Uri endpoint, string? token, HttpClient proven)
     {
         if (token is null)
         {
@@ -255,11 +257,12 @@ public sealed partial class BackendSessions(
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, ShutdownUriFor(endpoint));
             request.Headers.Add(McpTokenGate.HeaderName, token);
-            using var response = await _httpClient.SendAsync(request, bound.Token);
+            using var response = await proven.SendAsync(request, bound.Token);
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException)
         {
-            // A backend already gone cannot answer the request; the probe below is the verdict.
+            // A backend already gone cannot answer, and a closed proven connection is never
+            // re-dialled; either way the probe below is the verdict.
         }
 
         var probe = new ServerProbe(_httpClient);

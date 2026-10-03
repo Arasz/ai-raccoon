@@ -215,6 +215,8 @@ public sealed class ProxyPrivateBackendLifetimeTests : IDisposable
     private sealed class NeverProven : IIdentityProver
     {
         public Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx) => Task.FromResult<IdentityProofFailure?>(IdentityProofFailure.BadSignature);
+
+        public Task<ProvenChannel> ProveChannelAsync(Uri endpoint, CancellationToken ctx) => Task.FromResult(ProvenChannel.NotProven(IdentityProofFailure.BadSignature));
     }
 
     /// <summary>The real launcher, noting the pid the private child reports while it is still live.</summary>

@@ -619,6 +619,8 @@ public sealed class BackendSessionsTests
             shutdown.ShouldBeGreaterThanOrEqualTo(0, $"no shutdown request was sent; log: {string.Join(", ", log)}");
             stopProof.ShouldBeGreaterThanOrEqualTo(0);
             stopProof.ShouldBeLessThan(shutdown, $"the token rode before the stop proof; log: {string.Join(", ", log)}");
+            log[shutdown].ShouldBe("channel POST /shutdown",
+                $"the stop must ride the channel the proof handed back, not a fresh connection; log: {string.Join(", ", log)}");
         }
         finally
         {
@@ -683,6 +685,11 @@ public sealed class BackendSessionsTests
             return Task.FromResult(_last);
         }
 
+        public async Task<ProvenChannel> ProveChannelAsync(Uri endpoint, CancellationToken ctx) =>
+            await ProveAsync(endpoint, ctx) is { } failure
+                ? ProvenChannel.NotProven(failure)
+                : ProvenChannel.Proven(new HttpClient(new RecordingHandler(log, "channel")));
+
         public void AnswerNext(IdentityProofFailure? next) => _pending.Enqueue(next);
     }
 
@@ -694,22 +701,29 @@ public sealed class BackendSessionsTests
             log.Add($"prove {endpoint}");
             return Task.FromResult<IdentityProofFailure?>(endpoint == squatted ? IdentityProofFailure.BadSignature : null);
         }
+
+        public async Task<ProvenChannel> ProveChannelAsync(Uri endpoint, CancellationToken ctx) =>
+            await ProveAsync(endpoint, ctx) is { } failure
+                ? ProvenChannel.NotProven(failure)
+                : ProvenChannel.Proven(new HttpClient(new RecordingHandler(log, "channel")));
     }
 
     private sealed class RecordingHttpClientFactory(List<string> log) : IHttpClientFactory
     {
-        public HttpClient CreateClient(string name) => new(new RecordingHandler(log));
+        public HttpClient CreateClient(string name) => new(new RecordingHandler(log, "http"));
     }
 
-    /// <summary>Records every request; a /shutdown is accepted, everything else is refused so the
-    /// session attempt and the post-shutdown port poll both settle immediately.</summary>
-    private sealed class RecordingHandler(List<string> log) : HttpMessageHandler
+    /// <summary>Records every request under <paramref name="route" /> — "http" for the factory's
+    /// shared client, "channel" for a proven channel — so a test sees which one carried it; a
+    /// /shutdown is accepted, everything else is refused so the session attempt and the
+    /// post-shutdown port poll both settle immediately.</summary>
+    private sealed class RecordingHandler(List<string> log, string route) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
-            log.Add($"http {request.Method} {path}");
+            log.Add($"{route} {request.Method} {path}");
             if (path.EndsWith("/shutdown", StringComparison.Ordinal))
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Accepted));
