@@ -301,8 +301,9 @@ public sealed partial class SqliteMemoryStore
             }
             catch
             {
+                // Uncancellable: a cancelled token would skip the ROLLBACK and return the pooled connection mid-transaction.
                 await connection.ExecuteAsync(
-                        new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
+                        new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
                 throw;
             }
         }
@@ -370,8 +371,9 @@ public sealed partial class SqliteMemoryStore
         }
         catch
         {
+            // Uncancellable: a cancelled token would skip the ROLLBACK and return the pooled connection mid-transaction.
             await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: cancellationToken));
+                    new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
             throw;
         }
     }
