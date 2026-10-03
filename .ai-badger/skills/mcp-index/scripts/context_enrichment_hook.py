@@ -10,8 +10,9 @@ Telemetry lands under the same `ai_badger_hooks/mcp_retrieval` component the Her
 writes (docs/retrieval.md §6), so an audit record reads the same regardless of which agent
 produced it.
 
-Silent (exit 0, no output) when: no prompt, the retrieval modules did not land, no index, nothing
-clears the coverage gate, or any internal error — a broken hook must never block a prompt.
+Silent (exit 0, no output) when: no prompt, a harness-injected turn (the memory skill's
+`injected_turn`), the retrieval modules did not land, no index, nothing clears the coverage gate,
+or any internal error — a broken hook must never block a prompt.
 """
 from __future__ import annotations
 
@@ -40,6 +41,12 @@ COMPONENT = "ai_badger_hooks/mcp_retrieval"
 # ai_badger_hooks.py's own MCP_MATCHER_MODULE_NAME lazy sibling-import.
 CONTEXT_ENRICHMENT_MODULE_NAME = "ai_badger_context_enrichment"
 
+# The memory skill's injected-turn predicate, from the sibling `ai-raccoon-memory` skill: the
+# framework and a scaffold share the `skills/<name>/scripts/` layout. Absent, nothing is skipped.
+MEMORY_CONTEXT_PATH = (Path(__file__).resolve().parents[2]
+                       / "ai-raccoon-memory" / "scripts" / "memory_context.py")
+MEMORY_CONTEXT_MODULE_NAME = "ai_badger_enrichment_memory_context"
+
 
 def _load_context_enrichment() -> Optional[Any]:
     """Import the sibling module lazily; None when the retrieval adjustment never ran.
@@ -64,6 +71,22 @@ def _load_context_enrichment() -> Optional[Any]:
         spec.loader.exec_module(module)
     except Exception:  # pylint: disable=broad-exception-caught
         sys.modules.pop(CONTEXT_ENRICHMENT_MODULE_NAME, None)
+        return None
+    return module
+
+
+def _load_memory_context() -> Optional[Any]:
+    """The sibling memory_context module, or None when that skill is absent or predates the
+    injected-turn predicate."""
+    try:
+        spec = importlib.util.spec_from_file_location(MEMORY_CONTEXT_MODULE_NAME,
+                                                      MEMORY_CONTEXT_PATH)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return None
+    if not all(callable(getattr(module, name, None))
+               for name in ("injected_turn", "without_reminders")):
         return None
     return module
 
@@ -117,6 +140,13 @@ def main() -> int:
     """Read the hook payload from stdin and emit additionalContext when something recommends."""
     payload = json.load(sys.stdin)
     _PAYLOAD.update(payload)
+    prompt = payload.get("prompt", "")
+    memory_context = _load_memory_context()
+    if prompt and memory_context is not None:
+        if memory_context.injected_turn(prompt):
+            _debug("skip", reason="injected_turn")
+            return 0
+        prompt = memory_context.without_reminders(prompt)
     context_enrichment = _load_context_enrichment()
     if context_enrichment is None:
         _debug("skip", reason="matcher_unavailable")
@@ -126,7 +156,6 @@ def main() -> int:
                else (payload.get("cwd") or None))
 
     index = context_enrichment.load_mcp_index(project)
-    prompt = payload.get("prompt", "")
     if index is None:
         if prompt:
             event = "legacy" if context_enrichment.has_legacy_unmigrated_index(project) else "absent"

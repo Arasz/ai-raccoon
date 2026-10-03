@@ -109,7 +109,8 @@ def main() -> int:
 
 
 def record_hook_failure(where: str) -> None:
-    """Leave one content-free line behind before a hook swallows an exception.
+    """Leave one content-free line behind before a hook swallows an exception, or a bare
+    notice when none is being handled.
 
     Type and location only: an exception message can quote scanned prompt text. The log path
     is resolved here, at call time, not cached at import — so it follows a redirected HOME in
@@ -118,15 +119,16 @@ def record_hook_failure(where: str) -> None:
     exc_type, _, tb = sys.exc_info()
     frame = traceback.extract_tb(tb)[-1] if tb else None
     at = f"{Path(frame.filename).name}:{frame.lineno}" if frame else "unknown"
-    name = exc_type.__name__ if exc_type else "Unknown"
-    print(f"[ai-badger] {where} hook failed: {name} at {at}", file=sys.stderr)
+    detail = f" {exc_type.__name__} at {at}" if exc_type else ""
+    print(f"[ai-badger] {where} hook failed:{detail}" if exc_type else f"[ai-badger] {where}",
+          file=sys.stderr)
     try:
         log_path = Path.home() / ".ai-badger" / "hook-errors.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         if log_path.exists() and log_path.stat().st_size > MAX_ERROR_LOG_BYTES:
             log_path.unlink()
         with log_path.open("a", encoding="utf-8") as fh:
-            fh.write(f"{datetime.now(timezone.utc).isoformat()} {where} {name} at {at}\n")
+            fh.write(f"{datetime.now(timezone.utc).isoformat()} {where}{detail}\n")
     except OSError:
         pass
 

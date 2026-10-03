@@ -662,7 +662,11 @@ def _memory_context_failed(where: str) -> None:
     exc_type, _, tb = sys.exc_info()
     frames = traceback.extract_tb(tb) if tb else []
     at = f"{Path(frames[-1].filename).name}:{frames[-1].lineno}" if frames else "unknown"
-    name = exc_type.__name__ if exc_type else "Unknown"
+    if exc_type is None:
+        logger.warning("memory context: %s", where)
+        _debug("ai_badger_hooks/memory_context", "notice", where=where)
+        return
+    name = exc_type.__name__
     logger.warning("memory context failed in %s: %s at %s", where, name, at)
     _debug("ai_badger_hooks/memory_context", "failed", where=where, error=name, at=at)
 

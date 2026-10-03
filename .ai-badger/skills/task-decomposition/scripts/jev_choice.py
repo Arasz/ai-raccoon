@@ -11,12 +11,17 @@ proposal (tier) or the safe `serialize` direction (waves).
 Parser semantics are ported from pi's `decision-router-client.ts` (`clampProbability` /
 `parseAnswer` / `parseJevResponseBody`). Nothing in the parser or the classifier raises: bodies
 become `malformed`, answers become per-question rejects, transport failures become `None`.
-The one network surface is the vendored `openrouter_client.py` beside this file; the key is
-read from the process env and appears only in the Authorization header, never in a log.
+The one network surface is the vendored `openrouter_client.py` beside this file. A loopback
+`AI_BADGER_JEV_ENDPOINT` (a local decider) always works; OpenRouter or any other remote host
+needs https and `AI_BADGER_ALLOW_THIRD_PARTY=1`, and a `dataPolicy`-locked project admits only the
+hosts its `allowHosts` lists — the client's `egress_allowed` decides. A custom endpoint
+gets only `AI_BADGER_JEV_ENDPOINT_KEY`, never the OpenRouter key; keys appear only in the
+Authorization header, never in a log.
 """
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
 import json
 import math
@@ -63,6 +68,7 @@ TIER_ENV = "AI_BADGER_JEV_TIER"
 WAVES_ENV = "AI_BADGER_JEV_WAVES"
 MODEL_ENV = "AI_BADGER_JEV_MODEL"
 ENDPOINT_ENV = "AI_BADGER_JEV_ENDPOINT"
+ENDPOINT_KEY_ENV = "AI_BADGER_JEV_ENDPOINT_KEY"
 TIMEOUT_ENV = "AI_BADGER_JEV_TIMEOUT_MS"
 TEST_BASE_ENV = client.TEST_BASE_ENV
 
@@ -297,12 +303,6 @@ def model(env: Mapping[str, str]) -> str:
     return value if isinstance(value, str) and value else MODEL_DEFAULT
 
 
-def endpoint(env: Mapping[str, str]) -> str:
-    """`AI_BADGER_JEV_ENDPOINT`, defaulting to the alpha decisions URL."""
-    value = env.get(ENDPOINT_ENV)
-    return value if isinstance(value, str) and value else ENDPOINT_DEFAULT
-
-
 def timeout_seconds(env: Mapping[str, str]) -> float:
     """Per-attempt timeout from `AI_BADGER_JEV_TIMEOUT_MS`; unset/garbage/non-positive → 8 s."""
     raw = env.get(TIMEOUT_ENV)
@@ -317,17 +317,94 @@ def timeout_seconds(env: Mapping[str, str]) -> float:
     return parsed / 1000
 
 
-def endpoint_url(env: Mapping[str, str]) -> Optional[str]:
-    """The decisions URL, or `None`; a test base must be loopback with an `sk-test-` key."""
-    key = client.api_key(env)
-    if key is None:
-        return None
-    base = client.api_base(env, key)
-    if base is None:
-        return None
-    if base != client.PRODUCTION_BASE:
-        return base + DECISIONS_PATH
-    return endpoint(env)
+Target = Tuple[str, Optional[str]]
+Refusal = Tuple[str, str]
+
+
+def _refused(code: str, reason: str) -> Tuple[None, Refusal]:
+    return None, (code, reason)
+
+
+def _custom_target(url: str, env: Mapping[str, str]) -> Tuple[Optional[Target], Optional[Refusal]]:
+    """`AI_BADGER_JEV_ENDPOINT` with its own key (empty is keyless): https, or http to loopback,
+    which egress then judges; plain http elsewhere is refused before the key is read, a dirty key
+    resolves nothing, and the OpenRouter key is never sent there."""
+    if not url.startswith(("https://", "http://")):
+        return _refused("bad-endpoint", f"bad {ENDPOINT_ENV}: https, or http to loopback only")
+    if url.startswith("http://") and not client.is_loopback(url):
+        return _refused("plaintext", f"{ENDPOINT_ENV} is plain http to a non-loopback host: "
+                                     f"use https")
+    raw = env.get(ENDPOINT_KEY_ENV)
+    if not raw:
+        return (url, None), None
+    if client._clean_key(raw) != raw:  # pylint: disable=protected-access
+        return _refused("bad-endpoint-key", f"bad {ENDPOINT_KEY_ENV}: blank, spaced or non-ASCII")
+    return (url, raw), None
+
+
+def _resolve(env: Mapping[str, str], cwd: Optional[str]
+             ) -> Tuple[Optional[Target], Optional[Refusal]]:
+    """The decisions target, or the `(code, reason)` that names why none is permitted."""
+    if TEST_BASE_ENV in env:
+        key = client.api_key(env)
+        if key is None:
+            return _refused("no-key", "no OpenRouter key: OPENROUTER_API_KEY is unset or dirty")
+        base = client.api_base(env, key)
+        if base is None:
+            return _refused("bad-test-base", f"bad {TEST_BASE_ENV}: loopback with an sk-test- key")
+        target: Target = (base + DECISIONS_PATH, key)
+    elif env.get(ENDPOINT_ENV):
+        custom, refusal = _custom_target(env[ENDPOINT_ENV], env)
+        if custom is None:
+            return None, refusal
+        target = custom
+    else:
+        key = client.api_key(env)
+        if key is None:
+            return _refused("no-key", f"no OpenRouter key: set OPENROUTER_API_KEY, or "
+                                      f"{ENDPOINT_ENV} to a loopback decider")
+        target = (ENDPOINT_DEFAULT, key)
+    if not client.egress_allowed(target[0], env, cwd or "."):
+        return None, _egress_refusal(target[0], env, cwd or ".")
+    try:
+        client.proxy_for(target[0], env)
+    except ValueError as err:
+        cause = getattr(err, "cause", client.MALFORMED)
+        return _refused(f"proxy-{cause}", f"https_proxy/HTTPS_PROXY is {cause}: use "
+                                          f"http://host:port or host:port, without credentials")
+    return target, None
+
+
+def _egress_refusal(url: str, env: Mapping[str, str], cwd: str) -> Refusal:
+    """Why `egress_allowed` refused *url*: a malformed host, no opt-in, or the lock that denies
+    its host — one with no `allowHosts`, a voided list, or a valid list that lacks the host."""
+    host = client.dialled_host(url)
+    if host is None:
+        return "bad-endpoint", f"bad {ENDPOINT_ENV}: the host to dial is ambiguous"
+    if not client.opted_in(env):
+        return "not-opted-in", (f"{client.ALLOW_ENV} is not 1 (or set {ENDPOINT_ENV} "
+                                f"to a loopback decider)")
+    lock = client.denying_lock(url, cwd)
+    if lock is None:
+        return "locked", "inconsistent lock state"
+    if lock.path is None:
+        return "locked", f"locked by {lock.cause}"
+    if lock.hosts is not None:
+        return "locked", f"{host} is not in the allowHosts of {lock.path}"
+    if lock.cause == client.POLICY:
+        return "locked", f"locked by {lock.path} (no allowHosts)"
+    return "locked", f"locked by {lock.path}: {lock.cause}"
+
+
+def endpoint_target(env: Mapping[str, str], cwd: Optional[str] = None) -> Optional[Target]:
+    """`(url, key)` for the decisions call, or `None`: the loopback test seam, else a custom
+    endpoint with its own key, else OpenRouter; a non-loopback url needs the third-party opt-in."""
+    return _resolve(env, cwd)[0]
+
+
+def endpoint_refusal(env: Mapping[str, str], cwd: Optional[str] = None) -> Optional[Refusal]:
+    """`(code, reason)` when no decisions endpoint is permitted, else `None`."""
+    return _resolve(env, cwd)[1]
 
 
 # ------------------------------------------------------------------ prompt builders (R4 §3-4)
@@ -521,7 +598,7 @@ def classify(reply: Any, spec: Mapping[str, QuestionSpec]) -> Verdict:
 
 def request_choices(body: Mapping, names: List[str], *, env: Mapping[str, str],
                     post: Optional[Callable] = None, budget: Optional[Budget] = None,
-                    clock: Callable[[], float] = time.monotonic,
+                    clock: Callable[[], float] = time.monotonic, cwd: Optional[str] = None,
                     ) -> Dict[str, Optional[ChoiceAnswer]]:
     """One decisions body, at most `ATTEMPTS` attempts, no sleep, never raises."""
     names = list(names)
@@ -529,13 +606,14 @@ def request_choices(body: Mapping, names: List[str], *, env: Mapping[str, str],
     if not names:
         return failed
     try:
-        key = client.api_key(env)
-        url = endpoint_url(env)
-        if key is None or url is None:
+        target = endpoint_target(env, cwd)
+        if target is None:
             return failed
+        url, key = target
         envelope = budget if budget is not None else Budget(timeout_seconds(env) * ATTEMPTS,
                                                             clock=clock)
-        transport = post if post is not None else client.post_json
+        transport = post if post is not None else functools.partial(
+            client.post_json, env=env, cwd=cwd or ".")
         spec = _spec_from_body(body, names)
         per_attempt = timeout_seconds(env)
         for _ in range(ATTEMPTS):
@@ -553,7 +631,8 @@ def request_choices(body: Mapping, names: List[str], *, env: Mapping[str, str],
 
 def tier_proposals(steps: Any, *, env: Mapping[str, str], post: Optional[Callable] = None,
                    clock: Callable[[], float] = time.monotonic,
-                   budget: Optional[Budget] = None) -> Dict[str, TierProposal]:
+                   budget: Optional[Budget] = None,
+                   cwd: Optional[str] = None) -> Dict[str, TierProposal]:
     """Advisory upgrades by question name; `{}` when off, nothing asked, or a call fails.
 
     One `budget` bounds every step's call when the caller threads one through; without it a
@@ -570,7 +649,7 @@ def tier_proposals(steps: Any, *, env: Mapping[str, str], post: Optional[Callabl
                 continue
             name, body = build_tier_request(step, model_id=model(env))
             answers = request_choices(body, [name], env=env, post=post, clock=clock,
-                                      budget=envelope)
+                                      budget=envelope, cwd=cwd)
             proposal = propose_tier(step, answers.get(name))
             if proposal is not None:
                 proposals[name] = proposal
@@ -582,7 +661,7 @@ def tier_proposals(steps: Any, *, env: Mapping[str, str], post: Optional[Callabl
 def wave_hints(ready: Any, *, done: Any = (), edges: Any = (), env: Mapping[str, str],
                post: Optional[Callable] = None,
                clock: Callable[[], float] = time.monotonic,
-               budget: Optional[Budget] = None) -> Dict[str, str]:
+               budget: Optional[Budget] = None, cwd: Optional[str] = None) -> Dict[str, str]:
     """Pair name -> `share-wave`/`serialize`; off returns `{}`, anything else serializes.
 
     One `budget` bounds every chunk's call when the caller threads one through; without it a
@@ -604,7 +683,7 @@ def wave_hints(ready: Any, *, done: Any = (), edges: Any = (), env: Mapping[str,
             chunk_names, body = build_wave_request(chunk, done=done, edges=edges,
                                                    model_id=chosen)
             answers = request_choices(body, chunk_names, env=env, post=post, clock=clock,
-                                      budget=envelope)
+                                      budget=envelope, cwd=cwd)
             for name in chunk_names:
                 if pair_decision(answers.get(name)) == SHARE_WAVE:
                     decisions[name] = SHARE_WAVE
@@ -705,8 +784,10 @@ def _resolve_context(document: Mapping,
 
 
 def run(document: Any, *, want_tier: bool, want_waves: bool, env: Mapping[str, str],
-        post: Optional[Callable] = None) -> Dict[str, Any]:
-    """The advisory envelope: `ok` with both proposal maps, `off` when nothing is enabled.
+        post: Optional[Callable] = None, cwd: Optional[str] = None) -> Dict[str, Any]:
+    """The advisory envelope: `ok` with both proposal maps (plus `proxy_faults` tokens when the
+    proxy failed a call), `off` with a `refusal` code and its `reason` when nothing is enabled or
+    no decisions endpoint (or its proxy) is permitted.
 
     One `Budget` covers the whole invocation, so tier and wave calls share a single deadline
     and a slow plan cannot multiply the window per chunk.
@@ -720,17 +801,28 @@ def run(document: Any, *, want_tier: bool, want_waves: bool, env: Mapping[str, s
     if not tier_on and not waves_on:
         reason = (f"{MASTER_ENV} is not set to 1" if env.get(MASTER_ENV) != "1"
                   else f"requested capabilities are off: {TIER_ENV}/{WAVES_ENV} must be 1")
-        return {"status": "off", "reason": reason, "tier_proposals": {}, "wave_hints": {}}
+        return {"status": "off", "refusal": "flags-off", "reason": reason,
+                "tier_proposals": {}, "wave_hints": {}}
+    refusal = endpoint_refusal(env, cwd)
+    if refusal is not None:
+        return {"status": "off", "refusal": refusal[0], "reason": refusal[1],
+                "tier_proposals": {}, "wave_hints": {}}
     budget = Budget(timeout_seconds(env) * ATTEMPTS)
-    proposals = (tier_proposals(steps, env=env, post=post, budget=budget)
+    client.take_proxy_faults()
+    proposals = (tier_proposals(steps, env=env, post=post, budget=budget, cwd=cwd)
                  if tier_on else {})
-    hints = (wave_hints(ready, done=done, edges=edges, env=env, post=post, budget=budget)
+    hints = (wave_hints(ready, done=done, edges=edges, env=env, post=post, budget=budget,
+                        cwd=cwd)
              if waves_on else {})
-    return {"status": "ok",
-            "tier_proposals": {name: {"level": proposal.level,
-                                      "confidence": proposal.confidence}
-                               for name, proposal in proposals.items()},
-            "wave_hints": dict(hints)}
+    payload = {"status": "ok",
+               "tier_proposals": {name: {"level": proposal.level,
+                                         "confidence": proposal.confidence}
+                                  for name, proposal in proposals.items()},
+               "wave_hints": dict(hints)}
+    faults = client.take_proxy_faults()
+    if faults:
+        payload["proxy_faults"] = sorted(faults)
+    return payload
 
 
 def _read_document(source: str) -> Any:
@@ -764,7 +856,7 @@ def main(argv=None) -> int:
     want_waves = args.waves or args.both or not chosen
     try:
         payload = run(_read_document(args.plan), want_tier=want_tier, want_waves=want_waves,
-                      env=os.environ)
+                      env=os.environ, cwd=os.getcwd())
     except Exception as exc:  # pylint: disable=broad-except  # the CLI never tracebacks
         payload = {"status": "error", "reason": f"{type(exc).__name__}: {exc}",
                    "tier_proposals": {}, "wave_hints": {}}

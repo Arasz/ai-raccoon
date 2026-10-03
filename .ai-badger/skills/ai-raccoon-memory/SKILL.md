@@ -93,7 +93,11 @@ on pi. It is POSIX only: on Windows it stays silent and spawns nothing.
 **When it fires.** Every prompt that passes pi's `shouldEnrich` gate (long enough, enough
 distinct words, not a slash command or a control word like `continue`), in a project where
 `.ai-badger/project-id` resolves and the `ai-raccoon` executable is found (`PATH` first, then
-`~/.dotnet/tools/ai-raccoon`). Each run spawns the bare `ai-raccoon` binary as a proxy, once,
+`~/.dotnet/tools/ai-raccoon`). A turn the harness wrote rather than a person (one that starts
+with a marker in `INJECTED_PREFIXES`, such as `<task-notification>`, or holds only
+`<system-reminder>` blocks) is skipped before any search or spawn. Leading reminder blocks in
+front of your own text are stripped and the rest is gated as usual; a question whose first line
+is a pasted notification is skipped for that turn. Each run spawns the bare `ai-raccoon` binary as a proxy, once,
 and sends every search over that one session. The hook never reads the ai-raccoon token; the
 proxy does the identity proof. If no serve is running, the proxy may start one, and that serve
 outlives the hook under its own idle watchdog. When hits survive pruning, the hook injects a
@@ -102,11 +106,14 @@ nothing, and the hook always exits 0. An expected failure (no proxy, a timeout, 
 reply) is silent. A missing or broken `memory_context.py`, or a defect in the hook's own
 code, leaves one line in `~/.ai-badger/hook-errors.log` naming the exception type and where it
 was raised, never the prompt; under Hermes the same line goes to Hermes's log as a warning.
+If you opted in to third-party egress and a `dataPolicy` lock refuses it, one line naming the
+locking config is written there too.
 
 **Two modes.** Both inject the same block.
 
-- *Pipeline*: runs when `OPENROUTER_API_KEY` is set and `AI_BADGER_MEMORY_CONTEXT_PIPELINE` is
-  not `"0"`. An OpenRouter model plans 2 to 6 retrieval queries, each is searched once, the
+- *Pipeline*: runs only when you opt in — `AI_BADGER_ALLOW_THIRD_PARTY=1`, `OPENROUTER_API_KEY`
+  set, `AI_BADGER_MEMORY_CONTEXT_PIPELINE` not `"0"`, and no ancestor `.ai-badger/config.json`
+  declaring `dataPolicy` (a key alone does nothing). An OpenRouter model plans 2 to 6 retrieval queries, each is searched once, the
   Jev decisions endpoint scores the pooled hits, and pi's document-aware merge keeps the best
   five. The run's total is 90 s on Claude and Copilot, split into pi's stage limits
   (planner 15 s, each search 15 s, Jev 8 s). Under Hermes the total is 25 s and the stage
@@ -119,17 +126,22 @@ was raised, never the prompt; under Hermes the same line goes to Hermes's log as
 **What leaves the machine.** Only in pipeline mode, and only to OpenRouter: the gated prompt
 (the planner's input, and its first 32 000 characters in each Jev request), and for up to 48
 pooled hits their file path, kind and a 500-character excerpt of memory *and source code*.
-The key is read from the environment only and is never logged or written anywhere. Set
-`AI_BADGER_MEMORY_CONTEXT_PIPELINE=0` to keep everything but the ai-raccoon search local.
+The key is read from the environment only and is never logged or written anywhere. Without
+the opt-in everything but the ai-raccoon search stays local; a project that commits
+`"dataPolicy": "local-only"` keeps it local whatever a developer's shell sets (its object form
+can allow named company hosts, still only with the opt-in). An exported `AI_BADGER_PROJECT_ID`
+that differs from the working directory's project id keeps the single local search. The full
+inventory is `docs/reference/data-access.md` in the ai-badger repository.
 
-**Switches.** Only the literal `"0"` counts for either switch.
+**Switches.** Only the literal `"0"` counts for the two off switches, and only `"1"` for the opt-in.
 
 | Variable | Effect |
 |---|---|
 | `AI_BADGER_MEMORY_CONTEXT=0` | Hook off: no spawn, no HTTP, no block |
 | `AI_BADGER_MEMORY_CONTEXT_PIPELINE=0` | Single search even with a key; no HTTP |
 | `AI_BADGER_MEMORY_CONTEXT_PLANNER_MODEL` | Planner model override (an OpenRouter model id) |
-| `OPENROUTER_API_KEY` | Turns the pipeline on |
+| `AI_BADGER_ALLOW_THIRD_PARTY=1` | Opts in to third-party egress (pipeline mode); must be exactly `"1"`, and a `dataPolicy` lock overrides it |
+| `OPENROUTER_API_KEY` | The pipeline's credential; does nothing without the opt-in |
 | `AI_BADGER_PROJECT_ID` | Overrides `.ai-badger/project-id`; exported globally, it routes every repo to one project |
 
 Without the override, the planner uses the `medium` tier's preferred model through the `task`
