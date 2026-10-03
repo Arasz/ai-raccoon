@@ -142,7 +142,8 @@ public sealed partial class MemoryTools(
             "a result warning names the real number when a query is long enough to hit it) — for a " +
             "long paste (a log, stack trace, test output), search its " +
             "identifying line (exception type, error code, failing test name) instead of the whole " +
-            "dump. Keyword matching still covers the query in full. When kind is code or both, the " +
+            "dump. Keyword matching covers a query of 64 words or fewer in full; a longer query is " +
+            "capped to its first 64 distinct words, stopwords dropped. When kind is code or both, the " +
             "code leg has its own, separately-sized engine window and its own trim warning — a query " +
             "trimmed for one leg may still fit the other in full.")]
         string query,
