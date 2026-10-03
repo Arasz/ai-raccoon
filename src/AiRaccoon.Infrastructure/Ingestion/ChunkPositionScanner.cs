@@ -198,25 +198,8 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
     }
 
     /// <summary>The same resolution the ingest path uses, read from the same settings (mirrors <see cref="Ingestion.ChunkBackfill" />'s BudgetAsync).</summary>
-    public async Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        var provider = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken));
-        var model = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = 'embedding.model'", cancellationToken: cancellationToken));
-        provider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
-
-        var settings = new EmbeddingSettings(provider, model, null, null);
-        var budget = embeddingService.ResolveChunkBudgetFor(settings);
-        var overlay = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, budget - 1));
-        // local counts with the engine's own tokenizer; non-local uses the same o200k proxy the
-        // ingest path's chunker-default counter uses (D9 — the repair family and the ingest path
-        // must count with the same tokenizer per engine).
-        var countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
-            ? new TokenCount(embeddingService.ResolveTokenizer(settings)!.CountTokens)
-            : new TokenCount(new O200kTokenizer().CountTokens);
-        return new ChunkBudget(budget, overlay, countTokens);
-    }
+    public Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        connection.ReadChunkBudgetAsync(embeddingService, cancellationToken);
 
     private static bool TryReadFile(string path, out string content)
     {

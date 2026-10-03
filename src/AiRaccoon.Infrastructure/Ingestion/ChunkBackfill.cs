@@ -146,25 +146,8 @@ public sealed class ChunkBackfill(
 
     /// <summary>The same resolution the ingest path uses, read from the same settings. Internal for the
     /// D9 routing tests; the resolver IS the single source of budget + counter for the repair family.</summary>
-    internal async Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        var provider = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = 'embedding.provider'", cancellationToken: cancellationToken));
-        var model = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
-                "SELECT value FROM settings WHERE key = 'embedding.model'", cancellationToken: cancellationToken));
-        provider = string.IsNullOrWhiteSpace(provider) ? "local" : provider;
-
-        var settings = new EmbeddingSettings(provider, model, null, null);
-        var budget = embeddingService.ResolveChunkBudgetFor(settings);
-        var overlay = Math.Min(ChunkingDefaults.OverlayTokens, Math.Max(0, budget - 1));
-        // local counts with the engine's own tokenizer; non-local uses the same o200k proxy the
-        // ingest path's chunker-default counter uses (D9 — the repair family and the ingest path
-        // must count with the same tokenizer per engine).
-        var countTokens = provider.Equals("local", StringComparison.OrdinalIgnoreCase)
-            ? new TokenCount(embeddingService.ResolveTokenizer(settings)!.CountTokens)
-            : new TokenCount(new O200kTokenizer().CountTokens);
-        return new ChunkBudget(budget, overlay, countTokens);
-    }
+    internal Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
+        connection.ReadChunkBudgetAsync(embeddingService, cancellationToken);
 
     /// <summary>A memory_write note — no source_file, or a citation that does not name this row's
     /// own path — chunks as markdown; a file row chunks with its extension's own handler, or the
