@@ -227,6 +227,39 @@ public sealed class McpTokenFileTests : IDisposable
         tokenFile.Read().ShouldBe(writers);
     }
 
+    /// <summary>A refusal from an earlier read in the same ensure is cleared once a later read finds
+    /// the file readable, even when that file still holds no token and the ensure comes back empty.</summary>
+    [RetryFact]
+    public async Task AReadableFile_ClearsTheRefusalAnEarlierReadLeftInTheSameEnsure()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("UnixFileMode is POSIX-only; on Windows the file inherits the data-root ACL");
+            return;
+        }
+
+        var time = new FakeTimeProvider();
+        var tokenFile = new McpTokenFile(_dataRoot, time);
+        var truncated = (await MintElsewhereAsync())[..10];
+        await File.WriteAllTextAsync(tokenFile.Path, truncated, TestContext.Current.CancellationToken);
+        File.SetUnixFileMode(tokenFile.Path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
+        File.SetLastWriteTimeUtc(tokenFile.Path, time.GetUtcNow().UtcDateTime + TimeSpan.FromMinutes(5)); // too young to heal
+
+        var ensuring = tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
+        await Task.Delay(200, TestContext.Current.CancellationToken); // first read refused; timer registers
+        tokenFile.RefusalReason.ShouldNotBeNull().ShouldContain("chmod 600");
+
+        File.SetUnixFileMode(tokenFile.Path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        time.Advance(TimeSpan.FromMilliseconds(50)); // one poll: the same file, now readable, still no token
+        await Task.Delay(200, TestContext.Current.CancellationToken);
+        time.Advance(McpTokenFile.HealAfter);
+        var ensured = await ensuring.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        ensured.ShouldBeNull();
+        tokenFile.RefusalReason.ShouldBeNull();
+        (await File.ReadAllTextAsync(tokenFile.Path, TestContext.Current.CancellationToken)).ShouldBe(truncated);
+    }
+
     /// <summary>The clobber guard without the timing: the heal's delete only fires while the file
     /// holds no token.</summary>
     [RetryFact]
