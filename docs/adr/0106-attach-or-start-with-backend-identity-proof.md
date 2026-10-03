@@ -188,8 +188,12 @@ the old server manually before running the new binary against the same root.
 ## Residuals
 
 1. **Same-uid attackers and root are out of scope** — they read the key file directly.
-2. **Post-proof TOCTOU** — the proof binds one connection; the token rides later ones. Channel binding
-   / unix sockets remain future work.
+2. **Post-proof TOCTOU** — the proof binds one connection; the token rides later ones. Narrowed for
+   the two stop paths: the dispose-time stop and `serve --restart` prove over a single-connection
+   client (`IIdentityProver.ProveChannelAsync`) and send identify and `/shutdown` on that same
+   connection, so the stop token reaches the proven server or nobody. Still open: MCP session
+   traffic (including the SDK's `DELETE /mcp` on dispose) and acquire-time attach run on pooled
+   connections. Channel binding / unix sockets remain future work for those.
 3. **DoS** — squatting the port forces every client onto the fallback; a listener that accepts and
    never answers costs the same; fallback sprawl costs a model load each; the endpoint is rate-bounded
    but unauthenticated by construction.

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -22,6 +23,14 @@ public interface IIdentityProver
     ///     frozen transcript under this root's key. Null is proven; anything else is not.
     /// </summary>
     Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx);
+
+    /// <summary>
+    ///     Proves <paramref name="endpoint" />'s listener over a connection of its own and, when it
+    ///     proves, hands that connection back: a secret-bearing request sent through
+    ///     <see cref="ProvenChannel.Client" /> reaches the listener that proved or fails — it never
+    ///     dials whoever holds the port by then.
+    /// </summary>
+    Task<ProvenChannel> ProveChannelAsync(Uri endpoint, CancellationToken ctx);
 }
 
 /// <summary>
@@ -67,7 +76,68 @@ public sealed class IdentityProver : IIdentityProver
         Guard.IsGreaterThan(_budget, TimeSpan.Zero);
     }
 
-    public async Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx)
+    public Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx) => ProveOverAsync(endpoint, _client(), ctx);
+
+    public async Task<ProvenChannel> ProveChannelAsync(Uri endpoint, CancellationToken ctx)
+    {
+        var client = SingleConnectionClient();
+        IdentityProofFailure? failure;
+        try
+        {
+            failure = await ProveOverAsync(endpoint, client, ctx);
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
+
+        if (failure is { } notProven)
+        {
+            client.Dispose();
+            return ProvenChannel.NotProven(notProven);
+        }
+
+        return ProvenChannel.Proven(client);
+    }
+
+    /// <summary>
+    ///     A client that dials once: every request rides the first connection it opened, and once
+    ///     that connection is gone the next request fails rather than reach whoever holds the port
+    ///     now. Redirects stay off, as on every client that may carry the token.
+    /// </summary>
+    private static HttpClient SingleConnectionClient()
+    {
+        var dialled = 0;
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            MaxConnectionsPerServer = 1,
+            ConnectCallback = async (context, cancellationToken) =>
+            {
+                if (Interlocked.Exchange(ref dialled, 1) == 1)
+                {
+                    throw new HttpRequestException(HttpRequestError.ConnectionError,
+                        "the proven connection is gone; a new one could reach a listener that never proved");
+                }
+
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                try
+                {
+                    await socket.ConnectAsync(context.DnsEndPoint, cancellationToken);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            }
+        };
+        return new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+    }
+
+    private async Task<IdentityProofFailure?> ProveOverAsync(Uri endpoint, HttpClient client, CancellationToken ctx)
     {
         Guard.IsNotNull(endpoint);
 
@@ -89,7 +159,7 @@ public sealed class IdentityProver : IIdentityProver
             {
                 Content = ChallengeContent(nonce, _rootFp, keyId)
             };
-            using var response = await _client().SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
                 bound.Token);
 
             return response.IsSuccessStatusCode
