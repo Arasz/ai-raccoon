@@ -4,6 +4,15 @@
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+      "id": "air-cap-long-query-fts-terms",
+      "title": "Long-query FTS OR joins capped at 64 distinct content words (ADR-0126); release 1.56.1",
+      "pr": 842,
+      "merged": true,
+      "date": "2026-10-03",
+      "hasNotes": false,
+      "summary": "A 7,259-char memory_search query OR-joined 968 raw tokens (stopwords + repeats, uncapped) and took 74 s on a 22,450-entry bank; clients cancelled at 8-15 s. FtsQueryNormalizer now keeps the verbatim OR at <=64 raw tokens (every gate query unchanged) and above that drops stopwords/repeats and keeps the first 64 distinct terms, in both the long-query primary and the <=4-content-word OR fallback (review BLOCKING). Measured ~0.3 s at 7k chars, ~0.1 s at 60k; dedup alone still 6.4 s. Cap is SearchDefaults.MaxKeywordTerms (Core), read by QueryLengthGuard's warning. ADR-0126 supersedes ADR-0072's dedup/cap rejections on cost only; quality findings stand."
+    },
+    {
       "id": "air-finish-thread-refactor-pr-series",
       "title": "Duplication-review refactor series #814-#829 landed, integration-reviewed, checklisted; follow-up fixes #831-#837; release 1.56.0",
       "pr": 838,
