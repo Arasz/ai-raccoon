@@ -28,7 +28,7 @@
       "merged": true,
       "date": "2026-09-28",
       "hasNotes": false,
-      "summary": "vec0's metadata ctx rejects NULL, while MemorySql.ContextKeyExpression returned SQL NULL for project_id IS NULL (its C# twin never did): the vec_entries_au/vec_structure_au triggers threw at MarkEmbedded (ADR-0119 charged 3 attempts then abandoned the row), the v9 rebuild's rethrow blocked opening a v2-v8 bank holding such a row, and pre-v9 partition keys accepted the NULL. Fix: COALESCE(project_id,'') in every concatenating branch (key total: project:/custom:0::L/workspace:0::W, equal to ContextKeyFor(_, '')) plus an every-open probe-first replacement of the two stored trigger bodies from shared constants (EnsureVecCtxTriggerBodiesAsync, ADR-0023 amendment shape) — CREATE TRIGGER IF NOT EXISTS cannot replace an existing bank's body, and the live bank's bodies carried the old expression. No migration (verified: vec0 0.1.9 rejects NULL metadata; pre-v9 rows are rebuilt by v9; live bank 0 NULL/'' ctx). 8 RED-first tests; the plan review caught the stored-body blocker; both implementation reviews folded (consumer table, IS rationale, sibling statement-count gate). 1.53.13."
+      "summary": "vec0's metadata ctx rejects NULL, while MemorySql.ContextKeyExpression returned SQL NULL for project_id IS NULL (its C# twin never did): the vec_entries_au/vec_structure_au triggers threw at MarkEmbedded (ADR-0119 charged 3 attempts then abandoned the row), the v9 rebuild's rethrow blocked opening a v2-v8 bank holding such a row, and pre-v9 partition keys accepted the NULL. Fix: COALESCE(project_id,'') in every concatenating branch (key total: project:/custom:0::L/workspace:0::W, equal to ContextKeyFor(_, '')) plus an every-open probe-first replacement of the two stored trigger bodies from shared constants (EnsureVecCtxTriggerBodiesAsync, ADR-0023 amendment shape) \u2014 CREATE TRIGGER IF NOT EXISTS cannot replace an existing bank's body, and the live bank's bodies carried the old expression. No migration (verified: vec0 0.1.9 rejects NULL metadata; pre-v9 rows are rebuilt by v9; live bank 0 NULL/'' ctx). 8 RED-first tests; the plan review caught the stored-body blocker; both implementation reviews folded (consumer table, IS rationale, sibling statement-count gate). 1.53.13."
     },
     {
       "id": "air-chunk-index-repair-vanished-partition",
@@ -221,7 +221,7 @@
       "merged": true,
       "date": "2026-09-25",
       "hasNotes": false,
-      "summary": "MLX recall = CPU within ±0.007 MRR on all 8 arms. Cost is memory: footprint grows with distinct row lengths (17.9 GB peak at 1022 unpadded, 10.6-11.8 GB at 510); ×64 padding gives same vectors (cos>=0.999998), peaks 3.7 GB / 1.1 GB. Padded ms/1k tokens flat 46-57. Pick D + padding; product padding filed as #739. Report artifact E8eNowmT7e4avwTVurVrkA."
+      "summary": "MLX recall = CPU within \u00b10.007 MRR on all 8 arms. Cost is memory: footprint grows with distinct row lengths (17.9 GB peak at 1022 unpadded, 10.6-11.8 GB at 510); \u00d764 padding gives same vectors (cos>=0.999998), peaks 3.7 GB / 1.1 GB. Padded ms/1k tokens flat 46-57. Pick D + padding; product padding filed as #739. Report artifact E8eNowmT7e4avwTVurVrkA."
     },
     {
       "id": "air-fusion-confidence-weighted-rrf-706",
@@ -248,7 +248,7 @@
       "merged": false,
       "date": "2026-09-24",
       "hasNotes": false,
-      "summary": "Flag on: A9 stays 3 (FTS and vector rank-1 winners are distinct chunks, both claim key 1 — ADR-0078's L-results bound); gate (c) S4 1->3, S5 3->7, S6 2->3 (second SourceAffinityRanker pass, suggestive); held-out mean -0.018 (in band) but 6 per-query floors break; parity delta -0.0004. Keep flag off. New FusionNoRegressionFlagGateTests pins the flag-on ranks. #706 stays open for rank-1 rescue / confidence-weighted RRF."
+      "summary": "Flag on: A9 stays 3 (FTS and vector rank-1 winners are distinct chunks, both claim key 1 \u2014 ADR-0078's L-results bound); gate (c) S4 1->3, S5 3->7, S6 2->3 (second SourceAffinityRanker pass, suggestive); held-out mean -0.018 (in band) but 6 per-query floors break; parity delta -0.0004. Keep flag off. New FusionNoRegressionFlagGateTests pins the flag-on ranks. #706 stays open for rank-1 rescue / confidence-weighted RRF."
     },
     {
       "id": "air-harness-rebaseline-granite-707",
@@ -284,7 +284,7 @@
       "merged": false,
       "date": "2026-09-24",
       "hasNotes": false,
-      "summary": "RestartResult carries IdentityProofFailure? Reason; ServerRestart.CycleAsync sets it on Unproven; NodeRunner.RestartRefusal prints IdentityProof.RefusalText(reason) like the attach path (#700). EventId 657 unchanged. Note: BackendLaunchIdentityProofE2ETests.RestartCellAsync asserts the log line's wording, not the operator refusal line — a soft spot."
+      "summary": "RestartResult carries IdentityProofFailure? Reason; ServerRestart.CycleAsync sets it on Unproven; NodeRunner.RestartRefusal prints IdentityProof.RefusalText(reason) like the attach path (#700). EventId 657 unchanged. Note: BackendLaunchIdentityProofE2ETests.RestartCellAsync asserts the log line's wording, not the operator refusal line \u2014 a soft spot."
     },
     {
       "id": "air-settings-endpoint-baseurl-validation-708",
@@ -357,7 +357,7 @@
     },
     {
       "id": "air-backend-launch-identity-proof",
-      "title": "Attach-or-start + per-root ECDSA identity proof (ADR-0106, reverts ADR-0105; F49, F39) — released 1.44.0",
+      "title": "Attach-or-start + per-root ECDSA identity proof (ADR-0106, reverts ADR-0105; F49, F39) \u2014 released 1.44.0",
       "pr": 657,
       "merged": true,
       "date": "2026-09-23",
@@ -437,7 +437,7 @@
       "pr": 621,
       "merged": true,
       "date": "2026-09-05",
-      "summary": "Root cause (traced before hypothesizing): planner/applier predicate mismatch — OwnsMoveableContent scheduled folds FoldEntriesAsync could not execute (project-scope+non-NULL-only applier vs project+custom+shared planner), so applies drained yet re-planned identical folds forever. Fix in 7 packages + integration + ledgers across PRs #614 (A planner honesty+pins, B committed-scope applier, D2 verdict), #616 (C telemetry/workspaces), #617 (F bounded loop + D6 verdict), #618 (D durable project_id_aliases v14), #619 (E P3 chokes + sync arm + 3 reload legs), #620 (G convergence E2E, P3 ARMED), #622 (integration: shared fold domain unity, honest P3-armed derivation, warm fail-open 714), #623 (red-proof ledgers), #621 (release 1.41.0 + ADRs 0100-0103). Pipeline: implementer lanes built partial PRs, session 01a070f9 reviewed + fixed each, session 8575f1fb did full integration review. Reviews caught real defects (workspace-strand, BDD S2 contract, EventId collisions, warm skip-ensure race, Default teardown leaks). Next: 1.41.0 tag/publish + manual checklist on published build, then prove the original GOAL on the live bank with 1.41.0."
+      "summary": "Root cause (traced before hypothesizing): planner/applier predicate mismatch \u2014 OwnsMoveableContent scheduled folds FoldEntriesAsync could not execute (project-scope+non-NULL-only applier vs project+custom+shared planner), so applies drained yet re-planned identical folds forever. Fix in 7 packages + integration + ledgers across PRs #614 (A planner honesty+pins, B committed-scope applier, D2 verdict), #616 (C telemetry/workspaces), #617 (F bounded loop + D6 verdict), #618 (D durable project_id_aliases v14), #619 (E P3 chokes + sync arm + 3 reload legs), #620 (G convergence E2E, P3 ARMED), #622 (integration: shared fold domain unity, honest P3-armed derivation, warm fail-open 714), #623 (red-proof ledgers), #621 (release 1.41.0 + ADRs 0100-0103). Pipeline: implementer lanes built partial PRs, session 01a070f9 reviewed + fixed each, session 8575f1fb did full integration review. Reviews caught real defects (workspace-strand, BDD S2 contract, EventId collisions, warm skip-ensure race, Default teardown leaks). Next: 1.41.0 tag/publish + manual checklist on published build, then prove the original GOAL on the live bank with 1.41.0."
     },
     {
       "id": "air-repair-census-write-lock-timeout",
@@ -461,10 +461,10 @@
       "pr": 804,
       "merged": true,
       "date": "2026-09-29",
-      "summary": "Adopted config D from docs/work/2026-09-25-chunk-size-vs-attention-window-mlx.md: the bundled manifest's chunkTokens 254->1022 drives memory chunk size AND the query-trim budget (deliberate, ratified); code chunks stay 510. Existing banks re-chunk AND re-embed via a new ChunkBudgetReconciler phase inside the model-migration drain (before the embed loop, every migration-closing path): mirror groups re-ingest from disk per scope/context/workspace bucket (same file in two contexts keeps both), note groups reassemble via NoteTextOrder backtracking and carry path/source_file/section/keys/source_id/agent_id/created_at/ttl_days (mirror rows lose ttl_days — FileIngestor reads none). embedding.chunkBudget stamp present iff the last run converged; retryable skips gate it for at most 3 unproven passes per resolved budget (single-row-fits carve-out), terminal skips (source gone/unreadable/handler-less) never gate; budget drift force-opens a re-chunk-only migration; event 448 logs the report. MLX bucket-padding precondition pinned (short-row test) with fail-closed AIRACCOON_REQUIRE_MLX on the new build-mlx macOS job. Review fallout fixed: bucket-scoped mirror replace (was a hard-lock crash on two-context banks), ttl carry, retry bound, logging. Research harness now derives its embed window from the manifest; scripts manifest pin guarded by test. 29 budget-derived fixture/class fixes across 8 test classes; the OtlpNames gate caught a real DI bug (ChunkBudgetReconciler unconstructable). VERSION 1.54.0."
+      "summary": "Adopted config D from docs/work/2026-09-25-chunk-size-vs-attention-window-mlx.md: the bundled manifest's chunkTokens 254->1022 drives memory chunk size AND the query-trim budget (deliberate, ratified); code chunks stay 510. Existing banks re-chunk AND re-embed via a new ChunkBudgetReconciler phase inside the model-migration drain (before the embed loop, every migration-closing path): mirror groups re-ingest from disk per scope/context/workspace bucket (same file in two contexts keeps both), note groups reassemble via NoteTextOrder backtracking and carry path/source_file/section/keys/source_id/agent_id/created_at/ttl_days (mirror rows lose ttl_days \u2014 FileIngestor reads none). embedding.chunkBudget stamp present iff the last run converged; retryable skips gate it for at most 3 unproven passes per resolved budget (single-row-fits carve-out), terminal skips (source gone/unreadable/handler-less) never gate; budget drift force-opens a re-chunk-only migration; event 448 logs the report. MLX bucket-padding precondition pinned (short-row test) with fail-closed AIRACCOON_REQUIRE_MLX on the new build-mlx macOS job. Review fallout fixed: bucket-scoped mirror replace (was a hard-lock crash on two-context banks), ttl carry, retry bound, logging. Research harness now derives its embed window from the manifest; scripts manifest pin guarded by test. 29 budget-derived fixture/class fixes across 8 test classes; the OtlpNames gate caught a real DI bug (ChunkBudgetReconciler unconstructable). VERSION 1.54.0."
     }
   ],
-  "next": "Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) — owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
+  "next": "Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) \u2014 owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
@@ -473,7 +473,7 @@
     "#497 repair for bge-m3 manifests downloaded before #496",
     "#504 embedding fallback-chain shapes",
     "#519 TestData.CreateMemoryStore optional Null defaults (from #518)",
-    "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable — 1.33.0 checklist)",
+    "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable \u2014 1.33.0 checklist)",
     "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement",
     "#706 fusion that trusts one confident leg (A9 / #367)",
     "#724 watch catch-up leaves files stale for weeks after directory-entry replaces (git checkout)",
@@ -487,15 +487,15 @@
   "stillTrue": [
     "dotnet_env=local must be set per-directory for the DeployToLocalSource build target to push to .nupkg-local",
     "Transport is the --transport flag (stdio|http|https|proxy), default proxy since ADR-0020. MCP_TRANSPORT and AIRACCOON_DATA_ROOT do NOT exist - ServerConfig records that the env layer was removed by the single-channel ruling, and McpServerFactory injects the data root via WebApplicationFactory.UseSetting, not the environment",
-    "sqlite-memory's content-hash dedup is global — cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
-    "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params — alias columns and use a settable DTO",
+    "sqlite-memory's content-hash dedup is global \u2014 cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
+    "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params \u2014 alias columns and use a settable DTO",
     "sqlite-memory/vector/sync are native SQLite extensions loaded via Microsoft.Data.Sqlite LoadExtension; deferred embeddings (defer_embeddings=1) let writes work before any model is configured",
-    "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure — assert ShouldNotBe(true), not ShouldBe(false)",
+    "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure \u2014 assert ShouldNotBe(true), not ShouldBe(false)",
     "Bare `ai-raccoon` is a proxy: it opens no bank, resolves no key and loads no ONNX model. `--transport stdio` is the in-process server and the escape hatch when a backend cannot start",
     "`serve` mints <data-root>/mcp-token (0600) BEFORE it binds, so a port that answers guarantees the file exists; the probe accepts 401 as proof of a live server so it still recognises one across data roots",
     "/mcp and /shutdown accept the loopback token in either envelope: X-AiRaccoon-Token or Authorization: Bearer *** one credential compared with FixedTimeEquals on both paths and neither shadowing the other. /mcp alone renders a second 401 body for a credential that was presented but did not match; /shutdown keeps one body for every failure because ADR-0022 pins the refusal not to reveal whether a token exists. `serve --mcp-entry` prints a headers map carrying ${AIRACCOON_MCP_TOKEN}, never a live token - Hermes resolves it from ~/.hermes/.env, Claude Code from the environment, and an unset variable in Claude Code warns in `claude mcp list` but still sends the literal placeholder.",
-    "The manifest is the budget source of truth: chunkTokens (1022) sets memory chunk size AND the query-trim budget; code chunks stay 510 (min(510, ctx-2)). Everything that says 'longer than one chunk' or pins the manifest must follow it — scripts/src/bundle.py's BUNDLED_MANIFEST pin (guarded by scripts/tests/test_bundle.py::test_committed_files_match_their_pins) and every chunk-count fixture derive from the manifest, never literals.",
+    "The manifest is the budget source of truth: chunkTokens (1022) sets memory chunk size AND the query-trim budget; code chunks stay 510 (min(510, ctx-2)). Everything that says 'longer than one chunk' or pins the manifest must follow it \u2014 scripts/src/bundle.py's BUNDLED_MANIFEST pin (guarded by scripts/tests/test_bundle.py::test_committed_files_match_their_pins) and every chunk-count fixture derive from the manifest, never literals.",
     "ChunkBudgetReconciler (EntryEmbedder drain, after vec reconcile, before the embed loop): re-chunks AND re-embeds at the resolved budget; embedding.chunkBudget stamp present iff the last run converged; unproven note groups get 3 passes per resolved budget then stop gating (residual population named in ADR-0125); terminal skips never gate; event 448 reports counts.",
-    "Long-blocking tool calls in delegated lanes kill the session ('aborted (lost)' — observed 3x at dotnet-test full-suite launches; the dotnet-engineer persona's sonnet/bedrock pin also has no API key and falls back to openrouter). Lane briefs must mandate detached runs + tail polling and commit-as-you-go."
+    "Long-blocking tool calls in delegated lanes kill the session ('aborted (lost)' \u2014 observed 3x at dotnet-test full-suite launches; the dotnet-engineer persona's sonnet/bedrock pin also has no API key and falls back to openrouter). Lane briefs must mandate detached runs + tail polling and commit-as-you-go."
   ]
 }
