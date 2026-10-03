@@ -105,10 +105,13 @@ def test_neural_footprint_peak_is_at_least_current() -> None:
 def test_memory_of_another_pid_reads_that_process_not_this_one() -> None:
     import subprocess
 
+    margin_kib = 100 * 1024
+    # The child holds far more than this process does *now*, whatever the suite has loaded.
+    child_kib = memory_kib().footprint + 2 * margin_kib
     child = subprocess.Popen(
         [sys.executable, "-c",
-         "import sys; b = bytearray(200 * 1024 * 1024); b[::4096] = b'x' * len(b[::4096]); "
-         "print('ready', flush=True); sys.stdin.read()"],
+         "import sys; b = bytearray(int(sys.argv[1]) * 1024); b[::4096] = b'x' * len(b[::4096]); "
+         "print('ready', flush=True); sys.stdin.read()", str(child_kib)],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     try:
         assert child.stdout.readline().strip() == "ready"
@@ -116,8 +119,8 @@ def test_memory_of_another_pid_reads_that_process_not_this_one() -> None:
         theirs = memory_kib(child.pid)
         ours = memory_kib()
 
-        assert theirs.footprint_peak >= 190 * 1024
-        assert ours.footprint < 190 * 1024
+        assert theirs.footprint_peak >= child_kib
+        assert theirs.footprint - ours.footprint >= margin_kib
     finally:
         child.stdin.close()
         child.wait(timeout=10)
