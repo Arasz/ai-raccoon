@@ -1,11 +1,12 @@
 using System.Buffers;
 using System.Text.RegularExpressions;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
 ///     Free-text query -> safe FTS5 MATCH plan (see docs/plans/retrieval-improvement-c.md §3 Wave 1): AND-join with OR fallback
-///     for short queries, plain OR for long ones; terms come only from the token regex.
+///     for short queries, plain OR for long ones; every OR join is capped at <see cref="MaxOrTerms" />; terms come only from the token regex.
 /// </summary>
 internal static partial class FtsQueryNormalizer
 {
@@ -28,6 +29,10 @@ internal static partial class FtsQueryNormalizer
     /// whole chunk is stored hard-cut, and only its first piece is guaranteed to hold this much of its start.</summary>
     public const int PrefixLength = 64;
 
+    /// <summary>Above this many raw tokens, an OR join drops stopwords and repeats and keeps the first this-many
+    /// distinct terms, so a pasted dump costs about as much as a sentence.</summary>
+    public const int MaxOrTerms = SearchDefaults.MaxKeywordTerms;
+
     public static FtsQueryPlan BuildPlan(string query)
     {
         var rawTokens = TokenRegex().Matches(query)
@@ -46,6 +51,10 @@ internal static partial class FtsQueryNormalizer
         }
 
 
+        var orTerms = rawTokens.Count <= MaxOrTerms
+            ? rawTokens.Select(Term).ToList()
+            : tokens.Select(Term).Distinct().Take(MaxOrTerms).ToList();
+
         var bigrams = tokens.Count >= 3
             ? Enumerable.Range(0, tokens.Count - 1)
                 .Select(i => $"\"{tokens[i]} {tokens[i + 1]}\"")
@@ -56,12 +65,12 @@ internal static partial class FtsQueryNormalizer
         {
             return new FtsQueryPlan(
                 string.Join(" AND ", tokens.Select(Term)),
-                string.Join(" OR ", rawTokens.Select(Term).Concat(bigrams)),
+                string.Join(" OR ", orTerms.Concat(bigrams)),
                 tokens.Count)
             { MatchesAllTerms = true };
         }
 
-        return new FtsQueryPlan(string.Join(" OR ", rawTokens.Select(Term)), null, tokens.Count);
+        return new FtsQueryPlan(string.Join(" OR ", orTerms), null, tokens.Count);
     }
 
     private static string Term(string token) => token.Length > PrefixLength ? token[..PrefixLength] + "*" : token;

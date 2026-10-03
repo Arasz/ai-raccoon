@@ -55,5 +55,5 @@ public static class QueryLengthGuard
             : (int)Math.Round(budgetTokens * CharsPerTokenEstimate, MidpointRounding.AwayFromZero);
 
     private static string GuidanceFor(int budgetTokens, int thresholdChars) =>
-        $"This query is over {thresholdChars:N0} characters. Semantic search only embeds roughly the first {budgetTokens:N0} tokens of a query (~{thresholdChars:N0} characters of English prose, approximate) — search for the identifying line instead of pasting the whole dump, e.g. the exception type, error code, or failing test name. Keyword (FTS) matching still searches the query in full.";
+        $"This query is over {thresholdChars:N0} characters. Semantic search only embeds roughly the first {budgetTokens:N0} tokens of a query (~{thresholdChars:N0} characters of English prose, approximate) — search for the identifying line instead of pasting the whole dump, e.g. the exception type, error code, or failing test name. Keyword (FTS) matching is capped too: it searches only the first {SearchDefaults.MaxKeywordTerms} distinct words of a query this long.";
 }
