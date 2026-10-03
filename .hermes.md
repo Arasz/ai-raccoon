@@ -36,38 +36,29 @@ Additional invariants load contextually via these paths — see `.ai-badger/inva
 
 ## Hermes-specific guidance
 
-This project is configured for Hermes Agent. The `.ai-badger/` directory is the source of truth
-for all agent configuration.
+`.ai-badger/` is the source of truth for all agent configuration.
 
 ### Skills
 
-Framework skills live under `.ai-badger/skills/`. Load them in-session with `/skill <name>` or
-preload with `hermes -s <name>`. Key skills:
+Skills live under `.ai-badger/skills/`; load with `/skill <name>` or `hermes -s <name>`. Key skills:
 
 - `task` — task orchestration: TDD, PR flow, review loop, token tracking
 - `prompt-markers` — `h:`, `f:`, `e:`, `q:`, `i!:` prefix markers (see below)
 
 ### Memory
 
-Hermes persistent memory is available. Use it to save durable facts about the project:
-user preferences, environment details, recurring conventions. Do NOT save transient
-task progress or TODOs — use `session_search` for that.
+Save durable facts (user preferences, environment details, conventions) to Hermes memory;
+transient task progress belongs in `session_search`, not memory.
 
 ### Subagent delegation
 
-Use `delegate_task` for parallel subtasks. The `task` skill adapts its orchestration
-pattern for Hermes: plan with `role='orchestrator'`, implement with leaf agents.
-Prefer `delegate_task` over spawning separate `hermes` processes for quick subtasks.
+Use `delegate_task` for parallel subtasks, not separate `hermes` processes. The `task` skill
+plans with `role='orchestrator'` and implements with leaf agents.
 
 ### Context file discovery
 
-Hermes reads project context files in priority order (first match wins):
-1. `.hermes.md` / `HERMES.md` — walks parents to git root
-2. `AGENTS.md` — cwd only
-3. `CLAUDE.md` — cwd only
-
-This file (HERMES.md) is at priority 1 and is the authoritative project context for
-Hermes agents working in this repo.
+Hermes reads `.hermes.md`/`HERMES.md` first (walking parents to the git root), then `AGENTS.md`,
+then `CLAUDE.md`; this file is the authoritative context for Hermes here.
 
 ## Prompt markers
 
@@ -120,19 +111,10 @@ Start with `get_graph_summary` for orientation. Record architectural decisions w
 <!-- Playwright MCP tools -->
 ## MCP Tools: playwright
 
-The Playwright MCP server provides browser automation capabilities through the Model
-Context Protocol, enabling LLMs to interact with web pages using structured accessibility
-snapshots without requiring vision models.
+Browser automation over accessibility snapshots: `browser_navigate`, then `browser_snapshot` for
+element refs, then `browser_click`/`browser_type` on those refs. Each tool's own description
+covers the rest.
 
-Start with `browser_navigate` to load the target URL. Use `browser_snapshot` to capture the
-page's accessibility tree and element reference IDs (`ref=...`). Interact with elements using
-`browser_click`, `browser_type`, `browser_fill_form`, or `browser_select_option` referencing
-those IDs. Capture visual evidence with `browser_take_screenshot`. Monitor API calls with
-`browser_network_requests` and debug issues with `browser_console_messages`. For multi-step
-or complex interactions, execute custom Playwright scripts with `browser_run_code_unsafe`.
-Each tool's own description covers the rest.
-
-<!-- task-graph MCP tools -->
 ## MCP Tools: task-graph
 
 `task-graph` owns the decomposed task plan — a DAG of `step`s carrying status, acceptance criteria and evidence, persisted beside the task tracker in the project's `tracking.db`.
