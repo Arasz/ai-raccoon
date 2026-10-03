@@ -36,13 +36,6 @@ public sealed class SyncServiceGateContentionTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dataRoot, true);
 
-    private static async Task<SqliteConnection> OpenPlainAsync(string path, CancellationToken ct)
-    {
-        var c = new SqliteConnection($"Data Source={path}");
-        await c.OpenAsync(ct);
-        return c;
-    }
-
     /// <summary>
     ///     Forces two <c>MemorySyncAsync</c> calls to start at the same instant (Barrier), tags every
     ///     hook invocation with the logical cycle that made it via <see cref="AsyncLocal{T}" /> (correct
@@ -110,13 +103,13 @@ public sealed class SyncServiceGateContentionTests : IDisposable
         async Task<SqliteConnection> OpenReadOnlyAsync(string path, CancellationToken ct)
         {
             Record("openReadOnly");
-            return await OpenPlainAsync(path, ct);
+            return await _bank.OpenReadOnlyAsync(path, ct);
         }
 
         async Task<SqliteConnection> OpenSnapshotAsync(string path, CancellationToken ct)
         {
             Record("openSnapshot");
-            return await OpenPlainAsync(path, ct);
+            return await _bank.OpenSnapshotAsync(path, ct);
         }
 
         var service = new SyncService(ResolveCloudAsync, OpenBankAsync, OpenSnapshotAsync, OpenReadOnlyAsync,
@@ -173,8 +166,7 @@ public sealed class SyncServiceGateContentionTests : IDisposable
         {
             var bankPath = Path.Combine(dataRoot, "memory.db");
             var cloud = new FakeCloudStore();
-            var service = new SyncService(cloud, new SyncTestBank(bankPath).OpenBankAsync,
-                OpenPlainAsync, OpenPlainAsync, TimeProvider.System, NullLogger<SyncService>.Instance);
+            var service = new SyncTestBank(bankPath).CreateService(cloud);
 
             using var start = new Barrier(2);
             var task1 = Task.Run(async () =>
