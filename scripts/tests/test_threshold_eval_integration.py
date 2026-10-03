@@ -1029,7 +1029,7 @@ def _merge_allowed_pathspecs() -> list[str]:
                    ":(exclude)src").splitlines()
     top_level = sorted({path.split("/")[0] for path in changed if path})
     pathspecs = [entry for entry in top_level if entry != "src"]
-    assert pathspecs and "src" not in pathspecs
+    assert "src" not in pathspecs
     return pathspecs
 
 
@@ -1037,8 +1037,12 @@ def test_merge_hygiene_pr_branch_has_empty_src_diff(tmp_path):
     branch = _current_branch()
     if branch == "main" or branch.endswith("/main"):
         pytest.skip("on main the src/ assertion is trivially true — gate is meaningless")
+    if branch == "HEAD":
+        pytest.skip("detached HEAD has no task branch to build the PR from")
     base = "origin/main" if _git("rev-parse", "--verify", "--quiet", "origin/main") else "main"
     pathspecs = _merge_allowed_pathspecs()
+    if not pathspecs:
+        pytest.skip("branch changes nothing outside src/ relative to its merge-base — no PR to build")
     worktree = Path(tempfile.mkdtemp(prefix="merge-hygiene-pr-"))
     try:
         _git("worktree", "add", "--detach", str(worktree), base)
