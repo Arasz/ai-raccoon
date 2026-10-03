@@ -19,8 +19,8 @@ public static class CodeSearchWarnings
     /// <summary>
     ///     The query exceeded the configured code engine's manifest window (510 tokens for
     ///     code-daemon-embed-v1) and was trimmed before embedding — the vector leg saw only the
-    ///     trimmed prefix; the FTS5 leg has its own cap, <see cref="SearchDefaults.MaxKeywordTerms" />
-    ///     distinct words (ADR-0126).
+    ///     trimmed prefix; the FTS5 leg has its own cap of 64 distinct words
+    ///     (<see cref="SearchDefaults.MaxKeywordTerms" />, ADR-0126).
     /// </summary>
     public static readonly string QueryTrimmedToCodeWindow =
         "code search query was shortened to fit the code embedding model's window — the semantic " +
