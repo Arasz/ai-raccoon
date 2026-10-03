@@ -9,8 +9,12 @@ namespace AiRaccoon.Tests.TestHelpers;
 
 /// <summary>
 ///     A hand-built bank for sync tests: the minimal schema, the openers that mirror the DI
-///     <c>openBank</c>/<c>openSnapshot</c>/<c>openReadOnly</c> delegates (vec0 loaded, snapshot
-///     read-write, read-only check read-only, optional password), and <see cref="CreateService" />.
+///     <c>openBank</c>/<c>openSnapshot</c>/<c>openReadOnly</c> delegates (vec0 loaded on all three,
+///     snapshot read-write, read-only check read-only, optional password), and
+///     <see cref="CreateService" />. The schema carries a <c>vec_entries</c> vec0 table and the two
+///     production triggers that write it, so a sync DELETE or reindex UPDATE on <c>entries</c> fails
+///     with "no such module: vec0" on the bank and snapshot openers when they skip <c>LoadVector</c>. The
+///     read-only opener loads it for parity with DI only: <c>PRAGMA quick_check</c> never reads vec0.
 ///     <c>chunk_index</c> defaults to 0 here while production defaults it to -1, so a test that
 ///     cares about the sentinel writes it explicitly in its INSERT.
 /// </summary>
@@ -59,6 +63,15 @@ CREATE TABLE IF NOT EXISTS memory_source (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source_identity
     ON memory_source(source_type, source_locator, COALESCE(section, ''));
 CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id);
+CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT, embedding float[4] distance_metric=cosine);
+CREATE TRIGGER IF NOT EXISTS vec_entries_pending AFTER UPDATE OF embed_state ON entries
+WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+BEGIN
+    DELETE FROM vec_entries WHERE rowid = OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS vec_entries_ad AFTER DELETE ON entries BEGIN
+    DELETE FROM vec_entries WHERE rowid = OLD.id;
+END;
 """;
 
     public string BankPath { get; } = bankPath;
@@ -71,6 +84,8 @@ CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id);
     {
         var conn = new SqliteConnection(Connect(path));
         await conn.OpenAsync(ct);
+        conn.EnableExtensions();
+        conn.LoadVector();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = Schema;
         await cmd.ExecuteNonQueryAsync(ct);
