@@ -111,11 +111,13 @@ jobs:
         run: echo "No code-relevant paths changed; skipping build and tests."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: needs.changes.outputs.code == 'true'
-      - name: Duplication gate (src < 1%)
+      - name: Duplication gate (src < 0.6%)
         if: needs.changes.outputs.code == 'true'
         # Exact-clone ceiling for production C#; scope, exclusions and threshold live in
         # .jscpd.json. Runs before the build so a clone fails in seconds, and in build-fast
         # because that is a required check. Version pinned exactly; tests are excluded (DAMP).
+        # The ceiling is a ratchet: main sat at 0.52% when it was set to 0.6; lower it whenever
+        # the measured duplication drops, never raise it to fit a new clone.
         run: npx --yes jscpd@5.3.2 --config .jscpd.json
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         if: needs.changes.outputs.code == 'true'

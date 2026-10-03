@@ -2,7 +2,7 @@
   "path": ["src"],
   "format": ["csharp"],
   "minTokens": 60,
-  "threshold": 1,
+  "threshold": 0.6,
   "ignore": ["**/*.g.cs", "**/*.generated.cs", "**/bin/**", "**/obj/**"],
   "reporters": ["console"],
   "gitignore": true
