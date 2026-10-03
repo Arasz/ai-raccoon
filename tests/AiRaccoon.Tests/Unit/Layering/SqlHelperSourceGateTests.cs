@@ -37,9 +37,9 @@ public sealed partial class SqlHelperSourceGateTests
     [Fact]
     public void SettingValueRead_IsWrittenOnlyInSettingsReaderAndMemorySql()
     {
-        // Scoped to Infrastructure, where SettingsReader lives, and to value reads: count/delete/LIKE
-        // statements over settings (schema repair, ProjectIdsRepair) are not reads of one setting.
-        var offenders = SourceFilesMatching(SettingValueSelect(), "src/AiRaccoon.Infrastructure",
+        // Scoped to value reads: count/delete/LIKE statements over settings (schema repair,
+        // ProjectIdsRepair) are not reads of one setting.
+        var offenders = SourceFilesMatching(SettingValueSelect(), "src",
             allowedFiles: ["SettingsReader.cs", "MemorySql.cs"]);
 
         offenders.ShouldBeEmpty("read a setting through connection.ReadSettingAsync, not a raw SELECT.");
