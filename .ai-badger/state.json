@@ -1,8 +1,17 @@
 {
-  "lastUpdated": "2026-09-29",
+  "lastUpdated": "2026-10-03",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-finish-thread-refactor-pr-series",
+      "title": "Duplication-review refactor series #814-#829 landed, integration-reviewed, checklisted; follow-up fixes #831-#837; release 1.56.0",
+      "pr": 838,
+      "merged": false,
+      "date": "2026-10-03",
+      "hasNotes": false,
+      "summary": "Took over the cloud project thread's refactor series (#814-#820) and finished the duplication review: F2 BackgroundLoop (#825), F3/F8 IntSetting + ReportThenApplyRepairCommands (#824), F4 SettingsReader + Sql.Def (#826), F6 PermissiveFakeMemoryStore/SyncTestBank/RealMcpServerFixture (#827/#828), F9 CloudEtag (#823), jscpd gate (#822, ratcheted to 0.6% in #835), #829 RepairLoop record. Series shipped in 1.55.6 (changelog backfilled #833). Integration review (no combination failures; 4 SHOULD) fixed in #836 (cancel-safe Replace.cs rollbacks, SQL source gates, all raw settings reads via SettingsReader, one ChunkSizeReader) and #835. Full local suite: unit fixes #831 (NoBank before AutoStartUnsupported; packed test shows stdout), Python fixes #834, and a real stop-path token TOCTOU (#837: secrets ride the proven connection; ADR-0106 residual 2 narrowed). Manual checklist #832: 22 pass/3 substituted/1 fail (S3 auth message names no operation - pre-existing). Changelog README now states PRs without a VERSION change ship in the next release's entry. 1.56.0 release PR #838."
+    },
     {
       "id": "air-chunk-columns-null-ctx-key",
       "title": "Context key total over a NULL project id; stored vec-trigger bodies replaced (ADR-0124, 1.53.13)",
