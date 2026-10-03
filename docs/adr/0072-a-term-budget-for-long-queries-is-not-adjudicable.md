@@ -2,7 +2,7 @@
 
 Date: 2026-08-15
 
-Status: Accepted
+Status: Accepted. Its dedup and dedup + cap rejections are superseded by ADR-0126 (2026-10-03), on cost.
 
 Records a change **specified, measured and not shipped**. No production code changes.
 Relates to ADR-0071 (the query-trim record), which bounds the *vector* leg; this record
@@ -180,3 +180,11 @@ amendment and `docs/reference/logging-event-ids.md`.
 `EmbeddingService`'s block moved again on 2026-08-23 (#522 review) to make room for a new
 session-created event without interleaving `NoOpCodeChunker`/`CodeEmbedder`/`ManifestPoolingRepair`.
 Only the id changed. See ADR-0071's second amendment and `docs/reference/logging-event-ids.md`.
+
+## Amendment (2026-10-03) — the cost half is measured, and a cap ships
+
+The latency this record left unmeasured was measured on a 22,450-entry live-bank snapshot: a
+7,259-character query took 74 s on the verbatim OR join, and deduplication alone still took 6.4 s
+at 60,000 characters. [ADR-0126](0126-long-query-fts-terms-capped-for-cost.md) caps queries over
+64 raw tokens at their first 64 distinct non-stopword terms, on cost alone. The quality findings
+above are unchanged, and ADR-0126 relies on them.
