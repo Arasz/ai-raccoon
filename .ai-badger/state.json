@@ -1,492 +1,492 @@
 {
- "lastUpdated": "2026-10-03",
- "notesRef": ".ai-badger/status-notes.json",
- "historyRef": ".ai-badger/status-history.json",
- "completedTasks": [
-  {
-   "id": "air-finish-thread-refactor-pr-series",
-   "title": "Duplication-review refactor series #814-#829 landed, integration-reviewed, checklisted; follow-up fixes #831-#837; release 1.56.0",
-   "pr": 838,
-   "merged": false,
-   "date": "2026-10-03",
-   "hasNotes": false,
-   "summary": "Took over the cloud project thread's refactor series (#814-#820) and finished the duplication review: F2 BackgroundLoop (#825), F3/F8 IntSetting + ReportThenApplyRepairCommands (#824), F4 SettingsReader + Sql.Def (#826), F6 PermissiveFakeMemoryStore/SyncTestBank/RealMcpServerFixture (#827/#828), F9 CloudEtag (#823), jscpd gate (#822, ratcheted to 0.6% in #835), #829 RepairLoop record. Series shipped in 1.55.6 (changelog backfilled #833). Integration review (no combination failures; 4 SHOULD) fixed in #836 (cancel-safe Replace.cs rollbacks, SQL source gates, all raw settings reads via SettingsReader, one ChunkSizeReader) and #835. Full local suite: unit fixes #831 (NoBank before AutoStartUnsupported; packed test shows stdout), Python fixes #834, and a real stop-path token TOCTOU (#837: secrets ride the proven connection; ADR-0106 residual 2 narrowed). Manual checklist #832: 22 pass/3 substituted/1 fail (S3 auth message names no operation - pre-existing). Changelog README now states PRs without a VERSION change ship in the next release's entry. 1.56.0 release PR #838."
-  },
-  {
-   "id": "air-chunk-columns-null-ctx-key",
-   "title": "Context key total over a NULL project id; stored vec-trigger bodies replaced (ADR-0124, 1.53.13)",
-   "pr": 801,
-   "merged": true,
-   "date": "2026-09-28",
-   "hasNotes": false,
-   "summary": "vec0's metadata ctx rejects NULL, while MemorySql.ContextKeyExpression returned SQL NULL for project_id IS NULL (its C# twin never did): the vec_entries_au/vec_structure_au triggers threw at MarkEmbedded (ADR-0119 charged 3 attempts then abandoned the row), the v9 rebuild's rethrow blocked opening a v2-v8 bank holding such a row, and pre-v9 partition keys accepted the NULL. Fix: COALESCE(project_id,'') in every concatenating branch (key total: project:/custom:0::L/workspace:0::W, equal to ContextKeyFor(_, '')) plus an every-open probe-first replacement of the two stored trigger bodies from shared constants (EnsureVecCtxTriggerBodiesAsync, ADR-0023 amendment shape) — CREATE TRIGGER IF NOT EXISTS cannot replace an existing bank's body, and the live bank's bodies carried the old expression. No migration (verified: vec0 0.1.9 rejects NULL metadata; pre-v9 rows are rebuilt by v9; live bank 0 NULL/'' ctx). 8 RED-first tests; the plan review caught the stored-body blocker; both implementation reviews folded (consumer table, IS rationale, sibling statement-count gate). 1.53.13."
-  },
-  {
-   "id": "air-chunk-index-repair-vanished-partition",
-   "title": "repair chunk-index survives a partition vanishing mid-pass (NULL-safe partition key + vanished-group skip, 1.53.12)",
-   "pr": 800,
-   "merged": true,
-   "date": "2026-09-28",
-   "hasNotes": false,
-   "summary": "Live dry run crashed with ArgumentOutOfRangeException at ChunkIndexRepair.cs:44 (partition[0] on an empty PartitionAsync result): the group list is a snapshot and the walk re-chunks files for minutes, so a partition deleted or re-keyed since the snapshot left an empty lookup (95 rows were deleted inside the crashed run's window, sync_tombstones 12:57-13:10 UTC); a second latent path keys NULL for project_id IS NULL rows (GROUP BY groups NULLs, `= NULL` matches nothing). Fix: NULL-safe `IS` on the context-key comparison in ChunkPositionScanner.PartitionAsync; skip empty partitions and count only groups examined (GroupsExamined). Two RED-first tests (NULL-key partition; trigger-simulated concurrent delete), 68/68 on the touched surface. Rebased onto #799's 1.53.11; merged as a1aa1383."
-  },
-  {
-   "id": "air-sync-keeps-repaired-chunk-positions",
-   "title": "Sync's post-merge renumber keeps the positions repair chunk-index kept (ADR-0123 addendum, 1.53.10)",
-   "pr": 796,
-   "merged": true,
-   "date": "2026-09-28",
-   "hasNotes": false,
-   "summary": "Sync's RecomputeChunkColumnsBankWideKeepingOrder read -1 as 'merge-added', so a sync after chunk-index --apply closed ADR-0123 holes and positioned 'position unknown' rows. Now the merge INSERT writes chunk_index=-1 explicitly and sync passes @lastId (max id before merge): only file rows at -1 above it get positions (after the file rows); other file rows keep positions/holes/-1 while distinct and < file-row count, else renumber 0..k-1 (tombstone gap still closes); notes unchanged; note-order repair passes long.MaxValue. The sync tests' hand-built schema defaults chunk_index to 0, which hid the dependency on the column default. 2 SyncServiceTests + 3 mutants killed; 117/117 renumber consumers."
-  },
-  {
-   "id": "air-chunk-index-keeps-older-chunkings",
-   "title": "repair chunk-index keeps stored order an older chunking left; StoredOrderChain locates each kept row (ADR-0123, 1.53.9)",
-   "pr": 795,
-   "merged": true,
-   "date": "2026-09-28",
-   "hasNotes": false,
-   "summary": "Live dry run proposed 23,459 rows to -1: pre-granite (#687) and August chunkings of unchanged files, not corruption (tokenizer switch explains ~5k, #775 ~30). #794 keeps a partition's stored order when positions are 0..n-1 and reproduced rows are in document order; #795 (from two parallel reviews) locates every row's text in one SearchValues pass and keeps the heaviest stored-order chain (reproduced rows outweigh), adds duplicate/lone-CR/moved/out-of-place tests, fixes how-to drift, bumps 1.53.9. Snapshot: 742 to -1, 21 moved."
-  },
-  {
-   "id": "air-file-chunk-index-repair-788",
-   "title": "Boundary repair v2: duplicate/gapped file positions, one total_chunks rule, repair reports without a CLI deadline (#788)",
-   "pr": 790,
-   "merged": true,
-   "date": "2026-09-27",
-   "hasNotes": false,
-   "summary": "1.53.6 checklist: 186 live file groups with duplicate chunk_index; boundary repair re-ingested must-cut files every run. Fix: ChunkBoundaryRepair scans before re-ingest; exact match (MatchesStoredRows) repositions in place, stale/grown files re-ingest, gone/workspace-changed renumber in stored order; job renamed chunk-boundary-repair-v2. One rule in Core DocumentChunks: (ctx, source_file) partition, file rows first by first occurrence, citing notes after, total = partition row count; FileIngestor/scanner/ChunkIndexRepair agree; position-only moves skip section (no FTS rewrite). repair chunk-index reports RowsRetotalled; CLI client has no timeout, 100 s per-request deadline except repair reports. Released 1.53.7 (publish awaits production approval). Two debug lanes + integration review (B1 reused-HttpClient Timeout throw, S1 two total definitions) + 3 bot review rounds."
-  },
-  {
-   "id": "air-note-order-repair-retry-784",
-   "title": "Note chunk order repair skipped unpositioned notes; retry as v2 (#784)",
-   "pr": 786,
-   "merged": true,
-   "date": "2026-09-27",
-   "hasNotes": false,
-   "summary": "1.53.5 checklist (PR #785) found 354 live notes still opening-last with note-chunk-order-v1 stamped. Cause (red test first): Repositioned bails on chunk_index -1, then ChunkBoundaryRepair's RecomputeChunkColumnsBankWide fills -1 in id order. Fix: bank-wide RunAsync fills unknown positions with KeepingOrder first (as SyncService does); job renamed note-chunk-order-v2 so stamped banks re-run. Released 1.53.6 (publish awaits production approval). Owner's live bank already repaired by hand (ledger row deleted, re-ran 18:45)."
-  },
-  {
-   "id": "air-docs-sweep-after-defect-fixes",
-   "title": "Post-merge documentation-gap audit for ADR-0119..0122",
-   "pr": 782,
-   "merged": true,
-   "date": "2026-09-27",
-   "hasNotes": false,
-   "summary": "Docs were current except agent-memory-server.md, which lacked ADR-0121 watch self-healing (per-file fingerprint catch-up on restart, every 5 min for non-stopped watches, on digest recovery); added. EventId register, ADR index 0119-0122, architecture repair jobs verified. Open gap: memory_ingest_directory no longer fails on a denied directory - undocumented."
-  },
-  {
-   "id": "air-defect-sweep-537-695-724",
-   "title": "Defect sweep: #537 poison embed row, #695 chunker splits identifiers, #724 stale files after checkout (+#778 found)",
-   "pr": 779,
-   "merged": true,
-   "date": "2026-09-27",
-   "hasNotes": false,
-   "summary": "All four real, fixed TDD with ADRs and existing-bank repair. #774 ADR-0119 1.53.2: per-row isolation, entries.embed_attempts ceiling 3, engine-outage/busy charge nothing, model switch resets. #775 ADR-0120 1.53.3: whitespace/term-boundary splits, >64-char FTS prefix match, one-shot chunk-boundary-repair-v1. #776 ADR-0121 1.53.4: per-file fingerprint catch-up (mtime>=updated_at or size differs), 5-min heal pass, pruned walk (6-7 CPU-s -> 0.1 per scan), vanish-mid-digest = delete. #779 ADR-0122 1.53.5: notes stored in text order, hash-proved NoteTextOrder, note-chunk-order-v1, sync keeps partition order. Checklist items: ai-badger#525 + #780 (poison-embedding-stub.py). Owner rules learned: fix found gaps in-PR; session owns merging."
-  },
-  {
-   "id": "air-harness-granite-golden-regen-726",
-   "title": "Regenerate the granite harness golden (#726)",
-   "pr": 773,
-   "merged": true,
-   "date": "2026-09-27",
-   "hasNotes": false,
-   "summary": "#726 closed. Fresh live-bank copy cb99fe6e (70,763 entries) kept at ~/ai-raccoon-eval/copies/cb99fe6ecbe0.db (owner's AI_RACCOON_EVAL_COPY); project-corpus-100 re-pinned (98/100 queries changed; old pin e0434a72 lost with /tmp). Full run took 48 min, not 13 h. results-granite.json: harness hit 0.909 / ai-raccoon 0.919, MCC 0.94, stale C048; conservation test live. Bank leg on embedding.device auto. eval-set-100 keeps old pin (ADR 0060 anchor drift + MiniLM goldens): follow-up #777; until then the copy-gated test_pinned_copy_reproduces_every_committed_corpus fails locally."
-  },
-  {
-   "id": "air-coreml-webgpu-latency-ab-record",
-   "title": "M4 device benchmark + coreml vs WebGPU p95 search latency; README Performance section",
-   "pr": 772,
-   "merged": true,
-   "date": "2026-09-27",
-   "hasNotes": false,
-   "summary": "#764 closed (owner: coreml stays opt-in). ADR-0118 gate 2 holds on M4: CPU-s separated in two runs (24.6-27.1 vs 41.8-43.9; 28.9-29.7 vs 44.7-47.8), p95 search 35-39 ms vs 51-88 ms. device-benchmark.py --search-queries (schema v2, fenced-code-aware headings). docs/work/2026-09-26-device-benchmark-m4.md (F1-F5, NPU screenshot), perf report section 4. README: Quick Start first, What's new, Breaking changes -> docs/reference/breaking-changes.md, new Performance section asking other-chip owners for benchmark issues. Owner live server on coreml since 2026-09-27. Open: gate 1 (second chip), gate 3 (one opt-in release)."
-  },
-  {
-   "id": "air-device-power-benchmark-764",
-   "title": "Cross-device embedding benchmark: time, SoC and system energy, RAM",
-   "pr": 770,
-   "merged": true,
-   "date": "2026-09-26",
-   "hasNotes": false,
-   "summary": "#764. scripts/device-benchmark.py drives the real product per device (auto/cpu/mlx/coreml) on a tiered docs corpus; powermetrics SoC (sudo) + AppleSmartBattery system energy, server CPU-s, phys/neural peak. Owner run on M4 (1.53.0, 4914 chunks, x3): coreml 33.1 s / 379 J / 26.2 CPU-s vs auto(WebGPU) 70.4 s / 1389 J / 42.0 CPU-s; CPU-s ranges separated (24.6-27.1 vs 41.8-43.9). Cold compile 37.3 s, warm 1.0 s. p95 search latency not measured."
-  },
-  {
-   "id": "air-opt-in-coreml-device-764",
-   "title": "Opt-in embedding.device coreml on the Neural Engine (1.53.0)",
-   "pr": 769,
-   "merged": true,
-   "date": "2026-09-26",
-   "hasNotes": false,
-   "summary": "#764 stage 3, ADR-0118 Accepted, ADR-0117 Superseded. model_fp16_ane.onnx (5.7 MB, shared weights, offsets pinned), 4 CoreML bucket sessions (256-1024, batch 1), >1024 rows on a lazy CPU session, NeuralEngineSwitch state machine with background compile + per-bucket parity probe, WebGPU serves meanwhile, CoreMlCache with flock (exclusive compile, shared serve), .complete marker, contained prune, status.json + doctor coreml line, EventIds 436-441 (register 206). ORT telemetry disabled (fixed exit 134 after MLX+CoreML). M4: cosine >=0.999998, cold 35 s / warm 0.7 s, 808 MiB. macOS-only suites never run in CI. Default flip gated: second chip, in-product WebGPU A/B, one opt-in release."
-  },
-  {
-   "id": "air-coreml-default-apple-silicon-adr",
-   "title": "ADR-0118: opt-in coreml device on the Neural Engine (Proposed)",
-   "pr": 768,
-   "merged": true,
-   "date": "2026-09-26",
-   "hasNotes": false,
-   "summary": "#764 stage 2. Owner ruling: opt-in first; auto unchanged. Per-bucket CoreML sessions (256/512/768/1024), shared-weights model_fp16_ane.onnx, cache under data root, background compile with WebGPU serving + parity-probe state machine, every ordered device switch must work across restart and in-process. Default flip later gated by second chip, in-product WebGPU A/B, one opt-in release."
-  },
-  {
-   "id": "air-ane-shared-weights-export-764",
-   "title": "ANE graph that reads the shipped fp16 weights (5.7 MB added)",
-   "pr": 767,
-   "merged": true,
-   "date": "2026-09-25",
-   "hasNotes": false,
-   "summary": "#764 stage 1.1 (PRs #766 powermetrics result, #767). export_ane_encoder.py --share-weights-with rebuilds every ANE weight from the product's separate q/k/v/o/gate/up/down fp16 initializers via constant ops ORT folds before partitioning; bit-identical to the standalone export, CoreML 1 partition 1401-1405 NE ops, 5.68 MB added. powermetrics: ANE rail 1276 mW vs 29 idle. Published standalone export: huggingface.co/Arraasz/granite-embedding-small-english-r2-ane. Stage 1 left: second chip (needs M1/M2/M3); WebGPU direct A/B deferred to product."
-  },
-  {
-   "id": "air-ane-layout-encoder-reexport-760",
-   "title": "ANE-layout re-export of granite-small clears ADR-0117's CoreML gates",
-   "pr": 763,
-   "merged": true,
-   "date": "2026-09-25",
-   "hasNotes": false,
-   "summary": "#760 (PRs #763, #765; research only, no VERSION). fp16 ml-ane-transformers-layout export (conv1x1, per-head MatMul attention, Neg-free RoPE) = 1 CoreML partition, ~1405/1407 ops on ANE; fp32 graphs get 0 ANE ops. step256: 6-8% of MLX CPU-s, 0.49-0.57 GiB phys+neural, 808 MiB cache, recall unchanged. ADR-0117 amended, decision stands. Tools: export_ane_encoder.py, coreml_ab per-config model_dir, ane_powermetrics.py (owner runs, sudo). Next stage #764: shared-weights export, second chip, WebGPU compare, powermetrics, then ADR + coreml device."
-  },
-  {
-   "id": "air-server-exits-when-install-replaced",
-   "title": "Server exits when its install is replaced; pre-update proxies respawn through the tool shim",
-   "pr": 754,
-   "merged": true,
-   "date": "2026-09-25",
-   "hasNotes": false,
-   "summary": "#752 (1.52.1, ADR-0116): InstallWatchdog stops serve within 20s once AppContext.BaseDirectory is deleted by dotnet tool update (warn 613), MaintenanceJobRunner demotes BundledModelInstallReplacedException to Debug 529, startup log names version + install dir. #754 (1.52.2): Environment.ProcessPath resolves the tool symlink on macOS, so a pre-update proxy falls back to ~/.dotnet/tools/ai-raccoon then PATH (event 693). Follow-up pending owner ruling: extract multi-platform tests to platform.yml with a Platform trait."
-  },
-  {
-   "id": "air-performance-report-cpu-memory-gpu",
-   "title": "Performance report (CPU, memory footprint, GPU) + README What's new line",
-   "pr": 751,
-   "merged": true,
-   "date": "2026-09-25",
-   "hasNotes": false,
-   "summary": "docs/work/2026-09-25-performance-cpu-memory-gpu.md: Mermaid charts + tables for 1.44.3-1.51.2 (CPU 24.8-117 -> 1.2-2.8 CPU-s/120s on live events; footprint 6.8 -> 1.75 GB; MLX 17.9 -> 1.1-1.2 GB; CPU/embed 253-261 -> 2.8-8.3 ms), tests + checklist, caveats; live 1.51.2 reading 2.55 CPU-s/2 min, 277-586 MB RSS. README What's new one line; 1.48.0-1.44.0 moved to whats-new-history."
-  },
-  {
-   "id": "air-mlx-bucket-padding-cache-cap",
-   "title": "MLX path: 64-token buckets + 512 MiB cache cap (ADR-0114), released 1.51.1",
-   "pr": 744,
-   "merged": true,
-   "date": "2026-09-25",
-   "hasNotes": false,
-   "summary": "MLX sessions pad rows to multiples of 64 (Core LengthBuckets, reuses RunBatch zero-mask padding) and cap MLX's free-buffer cache at 512 MiB via mlx_set_cache_limit from the shipped libmlxc.dylib (MlxCacheLimit, EventIds 434-435, best effort). Measured 17.9 GB -> ~1.2 GB, same latency, ~7 ms more CPU/row; vectors unchanged. ADR renumber churn: #742 took 0113 first. v1.51.1 released; publish run 36078822306 awaits production approval."
-  },
-  {
-   "id": "air-drop-configureawait-app-code-adr",
-   "pr": 742,
-   "merged": "de1ecbfe",
-   "summary": "Removed ConfigureAwait from src/tests/benchmarks; ADR-0113; NoConfigureAwaitTests gate; dotnet format pass"
-  },
-  {
-   "id": "air-webgpu-plugin-cuda-optin-offmacos",
-   "pr": 740,
-   "merged": "1fdd365e",
-   "version": "1.51.0",
-   "summary": "WebGPU plugin EP default on win/linux-glibc, opt-in CUDA via user provider library; ADR-0112"
-  },
-  {
-   "id": "air-watch-cpu-excluded-delete-fastpath",
-   "title": "Cut startup/idle CPU: excluded-path delete fast path, index-seek cascades, pooled-handle init cache",
-   "pr": 741,
-   "merged": true,
-   "date": "2026-09-25",
-   "hasNotes": false,
-   "summary": "1.50.1. Diagnosed with dotnet-trace/counters/sample: .git/.ai-badger/bin churn ran DeleteSourcePathAsync (OR LIKE full project scan, up to 0.9 s warm, write lock) for excluded never-fingerprinted paths; reconcile ~30 opens/s each dlopen'd vec0 + schema pass. Fixes: HasFingerprintAtOrUnder gate, rowid-IN (project_id,path) seeks + idx_entries_project_path, per-handle cache keyed on data_version/schema_version/user_version/application_id (every-open steps still run). A/B on live-bank copy: idle 5.84->0.64 CPU-s/min, 300 hidden writes 14.17->1.13. Starts docs/changelog/."
-  },
-  {
-   "id": "air-mlx-cache-limit-bucket-sweep",
-   "title": "MLX cache limit, length buckets, 766 arm",
-   "pr": 743,
-   "merged": true,
-   "date": "2026-09-25",
-   "hasNotes": false,
-   "summary": "17.9 GB footprint = MLX free-buffer cache (92 MiB active). mlx_set_cache_limit via shipped libmlxc caps it: 0.4-1.0 GB unpadded; x64 + 512 MiB cap = ~1.2 GB, same p50, ~2x CPU/row. x32 halves pad waste, doubles shapes/footprint uncapped. 766 arm: memory half of 1022's gain, code ties 510; D stays. Teardown abort 2/70 processes. #739 updated."
-  },
-  {
-   "id": "air-chunk-window-mlx-rerun",
-   "title": "Chunk-size arms re-run on MLX (M4) + config D memory 1022 / code 510",
-   "pr": 738,
-   "merged": true,
-   "date": "2026-09-25",
-   "hasNotes": false,
-   "summary": "MLX recall = CPU within ±0.007 MRR on all 8 arms. Cost is memory: footprint grows with distinct row lengths (17.9 GB peak at 1022 unpadded, 10.6-11.8 GB at 510); ×64 padding gives same vectors (cos>=0.999998), peaks 3.7 GB / 1.1 GB. Padded ms/1k tokens flat 46-57. Pick D + padding; product padding filed as #739. Report artifact E8eNowmT7e4avwTVurVrkA."
-  },
-  {
-   "id": "air-fusion-confidence-weighted-rrf-706",
-   "title": "Confidence-weighted RRF measured (#706 round 2): A9 -> 2 but A6 and 6 held-out floors regress; keep off",
-   "pr": 730,
-   "merged": false,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "LegConfidence (Core pure fn, rank-1 vs rank-5 gap, weight clamped [0.5,2]) behind fusion.legConfidence.enabled.global (default false). ON: A9 3->2, A6 1->2 (near-tie flipped by a both-leg consensus candidate), held-out floors A4/A6/A7/A8/S1/S2 break, mean -0.0127, parity -0.0086. Keep rule fails. Two rounds done; #706 left open for an owner ruling (pin A9 and close, or telemetry first). PR #730: owner picks merge-as-off vs record only."
-  },
-  {
-   "id": "air-bank-key-verifier-sidecar-705",
-   "title": "Key-check sidecar tells a wrong key from a corrupt bank (ADR-0111)",
-   "pr": 729,
-   "merged": false,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "memory.db.keycheck: random bank-id + HMAC-SHA256(HKDF subkey, domain||bank-id), FixedTimeEquals, 0600 refuse-not-chmod, atomic writes; minted/rewritten on every successful keyed open (covers rekey/migrate). SQLITE_NOTADB: sidecar mismatch -> 21, sidecar verifies -> BankCorruptedException 32, absent -> both-causes 21; checked after the legacy-derivation probe (else migration breaks, ADR-0111 D4). doctor read-only three-way. EventIds 905/906. Stacked on #721; ADR README has a provisional 0110 row pending #722."
-  },
-  {
-   "id": "air-fusion-trust-confident-leg-706",
-   "title": "ADR-0078 no-regression reorder measured against the gates: does not fix A9, regresses S4/S5/S6",
-   "pr": 727,
-   "merged": false,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "Flag on: A9 stays 3 (FTS and vector rank-1 winners are distinct chunks, both claim key 1 — ADR-0078's L-results bound); gate (c) S4 1->3, S5 3->7, S6 2->3 (second SourceAffinityRanker pass, suggestive); held-out mean -0.018 (in band) but 6 per-query floors break; parity delta -0.0004. Keep flag off. New FusionNoRegressionFlagGateTests pins the flag-on ranks. #706 stays open for rank-1 rescue / confidence-weighted RRF."
-  },
-  {
-   "id": "air-harness-rebaseline-granite-707",
-   "title": "LlamaIndex retrieval harness moved to granite; package D per-row leg ranks",
-   "pr": 725,
-   "merged": false,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "Harness embeds with ibm-granite/granite-embedding-small-english-r2 (pinned), CLS+L2 by the checkpoint's own pooling config, max_length 512 like EmbeddingService's manifest budget; harness vs bank-stored granite vectors median cosine 0.99999 (n=20) vs 0.5934 for the retired gte/ONNX seam. results.json carries fts/vector/fused ranks; report splits fusion into fusion_take/fusion_floor. Golden not regenerated (13 h full-volume) -> #726."
-  },
-  {
-   "id": "air-code-index-uncovered-lines-711",
-   "title": "Code-index line-coverage gap investigated: watcher lag, not a chunker/ingest defect",
-   "pr": 723,
-   "merged": false,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "Every uncovered line (208 paths, 3,783 lines) sits in a file edited after its newest row; 0 unexplained gaps once lines split on '\\n' like CodeChunker (the 2 'trailing' lines were U+2028/U+2029 literals Python splitlines counts). New WatchIntegrationTests prove insert/modify/append and atomic-rename edits re-cover every line; CodeChunker covers an unterminated last line. Open: why restart catch-up leaves files stale for weeks after git checkout -> #724."
-  },
-  {
-   "id": "air-wrong-key-no-legacy-source-710",
-   "title": "Wrong key under a key source with no legacy derivation reports key mismatch, not a raw SqliteException",
-   "pr": 721,
-   "merged": false,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "Confirmed (#710): OpenBankWithResolvedKeyAsync only converted SQLITE_NOTADB when LegacyPassphrase was set, so env-style sources leaked a raw SqliteException. Now always a BankKeyMismatchException (NoLegacyDerivationToTry, both-causes hedge) -> exit 21 per ADR-0107. Four tests had pinned the bug (incl. EncryptionBitwardenIntegrationTests '...RethrowsTheOriginalSqliteException'); updated."
-  },
-  {
-   "id": "air-restart-unproven-names-proof-reason-709",
-   "title": "serve --restart Unproven refusal names the identity-proof reason",
-   "pr": 719,
-   "merged": false,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "RestartResult carries IdentityProofFailure? Reason; ServerRestart.CycleAsync sets it on Unproven; NodeRunner.RestartRefusal prints IdentityProof.RefusalText(reason) like the attach path (#700). EventId 657 unchanged. Note: BackendLaunchIdentityProofE2ETests.RestartCellAsync asserts the log line's wording, not the operator refusal line — a soft spot."
-  },
-  {
-   "id": "air-settings-endpoint-baseurl-validation-708",
-   "title": "SettingsEndpoint model-migration POST refuses an unusable BaseUrl",
-   "pr": 718,
-   "merged": false,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "BaseUrlValidation.IsUsableHttpUrl (AiRaccoon.Settings) shared by the CLI (exit 78) and the SettingsEndpoint POST (400 before StartModelMigrationAsync, nothing persisted). The server refusal is unreachable from current CLI verbs (they validate first), so no CLI exit mapping was added."
-  },
-  {
-   "id": "air-retrieval-reliability-followup-batch-plan",
-   "title": "Code-retrieval and reliability follow-up batch: ADR-0107 exit messages, bm25 hash tie-break, Nightly green (#691/#692), BDD binding fix, dedupe prevalence and eval-P3 on granite (1.49.3)",
-   "pr": [
-    700,
-    701,
-    702,
-    703,
-    704
-   ],
-   "merged": true,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "Owner gate D1-D7 (docs/work/2026-09-24-followup-batch-feedback.md). #700: wrong key or corrupt bank named in one message; bad base-url -> 78 before any write; rejected key own message (ClientResultException); exit 50 names IdentityProofFailure; exit 51 surfaces McpTokenFile.RefusalReason. #702: ', e.hash' tie-break on both bm25 ORDER BYs. #701: A9 excluded from sweep gate (c) with rank-3 ceiling; ProxyLaunch race = startup checkpoint writing WAL into the overwritten bank, fixed by awaiting Ticks + empty WAL, plus BankOpenObservation proxy-side assert. #703: HKDF step binding (build-bdd red since #696). Measured: dedupe loss 0.045% chunks / 0.012% lines (recorded, no fix); eval-P3 DROP on granite. Filed #705-#711."
-  },
-  {
-   "id": "air-full-recall-pack-guard-fixes",
-   "title": "1.49.1 checklist findings: full-recall leader for all-terms keyword matches, pack guard for missing model weights, bundled-engine warning wording (1.49.2)",
-   "pr": 694,
-   "merged": true,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "FusionLeader.Of widens the ADR-0005 leader: fused #1 that is the keyword top and in AllTermsMatched keeps rank 1 against the neighbour boost (red: vk83jq note ranked 3rd under minRelativeScore 0). Gates green: sweep, QueryConstruction, held-out, absolute floor. csproj RequireBundledModelWeights fails pack without model_fp16.onnx_data. Engine warnings/MCP instructions no longer promise a download. Post-verb --transport stdio exit 11 kept (pinned by design). Filed #695: chunker splits words mid-token."
-  },
-  {
-   "id": "air-symbol-path-header-chunk-eval",
-   "title": "Path/symbol header on line chunks, measured on JSAA C#/TS and ai-badger Python whole repos (granite): not kept",
-   "pr": 697,
-   "merged": true,
-   "date": "2026-09-24",
-   "hasNotes": false,
-   "summary": "Header = repo-relative path + tree-sitter enclosing symbol chain, prefixed to every line chunk (granite window 8190, no cap). vs re-embed control: JSAA span MRR +0.040 [-0.003,+0.083] (all 4 variants ~+0.04); ai-badger nDCG@5 -0.043, file MRR -0.041 (CIs at/below 0). Symbol adds nothing over path; keyword leg adds nothing over vector leg. Losses: header lends test/sibling files the target's name. Re-embed noise floor = 0 (AST churn real). Records: docs/work/2026-09-24-symbol-path-header-on-line-chunks.md, docs/work/2026-09-24-ast-chunking-on-whole-repos.md."
-  },
-  {
-   "id": "air-code-retrieval-eval-measured-improvements",
-   "title": "Multi-language code eval (12 languages, 332 queries), baseline, measured code-search changes: identifier-split code_fts column + HTML/CSS/SQL indexing kept; test down-weight, path header, AST chunking dropped (1.48.0)",
-   "pr": 686,
-   "merged": true,
-   "date": "2026-09-23",
-   "hasNotes": false,
-   "summary": "#673 corpus+runner, #686 queries+verdicts+shipping. nDCG@5 0.501 (B0) -> 0.654 (+html/css/sql) -> 0.689 (+identifiers, held-out +0.052 CI [0.021,0.088]); on granite (#687) 0.801 -> 0.824 (P2 still KEEP, +0.037). Dropped: test-file weight (test-intent collapses), path header (CI incl. 0), AST chunking (+0.018, CI [-0.006,0.044]). Scores deterministic (noise 0). ADR-0109. Record: docs/work/2026-09-23-code-retrieval-eval-results.md."
-  },
-  {
-   "id": "air-keyword-floor-neighbour-attach-exit",
-   "title": "Search floor keeps keyword matches, anchor-first file#section, leader outranks neighbour boost; CLI exit codes carry their meaning, then the categorized two-digit ErrorCode scheme (1.44.2 -> 1.45.0)",
-   "pr": 679,
-   "merged": true,
-   "date": "2026-09-23",
-   "hasNotes": false,
-   "summary": "#666 (1.44.2): the absolute floor exempts rows the keyword leg's conjunctive expression matched (not the stop-word OR fallback); anchor rows go first for path queries; the row both legs rank first stays above the sibling boost; stray --attach exits 9. #668 (1.44.3): 9 = argv outside the grammar (CommandResult parse error), 15 = bad value, on every path. #671 (1.44.4): post-parse audit, CommandFailed 27, Ctrl-C 130 everywhere. #679 (1.45.0, breaking): ErrorCode.{Category}.{Case}, two digits 10-99 (exit status is 8-bit: exit(1003) -> 235; 126-255 reserved), Ok.Success=0, Ok.SIGC=130, 74 cases in 9 categories, ADR-0107 with the old->new table; repair --apply stuck/writers-active/attention-needed = 37/38/39, bitwarden-not-switched = 29."
-  },
-  {
-   "id": "air-backfill-chunker-named-tuple-types",
-   "title": "ChunkBackfill picks its chunker per file type (re-runs as chunk-backfill-v2); declared tuple types -> named record structs; released 1.44.5",
-   "pr": 674,
-   "merged": true,
-   "date": "2026-09-23",
-   "hasNotes": false,
-   "summary": "P1 routing: memory_write notes (no source_file or path != source_file) -> markdown; file rows -> handler chunker via IFileTypeMatcher; unowned extension -> PlainTextChunker (the fallback); JobName chunk-backfill-v2 so every bank re-runs once. Tests T1,T2,T4,T5,T6,T7, each red under its own mutation. Sweep: 61 declared tuple sites in src+benchmarks -> 40 types (readonly record struct; Dapper rows AliasRow/PolicyCount are sealed classes because record ctor matching needs exact types); WatchKey owns its equality, WatchKeyComparer deleted. Union of touched suites 1894 passed locally; PR merged before build-slow/bdd finished (main build is the CI verdict). Also #676: claude-review loads review plugins, 150 turns, fails only without a 'Reviewed <sha>' verdict."
-  },
-  {
-   "id": "air-backend-launch-identity-proof",
-   "title": "Attach-or-start + per-root ECDSA identity proof (ADR-0106, reverts ADR-0105; F49, F39) — released 1.44.0",
-   "pr": 657,
-   "merged": true,
-   "date": "2026-09-23",
-   "hasNotes": false,
-   "summary": "P1 state-dir seam + token relocation/migration + identity key; P2 POST /identity/prove + proof-gated verifier; P3 F39 no-mint (exit 22); P4 attach-or-start revert, proof-gated handover/restart/dispose, --attach removed; P5 real-binary E2E (threat matrix 5 attackers x acquire/restart/dispose, every hostile cell red under mutations M1-M13), docs, SECURITY.md. Owner gate (docs/work/2026-09-23-identity-proof-p5-findings-feedback.md) approved F1 (serve tightens owned 0755 state dir to 0700, EventId 692), F7 (runnable exit-22 remedy), F2 (restart proves before identify), F3 (unproven fallback child killed), F5 residual; R1 Retry=Never carve-out applied on recommendation (owner timeout). Private-child URL-timeout leak fixed by peer session (4dc31a16). Follow-ups #658 #659 #660 #661. VERSION 1.44.0; squash 29368f97; release v1.44.0 tagged, nuget publish needs owner approval."
-  },
-  {
-   "id": "air-corpus-quality-clean-instrument",
-   "title": "Corpus quality: debris-free instrument + regenerated corpus + f2 golden (harness follow-up B)",
-   "pr": 635,
-   "merged": true,
-   "date": "2026-09-10",
-   "hasNotes": false,
-   "summary": "Markup-aware topic repair (new stdlib scripts/src/retrieval_tuning/corpus_text.py, TOPIC_DERIVATION=markup-aware-v1) delegated from build_project_corpus._derive_topic; corpus regenerated from the same pinned copy (sha 0a7ecb01...->5445425c...), debris 23/100->0/100 measured with the independent evaluate.debris_query; target-preserving (every id/anchor/scope/holdout byte-identical; 85 query texts changed, 2 collision-driven frames). B0 rig reproduction diffed CLEAN vs results-f1 before the campaign; two non-base runs -> new named goldens docs/work/results-f2.json + results-f2-run2.json (pair CLEAN), harness 0.828/0.192, bank 0.879/0.203, MCC 0.3233, cont 76/6/11/6, stale [C035]; clean subset f1 n=76 @0.697/0.842 -> f2 n=99 @0.828/0.879 (composition+text delta, not a controlled A/B). refresh exit 0 for both corpora; f1 goldens + eval-set-100.json byte-identical; collect_ac_evidence all PASS; full scripts/tests 639 passed/25 skipped/0 failed; CI lane 192 passed incl. the 2 new test files. Plan review d-803 REQUEST-CHANGES folded; implementation review d-805 REQUEST-CHANGES (2 docs MUSTs fixed in 860fc6fc); test-quality review d-806 APPROVE-WITH-MINORS. PR #635 squash-merged 499f457e."
-  },
-  {
-   "id": "air-eval-corpus-provenance-clean-ci",
-   "title": "eval-set-100 provenance + clean-checkout test hygiene (harness follow-up C+E)",
-   "pr": 634,
-   "merged": true,
-   "date": "2026-09-10",
-   "hasNotes": false,
-   "summary": "eval-set-100.json regenerated header-shaped with a snapshot pin (e0434a72 == the pinned copy); exactly 6 anchors repaired (E040/E041/E042/E045/E063/E065, expectedHash+answerSpan only); refresh now exits 0 for both corpora (wrong copy still exit 2); both raw readers header-aware (harness test + C# MiniLmGoldenVectorReader with a two-shape test, [RetryFact]); matplotlib declared, optuna/deleted-fixture tests skip with reasons; CI lane gains the dependency + eval-corpus gates; P3 parity gate normalized to the query payload and its pin assertion hardened to == sha256(pinned copy) after an independent desk review (APPROVE-WITH-MINORS). Full scripts/tests 629 passed/25 skipped/0 failed; all CI lanes green; PR #634 merged 2c36512e."
-  },
-  {
-   "id": "air-full-hundred-query-parity-eval",
-   "title": "Full 100-query harness parity eval + one-harness consolidation",
-   "pr": 633,
-   "merged": true,
-   "date": "2026-09-10",
-   "hasNotes": false,
-   "summary": "Full-100 parity eval on project-corpus-100 (harness vs bank, both legs on one frozen copy): harness 0.6768/0.1582 vs bank 0.8081/0.1874, MCC 0.5955, cont 65/2/15/17, stale [C035]. Determinism fixed (Chroma tie truncation); quiesced-scratch requirement found (bank re-ingests mid-eval otherwise); c-cell taxonomy 15/15 fusion; ONNX-vs-HF embedding seam measured (0.5934) with the pooling explanation retracted; one-harness consolidation (src scope builder, JSON knobs, refresh script, CLI parity, golden diff); C14 + 7 implementation-review findings closed; PR #633 merged c4b37a15; follow-up definition in docs/work/2026-09-10-harness-followups-definition.md."
-  },
-  {
-   "id": "air-handle-tool-cancellation-errors-gracefully",
-   "title": "Handle tool cancellation gracefully same as errors",
-   "pr": 630,
-   "merged": true,
-   "date": "2026-09-09",
-   "hasNotes": false,
-   "summary": "Live-token OCE answers IsError cancelled: (913) instead of escaping to SDK warn; telemetry on bounded sentinel; raw-HTTP isError:true SSE pin (checklist artifact disproven); VERSION 1.42.1. 3 commits + 1 review-fixup, subagent plan+implementation reviews."
-  },
-  {
-   "id": "air-remove-stdio-full-server-mode",
-   "summary": "Removed stdio full-server mode (D2(b) also bare-http): bare=proxy-only, serve sole server; keep-enum 9+hint, Https shrink, 1.42.0, ADR-0104. PR #627 merged.",
-   "pr": 627,
-   "merged": true,
-   "date": "2026-09-09",
-   "hasNotes": true
-  },
-  {
-   "id": "air-threshold-filter-corpus-committee-eval",
-   "summary": "Closed unfinished per owner order 2026-09-09 to unblock the duplicate-server task; no merge record.",
-   "hasNotes": false
-  },
-  {
-   "id": "air-llamaindex-chroma-fusion-retrieval-harness",
-   "summary": "LlamaIndex+Chroma fusion-retrieval harness finished and merged as PR #625 (merge fd69a2d4, 2026-09-09): 8 BLOCK review items addressed post-close (prod floor 0.6, eval fail-gates, per-bucket FTS probe + hash tiebreak, dep pins, scripts-harness CI lane); 95/95 harness tests green.",
-   "pr": 625,
-   "merged": true,
-   "date": "2026-09-09",
-   "hasNotes": false
-  },
-  {
-   "id": "air-mmr-leg-level-poc-branch",
-   "summary": "Leg-level MMR PoC branch + 4-cell eval: rho=0.1 vandalizes ours 29->11, python neutral",
-   "hasNotes": true
-  },
-  {
-   "id": "air-mmr-diversity-rerank-implementation-plan",
-   "summary": "MMR plan rev.2 (MoE+adversarial+owner 6/6) then P0a NO-GO stops build; negative probe recorded",
-   "hasNotes": true
-  },
-  {
-   "id": "air-run-once-repair-fully-converges",
-   "title": "Run-once project-ids repair converges fully with no new deviations (P2 scope fix + P3 enforcement)",
-   "pr": 621,
-   "merged": true,
-   "date": "2026-09-05",
-   "summary": "Root cause (traced before hypothesizing): planner/applier predicate mismatch — OwnsMoveableContent scheduled folds FoldEntriesAsync could not execute (project-scope+non-NULL-only applier vs project+custom+shared planner), so applies drained yet re-planned identical folds forever. Fix in 7 packages + integration + ledgers across PRs #614 (A planner honesty+pins, B committed-scope applier, D2 verdict), #616 (C telemetry/workspaces), #617 (F bounded loop + D6 verdict), #618 (D durable project_id_aliases v14), #619 (E P3 chokes + sync arm + 3 reload legs), #620 (G convergence E2E, P3 ARMED), #622 (integration: shared fold domain unity, honest P3-armed derivation, warm fail-open 714), #623 (red-proof ledgers), #621 (release 1.41.0 + ADRs 0100-0103). Pipeline: implementer lanes built partial PRs, session 01a070f9 reviewed + fixed each, session 8575f1fb did full integration review. Reviews caught real defects (workspace-strand, BDD S2 contract, EventId collisions, warm skip-ensure race, Default teardown leaks). Next: 1.41.0 tag/publish + manual checklist on published build, then prove the original GOAL on the live bank with 1.41.0."
-  },
-  {
-   "id": "air-repair-census-write-lock-timeout",
-   "title": "Repair project-ids census times out against a busy/large bank",
-   "pr": 611,
-   "merged": true,
-   "date": "2026-09-05",
-   "summary": "Two fixes: materialized-CTE vec0 join plan pin (VecEntriesCountSql/VecStructureCountSql) so an ANALYZEd bank keeps the cheap plan, and read-only repair reports open via OpenBankSkippingEnsureAsync + EnsureCheapAsync so they never wait on another connection's write lock. E2E regression coverage, review-findings refactor, manual checklist docs/work/checklist/2026-09-05-1.40.1-repair-census.json, released as 1.40.1 (VERSION-only bump per fix-not-feature convention)."
-  },
-  {
-   "id": "air-remove-machine-default-alias-map",
-   "title": "Remove machine-specific Default alias map from public lib (ADR-0099)",
-   "pr": 609,
-   "merged": true,
-   "date": "2026-09-05",
-   "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
-  },
-  {
-   "id": "air-config-d-memory-1022-chunks",
-   "title": "Config D: memory chunks + query trim follow manifest chunkTokens 1022, code stays 510 (ADR-0125)",
-   "pr": 804,
-   "merged": true,
-   "date": "2026-09-29",
-   "summary": "Adopted config D from docs/work/2026-09-25-chunk-size-vs-attention-window-mlx.md: the bundled manifest's chunkTokens 254->1022 drives memory chunk size AND the query-trim budget (deliberate, ratified); code chunks stay 510. Existing banks re-chunk AND re-embed via a new ChunkBudgetReconciler phase inside the model-migration drain (before the embed loop, every migration-closing path): mirror groups re-ingest from disk per scope/context/workspace bucket (same file in two contexts keeps both), note groups reassemble via NoteTextOrder backtracking and carry path/source_file/section/keys/source_id/agent_id/created_at/ttl_days (mirror rows lose ttl_days — FileIngestor reads none). embedding.chunkBudget stamp present iff the last run converged; retryable skips gate it for at most 3 unproven passes per resolved budget (single-row-fits carve-out), terminal skips (source gone/unreadable/handler-less) never gate; budget drift force-opens a re-chunk-only migration; event 448 logs the report. MLX bucket-padding precondition pinned (short-row test) with fail-closed AIRACCOON_REQUIRE_MLX on the new build-mlx macOS job. Review fallout fixed: bucket-scoped mirror replace (was a hard-lock crash on two-context banks), ttl carry, retry bound, logging. Research harness now derives its embed window from the manifest; scripts manifest pin guarded by test. 29 budget-derived fixture/class fixes across 8 test classes; the OtlpNames gate caught a real DI bug (ChunkBudgetReconciler unconstructable). VERSION 1.54.0."
-  }
- ],
- "next": "Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) — owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
- "filedNotStarted": [
-  "#477 no job-level metrics (feature gap)",
-  "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
-  "#485 directory-walk prune gap (post-delta-3, from #481)",
-  "#493 PerformanceTools description drift",
-  "#497 repair for bge-m3 manifests downloaded before #496",
-  "#504 embedding fallback-chain shapes",
-  "#519 TestData.CreateMemoryStore optional Null defaults (from #518)",
-  "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable — 1.33.0 checklist)",
-  "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement",
-  "#706 fusion that trusts one confident leg (A9 / #367)",
-  "#724 watch catch-up leaves files stale for weeks after directory-entry replaces (git checkout)",
-  "#726 regenerate the granite harness golden (overnight full-volume run)",
-  "#728 flaky MemorySearchRankingTests premise on x64 CI",
-  "#804-followup 254-vs-1022 retrieval measurement (WebGPU footprint + re-chunk wall-clock)",
-  "DONE 2026-09-30 (PR pending, #809 eval-reanchor): eval-set-100.json re-anchored to the first 1022-era bank copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb; 0 query-text changes, 93 expectedHash / 58 expectedSource / 60 answerSpan fields moved; project-corpus-100 deliberately stays on cb99fe6e",
-  "re-measure test_corpus_config MEASURED_BYTES band (1,608,970 measured 2026-08-22; main over it)"
- ],
- "research": [],
- "stillTrue": [
-  "dotnet_env=local must be set per-directory for the DeployToLocalSource build target to push to .nupkg-local",
-  "Transport is the --transport flag (stdio|http|https|proxy), default proxy since ADR-0020. MCP_TRANSPORT and AIRACCOON_DATA_ROOT do NOT exist - ServerConfig records that the env layer was removed by the single-channel ruling, and McpServerFactory injects the data root via WebApplicationFactory.UseSetting, not the environment",
-  "sqlite-memory's content-hash dedup is global — cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
-  "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params — alias columns and use a settable DTO",
-  "sqlite-memory/vector/sync are native SQLite extensions loaded via Microsoft.Data.Sqlite LoadExtension; deferred embeddings (defer_embeddings=1) let writes work before any model is configured",
-  "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure — assert ShouldNotBe(true), not ShouldBe(false)",
-  "Bare `ai-raccoon` is a proxy: it opens no bank, resolves no key and loads no ONNX model. `--transport stdio` is the in-process server and the escape hatch when a backend cannot start",
-  "`serve` mints <data-root>/mcp-token (0600) BEFORE it binds, so a port that answers guarantees the file exists; the probe accepts 401 as proof of a live server so it still recognises one across data roots",
-  "/mcp and /shutdown accept the loopback token in either envelope: X-AiRaccoon-Token or Authorization: Bearer *** one credential compared with FixedTimeEquals on both paths and neither shadowing the other. /mcp alone renders a second 401 body for a credential that was presented but did not match; /shutdown keeps one body for every failure because ADR-0022 pins the refusal not to reveal whether a token exists. `serve --mcp-entry` prints a headers map carrying ${AIRACCOON_MCP_TOKEN}, never a live token - Hermes resolves it from ~/.hermes/.env, Claude Code from the environment, and an unset variable in Claude Code warns in `claude mcp list` but still sends the literal placeholder.",
-  "The manifest is the budget source of truth: chunkTokens (1022) sets memory chunk size AND the query-trim budget; code chunks stay 510 (min(510, ctx-2)). Everything that says 'longer than one chunk' or pins the manifest must follow it — scripts/src/bundle.py's BUNDLED_MANIFEST pin (guarded by scripts/tests/test_bundle.py::test_committed_files_match_their_pins) and every chunk-count fixture derive from the manifest, never literals.",
-  "ChunkBudgetReconciler (EntryEmbedder drain, after vec reconcile, before the embed loop): re-chunks AND re-embeds at the resolved budget; embedding.chunkBudget stamp present iff the last run converged; unproven note groups get 3 passes per resolved budget then stop gating (residual population named in ADR-0125); terminal skips never gate; event 448 reports counts.",
-  "Long-blocking tool calls in delegated lanes kill the session ('aborted (lost)' — observed 3x at dotnet-test full-suite launches; the dotnet-engineer persona's sonnet/bedrock pin also has no API key and falls back to openrouter). Lane briefs must mandate detached runs + tail polling and commit-as-you-go."
- ]
+  "lastUpdated": "2026-10-03",
+  "notesRef": ".ai-badger/status-notes.json",
+  "historyRef": ".ai-badger/status-history.json",
+  "completedTasks": [
+    {
+      "id": "air-finish-thread-refactor-pr-series",
+      "title": "Duplication-review refactor series #814-#829 landed, integration-reviewed, checklisted; follow-up fixes #831-#837; release 1.56.0",
+      "pr": 838,
+      "merged": false,
+      "date": "2026-10-03",
+      "hasNotes": false,
+      "summary": "Took over the cloud project thread's refactor series (#814-#820) and finished the duplication review: F2 BackgroundLoop (#825), F3/F8 IntSetting + ReportThenApplyRepairCommands (#824), F4 SettingsReader + Sql.Def (#826), F6 PermissiveFakeMemoryStore/SyncTestBank/RealMcpServerFixture (#827/#828), F9 CloudEtag (#823), jscpd gate (#822, ratcheted to 0.6% in #835), #829 RepairLoop record. Series shipped in 1.55.6 (changelog backfilled #833). Integration review (no combination failures; 4 SHOULD) fixed in #836 (cancel-safe Replace.cs rollbacks, SQL source gates, all raw settings reads via SettingsReader, one ChunkSizeReader) and #835. Full local suite: unit fixes #831 (NoBank before AutoStartUnsupported; packed test shows stdout), Python fixes #834, and a real stop-path token TOCTOU (#837: secrets ride the proven connection; ADR-0106 residual 2 narrowed). Manual checklist #832: 22 pass/3 substituted/1 fail (S3 auth message names no operation - pre-existing). Changelog README now states PRs without a VERSION change ship in the next release's entry. 1.56.0 release PR #838."
+    },
+    {
+      "id": "air-chunk-columns-null-ctx-key",
+      "title": "Context key total over a NULL project id; stored vec-trigger bodies replaced (ADR-0124, 1.53.13)",
+      "pr": 801,
+      "merged": true,
+      "date": "2026-09-28",
+      "hasNotes": false,
+      "summary": "vec0's metadata ctx rejects NULL, while MemorySql.ContextKeyExpression returned SQL NULL for project_id IS NULL (its C# twin never did): the vec_entries_au/vec_structure_au triggers threw at MarkEmbedded (ADR-0119 charged 3 attempts then abandoned the row), the v9 rebuild's rethrow blocked opening a v2-v8 bank holding such a row, and pre-v9 partition keys accepted the NULL. Fix: COALESCE(project_id,'') in every concatenating branch (key total: project:/custom:0::L/workspace:0::W, equal to ContextKeyFor(_, '')) plus an every-open probe-first replacement of the two stored trigger bodies from shared constants (EnsureVecCtxTriggerBodiesAsync, ADR-0023 amendment shape) \u2014 CREATE TRIGGER IF NOT EXISTS cannot replace an existing bank's body, and the live bank's bodies carried the old expression. No migration (verified: vec0 0.1.9 rejects NULL metadata; pre-v9 rows are rebuilt by v9; live bank 0 NULL/'' ctx). 8 RED-first tests; the plan review caught the stored-body blocker; both implementation reviews folded (consumer table, IS rationale, sibling statement-count gate). 1.53.13."
+    },
+    {
+      "id": "air-chunk-index-repair-vanished-partition",
+      "title": "repair chunk-index survives a partition vanishing mid-pass (NULL-safe partition key + vanished-group skip, 1.53.12)",
+      "pr": 800,
+      "merged": true,
+      "date": "2026-09-28",
+      "hasNotes": false,
+      "summary": "Live dry run crashed with ArgumentOutOfRangeException at ChunkIndexRepair.cs:44 (partition[0] on an empty PartitionAsync result): the group list is a snapshot and the walk re-chunks files for minutes, so a partition deleted or re-keyed since the snapshot left an empty lookup (95 rows were deleted inside the crashed run's window, sync_tombstones 12:57-13:10 UTC); a second latent path keys NULL for project_id IS NULL rows (GROUP BY groups NULLs, `= NULL` matches nothing). Fix: NULL-safe `IS` on the context-key comparison in ChunkPositionScanner.PartitionAsync; skip empty partitions and count only groups examined (GroupsExamined). Two RED-first tests (NULL-key partition; trigger-simulated concurrent delete), 68/68 on the touched surface. Rebased onto #799's 1.53.11; merged as a1aa1383."
+    },
+    {
+      "id": "air-sync-keeps-repaired-chunk-positions",
+      "title": "Sync's post-merge renumber keeps the positions repair chunk-index kept (ADR-0123 addendum, 1.53.10)",
+      "pr": 796,
+      "merged": true,
+      "date": "2026-09-28",
+      "hasNotes": false,
+      "summary": "Sync's RecomputeChunkColumnsBankWideKeepingOrder read -1 as 'merge-added', so a sync after chunk-index --apply closed ADR-0123 holes and positioned 'position unknown' rows. Now the merge INSERT writes chunk_index=-1 explicitly and sync passes @lastId (max id before merge): only file rows at -1 above it get positions (after the file rows); other file rows keep positions/holes/-1 while distinct and < file-row count, else renumber 0..k-1 (tombstone gap still closes); notes unchanged; note-order repair passes long.MaxValue. The sync tests' hand-built schema defaults chunk_index to 0, which hid the dependency on the column default. 2 SyncServiceTests + 3 mutants killed; 117/117 renumber consumers."
+    },
+    {
+      "id": "air-chunk-index-keeps-older-chunkings",
+      "title": "repair chunk-index keeps stored order an older chunking left; StoredOrderChain locates each kept row (ADR-0123, 1.53.9)",
+      "pr": 795,
+      "merged": true,
+      "date": "2026-09-28",
+      "hasNotes": false,
+      "summary": "Live dry run proposed 23,459 rows to -1: pre-granite (#687) and August chunkings of unchanged files, not corruption (tokenizer switch explains ~5k, #775 ~30). #794 keeps a partition's stored order when positions are 0..n-1 and reproduced rows are in document order; #795 (from two parallel reviews) locates every row's text in one SearchValues pass and keeps the heaviest stored-order chain (reproduced rows outweigh), adds duplicate/lone-CR/moved/out-of-place tests, fixes how-to drift, bumps 1.53.9. Snapshot: 742 to -1, 21 moved."
+    },
+    {
+      "id": "air-file-chunk-index-repair-788",
+      "title": "Boundary repair v2: duplicate/gapped file positions, one total_chunks rule, repair reports without a CLI deadline (#788)",
+      "pr": 790,
+      "merged": true,
+      "date": "2026-09-27",
+      "hasNotes": false,
+      "summary": "1.53.6 checklist: 186 live file groups with duplicate chunk_index; boundary repair re-ingested must-cut files every run. Fix: ChunkBoundaryRepair scans before re-ingest; exact match (MatchesStoredRows) repositions in place, stale/grown files re-ingest, gone/workspace-changed renumber in stored order; job renamed chunk-boundary-repair-v2. One rule in Core DocumentChunks: (ctx, source_file) partition, file rows first by first occurrence, citing notes after, total = partition row count; FileIngestor/scanner/ChunkIndexRepair agree; position-only moves skip section (no FTS rewrite). repair chunk-index reports RowsRetotalled; CLI client has no timeout, 100 s per-request deadline except repair reports. Released 1.53.7 (publish awaits production approval). Two debug lanes + integration review (B1 reused-HttpClient Timeout throw, S1 two total definitions) + 3 bot review rounds."
+    },
+    {
+      "id": "air-note-order-repair-retry-784",
+      "title": "Note chunk order repair skipped unpositioned notes; retry as v2 (#784)",
+      "pr": 786,
+      "merged": true,
+      "date": "2026-09-27",
+      "hasNotes": false,
+      "summary": "1.53.5 checklist (PR #785) found 354 live notes still opening-last with note-chunk-order-v1 stamped. Cause (red test first): Repositioned bails on chunk_index -1, then ChunkBoundaryRepair's RecomputeChunkColumnsBankWide fills -1 in id order. Fix: bank-wide RunAsync fills unknown positions with KeepingOrder first (as SyncService does); job renamed note-chunk-order-v2 so stamped banks re-run. Released 1.53.6 (publish awaits production approval). Owner's live bank already repaired by hand (ledger row deleted, re-ran 18:45)."
+    },
+    {
+      "id": "air-docs-sweep-after-defect-fixes",
+      "title": "Post-merge documentation-gap audit for ADR-0119..0122",
+      "pr": 782,
+      "merged": true,
+      "date": "2026-09-27",
+      "hasNotes": false,
+      "summary": "Docs were current except agent-memory-server.md, which lacked ADR-0121 watch self-healing (per-file fingerprint catch-up on restart, every 5 min for non-stopped watches, on digest recovery); added. EventId register, ADR index 0119-0122, architecture repair jobs verified. Open gap: memory_ingest_directory no longer fails on a denied directory - undocumented."
+    },
+    {
+      "id": "air-defect-sweep-537-695-724",
+      "title": "Defect sweep: #537 poison embed row, #695 chunker splits identifiers, #724 stale files after checkout (+#778 found)",
+      "pr": 779,
+      "merged": true,
+      "date": "2026-09-27",
+      "hasNotes": false,
+      "summary": "All four real, fixed TDD with ADRs and existing-bank repair. #774 ADR-0119 1.53.2: per-row isolation, entries.embed_attempts ceiling 3, engine-outage/busy charge nothing, model switch resets. #775 ADR-0120 1.53.3: whitespace/term-boundary splits, >64-char FTS prefix match, one-shot chunk-boundary-repair-v1. #776 ADR-0121 1.53.4: per-file fingerprint catch-up (mtime>=updated_at or size differs), 5-min heal pass, pruned walk (6-7 CPU-s -> 0.1 per scan), vanish-mid-digest = delete. #779 ADR-0122 1.53.5: notes stored in text order, hash-proved NoteTextOrder, note-chunk-order-v1, sync keeps partition order. Checklist items: ai-badger#525 + #780 (poison-embedding-stub.py). Owner rules learned: fix found gaps in-PR; session owns merging."
+    },
+    {
+      "id": "air-harness-granite-golden-regen-726",
+      "title": "Regenerate the granite harness golden (#726)",
+      "pr": 773,
+      "merged": true,
+      "date": "2026-09-27",
+      "hasNotes": false,
+      "summary": "#726 closed. Fresh live-bank copy cb99fe6e (70,763 entries) kept at ~/ai-raccoon-eval/copies/cb99fe6ecbe0.db (owner's AI_RACCOON_EVAL_COPY); project-corpus-100 re-pinned (98/100 queries changed; old pin e0434a72 lost with /tmp). Full run took 48 min, not 13 h. results-granite.json: harness hit 0.909 / ai-raccoon 0.919, MCC 0.94, stale C048; conservation test live. Bank leg on embedding.device auto. eval-set-100 keeps old pin (ADR 0060 anchor drift + MiniLM goldens): follow-up #777; until then the copy-gated test_pinned_copy_reproduces_every_committed_corpus fails locally."
+    },
+    {
+      "id": "air-coreml-webgpu-latency-ab-record",
+      "title": "M4 device benchmark + coreml vs WebGPU p95 search latency; README Performance section",
+      "pr": 772,
+      "merged": true,
+      "date": "2026-09-27",
+      "hasNotes": false,
+      "summary": "#764 closed (owner: coreml stays opt-in). ADR-0118 gate 2 holds on M4: CPU-s separated in two runs (24.6-27.1 vs 41.8-43.9; 28.9-29.7 vs 44.7-47.8), p95 search 35-39 ms vs 51-88 ms. device-benchmark.py --search-queries (schema v2, fenced-code-aware headings). docs/work/2026-09-26-device-benchmark-m4.md (F1-F5, NPU screenshot), perf report section 4. README: Quick Start first, What's new, Breaking changes -> docs/reference/breaking-changes.md, new Performance section asking other-chip owners for benchmark issues. Owner live server on coreml since 2026-09-27. Open: gate 1 (second chip), gate 3 (one opt-in release)."
+    },
+    {
+      "id": "air-device-power-benchmark-764",
+      "title": "Cross-device embedding benchmark: time, SoC and system energy, RAM",
+      "pr": 770,
+      "merged": true,
+      "date": "2026-09-26",
+      "hasNotes": false,
+      "summary": "#764. scripts/device-benchmark.py drives the real product per device (auto/cpu/mlx/coreml) on a tiered docs corpus; powermetrics SoC (sudo) + AppleSmartBattery system energy, server CPU-s, phys/neural peak. Owner run on M4 (1.53.0, 4914 chunks, x3): coreml 33.1 s / 379 J / 26.2 CPU-s vs auto(WebGPU) 70.4 s / 1389 J / 42.0 CPU-s; CPU-s ranges separated (24.6-27.1 vs 41.8-43.9). Cold compile 37.3 s, warm 1.0 s. p95 search latency not measured."
+    },
+    {
+      "id": "air-opt-in-coreml-device-764",
+      "title": "Opt-in embedding.device coreml on the Neural Engine (1.53.0)",
+      "pr": 769,
+      "merged": true,
+      "date": "2026-09-26",
+      "hasNotes": false,
+      "summary": "#764 stage 3, ADR-0118 Accepted, ADR-0117 Superseded. model_fp16_ane.onnx (5.7 MB, shared weights, offsets pinned), 4 CoreML bucket sessions (256-1024, batch 1), >1024 rows on a lazy CPU session, NeuralEngineSwitch state machine with background compile + per-bucket parity probe, WebGPU serves meanwhile, CoreMlCache with flock (exclusive compile, shared serve), .complete marker, contained prune, status.json + doctor coreml line, EventIds 436-441 (register 206). ORT telemetry disabled (fixed exit 134 after MLX+CoreML). M4: cosine >=0.999998, cold 35 s / warm 0.7 s, 808 MiB. macOS-only suites never run in CI. Default flip gated: second chip, in-product WebGPU A/B, one opt-in release."
+    },
+    {
+      "id": "air-coreml-default-apple-silicon-adr",
+      "title": "ADR-0118: opt-in coreml device on the Neural Engine (Proposed)",
+      "pr": 768,
+      "merged": true,
+      "date": "2026-09-26",
+      "hasNotes": false,
+      "summary": "#764 stage 2. Owner ruling: opt-in first; auto unchanged. Per-bucket CoreML sessions (256/512/768/1024), shared-weights model_fp16_ane.onnx, cache under data root, background compile with WebGPU serving + parity-probe state machine, every ordered device switch must work across restart and in-process. Default flip later gated by second chip, in-product WebGPU A/B, one opt-in release."
+    },
+    {
+      "id": "air-ane-shared-weights-export-764",
+      "title": "ANE graph that reads the shipped fp16 weights (5.7 MB added)",
+      "pr": 767,
+      "merged": true,
+      "date": "2026-09-25",
+      "hasNotes": false,
+      "summary": "#764 stage 1.1 (PRs #766 powermetrics result, #767). export_ane_encoder.py --share-weights-with rebuilds every ANE weight from the product's separate q/k/v/o/gate/up/down fp16 initializers via constant ops ORT folds before partitioning; bit-identical to the standalone export, CoreML 1 partition 1401-1405 NE ops, 5.68 MB added. powermetrics: ANE rail 1276 mW vs 29 idle. Published standalone export: huggingface.co/Arraasz/granite-embedding-small-english-r2-ane. Stage 1 left: second chip (needs M1/M2/M3); WebGPU direct A/B deferred to product."
+    },
+    {
+      "id": "air-ane-layout-encoder-reexport-760",
+      "title": "ANE-layout re-export of granite-small clears ADR-0117's CoreML gates",
+      "pr": 763,
+      "merged": true,
+      "date": "2026-09-25",
+      "hasNotes": false,
+      "summary": "#760 (PRs #763, #765; research only, no VERSION). fp16 ml-ane-transformers-layout export (conv1x1, per-head MatMul attention, Neg-free RoPE) = 1 CoreML partition, ~1405/1407 ops on ANE; fp32 graphs get 0 ANE ops. step256: 6-8% of MLX CPU-s, 0.49-0.57 GiB phys+neural, 808 MiB cache, recall unchanged. ADR-0117 amended, decision stands. Tools: export_ane_encoder.py, coreml_ab per-config model_dir, ane_powermetrics.py (owner runs, sudo). Next stage #764: shared-weights export, second chip, WebGPU compare, powermetrics, then ADR + coreml device."
+    },
+    {
+      "id": "air-server-exits-when-install-replaced",
+      "title": "Server exits when its install is replaced; pre-update proxies respawn through the tool shim",
+      "pr": 754,
+      "merged": true,
+      "date": "2026-09-25",
+      "hasNotes": false,
+      "summary": "#752 (1.52.1, ADR-0116): InstallWatchdog stops serve within 20s once AppContext.BaseDirectory is deleted by dotnet tool update (warn 613), MaintenanceJobRunner demotes BundledModelInstallReplacedException to Debug 529, startup log names version + install dir. #754 (1.52.2): Environment.ProcessPath resolves the tool symlink on macOS, so a pre-update proxy falls back to ~/.dotnet/tools/ai-raccoon then PATH (event 693). Follow-up pending owner ruling: extract multi-platform tests to platform.yml with a Platform trait."
+    },
+    {
+      "id": "air-performance-report-cpu-memory-gpu",
+      "title": "Performance report (CPU, memory footprint, GPU) + README What's new line",
+      "pr": 751,
+      "merged": true,
+      "date": "2026-09-25",
+      "hasNotes": false,
+      "summary": "docs/work/2026-09-25-performance-cpu-memory-gpu.md: Mermaid charts + tables for 1.44.3-1.51.2 (CPU 24.8-117 -> 1.2-2.8 CPU-s/120s on live events; footprint 6.8 -> 1.75 GB; MLX 17.9 -> 1.1-1.2 GB; CPU/embed 253-261 -> 2.8-8.3 ms), tests + checklist, caveats; live 1.51.2 reading 2.55 CPU-s/2 min, 277-586 MB RSS. README What's new one line; 1.48.0-1.44.0 moved to whats-new-history."
+    },
+    {
+      "id": "air-mlx-bucket-padding-cache-cap",
+      "title": "MLX path: 64-token buckets + 512 MiB cache cap (ADR-0114), released 1.51.1",
+      "pr": 744,
+      "merged": true,
+      "date": "2026-09-25",
+      "hasNotes": false,
+      "summary": "MLX sessions pad rows to multiples of 64 (Core LengthBuckets, reuses RunBatch zero-mask padding) and cap MLX's free-buffer cache at 512 MiB via mlx_set_cache_limit from the shipped libmlxc.dylib (MlxCacheLimit, EventIds 434-435, best effort). Measured 17.9 GB -> ~1.2 GB, same latency, ~7 ms more CPU/row; vectors unchanged. ADR renumber churn: #742 took 0113 first. v1.51.1 released; publish run 36078822306 awaits production approval."
+    },
+    {
+      "id": "air-drop-configureawait-app-code-adr",
+      "pr": 742,
+      "merged": "de1ecbfe",
+      "summary": "Removed ConfigureAwait from src/tests/benchmarks; ADR-0113; NoConfigureAwaitTests gate; dotnet format pass"
+    },
+    {
+      "id": "air-webgpu-plugin-cuda-optin-offmacos",
+      "pr": 740,
+      "merged": "1fdd365e",
+      "version": "1.51.0",
+      "summary": "WebGPU plugin EP default on win/linux-glibc, opt-in CUDA via user provider library; ADR-0112"
+    },
+    {
+      "id": "air-watch-cpu-excluded-delete-fastpath",
+      "title": "Cut startup/idle CPU: excluded-path delete fast path, index-seek cascades, pooled-handle init cache",
+      "pr": 741,
+      "merged": true,
+      "date": "2026-09-25",
+      "hasNotes": false,
+      "summary": "1.50.1. Diagnosed with dotnet-trace/counters/sample: .git/.ai-badger/bin churn ran DeleteSourcePathAsync (OR LIKE full project scan, up to 0.9 s warm, write lock) for excluded never-fingerprinted paths; reconcile ~30 opens/s each dlopen'd vec0 + schema pass. Fixes: HasFingerprintAtOrUnder gate, rowid-IN (project_id,path) seeks + idx_entries_project_path, per-handle cache keyed on data_version/schema_version/user_version/application_id (every-open steps still run). A/B on live-bank copy: idle 5.84->0.64 CPU-s/min, 300 hidden writes 14.17->1.13. Starts docs/changelog/."
+    },
+    {
+      "id": "air-mlx-cache-limit-bucket-sweep",
+      "title": "MLX cache limit, length buckets, 766 arm",
+      "pr": 743,
+      "merged": true,
+      "date": "2026-09-25",
+      "hasNotes": false,
+      "summary": "17.9 GB footprint = MLX free-buffer cache (92 MiB active). mlx_set_cache_limit via shipped libmlxc caps it: 0.4-1.0 GB unpadded; x64 + 512 MiB cap = ~1.2 GB, same p50, ~2x CPU/row. x32 halves pad waste, doubles shapes/footprint uncapped. 766 arm: memory half of 1022's gain, code ties 510; D stays. Teardown abort 2/70 processes. #739 updated."
+    },
+    {
+      "id": "air-chunk-window-mlx-rerun",
+      "title": "Chunk-size arms re-run on MLX (M4) + config D memory 1022 / code 510",
+      "pr": 738,
+      "merged": true,
+      "date": "2026-09-25",
+      "hasNotes": false,
+      "summary": "MLX recall = CPU within \u00b10.007 MRR on all 8 arms. Cost is memory: footprint grows with distinct row lengths (17.9 GB peak at 1022 unpadded, 10.6-11.8 GB at 510); \u00d764 padding gives same vectors (cos>=0.999998), peaks 3.7 GB / 1.1 GB. Padded ms/1k tokens flat 46-57. Pick D + padding; product padding filed as #739. Report artifact E8eNowmT7e4avwTVurVrkA."
+    },
+    {
+      "id": "air-fusion-confidence-weighted-rrf-706",
+      "title": "Confidence-weighted RRF measured (#706 round 2): A9 -> 2 but A6 and 6 held-out floors regress; keep off",
+      "pr": 730,
+      "merged": false,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "LegConfidence (Core pure fn, rank-1 vs rank-5 gap, weight clamped [0.5,2]) behind fusion.legConfidence.enabled.global (default false). ON: A9 3->2, A6 1->2 (near-tie flipped by a both-leg consensus candidate), held-out floors A4/A6/A7/A8/S1/S2 break, mean -0.0127, parity -0.0086. Keep rule fails. Two rounds done; #706 left open for an owner ruling (pin A9 and close, or telemetry first). PR #730: owner picks merge-as-off vs record only."
+    },
+    {
+      "id": "air-bank-key-verifier-sidecar-705",
+      "title": "Key-check sidecar tells a wrong key from a corrupt bank (ADR-0111)",
+      "pr": 729,
+      "merged": false,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "memory.db.keycheck: random bank-id + HMAC-SHA256(HKDF subkey, domain||bank-id), FixedTimeEquals, 0600 refuse-not-chmod, atomic writes; minted/rewritten on every successful keyed open (covers rekey/migrate). SQLITE_NOTADB: sidecar mismatch -> 21, sidecar verifies -> BankCorruptedException 32, absent -> both-causes 21; checked after the legacy-derivation probe (else migration breaks, ADR-0111 D4). doctor read-only three-way. EventIds 905/906. Stacked on #721; ADR README has a provisional 0110 row pending #722."
+    },
+    {
+      "id": "air-fusion-trust-confident-leg-706",
+      "title": "ADR-0078 no-regression reorder measured against the gates: does not fix A9, regresses S4/S5/S6",
+      "pr": 727,
+      "merged": false,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "Flag on: A9 stays 3 (FTS and vector rank-1 winners are distinct chunks, both claim key 1 \u2014 ADR-0078's L-results bound); gate (c) S4 1->3, S5 3->7, S6 2->3 (second SourceAffinityRanker pass, suggestive); held-out mean -0.018 (in band) but 6 per-query floors break; parity delta -0.0004. Keep flag off. New FusionNoRegressionFlagGateTests pins the flag-on ranks. #706 stays open for rank-1 rescue / confidence-weighted RRF."
+    },
+    {
+      "id": "air-harness-rebaseline-granite-707",
+      "title": "LlamaIndex retrieval harness moved to granite; package D per-row leg ranks",
+      "pr": 725,
+      "merged": false,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "Harness embeds with ibm-granite/granite-embedding-small-english-r2 (pinned), CLS+L2 by the checkpoint's own pooling config, max_length 512 like EmbeddingService's manifest budget; harness vs bank-stored granite vectors median cosine 0.99999 (n=20) vs 0.5934 for the retired gte/ONNX seam. results.json carries fts/vector/fused ranks; report splits fusion into fusion_take/fusion_floor. Golden not regenerated (13 h full-volume) -> #726."
+    },
+    {
+      "id": "air-code-index-uncovered-lines-711",
+      "title": "Code-index line-coverage gap investigated: watcher lag, not a chunker/ingest defect",
+      "pr": 723,
+      "merged": false,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "Every uncovered line (208 paths, 3,783 lines) sits in a file edited after its newest row; 0 unexplained gaps once lines split on '\\n' like CodeChunker (the 2 'trailing' lines were U+2028/U+2029 literals Python splitlines counts). New WatchIntegrationTests prove insert/modify/append and atomic-rename edits re-cover every line; CodeChunker covers an unterminated last line. Open: why restart catch-up leaves files stale for weeks after git checkout -> #724."
+    },
+    {
+      "id": "air-wrong-key-no-legacy-source-710",
+      "title": "Wrong key under a key source with no legacy derivation reports key mismatch, not a raw SqliteException",
+      "pr": 721,
+      "merged": false,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "Confirmed (#710): OpenBankWithResolvedKeyAsync only converted SQLITE_NOTADB when LegacyPassphrase was set, so env-style sources leaked a raw SqliteException. Now always a BankKeyMismatchException (NoLegacyDerivationToTry, both-causes hedge) -> exit 21 per ADR-0107. Four tests had pinned the bug (incl. EncryptionBitwardenIntegrationTests '...RethrowsTheOriginalSqliteException'); updated."
+    },
+    {
+      "id": "air-restart-unproven-names-proof-reason-709",
+      "title": "serve --restart Unproven refusal names the identity-proof reason",
+      "pr": 719,
+      "merged": false,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "RestartResult carries IdentityProofFailure? Reason; ServerRestart.CycleAsync sets it on Unproven; NodeRunner.RestartRefusal prints IdentityProof.RefusalText(reason) like the attach path (#700). EventId 657 unchanged. Note: BackendLaunchIdentityProofE2ETests.RestartCellAsync asserts the log line's wording, not the operator refusal line \u2014 a soft spot."
+    },
+    {
+      "id": "air-settings-endpoint-baseurl-validation-708",
+      "title": "SettingsEndpoint model-migration POST refuses an unusable BaseUrl",
+      "pr": 718,
+      "merged": false,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "BaseUrlValidation.IsUsableHttpUrl (AiRaccoon.Settings) shared by the CLI (exit 78) and the SettingsEndpoint POST (400 before StartModelMigrationAsync, nothing persisted). The server refusal is unreachable from current CLI verbs (they validate first), so no CLI exit mapping was added."
+    },
+    {
+      "id": "air-retrieval-reliability-followup-batch-plan",
+      "title": "Code-retrieval and reliability follow-up batch: ADR-0107 exit messages, bm25 hash tie-break, Nightly green (#691/#692), BDD binding fix, dedupe prevalence and eval-P3 on granite (1.49.3)",
+      "pr": [
+        700,
+        701,
+        702,
+        703,
+        704
+      ],
+      "merged": true,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "Owner gate D1-D7 (docs/work/2026-09-24-followup-batch-feedback.md). #700: wrong key or corrupt bank named in one message; bad base-url -> 78 before any write; rejected key own message (ClientResultException); exit 50 names IdentityProofFailure; exit 51 surfaces McpTokenFile.RefusalReason. #702: ', e.hash' tie-break on both bm25 ORDER BYs. #701: A9 excluded from sweep gate (c) with rank-3 ceiling; ProxyLaunch race = startup checkpoint writing WAL into the overwritten bank, fixed by awaiting Ticks + empty WAL, plus BankOpenObservation proxy-side assert. #703: HKDF step binding (build-bdd red since #696). Measured: dedupe loss 0.045% chunks / 0.012% lines (recorded, no fix); eval-P3 DROP on granite. Filed #705-#711."
+    },
+    {
+      "id": "air-full-recall-pack-guard-fixes",
+      "title": "1.49.1 checklist findings: full-recall leader for all-terms keyword matches, pack guard for missing model weights, bundled-engine warning wording (1.49.2)",
+      "pr": 694,
+      "merged": true,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "FusionLeader.Of widens the ADR-0005 leader: fused #1 that is the keyword top and in AllTermsMatched keeps rank 1 against the neighbour boost (red: vk83jq note ranked 3rd under minRelativeScore 0). Gates green: sweep, QueryConstruction, held-out, absolute floor. csproj RequireBundledModelWeights fails pack without model_fp16.onnx_data. Engine warnings/MCP instructions no longer promise a download. Post-verb --transport stdio exit 11 kept (pinned by design). Filed #695: chunker splits words mid-token."
+    },
+    {
+      "id": "air-symbol-path-header-chunk-eval",
+      "title": "Path/symbol header on line chunks, measured on JSAA C#/TS and ai-badger Python whole repos (granite): not kept",
+      "pr": 697,
+      "merged": true,
+      "date": "2026-09-24",
+      "hasNotes": false,
+      "summary": "Header = repo-relative path + tree-sitter enclosing symbol chain, prefixed to every line chunk (granite window 8190, no cap). vs re-embed control: JSAA span MRR +0.040 [-0.003,+0.083] (all 4 variants ~+0.04); ai-badger nDCG@5 -0.043, file MRR -0.041 (CIs at/below 0). Symbol adds nothing over path; keyword leg adds nothing over vector leg. Losses: header lends test/sibling files the target's name. Re-embed noise floor = 0 (AST churn real). Records: docs/work/2026-09-24-symbol-path-header-on-line-chunks.md, docs/work/2026-09-24-ast-chunking-on-whole-repos.md."
+    },
+    {
+      "id": "air-code-retrieval-eval-measured-improvements",
+      "title": "Multi-language code eval (12 languages, 332 queries), baseline, measured code-search changes: identifier-split code_fts column + HTML/CSS/SQL indexing kept; test down-weight, path header, AST chunking dropped (1.48.0)",
+      "pr": 686,
+      "merged": true,
+      "date": "2026-09-23",
+      "hasNotes": false,
+      "summary": "#673 corpus+runner, #686 queries+verdicts+shipping. nDCG@5 0.501 (B0) -> 0.654 (+html/css/sql) -> 0.689 (+identifiers, held-out +0.052 CI [0.021,0.088]); on granite (#687) 0.801 -> 0.824 (P2 still KEEP, +0.037). Dropped: test-file weight (test-intent collapses), path header (CI incl. 0), AST chunking (+0.018, CI [-0.006,0.044]). Scores deterministic (noise 0). ADR-0109. Record: docs/work/2026-09-23-code-retrieval-eval-results.md."
+    },
+    {
+      "id": "air-keyword-floor-neighbour-attach-exit",
+      "title": "Search floor keeps keyword matches, anchor-first file#section, leader outranks neighbour boost; CLI exit codes carry their meaning, then the categorized two-digit ErrorCode scheme (1.44.2 -> 1.45.0)",
+      "pr": 679,
+      "merged": true,
+      "date": "2026-09-23",
+      "hasNotes": false,
+      "summary": "#666 (1.44.2): the absolute floor exempts rows the keyword leg's conjunctive expression matched (not the stop-word OR fallback); anchor rows go first for path queries; the row both legs rank first stays above the sibling boost; stray --attach exits 9. #668 (1.44.3): 9 = argv outside the grammar (CommandResult parse error), 15 = bad value, on every path. #671 (1.44.4): post-parse audit, CommandFailed 27, Ctrl-C 130 everywhere. #679 (1.45.0, breaking): ErrorCode.{Category}.{Case}, two digits 10-99 (exit status is 8-bit: exit(1003) -> 235; 126-255 reserved), Ok.Success=0, Ok.SIGC=130, 74 cases in 9 categories, ADR-0107 with the old->new table; repair --apply stuck/writers-active/attention-needed = 37/38/39, bitwarden-not-switched = 29."
+    },
+    {
+      "id": "air-backfill-chunker-named-tuple-types",
+      "title": "ChunkBackfill picks its chunker per file type (re-runs as chunk-backfill-v2); declared tuple types -> named record structs; released 1.44.5",
+      "pr": 674,
+      "merged": true,
+      "date": "2026-09-23",
+      "hasNotes": false,
+      "summary": "P1 routing: memory_write notes (no source_file or path != source_file) -> markdown; file rows -> handler chunker via IFileTypeMatcher; unowned extension -> PlainTextChunker (the fallback); JobName chunk-backfill-v2 so every bank re-runs once. Tests T1,T2,T4,T5,T6,T7, each red under its own mutation. Sweep: 61 declared tuple sites in src+benchmarks -> 40 types (readonly record struct; Dapper rows AliasRow/PolicyCount are sealed classes because record ctor matching needs exact types); WatchKey owns its equality, WatchKeyComparer deleted. Union of touched suites 1894 passed locally; PR merged before build-slow/bdd finished (main build is the CI verdict). Also #676: claude-review loads review plugins, 150 turns, fails only without a 'Reviewed <sha>' verdict."
+    },
+    {
+      "id": "air-backend-launch-identity-proof",
+      "title": "Attach-or-start + per-root ECDSA identity proof (ADR-0106, reverts ADR-0105; F49, F39) \u2014 released 1.44.0",
+      "pr": 657,
+      "merged": true,
+      "date": "2026-09-23",
+      "hasNotes": false,
+      "summary": "P1 state-dir seam + token relocation/migration + identity key; P2 POST /identity/prove + proof-gated verifier; P3 F39 no-mint (exit 22); P4 attach-or-start revert, proof-gated handover/restart/dispose, --attach removed; P5 real-binary E2E (threat matrix 5 attackers x acquire/restart/dispose, every hostile cell red under mutations M1-M13), docs, SECURITY.md. Owner gate (docs/work/2026-09-23-identity-proof-p5-findings-feedback.md) approved F1 (serve tightens owned 0755 state dir to 0700, EventId 692), F7 (runnable exit-22 remedy), F2 (restart proves before identify), F3 (unproven fallback child killed), F5 residual; R1 Retry=Never carve-out applied on recommendation (owner timeout). Private-child URL-timeout leak fixed by peer session (4dc31a16). Follow-ups #658 #659 #660 #661. VERSION 1.44.0; squash 29368f97; release v1.44.0 tagged, nuget publish needs owner approval."
+    },
+    {
+      "id": "air-corpus-quality-clean-instrument",
+      "title": "Corpus quality: debris-free instrument + regenerated corpus + f2 golden (harness follow-up B)",
+      "pr": 635,
+      "merged": true,
+      "date": "2026-09-10",
+      "hasNotes": false,
+      "summary": "Markup-aware topic repair (new stdlib scripts/src/retrieval_tuning/corpus_text.py, TOPIC_DERIVATION=markup-aware-v1) delegated from build_project_corpus._derive_topic; corpus regenerated from the same pinned copy (sha 0a7ecb01...->5445425c...), debris 23/100->0/100 measured with the independent evaluate.debris_query; target-preserving (every id/anchor/scope/holdout byte-identical; 85 query texts changed, 2 collision-driven frames). B0 rig reproduction diffed CLEAN vs results-f1 before the campaign; two non-base runs -> new named goldens docs/work/results-f2.json + results-f2-run2.json (pair CLEAN), harness 0.828/0.192, bank 0.879/0.203, MCC 0.3233, cont 76/6/11/6, stale [C035]; clean subset f1 n=76 @0.697/0.842 -> f2 n=99 @0.828/0.879 (composition+text delta, not a controlled A/B). refresh exit 0 for both corpora; f1 goldens + eval-set-100.json byte-identical; collect_ac_evidence all PASS; full scripts/tests 639 passed/25 skipped/0 failed; CI lane 192 passed incl. the 2 new test files. Plan review d-803 REQUEST-CHANGES folded; implementation review d-805 REQUEST-CHANGES (2 docs MUSTs fixed in 860fc6fc); test-quality review d-806 APPROVE-WITH-MINORS. PR #635 squash-merged 499f457e."
+    },
+    {
+      "id": "air-eval-corpus-provenance-clean-ci",
+      "title": "eval-set-100 provenance + clean-checkout test hygiene (harness follow-up C+E)",
+      "pr": 634,
+      "merged": true,
+      "date": "2026-09-10",
+      "hasNotes": false,
+      "summary": "eval-set-100.json regenerated header-shaped with a snapshot pin (e0434a72 == the pinned copy); exactly 6 anchors repaired (E040/E041/E042/E045/E063/E065, expectedHash+answerSpan only); refresh now exits 0 for both corpora (wrong copy still exit 2); both raw readers header-aware (harness test + C# MiniLmGoldenVectorReader with a two-shape test, [RetryFact]); matplotlib declared, optuna/deleted-fixture tests skip with reasons; CI lane gains the dependency + eval-corpus gates; P3 parity gate normalized to the query payload and its pin assertion hardened to == sha256(pinned copy) after an independent desk review (APPROVE-WITH-MINORS). Full scripts/tests 629 passed/25 skipped/0 failed; all CI lanes green; PR #634 merged 2c36512e."
+    },
+    {
+      "id": "air-full-hundred-query-parity-eval",
+      "title": "Full 100-query harness parity eval + one-harness consolidation",
+      "pr": 633,
+      "merged": true,
+      "date": "2026-09-10",
+      "hasNotes": false,
+      "summary": "Full-100 parity eval on project-corpus-100 (harness vs bank, both legs on one frozen copy): harness 0.6768/0.1582 vs bank 0.8081/0.1874, MCC 0.5955, cont 65/2/15/17, stale [C035]. Determinism fixed (Chroma tie truncation); quiesced-scratch requirement found (bank re-ingests mid-eval otherwise); c-cell taxonomy 15/15 fusion; ONNX-vs-HF embedding seam measured (0.5934) with the pooling explanation retracted; one-harness consolidation (src scope builder, JSON knobs, refresh script, CLI parity, golden diff); C14 + 7 implementation-review findings closed; PR #633 merged c4b37a15; follow-up definition in docs/work/2026-09-10-harness-followups-definition.md."
+    },
+    {
+      "id": "air-handle-tool-cancellation-errors-gracefully",
+      "title": "Handle tool cancellation gracefully same as errors",
+      "pr": 630,
+      "merged": true,
+      "date": "2026-09-09",
+      "hasNotes": false,
+      "summary": "Live-token OCE answers IsError cancelled: (913) instead of escaping to SDK warn; telemetry on bounded sentinel; raw-HTTP isError:true SSE pin (checklist artifact disproven); VERSION 1.42.1. 3 commits + 1 review-fixup, subagent plan+implementation reviews."
+    },
+    {
+      "id": "air-remove-stdio-full-server-mode",
+      "summary": "Removed stdio full-server mode (D2(b) also bare-http): bare=proxy-only, serve sole server; keep-enum 9+hint, Https shrink, 1.42.0, ADR-0104. PR #627 merged.",
+      "pr": 627,
+      "merged": true,
+      "date": "2026-09-09",
+      "hasNotes": true
+    },
+    {
+      "id": "air-threshold-filter-corpus-committee-eval",
+      "summary": "Closed unfinished per owner order 2026-09-09 to unblock the duplicate-server task; no merge record.",
+      "hasNotes": false
+    },
+    {
+      "id": "air-llamaindex-chroma-fusion-retrieval-harness",
+      "summary": "LlamaIndex+Chroma fusion-retrieval harness finished and merged as PR #625 (merge fd69a2d4, 2026-09-09): 8 BLOCK review items addressed post-close (prod floor 0.6, eval fail-gates, per-bucket FTS probe + hash tiebreak, dep pins, scripts-harness CI lane); 95/95 harness tests green.",
+      "pr": 625,
+      "merged": true,
+      "date": "2026-09-09",
+      "hasNotes": false
+    },
+    {
+      "id": "air-mmr-leg-level-poc-branch",
+      "summary": "Leg-level MMR PoC branch + 4-cell eval: rho=0.1 vandalizes ours 29->11, python neutral",
+      "hasNotes": true
+    },
+    {
+      "id": "air-mmr-diversity-rerank-implementation-plan",
+      "summary": "MMR plan rev.2 (MoE+adversarial+owner 6/6) then P0a NO-GO stops build; negative probe recorded",
+      "hasNotes": true
+    },
+    {
+      "id": "air-run-once-repair-fully-converges",
+      "title": "Run-once project-ids repair converges fully with no new deviations (P2 scope fix + P3 enforcement)",
+      "pr": 621,
+      "merged": true,
+      "date": "2026-09-05",
+      "summary": "Root cause (traced before hypothesizing): planner/applier predicate mismatch \u2014 OwnsMoveableContent scheduled folds FoldEntriesAsync could not execute (project-scope+non-NULL-only applier vs project+custom+shared planner), so applies drained yet re-planned identical folds forever. Fix in 7 packages + integration + ledgers across PRs #614 (A planner honesty+pins, B committed-scope applier, D2 verdict), #616 (C telemetry/workspaces), #617 (F bounded loop + D6 verdict), #618 (D durable project_id_aliases v14), #619 (E P3 chokes + sync arm + 3 reload legs), #620 (G convergence E2E, P3 ARMED), #622 (integration: shared fold domain unity, honest P3-armed derivation, warm fail-open 714), #623 (red-proof ledgers), #621 (release 1.41.0 + ADRs 0100-0103). Pipeline: implementer lanes built partial PRs, session 01a070f9 reviewed + fixed each, session 8575f1fb did full integration review. Reviews caught real defects (workspace-strand, BDD S2 contract, EventId collisions, warm skip-ensure race, Default teardown leaks). Next: 1.41.0 tag/publish + manual checklist on published build, then prove the original GOAL on the live bank with 1.41.0."
+    },
+    {
+      "id": "air-repair-census-write-lock-timeout",
+      "title": "Repair project-ids census times out against a busy/large bank",
+      "pr": 611,
+      "merged": true,
+      "date": "2026-09-05",
+      "summary": "Two fixes: materialized-CTE vec0 join plan pin (VecEntriesCountSql/VecStructureCountSql) so an ANALYZEd bank keeps the cheap plan, and read-only repair reports open via OpenBankSkippingEnsureAsync + EnsureCheapAsync so they never wait on another connection's write lock. E2E regression coverage, review-findings refactor, manual checklist docs/work/checklist/2026-09-05-1.40.1-repair-census.json, released as 1.40.1 (VERSION-only bump per fix-not-feature convention)."
+    },
+    {
+      "id": "air-remove-machine-default-alias-map",
+      "title": "Remove machine-specific Default alias map from public lib (ADR-0099)",
+      "pr": 609,
+      "merged": true,
+      "date": "2026-09-05",
+      "summary": "Started by a parallel pi-harness session (13 commits: empty Default alias map, map_json transport CLI->server with v13 migration, --map CLI + template UX, steady-state test migration, ADR-0099). Reviewed by this session (opus code-reviewer dispatch against an isolated snapshot): critical finding was a data-loss risk in the retire path that turned out to already be fixed and deliberately documented by the time of review. Took over per owner request to fix the one remaining red CI check (build-bdd, 'Scan after repair keeps the winner key'): root-caused to WatchEventSource's FileSystemWatcher closures holding a pre-repair project id until WatchHostedService's existing reconcile loop (every 1s in production) tears the watcher down and restarts it under the winner -- proven already-correct via a new deterministic unit test (Reconcile_RenamedWatch_StopsTheLoserAndStartsTheWinner); the BDD scenario's own WhenRepairRuns step just never triggered that reconcile. Test-only fix, admin-merged on green CI (owner authorized, branch protection has no requestable reviewer for a single-account repo). Companion work: PR #608 (repair project-ids' CLI output clarity, same session) and PR #610 (VERSION 1.38.1 -> 1.39.0, BREAKING readme line). Manual checklist docs/work/checklist/2026-09-05-1.39.0-project-ids.json: 7/7 pass against a real-shaped scratch bank (job-search-ai-assistant, pbi-badger-integration, aib, minted guids), confirming zero auto-fold without --map, the --map fold+apply+converge cycle over a real ~15s async poll, the non-overwriting template, and PR #608's scoreboard/retired-line/rerun-clarifier text. One non-blocking finding recorded: every registered project (even an already-correct canonical) now shows as needing human attribution on a map-less dry run, since Default carries zero hardcoded canonicals -- flagged for a follow-up decision, not fixed."
+    },
+    {
+      "id": "air-config-d-memory-1022-chunks",
+      "title": "Config D: memory chunks + query trim follow manifest chunkTokens 1022, code stays 510 (ADR-0125)",
+      "pr": 804,
+      "merged": true,
+      "date": "2026-09-29",
+      "summary": "Adopted config D from docs/work/2026-09-25-chunk-size-vs-attention-window-mlx.md: the bundled manifest's chunkTokens 254->1022 drives memory chunk size AND the query-trim budget (deliberate, ratified); code chunks stay 510. Existing banks re-chunk AND re-embed via a new ChunkBudgetReconciler phase inside the model-migration drain (before the embed loop, every migration-closing path): mirror groups re-ingest from disk per scope/context/workspace bucket (same file in two contexts keeps both), note groups reassemble via NoteTextOrder backtracking and carry path/source_file/section/keys/source_id/agent_id/created_at/ttl_days (mirror rows lose ttl_days \u2014 FileIngestor reads none). embedding.chunkBudget stamp present iff the last run converged; retryable skips gate it for at most 3 unproven passes per resolved budget (single-row-fits carve-out), terminal skips (source gone/unreadable/handler-less) never gate; budget drift force-opens a re-chunk-only migration; event 448 logs the report. MLX bucket-padding precondition pinned (short-row test) with fail-closed AIRACCOON_REQUIRE_MLX on the new build-mlx macOS job. Review fallout fixed: bucket-scoped mirror replace (was a hard-lock crash on two-context banks), ttl carry, retry bound, logging. Research harness now derives its embed window from the manifest; scripts manifest pin guarded by test. 29 budget-derived fixture/class fixes across 8 test classes; the OtlpNames gate caught a real DI bug (ChunkBudgetReconciler unconstructable). VERSION 1.54.0."
+    }
+  ],
+  "next": "Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) \u2014 owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
+  "filedNotStarted": [
+    "#477 no job-level metrics (feature gap)",
+    "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
+    "#485 directory-walk prune gap (post-delta-3, from #481)",
+    "#493 PerformanceTools description drift",
+    "#497 repair for bge-m3 manifests downloaded before #496",
+    "#504 embedding fallback-chain shapes",
+    "#519 TestData.CreateMemoryStore optional Null defaults (from #518)",
+    "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable \u2014 1.33.0 checklist)",
+    "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement",
+    "#706 fusion that trusts one confident leg (A9 / #367)",
+    "#724 watch catch-up leaves files stale for weeks after directory-entry replaces (git checkout)",
+    "#726 regenerate the granite harness golden (overnight full-volume run)",
+    "#728 flaky MemorySearchRankingTests premise on x64 CI",
+    "#804-followup 254-vs-1022 retrieval measurement (WebGPU footprint + re-chunk wall-clock)",
+    "DONE 2026-09-30 (PR pending, #809 eval-reanchor): eval-set-100.json re-anchored to the first 1022-era bank copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb; 0 query-text changes, 93 expectedHash / 58 expectedSource / 60 answerSpan fields moved; project-corpus-100 deliberately stays on cb99fe6e",
+    "re-measure test_corpus_config MEASURED_BYTES band (1,608,970 measured 2026-08-22; main over it)"
+  ],
+  "research": [],
+  "stillTrue": [
+    "dotnet_env=local must be set per-directory for the DeployToLocalSource build target to push to .nupkg-local",
+    "Transport is the --transport flag (stdio|http|https|proxy), default proxy since ADR-0020. MCP_TRANSPORT and AIRACCOON_DATA_ROOT do NOT exist - ServerConfig records that the env layer was removed by the single-channel ruling, and McpServerFactory injects the data root via WebApplicationFactory.UseSetting, not the environment",
+    "sqlite-memory's content-hash dedup is global \u2014 cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
+    "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params \u2014 alias columns and use a settable DTO",
+    "sqlite-memory/vector/sync are native SQLite extensions loaded via Microsoft.Data.Sqlite LoadExtension; deferred embeddings (defer_embeddings=1) let writes work before any model is configured",
+    "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure \u2014 assert ShouldNotBe(true), not ShouldBe(false)",
+    "Bare `ai-raccoon` is a proxy: it opens no bank, resolves no key and loads no ONNX model. `--transport stdio` is the in-process server and the escape hatch when a backend cannot start",
+    "`serve` mints <data-root>/mcp-token (0600) BEFORE it binds, so a port that answers guarantees the file exists; the probe accepts 401 as proof of a live server so it still recognises one across data roots",
+    "/mcp and /shutdown accept the loopback token in either envelope: X-AiRaccoon-Token or Authorization: Bearer *** one credential compared with FixedTimeEquals on both paths and neither shadowing the other. /mcp alone renders a second 401 body for a credential that was presented but did not match; /shutdown keeps one body for every failure because ADR-0022 pins the refusal not to reveal whether a token exists. `serve --mcp-entry` prints a headers map carrying ${AIRACCOON_MCP_TOKEN}, never a live token - Hermes resolves it from ~/.hermes/.env, Claude Code from the environment, and an unset variable in Claude Code warns in `claude mcp list` but still sends the literal placeholder.",
+    "The manifest is the budget source of truth: chunkTokens (1022) sets memory chunk size AND the query-trim budget; code chunks stay 510 (min(510, ctx-2)). Everything that says 'longer than one chunk' or pins the manifest must follow it \u2014 scripts/src/bundle.py's BUNDLED_MANIFEST pin (guarded by scripts/tests/test_bundle.py::test_committed_files_match_their_pins) and every chunk-count fixture derive from the manifest, never literals.",
+    "ChunkBudgetReconciler (EntryEmbedder drain, after vec reconcile, before the embed loop): re-chunks AND re-embeds at the resolved budget; embedding.chunkBudget stamp present iff the last run converged; unproven note groups get 3 passes per resolved budget then stop gating (residual population named in ADR-0125); terminal skips never gate; event 448 reports counts.",
+    "Long-blocking tool calls in delegated lanes kill the session ('aborted (lost)' \u2014 observed 3x at dotnet-test full-suite launches; the dotnet-engineer persona's sonnet/bedrock pin also has no API key and falls back to openrouter). Lane briefs must mandate detached runs + tail polling and commit-as-you-go."
+  ]
 }
