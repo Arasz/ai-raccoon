@@ -1,0 +1,239 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-10-03",
+    "branch": "chore/checklist-1-56-1 (worktree .ai-badger/worktrees/air-checklist-1561)",
+    "commit": "1007330ed73655fcb1167e816b4afcb7cbb97ea3 (release); tree origin/main 95a52cfb differs only in .ai-badger/state.json",
+    "data-root": "per lane under the session scratchpad: checklist/lane-{a,b,c}/..., checklist/lq/{big,small-1560,small-1561}; ~/.ai-raccoon read only (sqlite mode=ro, VACUUM INTO)",
+    "note": "Run against the installed, published 1.56.1 global tool (no local pack). The owner's live server (pid 52055, port 7721) was never touched. Negative control for the 1.56.1 item: published 1.56.0 (4eb56176) installed into a scratch --tool-path. Focus: the 1.56.1 long-query FTS cap (ADR-0126), added as item long-query-keyword-terms-capped."
+  },
+  "derived": {
+    "version": "1.56.1",
+    "mcp-tool-count": "29",
+    "mcp-prompt-count": "2",
+    "note": "Produced by scripts/derive-facts.py at run time (exit 0), never typed from memory or a previous run."
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "2026-09-28-1.53.13-release",
+      "prior-claim": "keyword-search-across-a-chunk-boundary: the item's literal fixture (fete sentence x10 + vk83jq) yields 2 rows (chunk 0 len 1148, chunk 1 len 41)",
+      "what-is-actually-true": "On 1.56.1 the same x10 fixture is a single row (len 1189, instr 1149, chunk 0/1), so the item's own premise fails; it needs x45 (2 rows, chunk 1 holds vk83jq at instr 493). 2026-10-02 run already scaled it; the item text in 2026-10-03-1.56.1-release.json still says x10.",
+      "evidence": "sqlite: (12, 0, 1, 1189, 1149, '44efd91f') for fete-small; (13,0,2,4611,0) and (14,1,2,533,493) for fete-big",
+      "so-what": "Update the item definition fixture so lanes do not each rediscover the substitution."
+    },
+    {
+      "prior-run": "2026-10-02-refactor-series-local-pack and 2026-09-28-1.53.13-release",
+      "prior-claim": "memory-search-hybrid-retrieval used the query 'an antique navigation instrument reflecting evening light in a stargazing room' as a no-keyword-overlap query",
+      "what-is-actually-true": "It shares the word 'in' with the stored text 'in the dusty observatory', and those runs recorded an fts leg on the hit (1.53.13: legs fts rank 3 + vector; 10-02: fts + vector), so keyword matching contributed. Replacing 'in a' with 'inside a' (zero shared words) gives a vector-only leg (cosine 0.8318) on 1.56.1 and the hit disappears at vectorWeight=0.",
+      "evidence": "checks.py 4: 'query words vs stored: set()' for the new query; legs=[('vector',1)]; prior evidence legs=[{fts,...},{vector,...}] for the old query",
+      "so-what": "The skill's example query is not strictly overlap-free (stopword); use the 'inside' variant."
+    },
+    {
+      "prior-run": "2026-09-28-1.53.13-release",
+      "prior-claim": "note-opening-chunk-reports-index-zero: the 62-paragraph minutes note produces 8 rows (indices 0..7)",
+      "what-is-actually-true": "On 1.56.1 the same fixture is 2 rows (4303 + 3015 chars), consistent with the 2026-10-02 run's 2 rows; chunk sizing changed since 1.53.13 so the 'last index = 7 of 8' wording in the item is stale (the regression would now be 1 of 2).",
+      "evidence": "sqlite: (17,0,2,4303,16) (18,1,2,3015,0)",
+      "so-what": "Item text could cite a scaled fixture (e.g. 300 paragraphs, 9 rows per 10-02 run) to make the index-0 check more discriminating."
+    },
+    {
+      "prior-run": "",
+      "prior-claim": "",
+      "what-is-actually-true": "No prior claim found wrong. Observation: the reviewed prior read-path-query-guard commands omit that memory_search requires sessionId, so they are not reproducible as written over raw MCP. The prior 'default threshold is strict' note is consistent: here the structural annotation was only demonstrated at threshold 0; default-threshold behaviour on real log shapes was not exercised.",
+      "evidence": "",
+      "so-what": ""
+    },
+    {
+      "prior-run": "",
+      "prior-claim": "",
+      "what-is-actually-true": "2026-10-02 refactor-series run recorded file-watch-status via 'sqlite3 watch_files rows = 3'; still correct here (3 rows, ignored dirs absent). No contradiction found.",
+      "evidence": "",
+      "so-what": ""
+    },
+    {
+      "prior-run": "",
+      "prior-claim": "",
+      "what-is-actually-true": "Prior full-mcp-surface (2026-10-02) said memory_search needs only a query; in 1.56.1 sessionId is a required argument (schema required=[query,sessionId]); omitting it returns invalid-argument (logged as ToolRefusals 910). Not a prior-run error, but a method trap: prior lane scripts used older arg shapes.",
+      "evidence": "",
+      "so-what": ""
+    },
+    {
+      "prior-run": "",
+      "prior-claim": "",
+      "what-is-actually-true": "Gotcha doc says the .git/ hand-edit guard blocks shell redirects into a scratch watch dir named .git; write such fixtures from python.",
+      "evidence": "",
+      "so-what": ""
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "~/.dotnet/tools/ai-raccoon --version; python3 derive-facts.py . (version=1.56.1, tools=29, prompts=2); git rev-parse 1007330e; shasum -a 256 ~/.dotnet/tools/.store/ai-raccoon/1.56.1/ai-raccoon/1.56.1/ai-raccoon.1.56.1.nupkg and .../ai-raccoon.osx-arm64/1.56.1/ai-raccoon.osx-arm64.1.56.1.nupkg; curl -sfL https://api.nuget.org/v3-flatcontainer/{ai-raccoon,ai-raccoon.osx-arm64}/1.56.1/<id>.1.56.1.nupkg | shasum -a 256 (files in lane-a/nupkg/)",
+      "evidence": "--version: 1.56.1+1007330ed73655fcb1167e816b4afcb7cbb97ea3 ; git rev-parse 1007330e: 1007330ed73655fcb1167e816b4afcb7cbb97ea3 ; VERSION: 1.56.1\nai-raccoon store 3b7967f0ac9504ffc4d6c5cf19f7b4ae19c934ad68449313306b37c57824adb6 == nuget.org 3b7967f0ac9504ffc4d6c5cf19f7b4ae19c934ad68449313306b37c57824adb6\nai-raccoon.osx-arm64 store 352d6bc51ffee40511cb87375ebc49ae9bd20bd787f6fdabf4f660ea1a18b2c0 == nuget.org 352d6bc51ffee40511cb87375ebc49ae9bd20bd787f6fdabf4f660ea1a18b2c0 (153390085 bytes)\n/observability on the scratch server: version 1.56.1+1007330ed73655fcb1167e816b4afcb7cbb97ea3",
+      "observed-result": "The installed global tool is byte-identical to the nuget.org 1.56.1 release (both the shell package and the RID package) and reports the release commit SHA; --version matches derived.version 1.56.1. No pack/install was run (owner's binary untouched).",
+      "status": "substituted",
+      "accepted": null,
+      "acceptance-reason": "Proposed: Accept as substituted: the item's build/pack/force-update steps were deliberately not run (orchestrator instruction; owner's released binary installed, live server on 7721). Instrument: --version SHA vs git release commit + store nupkg sha256 vs nuget.org flatcontainer, which proves the stronger fact (installed bytes == published release)."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "nohup ai-raccoon --data-root $L/data serve --port 0 --idle-timeout 0 > serve1.log &  ; nohup ai-raccoon --data-root $L/data serve --restart --port 61034 --idle-timeout 0 > serve2.log & ; negative control: serve --restart --port 0 > serve3.log & ; lsof -iTCP:61034/62070/7721 -sTCP:LISTEN; /observability pid before/after; kill by PID 77879, 79171",
+      "evidence": "serve1.log: ai-raccoon: 1.56.1+1007330e... serving on port 61034 (pid 65562 via lsof and /observability {\"pid\":65562})\nserve2.log: ServerRestart[650] ai-raccoon: asking the server on port 61034 to stop (pid 65562, 1.56.1+1007330e...)\nServerRestart[651] ai-raccoon: the server on port 61034 (pid 65562) stopped and the port is free\nthen 'serving on port 61034'; lsof: new pid 77879 on 61034; ps -p 65562: gone; /observability {\"pid\":77879}\nnegative control serve3.log: '--restart --port 0' -> 'serving on port 62070' (pid 79171) while pid 77879 kept 61034 (not cycled)\nlsof 7721: AiRaccoon 52055 LISTEN before, between and after (unchanged)",
+      "observed-result": "--port 0 binds an ephemeral port and logs it; --restart on the bound port stopped pid 65562 and rebound the same port under pid 77879 (a real cycle, not an attach); --restart --port 0 only starts an unrelated instance. 7721 owner server (52055) never touched; both my servers stopped by PID, no listener left on 61034/62070.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: Accept: restart cycled the found PID (old PID dead, new PID on same port) with negative control and 7721 PID unchanged."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "python3 write_fixtures.py (mcp.py JSON-RPC to http://127.0.0.1:61034/mcp, Bearer token from data/mcp-token): memory_write ordinary astrolabe note; memory_write '[IMPORTANT: Background process 4412 finished with exit code 0]'; clean control 'Background reading list: the process notes finished review with no changes.'; python3 checks.py 3 (memory_stats + sqlite3 -readonly)",
+      "evidence": "astrolabe: {\"hash\":\"b4faa710686f4154b446f267346d68bab3dfe4fc9ab5cd2e3ff9a6535f14db7c\",...\"stored\":true}\nnoise: {\"hash\":\"\",\"path\":\"\",\"context\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}\nclean control (same-shaped but not noise): stored:true hash 0a5b48cf...\nsqlite: count of entries with value like '%Background process 4412%' = 0 (rejected content left no row); memory_stats entries=18 (no phantom row)",
+      "observed-result": "Stored write returns a real hash that exists in entries; the rejected write returns stored=false, a reason naming the policy, empty hash/path; a lookalike clean note is still stored, so the filter is not rejecting everything.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: Accept: positive, rejection and negative control all observed."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "python3 checks.py 4: memory_search kind=memory query 'an antique navigation instrument reflecting evening light inside a stargazing room' (default floors), then minRelativeScore=0, then vectorWeight=0 (after model embedding set local --data-root --port 61034 and memory_embed_pending -> processed 3, pending 0). 17 other notes in bank (6 distractors, anchors, fete, etc.)",
+      "evidence": "shared-word check query vs stored text: set() (empty)\ndefault: n=1 -> hash b4faa710 /notes/astro.md legs=[vector rank 1] cosine=0.8318 ranking 0.9178; truncation absoluteRelevance threshold 0.79 dropped 7\nvectorWeight=0 control: n=3 unranked=true, only fts-leg rows (hiking trail, groceries, 2025-outage); astrolabe NOT returned",
+      "observed-result": "A query with zero shared words returns exactly the astrolabe note, carried by the vector leg alone (cosine 0.83), with all 7 distractors dropped by the relevance floor; with the vector leg weighted to 0 the note is not returned, so the hit is attributable to the vector leg of hybrid retrieval.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: Accept: no-overlap query, vector-only leg, negative control fails as it should. Note the skill's own example query shares the word 'in' with the stored text (see findings)."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "python3 checks.py 5: memory_get {projectId lane-a, hash b4faa710...}; memory_get hash 64 zeros; memory_get real hash with projectId other-project",
+      "evidence": "known: {\"hash\":\"b4faa710...\",\"value\":\"The brass astrolabe caught the lamplight in the dusty observatory, unused for decades.\",\"context\":\"project:lane-a\"} isError false\nunknown: isError true \"unknown-hash: No entry with hash '000...0' in project 'lane-a'.\"\nother project: isError true \"unknown-hash: No entry with hash 'b4faa710...' in project 'other-project'.\"",
+      "observed-result": "Reachable hash returns full stored value; unknown hash and a hash unreachable from another project both refuse with isError and unknown-hash, never an empty success.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: Accept (ADR-0035)."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "memory_write /notes/decisions/2026-outage.md section=decision and section=rollback; decoy /notes/decisions/2025-outage.md section=decision; python3 checks.py 6: memory_search kind=memory vectorWeight=0 for '2026-outage.md#decision', '2026-outage.md#rollback', '2026-outage.md#no-such-section' (default window, no minRelativeScore)",
+      "evidence": "#decision: n=1 hash a987548a /notes/decisions/2026-outage.md chunk 0/2 legs=[fts 1] (2025-outage decoy with same section excluded)\n#rollback: n=1 hash 17d2b8d1 chunk 1/2 legs=[fts 1]\n#no-such-section (control): n=8 unranked=true, mixed rows (rollback, decision, longterm x2, background note, 2025 decoy, astro, fete-big)",
+      "observed-result": "Each real anchor returns exactly its own chunk and nothing else; the fabricated section degrades to noisy unranked broad FTS, so the clean single hit is attributable to the anchor.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: Accept."
+    },
+    {
+      "item": "keyword-search-across-a-chunk-boundary",
+      "expected-result": "memory_write a note made of\"The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.\" ten times, space-joined, then \" Invoice reference vk83jq was filed with the parish council.\" Premise: sqlite shows more than one entries row for the note's path. memory_search {query: \"vk83jq\", kind: memory, minRelativeScore: 0} returns the note with an `fts` leg in evidenceByHash, and one of its rows holds `vk83jq` whole (`instr(value,'vk83jq')`). A vector-only hit does not count: the vector leg finds this note on a broken build too. Then write a note holding one whitespace-free term of about 2,500 characters (40 concatenated SHA-256 hex digests); premise: no row holds the whole term; searching the whole term returns that note with an `fts` leg. A build without ADR-0120 returns both notes by the vector leg only, and no row holds vk83jq (ADR-0120)",
+      "command": "memory_write fete note: spec fixture (sentence x10 + ' Invoice reference vk83jq was filed with the parish council.') as /notes/fete-small.md; scaled x45 as /notes/fete-big.md; /notes/longterm.md = 40 concatenated sha256 hex digests of 1..40 (2560 chars, no whitespace); sqlite3 premise queries (select id,chunk_index,total_chunks,length(value),instr(value,'vk83jq') ...); python 'term in value' over longterm rows; memory_search 'vk83jq' and the whole term with kind=memory minRelativeScore=0 (python3 checks.py 7)",
+      "evidence": "premise spec fixture x10: 1 row only (id 12 chunk 0/1 len 1189 instr=1149) -> premise 'more than one row' FAILS for the literal fixture on this build\nx45 fete-big: id13 chunk 0/2 len 4611 instr=0 ; id14 chunk 1/2 len 533 instr(value,'vk83jq')=493 (premise met)\nsearch 'vk83jq': first result 3fd33e0b fete-big chunk 1/2 legs=[fts 1, vector 3] cos 0.7478 (spec-sized fete-small 44efd91f also returned legs=[fts 2, vector 9])\nlongterm: rows id15 chunk 0/2 len 1715, id16 chunk 1/2 len 845, instr 0; 'any longterm row holds whole term: False' (term len 2560)\nsearch whole term: first result 4bbd5473 longterm.md chunk 0/2 legs=[fts 1, vector 1] cos 1",
+      "observed-result": "The identifier lands whole in a row of a genuinely multi-row note and is returned with an fts leg; the oversize term has no whole row yet the search returns the note with an fts leg. The item's literal fixture (x10) now yields a single row, so the premise was met with a scaled (x45) fixture.",
+      "status": "substituted",
+      "accepted": null,
+      "acceptance-reason": "Proposed: Accept as substituted: fixture scaled to x45 because the item's x10 fixture no longer produces more than one row (bank chunk budget); same instruments (sqlite premise + fts leg in evidenceByHash). Recommend updating the item's fixture text to x45."
+    },
+    {
+      "item": "note-opening-chunk-reports-index-zero",
+      "expected-result": "memory_write a note with sourceFile /notes/minutes.md made of 62 paragraphs separated by blank lines (\"Paragraph N of the parish minutes records the treasurer's report on hall repairs, roof slates and the organ fund.\"), the first opening with \"Opening marker zq71\". Premise: sqlite shows more than one row for the note's path. memory_search {query: \"zq71\", kind: memory, minRelativeScore: 0} returns it with chunkIndex 0, and sqlite gives chunk_index 0 for the row where `instr(value,'zq71') > 0`. A build without ADR-0122 puts the opening at the last index (7 of 8) (ADR-0122)",
+      "command": "memory_write /notes/minutes.md = 62 paragraphs ('Paragraph N of the parish minutes records the treasurer's report on hall repairs, roof slates and the organ fund.') joined by blank lines, paragraph 1 prefixed 'Opening marker zq71 '; sqlite3 -readonly select id,chunk_index,total_chunks,length(value),instr(value,'zq71') from entries where path=... order by chunk_index; memory_search query zq71 kind=memory minRelativeScore=0 (python3 checks.py 8)",
+      "evidence": "sqlite: (17, chunk_index 0, total 2, len 4303, instr(zq71)=16) ; (18, chunk_index 1, total 2, len 3015, instr 0) -> premise: 2 rows for the path\nmemory_search zq71: first result f261628a /notes/minutes.md chunkIndex 0 totalChunks 2 legs=[fts 1, vector 1] snippet 'Opening marker zq71 Paragraph 1 of the parish minutes...'",
+      "observed-result": "The row sqlite shows holding the opening marker is chunk_index 0 and memory_search reports chunkIndex 0 for it; the later row is index 1 and has no marker.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: Accept (ADR-0122). Caveat: only 2 rows, so the 'opening at last index (n-1 of n)' regression would be index 1 here, still distinguishable from 0."
+    },
+    {
+      "item": "poison-memory-row-isolated-and-abandoned",
+      "expected-result": "On a fresh scratch bank with no engine set, memory_write four ordinary notes and one containing POISON-7Q, so all five rows are pending. Start `python3 scripts/poison-embedding-stub.py --port 0 --log stub.log`, then run `model embedding set openai stub-embed <printed base URL> --api-key stub-key` against the scratch server. memory_embed_pending returns {processed, pending} and does not fail or hang. Later calls return pending 1. `sqlite3 -readonly memory.db \"SELECT embed_state, embed_attempts, count(*) FROM entries GROUP BY 1, 2\"` shows four rows embedded and the poison row pending at embed_attempts 3. memory_stats.pending is 1, and the count of poison lines in stub.log stays the same across three more memory_embed_pending calls. Negative control: stub.log holds a `poison 5` batch line followed by `ok 1` lines, so the engine refused the batch and answered the single rows. A build without ADR-0119 fails every memory_embed_pending with ClientResultException, keeps all five rows pending and adds a poison line per call (ADR-0119)",
+      "command": "serve --data-root lane-b/poison --port 0 (port 61043); item1.py (5 memory_write over MCP: 4 ordinary + 'Cartography note POISON-7Q refuses to embed.'); sqlite3 -readonly poison/memory.db GROUP BY -> pending|0|5; poison-embedding-stub.py --port 0 --log stub.log (http://127.0.0.1:61188/v1); ai-raccoon --data-root .../poison --port 61043 model embedding set openai stub-embed http://127.0.0.1:61188/v1 --api-key stub-key; item1b.py (3 memory_embed_pending, sqlite GROUP BY, memory_stats, 3 more memory_embed_pending, poison-line count). Output: item1b.out",
+      "evidence": "before engine: stats {entries:5, pending:5}; sqlite pending|0|5\nembed_pending call 1 {\"processed\": 4, \"pending\": 1}; calls 2,3 {\"processed\": 0, \"pending\": 1}\nsql: embedded|0|4 / pending|3|1\nstats {\"entries\": 5, \"pending\": 1}\npoison lines before/after 3 extra calls: 6 6 (also 6 after calls 1-3)\nstub.log: ok 1 / poison 5 / ok 1 / ok 1 / ok 1 / ok 1 / poison 1 / poison 1 / poison 1 / ok 1 / poison 1 / poison 1 / ok 1",
+      "observed-result": "No call failed or hung. Four rows embedded at attempts 0; the poison row pending at embed_attempts 3; stats.pending 1; poison lines constant at 6 across six calls (the 3 extra calls added none), so the abandoned row is no longer retried. stub.log shows the whole batch refused ('poison 5') then single-row 'ok 1' answers (batch split, poison isolated), then single-row poison retries up to the cap. The pre-ADR-0119 control build could not be run (only the released binary is installed); the poison 5 -> ok 1 pattern is the in-log negative control.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: accept: every numeric claim in the expected result observed, isolation and abandonment both visible. Note stub.log has an 'ok 1' before the first 'poison 5' (the engine-set probe) and interleaved ok/poison singles, consistent with split + retry."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "serve --data-root lane-b/main --port 0 (port 61044); source: only services.AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy>() (src/AiRaccoon/Setup/AppRegistrations.cs:340), Name HermesBackgroundProcessLog, 3 shapes (2 case-insensitive prefixes on trimmed content; exact-body 'received signal <digits>[.]'); item2.py (9 memory_write: 4 positives, 5 negatives); sqlite3 -readonly main/memory.db 'SELECT id, detected_by_policy, request_content FROM noise_entries ORDER BY id'; ai-raccoon --data-root .../main --port 61044 noise entries; SELECT count(*) FROM entries. Output: item2.out",
+      "evidence": "P1 '[IMPORTANT: Background process 4412 finished with exit code 0]' -> stored:false, hash '', reason \"rejected by noise policy 'HermesBackgroundProcessLog'\"; P2 '  [async delegation batch complete] 3 tasks done', P3 'received signal 15', P4 '  Received Signal 1.' -> same rejection.\nN1 '[IMPORTANT: freeze deploys on Fridays...]', N2 mid-sentence '[ASYNC DELEGATION BATCH COMPLETE]', N3 'We received signal 15 from the radio tower...', N4 'received signal fifteen', N5 clean budget note -> all stored:true with real hashes.\nnoise_entries: 1|HermesBackgroundProcessLog|[IMPORTANT: Background process 4412 ...]; 2|...|  [async delegation batch complete] 3 tasks done; 3|...|received signal 15; 4|...|  Received Signal 1.\nnoise entries CLI: 'total: 4 / HermesBackgroundProcessLog: 4'; entries count 5 (the five negatives)",
+      "observed-result": "One policy registered; rejects exactly its documented shapes (incl. case/whitespace variants), reports stored:false with policy name and no fabricated hash, leaves 5 near-miss/clean negatives stored, and the 4 rejected contents are verbatim in noise_entries (CLI gives only per-policy counts; text via sqlite). The entries table holds only the 5 clean notes.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: accept: positive and negative controls exercised; rejected content retrievable; CLI count, noise_entries and entries count agree."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "memory_search over MCP (sessionId is a REQUIRED argument) via item3.py, item3b.py; settings via ai-raccoon --data-root .../main --port 61044 settings queryguard show|shadow enable|shadow disable|enable|disable|structural enable|structural disable|structural threshold set N. Source read: QueryGuardPolicy.cs, QueryLengthGuard.cs, QueryGuardService.cs, SearchWarnings.cs. Output: item3.out, item3b.out",
+      "evidence": "Default: 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'\nREFUSE '[IMPORTANT: Background process proc_9 completed normally. Command: make test]' and '[ASYNC DELEGATION BATCH COMPLETE] the batch dispatched earlier has finished' -> isError=True 'invalid-params: This looks like tool output rather than a question. Memory search matches meaning, so search for what you want to find — e.g. ... Refused query: ...'\nControls '[IMPORTANT: Background process notes] how do deploys work', '[ASYNC DELEGATION BATCH COMPLETE] all five tasks finished', 'why do deploys freeze on Fridays' -> results (n_mem 3/2/3), only the unrelated 'code engine not configured' note.\nANNOTATE '   at System.Net.Http.HttpClient.Send(HttpRequestMessage request)\\ndeploys freeze' and 'warn: deploys freeze during startup' -> results returned + warning 'This query contains what looks like log or stack-trace output. Memory search matches meaning, not literal text — if you're not intentionally searching for this exact fragment, try rephrasing as a question about what you want to find.'; control 'we arrive at the deploy freeze on Fridays' -> no such warning.\nLONG QUERY (8012 chars, 900 distinct words) warning verbatim: \"This query is over 4,024 characters. Semantic search only embeds roughly the first 1,022 tokens of a query (~4,024 characters of English prose, approximate) — search for the identifying line instead of pasting the whole dump, e.g. the exception type, error code, or failing test name. Keyword (FTS) matching is capped too: it searches only the first 64 distinct words of a query this long.\" Boundary: 4000 and 4024 chars -> no length warning; 4025 and 4100 -> warning; short query -> none.\nShadow on: refuse query ran (n_mem=1, no error); disabled: ran; re-enabled: refused again.\nSTRUCTURAL (threshold set 0): structural off -> clean question has no structural text; after 'structural enable' ('structural: True  threshold: 0') same question gets \"This query's shape (line layout, punctuation density, token structure) statistically resembles tool output rather than a question. ...\" and still returns results; refuse query with structural on -> still 'REFUSED: invalid-params: This looks like tool output...'; threshold 1 -> annotation gone; reset -> 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'",
+      "observed-result": "Refuse tier refuses only the two full marked shapes (prefix + marker); near-miss and clean controls pass. Annotate tier warns but returns results; a prose 'at' control does not warn. The long-query warning comes from the always-on QueryLengthGuard (ADR-0071), in the exact 1.56.1 wording with the 64-distinct-words sentence; threshold 4,024 chars for the bundled 1,022-token budget (boundary 4024/4025). Structural detector ships disabled, stays silent at threshold 0 until armed, then only annotates (never refuses, never downgrades a regex Refuse) and obeys threshold 1. Shadow and disable pass queries through. Settings restored to defaults.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: accept: both tiers with negative controls; default-off structural proven by arming at threshold 0 flipping the same query from silent to annotated; long-query text recorded verbatim."
+    },
+    {
+      "item": "long-query-keyword-terms-capped",
+      "expected-result": "On a bank of real scale (a VACUUM INTO copy of ~20k entries), a ~7k-character pasted memory_search returns well inside a client timeout (seconds, not tens of seconds) and its long-query warning says keyword matching is capped at 64 distinct words. On a scratch bank with vectorWeight 0, a unique word placed after 64 distinct filler words gets no fts leg, while the same word placed first does; a query of 64 raw tokens or fewer keeps its stopwords. Negative control: the previous release on the same copy and queries shows the slow, uncapped behaviour, so each leg is seen to fail (ADR-0126)",
+      "command": "VACUUM INTO copy of ~/.ai-raccoon/memory.db (22,467 entries, watches cleared, device cpu) -> lq/big. probe_latency.py: memory_search projectId=ai-raccoon scope=all with (a) first 7,259 chars of CLAUDE.md (1,015 raw tokens), (b) 7,022 chars of stopwords + 'astrolabe observatory' (2,003 raw tokens, exercises the short-query OR fallback), each at vectorWeight=0 and default; run on 1.56.0 (scratch tool-path, port 61345) then 1.56.1 (global tool, port 64888) on the same copy, client timeout 240 s. probe_cap.py on fresh banks small-1560 / small-1561: two notes (marker 'The quokkaglyph ledger…', control 'Harbour pilots…'), kind=memory vectorWeight=0 minRelativeScore=0 queries: marker first of 71 distinct words; marker after 70 distinct filler words; marker after 80 repeats of 2 words; 'the' + 5 fillers (6 tokens); 'the' + 70 fillers (71 tokens). Scripts in scratchpad checklist/lq/.",
+      "evidence": "1.56.0: paste-7259 (7259 chars) vectorWeight=0: 47.06 s; paste-7259 (7259 chars) vectorWeight=None: 46.88 s; stopword-run-2-content (7022 chars) vectorWeight=0: TimeoutError('timed out'); stopword-run-2-content (7022 chars) vectorWeight=None: 90.44 s\n1.56.1: paste-7259 (7259 chars) vectorWeight=0: 1.86 s; paste-7259 (7259 chars) vectorWeight=None: 1.54 s; stopword-run-2-content (7022 chars) vectorWeight=0: 0.6 s; stopword-run-2-content (7022 chars) vectorWeight=None: 0.93 s\n1.56.0 warning: 'Keyword (FTS) matching still searches the query in full.'\n1.56.1 data.warning (verbatim): 'This query is over 4,024 characters. … Keyword (FTS) matching is capped too: it searches only the first 64 distinct words of a query this long. code search query was shortened to fit the code embedding model's window — the semantic match saw only the first part of the query; keyword matching still saw it in full.'\n1.56.1 tools/list memory_search.query description: '… Keyword matching still covers the query in full. …'\nprobe_cap 1.56.0: marker-first true, marker-after-70 true, marker-after-80-repeats true, stopword-6 true, stopword-71 true\nprobe_cap 1.56.1: marker-first true legs=[{legName:fts,rank:1}], marker-after-70 false (n=0), marker-after-80-repeats true, stopword-6 true, stopword-71 false (n=0); control note never hit on either build",
+      "observed-result": "The cap works and each leg was seen to fail on the previous release: on the 22k-entry copy the paste drops from 47 s to 1.9 s (keyword only) and the stopword-run fallback from a 240 s client timeout / 90 s to 0.6-0.9 s; 8 results still return. A word after the 64th distinct word loses its fts leg on 1.56.1 and keeps it on 1.56.0; repeats do not consume the cap; a 6-token query keeps its stopword 'the', a 71-token one drops it. DEFECT: two caller-facing strings shipped in 1.56.1 still claim the keyword leg sees the whole query. CodeSearchWarnings.QueryTrimmedToCodeWindow ('keyword matching still saw it in full') is appended to the new memory warning, so one warning contradicts itself whenever kind includes code (the default here); MemoryTools.cs:145's query parameter description ('Keyword matching still covers the query in full') is what every client reads in tools/list. Code search shares FtsQueryNormalizer.BuildPlan (SqliteCodeSearchService.cs:32), and a query long enough to pass the 510-token code window is far over 64 words, so both claims are false.",
+      "status": "fail",
+      "accepted": null,
+      "acceptance-reason": "Proposed: accept as a tracked defect. The behaviour passes: the cap, the latency and the ranking boundary each went red on 1.56.0 and green on 1.56.1. The two stale strings are fixed in PR #844 (fix/keyword-cap-wording), which ships with the next release."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "lib.py/start_watch.py: nohup ai-raccoon --data-root lane-c/data serve --port 0 --idle-timeout 0 (bound 61060, pid 67169); w1.sh: air.sh data 61060 settings ingest scope add wproj <wdir>; settings watch enable wproj true; mcp.py data 61060 memory_watch_add {projectId:wproj,path:<wdir>}; sleep 8; sqlite3 -readonly data/memory.db 'select * from watches; select path,updated_at,size from watch_files'; mcp.py ... memory_watch_status {projectId:wproj}. wdir held x.md,w.md,y.md plus node_modules/pkg/index.md and .git/notes.md.",
+      "evidence": "memory_watch_status: {\"data\":{\"watches\":[{\"projectId\":\"wproj\",\"path\":\".../lane-c/wdir\",\"state\":\"Healthy\",\"lastSync\":\"2026-10-03T15:41:29.210118+00:00\"}]}}; sqlite watches row: wproj|.../wdir|1791042087|1791042089||0; watch_files: x.md|1791042089|35, y.md|1791042089|23, w.md|1791042089|37 (3 rows; no node_modules/.git rows).",
+      "observed-result": "memory_watch_status lists the live registration with state Healthy and an ISO lastSync (15:41:29 = epoch 1791042089, equal to the watches.last_scan/updated value and the watch_files updated_at), matching the bank rows. Same shape after restart (lastSync 15:42:09, Healthy). Tool-level check: also seen Scanning state for a just-added watch in the full-mcp-surface run (memory_watch_status -> state Scanning).",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: accept: registration listed with state and sync time, agreeing with the bank's watches/watch_files rows; negative control is the ignored dirs having no watch_files rows."
+    },
+    {
+      "item": "watch-catch-up-heals-a-missed-change",
+      "expected-result": "Watch a scratch directory (`settings ingest scope add`, `settings watch enable`, memory_watch_add) holding x.md, w.md and y.md, plus node_modules/pkg/index.md and .git/notes.md, each with a term found nowhere else. Wait for three watch_files rows, `chmod 000` node_modules, wait 2 s, then edit y.md so watches.last_change_ts moves past x.md's watch_files.updated_at. Read both values while the server runs, because a stopped WAL bank will not open read-only. Stop the server. Replace one word of x.md with a new term of the same byte length and `touch -t $(date -r <t> +%Y%m%d%H%M.%S)` it, where t is between x.md's updated_at and last_change_ts. Rewrite w.md at a different size with a new term, and touch it to before its own updated_at. Restart on the same data root. Within seconds memory_search finds both new terms, watch_files shows new updated_at and size for x.md and w.md, and memory_watch_status reads Healthy. Neither the node_modules term nor the .git term is ever found. Premise: before the restart, updated_at(x.md) <= mtime(x.md) <= last_change_ts. A build without ADR-0121 finds neither new term, because it re-queues only files with mtime > last_change_ts. The 5-minute heal pass (WatchHostedService.HealInterval, event 322 at Debug) is optional: it needs a server left up for over 5 minutes (ADR-0121)",
+      "command": "w1.sh (as above) then w2.sh: chmod 000 wdir/node_modules; sleep 3; rewrite y.md; sleep 6; sqlite3 -readonly (while server up) 'select last_change_ts from watches; select path,updated_at,size from watch_files'; stat. w3.sh: kill 67169; sed x.md xylophoneaaa->xylophonebbb (same length); touch -t $(date -r 1791042095 ...) x.md; rewrite w.md (35->78 bytes, term walrusnewterm777); touch w.md to epoch 1791042000; nohup serve on same data root (new port 61399, pid 73535); sleep 12. w4.sh/search.py: memory_search (projectId wproj, scope all, sessionId lanec) for each term; sqlite3 -readonly watch_files; memory_watch_status.",
+      "evidence": "Premise (server up): last_change_ts=1791042106; watch_files x.md|1791042089|35, w.md|1791042089|37, y.md|1791042106|43; stat x.md mtime=1791042086. After edits: x.md mtime=1791042095 size=35 (1791042089 <= 1791042095 <= 1791042106 holds), w.md mtime=1791042000 size=78 (< its updated_at 1791042089). After restart: search xylophonebbb -> hit path .../wdir/x.md snippet '# X\\n\\nAlpha note xylophonebbb here.' chunkIndex 0; walrusnewterm777 -> hit w.md snippet '...carrying walrusnewterm777 and extra words.'; xylophoneaaa, walrusold111, nmzzzterm, gitzzzterm -> results: []; watch_files after: x.md|1791042129|35, y.md|1791042106|43, w.md|1791042129|78; memory_watch_status state Healthy lastSync 2026-10-03T15:42:09.966019+00:00. Control: y.md term yakyakyak found.",
+      "observed-result": "Both missed changes healed on restart within the 12 s wait: x.md (same size, mtime inside [updated_at,last_change_ts], which only ADR-0121's fingerprint rule catches) and w.md (size changed, mtime older than its own updated_at). New terms found, old terms gone, updated_at moved to 1791042129 for exactly those two while untouched y.md kept 1791042106. node_modules (chmod 000) and .git terms never found. The optional 5-minute heal pass (event 322, Debug) was not exercised: server not left up >5 min, and Debug lines are not logged at default level. Not run: a pre-ADR-0121 build as negative control.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: accept: judged by x.md's and w.md's own fingerprints (watch_files rows) plus search; the same-length/in-window edit is the case a mtime>last_change_ts rule misses."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "item4.py: project_id_token_get x2; memory_promotion_list baseline; memory_write x3 plain; memory_write context=shared; memory_share_extract {mode:propose}; memory_promotion_list includeFullValue (plain, limit 1, other project); sqlite3 -readonly 'SELECT substr(hash,1,12),score,reasons,project_id FROM promotion_queue ORDER BY score DESC'; memory_promotion_discard {hash}; list again; sqlite count. Output: item4.out",
+      "evidence": "BASELINE {\"rows\": []}, waitingPromotionsCount 0\nshared write -> stored:true reason 'queued-for-promotion: agent-requested-share', waitingPromotionsCount 1, capacity {reserved:1000, used:1}\nextract propose -> 4 candidates; 50910787... 'Lane-b shared candidate: ...' raw score 1.82 [organic-note, durable-fact-language, short-definitional-floor, very-short-penalty]; three plain notes 1.07 [organic-note, very-short-penalty]\nlist -> 4 rows with full value: 50910787 score 5 reasons [agent-requested-share, organic-note, durable-fact-language, short-definitional-floor, very-short-penalty]; 5bdd78b0 / 8f6dfcd2 / fb7896f0 score 1.07; meta waitingPromotionsCount 4, capacity used 4\nlimit=1 -> 1 row (score 5); other project -> {\"rows\": []}\nsqlite promotion_queue: 50910787e749|5.0|[5 reasons]; fb7896f0ebbd|1.07; 8f6dfcd207d4|1.07; 5bdd78b089ec|1.07\ndiscard fb7896f0... -> {\"discarded\": 1}, waitingPromotionsCount 3, used 3; list -> 3 rows without fb7896f0; sqlite count 3",
+      "observed-result": "Candidates created first (agent-requested write and organic propose); the list reports value text, scores, reasons and counters matching promotion_queue exactly; agent-requested row persisted score pinned at 5 (extract showed raw 1.82) with merged reasons; limit and project scoping work; discard removes exactly the named row and decrements waiting/used.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: accept: empty baseline, populated content assertions, empty other-project control, discard transition, sqlite cross-check."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "surf1.py (serve root lane-c/mcp on port 61732 pid 76779; tools/list + prompts/list via Streamable-HTTP JSON-RPC with X-AiRaccoon-Token from mcp-token and Mcp-Session-Id) and surf2.py: CLI 'settings access set lanec-proj full', 'settings ingest scope add lanec-proj sdocs', 'settings watch enable lanec-proj true', then tools/call for all 29 tools in dependency order, prompts/get for both prompts. Full log: surface-log.json.",
+      "evidence": "surf1: 'tools 29 prompts 2 [workspace-consolidation-guide, memory-usage-guide]' (derived: 29/2). surf2: 'NOT CALLED: set() CALLED 29'. Success (isError None): memory_write stored:true, memory_get, memory_search (hit by hash), memory_list, memory_stats {entries:1}, memory_set_ttl, memory_record_grade {recorded:true}, memory_record_followthrough {recorded:true}, memory_ingest_file {indexed:1}, memory_ingest_directory {scanned:1}, memory_watch_add/status(Scanning)/remove, memory_workspace_begin/status/consolidate {promoted:0,discarded:1}/discard, memory_share {shared:true,context:shared}, memory_share_extract(propose) candidates:[], memory_promotion_list rows:[], memory_promotion_discard, memory_performance, memory_sweep dryRun, memory_embed_pending {processed:0,pending:4}, project_id_token_get (projectId UUID), memory_delete {deleted:1}, memory_delete_context {deleted:0}. Typed errors (isError True, tool reached): memory_sync -> 'sync-not-configured', code_get -> 'unknown-hash'. prompts/get: workspace-consolidation-guide 449 chars, memory-usage-guide 2953 chars. Server log shows ToolRefusals 910 for memory_sync and 911 for code_get.",
+      "observed-result": "tools/list = 29 and prompts/list = 2 match derived counts. All 29 tools reached the tool handler: 27 returned success; memory_sync and code_get returned their documented typed refusals (no sync remote configured; no code corpus), which proves dispatch/reachability but not their success paths. Both prompts retrievable. memory_workspace_consolidate promoted 0 (my keep argument was not a matching entry), so its promote path was not exercised here; memory_delete_context deleted 0 because memory_delete had already removed the only row.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: accept per item wording (listed and reachable); note success paths for memory_sync and code_get, and consolidate-promote/delete_context row counts, were not exercised in this lane."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "events.py: harvest '<level>: AiRaccoon...[id]' lines from lane-c/serve-data-1.log, serve-data-2.log, serve-mcp-1.log; parse docs/reference/logging-event-ids.md table rows (ranges and comma lists expanded) in the 1.56.1 worktree; cross-check each id's EventId literal with grep -rlaE in src.",
+      "evidence": "12 distinct ids emitted: 446,447,510,525,601,672,692,899,910,911,1003,1005; 'unresolved: []'. e.g. 692 -> row '| 692 | src/AiRaccoon/Hosting/Common/OwnerOnlyFile.cs'; 510 -> '510-524 .../BankMaintenanceHostedService.cs'; 525 -> '525-529 .../MaintenanceJobRunner.cs'; 446 -> NoteChunkOrderRepairJob.cs; 447 -> ChunkBoundaryRepairJob.cs; 672 -> '670-675 src/AiRaccoon/Settings/SettingsEndpoint.cs'; 899 -> '897-900 SqliteMemoryStore.cs and .Replace.cs'; 910/911 -> '910-915 src/AiRaccoon/Tools/ToolRefusals.cs'; 1003/1005 -> '1002-1013 .../Embedding/EmbedDrainReporter.cs'; 601 -> '601-609 NodeRunner.cs'. Source grep puts each literal in the doc-named file (692 OwnerOnlyFile.cs, 672 SettingsEndpoint.cs, 899 SqliteMemoryStore.Replace.cs, 1003/1005 EmbedDrainReporter.cs).",
+      "observed-result": "Every emitted id resolves to a doc row naming the file that declares it (692 and 1003/1005 log under a different category name than the file, as the doc rows state). Side observation: id 1005 (warn, with stack) fires every drain pass on a fresh scratch bank because no memory embedding engine is configured ('Unknown embedding provider; expected local or openai. Actual value was .'); expected for an unconfigured bank, but noisy. Retention-purge ids 520/522/523 were not emitted (nothing seeded), so not covered by this run.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": "Proposed: accept: all emitted ids resolve; coverage limited to the 12 ids a plain serve/watch/tool session emits."
+    }
+  ]
+}
