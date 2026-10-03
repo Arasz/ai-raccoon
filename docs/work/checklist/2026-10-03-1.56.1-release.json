@@ -183,7 +183,7 @@
       "observed-result": "The cap works and each leg was seen to fail on the previous release: on the 22k-entry copy the paste drops from 47 s to 1.9 s (keyword only) and the stopword-run fallback from a 240 s client timeout / 90 s to 0.6-0.9 s; 8 results still return. A word after the 64th distinct word loses its fts leg on 1.56.1 and keeps it on 1.56.0; repeats do not consume the cap; a 6-token query keeps its stopword 'the', a 71-token one drops it. DEFECT: two caller-facing strings shipped in 1.56.1 still claim the keyword leg sees the whole query. CodeSearchWarnings.QueryTrimmedToCodeWindow ('keyword matching still saw it in full') is appended to the new memory warning, so one warning contradicts itself whenever kind includes code (the default here); MemoryTools.cs:145's query parameter description ('Keyword matching still covers the query in full') is what every client reads in tools/list. Code search shares FtsQueryNormalizer.BuildPlan (SqliteCodeSearchService.cs:32), and a query long enough to pass the 510-token code window is far over 64 words, so both claims are false.",
       "status": "fail",
       "accepted": null,
-      "acceptance-reason": "Proposed: accept as a tracked defect — the behaviour (cap, latency, ranking boundary) passes; the two stale strings are fixed in the follow-up fix PR named in this run's PR."
+      "acceptance-reason": "Proposed: accept as a tracked defect. The behaviour passes: the cap, the latency and the ranking boundary each went red on 1.56.0 and green on 1.56.1. The two stale strings are fixed in PR #844 (fix/keyword-cap-wording), which ships with the next release."
     },
     {
       "item": "file-watch-status",
