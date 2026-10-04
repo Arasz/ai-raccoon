@@ -147,6 +147,45 @@ public sealed class ProjectsEndpointTests : IAsyncLifetime
     }
 
     [RetryFact]
+    public async Task Post_NameOfTwoHundredOneCharacters_Is400WritesNothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var response = await _client.PostAsJsonAsync(ProjectsProtocol.Path,
+            new ProjectRegisterRequest(Fresh, new string('a', 201)), ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await _app.Services.GetRequiredService<IProjectRegistry>().IsRegisteredAsync(Fresh, ct)).ShouldBeFalse();
+    }
+
+    [RetryTheory]
+    [InlineData("acme\u001b")]
+    [InlineData("ac\rme")]
+    public async Task Post_NameWithControlCharacter_Is400WithAPrintableEcho(string name)
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var response = await _client.PostAsJsonAsync(ProjectsProtocol.Path, new ProjectRegisterRequest(Fresh, name), ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        body.Any(char.IsControl).ShouldBeFalse(body);
+        (await _app.Services.GetRequiredService<IProjectRegistry>().IsRegisteredAsync(Fresh, ct)).ShouldBeFalse();
+    }
+
+    [RetryFact]
+    public async Task Post_NameOfTwoHundredCharacters_Registers()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var name = new string('a', 200);
+
+        var response = await _client.PostAsJsonAsync(ProjectsProtocol.Path, new ProjectRegisterRequest(Fresh, name), ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await _app.Services.GetRequiredService<IProjectRegistry>().IsRegisteredAsync(Fresh, ct)).ShouldBeTrue();
+    }
+
+    [RetryFact]
     public async Task WithoutTheToken_EveryRouteIsRefused()
     {
         var ct = TestContext.Current.CancellationToken;

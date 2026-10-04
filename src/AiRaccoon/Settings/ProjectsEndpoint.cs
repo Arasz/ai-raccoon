@@ -35,9 +35,15 @@ internal static class ProjectsEndpoint
             webApplication.MapPost(ProjectsProtocol.Path,
                 async (ProjectRegisterRequest request, IProjectDirectory directory, CancellationToken ctx) =>
                 {
-                    if (string.IsNullOrWhiteSpace(request.ProjectId) || (request.Name is not null && string.IsNullOrWhiteSpace(request.Name)))
+                    if (ProjectName.TryGetRefusal(request.Name) is { } nameRefusal)
                     {
-                        return Results.BadRequest("ai-raccoon: a project id is required and a name, when given, must not be blank");
+                        return Results.BadRequest(
+                            $"ai-raccoon: the project name '{ProjectIdText.Printable(request.Name!)}' {nameRefusal}");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(request.ProjectId))
+                    {
+                        return Results.BadRequest("ai-raccoon: a project id is required");
                     }
 
                     var registration = await directory.RegisterAsync(request.ProjectId, request.Name, ctx);

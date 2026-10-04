@@ -19,6 +19,11 @@ internal sealed class ProjectIdCommands(IProjectDirectory directory)
             return await UsageAsync(streams, "project id register needs a non-blank <id>, and --name, when given, must not be blank");
         }
 
+        if (ProjectName.TryGetRefusal(name) is { } nameRefusal)
+        {
+            return await UsageAsync(streams, $"project id register: --name {nameRefusal}");
+        }
+
         var registration = await directory.RegisterAsync(projectId, name, cancellationToken);
         switch (registration.Outcome)
         {

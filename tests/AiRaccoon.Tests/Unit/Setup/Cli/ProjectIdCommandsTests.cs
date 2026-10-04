@@ -131,6 +131,38 @@ public sealed class ProjectIdCommandsTests
         stderr.ShouldContain("is retired");
     }
 
+    public static TheoryData<string> InvalidNames() => new()
+    {
+        new string('a', 201),
+        "acme\u001b",
+        "ac\rme"
+    };
+
+    /// <summary>The name rule is enforced before the directory is reached, so a bad argument never becomes a server call.</summary>
+    [Theory]
+    [MemberData(nameof(InvalidNames))]
+    public async Task Register_InvalidName_Exits10WithoutTouchingTheDirectory(string name)
+    {
+        var (exit, stdout, stderr) = await Run(["project", "id", "register", Guid1, "--name", name]);
+
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        stdout.ShouldBeEmpty();
+        stderr.ShouldStartWith("ai-raccoon: ");
+        _directory.ReceivedCalls().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Register_TwoHundredCharacterName_ReachesTheDirectory()
+    {
+        var name = new string('a', 200);
+        _directory.RegisterAsync(Guid1, name, Arg.Any<CancellationToken>())
+            .Returns(new ProjectRegistration(Guid1, ProjectRegistrationOutcome.Registered));
+
+        var (exit, _, _) = await Run(["project", "id", "register", Guid1, "--name", name]);
+
+        exit.ShouldBe(0);
+    }
+
     /// <summary>Raw-text ids are printed exactly as stored, with no prefix, so a script can capture the line.</summary>
     [Theory]
     [InlineData(Guid1)]
