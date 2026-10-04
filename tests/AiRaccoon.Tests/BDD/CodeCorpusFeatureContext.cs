@@ -68,7 +68,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         SearchQuality = new SqliteSearchQualityService(Factory, NullLogger<SqliteSearchQualityService>.Instance);
         ReindexJob = new CodeReindexJob(CodeEmbedder, EmbedDrainPump);
 
-        var gate = new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
+        var gate = new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
         MemoryTools = new MemoryTools(Store, gate,
             new SearchDispatcher(Store, CodeSearch, SearchQuality),
             new QueryGuardService(Settings), new MemoryWriteService(Store, new FakePromotionQueue()),
@@ -257,6 +257,6 @@ public sealed class CodeCorpusFeatureContext : IDisposable
             TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         WatchServiceInstance = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver(),
             new SqliteProjectIdsMigrationGate(Factory));
-        WatchToolsInstance = new WatchTools(WatchServiceInstance, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
+        WatchToolsInstance = new WatchTools(WatchServiceInstance, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
     }
 }
