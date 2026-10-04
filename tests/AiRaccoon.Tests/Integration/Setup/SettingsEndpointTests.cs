@@ -407,6 +407,49 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         (await BankSettingAsync(key)).ShouldBe("""["/a"]""");
     }
 
+    /// <summary>The removal exemption is a scope-list rule, checked before the retired refusal: a pure shrink writes under any id.</summary>
+    [RetryTheory]
+    [InlineData("registered")]
+    [InlineData("unregistered")]
+    [InlineData("retired")]
+    public async Task Put_ScopeSubset_UnderAnyId_Writes(string kind)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Unknown;
+        if (kind == "registered")
+        {
+            await Registry.RegisterAsync(Unknown, null, ct);
+        }
+        else if (kind == "retired")
+        {
+            id = Retired;
+            await Registry.RegisterAsync(Retired, null, ct);
+            ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap([], [], [Retired]));
+        }
+
+        var key = $"ingest.scope.{id}";
+        await BankStore.SetSettingAsync(key, """["/a","/b"]""", ct);
+
+        (await PutAsync(key, """["/a"]""")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        (await BankSettingAsync(key)).ShouldBe("""["/a"]""");
+    }
+
+    /// <summary>A write that is not a pure shrink under a retired id stays refused.</summary>
+    [RetryFact]
+    public async Task Put_ScopeSuperset_UnderRetiredId_Is409()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await Registry.RegisterAsync(Retired, null, ct);
+        ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap([], [], [Retired]));
+        var key = $"ingest.scope.{Retired}";
+        await BankStore.SetSettingAsync(key, """["/a"]""", ct);
+
+        (await PutAsync(key, """["/a","/b"]""")).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+
+        (await BankSettingAsync(key)).ShouldBe("""["/a"]""");
+    }
+
     [RetryFact]
     public async Task Put_ScopeSuperset_UnderUnknownId_Is409()
     {
