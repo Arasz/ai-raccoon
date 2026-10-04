@@ -63,6 +63,11 @@ listed above that read a non-settings table or mutate data (`watch registered`,
 `extract prune`, `noise entries`, `model embedding set`, `model code set`, `encryption`,
 `serve`).
 
+A per-project write (`access set`, `watch enable|disable`, `watch concurrency`,
+`ingest scope add`) needs a project id the bank knows: registered, or holding rows. An unknown or
+retired id exits 18 and writes nothing. An alias writes its winner's settings, and
+`ingest scope remove` works under any id.
+
 | Command | Purpose |
 |---|---|
 | `settings access default set {ro\|rw\|full}` / `default show` | Global default access mode |

@@ -25,6 +25,28 @@ public class ConfigCommandsWatchTests
             TestData.CreateConfigCommands(store, watch: new WatchCommands(watchStore ?? new FakeWatchStore())));
 
 
+    /// <summary>The per-project watch and scope writers a server can refuse.</summary>
+    public static TheoryData<string[]> RefusableWriters => new()
+    {
+        new[] { "settings", "watch", "enable", "acme", "true" },
+        new[] { "settings", "watch", "disable", "acme", "false" },
+        new[] { "settings", "watch", "concurrency", "acme", "4" },
+        new[] { "settings", "ingest", "scope", "add", "acme", "/repo" }
+    };
+
+    /// <summary>The server refused the project: the CLI prints its reason as-is and exits ProjectUnknown.</summary>
+    [Theory]
+    [MemberData(nameof(RefusableWriters))]
+    public async Task ProjectWriter_Refused_Exits18(string[] args)
+    {
+        var (exit, stdout, err) = await CliRun.RunAsync(args,
+            TestData.CreateConfigCommands(new ProjectRefusingStore(), watch: new WatchCommands(new FakeWatchStore())));
+
+        exit.ShouldBe(ErrorCode.Usage.ProjectUnknown);
+        err.Trim().ShouldBe(ProjectRefusingStore.Reason);
+        stdout.ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task WatchEnable_WritesTrueRow_ForProject()
     {

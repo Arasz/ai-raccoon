@@ -18,6 +18,9 @@ internal sealed class SettingsServerUnavailableException(int code, string messag
 /// <summary>The settings server answered but refused the credential.</summary>
 internal sealed class SettingsServerRefusedException(string message) : Exception(message);
 
+/// <summary>The settings server refused a per-project write because the id is unknown or retired; the message is the server's reason.</summary>
+internal sealed class ProjectRefusedException(string message) : Exception(message);
+
 /// <summary>The settings server answered but failed processing the request (5xx) — a server-side fault, not a bad argument.</summary>
 internal sealed class SettingsServerErrorException(string message) : Exception(message);
 
@@ -85,6 +88,11 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         Guard.IsNotNullOrWhiteSpace(key);
         var response = await SendAsync(token =>
             _client.PutAsJsonAsync(SettingsProtocol.Path, new SettingWrite(key, value), token), cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ProjectRefusedException(await response.Content.ReadAsStringAsync(cancellationToken));
+        }
+
         Ensure(response);
     }
 
