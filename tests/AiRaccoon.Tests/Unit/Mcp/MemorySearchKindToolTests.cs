@@ -615,13 +615,13 @@ public sealed class MemorySearchKindToolTests
             return Task.CompletedTask;
         }
 
-        public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null,
+        public Task<bool> RecordFollowThroughAsync(string projectId, string correlationId, string filePath, int? servedRank = null,
             CancellationToken ct = default) =>
-            Task.CompletedTask;
+            Task.FromResult(true);
 
-        public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
+        public Task<bool> RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
             CancellationToken ct = default) =>
-            Task.CompletedTask;
+            Task.FromResult(true);
 
         public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
             CancellationToken ct = default) =>

@@ -133,7 +133,8 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
     /// <summary>One leg's ordinal vote, mirroring <see cref="LegRank" />.</summary>
     private sealed record LegFeatureRow(string Name, int Rank);
 
-    public async Task RecordFollowThroughAsync(
+    public async Task<bool> RecordFollowThroughAsync(
+        string projectId,
         string correlationId,
         string filePath,
         int? servedRank = null,
@@ -151,8 +152,8 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         // Dedupe is ordinal by path: an existing non-null rank is never clobbered, and a null
         // rank is filled once by a later non-null.
         var existing = await connection.QuerySingleOrDefaultAsync<string?>(
-            "SELECT follow_through_files FROM search_quality WHERE correlation_id = @Id",
-            new { Id = correlationId });
+            "SELECT follow_through_files FROM search_quality WHERE correlation_id = @Id AND project_id = @ProjectId",
+            new { Id = correlationId, ProjectId = projectId });
 
         var entries = DecodeFollowThrough(existing);
         var index = entries.FindIndex(e => string.Equals(e.Path, filePath, StringComparison.Ordinal));
@@ -165,18 +166,20 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
             entries[index] = entries[index] with { Rank = servedRank };
         }
 
-        await connection.ExecuteAsync(
+        var updated = await connection.ExecuteAsync(
             """
             UPDATE search_quality
             SET follow_through_count = @Count, follow_through_files = @Files
-            WHERE correlation_id = @Id
+            WHERE correlation_id = @Id AND project_id = @ProjectId
             """,
             new
             {
                 Id = correlationId,
+                ProjectId = projectId,
                 entries.Count,
                 Files = JsonSerializer.Serialize(entries)
             });
+        return updated > 0;
     }
 
     /// <summary>
@@ -218,7 +221,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         return entries;
     }
 
-    public async Task RecordGradeAsync(
+    public async Task<bool> RecordGradeAsync(
         string projectId,
         string correlationId,
         int grade,
@@ -227,13 +230,14 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
     {
         await using var connection = await factory.OpenBankAsync(ct);
 
-        await connection.ExecuteAsync(
+        var updated = await connection.ExecuteAsync(
             """
             UPDATE search_quality
             SET usefulness_grade = @Grade, grade_note = @Note
-            WHERE correlation_id = @Id
+            WHERE correlation_id = @Id AND project_id = @ProjectId
             """,
-            new { Id = correlationId, Grade = grade, Note = note });
+            new { Id = correlationId, ProjectId = projectId, Grade = grade, Note = note });
+        return updated > 0;
     }
 
     public async Task<SearchQualityMetrics> GetMetricsAsync(

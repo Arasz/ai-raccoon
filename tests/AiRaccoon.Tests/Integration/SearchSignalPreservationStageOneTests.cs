@@ -213,7 +213,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
 
         var followFile = envelope.Data!.Results[0].SourceFile.ShouldNotBeNull();
         await quality.RecordGradeAsync("acme", correlationId, 5, "p7 telemetry join", ct);
-        await quality.RecordFollowThroughAsync(correlationId, followFile, ct: ct);
+        await quality.RecordFollowThroughAsync("acme", correlationId, followFile, ct: ct);
 
         var labeled = await ReadQualityRowAsync(connection, correlationId, ct);
         labeled.UsefulnessGrade.ShouldBe(5L);
