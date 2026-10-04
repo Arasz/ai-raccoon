@@ -28,6 +28,35 @@ public static class IngestScopeList
 
     public static string ToJson(IEnumerable<string> paths) => JsonSerializer.Serialize(paths.ToList());
 
+    /// <summary>True when <paramref name="proposed" /> only drops paths from a <paramref name="stored" /> list; false when nothing is stored or either value is unreadable.</summary>
+    public static bool IsSubset(string? stored, string? proposed)
+    {
+        if (TryParseStrict(stored) is not { } storedPaths || TryParseStrict(proposed) is not { } proposedPaths)
+        {
+            return false;
+        }
+
+        var kept = storedPaths.ToHashSet(StringComparer.Ordinal);
+        return proposedPaths.All(kept.Contains);
+    }
+
+    private static string[]? TryParseStrict(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<string[]>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     public static IReadOnlyList<string> Add(IEnumerable<string> current, string path)
     {
         ArgumentNullException.ThrowIfNull(current);
