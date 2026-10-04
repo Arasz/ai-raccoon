@@ -57,7 +57,8 @@ public sealed class ToolGateRetiredIdTests
 
             ex.Message.ShouldContain(Dropped);
             ex.Message.ShouldContain("repair");
-            guard.Calls.ShouldBeEmpty("a retired id is invalid before any access check runs");
+            guard.Calls.ShouldBe([(Dropped, requirement, "memory_write")],
+                "access is enforced before the retired refusal, so an unauthorized caller cannot learn the id is retired");
             registration.Calls.ShouldBeEmpty("the dropped refusal wins over project-not-registered");
         }
         finally
@@ -83,8 +84,30 @@ public sealed class ToolGateRetiredIdTests
 
             ex.Message.ShouldContain("Calls under a retired id are refused");
             ex.Message.ShouldNotContain("Writes under");
-            guard.Calls.ShouldBeEmpty();
+            guard.Calls.ShouldBe([(Dropped, AccessRequirement.Read, "memory_search")]);
             registration.Calls.ShouldBeEmpty();
+        }
+        finally
+        {
+            ProjectIdAliasMap.ResetDefault();
+        }
+    }
+
+    /// <summary>An unauthorized caller naming a retired id learns only that it is unauthorized — never that the id exists and is retired.</summary>
+    [Fact]
+    public async Task RequireAsync_DroppedIdUnderADeny_ThrowsAccessDenied()
+    {
+        var gate = new ToolGate(new DenyingGuard(), new FakePromotionQueue(), new NeverMigratingStore(),
+            new RecordingRegistrationGuard());
+        try
+        {
+            ProjectIdAliasMap.ReplaceDefault(FixtureMap());
+
+            var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
+                gate.RequireAsync(Dropped, AccessRequirement.Destructive, "memory_delete",
+                    TestContext.Current.CancellationToken));
+
+            ex.Message.ShouldNotContain("retired");
         }
         finally
         {
@@ -151,6 +174,17 @@ public sealed class ToolGateRetiredIdTests
             Calls.Add((projectId, requirement, toolName));
             return Task.CompletedTask;
         }
+    }
+
+    /// <summary>Refuses every call, the way a mode-restricted caller's guard does.</summary>
+    private sealed class DenyingGuard : IMemoryAccessGuard
+    {
+        public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(AccessMode.Ro);
+
+        public Task EnsureAsync(string projectId, AccessRequirement requirement, string toolName,
+            CancellationToken cancellationToken = default) =>
+            throw new AccessDeniedException($"{toolName} requires mode full (current ro)");
     }
 
     private sealed class RecordingRegistrationGuard : IProjectRegistrationGuard
