@@ -124,6 +124,8 @@ environment or the product first.
 | 15 | `Usage.AliasMapInvalid` | `repair project-ids --map` names a file that is missing, unreadable or not a valid alias map. | no |
 | 16 | `Usage.ConfirmationDeclined` | `model download` over the size guard was not confirmed (no `--yes`, prompt declined, or stdin at EOF); nothing was touched. | no |
 | 17 | `Usage.RequestRejected` | The server rejected the request as malformed (HTTP 400) for a reason the CLI pre-flight did not catch. | no |
+| 18 | `Usage.ProjectUnknown` | The project id or name names no usable project: `project id check` of an unknown or retired id, `project id get` with no match, `project id register` of a retired id, or a settings write under an unknown or retired id. | no |
+| 19 | `Usage.ProjectAmbiguous` | `project id get --name` matched several registered projects; the message lists every id for a human to pick one. | no |
 
 ### 2 — `Key`
 

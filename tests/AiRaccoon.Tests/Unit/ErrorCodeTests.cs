@@ -90,6 +90,14 @@ public sealed class ErrorCodeTests
         missing.ShouldBeEmpty($"x0 is each category's most general case: {string.Join(", ", missing)}");
     }
 
+    /// <summary>`project id get|check|register` exit with these numbers, and ai-badger branches on them.</summary>
+    [Fact]
+    public void ProjectCodes_AreThePublishedContract()
+    {
+        ErrorCode.Usage.ProjectUnknown.ShouldBe(18);
+        ErrorCode.Usage.ProjectAmbiguous.ShouldBe(19);
+    }
+
     private static IEnumerable<Type> Categories() =>
         typeof(ErrorCode).GetNestedTypes(BindingFlags.Public).Where(type => type is { IsAbstract: true, IsSealed: true });
 
