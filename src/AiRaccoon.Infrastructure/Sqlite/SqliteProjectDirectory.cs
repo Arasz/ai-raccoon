@@ -22,6 +22,12 @@ public sealed partial class SqliteProjectDirectory(
             return new ProjectRegistration(id, ProjectRegistrationOutcome.Retired);
         }
 
+        // The nil guid parses like any other, so it needs its own refusal: it names nothing.
+        if (Guid.TryParse(id, out var parsed) && parsed == Guid.Empty)
+        {
+            return new ProjectRegistration(id, ProjectRegistrationOutcome.NotAGuid);
+        }
+
         if (await registry.IsRegisteredAsync(id, cancellationToken))
         {
             if (name is not null)

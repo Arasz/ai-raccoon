@@ -60,7 +60,7 @@ internal static partial class SettingsEndpoint
                     {
                         if (string.IsNullOrWhiteSpace(owner))
                         {
-                            return Results.BadRequest($"ai-raccoon: the settings key '{write.Key}' names no project");
+                            return Results.BadRequest($"ai-raccoon: the settings key '{ProjectIdText.Printable(write.Key)}' names no project");
                         }
 
                         var folded = ProjectIdAliasMap.Default.Apply(owner);
@@ -174,21 +174,21 @@ internal static partial class SettingsEndpoint
             : key;
 
     /// <summary>
-    ///     The refusal for a per-project write, or null to write it. A retired id is refused; a scope
-    ///     list that only loses paths is allowed; otherwise the id must pass the read form of the
-    ///     registration check, which never registers it.
+    ///     The refusal for a per-project write, or null to write it. A scope list that only loses
+    ///     paths is allowed under any id, retired included; otherwise a retired id is refused; then
+    ///     the id must pass the read form of the registration check, which never registers it.
     /// </summary>
     private static async Task<string?> RefuseProjectAsync(string key, string value, FoldedProjectId folded,
         ISettingsStore store, IProjectRegistrationGuard registration, CancellationToken ctx)
     {
-        if (folded.Dropped)
-        {
-            return new RetiredProjectException(folded.ProjectId).Message;
-        }
-
         if (IsScopeList(key) && IngestScopeList.IsSubset(await store.GetSettingAsync(key, ctx), value))
         {
             return null;
+        }
+
+        if (folded.Dropped)
+        {
+            return new RetiredProjectException(folded.ProjectId).Message;
         }
 
         try

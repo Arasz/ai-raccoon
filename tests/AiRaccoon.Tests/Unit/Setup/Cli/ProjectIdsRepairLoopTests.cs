@@ -174,6 +174,9 @@ public sealed class ProjectIdsRepairLoopTests
         stdout.ShouldContain("the server has not finished");
         stdout.ShouldNotContain("summary — converged");
         stdout.ShouldNotContain("summary — pinned-only");
+        // A request still open at the budget is not a completed pass: no reaped or census verdict.
+        stdout.ShouldNotContain("reaped");
+        stdout.ShouldNotContain("census totals");
     }
 
     /// <summary>A request left open by an earlier run must not hang or change a settled census.</summary>

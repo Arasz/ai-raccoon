@@ -132,7 +132,8 @@ public sealed class ToolRefusalsRemedyTests
         {
             ProjectRegistrationGuard.Remedy("0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"),
             ProjectRegistrationGuard.Remedy("legacy-repo"),
-            new UnregisteredProjectException("0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70").Message
+            new UnregisteredProjectException("0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70").Message,
+            new UnregisteredProjectException("legacy-repo").Message
         };
         var data = new TheoryData<string>();
         foreach (var command in messages.SelectMany(ExtractCliCommands))

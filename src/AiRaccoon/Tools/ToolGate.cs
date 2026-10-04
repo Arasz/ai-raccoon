@@ -33,9 +33,9 @@ public sealed class ToolGate(
     /// <summary>
     ///     Refuses while a migration is open, resolves a blank id from the working directory, then
     ///     runs the id through <see cref="ProjectIdAliasMap.Apply" /> on the default map: an alias
-    ///     folds to its winner, and a retired (dropped) id is refused on every requirement. Then
-    ///     the access mode is enforced, and only then registration, so an unauthorized caller
-    ///     cannot learn whether an id is registered. Returns the id to carry to storage.
+    ///     folds to its winner. Then the access mode is enforced, then a retired (dropped) id is
+    ///     refused, and only then registration, so an unauthorized caller cannot learn whether an
+    ///     id is registered or retired. Returns the id to carry to storage.
     /// </summary>
     public async Task<string> RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
         CancellationToken cancellationToken)
@@ -48,13 +48,13 @@ public sealed class ToolGate(
         }
 
         var folded = ProjectIdAliasMap.Default.Apply(projectId);
-        if (folded.Dropped)
-        {
-            throw new RetiredProjectException(folded.ProjectId);
-        }
-
         var canonical = folded.ProjectId;
         await access.EnsureAsync(canonical, requirement, toolName, cancellationToken);
+        if (folded.Dropped)
+        {
+            throw new RetiredProjectException(canonical);
+        }
+
         await registration.EnsureAsync(canonical, requirement, cancellationToken);
         return canonical;
     }

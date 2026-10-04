@@ -92,6 +92,40 @@ public sealed class ServerSettingsStoreDeadlineTests
         await Should.ThrowAsync<OperationCanceledException>(() => store.GetSettingAsync("sweep.threshold", caller.Token));
     }
 
+    /// <summary>The 409 reason is shown verbatim; the read is capped so a runaway body cannot become an unbounded CLI string.</summary>
+    [Fact]
+    public async Task SetSetting_OnAnOversized409Body_CapsTheReasonAtTheDocumentedCap()
+    {
+        var store = NewStore(new RefusingHandler(10_000), TimeSpan.FromSeconds(30));
+
+        var error = await Should.ThrowAsync<ProjectRefusedException>(
+            () => store.SetSettingAsync("sweep.threshold", "0.1", TestContext.Current.CancellationToken));
+
+        error.Message.Length.ShouldBe(4096);
+    }
+
+    [Fact]
+    public async Task DeleteSetting_OnAnOversized409Body_CapsTheReasonAtTheDocumentedCap()
+    {
+        var store = NewStore(new RefusingHandler(10_000), TimeSpan.FromSeconds(30));
+
+        var error = await Should.ThrowAsync<ModelMigrationInProgressException>(
+            () => store.DeleteSettingAsync("embedding.provider", TestContext.Current.CancellationToken));
+
+        error.Message.Length.ShouldBe(4096);
+    }
+
+    [Fact]
+    public async Task StartModelMigration_OnAnOversized409Body_CapsTheReasonAtTheDocumentedCap()
+    {
+        var store = NewStore(new RefusingHandler(10_000), TimeSpan.FromSeconds(30));
+
+        var error = await Should.ThrowAsync<ModelMigrationInProgressException>(
+            () => store.StartModelMigrationAsync("openai", "m", null, TestContext.Current.CancellationToken));
+
+        error.Message.Length.ShouldBe(4096);
+    }
+
     private static ServerSettingsStore NewStore(HttpMessageHandler handler, TimeSpan requestDeadline) =>
         new(new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1:1/mcp") }, Token, requestDeadline);
 
@@ -103,6 +137,17 @@ public sealed class ServerSettingsStoreDeadlineTests
             RepairKinds.ProjectIds => store.ReportProjectIdsAsync(cancellationToken),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
         };
+
+    /// <summary>Answers every request with a 409 whose body is longer than the refusal cap.</summary>
+    private sealed class RefusingHandler(int bodyLength) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict)
+            {
+                Content = new StringContent(new string('x', bodyLength))
+            });
+    }
 
     /// <summary>Answers every request after <paramref name="delay" />: 404 for a setting, a canned body for a repair report.</summary>
     private sealed class DelayingHandler(TimeSpan delay) : HttpMessageHandler

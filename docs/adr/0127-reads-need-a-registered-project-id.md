@@ -104,7 +104,11 @@ The research record is `docs/work/2026-10-04-unregistered-project-id-research.md
   unregistered stays silent until the id is registered or aliased. Hooks already fail open.
 - **A new CLI against an old server.** A 1.57.0 CLI talking to an older server finds no `/projects`
   route and exits 57 (`EndpointMissing`). The repair loop reads `RepairOpen` as false against an
-  old server, so it behaves as it did before 1.57.0.
+  old server, so it behaves as it did before 1.57.0. Settings writers are the sharper edge: an
+  older, still-running server has no 409 path for a per-project settings write, so the write
+  succeeds and the CLI exit looks clean until the server restarts on 1.57.0 and the next write is
+  refused. Mixed binary and server versions are unsupported (the version-skew rule stated in the
+  1.44.0 breaking-change note).
 - **Cost per read.**
   - A registered id costs one bank open plus a primary-key SELECT on `projects`.
   - An unregistered id adds the rows probe.

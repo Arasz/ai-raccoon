@@ -391,6 +391,14 @@ public sealed class ProjectIdsRepairCommands
 
         var moved = Math.Max(0, beforeActionableEntries - ActionableEntries(after, plan));
         var afterTotal = CensusTotal(after);
+        if (after.RepairOpen)
+        {
+            // The server has not applied the request within the budget: the poll summary owns the
+            // verdict, so no reaped or census line claims a pass the bank never completed.
+            return new RepairPass(ActionableSignature(plan), moved, afterTotal > beforeTotal, after,
+                ProjectIdsFoldPlan.FromCensus(after, map), StillOpen: true);
+        }
+
         await streams.WriteOutputLineAsync(
             $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — reaped: moved {moved} row(s); " +
             $"census totals {beforeTotal} → {afterTotal} entries.");
@@ -403,7 +411,7 @@ public sealed class ProjectIdsRepairCommands
         }
 
         return new RepairPass(ActionableSignature(plan), moved, afterTotal > beforeTotal, after,
-            ProjectIdsFoldPlan.FromCensus(after, map), after.RepairOpen);
+            ProjectIdsFoldPlan.FromCensus(after, map));
     }
 
     /// <summary>

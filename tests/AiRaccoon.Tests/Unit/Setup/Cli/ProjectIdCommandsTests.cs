@@ -90,6 +90,34 @@ public sealed class ProjectIdCommandsTests
         stderr.ShouldContain("not a guid");
     }
 
+    /// <summary>The outcome lines echo a server-resolved id through ProjectIdText.</summary>
+    [Fact]
+    public async Task Register_HostileResolvedId_IsEscapedOnStdout()
+    {
+        _directory.RegisterAsync("my-repo", null, Arg.Any<CancellationToken>())
+            .Returns(new ProjectRegistration("bad\rID", ProjectRegistrationOutcome.Registered));
+
+        var (exit, stdout, stderr) = await Run(["project", "id", "register", "my-repo"]);
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("\\u000D");
+        stdout.ShouldNotContain("\rID");
+        stderr.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Register_HostileNotAGuid_IsEscapedOnStderr()
+    {
+        _directory.RegisterAsync("ghost\u001b", null, Arg.Any<CancellationToken>())
+            .Returns(new ProjectRegistration("ghost\u001b", ProjectRegistrationOutcome.NotAGuid));
+
+        var (exit, _, stderr) = await Run(["project", "id", "register", "ghost\u001b"]);
+
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        stderr.ShouldContain("\\u001B");
+        stderr.ShouldNotContain("\u001b");
+    }
+
     [Fact]
     public async Task Register_Retired_Exits18StdoutEmpty()
     {
@@ -101,6 +129,38 @@ public sealed class ProjectIdCommandsTests
         exit.ShouldBe(ErrorCode.Usage.ProjectUnknown);
         stdout.ShouldBeEmpty();
         stderr.ShouldContain("is retired");
+    }
+
+    public static TheoryData<string> InvalidNames() => new()
+    {
+        new string('a', 201),
+        "acme\u001b",
+        "ac\rme"
+    };
+
+    /// <summary>The name rule is enforced before the directory is reached, so a bad argument never becomes a server call.</summary>
+    [Theory]
+    [MemberData(nameof(InvalidNames))]
+    public async Task Register_InvalidName_Exits10WithoutTouchingTheDirectory(string name)
+    {
+        var (exit, stdout, stderr) = await Run(["project", "id", "register", Guid1, "--name", name]);
+
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        stdout.ShouldBeEmpty();
+        stderr.ShouldStartWith("ai-raccoon: ");
+        _directory.ReceivedCalls().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Register_TwoHundredCharacterName_ReachesTheDirectory()
+    {
+        var name = new string('a', 200);
+        _directory.RegisterAsync(Guid1, name, Arg.Any<CancellationToken>())
+            .Returns(new ProjectRegistration(Guid1, ProjectRegistrationOutcome.Registered));
+
+        var (exit, _, _) = await Run(["project", "id", "register", Guid1, "--name", name]);
+
+        exit.ShouldBe(0);
     }
 
     /// <summary>Raw-text ids are printed exactly as stored, with no prefix, so a script can capture the line.</summary>
@@ -128,6 +188,35 @@ public sealed class ProjectIdCommandsTests
         exit.ShouldBe(ErrorCode.Usage.ProjectUnknown);
         stdout.ShouldBeEmpty();
         stderr.ShouldContain("acme");
+    }
+
+    /// <summary>A hostile server answer is echoed through ProjectIdText: raw control characters never reach stderr.</summary>
+    [Fact]
+    public async Task Get_HostileNameAndIds_AreEscaped()
+    {
+        _directory.FindByNameAsync("ac\rme", Arg.Any<CancellationToken>()).Returns(["bad\u001bID", "good"]);
+
+        var (exit, stdout, stderr) = await Run(["project", "id", "get", "--name", "ac\rme"]);
+
+        exit.ShouldBe(ErrorCode.Usage.ProjectAmbiguous);
+        stdout.ShouldBeEmpty();
+        stderr.ShouldContain("\\u000D");
+        stderr.ShouldContain("\\u001B");
+        stderr.ShouldNotContain("\r");
+        stderr.ShouldNotContain("\u001b");
+    }
+
+    [Fact]
+    public async Task Get_HostileMissingName_IsEscaped()
+    {
+        _directory.FindByNameAsync("ac\u001bme", Arg.Any<CancellationToken>()).Returns([]);
+
+        var (exit, stdout, stderr) = await Run(["project", "id", "get", "--name", "ac\u001bme"]);
+
+        exit.ShouldBe(ErrorCode.Usage.ProjectUnknown);
+        stdout.ShouldBeEmpty();
+        stderr.ShouldContain("\\u001B");
+        stderr.ShouldNotContain("\u001b");
     }
 
     [Fact]
@@ -169,6 +258,19 @@ public sealed class ProjectIdCommandsTests
         exit.ShouldBe(ErrorCode.Usage.ProjectUnknown);
         stdout.ShouldBe($"unknown {Guid1}{Environment.NewLine}");
         stderr.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Check_HostileUnknownId_IsEscapedOnStdout()
+    {
+        _directory.CheckAsync("bad\u001b", Arg.Any<CancellationToken>())
+            .Returns(new ProjectIdCheck("bad\u001b", ProjectIdStatus.Unknown));
+
+        var (exit, stdout, _) = await Run(["project", "id", "check", "bad\u001b"]);
+
+        exit.ShouldBe(ErrorCode.Usage.ProjectUnknown);
+        stdout.ShouldContain("\\u001B");
+        stdout.ShouldNotContain("\u001b");
     }
 
     [Fact]
