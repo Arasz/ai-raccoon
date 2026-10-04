@@ -23,7 +23,7 @@ internal static class ToolTelemetry
     /// <summary>Span and counter project id for the one tool whose project id is optional.</summary>
     internal const string AllProjectsId = "all";
 
-    /// <summary>Counter and span project id for the tool that mints an id — there is no project before it returns.</summary>
+    /// <summary>Counter and span project id for the tools that mint or look up an id — the caller names no project.</summary>
     internal const string NoProjectId = "none";
 
     private const string ProjectIdArgument = "projectId";
@@ -39,7 +39,8 @@ internal static class ToolTelemetry
         {
             ["memory_promotion_list"] = arguments => new ToolProject(Text(arguments, ProjectIdArgument) ?? AllProjectsId, null),
             ["memory_share_extract"] = arguments => new ToolProject(JoinedText(arguments, ProjectIdsArgument), MultiProjectId),
-            ["project_id_token_get"] = _ => new ToolProject(NoProjectId, null)
+            ["project_id_token_get"] = _ => new ToolProject(NoProjectId, null),
+            ["project_id_get"] = _ => new ToolProject(NoProjectId, null)
         };
 
     /// <summary>

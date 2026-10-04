@@ -9,10 +9,15 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **217** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **218** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
+
+(Remeasured 2026-10-04, task/air-refuse-unregistered-project-id-tools: **218**. `SqliteProjectDirectory`
+takes 694, the next free id after `BackendLaunchArguments`' 693: one Information line when the
+project directory registers an id (`project id register`), so a durable registry change is never
+silent. +1 over the 217 measured below.)
 
 (Remeasured 2026-09-28, task/air-config-d-memory-1022-chunks-lane-fix: **217**. The config-D
 review-fix batch gives `ChunkBudgetReconciler` 448, first in the clean 448-496 gap after
@@ -192,6 +197,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 688-691 | `src/AiRaccoon/Hosting/Proxy/BackendSessions.cs` (688-689 added 2026-09-22, owner ruling 2026-09-22: the private backend's lifetime belongs to the proxy that started it — 688 it stopped with the proxy over the token-guarded /shutdown, 689 it did not stop within the bound and is left to its idle timeout; an attached shared server is never stopped. 690-691 added 2026-09-23, ADR-0106: 690 the configured port could not be proven and the private fallback is started, naming the held port and the remedy; 691 the private backend could not prove at stop time, so nothing was sent and it is left to its idle timeout) |
 | 692 | `src/AiRaccoon/Hosting/Common/OwnerOnlyFile.cs` (added 2026-09-23, ADR-0106 D1: an owned state directory whose only leak is group/world read or execute was tightened to owner-only, 0700 — logged once by `serve` through `NodeRunner`; a group/world-writable or foreign-owned directory is still refused) |
 | 693 | `src/AiRaccoon/Hosting/Common/BackendLaunchArguments.cs` (added 2026-09-25, ADR-0116 follow-up: `ResolveExecutable` falls back off a missing own executable — the dotnet global-tool shim, then `PATH` — for a proxy whose resolved `Environment.ProcessPath` was deleted by `dotnet tool update`; logged once naming the missing own path and the fallback in use. New owner, since `BackendSessions`' 688-691 had no room to grow between `CliSettingsBackend`'s 687 and this file's own neighbor at 692) |
+| 694 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteProjectDirectory.cs` (added 2026-10-04: the project directory registered an id — a guid, or a raw-text id the bank already holds rows for — through `POST /projects`; logged once per registration, never for an id that was already registered) |
 | 700, 702-704, 707-709 | `src/AiRaccoon.Infrastructure/Promotion/PromotionQueueService.cs` (701/705/706 removed 2026-08-11: per-element eviction/failure logs de-noised; 708 = prune summary; 709 added 2026-08-14 = stale promotion claims reclaimed, ADR-0037) |
 | 710-711 | `src/AiRaccoon.Infrastructure/Maintenance/ProjectIdsRepairJob.cs` (ADR-0099: a stored `repair_requests.map_json` that bypassed endpoint validation — the poll refuses to fold and leaves the request open for a corrected `--apply`; 711 added 2026-09-05, Package F of docs/work/air-run-once-repair-fully-converges-plan.md: the per-pass result receipt — one Information line per requested run stamping folds/drops/retires applied, rows moved, and chunk rows repositioned) |
 | 713 | `src/AiRaccoon.Infrastructure/Maintenance/ProjectIdAliasCacheHostedService.cs` (Package E1: the startup warm of the choke-point alias cache failed — P3 enforcement stays disarmed until the next reload; fail-open, never blocks startup) |

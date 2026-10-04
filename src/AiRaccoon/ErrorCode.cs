@@ -41,6 +41,12 @@ public static class ErrorCode
 
         /// <summary>The server rejected the request as malformed (HTTP 400) for a reason the CLI pre-flight did not catch.</summary>
         public const int RequestRejected = 17;
+
+        /// <summary>The project id or name names no usable project: unknown, retired, or not found by name.</summary>
+        public const int ProjectUnknown = 18;
+
+        /// <summary>A project name matches several registered projects; a human picks one.</summary>
+        public const int ProjectAmbiguous = 19;
     }
 
     /// <summary>The encryption key cannot be resolved, is wrong, or its source (env, Bitwarden CLI, sidecar) is unusable.</summary>

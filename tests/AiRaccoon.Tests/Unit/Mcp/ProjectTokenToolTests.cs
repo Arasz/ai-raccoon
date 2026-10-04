@@ -2,6 +2,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Tools;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -22,7 +23,7 @@ public sealed class ProjectTokenToolTests
 
     public ProjectTokenToolTests()
     {
-        _tools = new ProjectTools(_registry, _gate);
+        _tools = new ProjectTools(_registry, Substitute.For<IProjectDirectory>(), _gate);
     }
 
     [Fact]

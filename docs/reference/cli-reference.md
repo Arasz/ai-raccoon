@@ -156,6 +156,8 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 15 | `Usage.AliasMapInvalid` | `repair project-ids --map` names a file that is missing, unreadable or invalid | no |
 | 16 | `Usage.ConfirmationDeclined` | `model download` over the size guard was not confirmed | no |
 | 17 | `Usage.RequestRejected` | The server rejected the request as malformed (HTTP 400) | no |
+| 18 | `Usage.ProjectUnknown` | The project id or name names no usable project: unknown, retired, or not found by name | no |
+| 19 | `Usage.ProjectAmbiguous` | A project name matches several registered projects; a human picks one | no |
 | 20 | `Key.Unresolved` | No encryption key could be resolved | no |
 | 21 | `Key.WrongKey` | The resolved key does not open the bank | no |
 | 22 | `Key.LegacyKeyDerivation` | The bank is still keyed under the pre-ADR-0012 derivation; `encryption migrate` fixes it | no |
