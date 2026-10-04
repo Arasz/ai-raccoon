@@ -206,8 +206,9 @@ public static class TestData
         ProjectIdsRepairCommands? projectIdsRepair = null,
         DoctorCommands? doctor = null,
         ModelDownloadCommands? modelDownload = null,
-        ICodeEngineStore? codeEngine = null) =>
-        new(store, modelMigrations!, codeEngine!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, projectIdsRepair!, doctor!, modelDownload!);
+        ICodeEngineStore? codeEngine = null,
+        ProjectIdCommands? projectIds = null) =>
+        new(store, modelMigrations!, codeEngine!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, projectIdsRepair!, doctor!, modelDownload!, projectIds!);
 
     /// <summary>A <see cref="ServerProbe"/> backed by a plain loopback HttpClient (the pre-DI-refactor ForLoopback shape).</summary>
     public static ServerProbe CreateServerProbe() => new(new LoopbackHttpClientFactory());
