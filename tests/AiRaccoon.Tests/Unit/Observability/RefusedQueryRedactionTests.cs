@@ -226,9 +226,4 @@ public sealed class RefusedQueryRedactionTests
                     .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal));
     }
 
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
-    }
 }

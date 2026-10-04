@@ -372,8 +372,10 @@ config channel (see [Command-line options](#command-line-options)).
   Rewriting or re-ingesting it gives it a fresh row; switching the embedding model resets every
   row's attempts. An engine that cannot answer at all fails the pass instead and charges no row
   ([ADR-0119](../adr/0119-poison-memory-rows-are-isolated-and-abandoned.md)).
-- **`memory_performance`:** project-scoped, except the reserved `__self_metrics__` project id,
-  which returns the bank-wide series instead (a per-tenant whole-bank scope is still deferred). The
+- **`memory_performance`:** project-scoped, except the reserved `__self_metrics__` project id (an
+  exact, case-sensitive match), which returns the bank-wide series instead and needs no
+  registration; any other unregistered id, `__SELF_METRICS__` included, is refused with
+  `project-not-registered` (a per-tenant whole-bank scope is still deferred). The
   `series` list is derived from the server's tool inventory plus the nine
   `memory_search` phases (`search.open`, `search.embed`, `search.fts`, `search.vector`,
   `search.fusion`, `search.affinity`, `search.adjustment`, `search.snippets`,
@@ -419,12 +421,15 @@ tool it is (see [ADR-0024](../adr/0024-unknown-id-contract.md)):
   [Error shapes](#error-shapes)) instead of silently doing nothing — there is no well-defined
   "already done" state for promoting a hash that was never written or writing into a workspace
   that was never begun.
-- **An unregistered `projectId` on a write/destructive call is refused, not silently founded.**
-  ADR-0089 decision 3: before this, any string a caller named became a project the moment
-  something was written under it — a typo could not fail, it founded a ghost project. Now a write
-  is refused (`project-not-registered`, see [Error shapes](#error-shapes)) unless the id is
-  registered (`project_id_token_get`) or the bank already holds rows for it (a legacy raw-text id,
-  which keeps working with a one-time warning). Reads are never refused this way.
+- **An unregistered `projectId` is refused on every call, reads included, not silently founded.**
+  ADR-0089 decision 3, amended by ADR-0127: a call is refused (`project-not-registered`, see
+  [Error shapes](#error-shapes)) unless the id is registered (`project_id_get`,
+  `project_id_token_get`, or `ai-raccoon project id register <id>`) or the bank already holds rows
+  for it (a legacy id, which keeps working with a one-time warning, EventId 433). Reads never
+  register an id; until a project-ids repair finishes, a write under an unregistered raw-text id
+  still registers it. The only calls that pass without a registered id are `project_id_token_get`,
+  `project_id_get`, `memory_promotion_list` with `allProjects=true`, and `memory_performance` under
+  `__self_metrics__`.
 
 ### `capacity` semantics
 
@@ -1133,8 +1138,8 @@ source of truth; a test cross-checks this table against it.
 | `sync-corrupt-file` | `PRAGMA quick_check` failed on the pulled remote snapshot — the local DB is not replaced | `sync-corrupt-file: <detail>` |
 | `sync-tampered-remote` | The pulled remote snapshot's embedded HMAC authenticity tag does not match its bytes, **or** the blob has no tag at all for an objectKey this bank has previously verified one for (checked before `PRAGMA quick_check` and before `ATTACH`) — the local DB is not replaced. An encrypted bank keys the tag from its own passphrase via `HKDF`; a headerless remote is accepted with a logged warning only the first time this objectKey is ever seen (trust-on-first-use). An encrypted bank synced by ≥1.31 cannot be pulled by <1.31 — upgrade both ends of an encrypted sync pair together | `sync-tampered-remote: <detail>` |
 | `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation; the refusal names the `settings access` remedy | `access-denied: <tool> requires mode <required> (current <mode>); run 'ai-raccoon settings access set <project> <required>' to raise this project's mode, or 'ai-raccoon settings access default set <required>' for all projects` |
-| `project-not-registered` | A write/destructive call named a `projectId` with no registry row and no existing rows either (ADR-0089) — reads are never refused. A legacy raw-text id the bank already holds rows for keeps working, with a one-time warning, instead of this refusal | `project-not-registered: Project '<id>' is not registered. Call project_id_token_get to mint and register a project id before writing.` |
-| `project-retired` | A write/destructive call named a `projectId` the project-ids repair dropped with a tombstone (Package E of the run-once repair plan) — resurrecting it by write is refused with the repair attribution. Reads still pass through, and an alias loser folds to its winner instead of refusing | `project-retired: Project '<id>' is retired: the project-ids repair attributed it as dropped test residue and deleted its rows with a tombstone. Writes under a retired id are refused — write under the canonical project id instead.` |
+| `project-not-registered` | A call, read or write, named a `projectId` with no registry row and no existing rows either (ADR-0089, ADR-0127). A legacy id the bank already holds rows for keeps working, with a one-time warning, instead of this refusal | `project-not-registered: Project '<id>' is not registered. Look up this repository's id with project_id_get, mint a new one with project_id_token_get, or register an id you already use with 'ai-raccoon project id register <id>'.` |
+| `project-retired` | A call, read or write, named a `projectId` the project-ids repair dropped with a tombstone; it is refused with the repair attribution, also while a repair request is open. An alias loser folds to its winner instead of refusing | `project-retired: Project '<id>' is retired: the project-ids repair attributed it as dropped test residue and deleted its rows with a tombstone. Calls under a retired id are refused — use the canonical project id instead.` |
 | `project-not-found` | `project_id_get` found no project registered under that exact, case-sensitive name. Nothing is registered; mint one with `project_id_token_get` | `project-not-found: No project is registered under the name '<name>'. Call project_id_token_get with this name to mint and register one.` |
 | `project-name-ambiguous` | `project_id_get` found several projects registered under that exact name; the message lists every id so a human can pick one | `project-name-ambiguous: 2 projects are registered under the name '<name>': <id1>, <id2>. Ask the user which one to use and pass that id as projectId.` |
 | `context-outside-project` | A write's `context` names a project other than the request's `project_id` | `context-outside-project: Context '<context>' writes into a project other than '<project_id>'. A write may only target its own project.` |

@@ -704,10 +704,9 @@ public sealed class AllowingRegistrationGuard : IProjectRegistrationGuard
 }
 
 /// <summary>
-///     Stub <see cref="Core.Projects.IProjectIdsMigrationGate"/> for tests that construct a gate
-///     directly and do not exercise the P3 fold: explicitly unmigrated, so ids pass through
-///     unfolded. Named at every construction — the gate ctor takes no default (d-425 SHOULD-1,
-///     d-426 SHOULD-5), so a forgotten gate is a compile error, never a silent pass-through.
+///     Stub <see cref="Core.Projects.IProjectIdsMigrationGate"/> that reports an unmigrated bank:
+///     a <see cref="AiRaccoon.Projects.ProjectRegistrationGuard"/> built with it still
+///     auto-registers a raw-text id on its first write.
 /// </summary>
 public sealed class NeverMigratedGate : Core.Projects.IProjectIdsMigrationGate
 {

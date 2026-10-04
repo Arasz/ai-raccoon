@@ -689,9 +689,4 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
 
     /// <summary>Unmigrated gate: these search-behavior tests predate the project-ids repair,
     /// so the fold stays off and pre-migration behavior is preserved.</summary>
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
-    }
 }
