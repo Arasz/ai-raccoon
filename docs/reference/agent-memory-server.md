@@ -16,7 +16,7 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (29)
+## Tools (30)
 
 Every tool takes `projectId` (camelCase — all parameters are camelCase), and it is
 **optional on every tool**: an omitted or blank id defaults to the registered project
@@ -25,16 +25,19 @@ one distinct project resolves (guid spellings canonicalize at the gate), several
 as ambiguous with the sorted candidate list, none refuses with `projectId is required`
 naming the probed directory. An explicit id always wins and never consults the resolver.
 The exceptions: `memory_promotion_list`, whose omitted id means all-projects (its
-cross-project feature) and never cwd-defaults, and `project_id_token_get`, which mints
-one and so takes none. Writes land in `project:<id>` by default; naming a `workspaceId`
-routes them into that workspace's isolated context, and it wins over `context` when both
+cross-project feature) and never cwd-defaults, `project_id_get`, which looks an id up by
+name and so takes none, and `project_id_token_get`, which mints one and so takes none.
+Writes land in `project:<id>` by default; naming a `workspaceId` routes them into that
+workspace's isolated context, and it wins over `context` when both
 are supplied (the sandbox has priority, so a workspace write never lands project-wide).
 
 10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
 2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),
 2 search-feedback tools (`memory_record_followthrough`, `memory_record_grade`),
 1 sync tool, 1 performance tool (`memory_performance`), 1 code tool (`code_get`),
-1 project tool (`project_id_token_get`, ADR-0089 — mints and registers a new project id).
+2 project tools (`project_id_get`, which returns the id registered under an exact name, and
+`project_id_token_get`, ADR-0089, which mints and registers a new project id; call
+`project_id_get` first).
 `memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config
 refactor: configuration is no longer an MCP tool — the CLI verbs are the single
 config channel (see [Command-line options](#command-line-options)).
@@ -69,6 +72,7 @@ config channel (see [Command-line options](#command-line-options)).
 | `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
 | `memory_performance`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
 | `code_get`                     | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, lineStart, lineEnd}`                                                          |
+| `project_id_get`               | `name`                                                                                                                                                      | `{projectId}`                                                                                      |
 | `project_id_token_get`         | `name?`                                                                                                                                                     | `{projectId, instructions}`                                                                        |
 
 ### Notes on the less obvious tools
@@ -1131,6 +1135,8 @@ source of truth; a test cross-checks this table against it.
 | `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation; the refusal names the `settings access` remedy | `access-denied: <tool> requires mode <required> (current <mode>); run 'ai-raccoon settings access set <project> <required>' to raise this project's mode, or 'ai-raccoon settings access default set <required>' for all projects` |
 | `project-not-registered` | A write/destructive call named a `projectId` with no registry row and no existing rows either (ADR-0089) — reads are never refused. A legacy raw-text id the bank already holds rows for keeps working, with a one-time warning, instead of this refusal | `project-not-registered: Project '<id>' is not registered. Call project_id_token_get to mint and register a project id before writing.` |
 | `project-retired` | A write/destructive call named a `projectId` the project-ids repair dropped with a tombstone (Package E of the run-once repair plan) — resurrecting it by write is refused with the repair attribution. Reads still pass through, and an alias loser folds to its winner instead of refusing | `project-retired: Project '<id>' is retired: the project-ids repair attributed it as dropped test residue and deleted its rows with a tombstone. Writes under a retired id are refused — write under the canonical project id instead.` |
+| `project-not-found` | `project_id_get` found no project registered under that exact, case-sensitive name. Nothing is registered; mint one with `project_id_token_get` | `project-not-found: No project is registered under the name '<name>'. Call project_id_token_get with this name to mint and register one.` |
+| `project-name-ambiguous` | `project_id_get` found several projects registered under that exact name; the message lists every id so a human can pick one | `project-name-ambiguous: 2 projects are registered under the name '<name>': <id1>, <id2>. Ask the user which one to use and pass that id as projectId.` |
 | `context-outside-project` | A write's `context` names a project other than the request's `project_id` | `context-outside-project: Context '<context>' writes into a project other than '<project_id>'. A write may only target its own project.` |
 | `invalid-params` | FluentValidation rejected the request (invalid `scope`, out-of-range `limit`, etc.), or the call named no `projectId` and cwd-default resolution found no candidate — the refusal names the probed working directory. When resolution finds two or more candidates the message is `invalid-params: projectId is ambiguous from cwd <cwd>: candidates <ids>`. The one exception is `memory_promotion_list`, whose omitted projectId means all-projects (that tool's cross-project feature) and never cwd-defaults. | `invalid-params: projectId is required (no registered project's scope contains cwd <cwd>; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)` |
 | `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, or a present-but-blank value fails a guard clause — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. Mapped from `JsonException`, `ArgumentException` and `ArgumentNullException`. `ArgumentOutOfRangeException` is deliberately **not** mapped: it is how .NET reports the server's own index arithmetic going wrong, so refusing it would mute Error-level alerting and tell the caller to retry an argument that was never at fault | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |

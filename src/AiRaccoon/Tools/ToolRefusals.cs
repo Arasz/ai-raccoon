@@ -50,6 +50,9 @@ internal static partial class ToolRefusals
         [typeof(UnregisteredProjectException)] = "project-not-registered",
         // Package E (D4 enforcement): a write named a dropped id — refused with the repair attribution.
         [typeof(RetiredProjectException)] = "project-retired",
+        // project_id_get: no registered project has the exact name, or several do.
+        [typeof(ProjectNotFoundException)] = "project-not-found",
+        [typeof(ProjectNameAmbiguousException)] = "project-name-ambiguous",
         // Package E2: the pull merged a same-alias-different-winner map row — a human must pick the winner.
         [typeof(SyncAliasConflictException)] = "sync-alias-conflict",
         // The install this process started from was replaced/removed under it (e.g. 'dotnet tool
