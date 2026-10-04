@@ -166,6 +166,20 @@ public sealed class SqliteProjectDirectoryTests : IAsyncLifetime
         (await ProjectRowCountAsync("acme-raw")).ShouldBe(0);
     }
 
+    /// <summary>The nil guid parses, so it would otherwise slip through every guid check; it names nothing and is refused without a row.</summary>
+    [RetryTheory]
+    [InlineData("00000000-0000-0000-0000-000000000000")]
+    [InlineData("{00000000-0000-0000-0000-000000000000}")]
+    public async Task Register_NilGuid_IsNotAGuid_NoRow(string spelling)
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var registration = await _directory.RegisterAsync(spelling, "acme", ct);
+
+        registration.ShouldBe(new ProjectRegistration("00000000-0000-0000-0000-000000000000", ProjectRegistrationOutcome.NotAGuid));
+        (await ProjectRowCountAsync("00000000-0000-0000-0000-000000000000")).ShouldBe(0);
+    }
+
     [RetryFact]
     public async Task Register_RowHoldingRawText_IsRegistered()
     {
