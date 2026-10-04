@@ -411,6 +411,70 @@ public sealed class ProjectIdsFoldPlanTests
         pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedTelemetryOnly);
     }
 
+    [Fact]
+    public void FromCensus_UnmappedUnregistered_MetricsAndQualityOnly_PinsTelemetryOnly()
+    {
+        var report = Report(Row("b0e32c16", metricsRows: 2, qualityRows: 3));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Empty);
+
+        plan.Unresolved.ShouldBeEmpty();
+        var pin = plan.Pinned.ShouldHaveSingleItem();
+        pin.ProjectId.ShouldBe("b0e32c16");
+        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedTelemetryOnly);
+    }
+
+    [Fact]
+    public void FromCensus_UnmappedUnregistered_QualityOnly_PinsTelemetryOnly()
+    {
+        var report = Report(Row("b0e32c16", qualityRows: 3));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Empty);
+
+        plan.Unresolved.ShouldBeEmpty();
+        plan.Pinned.ShouldHaveSingleItem().Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedTelemetryOnly);
+    }
+
+    [Fact]
+    public void FromCensus_UnmappedUnregistered_QualityPlusWatch_StaysUnresolved()
+    {
+        var report = Report(Row("b0e32c16", qualityRows: 3, watches: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Empty);
+
+        plan.Unresolved.ShouldBe(["b0e32c16"]);
+        plan.Pinned.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void FromCensus_DroppedId_QualityOnly_IsStillDropped()
+    {
+        var plan = ProjectIdsFoldPlan.FromCensus(Report(Row("qa-noise-project", qualityRows: 2)), FixtureMap());
+
+        plan.Dropped.ShouldBe(["qa-noise-project"]);
+        plan.Pinned.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void FromCensus_MappedLoser_QualityOnly_StillFolds()
+    {
+        var plan = ProjectIdsFoldPlan.FromCensus(Report(Row("job-search-ai-assistant", qualityRows: 2)), FixtureMap());
+
+        plan.Folds.ShouldHaveSingleItem().Winner.ShouldBe("jsaa");
+        plan.Pinned.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void FromCensus_RegisteredEmpty_WithQualityRows_IsNotRetireEligible()
+    {
+        var plan = ProjectIdsFoldPlan.FromCensus(
+            Report(Row("my-project", registered: true, qualityRows: 2)), ProjectIdAliasMap.Empty);
+
+        plan.RetiredProjects.ShouldBeEmpty("a registered id with quality rows still owns an attachment");
+        plan.Pinned.ShouldBeEmpty();
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
     // Ledger — workspace-retire-block : --filter FromCensus_RegisteredIdWithOpenWorkspaces_NeverRetires : registered + workspaces, empty map.
     [Fact]
     public void FromCensus_RegisteredIdWithOpenWorkspaces_NeverRetires()
