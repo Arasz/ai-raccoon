@@ -36,11 +36,11 @@ internal sealed class SettingsServerErrorException(string message) : Exception(m
 ///         <c>model code set local</c>, <c>repair</c>, <c>extract prune</c>,
 ///         <c>settings maintenance list</c>, <c>noise entries</c> and <c>watch registered</c> all
 ///         reach the same way, over the same connection — one class, one credential, one transport
-///         for every control-plane resource.
+///         for every control-plane resource. <see cref="IProjectDirectory" /> serves <c>project id</c>.
 ///     </para>
 /// </summary>
 internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, ICodeEngineStore, IRepairStore,
-    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore
+    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore, IProjectDirectory
 {
     private readonly HttpClient _client;
     private readonly TimeSpan _requestDeadline;
@@ -223,6 +223,36 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         var response = await SendAsync(token => _client.GetAsync(WatchRegisteredProtocol.Path, token), cancellationToken);
         Ensure(response);
         return (await response.Content.ReadFromJsonAsync<List<WatchRegistration>>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(projectId);
+        var response = await SendAsync(token =>
+            _client.PostAsJsonAsync(ProjectsProtocol.Path, new ProjectRegisterRequest(projectId, name), token), cancellationToken);
+        Ensure(response);
+        var body = (await response.Content.ReadFromJsonAsync<ProjectRegisterResponse>(cancellationToken))!;
+        return new ProjectRegistration(body.ProjectId, body.Outcome);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> FindByNameAsync(string name, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(name);
+        var response = await SendAsync(token => _client.GetAsync(ProjectsProtocol.ForName(name), token), cancellationToken);
+        Ensure(response);
+        return (await response.Content.ReadFromJsonAsync<ProjectIdsResponse>(cancellationToken))!.Ids;
+    }
+
+    /// <inheritdoc />
+    public async Task<ProjectIdCheck> CheckAsync(string projectId, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(projectId);
+        var response = await SendAsync(token => _client.GetAsync(ProjectsProtocol.ForCheck(projectId), token), cancellationToken);
+        Ensure(response);
+        var body = (await response.Content.ReadFromJsonAsync<ProjectCheckResponse>(cancellationToken))!;
+        return new ProjectIdCheck(body.ProjectId, body.Status);
     }
 
     /// <summary>
