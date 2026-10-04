@@ -141,7 +141,7 @@ public sealed class RefusedQueryRedactionTests
         ISearchQualityService? quality = null)
     {
         var access = new MemoryAccessGuard(store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new StubMigrationGate(migrated: false));
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
         return new MemoryTools(store, gate,
             new SearchDispatcher(store, new NoOpCodeSearchService(), quality ?? new NoOpSearchQualityService()),
             new QueryGuardService(store),

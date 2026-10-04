@@ -38,7 +38,7 @@ public sealed class SetTtlToolTests : IDisposable
         _tools = new SweepTools(
             new SweepService(_store, _clock),
             new ForgettingPolicyService(_store, guard),
-            new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
+            new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

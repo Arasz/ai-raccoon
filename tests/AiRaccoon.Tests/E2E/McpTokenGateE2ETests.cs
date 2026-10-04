@@ -1,3 +1,4 @@
+using AiRaccoon.Tests.Integration.Observability;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -145,6 +146,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
             {
                 // Measured on xunit.v3 3.2.2: DisposeAsync does NOT run when InitializeAsync
                 // throws, so a boot that never reports a URL has to release the gate itself.
+                await TelemetryServerHost.SeedProjectRegistrationAsync(DataRoot, "acme", TestContext.Current.CancellationToken);
                 using var lease = LoopbackPort.Reserve();
                 Port = lease.Port;
                 CliArgs.TryParse(["--data-root", DataRoot, "serve", "--port", Port.ToString()], out var parsed);

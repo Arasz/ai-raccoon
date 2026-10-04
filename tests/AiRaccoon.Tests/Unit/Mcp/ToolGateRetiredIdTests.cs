@@ -15,8 +15,8 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 /// <summary>
 ///     Package E1 at the ToolGate write path: a write under a DROPPED id is refused with an error
 ///     naming the repair attribution, while a write under an alias loser folds through to the
-///     winner so stale-config writers keep working. Reads never refuse; an unmigrated bank keeps
-///     the pre-P3 pass-through.
+///     winner so stale-config writers keep working. Reads under a dropped id are refused too (D2),
+///     and neither depends on the repair finish marker.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -32,11 +32,10 @@ public sealed class ToolGateRetiredIdTests
         [Winner],
         [Dropped]);
 
-    private static ToolGate MigratedGate(
+    private static ToolGate NewGate(
         RecordingGuard guard,
         RecordingRegistrationGuard registration) =>
-        new(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
-            new StubMigrationGate(true));
+        new(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration);
 
     [Theory]
     [InlineData(AccessRequirement.Write)]
@@ -47,7 +46,7 @@ public sealed class ToolGateRetiredIdTests
         // E-AC1. Ledger — dropped-write-refused.
         var guard = new RecordingGuard();
         var registration = new RecordingRegistrationGuard();
-        var gate = MigratedGate(guard, registration);
+        var gate = NewGate(guard, registration);
         try
         {
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
@@ -68,20 +67,24 @@ public sealed class ToolGateRetiredIdTests
     }
 
     [Fact]
-    public async Task RequireAsync_ReadUnderDroppedId_PassesThrough()
+    public async Task RequireAsync_ReadUnderDroppedId_IsRefusedAsRetired()
     {
-        // Reads never refuse: visibility into retired state stays available.
+        // D2: a retired id is refused on reads too.
         var guard = new RecordingGuard();
         var registration = new RecordingRegistrationGuard();
-        var gate = MigratedGate(guard, registration);
+        var gate = NewGate(guard, registration);
         try
         {
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
 
-            var canonical = await gate.RequireAsync(Dropped, AccessRequirement.Read, "memory_search",
-                TestContext.Current.CancellationToken);
+            var ex = await Should.ThrowAsync<RetiredProjectException>(() =>
+                gate.RequireAsync(Dropped, AccessRequirement.Read, "memory_search",
+                    TestContext.Current.CancellationToken));
 
-            canonical.ShouldBe(Dropped);
+            ex.Message.ShouldContain("Calls under a retired id are refused");
+            ex.Message.ShouldNotContain("Writes under");
+            guard.Calls.ShouldBeEmpty();
+            registration.Calls.ShouldBeEmpty();
         }
         finally
         {
@@ -95,7 +98,7 @@ public sealed class ToolGateRetiredIdTests
         // E-AC2: stale-config writers keep working, data lands canonical.
         var guard = new RecordingGuard();
         var registration = new RecordingRegistrationGuard();
-        var gate = MigratedGate(guard, registration);
+        var gate = NewGate(guard, registration);
         try
         {
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
@@ -113,22 +116,21 @@ public sealed class ToolGateRetiredIdTests
         }
     }
 
-    [Fact]
-    public async Task RequireAsync_WhenExplicitlyUnmigrated_PassesTheDroppedIdThrough()
+    /// <summary>A repair request resets the finish marker, so the fold must not depend on it.</summary>
+    [Theory]
+    [InlineData(AccessRequirement.Read)]
+    [InlineData(AccessRequirement.Write)]
+    public async Task RequireAsync_DroppedIdWithOpenRepairRequest_IsStillRefused(AccessRequirement requirement)
     {
-        // P3 arms alongside the migration gate (H8): an unmigrated bank behaves exactly as before.
-        var guard = new RecordingGuard();
-        var registration = new RecordingRegistrationGuard();
-        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
-            new StubMigrationGate(false));
+        var gate = new ToolGate(new RecordingGuard(), new FakePromotionQueue(), new NeverMigratingStore(),
+            new RecordingRegistrationGuard());
         try
         {
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
 
-            var canonical = await gate.RequireAsync(Dropped, AccessRequirement.Write, "memory_write",
-                TestContext.Current.CancellationToken);
-
-            canonical.ShouldBe(Dropped);
+            await Should.ThrowAsync<RetiredProjectException>(() =>
+                gate.RequireAsync(Dropped, requirement, "memory_search",
+                    TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -161,11 +163,5 @@ public sealed class ToolGateRetiredIdTests
             Calls.Add((projectId, requirement));
             return Task.CompletedTask;
         }
-    }
-
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
     }
 }

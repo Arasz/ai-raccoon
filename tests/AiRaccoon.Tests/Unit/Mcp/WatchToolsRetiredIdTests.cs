@@ -40,7 +40,7 @@ public sealed class WatchToolsRetiredIdTests
     private static WatchTools WiredTools(RecordingWatchService watch) =>
         new(watch,
             new ToolGate(new AllowAllGuard(), new FakePromotionQueue(),
-                new NeverMigratingStore(), new AllowingRegistrationGuard(), new StubMigrationGate(true)));
+                new NeverMigratingStore(), new AllowingRegistrationGuard()));
 
     [Fact]
     public async Task Add_UnderDroppedId_RefusesBeforeTheServiceIsTouched()
@@ -130,12 +130,6 @@ public sealed class WatchToolsRetiredIdTests
         public Task<bool> IsPathAllowedAsync(string projectId, string path,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
-    }
-
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
     }
 
     private sealed class AllowAllGuard : IMemoryAccessGuard

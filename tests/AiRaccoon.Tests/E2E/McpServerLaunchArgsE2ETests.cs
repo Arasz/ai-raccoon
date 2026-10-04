@@ -1,3 +1,4 @@
+using AiRaccoon.Tests.Integration.Observability;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Json;
@@ -41,7 +42,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
-        _factory = new McpServerFactory(InstallScope.Project);
+        _factory = new McpServerFactory(InstallScope.Project) { Projects = ["acme"] };
         _client = await _factory.CreateClientAsync();
     }
 
@@ -111,6 +112,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
     {
         // F39: the auto-launch refuses a non-default root with no bank, so the bank the backend serves exists first.
         var dataRoot = await TestData.CreateTempRootWithBankAsync("proxy-full-surface", TestContext.Current.CancellationToken);
+        await TelemetryServerHost.SeedProjectRegistrationAsync(dataRoot, "acme", TestContext.Current.CancellationToken);
         using var lease = LoopbackPort.Reserve();
         var port = lease.Port;
         lease.ReleaseForBind();

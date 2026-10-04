@@ -33,11 +33,11 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 [Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class ShareToolsTests
 {
-    private static (RecordingShareExtractService Service, ShareTools Tools) NewStack(bool migrated)
+    private static (RecordingShareExtractService Service, ShareTools Tools) NewStack()
     {
         var service = new RecordingShareExtractService();
         var gate = new ToolGate(new AllowingGuard(), new FakePromotionQueue(), new NeverMigratingStore(),
-            new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(migrated));
+            new AllowingRegistrationGuard());
         return (service, new ShareTools(Substitute.For<IMemoryStore>(), gate, service));
     }
 
@@ -45,7 +45,7 @@ public sealed class ShareToolsTests
     public async Task ShareExtract_MultiFragment_StaysTwoProjects()
     {
         // Ledger — skip-dedup : --filter ShareExtract_MultiFragment_StaysTwoProjects : jsaa+loser pair, migrated.
-        var (service, tools) = NewStack(migrated: true);
+        var (service, tools) = NewStack();
 
         await tools.ShareExtract(["jsaa", "job-search-ai-assistant"],
             cancellationToken: TestContext.Current.CancellationToken);
@@ -61,7 +61,7 @@ public sealed class ShareToolsTests
         // Ledger — reads-do-not-fold : --filter ShareExtract_SingleLoser_ThreadsTheNamedId : loser in propose mode, migrated.
         // ADR-0099: the gate passes ids through even when migrated — the caller-named id
         // threads to the runner unchanged.
-        var (service, tools) = NewStack(migrated: true);
+        var (service, tools) = NewStack();
 
         await tools.ShareExtract(["job-search-ai-assistant"],
             cancellationToken: TestContext.Current.CancellationToken);
@@ -81,7 +81,7 @@ public sealed class ShareToolsTests
         var guard = new RecordingGuard();
         var service = new RecordingShareExtractService();
         var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(),
-            new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(true));
+            new AllowingRegistrationGuard());
         var tools = new ShareTools(Substitute.For<IMemoryStore>(), gate, service);
 
         var ex = await Should.ThrowAsync<McpException>(() =>
@@ -102,7 +102,7 @@ public sealed class ShareToolsTests
         var service = new ShareExtractService(Substitute.For<IMemoryStore>(),
             Substitute.For<ISharedExtractionRunner>(), new FakePromotionQueue());
         var gate = new ToolGate(new AllowingGuard(), new FakePromotionQueue(), new NeverMigratingStore(),
-            new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(true));
+            new AllowingRegistrationGuard());
         var tools = new ShareTools(Substitute.For<IMemoryStore>(), gate, service);
 
         var ex = await Should.ThrowAsync<ValidationException>(() =>
@@ -160,12 +160,6 @@ public sealed class ShareToolsTests
         public Task EnsureAsync(string projectId, AccessRequirement requirement, string toolName,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
-    }
-
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
     }
 
     /// <summary>Records the rebuilt request the tool actually handed over — the seam the per-element gate feeds.</summary>
