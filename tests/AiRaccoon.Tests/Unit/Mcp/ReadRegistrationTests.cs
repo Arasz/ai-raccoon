@@ -109,7 +109,7 @@ public sealed class ReadRegistrationTests
     public async Task ProjectIdTokenGet_PassesOnAnEmptyRegistry()
     {
         var registry = Substitute.For<IProjectRegistry>();
-        var tools = new ProjectTools(registry, _gate);
+        var tools = new ProjectTools(registry, Substitute.For<IProjectDirectory>(), _gate);
 
         var minted = await tools.Get(cancellationToken: Ct);
 
