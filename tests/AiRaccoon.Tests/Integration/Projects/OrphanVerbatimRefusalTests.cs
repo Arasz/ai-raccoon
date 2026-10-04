@@ -9,7 +9,9 @@ using AiRaccoon.Projects;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using AiRaccoon.Tests.Unit.Projects;
@@ -29,8 +31,8 @@ namespace AiRaccoon.Tests.Integration.Projects;
 ///         --filter AliasWrite_ThreadsTheVerbatimPartition : migrated bank, registered jsaa + loser, loser write;
 ///         always-legacy-guard : --filter TrueTypo_Refused : same bank, jsaaa write;
 ///         drop-write-assert : --filter CanonicalOnlyWrite_ReachesStorage : respelled-guid direct
-///         store write bypassing the gate; refuse-reads : --filter OrphanRead_Passthrough :
-///         unmigrated bank with loser rows, loser-id search.
+///         store write bypassing the gate; rows-exemption-write-only :
+///         --filter LegacyRowsWithoutRegistration_ReadPassesAndWarns433 : raw-SQL rows, no projects row.
 ///     </para>
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -73,10 +75,10 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
     ///     The full production choke: the real marker gate flips the real ToolGate's fold and the
     ///     real guard's refusal over one bank. The queue fake only carries the envelope meta.
     /// </summary>
-    private MemoryTools BuildEnforcingTools()
+    private MemoryTools BuildEnforcingTools(ILogger<ProjectRegistrationGuard>? guardLogger = null)
     {
         var marker = new SqliteProjectIdsMigrationGate(_factory);
-        var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, marker);
+        var guard = new ProjectRegistrationGuard(_store, guardLogger ?? NullLogger<ProjectRegistrationGuard>.Instance, marker);
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(),
             new NeverMigratingStore(), guard);
         var settings = new InMemorySettings();
@@ -162,16 +164,14 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     No marker: an unmigrated bank holding loser rows. Loser-id reads must succeed and find
-    ///     their rows — enforcement must not break reads, before migration or after. Two rows, not
-    ///     one (d-427 SHOULD-5): a single-row passthrough cannot tell "reads pass through" from
-    ///     "the one row happened to match".
+    ///     An unmigrated bank: the loser's first write auto-registers it (a raw-text write before the
+    ///     repair), so the later read is a registered read and finds both rows. Two rows, not one
+    ///     (d-427 SHOULD-5): a single-row read cannot tell "found the rows" from "one happened to match".
+    ///     The rows-without-registration path is pinned by <see cref="LegacyRowsWithoutRegistration_ReadPassesAndWarns433" />.
     /// </summary>
     [RetryFact]
     public async Task OrphanRead_Passthrough()
     {
-        // No marker: an unmigrated bank holding loser rows. A loser-id read must succeed and find
-        // its rows — enforcement must not break reads, before migration or after.
         var ct = TestContext.Current.CancellationToken;
         var tools = BuildEnforcingTools();
         var first = await tools.Write(Loser, "loser row narwhal tusk",
@@ -180,10 +180,45 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
             cancellationToken: ct);
         await _store.EmbedPendingAsync(Loser, null, ct);
 
-        // Ledger — refuse-reads : --filter OrphanRead_Passthrough : unmigrated bank with loser rows, loser-id search.
         var search = await tools.Search(Loser, "narwhal", sessionId: "sess-pint", cancellationToken: ct);
 
         search.Data!.Results.ShouldContain(r => r.Hash == first.Data!.Hash);
         search.Data!.Results.ShouldContain(r => r.Hash == second.Data!.Hash);
+    }
+
+    /// <summary>
+    ///     Rows seeded by raw SQL with no projects row at all: the read passes on the row
+    ///     exemption alone, warns 433 once, and registers nothing.
+    /// </summary>
+    [RetryFact]
+    public async Task LegacyRowsWithoutRegistration_ReadPassesAndWarns433()
+    {
+        const string legacy = "legacy-raw-text";
+        var ct = TestContext.Current.CancellationToken;
+        var now = FixedNow.ToUnixTimeSeconds();
+        await using (var connection = await _factory.OpenBankAsync(ct))
+        {
+            foreach (var (hash, value) in new[] { ("l1", "legacy narwhal tusk"), ("l2", "legacy narwhal horn") })
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    "INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, created_at, updated_at, embed_state) " +
+                    "VALUES (@hash, @hash, @value, 'seed.md', 's', 'project', @legacy, @now, @now, 'pending')",
+                    new { hash, value, legacy, now }, cancellationToken: ct));
+            }
+        }
+
+        await _store.EmbedPendingAsync(legacy, null, ct);
+        var logger = new FakeLogger<ProjectRegistrationGuard>();
+        var tools = BuildEnforcingTools(logger);
+
+        var first = await tools.Search(legacy, "narwhal", sessionId: "sess-legacy", cancellationToken: ct);
+        await tools.Search(legacy, "narwhal", sessionId: "sess-legacy", cancellationToken: ct);
+
+        first.Data!.Results.Select(r => r.Hash).ShouldBe(["l1", "l2"], ignoreOrder: true);
+        logger.Collector.GetSnapshot().Count(r => r.Id.Id == 433).ShouldBe(1);
+        await using var check = await _factory.OpenBankAsync(ct);
+        (await check.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM projects WHERE id = @legacy", new { legacy }, cancellationToken: ct)))
+            .ShouldBe(0, "a read must never register an id");
     }
 }
