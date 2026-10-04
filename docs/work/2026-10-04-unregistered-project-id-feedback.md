@@ -13,6 +13,14 @@ Source document: `docs/work/2026-10-04-unregistered-project-id-research.md`
 | D4 | `project id register <guid> [--name]`; ai-badger's scaffold and den-refresh call it | APPROVE | "ai-badger already started working on this". The ai-badger side is handled in that repo; this PR ships the ai-raccoon verb only |
 | D5 | Ships as 1.57.0 with a Breaking changes README line | APPROVE | — |
 
+## Follow-up feedback (2026-10-04, chat)
+
+- **F1:** "ensure cases are handled: ai-raccoon without ai-badger, so the ai-raccoon needs tool that will return id and ai-badger needs to check if the id exists". The resulting design:
+  - MCP `project_id_get(name)`, used before `project_id_token_get`
+  - CLI `project id get --name <repo>`
+  - CLI `project id check <guid>`
+  - ai-badger runs get/check before register
+
 Not answered: none.
 
 <!-- end refinement feedback -->
