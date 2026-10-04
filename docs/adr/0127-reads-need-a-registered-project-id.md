@@ -71,8 +71,8 @@ The research record is `docs/work/2026-10-04-unregistered-project-id-research.md
    - **Exceptions.** A scope write whose new list is a subset of the stored list passes, and so
      does the `*` wildcard. DELETE routes are unaffected, so stale per-project state can always be
      removed.
-   - **Consequence.** A legacy raw-text id with no registry row cannot take `ingest scope add` or
-     `watch enable` until it is registered.
+   - **Consequence.** A raw-text id that is neither registered nor holding rows cannot take
+     `ingest scope add` or `watch enable` until it is registered; an id that holds rows passes.
 
 6. **`project id register | get | check` replace decision 6's unbuilt `generate` and `convert`.**
    - `ai-raccoon project id register <id> [--name <n>]` registers an id a project already uses:
