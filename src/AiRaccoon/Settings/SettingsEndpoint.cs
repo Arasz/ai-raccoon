@@ -60,7 +60,7 @@ internal static partial class SettingsEndpoint
                     {
                         if (string.IsNullOrWhiteSpace(owner))
                         {
-                            return Results.BadRequest($"ai-raccoon: the settings key '{write.Key}' names no project");
+                            return Results.BadRequest($"ai-raccoon: the settings key '{ProjectIdText.Printable(write.Key)}' names no project");
                         }
 
                         var folded = ProjectIdAliasMap.Default.Apply(owner);

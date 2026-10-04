@@ -457,6 +457,18 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         (await BankSettingAsync(key)).ShouldBeNull();
     }
 
+    /// <summary>The blank-owner refusal echoes the key; the echo goes through ProjectIdText.</summary>
+    [RetryFact]
+    public async Task Put_BlankOwnerWithControlCharacter_Is400WithAPrintableEcho()
+    {
+        var response = await PutAsync("access.mode.project:\r", "ro");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        body.ShouldContain("\\u000D");
+        body.Any(char.IsControl).ShouldBeFalse(body);
+    }
+
     /// <summary>A fresh bank is unmigrated, where a write-side guard would auto-register a raw-text id; the settings check never does.</summary>
     [RetryFact]
     public async Task Put_RefusedOnUnmigratedBank_RegistersNothing()

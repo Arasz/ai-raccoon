@@ -23,17 +23,17 @@ internal sealed class ProjectIdCommands(IProjectDirectory directory)
         switch (registration.Outcome)
         {
             case ProjectRegistrationOutcome.Registered:
-                await streams.WriteOutputLineAsync($"registered {registration.ProjectId}");
+                await streams.WriteOutputLineAsync($"registered {ProjectIdText.Printable(registration.ProjectId)}");
                 return ErrorCode.Ok.Success;
             case ProjectRegistrationOutcome.AlreadyRegistered:
-                await streams.WriteOutputLineAsync($"already registered {registration.ProjectId}");
+                await streams.WriteOutputLineAsync($"already registered {ProjectIdText.Printable(registration.ProjectId)}");
                 return ErrorCode.Ok.Success;
             case ProjectRegistrationOutcome.Retired:
                 await streams.WriteErrorLineAsync($"ai-raccoon: {new RetiredProjectException(registration.ProjectId).Message}");
                 return ErrorCode.Usage.ProjectUnknown;
             default:
                 return await UsageAsync(streams,
-                    $"'{registration.ProjectId}' is not a guid, and no project is registered or holds rows under it; register a guid instead");
+                    $"'{ProjectIdText.Printable(registration.ProjectId)}' is not a guid, and no project is registered or holds rows under it; register a guid instead");
         }
     }
 
@@ -52,13 +52,14 @@ internal sealed class ProjectIdCommands(IProjectDirectory directory)
                 await streams.WriteOutputLineAsync(ids[0]);
                 return ErrorCode.Ok.Success;
             case 0:
-                await streams.WriteErrorLineAsync($"ai-raccoon: no project is registered under the name '{name}'");
+                await streams.WriteErrorLineAsync($"ai-raccoon: no project is registered under the name '{ProjectIdText.Printable(name)}'");
                 return ErrorCode.Usage.ProjectUnknown;
             default:
-                await streams.WriteErrorLineAsync($"ai-raccoon: {ids.Count} projects are registered under the name '{name}'; pick one of:");
+                await streams.WriteErrorLineAsync(
+                    $"ai-raccoon: {ids.Count} projects are registered under the name '{ProjectIdText.Printable(name)}'; pick one of:");
                 foreach (var id in ids)
                 {
-                    await streams.WriteErrorLineAsync(id);
+                    await streams.WriteErrorLineAsync(ProjectIdText.Printable(id));
                 }
 
                 return ErrorCode.Usage.ProjectAmbiguous;
@@ -80,7 +81,7 @@ internal sealed class ProjectIdCommands(IProjectDirectory directory)
             ProjectIdStatus.Retired => "retired",
             _ => "unknown"
         };
-        await streams.WriteOutputLineAsync($"{status} {check.ProjectId}");
+        await streams.WriteOutputLineAsync($"{status} {ProjectIdText.Printable(check.ProjectId)}");
         return check.Status == ProjectIdStatus.Known ? ErrorCode.Ok.Success : ErrorCode.Usage.ProjectUnknown;
     }
 

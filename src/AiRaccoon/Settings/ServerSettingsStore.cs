@@ -42,6 +42,9 @@ internal sealed class SettingsServerErrorException(string message) : Exception(m
 internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, ICodeEngineStore, IRepairStore,
     IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore, IProjectDirectory
 {
+    /// <summary>Every 409 body reaches a user's terminal; the read stops at this many characters.</summary>
+    private const int RefusalBodyMaxLength = 4096;
+
     private readonly HttpClient _client;
     private readonly TimeSpan _requestDeadline;
 
@@ -90,7 +93,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             _client.PutAsJsonAsync(SettingsProtocol.Path, new SettingWrite(key, value), token), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
-            throw new ProjectRefusedException(await response.Content.ReadAsStringAsync(cancellationToken));
+            throw new ProjectRefusedException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
         }
 
         Ensure(response);
@@ -103,7 +106,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             // Mirror of StartModelMigrationAsync: the endpoint's 409 body is the refusal reason.
-            throw new ModelMigrationInProgressException(await response.Content.ReadAsStringAsync(cancellationToken));
+            throw new ModelMigrationInProgressException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
         }
 
         Ensure(response);
@@ -119,7 +122,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
                 token), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
-            throw new ModelMigrationInProgressException(await response.Content.ReadAsStringAsync(cancellationToken));
+            throw new ModelMigrationInProgressException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
         }
 
         Ensure(response);
@@ -281,6 +284,16 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             throw new SettingsServerUnavailableException(ErrorCode.Reach.StoppedAnswering,
                 $"ai-raccoon: no settings server answered at {_client.BaseAddress} within {limit.TotalSeconds:0.###}s", ex);
         }
+    }
+
+    /// <summary>A 409 body is displayed to the user: read no more than <see cref="RefusalBodyMaxLength" /> characters, so a runaway body cannot become an unbounded CLI string.</summary>
+    private static async Task<string> ReadRefusalBodyAsync(HttpContent content, CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream);
+        var buffer = new char[RefusalBodyMaxLength];
+        var read = await reader.ReadBlockAsync(buffer.AsMemory(), cancellationToken);
+        return new string(buffer, 0, read);
     }
 
     private void Ensure(HttpResponseMessage response)
