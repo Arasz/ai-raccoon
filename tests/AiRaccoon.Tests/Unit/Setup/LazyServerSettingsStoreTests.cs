@@ -5,6 +5,7 @@ using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Settings;
 using AiRaccoon.Tests.TestHelpers;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -256,6 +257,30 @@ public sealed class LazyServerSettingsStoreTests
 
         await store.SummarizeAsync(TestContext.Current.CancellationToken);
         await store.GetSettingAsync("a", TestContext.Current.CancellationToken);
+
+        acquireCalls.ShouldBe(1);
+    }
+
+    /// <summary>`project id register | get | check` reach the same acquired store, over one acquire.</summary>
+    [Fact]
+    public async Task ProjectDirectoryCalls_DelegateToTheAcquiredStoreOverOneAcquire()
+    {
+        var acquireCalls = 0;
+        var inner = Substitute.For<ISettingsStore, IProjectDirectory>();
+        var directory = (IProjectDirectory)inner;
+        directory.RegisterAsync("p", "n", Arg.Any<CancellationToken>())
+            .Returns(new ProjectRegistration("p", ProjectRegistrationOutcome.Registered));
+        directory.FindByNameAsync("n", Arg.Any<CancellationToken>()).Returns(["p"]);
+        directory.CheckAsync("p", Arg.Any<CancellationToken>()).Returns(new ProjectIdCheck("p", ProjectIdStatus.Known));
+        var store = new LazyServerSettingsStore(_ =>
+        {
+            acquireCalls++;
+            return Task.FromResult(inner);
+        });
+
+        (await store.RegisterAsync("p", "n", TestContext.Current.CancellationToken)).Outcome.ShouldBe(ProjectRegistrationOutcome.Registered);
+        (await store.FindByNameAsync("n", TestContext.Current.CancellationToken)).ShouldBe(["p"]);
+        (await store.CheckAsync("p", TestContext.Current.CancellationToken)).Status.ShouldBe(ProjectIdStatus.Known);
 
         acquireCalls.ShouldBe(1);
     }
