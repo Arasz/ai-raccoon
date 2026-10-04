@@ -77,10 +77,12 @@ public sealed class ToolGateRetiredIdTests
         {
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
 
-            await Should.ThrowAsync<RetiredProjectException>(() =>
+            var ex = await Should.ThrowAsync<RetiredProjectException>(() =>
                 gate.RequireAsync(Dropped, AccessRequirement.Read, "memory_search",
                     TestContext.Current.CancellationToken));
 
+            ex.Message.ShouldContain("Calls under a retired id are refused");
+            ex.Message.ShouldNotContain("Writes under");
             guard.Calls.ShouldBeEmpty();
             registration.Calls.ShouldBeEmpty();
         }
