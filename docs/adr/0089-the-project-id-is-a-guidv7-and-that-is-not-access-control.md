@@ -5,6 +5,8 @@ Date: 2026-08-22
 Status: Accepted — ratified by the owner on 2026-08-22 (post-delta-3 gate G2, 15/15 APPROVE,
 `docs/work/2026-08-22-post-delta-3-feedback.md`); implementation is a separate work item, parked for
 session 4 per gate G15 (sizing in `docs/work/2026-08-22-post-delta-3-plan.md` §WP10).
+Amended 2026-10-04 by [ADR-0127](0127-reads-need-a-registered-project-id.md): decision 3 now
+refuses reads too, and decision 6's verbs are `project id register | get | check`.
 
 Plan: `docs/work/2026-08-22-post-delta-next-steps-plan.md` (rev 4, §S2), owner gate G2
 (`docs/work/2026-08-22-delta-open-items-feedback.md` §G2, binding design input), review round on
@@ -64,6 +66,8 @@ effort is out of scope.
    `SelectProjectIds` (`MemorySql.cs:58-64`) is what answers the second half — see
    "Membership, and what the registry is not" below. This is what removes the accident the owner
    named: a random or mistyped guid is not a new project, it is a refusal.
+
+   *Amended by ADR-0127: reads are refused the same way, and a read never registers an id.*
    *[Was: "a non-guid id the bank does not know is refused" — guid-shaped ids still auto-created a
    project. Changed in review: the refusal is now about registration, not about the string's shape,
    which also retires my previous flag that this rule extended the owner's words.]*
@@ -112,6 +116,9 @@ effort is out of scope.
    `watch registered`, `extract prune`, `model set` (`CliCommandTree.cs:83`).
    *[Was: `generate` minted without registering, and `convert` said nothing about a name. Changed in
    review.]*
+
+   *Amended by ADR-0127: `generate` and `convert` were never built; the family ships as
+   `project id register | get | check`.*
 
 7. **`convert` must re-derive the stored `ctx` values, not only `project_id`.** The vec0 `ctx`
    column is written once, by trigger, at insert time — `MemorySql.ContextKeyExpression`
