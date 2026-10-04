@@ -173,7 +173,7 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 34 | `Bank.SchemaMismatch` | The schema shape differs from this binary's DDL; `serve` repairs it on open | no |
 | 35 | `Bank.SchemaNewerThanBinary` | The bank's `user_version` is newer than this binary supports | no |
 | 36 | `Bank.MigrationOpen` | A `model_migration` row is open; MCP tool calls are refused until the re-embed finishes | no |
-| 37 | `Bank.RepairStuck` | `repair project-ids --apply` stopped with actionable rows still in place | no |
+| 37 | `Bank.RepairStuck` | `repair project-ids --apply` stopped with actionable rows still in place, or the server had not finished the committed request when the time budget ended | no |
 | 38 | `Bank.RepairWritersActive` | `repair project-ids --apply` hit its bound while writers are still active | yes |
 | 39 | `Bank.RepairAttentionNeeded` | The repair converged everything it can attribute; a person must pick the rest | no |
 | 40 | `Port.InUse` | The port is in use by a holder this run cannot cycle or identify | no |

@@ -151,7 +151,7 @@ environment or the product first.
 | 34 | `Bank.SchemaMismatch` | The schema shape differs from this binary's DDL; `serve` repairs it on open. | no |
 | 35 | `Bank.SchemaNewerThanBinary` | The bank's `user_version` is newer than this binary supports; update ai-raccoon. | no |
 | 36 | `Bank.MigrationOpen` | Schema is healthy but a `model_migration` row is open; MCP tool calls are refused until the re-embed finishes. | yes |
-| 37 | `Bank.RepairStuck` | `repair project-ids --apply` stopped with the same actionable set and zero rows moved, or hit its pass/time bound without census growth. | no |
+| 37 | `Bank.RepairStuck` | `repair project-ids --apply` stopped with the same actionable set and zero rows moved, hit its pass/time bound without census growth, or its committed request was still open when the time budget ended (the server has not finished it). | no |
 | 38 | `Bank.RepairWritersActive` | `repair project-ids --apply` hit its bound while census totals grew: writers are active under folded ids. | yes |
 | 39 | `Bank.RepairAttentionNeeded` | `repair project-ids --apply` converged, but ids remain that only a person can attribute; nothing more the machine can do. A dry run with the same outcome still exits `0`. | no |
 

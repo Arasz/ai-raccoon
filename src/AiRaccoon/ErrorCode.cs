@@ -101,7 +101,7 @@ public static class ErrorCode
         /// <summary>The schema is healthy but a model_migration row is open; MCP tool calls are refused until the re-embed finishes.</summary>
         public const int MigrationOpen = 36;
 
-        /// <summary>repair project-ids --apply stopped with actionable rows still in place and nothing moving.</summary>
+        /// <summary>repair project-ids --apply stopped with actionable rows still in place and nothing moving, or its committed request was still open when the time budget ended (the server has not finished).</summary>
         public const int RepairStuck = 37;
 
         /// <summary>repair project-ids --apply hit its bound while census totals grew: writers are active; retryable.</summary>

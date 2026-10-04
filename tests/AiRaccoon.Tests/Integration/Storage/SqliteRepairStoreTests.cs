@@ -152,6 +152,50 @@ public sealed class SqliteRepairStoreTests : IDisposable
         elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(2), "a read-only report must not wait on the bank's write lock");
     }
 
+    [RetryFact]
+    public async Task ReportProjectIds_RepairOpen_TracksTheRequestRow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        (await _store.ReportProjectIdsAsync(ct)).RepairOpen.ShouldBeFalse("no request yet");
+
+        await _store.RequestRepairAsync(RepairKind.ProjectIds, ct);
+        (await _store.ReportProjectIdsAsync(ct)).RepairOpen.ShouldBeTrue("the request is open until the server stamps it");
+
+        await using (var connection = await _factory.OpenBankAsync(ct))
+        {
+            await connection.ExecuteAsync(MemorySql.FinishRepairRequest,
+                new { finishedAt = FixedNow.ToUnixTimeSeconds(), kind = RepairKind.ProjectIds.ToKey() });
+        }
+
+        (await _store.ReportProjectIdsAsync(ct)).RepairOpen.ShouldBeFalse("finished_at is stamped");
+    }
+
+    [RetryFact]
+    public async Task ReportProjectIds_RepairOpen_IgnoresOtherKinds()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await _store.RequestRepairAsync(RepairKind.Reingest, ct);
+        await _store.RequestRepairAsync(RepairKind.ChunkIndex, ct);
+
+        (await _store.ReportProjectIdsAsync(ct)).RepairOpen.ShouldBeFalse();
+    }
+
+    /// <summary>The report stays SELECT-only: another connection's data_version does not move across it.</summary>
+    [RetryFact]
+    public async Task ReportProjectIds_RunsUnderQueryOnly()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await _store.RequestRepairAsync(RepairKind.ProjectIds, ct);
+        await _store.ReportProjectIdsAsync(ct);
+        await using var observer = await _factory.OpenBankAsync(ct);
+        var before = await observer.ExecuteScalarAsync<long>("PRAGMA data_version");
+
+        await _store.ReportProjectIdsAsync(ct);
+
+        (await observer.ExecuteScalarAsync<long>("PRAGMA data_version")).ShouldBe(before,
+            "a report that writes would bump the data_version other connections see");
+    }
+
     /// <summary>
     ///     T4: a genuinely fresh, never-opened bank file must still get its schema created and answer
     ///     correctly through the cheap-open path — EnsureCheapAsync's digest-mismatch fallback to the
