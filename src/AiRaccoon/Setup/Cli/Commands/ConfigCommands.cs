@@ -159,6 +159,12 @@ internal sealed class ConfigCommands(
             await streams.WriteErrorLineAsync(ex.Message);
             return ErrorCode.Internal.ServerError;
         }
+        catch (ProjectRefusedException ex)
+        {
+            // The server's 409 body already carries the "ai-raccoon: " prefix and the reason.
+            await streams.WriteErrorLineAsync(ex.Message);
+            return ErrorCode.Usage.ProjectUnknown;
+        }
         catch (BankMissingException ex)
         {
             // F39: the guard already names the resolved path and the remedy; unprefixed like the

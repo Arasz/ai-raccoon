@@ -500,7 +500,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
 
         foreach (var dropped in plan.Dropped)
         {
-            var keys = SettingsKeysFor(dropped);
+            var keys = ProjectSettingsKeys.KeysFor(dropped);
             total += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition("DELETE FROM settings WHERE key IN @keys",
                         new { keys }, cancellationToken: cancellationToken)),
@@ -511,16 +511,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     }
 
     private static IEnumerable<SettingsKeyPair> SettingsKeyPairs(string loser, string winner) =>
-        SettingsKeysFor(loser).Zip(SettingsKeysFor(winner), (loserKey, winnerKey) => new SettingsKeyPair(loserKey, winnerKey));
-
-    private static List<string> SettingsKeysFor(string projectId) =>
-    [
-        $"ingest.scope.{projectId}",
-        $"watch.scope.{projectId}",
-        $"watch.enabled.{projectId}",
-        $"watch.concurrency.{projectId}",
-        $"access.mode.project:{projectId}"
-    ];
+        ProjectSettingsKeys.KeysFor(loser).Zip(ProjectSettingsKeys.KeysFor(winner), (loserKey, winnerKey) => new SettingsKeyPair(loserKey, winnerKey));
 
     /// <summary>
     ///     Projects rows never sync back — the pushed snapshot carries the projects table
