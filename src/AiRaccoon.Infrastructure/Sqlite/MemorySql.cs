@@ -525,13 +525,18 @@ internal static class MemorySql
 
     // ---- projects (ADR-0089) ----
 
+    /// <summary>Idempotent register; the first non-null name wins, so a later name fills a NULL and never overwrites a set one.</summary>
     public const string InsertProject = """
                                         INSERT INTO projects (id, name, created_at)
                                         VALUES (@id, @name, @createdAt)
-                                        ON CONFLICT(id) DO NOTHING
+                                        ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                                        WHERE projects.name IS NULL AND excluded.name IS NOT NULL
                                         """;
 
     public const string ProjectIsRegistered = "SELECT count(*) FROM projects WHERE id = @projectId";
+
+    /// <summary>Exact, case-sensitive name match (BINARY collation, no LIKE), so <c>%</c> and <c>_</c> are literal.</summary>
+    public const string SelectProjectIdsByName = "SELECT id FROM projects WHERE name = @name ORDER BY id";
 
     // ProjectRows.Of(), never Scope(): Scope() carries no project_id, so a Scope()-only predicate
     // is true for any project- or custom-scoped row in the whole bank, defeating the per-project
