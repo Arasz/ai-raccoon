@@ -3,6 +3,8 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Access;
+using AiRaccoon.Core.Projects;
+using AiRaccoon.Projects;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
@@ -111,13 +113,55 @@ public sealed class ToolRefusalsRemedyTests
         }
     }
 
+    /// <summary>
+    ///     The registration remedies: warning 433's guid and raw-text branches, and the refusal an
+    ///     unregistered id gets. Each quoted command must parse against the real tree.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RegistrationRemedyCommands))]
+    public void RegistrationRemedies_ParseAgainstTheRealCliTree(string command)
+    {
+        var parseResult = CliCommandTree.BuildFullRootCommand().Parse(SubstitutePlaceholders(command).Split(' '));
+
+        parseResult.Errors.Select(e => e.Message).ShouldBeEmpty($"'{command}' does not parse against the real CLI tree");
+    }
+
+    public static TheoryData<string> RegistrationRemedyCommands()
+    {
+        var messages = new[]
+        {
+            ProjectRegistrationGuard.Remedy("0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"),
+            ProjectRegistrationGuard.Remedy("legacy-repo"),
+            new UnregisteredProjectException("0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70").Message
+        };
+        var data = new TheoryData<string>();
+        foreach (var command in messages.SelectMany(ExtractCliCommands))
+        {
+            data.Add(command);
+        }
+
+        return data;
+    }
+
+    /// <summary>Derive gate: the registration theory above has rows, so it cannot pass vacuously.</summary>
+    [Fact]
+    public void RegistrationRemedies_QuoteEveryVerbTheyName()
+    {
+        var commands = RegistrationRemedyCommands().Select(row => row.Data).ToArray();
+
+        commands.ShouldContain(c => c.StartsWith("project id register ", StringComparison.Ordinal));
+        commands.ShouldContain(c => c.StartsWith("repair project-ids --map ", StringComparison.Ordinal));
+    }
+
     /// <summary>Every single-quoted 'ai-raccoon ...' command in a message, with the binary name stripped.</summary>
     private static IEnumerable<string> ExtractCliCommands(string text) =>
         Regex.Matches(text, "'ai-raccoon ([^']+)'").Select(m => m.Groups[1].Value);
 
     private static string SubstitutePlaceholders(string args) =>
         args.Replace("<projectId|*>", "*", StringComparison.Ordinal)
-            .Replace("<path>", "/tmp/x", StringComparison.Ordinal);
+            .Replace("<path>", "/tmp/x", StringComparison.Ordinal)
+            .Replace("<id>", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70", StringComparison.Ordinal)
+            .Replace("<file>", "/tmp/map.json", StringComparison.Ordinal);
 
     private static McpRequestHandler<CallToolRequestParams, CallToolResult> Throwing(Exception exception) =>
         (_, _) => ValueTask.FromException<CallToolResult>(exception);

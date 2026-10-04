@@ -1,12 +1,14 @@
 using System.CommandLine;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.Integration.Setup;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Watch;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -22,7 +24,7 @@ namespace AiRaccoon.Tests.Unit.Setup.Cli;
 public class SettingsCommandTreeTests
 {
     /// <summary>The end-state top level: one config noun plus the operations that are not configuration.</summary>
-    private static readonly string[] TopLevel = ["settings", "model", "watch", "extract", "encryption", "repair", "serve", "noise", "doctor"];
+    private static readonly string[] TopLevel = ["settings", "model", "watch", "extract", "encryption", "repair", "project", "serve", "noise", "doctor"];
 
     /// <summary>
     ///     Every configuration leaf, with a sample argv that satisfies its arguments. The coverage test
@@ -119,6 +121,14 @@ public class SettingsCommandTreeTests
     /// </summary>
     private static readonly string[] WriteOptOuts =
         ["model embedding set local", "model embedding set openai", "model code set default", "model code set local", "model download", "encryption bitwarden", "encryption show", "encryption unset", "encryption migrate", "serve", "serve observability"];
+
+    /// <summary>Sample arguments for the leaves outside `settings` that cannot run bare.</summary>
+    private static readonly Dictionary<string, string[]> RequiredArguments = new(StringComparer.Ordinal)
+    {
+        ["project id register"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
+        ["project id get"] = ["--name", "acme"],
+        ["project id check"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"]
+    };
 
     public static TheoryData<string[]> SettingsArgv()
     {
@@ -292,9 +302,10 @@ public class SettingsCommandTreeTests
                 store,
                 watch: new WatchCommands(new FakeWatchStore()),
                 extract: new ExtractCommands(new EmptyOrphanQueueStore()),
-                noiseEntries: new NoiseEntriesCommands(NoOpNoiseEntryStore.Instance));
+                noiseEntries: new NoiseEntriesCommands(NoOpNoiseEntryStore.Instance),
+                projectIds: new ProjectIdCommands(Substitute.For<IProjectDirectory>()));
 
-            await CliRun.RunAsync(path.Split(' '), commands);
+            await CliRun.RunAsync([.. path.Split(' '), .. RequiredArguments.GetValueOrDefault(path, [])], commands);
 
             store.Settings.ShouldBeEmpty($"'{path}' wrote configuration outside settings");
             store.Configured.ShouldBeNull($"'{path}' reconfigured the embedder outside settings");
