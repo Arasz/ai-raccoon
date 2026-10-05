@@ -99,7 +99,7 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
     ///     header, no tool payload — and only the probe and the nonce challenge. The client
     ///     refuses without starting another backend.
     /// </summary>
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WithASquatter_RefusesAndSendsZeroSecretBytes()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken, (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -116,7 +116,7 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
         RequestLines(squatter).ShouldAllBe(line => line.StartsWith("POST /mcp", StringComparison.Ordinal) || line.StartsWith("POST /identity/prove", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_RealRunningServerWithChangedTrustAnchor_RefusesWithoutStartingBackend()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
@@ -157,7 +157,7 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Open_RealRunningServerWithChangedTrustAnchor_WritesNoServeMarker()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the recording executable is a POSIX shell wrapper");

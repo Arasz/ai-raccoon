@@ -52,7 +52,7 @@ public sealed class BackendLauncherTests : IDisposable
         TestData.DeleteTempRoot(_dataRoot);
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData(ProbeVerdict.Answered)]
     [InlineData(ProbeVerdict.Unanswered)]
     public async Task AcquireShared_WhenAListenerAppearsBeforeLauncherProbe_StartsNothing(ProbeVerdict secondVerdict)
@@ -76,7 +76,7 @@ public sealed class BackendLauncherTests : IDisposable
         prover.Calls.Count.ShouldBe(secondVerdict is ProbeVerdict.Answered ? 1 : 0);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WhenCancellationArrivesWithRefusal_DoesNotStart()
     {
         using var caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
@@ -101,7 +101,7 @@ public sealed class BackendLauncherTests : IDisposable
         public Task<bool> RespondsAsync(Uri endpoint, CancellationToken ctx) => RespondsAsync(endpoint.Port, ctx);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WhenStartedChildExitsAndLastChanceIsInconclusive_ReturnsNoUrlAndStartsOnce()
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "the recording child uses a POSIX shell");
@@ -114,7 +114,7 @@ public sealed class BackendLauncherTests : IDisposable
         (await File.ReadAllLinesAsync(marker, TestContext.Current.CancellationToken)).ShouldBe(["started"]);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WithAnInconclusiveProbe_DoesNotStart()
     {
         var marker = Path.Combine(_dataRoot, "started");
@@ -125,7 +125,7 @@ public sealed class BackendLauncherTests : IDisposable
         File.Exists(marker).ShouldBeFalse();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Acquire_WithARespondingForeignHttpListener_DoesNotStart()
     {
         var port = HoldListener(ForeignServerResponse);

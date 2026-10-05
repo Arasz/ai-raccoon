@@ -1,7 +1,6 @@
 using System.Buffers.Text;
 using System.Globalization;
 using System.Security.Cryptography;
-using System.Text.RegularExpressions;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Tests.TestHelpers;
@@ -136,13 +135,12 @@ public sealed class CliContractTests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     The hanging-holder row, re-shaped for attach-or-start (ADR-0106): a listener that takes
-    ///     the connection and says nothing cannot be proven, so the command completes on a bounded
-    ///     private fallback and says so — the held port and the remedy. Before the revert this was
-    ///     exit 18 (no server reachable); the fallback is now the contract.
+    ///     The hanging-holder row under ADR-0128: a listener that accepts the connection but
+    ///     answers nothing probes Unanswered and cannot prove identity, so the command refuses
+    ///     with Server.Unproven (50) and starts no extra backend — no private fallback.
     /// </summary>
     [RetryFact]
-    public async Task SettingsCommand_WithAHangingHolder_FallsBackPrivately_AndWarns()
+    public async Task SettingsCommand_WithAHangingHolder_RefusesWithoutStartingABackend()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
@@ -150,26 +148,18 @@ public sealed class CliContractTests : IAsyncLifetime
         await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(dataRoot), TestContext.Current.CancellationToken);
         using var foreign = LoopbackPort.Occupy();
 
-        var fallbackPort = 0;
         try
         {
             var run = await RunAsync(dataRoot, foreign.Port, ["settings", "sweep", "show"]);
 
-            run.ExitCode.ShouldBe(0, $"the private fallback must serve the command; stderr: {run.Stderr}");
-            run.Stderr.ShouldContain($"listener on port {foreign.Port} did not prove");
-            run.Stderr.ShouldContain("stop the listener");
-            // The N1 disclosure names the fallback's own port; parse it so this test stops the child.
-            var match = Regex.Match(run.Stderr, @"backend on port (\d+) keeps running");
-            match.Success.ShouldBeTrue($"the disclosure must name the fallback port; stderr: {run.Stderr}");
-            fallbackPort = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+            run.ExitCode.ShouldBe(ErrorCode.Server.Unproven, $"an unproven holder must refuse; stderr: {run.Stderr}");
+            run.Stdout.ShouldBeEmpty();
+            run.Stderr.ShouldContain(foreign.Port.ToString(CultureInfo.InvariantCulture));
+            run.Stderr.ShouldContain("is unproven");
+            run.Stderr.ShouldContain("no extra backend was started");
         }
         finally
         {
-            if (fallbackPort != 0)
-            {
-                await RaccoonBackendCleanup.ShutdownIfRunningAsync(dataRoot, fallbackPort, CancellationToken.None);
-            }
-
             TestData.DeleteTempRoot(dataRoot);
         }
     }
