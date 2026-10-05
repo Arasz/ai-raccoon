@@ -24,7 +24,12 @@
           },
           "command": {
             "type": "string",
-            "description": "Launch command, e.g. 'python3 -m code_review_graph serve'. Split on whitespace into command + args. Required when 'declare' is true and pointless without it: a server ai-badger cannot launch is described, not declared."
+            "description": "Launch command, e.g. 'python3 -m code_review_graph serve'. Without 'args' it is split on whitespace into command + args; with 'args' it is the executable alone and is never split. Required when 'declare' is true and pointless without it: a server ai-badger cannot launch is described, not declared."
+          },
+          "args": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Launch arguments passed through unsplit, for an argument that contains whitespace or quotes. When present, 'command' is the executable alone."
           },
           "declare": {
             "type": "boolean",
@@ -56,7 +61,7 @@
           },
           "agentOverrides": {
             "type": "object",
-            "description": "Per-agent launch overrides, applied by the one agent that reads each generated file.",
+            "description": "Per-agent launch overrides, applied by the one agent that reads each generated file. An override replaces the server's command and args field by field.",
             "additionalProperties": false,
             "properties": {
               "claude": { "$ref": "#/$defs/agentOverride" },
