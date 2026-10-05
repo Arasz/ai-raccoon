@@ -4,6 +4,16 @@
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+        "id": "air-alias-scope-delete-canonical-key",
+        "title": "Resolve project aliases when deleting settings",
+        "summary": "DELETE now resolves project aliases before applying the migration guard and deleting settings, so final ingest-scope removal removes the winner row; regression confirmed red before the fix and green after; SettingsEndpointTests 64/64, build and diff check passed; PR #853 merged as d24bc7b3. At merge, GitHub review job passed but no submitted review existed; changes and label checks still showed pending.",
+        "pr": 853,
+        "merged": true,
+        "mergeCommit": "d24bc7b37d21b4b09ec66725d0be4b61181425cc",
+        "date": "2026-10-05",
+        "hasNotes": true
+    },
+      {
       "id": "air-fix-cuda-runtime-provider-fallback",
       "summary": "CUDA inference errors retry once on persistent WebGPU/CPU fallback; Windows CUDA/cuDNN DLL directories required on inherited PATH;14 regression tests;1.57.1",
       "pr": 848,
@@ -43,7 +53,7 @@
       "merged": true,
       "date": "2026-09-28",
       "hasNotes": false,
-      "summary": "vec0's metadata ctx rejects NULL, while MemorySql.ContextKeyExpression returned SQL NULL for project_id IS NULL (its C# twin never did): the vec_entries_au/vec_structure_au triggers threw at MarkEmbedded (ADR-0119 charged 3 attempts then abandoned the row), the v9 rebuild's rethrow blocked opening a v2-v8 bank holding such a row, and pre-v9 partition keys accepted the NULL. Fix: COALESCE(project_id,'') in every concatenating branch (key total: project:/custom:0::L/workspace:0::W, equal to ContextKeyFor(_, '')) plus an every-open probe-first replacement of the two stored trigger bodies from shared constants (EnsureVecCtxTriggerBodiesAsync, ADR-0023 amendment shape) \u2014 CREATE TRIGGER IF NOT EXISTS cannot replace an existing bank's body, and the live bank's bodies carried the old expression. No migration (verified: vec0 0.1.9 rejects NULL metadata; pre-v9 rows are rebuilt by v9; live bank 0 NULL/'' ctx). 8 RED-first tests; the plan review caught the stored-body blocker; both implementation reviews folded (consumer table, IS rationale, sibling statement-count gate). 1.53.13."
+        "summary": "vec0's metadata ctx rejects NULL, while MemorySql.ContextKeyExpression returned SQL NULL for project_id IS NULL (its C# twin never did): the vec_entries_au/vec_structure_au triggers threw at MarkEmbedded (ADR-0119 charged 3 attempts then abandoned the row), the v9 rebuild's rethrow blocked opening a v2-v8 bank holding such a row, and pre-v9 partition keys accepted the NULL. Fix: COALESCE(project_id,'') in every concatenating branch (key total: project:/custom:0::L/workspace:0::W, equal to ContextKeyFor(_, '')) plus an every-open probe-first replacement of the two stored trigger bodies from shared constants (EnsureVecCtxTriggerBodiesAsync, ADR-0023 amendment shape) — CREATE TRIGGER IF NOT EXISTS cannot replace an existing bank's body, and the live bank's bodies carried the old expression. No migration (verified: vec0 0.1.9 rejects NULL metadata; pre-v9 rows are rebuilt by v9; live bank 0 NULL/'' ctx). 8 RED-first tests; the plan review caught the stored-body blocker; both implementation reviews folded (consumer table, IS rationale, sibling statement-count gate). 1.53.13."
     },
     {
       "id": "air-chunk-index-repair-vanished-partition",
@@ -73,7 +83,7 @@
       "summary": "Live dry run proposed 23,459 rows to -1: pre-granite (#687) and August chunkings of unchanged files, not corruption (tokenizer switch explains ~5k, #775 ~30). #794 keeps a partition's stored order when positions are 0..n-1 and reproduced rows are in document order; #795 (from two parallel reviews) locates every row's text in one SearchValues pass and keeps the heaviest stored-order chain (reproduced rows outweigh), adds duplicate/lone-CR/moved/out-of-place tests, fixes how-to drift, bumps 1.53.9. Snapshot: 742 to -1, 21 moved."
     }
   ],
-  "next": "Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) \u2014 owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
+    "next": "Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) — owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
@@ -82,7 +92,7 @@
     "#497 repair for bge-m3 manifests downloaded before #496",
     "#504 embedding fallback-chain shapes",
     "#519 TestData.CreateMemoryStore optional Null defaults (from #518)",
-    "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable \u2014 1.33.0 checklist)",
+      "#538 chunker labels a chunk that swallows the next heading + a few body lines with the later section (#489 residual; file#section anchor unsatisfiable — 1.33.0 checklist)",
     "#539 ServerProbe doc comment claims a {400,401,405,406} status gate the code does not implement",
     "#706 fusion that trusts one confident leg (A9 / #367)",
     "#724 watch catch-up leaves files stale for weeks after directory-entry replaces (git checkout)",
@@ -96,15 +106,15 @@
   "stillTrue": [
     "dotnet_env=local must be set per-directory for the DeployToLocalSource build target to push to .nupkg-local",
     "Transport is the --transport flag (stdio|http|https|proxy), default proxy since ADR-0020. MCP_TRANSPORT and AIRACCOON_DATA_ROOT do NOT exist - ServerConfig records that the env layer was removed by the single-channel ruling, and McpServerFactory injects the data root via WebApplicationFactory.UseSetting, not the environment",
-    "sqlite-memory's content-hash dedup is global \u2014 cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
-    "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params \u2014 alias columns and use a settable DTO",
+      "sqlite-memory's content-hash dedup is global — cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
+      "Dapper 2.1.79 parameter binding is case-sensitive against SQL param names and its record ctor matching chokes on nullable params — alias columns and use a settable DTO",
     "sqlite-memory/vector/sync are native SQLite extensions loaded via Microsoft.Data.Sqlite LoadExtension; deferred embeddings (defer_embeddings=1) let writes work before any model is configured",
-    "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure \u2014 assert ShouldNotBe(true), not ShouldBe(false)",
+      "MCP protocol CallToolResult.IsError is null on success (absent), true only on failure — assert ShouldNotBe(true), not ShouldBe(false)",
     "Bare `ai-raccoon` is a proxy: it opens no bank, resolves no key and loads no ONNX model. `--transport stdio` is the in-process server and the escape hatch when a backend cannot start",
     "`serve` mints <data-root>/mcp-token (0600) BEFORE it binds, so a port that answers guarantees the file exists; the probe accepts 401 as proof of a live server so it still recognises one across data roots",
     "/mcp and /shutdown accept the loopback token in either envelope: X-AiRaccoon-Token or Authorization: Bearer *** one credential compared with FixedTimeEquals on both paths and neither shadowing the other. /mcp alone renders a second 401 body for a credential that was presented but did not match; /shutdown keeps one body for every failure because ADR-0022 pins the refusal not to reveal whether a token exists. `serve --mcp-entry` prints a headers map carrying ${AIRACCOON_MCP_TOKEN}, never a live token - Hermes resolves it from ~/.hermes/.env, Claude Code from the environment, and an unset variable in Claude Code warns in `claude mcp list` but still sends the literal placeholder.",
-    "The manifest is the budget source of truth: chunkTokens (1022) sets memory chunk size AND the query-trim budget; code chunks stay 510 (min(510, ctx-2)). Everything that says 'longer than one chunk' or pins the manifest must follow it \u2014 scripts/src/bundle.py's BUNDLED_MANIFEST pin (guarded by scripts/tests/test_bundle.py::test_committed_files_match_their_pins) and every chunk-count fixture derive from the manifest, never literals.",
+      "The manifest is the budget source of truth: chunkTokens (1022) sets memory chunk size AND the query-trim budget; code chunks stay 510 (min(510, ctx-2)). Everything that says 'longer than one chunk' or pins the manifest must follow it — scripts/src/bundle.py's BUNDLED_MANIFEST pin (guarded by scripts/tests/test_bundle.py::test_committed_files_match_their_pins) and every chunk-count fixture derive from the manifest, never literals.",
     "ChunkBudgetReconciler (EntryEmbedder drain, after vec reconcile, before the embed loop): re-chunks AND re-embeds at the resolved budget; embedding.chunkBudget stamp present iff the last run converged; unproven note groups get 3 passes per resolved budget then stop gating (residual population named in ADR-0125); terminal skips never gate; event 448 reports counts.",
-    "Long-blocking tool calls in delegated lanes kill the session ('aborted (lost)' \u2014 observed 3x at dotnet-test full-suite launches; the dotnet-engineer persona's sonnet/bedrock pin also has no API key and falls back to openrouter). Lane briefs must mandate detached runs + tail polling and commit-as-you-go."
+      "Long-blocking tool calls in delegated lanes kill the session ('aborted (lost)' — observed 3x at dotnet-test full-suite launches; the dotnet-engineer persona's sonnet/bedrock pin also has no API key and falls back to openrouter). Lane briefs must mandate detached runs + tail polling and commit-as-you-go."
   ]
 }
