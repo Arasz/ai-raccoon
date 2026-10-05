@@ -92,6 +92,10 @@ For initial setup use `welcome-ai-badger`; to contribute back use `feed-badger`.
      it never triggers a re-scaffold, so non-empty `newStacks` alongside `reScaffolded: false`
      is the expected shape, not a contradiction
    - `reScaffolded` — whether a re-scaffold was performed
+   - `projectIdWarning` — present only when the project-id step warned: ai-raccoon's id lookup
+     or registration failed, several bank projects share this repo's name, or the reply was
+     unusable. The id file is still minted or kept; the warning names the command to rerun
+     after a human resolves it (ai-raccoon 1.57.0's `project id` verbs; ADR-0036)
    - `note` — present only when config.json and the framework disagree on the version and no
      re-scaffold ran; the generated files were not rewritten, so say so rather than reporting green
    - `scaffold` — if re-scaffolded: entry count, refreshed skill names, notes
