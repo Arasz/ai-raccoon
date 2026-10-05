@@ -4,6 +4,26 @@
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+        "id": "air-fix-proxy-refusal-integration-nits",
+        "title": "Fix proxy-refusal integration nits from PR #852 review",
+        "summary": "Removed write-only AcquireOutcome.Verdict, renamed pre-proof event 634 to backend-answering, carried inconclusive-probe reasons into refusals, 3-state last-chance probe, hardened quiet-log/ChildPorts assertions, documented Url retention and 60-vs-63 split. PR #855 merged as 92bcca1e; Rider test run all green.",
+        "pr": 855,
+        "merged": true,
+        "mergeCommit": "92bcca1e5afdc266f544f7a720a91400ca66ce3a",
+        "date": "2026-10-05",
+        "hasNotes": false
+    },
+    {
+        "id": "air-cuda-proxy-review-followup-fixes",
+        "title": "Collect CUDA/proxy review follow-ups with verification results",
+        "summary": "Single issues file docs/work/2026-10-05-cuda-proxy-review-issues.md (I1 range-bundling note, I2 EmbeddingModelRejectedException transient closed non-reproducing after touched suites 56/56 green, I3 build 0/0 + CI verdicts: #848 gates SUCCESS, #852 release SUCCESS, main failures are superseded-run cancellations). PR #856 opened docs-only with squash auto-merge.",
+        "pr": 856,
+        "merged": true,
+        "mergeCommit": "08ee359d51727509203c00bcf3f55227603c6b97",
+        "date": "2026-10-05",
+        "hasNotes": false
+    },
+    {
         "id": "air-alias-scope-delete-canonical-key",
         "title": "Resolve project aliases when deleting settings",
         "summary": "DELETE now resolves project aliases before applying the migration guard and deleting settings, so final ingest-scope removal removes the winner row; regression confirmed red before the fix and green after; SettingsEndpointTests 64/64, build and diff check passed; PR #853 merged as d24bc7b3. At merge, GitHub review job passed but no submitted review existed; changes and label checks still showed pending.",
