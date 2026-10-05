@@ -60,6 +60,24 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         ProjectIdAliasMap.ResetDefault();
     }
 
+    [RetryTheory]
+    [InlineData("ingest.scope.", "[\"/machine\"]")]
+    [InlineData("watch.enabled.", "true")]
+    [InlineData("watch.concurrency.", "4")]
+    public async Task AliasToGlobal_CannotReadWriteOrDeleteMachineSettings(string prefix, string value)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var settings = _app.Services.GetRequiredService<ISettingsStore>();
+        await settings.SetSettingAsync(prefix + "global", value, ct);
+        ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap(
+            [new ProjectIdAliasEntry(Loser, "global")], ["global"], []));
+
+        (await _client.GetAsync("/settings?key=" + prefix + Loser, ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await PutAsync(prefix + Loser, value)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await _client.DeleteAsync("/settings?key=" + prefix + Loser, ct)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await settings.GetSettingAsync(prefix + "global", ct)).ShouldBe(value);
+    }
+
     [RetryFact]
     public async Task PutThenGet_RoundTripsTheValue()
     {

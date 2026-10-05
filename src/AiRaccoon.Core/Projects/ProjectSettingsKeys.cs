@@ -52,14 +52,21 @@ public static class ProjectSettingsKeys
         Guard.IsNotNull(key);
         Guard.IsNotNullOrWhiteSpace(projectId);
         var prefix = Prefixes.FirstOrDefault(p => key.StartsWith(p.Prefix, StringComparison.Ordinal));
-        if (prefix is null)
+        if (prefix is null || !TryGetProjectId(key, out _))
         {
             ThrowHelper.ThrowArgumentException(nameof(key), $"'{key}' is not a per-project settings key");
         }
 
-        return prefix.Prefix + projectId;
+        var replacement = prefix.Prefix + projectId;
+        if (!TryGetProjectId(replacement, out _))
+        {
+            ThrowHelper.ThrowArgumentException(nameof(projectId), $"'{replacement}' is a machine-global settings key");
+        }
+
+        return replacement;
     }
 
     /// <summary>Every per-project key of <paramref name="projectId" />, in <see cref="Prefixes" /> order.</summary>
-    public static IReadOnlyList<string> KeysFor(string projectId) => [.. Prefixes.Select(p => p.Prefix + projectId)];
+    public static IReadOnlyList<string> KeysFor(string projectId) =>
+        [.. Prefixes.Where(p => !p.ExcludesGlobal || projectId != GlobalOwner).Select(p => p.Prefix + projectId)];
 }

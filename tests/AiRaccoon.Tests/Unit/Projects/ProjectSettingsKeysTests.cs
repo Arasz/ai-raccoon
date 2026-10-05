@@ -129,6 +129,22 @@ public class ProjectSettingsKeysTests
         }
     }
 
+    [Fact]
+    public void KeysFor_Global_ContainsOnlyProjectAttributedKeys()
+    {
+        ProjectSettingsKeys.KeysFor("global").ShouldBe(["watch.scope.global", "access.mode.project:global"]);
+    }
+
+    [Theory]
+    [InlineData("ingest.scope.")]
+    [InlineData("watch.enabled.")]
+    [InlineData("watch.concurrency.")]
+    public void WithProjectId_RejectsMachineGlobalSourceAndTarget(string prefix)
+    {
+        Should.Throw<ArgumentException>(() => ProjectSettingsKeys.WithProjectId(prefix + "global", Id));
+        Should.Throw<ArgumentException>(() => ProjectSettingsKeys.WithProjectId(prefix + Id, "global"));
+    }
+
     [Theory]
     [MemberData(nameof(EveryPrefix))]
     public void WithProjectId_ReplacesOnlyTheOwner(string prefix)

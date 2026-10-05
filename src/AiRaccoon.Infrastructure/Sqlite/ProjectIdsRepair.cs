@@ -511,7 +511,10 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     }
 
     private static IEnumerable<SettingsKeyPair> SettingsKeyPairs(string loser, string winner) =>
-        ProjectSettingsKeys.KeysFor(loser).Zip(ProjectSettingsKeys.KeysFor(winner), (loserKey, winnerKey) => new SettingsKeyPair(loserKey, winnerKey));
+        ProjectSettingsKeys.Prefixes
+            .Where(prefix => ProjectSettingsKeys.TryGetProjectId(prefix.Prefix + loser, out _)
+                && ProjectSettingsKeys.TryGetProjectId(prefix.Prefix + winner, out _))
+            .Select(prefix => new SettingsKeyPair(prefix.Prefix + loser, prefix.Prefix + winner));
 
     /// <summary>
     ///     Projects rows never sync back — the pushed snapshot carries the projects table
