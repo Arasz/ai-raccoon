@@ -99,9 +99,9 @@ depends on the RID ([ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16
 | RID | GPU providers tried, in order | Host dependencies |
 |---|---|---|
 | `osx-arm64` | `mlx`/`coreml` (opt-in) → WebGPU (built in) → CPU | None for WebGPU. MLX needs Apple Silicon and the plugin's native runtime, bundled only in this RID's package. CoreML needs Apple Silicon and applies to the bundled model only. |
-| `win-x64` | `cuda` (opt-in) → WebGPU (bundled core) → CPU | WebGPU needs a GPU driver with D3D12 support. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
+| `win-x64` | `cuda` (opt-in) → WebGPU (bundled core) → CPU | WebGPU needs a GPU driver with D3D12 support. CUDA needs an NVIDIA driver, CUDA 13 and cuDNN 9. |
 | `win-arm64` | WebGPU (bundled core) → CPU | Same as win-x64. The CUDA provider only ships for x64, so `cuda` here refuses and falls through. |
-| `linux-x64` | `cuda` (opt-in) → WebGPU (bundled core) → CPU | WebGPU needs the Vulkan loader, `libvulkan.so.1` (`apt install libvulkan1` or the distro equivalent), plus the vendor's own Vulkan driver and its ICD manifest. Some NVIDIA containers mount the driver (`libGLX_nvidia.so.0`) without the manifest; add `~/.config/vulkan/icd.d/nvidia_icd.json` (see *Checking a Linux GPU host*) or the session runs on the CPU. CUDA needs an NVIDIA driver, CUDA 13 and — unverified — cuDNN 9. |
+| `linux-x64` | `cuda` (opt-in) → WebGPU (bundled core) → CPU | WebGPU needs the Vulkan loader, `libvulkan.so.1` (`apt install libvulkan1` or the distro equivalent), plus the vendor's own Vulkan driver and its ICD manifest. Some NVIDIA containers mount the driver (`libGLX_nvidia.so.0`) without the manifest; add `~/.config/vulkan/icd.d/nvidia_icd.json` (see *Checking a Linux GPU host*) or the session runs on the CPU. CUDA needs an NVIDIA driver, CUDA 13 and cuDNN 9. |
 | `linux-arm64` | CPU | ONNX Runtime publishes no WebGPU build for linux-arm64. No CUDA provider ships for arm64; `cuda` refuses and falls through. |
 | `linux-musl-x64` | CPU only | None — there is no WebGPU or CUDA build for musl. |
 
@@ -192,7 +192,7 @@ previous chain on the next restart. The cache stays in place, so switching back 
 skips the compile. No bank re-embeds either way: CoreML's vectors match the CPU's inside the same
 parity bar WebGPU and MLX already meet.
 
-#### CUDA (opt-in, x64 only, run once on a Tesla T4)
+#### CUDA (opt-in, x64 only)
 
 CUDA is never bundled — its native provider is over 270 MB, past the size nuget.org allows for a
 package — so it is a library you install yourself and point the tool at
@@ -204,15 +204,34 @@ model, not only the bundled one.
    `1.30.0`. A different version will not register against this build's core. The provider also
    needs `onnxruntime_providers_shared`, which the tool already ships beside itself — no separate
    install for that part — and refuses to load if the two do not match.
-2. Point the tool at the provider library:
+2. Install the matching CUDA 13 runtime and cuDNN 9 dependencies, and make their libraries
+   discoverable by the **server process**. On Windows, every directory containing the required
+   CUDA/cuDNN DLLs must be on its inherited `PATH`, including the directory containing
+   `cudnn64_9.dll`. The provider library's absolute path does not satisfy dependent DLL lookup:
+   cuDNN can be loaded by name on the first inference, after session creation has succeeded.
+   For example, in PowerShell (replace these example directories with your installed paths):
+
+   ```powershell
+   $env:PATH = "C:\cuda\bin;C:\cudnn\bin;$env:PATH"
+   ai-raccoon serve
+   ```
+
+   A server launched by another application or service needs those directories in that launcher’s
+   environment. Restart the launcher and server after changing a persistent `PATH`. On Linux,
+   put the corresponding runtime library directories on `LD_LIBRARY_PATH` before starting the
+   server.
+3. Point the tool at the provider library:
 
    ```bash
    ai-raccoon settings model device cuda /abs/path/to/libonnxruntime_providers_cuda.so   # Linux
-   ai-raccoon settings model device cuda C:\path\to\onnxruntime_providers_cuda.dll        # Windows
+   ai-raccoon settings model device cuda "C:\path\to\onnxruntime_providers_cuda.dll"     # Windows
    ```
 
-3. Restart the server. A session now tries CUDA first, falls back to WebGPU, then the CPU, and the
-   "execution provider" log line says which one it landed on.
+4. Restart the server with that environment. A session tries CUDA first, falls back to WebGPU,
+   then the CPU, and the "execution provider" log line says which one it landed on. If CUDA fails
+   during inference with a provider or native-library error, the generator switches to that
+   fallback and retries the failed row once. Later calls use the fallback. A warning names the
+   CUDA failure and the selected provider; errors from the fallback propagate.
 
 The path is refused up front, with nothing written, when it does not exist, when `cuda` is given
 with no path, or when a path is given for any other device. A session also refuses a stored path
@@ -222,14 +241,17 @@ CUDA 13 on the host. The cuDNN version ONNX Runtime 1.30 needs against CUDA 13 i
 yet on its own — [ONNX Runtime's CUDA execution provider requirements
 table](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html) lists 1.27.x
 through 1.29.x against CUDA 13.0 and cuDNN 9.x, and does not yet list 1.30 — so cuDNN 9 is the
-expected requirement by that pattern, but it is unverified for 1.30 specifically.
+expected requirement by that pattern. The hardware runs below used cuDNN 9 successfully with
+the 1.30 provider; the published table is still the reference for other versions.
 
-It has run once on real hardware: a Lightning AI Tesla T4 (driver 580.178.04, CUDA 13.0), with the
+The Linux path has run on a Lightning AI Tesla T4 (driver 580.178.04, CUDA 13.0), with the
 CUDA 13 runtime, cuBLAS, cuRAND and cuDNN 9 from their NVIDIA wheels on `LD_LIBRARY_PATH` and the
 `1.30.0` provider library. The session landed on `CUDA` and its vectors matched the CPU's, with no
-abort. Other GPUs and drivers are untested. If it does not work, the session falls back to WebGPU or
-the CPU and the log line names the refusal reason; if the process dies on the first embed instead,
-switch back with `ai-raccoon settings model device auto`. Report anything unexpected on the
+abort. The reported Windows RTX PRO 1000 run also matched CPU output with the CUDA/cuDNN DLL
+folders on `PATH`; without them, its first inference failed to load `cudnn64_9.dll`. These
+measurements do not establish support for every GPU or driver. If it does not work, the session
+falls back to WebGPU or the CPU and the log line names the refusal reason. If the process dies
+on the first embed instead, switch back with `ai-raccoon settings model device auto`. Report anything unexpected on the
 repository.
 
 `win-arm64` and `linux-arm64` have no CUDA provider build; `settings model device cuda <path>`

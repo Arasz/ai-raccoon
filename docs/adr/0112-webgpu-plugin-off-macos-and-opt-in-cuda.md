@@ -126,6 +126,13 @@ environment-variable kill switch for any of this; an operator who wants no GPU a
 refusal carrying the exception's message; a GPU attempt does not throw out of session construction
 for any of the listed exceptions, but nothing here is a blanket `catch (Exception)`. The macOS
 built-in WebGPU path is not a plugin load and keeps catching only `OnnxRuntimeException`, as before.
+CUDA also applies this exception set to inference: a failure in the CUDA `Run` switches that
+model’s generator to its configured WebGPU/CPU fallback and retries the same row once. The
+replacement is retained for later calls, with a warning and a CUDA refusal reason. Replacement
+construction, inference, output consumption and disposal share an instance lock; errors from the
+replacement run propagate. This also means an ORT invalid-input error can trigger one fallback
+attempt before the replacement reports the same invalid input.
+
 The CUDA path also refuses a library path that is not fully qualified — "provider library path must
 be absolute: `<path>`" — before it ever hands the operator-supplied string to the native loader,
 since a relative path resolves against the process's current directory rather than wherever the
