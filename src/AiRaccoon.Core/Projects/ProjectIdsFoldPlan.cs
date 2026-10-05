@@ -163,7 +163,7 @@ public sealed class ProjectIdsFoldPlan(
 
             // D3: an unresolvable id owning only regenerable telemetry never needs a human —
             // it pins telemetry-only (convergence-neutral) instead of blocking the unresolved verdict.
-            if ((row.MetricsRows > 0 || row.NoiseRows > 0) && row.EntryTotal == 0 && row.AttachmentCount == 0)
+            if (OwnsOnlyTelemetry(row))
             {
                 pinned.Add(PinTelemetryOnly(row.ProjectId, row));
                 continue;
@@ -235,10 +235,21 @@ public sealed class ProjectIdsFoldPlan(
             || row.SettingsKeys.Count > 0;
     }
 
+    /// <summary>
+    ///     True when the id owns metrics, noise or search-quality rows and nothing else. Quality rows
+    ///     count as telemetry here but stay an attachment in <see cref="ProjectIdCensusRow.AttachmentCount" />,
+    ///     so a registered id holding them is still not retire-eligible.
+    /// </summary>
+    private static bool OwnsOnlyTelemetry(ProjectIdCensusRow row) =>
+        (row.MetricsRows > 0 || row.NoiseRows > 0 || row.QualityRows > 0)
+        && row.EntryTotal == 0
+        && row.AttachmentCount == row.QualityRows;
+
     /// <summary>Telemetry-only pin: regenerable derived data the repair never moves (D3, convergence-neutral).</summary>
     private static ProjectIdPin PinTelemetryOnly(string projectId, ProjectIdCensusRow row) =>
         new(projectId, PinnedTelemetryOnly,
-            $"owns only telemetry ({row.MetricsRows} metrics + {row.NoiseRows} noise rows) — " +
+            $"owns only telemetry ({row.MetricsRows} metrics + {row.NoiseRows} noise" +
+            (row.QualityRows > 0 ? $" + {row.QualityRows} search-quality" : string.Empty) + " rows) — " +
             "regenerable derived data the repair never moves");
 
     /// <summary>True when the row owns live workspace scratch that never moves across projects (D3 block).</summary>

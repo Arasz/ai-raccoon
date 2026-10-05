@@ -46,7 +46,8 @@ public sealed record ProjectIdCensusRow(
 ///     Bank-wide census report: one row per id found on any id-keyed surface, plus NULL counters
 ///     and the durable alias map the bank currently enforces. The map rides on the census because
 ///     the D6 (iv) verdict is a claim about this bank — "P3 armed" has to be read off it, not
-///     asserted (a bank that never ran a repair enforces nothing).
+///     asserted (a bank that never ran a repair enforces nothing). <c>RepairOpen</c> is true while
+///     a project-ids repair request exists the server has not yet stamped finished.
 /// </summary>
 public sealed record ProjectIdCensusReport(
     IReadOnlyList<ProjectIdCensusRow> Rows,
@@ -56,7 +57,8 @@ public sealed record ProjectIdCensusReport(
     long NullQualityRows,
     IReadOnlyList<string> UnattributedSettingsKeys,
     IReadOnlyList<ProjectIdAliasEntry>? DurableAliases = null,
-    IReadOnlyList<string>? DurableDropped = null)
+    IReadOnlyList<string>? DurableDropped = null,
+    bool RepairOpen = false)
 {
     /// <summary>Alias rows the bank's durable map holds — ids that fold through on a write.</summary>
     public int DurableAliasCount => DurableAliases?.Count ?? 0;

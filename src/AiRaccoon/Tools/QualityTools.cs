@@ -17,7 +17,8 @@ public sealed class QualityTools(
     [McpServerTool(Name = TnRecordFollowThrough)]
     [Description(
         "Records that the agent read a file that appeared in a prior memory_search result. " +
-        "Updates the existing quality record keyed by correlationId. " +
+        "Updates the existing quality record keyed by correlationId; the record must belong to this project, " +
+        "and recorded is false when none does. " +
         "Call this when the agent opens a file that was returned by memory_search. " +
         "servedRank is the 1-based rank the file was served at, when known; rank-only telemetry " +
         "is section-ambiguous under kind=both by design.")]
@@ -33,8 +34,8 @@ public sealed class QualityTools(
     {
         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnRecordFollowThrough, cancellationToken);
 
-        await qualityService.RecordFollowThroughAsync(correlationId, filePath, servedRank, cancellationToken);
-        var envelope = await gate.WrapAsync(canonical, new FollowThroughResult(true), cancellationToken);
+        var recorded = await qualityService.RecordFollowThroughAsync(canonical, correlationId, filePath, servedRank, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, new FollowThroughResult(recorded), cancellationToken);
 
         return envelope;
     }
@@ -42,7 +43,8 @@ public sealed class QualityTools(
     [McpServerTool(Name = TnRecordGrade)]
     [Description(
         "Records a human usefulness grade (1-5) for a prior memory_search call. " +
-        "Updates the existing quality record keyed by correlationId.")]
+        "Updates the existing quality record keyed by correlationId; the record must belong to this project, " +
+        "and recorded is false when none does.")]
     public async Task<ApiEnvelope<GradeResult>> RecordGrade(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The correlationId returned by the preceding memory_search call.")]
@@ -55,8 +57,8 @@ public sealed class QualityTools(
     {
         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnRecordGrade, cancellationToken);
 
-        await qualityService.RecordGradeAsync(canonical, correlationId, grade, note, cancellationToken);
-        var envelope = await gate.WrapAsync(canonical, new GradeResult(true), cancellationToken);
+        var recorded = await qualityService.RecordGradeAsync(canonical, correlationId, grade, note, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, new GradeResult(recorded), cancellationToken);
 
         return envelope;
     }

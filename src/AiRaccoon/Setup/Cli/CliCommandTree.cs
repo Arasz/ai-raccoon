@@ -74,6 +74,7 @@ internal static class CliCommandTree
         root.Add(NoiseCommand());
         root.Add(EncryptionCommand());
         root.Add(RepairCommand());
+        root.Add(ProjectCommand());
         root.Add(ServeCommand());
         root.Add(DoctorCommand());
         return root;
@@ -448,6 +449,28 @@ internal static class CliCommandTree
                 new Option<bool>("--queue-only") { Description = "With --apply: queue one request and exit without waiting for the run-until-fixed loop to converge" },
                 new Option<bool>("--diagnose") { Description = "Show the id clusters without queueing anything (the default)" },
                 new Option<string?>("--map") { Description = "Path to a JSON alias map (see the template a map-less dry run writes); without it the empty map plans no folds", HelpName = "path" }
+            }
+        };
+
+    /// <summary>Lookup-before-mint for project ids: find one by name, check one, or register one. Never reads stdin.</summary>
+    private static Command ProjectCommand() =>
+        new("project", "Project ids: look one up by repository name, check one, or register one")
+        {
+            new Command("id", "The project id every memory call is scoped to")
+            {
+                new Command("register", "Registers a project id; an id already registered, or an alias of one, prints the id it resolves to")
+                {
+                    new Argument<string>("id") { HelpName = "project-id" },
+                    new Option<string>("--name") { Description = "Repository name to record; fills an unset name, never overwrites one", HelpName = "name" }
+                },
+                new Command("get", "Prints the one project id registered under a name (exit 18: none, 19: several)")
+                {
+                    new Option<string>("--name") { Description = "Repository name, matched exactly and case-sensitively", HelpName = "name", Required = true }
+                },
+                new Command("check", "Prints whether a project id is known, unknown or retired (exit 18 unless known)")
+                {
+                    new Argument<string>("id") { HelpName = "project-id" }
+                }
             }
         };
 

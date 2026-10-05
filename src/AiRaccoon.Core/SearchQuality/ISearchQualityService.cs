@@ -54,13 +54,15 @@ public interface ISearchQualityService
 
     /// <summary>
     ///     Records that the agent read a file that appeared in the search results.
-    ///     Updates the existing row by <paramref name="correlationId" />.
+    ///     Updates the existing row of <paramref name="projectId" /> by <paramref name="correlationId" />;
+    ///     returns false when no row of that project carries the id.
     ///     <paramref name="servedRank" /> is the 1-based rank the file was served at, when known
     ///     (null when the caller never saw a rank). Ranks below 1 are rejected fail-fast; there
     ///     is no upper bound — result-set size is unknowable at write time. Rank-only telemetry
     ///     is section-ambiguous under <c>kind=both</c> by design, so there is no section qualifier.
     /// </summary>
-    Task RecordFollowThroughAsync(
+    Task<bool> RecordFollowThroughAsync(
+        string projectId,
         string correlationId,
         string filePath,
         int? servedRank = null,
@@ -68,10 +70,10 @@ public interface ISearchQualityService
 
     /// <summary>
     ///     Records a human usefulness grade (1-5) for the search.
-    ///     Updates the existing row by <paramref name="correlationId" />.
-    ///     <paramref name="projectId" /> is accepted-but-unused, not a predicate — keying is correlationId-only.
+    ///     Updates the existing row of <paramref name="projectId" /> by <paramref name="correlationId" />;
+    ///     returns false when no row of that project carries the id.
     /// </summary>
-    Task RecordGradeAsync(
+    Task<bool> RecordGradeAsync(
         string projectId,
         string correlationId,
         int grade,

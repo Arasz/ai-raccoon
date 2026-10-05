@@ -116,7 +116,7 @@ shapes account for nearly all of it:
   rejected. A policy that rejects *everything* passes a rejection-only test, and looks healthiest
   exactly when it is most broken.
 - **A semantic-retrieval query must be one that keyword match cannot carry.** Query for
-  "an antique navigation instrument reflecting evening light in a stargazing room" against content
+  "an antique navigation instrument reflecting evening light inside a stargazing room" against content
   that says "astrolabe", "lamplight", "observatory" — no literal overlap, so a dead vector leg
   actually fails the item. A query sharing words with the stored text passes on BM25 alone and
   tells you nothing about the half you meant to test.
@@ -142,7 +142,9 @@ registered in the build in front of you.
   text order, so its opening reports `chunkIndex` 0.
 - **Read path** — search returns the written entry, get returns its content by hash, and a
   `file#section` anchor resolves its exact chunk. Keyword search finds an identifier that sits
-  where a chunk boundary would fall, and a term longer than a whole chunk.
+  where a chunk boundary would fall, and a term longer than a whole chunk. A pasted query of
+  thousands of characters returns in seconds on a bank of real scale, because its keyword terms
+  are capped.
 - **Embedding** — a memory row the engine refuses is split from its batch and abandoned after
   three attempts. `scripts/poison-embedding-stub.py` is an engine that refuses one marker.
 - **Noise filtering** — each *registered* write-path policy rejects what it claims to, and the

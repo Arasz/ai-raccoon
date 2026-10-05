@@ -15,7 +15,7 @@ namespace AiRaccoon.Settings;
 ///     instance; a failed acquire is not cached and is retried on the next call.
 /// </summary>
 internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationStore, ICodeEngineStore, IRepairStore,
-    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore
+    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore, IProjectDirectory
 {
     private readonly Func<CancellationToken, Task<ISettingsStore>> _acquire;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -87,6 +87,18 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>
         await AsWatchRegisteredStore(await InnerAsync(cancellationToken)).ListWatchesAsync(cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default) =>
+        await AsProjectDirectory(await InnerAsync(cancellationToken)).RegisterAsync(projectId, name, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> FindByNameAsync(string name, CancellationToken cancellationToken = default) =>
+        await AsProjectDirectory(await InnerAsync(cancellationToken)).FindByNameAsync(name, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<ProjectIdCheck> CheckAsync(string projectId, CancellationToken cancellationToken = default) =>
+        await AsProjectDirectory(await InnerAsync(cancellationToken)).CheckAsync(projectId, cancellationToken);
+
     /// <summary>
     ///     Every store the acquire function can resolve to in production (<see cref="ServerSettingsStore" />)
     ///     implements both interfaces over the same connection; a cast failure here means a caller
@@ -125,6 +137,11 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     private static IWatchRegisteredStore AsWatchRegisteredStore(ISettingsStore store) =>
         store as IWatchRegisteredStore ?? throw new NotSupportedException(
             $"ai-raccoon: {store.GetType().Name} does not support watch-registered listing");
+
+    /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the project directory.</summary>
+    private static IProjectDirectory AsProjectDirectory(ISettingsStore store) =>
+        store as IProjectDirectory ?? throw new NotSupportedException(
+            $"ai-raccoon: {store.GetType().Name} does not support the project directory");
 
     private async Task<ISettingsStore> InnerAsync(CancellationToken cancellationToken)
     {

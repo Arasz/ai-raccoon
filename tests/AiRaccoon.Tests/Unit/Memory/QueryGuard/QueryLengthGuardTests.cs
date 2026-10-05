@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiRaccoon.Core.Memory.QueryGuard;
 using Shouldly;
 using Xunit;
@@ -126,8 +127,7 @@ public class QueryLengthGuardTests
 
         verdict.Tier.ShouldBe(QueryGuardTier.Warn);
         verdict.Guidance.ShouldNotBeNull();
-        var ungrouped = verdict.Guidance!.Replace(",", "");
-        ungrouped.ShouldContain("1022");
-        ungrouped.ShouldContain("4024");
+        verdict.Guidance.ShouldContain(1022.ToString("N0", CultureInfo.CurrentCulture));
+        verdict.Guidance.ShouldContain(4024.ToString("N0", CultureInfo.CurrentCulture));
     }
 }

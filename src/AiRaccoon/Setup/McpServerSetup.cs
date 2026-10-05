@@ -110,6 +110,7 @@ internal static partial class McpServerSetup
                 // ADR-0075 amendment: noise entries and watch registered reach the server entirely too.
                 webApplication.MapNoiseSummary();
                 webApplication.MapWatchRegistered();
+                webApplication.MapProjects();
             }
 
             return webApplication;

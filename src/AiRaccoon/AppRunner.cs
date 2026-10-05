@@ -1,7 +1,5 @@
 using System.Runtime.InteropServices;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Options;
@@ -113,20 +111,7 @@ public sealed partial class AppRunner
         {
             settingsLoggerFactory = CreateCliLoggerFactory(cliInput.ServerConfig.Options);
             var loggerFactory = settingsLoggerFactory;
-            var lazyServerStore = new LazyServerSettingsStore(ctx => _acquireServerSettingsStore(cliInput.ServerConfig, loggerFactory, ctx));
-            services.AddSingleton<ISettingsStore>(lazyServerStore);
-            // ADR-0076: model embedding set routes the same way now — same instance, same acquired connection.
-            services.AddSingleton<IModelMigrationStore>(lazyServerStore);
-            // §3.3 D-E9: model code set local routes the same way too.
-            services.AddSingleton<ICodeEngineStore>(lazyServerStore);
-            // ADR-0075 amendment: repair routes the same way — same instance, same acquired connection.
-            services.AddSingleton<IRepairStore>(lazyServerStore);
-            // ADR-0075 amendment: extract prune and settings maintenance list route the same way too.
-            services.AddSingleton<IPromotionQueuePruneStore>(lazyServerStore);
-            services.AddSingleton<IMaintenanceStatsStore>(lazyServerStore);
-            // ADR-0075 amendment: noise entries and watch registered route the same way too.
-            services.AddSingleton<INoiseSummaryStore>(lazyServerStore);
-            services.AddSingleton<IWatchRegisteredStore>(lazyServerStore);
+            services.BindCliToServer(new LazyServerSettingsStore(ctx => _acquireServerSettingsStore(cliInput.ServerConfig, loggerFactory, ctx)));
         }
 
         try

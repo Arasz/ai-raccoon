@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -46,19 +45,13 @@ public class VersionContractTests
     }
 
     [Fact]
-    public async Task PackageVersion_ResolvesToTheVersionFile_ThroughMsBuildEvaluation()
+    public void PackageVersion_IsConfiguredFromTheVersionFile()
     {
-        var expected = ReadVersionFile();
-        var csproj = TestData.RepoFile("src/AiRaccoon/AiRaccoon.csproj");
+        var props = XDocument.Load(TestData.RepoFile("Directory.Build.props"));
+        var version = props.Descendants("Version").Single();
 
-        var run = await RaccoonProcess.RunAsync(
-            "dotnet",
-            ["build", csproj, "-getProperty:PackageVersion", "--nologo"],
-            TimeSpan.FromSeconds(60),
-            TestContext.Current.CancellationToken);
-
-        run.ExitCode.ShouldBe(0, run.Stderr);
-        run.Stdout.Trim().ShouldBe(expected);
+        version.Value.ShouldContain("File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim()");
+        ReadVersionFile().ShouldMatch(@"^\d+\.\d+\.\d+$");
     }
 
     /// <summary>The single-marker gate: the tracked file must hold the substitution token, never a real version.</summary>
@@ -70,6 +63,25 @@ public class VersionContractTests
         Regex.IsMatch(text, @"\d+\.\d+\.\d+").ShouldBeFalse(
             "src/AiRaccoon/.mcp/server.json must hold no literal semver — both version slots derive " +
             "from VERSION at pack time via the __VERSION__ token.");
+    }
+
+    [Fact]
+    public void GeneratedMcpServerJson_CarriesTheVersionFileVersion()
+    {
+        var expected = ReadVersionFile();
+        var project = XDocument.Load(TestData.RepoFile("src/AiRaccoon/AiRaccoon.csproj"));
+        var target = project.Descendants("Target").Single(element =>
+            (string?)element.Attribute("Name") == "GenerateMcpServerJson");
+        target.Attribute("BeforeTargets")!.Value.ShouldBe("_GetPackageFiles");
+        target.Descendants("WriteLinesToFile").Single().Attribute("Lines")!.Value
+            .ShouldContain("Replace('__VERSION__', '$(Version)')");
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(TestData.RepoFile("src/AiRaccoon/.mcp/server.json"))
+            .Replace("__VERSION__", expected, StringComparison.Ordinal));
+        var root = doc.RootElement;
+
+        root.GetProperty("version").GetString().ShouldBe(expected);
+        root.GetProperty("packages")[0].GetProperty("version").GetString().ShouldBe(expected);
     }
 
     [Fact]

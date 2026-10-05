@@ -89,7 +89,8 @@ for every candidate that was tried and lost — for example `"WebGPU (CUDA refus
 refused: …)"`. A plugin WebGPU session takes the same process-wide `GpuGate` the built-in one
 already does, and sets `_needsGpuGateForRun`. A CUDA session takes the gate only while it registers
 and builds (plugin registration and device enumeration go through the one shared `OrtEnv`); its runs
-take no gate, since CUDA sessions share no device context (D5).
+take no process-wide `GpuGate`, since CUDA sessions share no device context (D5). Inference and
+disposal use an instance lock to protect runtime session replacement.
 
 **`gpu` and `cuda` both reach the plugin path, at different scopes.** `device gpu` for a
 downloaded, non-bundled model now goes through the same `CreateGpuSessionOrNull` the bundled engine
@@ -126,6 +127,13 @@ environment-variable kill switch for any of this; an operator who wants no GPU a
 refusal carrying the exception's message; a GPU attempt does not throw out of session construction
 for any of the listed exceptions, but nothing here is a blanket `catch (Exception)`. The macOS
 built-in WebGPU path is not a plugin load and keeps catching only `OnnxRuntimeException`, as before.
+CUDA also applies this exception set to inference: a failure in the CUDA `Run` switches that
+model’s generator to its configured WebGPU/CPU fallback and retries the same row once. The
+replacement is retained for later calls, with a warning and a CUDA refusal reason. Replacement
+construction, inference, output consumption and disposal share an instance lock; errors from the
+replacement run propagate. This also means an ORT invalid-input error can trigger one fallback
+attempt before the replacement reports the same invalid input.
+
 The CUDA path also refuses a library path that is not fully qualified — "provider library path must
 be absolute: `<path>`" — before it ever hands the operator-supplied string to the native loader,
 since a relative path resolves against the process's current directory rather than wherever the

@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Projects;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Reflection;
@@ -128,6 +129,8 @@ public sealed class OtlpExportTests : IDisposable
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
+            await host.Services.GetRequiredService<IProjectRegistry>()
+                .RegisterAsync("wp4-probe", null, TestContext.Current.CancellationToken);
             var tools = ActivatorUtilities.CreateInstance<MemoryTools>(host.Services);
 
             var envelope = await tools.Stats("wp4-probe", TestContext.Current.CancellationToken);

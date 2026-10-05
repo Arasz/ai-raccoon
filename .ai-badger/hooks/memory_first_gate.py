@@ -22,7 +22,6 @@ except ImportError:  # a deployment without the store keeps the legacy marker-fi
     badger_store = None  # pylint: disable=invalid-name
 
 MARKER_DIR = Path.home() / ".ai-badger" / "memory-first"
-PROJECT_ID_ENV = "AI_RACCOON_PROJECT_ID"
 
 # Keeps a hung/slow git from blocking the tool call the gate is meant to police.
 _GIT_TIMEOUT_SECONDS = 2
@@ -234,11 +233,25 @@ def _main_checkout_basename(cwd: str) -> Optional[str]:
 
 
 def project_id(cwd: str = "") -> str:
-    """The bank's project id for a working directory: the main checkout's basename (a linked
-    worktree collapses to it), else the cwd directory's own basename, else `unknown`."""
-    override = os.environ.get(PROJECT_ID_ENV, "").strip()
-    if override:
-        return override
+    """The bank's project id for a working directory: the memory hook's own resolution.
+
+    badger_store.resolve_project_id reads the explicit ``AI_BADGER_PROJECT_ID`` override
+    first, else the nearest-ancestor ``.ai-badger/project-id`` file, so the denial names
+    exactly the project the memory hook reads and writes (the file is the identity, never
+    a directory name). The old raccoon-side override is retired: the gate and the
+    memory hook share one override (AI_BADGER_PROJECT_ID). When the vendored store is
+    absent or the walk finds nothing, the legacy basename chain holds: a linked worktree
+    collapses to the main checkout's basename, a plain directory to its own, else
+    ``unknown``. A gate must never raise, so a store failure falls back rather than
+    propagating.
+    """
+    if badger_store is not None:
+        try:
+            resolved = badger_store.resolve_project_id(cwd)
+        except Exception:  # pylint: disable=broad-exception-caught  # a gate never raises
+            resolved = None
+        if resolved and resolved.strip():
+            return resolved.strip()
     return _main_checkout_basename(cwd) or Path(cwd or "").name or "unknown"
 
 

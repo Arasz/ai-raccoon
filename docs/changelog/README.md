@@ -12,7 +12,7 @@ What's new list.
 Newest first; add each release's line in the same PR that adds its file.
 
 - [1.57.2 — failed identification no longer starts another server](1.57.2-proxy-refuses-unproven-backend.md)
-
+- [1.57.0 — reads need a registered project id too](1.57.0-reads-need-a-registered-project.md)
 - [1.56.1 — long queries no longer time out in keyword search](1.56.1-long-query-fts-cap.md)
 - [1.56.0 — stop-path secrets ride the proven connection; cancel-safe writes everywhere](1.56.0-stop-path-token-and-cancel-safe-writes.md)
 - [1.55.6 — a named backend executable is never silently replaced](1.55.6-named-executable-never-swapped.md)

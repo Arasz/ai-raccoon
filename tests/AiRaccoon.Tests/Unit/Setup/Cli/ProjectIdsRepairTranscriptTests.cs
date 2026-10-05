@@ -30,7 +30,7 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
     [
         "dry-run-no-map", "dry-run-no-map-template-exists", "dry-run-with-map", "dry-run-converged",
         "queue-only-actionable", "queue-only-attention", "queue-only-converged", "apply-loop",
-        "missing-map"
+        "missing-map", "telemetry-quality-pinned-only"
     ];
 
     [Theory]
@@ -59,7 +59,7 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
             "dry-run-with-map" or "dry-run-converged" => ["repair", "project-ids", "--map", mapPath],
             "queue-only-actionable" or "queue-only-attention" or "queue-only-converged" =>
                 ["repair", "project-ids", "--apply", "--queue-only", "--map", mapPath],
-            "apply-loop" => ["repair", "project-ids", "--apply", "--map", mapPath],
+            "apply-loop" or "telemetry-quality-pinned-only" => ["repair", "project-ids", "--apply", "--map", mapPath],
             "missing-map" => ["repair", "project-ids", "--map", Path.Combine(_dataRoot, "absent.json")],
             _ => throw new ArgumentOutOfRangeException(nameof(scenario))
         };
@@ -72,6 +72,7 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
         {
             "dry-run-converged" or "queue-only-converged" => ConvergedReport(),
             "queue-only-attention" => AttentionReport(),
+            "telemetry-quality-pinned-only" => TelemetryWithQualityReport(),
             _ => MixedReport()
         };
         var store = new InMemorySettings { ProjectIdsReport = report };
@@ -114,13 +115,20 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
     private static ProjectIdCensusReport AttentionReport() => new(
         [Row("jsaa", registered: true, entries: 3), Row("mystery-guid-0001", entries: 1)], 0, 0, 0, 0, []);
 
+    private static ProjectIdCensusReport TelemetryWithQualityReport() => new(
+        [
+            Row("jsaa", registered: true, entries: 3),
+            Row("quality-only", qualityRows: 2),
+            Row("metrics-and-quality", metricsRows: 2, qualityRows: 1)
+        ], 0, 0, 0, 0, []);
+
     private static ProjectIdCensusReport ConvergedReport() => new(
         [Row("jsaa", registered: true, entries: 3), Row("ai-badger", registered: true, entries: 1)], 0, 0, 0, 0, []);
 
     private static ProjectIdCensusRow Row(string projectId, bool registered = false, string? registeredName = null,
-        long entries = 0, long nullContext = 0, long queued = 0, long metricsRows = 0) =>
+        long entries = 0, long nullContext = 0, long queued = 0, long metricsRows = 0, long qualityRows = 0) =>
         new(projectId, registered, registeredName, entries, 0, 0, 0, nullContext,
-            0, 0, 0, 0, 0, 0, queued, 0, 0, 0, 0, 0, 0, 0, metricsRows, 0, []);
+            0, 0, 0, 0, 0, 0, queued, 0, qualityRows, 0, 0, 0, 0, 0, metricsRows, 0, []);
 
     private static readonly Dictionary<string, string> Expected = new(StringComparer.Ordinal)
     {
@@ -246,6 +254,17 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
             project-ids repair: pass 1/3 — reaped: moved 0 row(s); census totals 9 → 9 entries.
             project-ids repair: stuck — identical actionable set across 2 passes with zero rows moved (actionable: D:qa-noise-project;F:job-search-ai-assistant->jsaa;R:empty-registered-project); quiesce writers under folded ids and check the server log for the job receipt, then re-run 'repair project-ids'.
             project-ids repair: summary — stuck: 1 fold, 1 drop, 1 retire, 2 unresolved, 1 pinned (pinned-telemetry-only: 'telemetry-only') — identical actionable set across 2 passes with zero rows moved; quiesce writers under folded ids, then re-run.
+            --- stderr
+
+            """,
+        ["telemetry-quality-pinned-only"] = """
+            exit 0; requested nothing
+            --- stdout
+            project-ids repair: 3 id(s) censused — 0 fold, 0 drop (test residue), 0 retire (registered, empty), 0 need a human to attribute, 2 pinned (waiting with reasons below), 1 need nothing (already correct or empty). Request will be queued for the server.
+            project-ids repair: 2 id(s) pinned — waiting with reasons below:
+              pinned-telemetry-only: 'quality-only' — owns only telemetry (0 metrics + 0 noise + 2 search-quality rows) — regenerable derived data the repair never moves
+              pinned-telemetry-only: 'metrics-and-quality' — owns only telemetry (2 metrics + 0 noise + 1 search-quality rows) — regenerable derived data the repair never moves
+            project-ids repair: summary — pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, 2 pinned (pinned-telemetry-only: 'quality-only', pinned-telemetry-only: 'metrics-and-quality'), P3 inert (durable alias map empty — no id folds through, none is refused).
             --- stderr
 
             """,

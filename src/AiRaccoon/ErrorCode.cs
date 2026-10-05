@@ -41,6 +41,12 @@ public static class ErrorCode
 
         /// <summary>The server rejected the request as malformed (HTTP 400) for a reason the CLI pre-flight did not catch.</summary>
         public const int RequestRejected = 17;
+
+        /// <summary>The project id or name names no usable project: unknown, retired, or not found by name.</summary>
+        public const int ProjectUnknown = 18;
+
+        /// <summary>A project name matches several registered projects; a human picks one.</summary>
+        public const int ProjectAmbiguous = 19;
     }
 
     /// <summary>The encryption key cannot be resolved, is wrong, or its source (env, Bitwarden CLI, sidecar) is unusable.</summary>
@@ -101,7 +107,7 @@ public static class ErrorCode
         /// <summary>The schema is healthy but a model_migration row is open; MCP tool calls are refused until the re-embed finishes.</summary>
         public const int MigrationOpen = 36;
 
-        /// <summary>repair project-ids --apply stopped with actionable rows still in place and nothing moving.</summary>
+        /// <summary>repair project-ids --apply stopped with actionable rows still in place and nothing moving, or its committed request was still open when the time budget ended (the server has not finished).</summary>
         public const int RepairStuck = 37;
 
         /// <summary>repair project-ids --apply hit its bound while census totals grew: writers are active; retryable.</summary>

@@ -14,9 +14,11 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     P3 enforcement silently disarms: a retired id becomes writable again, an alias loser stops
 ///     folding through, until someone happens to run a repair or a sync pull in the new process.
 ///     <para>
-///         Fail-open by design: a warm failure logs a warning and leaves the empty map — writes
-///         behave exactly as pre-E — never blocks the server from starting. The next reload
-///         opportunity (repair apply, sync pull, restart) re-attempts the warm.
+///         Fail-open by design: a warm failure logs a warning and leaves the empty map — alias
+///         folding and the retired refusal are disarmed for reads and writes alike, because every
+///         choke point (ToolGate included) reads <see cref="ProjectIdAliasMap.Default" /> on each
+///         call — but it never blocks the server from starting. The next reload opportunity
+///         (repair apply, sync pull, restart) re-attempts the warm.
 ///     </para>
 /// </summary>
 public sealed partial class ProjectIdAliasCacheHostedService(

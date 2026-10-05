@@ -295,6 +295,15 @@ public sealed class ProjectIdsRepairCommands
             }
 
             var pass = await RunPassAsync(map, mapJson, loop, streams, cancellationToken);
+            if (pass.StillOpen)
+            {
+                await streams.WriteOutputLineAsync(
+                    $"project-ids repair: summary — stuck: {CountsLine(loop.Plan)} — the server has not finished " +
+                    $"the committed request within {_options.TotalBudget.TotalMinutes:0.#} minute(s); check that the " +
+                    "server is running and healthy, then re-run 'repair project-ids'.");
+                return ErrorCode.Bank.RepairStuck;
+            }
+
             loop = loop with { Report = pass.After, Plan = pass.AfterPlan, Pass = loop.Pass + 1, Previous = pass };
         }
     }
@@ -304,7 +313,8 @@ public sealed class ProjectIdsRepairCommands
         long FirstTotal, long Started);
 
     /// <summary>What one pass saw: the actionable set it committed for, the rows it moved, and the re-derived census.</summary>
-    private sealed record RepairPass(string Signature, long Moved, bool Grew, ProjectIdCensusReport After, ProjectIdsFoldPlan AfterPlan);
+    private sealed record RepairPass(string Signature, long Moved, bool Grew, ProjectIdCensusReport After, ProjectIdsFoldPlan AfterPlan,
+        bool StillOpen = false);
 
     /// <summary>
     ///     The loop's exit code once a stop condition holds — settled, stuck, or bound reached with
@@ -360,7 +370,7 @@ public sealed class ProjectIdsRepairCommands
     private async Task<RepairPass> RunPassAsync(ProjectIdAliasMap map, string? mapJson, RepairLoop loop, StandardStreams streams,
         CancellationToken cancellationToken)
     {
-        var (report, plan, pass, _, _, _) = loop;
+        var (report, plan, pass, _, _, started) = loop;
         var beforeTotal = CensusTotal(report);
         var beforeActionableEntries = ActionableEntries(report, plan);
         await _repair.RequestRepairAsync(RepairKind.ProjectIds, cancellationToken, mapJson);
@@ -369,10 +379,26 @@ public sealed class ProjectIdsRepairCommands
             $"{plan.Dropped.Count} drop, {plan.RetiredProjects.Count} retire; request committed; the server " +
             "applies it on its next maintenance poll (~15s).");
 
-        await Task.Delay(_options.PollInterval, _timeProvider, cancellationToken);
-        var after = await _repair.ReportProjectIdsAsync(cancellationToken);
+        // The request this run just committed is open until the server stamps finished_at; reading
+        // earlier would claim a verdict about a bank the server has not touched yet.
+        ProjectIdCensusReport after;
+        do
+        {
+            await Task.Delay(_options.PollInterval, _timeProvider, cancellationToken);
+            after = await _repair.ReportProjectIdsAsync(cancellationToken);
+        }
+        while (after.RepairOpen && _timeProvider.GetElapsedTime(started) < _options.TotalBudget);
+
         var moved = Math.Max(0, beforeActionableEntries - ActionableEntries(after, plan));
         var afterTotal = CensusTotal(after);
+        if (after.RepairOpen)
+        {
+            // The server has not applied the request within the budget: the poll summary owns the
+            // verdict, so no reaped or census line claims a pass the bank never completed.
+            return new RepairPass(ActionableSignature(plan), moved, afterTotal > beforeTotal, after,
+                ProjectIdsFoldPlan.FromCensus(after, map), StillOpen: true);
+        }
+
         await streams.WriteOutputLineAsync(
             $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — reaped: moved {moved} row(s); " +
             $"census totals {beforeTotal} → {afterTotal} entries.");

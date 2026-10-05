@@ -59,8 +59,8 @@ public sealed class SearchQualityServiceTests : IDisposable
             "corr-002", "query", "all", "proj-a", kind: "memory", sessionId: "sess-test",
             resultCount: 3, topSourceFiles: ["/file.md"], ct: TestContext.Current.CancellationToken);
 
-        await _sut.RecordFollowThroughAsync("corr-002", "/file.md", ct: TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-002", "/other.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-002", "/file.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-002", "/other.md", ct: TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metrics.FollowThroughSearches.ShouldBe(1);
@@ -75,8 +75,8 @@ public sealed class SearchQualityServiceTests : IDisposable
             "corr-003", "query", "all", "proj-a", kind: "memory", sessionId: "sess-test",
             resultCount: 1, topSourceFiles: ["/file.md"], ct: TestContext.Current.CancellationToken);
 
-        await _sut.RecordFollowThroughAsync("corr-003", "/file.md", ct: TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-003", "/file.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-003", "/file.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-003", "/file.md", ct: TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metrics.FollowThroughSearches.ShouldBe(1);
@@ -121,7 +121,7 @@ public sealed class SearchQualityServiceTests : IDisposable
 
         await _sut.RecordSearchAsync(correlationId: "c1", query: "q1", scope: "all", projectId: "proj-a", kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
         await _sut.RecordSearchAsync(correlationId: "c2", query: "q2", scope: "all", projectId: "proj-a", kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: [], ct: TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("c1", "/file.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "c1", "/file.md", ct: TestContext.Current.CancellationToken);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, TestContext.Current.CancellationToken);
         metrics.FollowThroughRate.ShouldBe(0.5);
@@ -245,7 +245,7 @@ public sealed class SearchQualityServiceTests : IDisposable
                 + "follow_through_files = '[\"/a.md\"]' WHERE correlation_id = 'corr-p4-legacy'");
         }
 
-        await _sut.RecordFollowThroughAsync("corr-p4-legacy", "/b.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-legacy", "/b.md", ct: TestContext.Current.CancellationToken);
 
         var raw = await ReadFollowThroughFilesAsync("corr-p4-legacy");
         raw.ShouldNotBeNull();
@@ -276,7 +276,7 @@ public sealed class SearchQualityServiceTests : IDisposable
                 + "follow_through_files = '[\"/a.md\"]' WHERE correlation_id = 'corr-p4-mixed'");
         }
 
-        await _sut.RecordFollowThroughAsync("corr-p4-mixed", "/b.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-mixed", "/b.md", ct: TestContext.Current.CancellationToken);
 
         (await ReadFollowThroughFilesAsync("corr-p4-mixed")).ShouldBe(
             "[{\"path\":\"/a.md\",\"rank\":null},{\"path\":\"/b.md\",\"rank\":null}]",
@@ -293,7 +293,7 @@ public sealed class SearchQualityServiceTests : IDisposable
     {
         await EnsureSchemaAsync();
 
-        await _sut.RecordFollowThroughAsync("no-such-corr", "/file.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "no-such-corr", "/file.md", ct: TestContext.Current.CancellationToken);
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         (await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM search_quality")).ShouldBe(0);
@@ -329,8 +329,8 @@ public sealed class SearchQualityServiceTests : IDisposable
             kind: "both", sessionId: "sess-test", resultCount: 5, topSourceFiles: ["/a.md", "/b.md"],
             ct: TestContext.Current.CancellationToken);
 
-        await _sut.RecordFollowThroughAsync("corr-p4-rank", "/a.md", servedRank: 1, ct: TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-p4-rank", "/b.md", servedRank: 3, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-rank", "/a.md", servedRank: 1, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-rank", "/b.md", servedRank: 3, ct: TestContext.Current.CancellationToken);
 
         var raw = await ReadFollowThroughFilesAsync("corr-p4-rank");
         raw.ShouldNotBeNull();
@@ -356,12 +356,12 @@ public sealed class SearchQualityServiceTests : IDisposable
             kind: "memory", sessionId: "sess-test", resultCount: 2, topSourceFiles: ["/a.md", "/b.md"],
             ct: TestContext.Current.CancellationToken);
 
-        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/a.md", servedRank: 3, ct: TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/a.md", servedRank: 5, ct: TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/a.md", ct: TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/b.md", ct: TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/b.md", servedRank: 7, ct: TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-p4-dedupe", "/b.md", servedRank: 9, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-dedupe", "/a.md", servedRank: 3, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-dedupe", "/a.md", servedRank: 5, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-dedupe", "/a.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-dedupe", "/b.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-dedupe", "/b.md", servedRank: 7, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-dedupe", "/b.md", servedRank: 9, ct: TestContext.Current.CancellationToken);
 
         var raw = await ReadFollowThroughFilesAsync("corr-p4-dedupe");
         raw.ShouldNotBeNull();
@@ -392,7 +392,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         await EnsureSchemaAsync();
 
         await Should.ThrowAsync<ArgumentOutOfRangeException>(() => _sut.RecordFollowThroughAsync(
-            "corr-p4-guard", "/file.md", servedRank: rank, ct: TestContext.Current.CancellationToken));
+            "proj-a", "corr-p4-guard", "/file.md", servedRank: rank, ct: TestContext.Current.CancellationToken));
     }
 
     /// <summary>P4: no upper bound on rank — the writer cannot know the result-set size.</summary>
@@ -405,7 +405,7 @@ public sealed class SearchQualityServiceTests : IDisposable
             kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: ["/file.md"],
             ct: TestContext.Current.CancellationToken);
 
-        await _sut.RecordFollowThroughAsync("corr-p4-big", "/file.md", servedRank: int.MaxValue, ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-p4-big", "/file.md", servedRank: int.MaxValue, ct: TestContext.Current.CancellationToken);
 
         var raw = await ReadFollowThroughFilesAsync("corr-p4-big");
         raw.ShouldNotBeNull();
@@ -437,7 +437,7 @@ public sealed class SearchQualityServiceTests : IDisposable
         await _sut.RecordSearchAsync(correlationId: "pool-5", query: "q5", scope: "all", projectId: "proj-b", kind: "code", sessionId: "sess-test", resultCount: 9, topSourceFiles: ["/c.md"], ct: ct);
 
         await _sut.RecordGradeAsync("proj-a", "pool-1", 5, null, ct);
-        await _sut.RecordFollowThroughAsync("pool-2", "/b.md", ct: ct);
+        await _sut.RecordFollowThroughAsync("proj-a", "pool-2", "/b.md", ct: ct);
 
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, ct);
         metrics.TotalSearches.ShouldBe(4);
@@ -451,30 +451,89 @@ public sealed class SearchQualityServiceTests : IDisposable
         all.TotalSearches.ShouldBe(5);
     }
 
-    [RetryFact]
-    public async Task RecordGrade_CorrelationIdOnlyKeying_ProjectIdNotAPredicate()
+    private async Task SeedSearchAsync(string correlationId, string projectId)
     {
-        // P5 audit pin (absence pin, explicitly accepted out of scope): grade updates key on
-        // correlation_id alone — the projectId argument is accepted but is not a SQL predicate
-        // (RecordGradeAsync binds Id/Grade/Note only; follow-through takes no projectId at all).
-        // Ruling: accepted-out-of-scope, no live cross-project grade demonstrated (correlation ids
-        // are unique and unguessable; the tool gate still enforces write access). Any future
-        // re-scoping (changed forwarding) must trip this test for deliberate revisit.
-        // Red-proof: AND project_id = @ProjectId mutation drops GradedSearches 1 -> 0 (verified
-        // at P5 audit, re-verified at P7 join).
         await EnsureSchemaAsync();
+        await _sut.RecordSearchAsync(correlationId: correlationId, query: "q", scope: "all", projectId: projectId,
+            kind: "memory", sessionId: "sess-test", resultCount: 1, topSourceFiles: ["/a.md"],
+            ct: TestContext.Current.CancellationToken);
+    }
+
+    private async Task<(int? Grade, string? Files)> ReadSignalsAsync(string correlationId)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        var row = await connection.QuerySingleAsync(
+            "SELECT usefulness_grade AS Grade, follow_through_files AS Files FROM search_quality WHERE correlation_id = @Id",
+            new { Id = correlationId });
+        return ((int?)row.Grade, (string?)row.Files);
+    }
+
+    [RetryFact]
+    public async Task RecordGrade_UnderAnotherProject_LeavesTheRowUntouched()
+    {
         var ct = TestContext.Current.CancellationToken;
+        await SeedSearchAsync("key-1", "proj-a");
 
-        await _sut.RecordSearchAsync(correlationId: "key-1", query: "q1", scope: "all", projectId: "proj-a", kind: "memory", sessionId: "sess-test", resultCount: 2, topSourceFiles: ["/a.md"], ct: ct);
-        await _sut.RecordSearchAsync(correlationId: "key-2", query: "q2", scope: "all", projectId: "proj-a", kind: "code", sessionId: "sess-test", resultCount: 3, topSourceFiles: ["/b.md"], ct: ct);
+        var recorded = await _sut.RecordGradeAsync("proj-b", "key-1", 4, "cross-project", ct);
 
-        await _sut.RecordGradeAsync("proj-B-NOT-THE-ROW-PROJECT", "key-1", 4, "audit pin", ct);
+        recorded.ShouldBeFalse();
+        (await ReadSignalsAsync("key-1")).Grade.ShouldBeNull("another project's grade never lands on this row");
+    }
 
+    [RetryFact]
+    public async Task RecordFollowThrough_UnderAnotherProject_LeavesTheRowUntouched()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedSearchAsync("key-1", "proj-a");
+
+        var recorded = await _sut.RecordFollowThroughAsync("proj-b", "key-1", "/a.md", ct: ct);
+
+        recorded.ShouldBeFalse();
+        (await ReadSignalsAsync("key-1")).Files.ShouldBeNull("another project's follow-through never lands on this row");
         var metrics = await _sut.GetMetricsAsync("proj-a", DateTimeOffset.MinValue, ct);
-        metrics.TotalSearches.ShouldBe(2);
-        metrics.GradedSearches.ShouldBe(1);
-        metrics.AverageGrade.ShouldBe(4.0);
-        metrics.Coverage.ShouldBe(0.5);
+        metrics.FollowThroughSearches.ShouldBe(0);
+    }
+
+    [RetryFact]
+    public async Task RecordGrade_UnderItsOwnProject_UpdatesAndReturnsTrue()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedSearchAsync("key-1", "proj-a");
+
+        var recorded = await _sut.RecordGradeAsync("proj-a", "key-1", 4, "own", ct);
+
+        recorded.ShouldBeTrue();
+        (await ReadSignalsAsync("key-1")).Grade.ShouldBe(4);
+    }
+
+    [RetryFact]
+    public async Task RecordFollowThrough_UnderItsOwnProject_UpdatesAndReturnsTrue()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SeedSearchAsync("key-1", "proj-a");
+
+        var recorded = await _sut.RecordFollowThroughAsync("proj-a", "key-1", "/a.md", ct: ct);
+
+        recorded.ShouldBeTrue();
+        (await ReadSignalsAsync("key-1")).Files.ShouldNotBeNull().ShouldContain("/a.md");
+    }
+
+    [RetryFact]
+    public async Task RecordGrade_ReturnsFalseWhenNoRowMatched()
+    {
+        await EnsureSchemaAsync();
+
+        (await _sut.RecordGradeAsync("proj-a", "no-such-corr", 4, null, TestContext.Current.CancellationToken))
+            .ShouldBeFalse();
+    }
+
+    [RetryFact]
+    public async Task RecordFollowThrough_ReturnsFalseWhenNoRowMatched()
+    {
+        await EnsureSchemaAsync();
+
+        (await _sut.RecordFollowThroughAsync("proj-a", "no-such-corr", "/a.md", ct: TestContext.Current.CancellationToken))
+            .ShouldBeFalse();
     }
 
     [RetryFact]

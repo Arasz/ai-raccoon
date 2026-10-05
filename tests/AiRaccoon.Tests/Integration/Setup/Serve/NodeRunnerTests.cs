@@ -1,3 +1,4 @@
+using AiRaccoon.Tests.Integration.Observability;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Options;
@@ -51,6 +52,7 @@ public sealed class NodeRunnerTests : IDisposable
     public async Task PortZero_PrintsBoundUrl_AndMcpClientReachesIt()
     {
         using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
+        await TelemetryServerHost.SeedProjectRegistrationAsync(_dataRoot, "acme", TestContext.Current.CancellationToken);
         await using var run = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", "0"]);
 
         var url = await run.WaitForUrlAsync(TestContext.Current.CancellationToken);

@@ -133,7 +133,7 @@ can allow named company hosts, still only with the opt-in). An exported `AI_BADG
 that differs from the working directory's project id keeps the single local search. The full
 inventory is `docs/reference/data-access.md` in the ai-badger repository.
 
-**Switches.** Only the literal `"0"` counts for the two off switches, and only `"1"` for the opt-in.
+**Switches.** Only the literal `"0"` counts for the three off switches, and only `"1"` for the opt-in.
 
 | Variable | Effect |
 |---|---|
@@ -143,12 +143,18 @@ inventory is `docs/reference/data-access.md` in the ai-badger repository.
 | `AI_BADGER_ALLOW_THIRD_PARTY=1` | Opts in to third-party egress (pipeline mode); must be exactly `"1"`, and a `dataPolicy` lock overrides it |
 | `OPENROUTER_API_KEY` | The pipeline's credential; does nothing without the opt-in |
 | `AI_BADGER_PROJECT_ID` | Overrides `.ai-badger/project-id`; exported globally, it routes every repo to one project |
+| `AI_BADGER_RACCOON_REGISTER=0` | Scaffold and den-refresh make no `project id` lookup or register call: the id is still minted locally, but nothing is asked of the bank |
 
 Without the override, the planner uses the `medium` tier's preferred model through the `task`
 skill's `model_groups.py` and the project's `model-groups.json`. A project that declined the
 `task` skill has no resolver, so the planner has no model and every run falls back to a single
 search unless the override is set. The planner model comes from project data and is billed to
 your key; the override pins it.
+
+The memory-first gate (the PreToolUse deny that precedes a text search) names the same id the
+hook reads: the nearest `.ai-badger/project-id`, with `AI_BADGER_PROJECT_ID` first. The old
+raccoon-side override is retired (see ADR-0036 in the ai-badger repository), so the denial and
+the search it demands cannot point at two different projects.
 
 **Search log.** Each enriched prompt, and each planned query, is a real `memory_search` and
 lands in ai-raccoon's search log like any other search.

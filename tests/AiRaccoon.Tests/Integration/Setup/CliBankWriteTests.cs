@@ -70,6 +70,11 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         CodeReindexJob.JobName
     ];
 
+    /// <summary>A registered project the fixture seeds, so `project id get` and `check` have something to find.</summary>
+    private const string SeededProjectId = "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70";
+
+    private const string SeededProjectName = "cli-writes-repo";
+
     private readonly string _dataRoot = TestData.CreateTempRoot("ai-raccoon-cli-writes");
 
     /// <summary>
@@ -100,6 +105,8 @@ public sealed class CliBankWriteTests : IAsyncLifetime
         data.Add("repair chunk-index", ["repair", "chunk-index"]);
         data.Add("repair reingest", ["repair", "reingest"]);
         data.Add("repair project-ids", ["repair", "project-ids"]);
+        data.Add("project id get", ["project", "id", "get", "--name", SeededProjectName]);
+        data.Add("project id check", ["project", "id", "check", SeededProjectId]);
         return data;
     }
 
@@ -158,6 +165,9 @@ public sealed class CliBankWriteTests : IAsyncLifetime
                     """,
                     new { name, now });
             }
+
+            await connection.ExecuteAsync(MemorySql.InsertProject,
+                new { id = SeededProjectId, name = SeededProjectName, createdAt = now });
         }
 
         _portLease = LoopbackPort.Reserve();

@@ -31,7 +31,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
     public MemorySearchAbsoluteRelevanceTests()
     {
         var access = new MemoryAccessGuard(_store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new StubMigrationGate(migrated: false));
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
@@ -312,11 +312,5 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         public override Task<SearchResults> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default) =>
             Task.FromResult(new SearchResults(StubResults, SearchTimings.Empty, null, StubEvidence, StubStats,
                 AllTermsMatched: StubAllTermsMatched, RelevanceFloor: StubRelevanceFloor));
-    }
-
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
     }
 }

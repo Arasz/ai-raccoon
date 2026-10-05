@@ -1,11 +1,40 @@
-"""Provenance hashing for scaffold.py's manifest entries — kept out of its line budget (#194).
+"""Provenance helpers for scaffold.py's manifest entries — kept out of its line budget (#194).
 
-One function, `provenance_hashes`, called from `Scaffolder.record`.
+`provenance_hashes` is called from `Scaffolder.record`; `git_provenance` from
+`Scaffolder.__init__` (it moved here when 0.188.0's project-id flow pushed scaffold.py over
+the 850-line budget the #194 test enforces).
 """
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Tuple
+
+from project_id import git_env
+
+
+def git_provenance(root: Path) -> Tuple[Optional[str], bool]:
+    """Return (HEAD sha, working-tree-dirty) for root, or (None, False) when it is not a git repo.
+
+    A plugin cache is a plain copy with no .git, so the commit is unknowable there and the
+    version resolves to it instead (ADR-0001 decision 4). A copy cannot be dirty, so False
+    is a fact rather than a missing value. `git_env()` strips the export a git hook carries
+    (GIT_DIR et al.), which would otherwise make this read another repository's HEAD.
+    """
+    if not (root / ".git").exists():
+        return None, False
+    try:
+        sha = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True, env=git_env(),
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain"],
+            check=True, capture_output=True, text=True, env=git_env(),
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None, False
+    return (sha or None), bool(status)
 
 
 def provenance_hashes(bl, feature: str, source: Path, target: Path,

@@ -1,5 +1,9 @@
+using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Hosting.Node;
+using AiRaccoon.Projects;
 using AiRaccoon.Infrastructure.Embedding;
 
 namespace AiRaccoon.Settings;
@@ -37,21 +41,45 @@ internal static partial class SettingsEndpoint
                         return Results.Ok(new SettingRows(rows));
                     }
 
-                    var value = await store.GetSettingAsync(key!, ctx);
-                    Log.KeyRead(logger, key!, value is not null);
+                    var resolved = Resolve(key!);
+                    var value = await store.GetSettingAsync(resolved, ctx);
+                    Log.KeyRead(logger, resolved, value is not null);
                     return value is null ? Results.NotFound() : Results.Ok(new SettingValue(value));
                 });
 
             webApplication.MapPut(SettingsProtocol.Path,
-                async (SettingWrite write, ISettingsStore store, CancellationToken ctx) =>
+                async (SettingWrite write, ISettingsStore store, IProjectRegistrationGuard registration, CancellationToken ctx) =>
                 {
                     if (string.IsNullOrWhiteSpace(write.Key))
                     {
                         return Results.BadRequest("ai-raccoon: a settings write needs a key");
                     }
 
-                    await store.SetSettingAsync(write.Key, write.Value, ctx);
-                    Log.KeyWritten(logger, write.Key);
+                    var key = write.Key;
+                    if (ProjectSettingsKeys.TryGetProjectId(write.Key, out var owner))
+                    {
+                        if (string.IsNullOrWhiteSpace(owner))
+                        {
+                            return Results.BadRequest($"ai-raccoon: the settings key '{ProjectIdText.Printable(write.Key)}' names no project");
+                        }
+
+                        var folded = ProjectIdAliasMap.Default.Apply(owner);
+                        try
+                        {
+                            key = ProjectSettingsKeys.WithProjectId(write.Key, folded.ProjectId);
+                        }
+                        catch (ArgumentException exception)
+                        {
+                            return Results.BadRequest(exception.Message);
+                        }
+                        if (await RefuseProjectAsync(key, write.Value, folded, store, registration, ctx) is { } refusal)
+                        {
+                            return Refused(refusal);
+                        }
+                    }
+
+                    await store.SetSettingAsync(key, write.Value, ctx);
+                    Log.KeyWritten(logger, key);
                     return Results.NoContent();
                 });
 
@@ -145,6 +173,61 @@ internal static partial class SettingsEndpoint
                 });
         }
     }
+
+    /// <summary>A per-project key under its alias winner's id; any other key, or a blank owner, unchanged.</summary>
+    private static string Resolve(string key)
+    {
+        if (!ProjectSettingsKeys.TryGetProjectId(key, out var owner) || string.IsNullOrWhiteSpace(owner))
+        {
+            return key;
+        }
+
+        try
+        {
+            return ProjectSettingsKeys.WithProjectId(key, ProjectIdAliasMap.Default.Apply(owner).ProjectId);
+        }
+        catch (ArgumentException)
+        {
+            return key;
+        }
+    }
+
+    /// <summary>
+    ///     The refusal for a per-project write, or null to write it. A scope list that only loses
+    ///     paths is allowed under any id, retired included; otherwise a retired id is refused; then
+    ///     the id must pass the read form of the registration check, which never registers it.
+    /// </summary>
+    private static async Task<string?> RefuseProjectAsync(string key, string value, FoldedProjectId folded,
+        ISettingsStore store, IProjectRegistrationGuard registration, CancellationToken ctx)
+    {
+        if (IsScopeList(key) && IngestScopeList.IsSubset(await store.GetSettingAsync(key, ctx), value))
+        {
+            return null;
+        }
+
+        if (folded.Dropped)
+        {
+            return new RetiredProjectException(folded.ProjectId).Message;
+        }
+
+        try
+        {
+            await registration.EnsureAsync(folded.ProjectId, AccessRequirement.Read, ctx);
+            return null;
+        }
+        catch (UnregisteredProjectException ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    private static bool IsScopeList(string key) =>
+        key.StartsWith("ingest.scope.", StringComparison.Ordinal)
+        || key.StartsWith(IngestScopeKeys.LegacyScopePrefix, StringComparison.Ordinal);
+
+    /// <summary>Plain text, so the CLI writes the reason to stderr verbatim.</summary>
+    private static IResult Refused(string reason) =>
+        Results.Text($"ai-raccoon: settings write refused: {reason}", "text/plain", statusCode: StatusCodes.Status409Conflict);
 
     internal static partial class Log
     {

@@ -169,47 +169,15 @@ public static class ProjectIdCensus
             await conn.ExecuteScalarAsync<long>(new CommandDefinition(sql, cancellationToken: ct));
     }
 
-    /// <summary>Attributes an id-embedding settings key to its owner; false for global keys.</summary>
+    /// <summary>Attributes an id-embedding settings key to its owner; false for global keys and a blank owner.</summary>
     internal static bool TryAttributeSetting(string key, out string? owner)
     {
-        if (TryStripPrefix(key, "ingest.scope.", out owner) && owner != "global")
-        {
-            return true;
-        }
-
-        if (TryStripPrefix(key, "watch.scope.", out owner))
-        {
-            return true;
-        }
-
-        if (TryStripPrefix(key, "watch.enabled.", out owner) && owner != "global")
-        {
-            return true;
-        }
-
-        if (TryStripPrefix(key, "watch.concurrency.", out owner) && owner != "global")
-        {
-            return true;
-        }
-
-        if (TryStripPrefix(key, "access.mode.project:", out owner))
+        if (ProjectSettingsKeys.TryGetProjectId(key, out owner) && owner.Length > 0)
         {
             return true;
         }
 
         owner = null;
-        return false;
-    }
-
-    private static bool TryStripPrefix(string key, string prefix, out string? rest)
-    {
-        if (key.StartsWith(prefix, StringComparison.Ordinal) && key.Length > prefix.Length)
-        {
-            rest = key[prefix.Length..];
-            return true;
-        }
-
-        rest = null;
         return false;
     }
 

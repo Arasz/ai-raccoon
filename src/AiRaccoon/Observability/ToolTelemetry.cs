@@ -23,7 +23,7 @@ internal static class ToolTelemetry
     /// <summary>Span and counter project id for the one tool whose project id is optional.</summary>
     internal const string AllProjectsId = "all";
 
-    /// <summary>Counter and span project id for the tool that mints an id — there is no project before it returns.</summary>
+    /// <summary>Counter and span project id for the tools that mint or look up an id — the caller names no project.</summary>
     internal const string NoProjectId = "none";
 
     private const string ProjectIdArgument = "projectId";
@@ -39,17 +39,9 @@ internal static class ToolTelemetry
         {
             ["memory_promotion_list"] = arguments => new ToolProject(Text(arguments, ProjectIdArgument) ?? AllProjectsId, null),
             ["memory_share_extract"] = arguments => new ToolProject(JoinedText(arguments, ProjectIdsArgument), MultiProjectId),
-            ["project_id_token_get"] = _ => new ToolProject(NoProjectId, null)
+            ["project_id_token_get"] = _ => new ToolProject(NoProjectId, null),
+            ["project_id_get"] = _ => new ToolProject(NoProjectId, null)
         };
-
-    /// <summary>
-    ///     One-way latch for the migration marker: it never un-flips for a bank, so a single
-    ///     observed true skips the per-call marker query forever. Reset only by tests.
-    /// </summary>
-    private static volatile bool _migratedLatched;
-
-    /// <summary>Test seam for the migration latch (see <see cref="_migratedLatched" />).</summary>
-    internal static void ResetMigratedLatchForTests() => _migratedLatched = false;
 
     /// <summary>The filter: every call to every registered tool, present and future, passes through it.</summary>
     internal static McpRequestHandler<CallToolRequestParams, CallToolResult> Filter(
@@ -59,11 +51,10 @@ internal static class ToolTelemetry
             var metrics = request.Services?.GetService<ToolCallMetrics>();
             var recorder = request.Services?.GetService<IMeasurementRecorder>();
             var timeProvider = request.Services?.GetService<TimeProvider>();
-            var migrationGate = request.Services?.GetService<IProjectIdsMigrationGate>();
             return metrics is null
                 ? await next(request, cancellationToken)
                 : await RecordAsync(metrics, request.Params?.Name ?? string.Empty, request.Params?.Arguments,
-                    token => next(request, token), cancellationToken, recorder, timeProvider, migrationGate);
+                    token => next(request, token), cancellationToken, recorder, timeProvider);
         };
 
     /// <summary>
@@ -74,11 +65,10 @@ internal static class ToolTelemetry
     internal static async ValueTask<CallToolResult> RecordAsync(ToolCallMetrics metrics, string toolName,
         IDictionary<string, JsonElement>? arguments,
         Func<CancellationToken, ValueTask<CallToolResult>> next, CancellationToken cancellationToken,
-        IMeasurementRecorder? recorder = null, TimeProvider? timeProvider = null,
-        IProjectIdsMigrationGate? migrationGate = null)
+        IMeasurementRecorder? recorder = null, TimeProvider? timeProvider = null)
     {
         var project = ProjectFor(toolName, arguments);
-        var bankProjectId = await BankProjectIdAsync(migrationGate, project.SpanId, cancellationToken);
+        var bankProjectId = ProjectIdAliasMap.Default.Fold(project.SpanId);
         using var activity = new ToolExecutionActivity(metrics, toolName, project.SpanId, project.MetricId, recorder, timeProvider, bankProjectId);
         try
         {
@@ -90,43 +80,6 @@ internal static class ToolTelemetry
         {
             activity.RecordError(exception, Refused(exception) ? RefusedProjectId : null);
             throw;
-        }
-    }
-
-    /// <summary>
-    ///     The bank measurement's project id: the write-time fold for the tool-level row. The span
-    ///     and the counter keep the raw caller-sent id; only the bank row follows the same
-    ///     post-migration fold <see cref="ToolGate" /> applies, so tool-level rows correlate with
-    ///     the canonical project's performance report instead of orphaning under loser spellings
-    ///     (each orphan mints a telemetry-only census pin). Fail-open: a missing gate, a failed
-    ///     marker read, or a pre-migration bank records raw — exactly as before.
-    /// </summary>
-    private static async ValueTask<string> BankProjectIdAsync(IProjectIdsMigrationGate? migrationGate,
-        string spanId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            if (migrationGate is null)
-            {
-                return spanId;
-            }
-
-            if (_migratedLatched)
-            {
-                return ProjectIdAliasMap.Default.Fold(spanId);
-            }
-
-            if (!await migrationGate.IsMigratedAsync(cancellationToken))
-            {
-                return spanId;
-            }
-
-            _migratedLatched = true;
-            return ProjectIdAliasMap.Default.Fold(spanId);
-        }
-        catch (Exception)
-        {
-            return spanId;
         }
     }
 

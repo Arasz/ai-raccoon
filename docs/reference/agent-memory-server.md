@@ -16,7 +16,7 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
-## Tools (29)
+## Tools (30)
 
 Every tool takes `projectId` (camelCase — all parameters are camelCase), and it is
 **optional on every tool**: an omitted or blank id defaults to the registered project
@@ -25,16 +25,19 @@ one distinct project resolves (guid spellings canonicalize at the gate), several
 as ambiguous with the sorted candidate list, none refuses with `projectId is required`
 naming the probed directory. An explicit id always wins and never consults the resolver.
 The exceptions: `memory_promotion_list`, whose omitted id means all-projects (its
-cross-project feature) and never cwd-defaults, and `project_id_token_get`, which mints
-one and so takes none. Writes land in `project:<id>` by default; naming a `workspaceId`
-routes them into that workspace's isolated context, and it wins over `context` when both
+cross-project feature) and never cwd-defaults, `project_id_get`, which looks an id up by
+name and so takes none, and `project_id_token_get`, which mints one and so takes none.
+Writes land in `project:<id>` by default; naming a `workspaceId` routes them into that
+workspace's isolated context, and it wins over `context` when both
 are supplied (the sandbox has priority, so a workspace write never lands project-wide).
 
 10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
 2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),
 2 search-feedback tools (`memory_record_followthrough`, `memory_record_grade`),
 1 sync tool, 1 performance tool (`memory_performance`), 1 code tool (`code_get`),
-1 project tool (`project_id_token_get`, ADR-0089 — mints and registers a new project id).
+2 project tools (`project_id_get`, which returns the id registered under an exact name, and
+`project_id_token_get`, ADR-0089, which mints and registers a new project id; call
+`project_id_get` first).
 `memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config
 refactor: configuration is no longer an MCP tool — the CLI verbs are the single
 config channel (see [Command-line options](#command-line-options)).
@@ -44,8 +47,8 @@ config channel (see [Command-line options](#command-line-options)).
 | `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt, stored=true, reason?}`                                           |
 | `memory_get`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
 | `memory_search`                | `projectId`, `query`, `sessionId!`, `scope=all\|project\|shared`, `workspaceId?`, `limit=8`, `minRelativeScore=0.6`, `rrfK?` (else 60), `ftsWeight?` (else 1), `vectorWeight?` (else 1), `sourceLambda?` (else 0.1), `consolidationThreshold?` (else 0.1), `docScoreFormula?` ("max"\|"sum", else "max"), `candidateWindow?` ("max3x100"\|"max5x50", else "max3x100"), `contextLabel?`, `kind=memory\|code\|both` (default `both`), `codeLimit?`, `codeMinRelativeScore?` | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], evidenceByHash?:{<hash>:{hash, fusionStrength, legs:[{legName, rank}], cosine?}}, fusionStats?:{topMargin?, topVsMedian?, maxPossible, participatingLegs}, unranked?:true, truncation?:[{floor, threshold, dropped}], warning?}` |
-| `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`, `servedRank?`                                                                                                                    | `{recorded: true}`                                                                                 |
-| `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: true}`                                                                                 |
+| `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`, `servedRank?`                                                                                                                    | `{recorded: bool}`                                                                                 |
+| `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: bool}`                                                                                 |
 | `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
 | `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
 | `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
@@ -69,6 +72,7 @@ config channel (see [Command-line options](#command-line-options)).
 | `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
 | `memory_performance`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
 | `code_get`                     | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, lineStart, lineEnd}`                                                          |
+| `project_id_get`               | `name`                                                                                                                                                      | `{projectId}`                                                                                      |
 | `project_id_token_get`         | `name?`                                                                                                                                                     | `{projectId, instructions}`                                                                        |
 
 ### Notes on the less obvious tools
@@ -126,7 +130,7 @@ config channel (see [Command-line options](#command-line-options)).
   tables ever leave the machine (code per ADR-0085, telemetry stripped from every pushed
   snapshot per ADR-0098). `meta.correlationId` is present on all three kinds
   (the id `memory_record_grade`/`memory_record_followthrough` key off), since every search now
-  has a row behind it. `sessionId` is required on every search. Pass your session id. Blank fails fast. The server stores the value verbatim on the row. When you open a file the search returned, call `memory_record_followthrough` with that id, the file path, and `servedRank` when you saw one. Rank is 1-based. Under `kind=both` a bare rank cannot name its section, and that ambiguity is intentional. Grade with `memory_record_grade` (1-5, 5 is best, plus an optional note) on the same id when you have a judgment.
+  has a row behind it. `sessionId` is required on every search. Pass your session id. Blank fails fast. The server stores the value verbatim on the row. When you open a file the search returned, call `memory_record_followthrough` with that id, the file path, and `servedRank` when you saw one. Rank is 1-based. Under `kind=both` a bare rank cannot name its section, and that ambiguity is intentional. Grade with `memory_record_grade` (1-5, 5 is best, plus an optional note) on the same id when you have a judgment. Both calls touch only a search record that belongs to the caller's `projectId`. `recorded` is true only when that record was updated; an unknown correlationId, or one from another project, changes nothing and returns `recorded: false`.
 - **`memory_ingest_file`/`memory_ingest_directory` feed the code corpus too:** a file is routed
   by extension — the memory-owned extensions (`.md`/`.markdown`/`.txt`/`.json`) always win on
   overlap; a recognized code extension (`.cs`, `.py`, `.ts`, `.go`, `.rs`, … — the v1 list is
@@ -368,8 +372,10 @@ config channel (see [Command-line options](#command-line-options)).
   Rewriting or re-ingesting it gives it a fresh row; switching the embedding model resets every
   row's attempts. An engine that cannot answer at all fails the pass instead and charges no row
   ([ADR-0119](../adr/0119-poison-memory-rows-are-isolated-and-abandoned.md)).
-- **`memory_performance`:** project-scoped, except the reserved `__self_metrics__` project id,
-  which returns the bank-wide series instead (a per-tenant whole-bank scope is still deferred). The
+- **`memory_performance`:** project-scoped, except the reserved `__self_metrics__` project id (an
+  exact, case-sensitive match), which returns the bank-wide series instead and needs no
+  registration; any other unregistered id, `__SELF_METRICS__` included, is refused with
+  `project-not-registered` (a per-tenant whole-bank scope is still deferred). The
   `series` list is derived from the server's tool inventory plus the nine
   `memory_search` phases (`search.open`, `search.embed`, `search.fts`, `search.vector`,
   `search.fusion`, `search.affinity`, `search.adjustment`, `search.snippets`,
@@ -415,12 +421,14 @@ tool it is (see [ADR-0024](../adr/0024-unknown-id-contract.md)):
   [Error shapes](#error-shapes)) instead of silently doing nothing — there is no well-defined
   "already done" state for promoting a hash that was never written or writing into a workspace
   that was never begun.
-- **An unregistered `projectId` on a write/destructive call is refused, not silently founded.**
-  ADR-0089 decision 3: before this, any string a caller named became a project the moment
-  something was written under it — a typo could not fail, it founded a ghost project. Now a write
-  is refused (`project-not-registered`, see [Error shapes](#error-shapes)) unless the id is
-  registered (`project_id_token_get`) or the bank already holds rows for it (a legacy raw-text id,
-  which keeps working with a one-time warning). Reads are never refused this way.
+- **An unregistered `projectId` is refused on every call, reads included, not silently founded.**
+  ADR-0089 decision 3, amended by ADR-0127: a call is refused (`project-not-registered`, see
+  [Error shapes](#error-shapes)) unless the id is registered (`project_id_token_get` or `ai-raccoon project id register <id>`) or the bank already holds rows
+  for it (a legacy id, which keeps working with a one-time warning, EventId 433). Reads never
+  register an id; until a project-ids repair finishes, a write under an unregistered raw-text id
+  still registers it. The only calls that pass without a registered id are `project_id_token_get`,
+  `project_id_get`, `memory_promotion_list` with `allProjects=true`, and `memory_performance` under
+  `__self_metrics__`.
 
 ### `capacity` semantics
 
@@ -1123,8 +1131,10 @@ source of truth; a test cross-checks this table against it.
 | `sync-corrupt-file` | `PRAGMA quick_check` failed on the pulled remote snapshot — the local DB is not replaced | `sync-corrupt-file: <detail>` |
 | `sync-tampered-remote` | The pulled remote snapshot's embedded HMAC authenticity tag does not match its bytes, **or** the blob has no tag at all for an objectKey this bank has previously verified one for (checked before `PRAGMA quick_check` and before `ATTACH`) — the local DB is not replaced. An encrypted bank keys the tag from its own passphrase via `HKDF`; a headerless remote is accepted with a logged warning only the first time this objectKey is ever seen (trust-on-first-use). An encrypted bank synced by ≥1.31 cannot be pulled by <1.31 — upgrade both ends of an encrypted sync pair together | `sync-tampered-remote: <detail>` |
 | `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation; the refusal names the `settings access` remedy | `access-denied: <tool> requires mode <required> (current <mode>); run 'ai-raccoon settings access set <project> <required>' to raise this project's mode, or 'ai-raccoon settings access default set <required>' for all projects` |
-| `project-not-registered` | A write/destructive call named a `projectId` with no registry row and no existing rows either (ADR-0089) — reads are never refused. A legacy raw-text id the bank already holds rows for keeps working, with a one-time warning, instead of this refusal | `project-not-registered: Project '<id>' is not registered. Call project_id_token_get to mint and register a project id before writing.` |
-| `project-retired` | A write/destructive call named a `projectId` the project-ids repair dropped with a tombstone (Package E of the run-once repair plan) — resurrecting it by write is refused with the repair attribution. Reads still pass through, and an alias loser folds to its winner instead of refusing | `project-retired: Project '<id>' is retired: the project-ids repair attributed it as dropped test residue and deleted its rows with a tombstone. Writes under a retired id are refused — write under the canonical project id instead.` |
+| `project-not-registered` | A call, read or write, named a `projectId` with no registry row and no existing rows either (ADR-0089, ADR-0127). A legacy id the bank already holds rows for keeps working, with a one-time warning, instead of this refusal | `project-not-registered: Project '<id>' is not registered. Look up this repository's id with project_id_get, mint a new one with project_id_token_get, or register an id you already use with 'ai-raccoon project id register <id>'.` |
+| `project-retired` | A call, read or write, named a `projectId` the project-ids repair dropped with a tombstone; it is refused with the repair attribution, also while a repair request is open. An alias loser folds to its winner instead of refusing | `project-retired: Project '<id>' is retired: the project-ids repair attributed it as dropped test residue and deleted its rows with a tombstone. Calls under a retired id are refused — use the canonical project id instead.` |
+| `project-not-found` | `project_id_get` found no project registered under that exact, case-sensitive name. Nothing is registered; mint one with `project_id_token_get` | `project-not-found: No project is registered under the name '<name>'. Call project_id_token_get with this name to mint and register one.` |
+| `project-name-ambiguous` | `project_id_get` found several projects registered under that exact name; the message lists every id so a human can pick one | `project-name-ambiguous: 2 projects are registered under the name '<name>': <id1>, <id2>. Ask the user which one to use and pass that id as projectId.` |
 | `context-outside-project` | A write's `context` names a project other than the request's `project_id` | `context-outside-project: Context '<context>' writes into a project other than '<project_id>'. A write may only target its own project.` |
 | `invalid-params` | FluentValidation rejected the request (invalid `scope`, out-of-range `limit`, etc.), or the call named no `projectId` and cwd-default resolution found no candidate — the refusal names the probed working directory. When resolution finds two or more candidates the message is `invalid-params: projectId is ambiguous from cwd <cwd>: candidates <ids>`. The one exception is `memory_promotion_list`, whose omitted projectId means all-projects (that tool's cross-project feature) and never cwd-defaults. | `invalid-params: projectId is required (no registered project's scope contains cwd <cwd>; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)` |
 | `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, or a present-but-blank value fails a guard clause — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. Mapped from `JsonException`, `ArgumentException` and `ArgumentNullException`. `ArgumentOutOfRangeException` is deliberately **not** mapped: it is how .NET reports the server's own index arithmetic going wrong, so refusing it would mute Error-level alerting and tell the caller to retry an argument that was never at fault | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |

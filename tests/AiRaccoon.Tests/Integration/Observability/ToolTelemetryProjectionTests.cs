@@ -152,6 +152,12 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
         ToolTelemetry.Projections["project_id_token_get"](null)
             .ShouldBe(new ToolTelemetry.ToolProject(ToolTelemetry.NoProjectId, null));
 
+    /// <summary>The name lookup has no caller project either; it never projects under the looked-up id.</summary>
+    [RetryFact]
+    public void ProjectIdGet_ProjectsUnderTheNoneSentinel() =>
+        ToolTelemetry.Projections["project_id_get"](ToolCallRecorder.Arguments(("name", "acme")))
+            .ShouldBe(new ToolTelemetry.ToolProject(ToolTelemetry.NoProjectId, null));
+
     private static bool DeclaresProjectId(JsonElement inputSchema) =>
         inputSchema.ValueKind == JsonValueKind.Object
         && inputSchema.TryGetProperty("properties", out var properties)
