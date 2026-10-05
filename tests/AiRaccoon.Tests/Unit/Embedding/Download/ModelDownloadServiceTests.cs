@@ -297,22 +297,6 @@ public class ModelDownloadServiceTests : IDisposable
         new EmbeddingManifestValidator().Validate(manifest).ShouldBeEmpty();
     }
 
-    /// <summary>Negative control: a rank-3 (token-level) output leaves the planner's decision alone.</summary>
-    [Fact]
-    public async Task GraphEmitsTokenEmbeddings_KeepsThePlannedPoolingMode()
-    {
-        var repo = FakeRepo.CodeDaemon(_server);
-        var service = Service(repo, smoke: new FakeSmokeTester(ok: true,
-            ranks: new Dictionary<string, int>(StringComparer.Ordinal) { ["last_hidden_state"] = 3 }));
-
-        var result = await service.DownloadAsync(Request(repo), TestContext.Current.CancellationToken);
-
-        var manifest = LoadManifest();
-        manifest.Pooling.Mode.ShouldBe(PoolingMode.Cls);
-        manifest.Onnx.EmbeddingOutput.ShouldBeNull();
-        result.Plan.PoolingProvenance.ShouldContain("placeholder");
-    }
-
     [Fact]
     public void ModelSlug_SanitizesRepoId()
     {

@@ -203,7 +203,7 @@ public sealed class ModelDownloadService(
                 throw new ModelDownloadException(ModelDownloadFailure.RuntimeRejected, ex.Message, ex);
             }
 
-            plan = PoolingFromGraph(plan, outputRanks);
+            plan = ModelDownloadPlanPooling.ApplyGraphOutputRanks(plan, outputRanks);
 
             var manifestPath = await WriteManifestAsync(plan, targetDir, cancellationToken);
             return new ModelDownloadResult(plan, targetDir, manifestPath, downloaded);
@@ -213,29 +213,6 @@ public sealed class ModelDownloadService(
             Cleanup(targetDir, cleanup, createdTargetDir);
             throw;
         }
-    }
-
-    /// <summary>
-    ///     #470: a graph whose token-embeddings output is <c>[batch, dimensions]</c> pooled inside
-    ///     itself, so the planner's mode — inferred from the repo's files — is unappliable. The
-    ///     downloaded graph's own rank overrides it, and the manifest records what the engine will
-    ///     actually do instead of a guess it warns about (417) on every load.
-    /// </summary>
-    private static ModelDownloadPlan PoolingFromGraph(ModelDownloadPlan plan, IReadOnlyDictionary<string, int> outputRanks)
-    {
-        var output = plan.TokenEmbeddingsOutput;
-        if (plan.PoolingMode == PoolingMode.ModelOutput || string.IsNullOrWhiteSpace(output)
-                                                        || !outputRanks.TryGetValue(output, out var rank) || rank != OnnxOutputRanks.PooledRank)
-        {
-            return plan;
-        }
-
-        return plan with
-        {
-            PoolingMode = PoolingMode.ModelOutput,
-            EmbeddingOutput = output,
-            PoolingProvenance = "onnx-graph"
-        };
     }
 
     /// <summary>
