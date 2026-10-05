@@ -4,6 +4,15 @@
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+      "id": "air-refuse-unregistered-project-id-tools",
+      "title": "Require registered project ids on reads and settings writes; release 1.57.0",
+      "pr": 846,
+      "merged": true,
+      "date": "2026-10-05",
+      "hasNotes": false,
+      "summary": "Recovered Claude/Pi migration handoff and completed residual retirement, alias-name, telemetry, machine-global settings and repair-snapshot fixes. Independent correctness/QA reviews passed; 207 focused tests and 66 combined gates green, zero-warning build, all required CI passed. PR #846 merged as 1044e973. Sync pull and existing watches remain tracked in #847. Recovery evidence: docs/work/2026-10-05-1.57.0-resume.md."
+    },
+    {
       "id": "air-cap-long-query-fts-terms",
       "title": "Long-query FTS OR joins capped at 64 distinct content words (ADR-0126); release 1.56.1",
       "pr": 842,
@@ -464,7 +473,7 @@
       "summary": "Adopted config D from docs/work/2026-09-25-chunk-size-vs-attention-window-mlx.md: the bundled manifest's chunkTokens 254->1022 drives memory chunk size AND the query-trim budget (deliberate, ratified); code chunks stay 510. Existing banks re-chunk AND re-embed via a new ChunkBudgetReconciler phase inside the model-migration drain (before the embed loop, every migration-closing path): mirror groups re-ingest from disk per scope/context/workspace bucket (same file in two contexts keeps both), note groups reassemble via NoteTextOrder backtracking and carry path/source_file/section/keys/source_id/agent_id/created_at/ttl_days (mirror rows lose ttl_days \u2014 FileIngestor reads none). embedding.chunkBudget stamp present iff the last run converged; retryable skips gate it for at most 3 unproven passes per resolved budget (single-row-fits carve-out), terminal skips (source gone/unreadable/handler-less) never gate; budget drift force-opens a re-chunk-only migration; event 448 logs the report. MLX bucket-padding precondition pinned (short-row test) with fail-closed AIRACCOON_REQUIRE_MLX on the new build-mlx macOS job. Review fallout fixed: bucket-scoped mirror replace (was a hard-lock crash on two-context banks), ttl carry, retry bound, logging. Research harness now derives its embed window from the manifest; scripts manifest pin guarded by test. 29 budget-derived fixture/class fixes across 8 test classes; the OtlpNames gate caught a real DI bug (ChunkBudgetReconciler unconstructable). VERSION 1.54.0."
     }
   ],
-  "next": "Finish air-refuse-unregistered-project-id-tools (1.57.0, PR #846): recovered Claude/Pi handoff; residual correctness fixes integrated and independently approved; 207 focused tests passed, combined build clean. Await required CI and an approving GitHub review before merge. Recovery evidence: docs/work/2026-10-05-1.57.0-resume.md. After merge: Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) \u2014 owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
+  "next": "Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) \u2014 owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
