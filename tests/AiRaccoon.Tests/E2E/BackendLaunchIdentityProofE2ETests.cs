@@ -493,7 +493,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         return reader.ReadToEnd();
     }
 
-    /// <summary>Every started backend the proxy's launcher reported live, by port.</summary>
+    /// <summary>Every endpoint the proxy's launcher reported answering (pre-proof), by port.</summary>
     private int[] ChildPorts() =>
     [
         .. BackendLiveLine().Matches(ReadQuietLog())
@@ -501,7 +501,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             .Distinct()
     ];
 
-    [GeneratedRegex(@"backend live at http://127\.0\.0\.1:(\d+)/mcp")]
+    [GeneratedRegex(@"backend answering at http://127\.0\.0\.1:(\d+)/mcp")]
     private static partial Regex BackendLiveLine();
 
     private static async Task<bool> WaitUntilGoneAsync(int pid)

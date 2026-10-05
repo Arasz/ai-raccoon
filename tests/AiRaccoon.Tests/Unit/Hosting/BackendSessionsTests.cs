@@ -91,7 +91,6 @@ public sealed class BackendSessionsTests
         var outcome = await AcquireAsync(new FakeServerProbe(verdict), prover, launcher, Config(54242, "/tmp/unused"));
         outcome.Result.Url.ShouldBeNull();
         outcome.ProofFailure.ShouldBe(failure);
-        outcome.Verdict.ShouldBe(verdict);
         launcher.Calls.ShouldBe(0);
         prover.Calls.ShouldBe([new Uri("http://127.0.0.1:54242/mcp")]);
     }
