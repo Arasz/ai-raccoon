@@ -54,9 +54,11 @@ public sealed class SqliteRepairStore(
     {
         await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
         await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
+        using var snapshot = connection.BeginTransaction(deferred: true);
         var report = await ProjectIdCensus.CollectAsync(connection, cancellationToken);
         var open = await connection.ExecuteScalarAsync<long>(new CommandDefinition(MemorySql.HasOpenRepairRequest,
             new { kind = RepairKind.ProjectIds.ToKey() }, cancellationToken: cancellationToken));
+        await snapshot.CommitAsync(cancellationToken);
         return report with { RepairOpen = open > 0 };
     }
 
