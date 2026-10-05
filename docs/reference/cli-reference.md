@@ -44,8 +44,22 @@ proxy; full servers come only from `serve`).
 | `repair chunk-index [--apply]` | Reports (default) or fixes chunk positions that drifted from document order |
 | `repair reingest [--apply]` | Reports (default) or re-ingests files a chunker change made unreproducible |
 | `repair project-ids [--apply] [--queue-only] [--diagnose] [--map <path>]` | Diagnoses (default) or folds fragment project ids into one |
+| `project id register <id> [--name <name>]` | Registers a project id. Prints `registered <id>`, or `already registered <id>` for a registered id or an alias of one (the id it resolves to). A name fills an unset one and never overwrites it. Exits 10 for raw text that no project is registered or holds rows under, 18 for a retired id |
+| `project id get --name <name>` | Prints the one id registered under an exact, case-sensitive name, with no prefix. Exits 18 when none matches and 19 when several do, listing each id on stderr with stdout empty |
+| `project id check <id>` | Prints `known <id>` (the id it resolves to) and exits 0, or prints `unknown <id>` / `retired <id>` and exits 18. Accepts any non-blank id, guid or raw text |
 | `serve [options]` | Runs the HTTP MCP endpoint in the foreground; see [serve](#serve) below |
 | `doctor` | Shows bank schema/version, code engine state and embedding settings, without changing the bank |
+
+The three `project id` verbs are built for scripts. They never read stdin or prompt, and on
+success they write exactly one stdout line. Under `--quiet` their stderr stays empty on success;
+without it, stderr may carry the backend-acquire notice. A blank argument exits 10 before any
+server is contacted. They reach the server like every other routed verb and never open the
+bank, so a server older than `/projects` exits 57.
+
+Registration refuses the nil GUID (exit 10). A supplied `--name` must be nonblank,
+at most 200 characters, and contain no control characters. Only direct registration can
+fill an unset name; registering an alias leaves the winner unchanged.
+Project settings alias resolution never rewrites a per-project key into a machine-global key.
 
 ## settings
 
@@ -53,6 +67,11 @@ Every family below lives under `ai-raccoon settings <family> …`, except the op
 listed above that read a non-settings table or mutate data (`watch registered`,
 `extract prune`, `noise entries`, `model embedding set`, `model code set`, `encryption`,
 `serve`).
+
+A per-project write (`access set`, `watch enable|disable`, `watch concurrency`,
+`ingest scope add`) needs a project id the bank knows: registered, or holding rows. An unknown or
+retired id exits 18 and writes nothing. An alias writes its winner's settings, and
+`ingest scope remove` works under any id.
 
 | Command | Purpose |
 |---|---|
@@ -156,6 +175,8 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 15 | `Usage.AliasMapInvalid` | `repair project-ids --map` names a file that is missing, unreadable or invalid | no |
 | 16 | `Usage.ConfirmationDeclined` | `model download` over the size guard was not confirmed | no |
 | 17 | `Usage.RequestRejected` | The server rejected the request as malformed (HTTP 400) | no |
+| 18 | `Usage.ProjectUnknown` | The project id or name names no usable project: unknown, retired, or not found by name | no |
+| 19 | `Usage.ProjectAmbiguous` | A project name matches several registered projects; a human picks one | no |
 | 20 | `Key.Unresolved` | No encryption key could be resolved | no |
 | 21 | `Key.WrongKey` | The resolved key does not open the bank | no |
 | 22 | `Key.LegacyKeyDerivation` | The bank is still keyed under the pre-ADR-0012 derivation; `encryption migrate` fixes it | no |
@@ -173,7 +194,7 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 34 | `Bank.SchemaMismatch` | The schema shape differs from this binary's DDL; `serve` repairs it on open | no |
 | 35 | `Bank.SchemaNewerThanBinary` | The bank's `user_version` is newer than this binary supports | no |
 | 36 | `Bank.MigrationOpen` | A `model_migration` row is open; MCP tool calls are refused until the re-embed finishes | no |
-| 37 | `Bank.RepairStuck` | `repair project-ids --apply` stopped with actionable rows still in place | no |
+| 37 | `Bank.RepairStuck` | `repair project-ids --apply` stopped with actionable rows still in place, or the server had not finished the committed request when the time budget ended | no |
 | 38 | `Bank.RepairWritersActive` | `repair project-ids --apply` hit its bound while writers are still active | yes |
 | 39 | `Bank.RepairAttentionNeeded` | The repair converged everything it can attribute; a person must pick the rest | no |
 | 40 | `Port.InUse` | The port is in use by a holder this run cannot cycle or identify | no |

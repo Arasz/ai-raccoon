@@ -1,10 +1,12 @@
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Settings;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -208,6 +210,29 @@ public sealed class AppRunnerSettingsRoutingTests : IDisposable
         exit.ShouldBe(0);
         acquireCalls.ShouldBe(1);
         stdout.ShouldContain("no registered watches");
+    }
+
+    /// <summary>The project id verbs resolve the server-backed directory, never the bank's own.</summary>
+    [Fact]
+    public async Task ProjectIdVerbs_ResolveTheServerBackedDirectory()
+    {
+        const string projectId = "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70";
+        var acquireCalls = 0;
+        var fake = Substitute.For<ISettingsStore, IProjectDirectory>();
+        ((IProjectDirectory)fake).CheckAsync(projectId, Arg.Any<CancellationToken>())
+            .Returns(new ProjectIdCheck(projectId, ProjectIdStatus.Known));
+
+        var (exit, stdout) = await Run(
+            (_, _, _) =>
+            {
+                acquireCalls++;
+                return Task.FromResult(fake);
+            },
+            ["--data-root", _dataRoot, "project", "id", "check", projectId]);
+
+        exit.ShouldBe(0);
+        acquireCalls.ShouldBe(1);
+        stdout.ShouldBe($"known {projectId}{Environment.NewLine}");
     }
 
     /// <summary>A failed acquire surfaces as the command's own failure, not a crash.</summary>

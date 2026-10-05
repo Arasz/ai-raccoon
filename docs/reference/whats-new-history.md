@@ -1,11 +1,12 @@
 # What's new — history
 
-Older release highlights, archived from the README: 1.6.0 through 1.49.0. Newest at the top.
+Older release highlights, archived from the README: 1.6.0 through 1.50.0. Newest at the top.
 
 For current highlights, see [README.md](../../README.md#whats-new).
 
 ---
 
+- On Apple silicon the bundled engine can run through the MLX execution provider, opt-in with `ai-raccoon settings model device mlx`. (1.50.0) [ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md) · [how-to](../how-to/configure-embedding-engines.md)
 - Code search indexes `.mjs`/`.cjs`, Vue, shell, Terraform/HCL and Gherkin `.feature` files, and ingest skips binary files whatever their extension. (1.49.0) [how-to](../how-to/search-the-code-corpus.md#what-gets-indexed) · [research](../work/2026-09-23-ast-chunking-on-granite-and-magika.md)
 - Code search matches words inside identifiers (`overlap` finds `WatchOverlapResolver`) and indexes HTML, CSS/SCSS and SQL files. (1.48.0) [ADR-0109](../adr/0109-code-fts-carries-a-derived-identifiers-column.md) · [results](../work/2026-09-23-code-retrieval-eval-results.md)
 - One bundled embedding model for memory and code, granite-embedding-small-english-r2, which beats the old defaults on every retrieval eval, and runs on the GPU where available (macOS). (1.47.0) [ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)

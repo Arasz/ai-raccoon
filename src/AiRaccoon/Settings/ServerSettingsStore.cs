@@ -18,6 +18,9 @@ internal sealed class SettingsServerUnavailableException(int code, string messag
 /// <summary>The settings server answered but refused the credential.</summary>
 internal sealed class SettingsServerRefusedException(string message) : Exception(message);
 
+/// <summary>The settings server refused a per-project write because the id is unknown or retired; the message is the server's reason.</summary>
+internal sealed class ProjectRefusedException(string message) : Exception(message);
+
 /// <summary>The settings server answered but failed processing the request (5xx) — a server-side fault, not a bad argument.</summary>
 internal sealed class SettingsServerErrorException(string message) : Exception(message);
 
@@ -33,12 +36,15 @@ internal sealed class SettingsServerErrorException(string message) : Exception(m
 ///         <c>model code set local</c>, <c>repair</c>, <c>extract prune</c>,
 ///         <c>settings maintenance list</c>, <c>noise entries</c> and <c>watch registered</c> all
 ///         reach the same way, over the same connection — one class, one credential, one transport
-///         for every control-plane resource.
+///         for every control-plane resource. <see cref="IProjectDirectory" /> serves <c>project id</c>.
 ///     </para>
 /// </summary>
 internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, ICodeEngineStore, IRepairStore,
-    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore
+    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore, IProjectDirectory
 {
+    /// <summary>Every 409 body reaches a user's terminal; the read stops at this many characters.</summary>
+    private const int RefusalBodyMaxLength = 4096;
+
     private readonly HttpClient _client;
     private readonly TimeSpan _requestDeadline;
 
@@ -85,6 +91,11 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         Guard.IsNotNullOrWhiteSpace(key);
         var response = await SendAsync(token =>
             _client.PutAsJsonAsync(SettingsProtocol.Path, new SettingWrite(key, value), token), cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ProjectRefusedException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
+        }
+
         Ensure(response);
     }
 
@@ -95,7 +106,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             // Mirror of StartModelMigrationAsync: the endpoint's 409 body is the refusal reason.
-            throw new ModelMigrationInProgressException(await response.Content.ReadAsStringAsync(cancellationToken));
+            throw new ModelMigrationInProgressException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
         }
 
         Ensure(response);
@@ -111,7 +122,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
                 token), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
-            throw new ModelMigrationInProgressException(await response.Content.ReadAsStringAsync(cancellationToken));
+            throw new ModelMigrationInProgressException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
         }
 
         Ensure(response);
@@ -217,6 +228,36 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         return (await response.Content.ReadFromJsonAsync<List<WatchRegistration>>(cancellationToken))!;
     }
 
+    /// <inheritdoc />
+    public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(projectId);
+        var response = await SendAsync(token =>
+            _client.PostAsJsonAsync(ProjectsProtocol.Path, new ProjectRegisterRequest(projectId, name), token), cancellationToken);
+        Ensure(response);
+        var body = (await response.Content.ReadFromJsonAsync<ProjectRegisterResponse>(cancellationToken))!;
+        return new ProjectRegistration(body.ProjectId, body.Outcome);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> FindByNameAsync(string name, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(name);
+        var response = await SendAsync(token => _client.GetAsync(ProjectsProtocol.ForName(name), token), cancellationToken);
+        Ensure(response);
+        return (await response.Content.ReadFromJsonAsync<ProjectIdsResponse>(cancellationToken))!.Ids;
+    }
+
+    /// <inheritdoc />
+    public async Task<ProjectIdCheck> CheckAsync(string projectId, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(projectId);
+        var response = await SendAsync(token => _client.GetAsync(ProjectsProtocol.ForCheck(projectId), token), cancellationToken);
+        Ensure(response);
+        var body = (await response.Content.ReadFromJsonAsync<ProjectCheckResponse>(cancellationToken))!;
+        return new ProjectIdCheck(body.ProjectId, body.Status);
+    }
+
     /// <summary>
     ///     A transport failure, or no answer within <paramref name="deadline" /> (the request deadline
     ///     by default), is reported as unavailable rather than surfacing a bare HttpRequestException: a
@@ -243,6 +284,16 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             throw new SettingsServerUnavailableException(ErrorCode.Reach.StoppedAnswering,
                 $"ai-raccoon: no settings server answered at {_client.BaseAddress} within {limit.TotalSeconds:0.###}s", ex);
         }
+    }
+
+    /// <summary>A 409 body is displayed to the user: read no more than <see cref="RefusalBodyMaxLength" /> characters, so a runaway body cannot become an unbounded CLI string.</summary>
+    private static async Task<string> ReadRefusalBodyAsync(HttpContent content, CancellationToken cancellationToken)
+    {
+        await using var stream = await content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream);
+        var buffer = new char[RefusalBodyMaxLength];
+        var read = await reader.ReadBlockAsync(buffer.AsMemory(), cancellationToken);
+        return new string(buffer, 0, read);
     }
 
     private void Ensure(HttpResponseMessage response)

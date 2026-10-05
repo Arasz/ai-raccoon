@@ -25,7 +25,7 @@ public sealed class ToolGateTests
         var queue = new FakePromotionQueue();
         var migrations = new RecordingMigrations();
         var registration = new RecordingRegistrationGuard();
-        return (guard, queue, migrations, registration, new ToolGate(guard, queue, migrations, registration, new NeverMigratedGate()));
+        return (guard, queue, migrations, registration, new ToolGate(guard, queue, migrations, registration));
     }
 
     [Fact]
@@ -181,8 +181,7 @@ public sealed class ToolGateTests
     public async Task RequireAsync_WhenMigrated_PassesFormerAliasesThrough()
     {
         var (guard, _, _, registration, _) = NewStack();
-        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
-            migrationGate: new StubMigrationGate(true));
+        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration);
 
         var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
             "memory_write", TestContext.Current.CancellationToken);
@@ -193,26 +192,29 @@ public sealed class ToolGateTests
     }
 
     /// <summary>
-    ///     The mechanical half of M1: an EXPLICITLY unmigrated bank behaves exactly as before —
-    ///     the loser passes through unfolded (the winners' own writes must never refuse on an
-    ///     unmigrated bank). d-425 SHOULD-1 inversion: the old theory's `true` leg constructed the
-    ///     gate with NO migration gate at all and asserted the pass-through bypass — that shape no
-    ///     longer compiles (the ctor takes no default), so every construction names its migration
-    ///     state and only an explicit unmigrated gate passes through.
-    ///     Ledger — missing-gate-pass-through : --filter RequireAsync_WhenExplicitlyUnmigrated_PassesTheLoserThroughUnfolded : loser write, explicit unmigrated gate.
+    ///     A repair request resets the finish marker for the job's duration; alias reads must keep
+    ///     folding through that window instead of being refused as unregistered.
     /// </summary>
     [Fact]
-    public async Task RequireAsync_WhenExplicitlyUnmigrated_PassesTheLoserThroughUnfolded()
+    public async Task RequireAsync_AliasDuringRepairWindow_FoldsToTheWinner()
     {
         var (guard, _, _, registration, _) = NewStack();
-        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration,
-            new StubMigrationGate(false));
+        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration);
+        try
+        {
+            ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa")], ["jsaa"], []));
 
-        var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
-            "memory_write", TestContext.Current.CancellationToken);
+            var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Read,
+                "memory_search", TestContext.Current.CancellationToken);
 
-        canonical.ShouldBe("job-search-ai-assistant");
-        guard.Calls.ShouldBe([("job-search-ai-assistant", AccessRequirement.Write, "memory_write")]);
+            canonical.ShouldBe("jsaa");
+            registration.Calls.ShouldBe([("jsaa", AccessRequirement.Read)]);
+        }
+        finally
+        {
+            ProjectIdAliasMap.ResetDefault();
+        }
     }
 
     private sealed class RecordingGuard : IMemoryAccessGuard
@@ -263,11 +265,5 @@ public sealed class ToolGateTests
 
             return Task.CompletedTask;
         }
-    }
-
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
     }
 }

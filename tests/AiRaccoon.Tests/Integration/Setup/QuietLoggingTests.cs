@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Projects;
 using System.Net;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Proxy;
@@ -124,6 +125,8 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         await host.StartAsync(TestContext.Current.CancellationToken);
         try
         {
+            await host.Services.GetRequiredService<IProjectRegistry>()
+                .RegisterAsync("quiet-unwritable-probe", null, TestContext.Current.CancellationToken);
             var tools = ActivatorUtilities.CreateInstance<MemoryTools>(host.Services);
             var envelope = await tools.Stats("quiet-unwritable-probe", TestContext.Current.CancellationToken);
 

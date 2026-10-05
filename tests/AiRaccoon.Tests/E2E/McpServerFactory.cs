@@ -1,5 +1,6 @@
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -21,7 +22,8 @@ namespace AiRaccoon.Tests.E2E;
 ///     instance under its own temp data root. P2/ADR-0020: bare launches proxy out-of-process, so
 ///     the sole host is built directly (the same McpServerSetup.CreateWebHost production boots)
 ///     on an ephemeral loopback port, and the client dials its bound URL over real HTTP — no
-///     WebApplicationFactory, no TestServer. Access mode defaults to full before the first bank open.
+///     WebApplicationFactory, no TestServer. Access mode defaults to full before the first bank open,
+///     and the ids in <see cref="Projects" /> are registered then too.
 /// </summary>
 public sealed class McpServerFactory : IDisposable, IAsyncDisposable
 {
@@ -33,6 +35,9 @@ public sealed class McpServerFactory : IDisposable, IAsyncDisposable
     {
         _scope = scope;
     }
+
+    /// <summary>Project ids registered before the first client connects; every tool refuses an unregistered id.</summary>
+    public IReadOnlyList<string> Projects { get; init; } = [];
 
     /// <summary>The temp data root the server instance writes into.</summary>
     public string DataRoot { get; } = CreateTempRoot();
@@ -84,6 +89,11 @@ public sealed class McpServerFactory : IDisposable, IAsyncDisposable
         // just as a real deployment is; the surface tests ingest from temp paths.
         await store.SetSettingAsync(IngestScopeKeys.ScopeGlobal,
             IngestScopeKeys.Serialize([Path.GetTempPath(), DataRoot]));
+
+        foreach (var projectId in Projects)
+        {
+            await ((IProjectRegistry)store).RegisterAsync(projectId, null);
+        }
     }
 
     public void Dispose()

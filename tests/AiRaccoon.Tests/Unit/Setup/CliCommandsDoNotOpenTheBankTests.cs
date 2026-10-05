@@ -122,16 +122,9 @@ public sealed class CliCommandsDoNotOpenTheBankTests : IDisposable
         services.RegisterCoreMemoryServices(options);
         services.RegisterCommands();
 
-        var lazyServerStore = new LazyServerSettingsStore(_ =>
+        services.BindCliToServer(new LazyServerSettingsStore(_ =>
             throw new InvalidOperationException(
-                "ai-raccoon: the acquire delegate must never run while this test only constructs commands"));
-        services.AddSingleton<ISettingsStore>(lazyServerStore);
-        services.AddSingleton<IModelMigrationStore>(lazyServerStore);
-        services.AddSingleton<IRepairStore>(lazyServerStore);
-        services.AddSingleton<IPromotionQueuePruneStore>(lazyServerStore);
-        services.AddSingleton<IMaintenanceStatsStore>(lazyServerStore);
-        services.AddSingleton<INoiseSummaryStore>(lazyServerStore);
-        services.AddSingleton<IWatchRegisteredStore>(lazyServerStore);
+                "ai-raccoon: the acquire delegate must never run while this test only constructs commands")));
 
         return services.BuildServiceProvider();
     }

@@ -206,8 +206,9 @@ public static class TestData
         ProjectIdsRepairCommands? projectIdsRepair = null,
         DoctorCommands? doctor = null,
         ModelDownloadCommands? modelDownload = null,
-        ICodeEngineStore? codeEngine = null) =>
-        new(store, modelMigrations!, codeEngine!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, projectIdsRepair!, doctor!, modelDownload!);
+        ICodeEngineStore? codeEngine = null,
+        ProjectIdCommands? projectIds = null) =>
+        new(store, modelMigrations!, codeEngine!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, projectIdsRepair!, doctor!, modelDownload!, projectIds!);
 
     /// <summary>A <see cref="ServerProbe"/> backed by a plain loopback HttpClient (the pre-DI-refactor ForLoopback shape).</summary>
     public static ServerProbe CreateServerProbe() => new(new LoopbackHttpClientFactory());
@@ -704,10 +705,9 @@ public sealed class AllowingRegistrationGuard : IProjectRegistrationGuard
 }
 
 /// <summary>
-///     Stub <see cref="Core.Projects.IProjectIdsMigrationGate"/> for tests that construct a gate
-///     directly and do not exercise the P3 fold: explicitly unmigrated, so ids pass through
-///     unfolded. Named at every construction — the gate ctor takes no default (d-425 SHOULD-1,
-///     d-426 SHOULD-5), so a forgotten gate is a compile error, never a silent pass-through.
+///     Stub <see cref="Core.Projects.IProjectIdsMigrationGate"/> that reports an unmigrated bank:
+///     a <see cref="AiRaccoon.Projects.ProjectRegistrationGuard"/> built with it still
+///     auto-registers a raw-text id on its first write.
 /// </summary>
 public sealed class NeverMigratedGate : Core.Projects.IProjectIdsMigrationGate
 {
@@ -732,12 +732,12 @@ public sealed class NoOpSearchQualityService : ISearchQualityService
         IReadOnlyList<RetrievalEvidence>? evidence = null) =>
         Task.CompletedTask;
 
-    public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null,
-        CancellationToken ct = default) => Task.CompletedTask;
+    public Task<bool> RecordFollowThroughAsync(string projectId, string correlationId, string filePath, int? servedRank = null,
+        CancellationToken ct = default) => Task.FromResult(true);
 
-    public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
+    public Task<bool> RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
         CancellationToken ct = default) =>
-        Task.CompletedTask;
+        Task.FromResult(true);
 
     public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
         CancellationToken ct = default) =>

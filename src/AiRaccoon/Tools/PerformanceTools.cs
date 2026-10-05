@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Metrics;
 using System.ComponentModel;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Memory;
 using ModelContextProtocol.Server;
 
 // ReSharper disable ExplicitCallerInfoArgument
@@ -23,7 +24,18 @@ public sealed class PerformanceTools(IMetricsReportService reportService, IToolG
         int? bucketMinutes = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPerformance, cancellationToken);
+        var canonical = MetricsConfigKeys.SelfMetricsProjectId;
+        if (string.Equals(projectId, MetricsConfigKeys.SelfMetricsProjectId, StringComparison.Ordinal))
+        {
+            // The server's own metrics sentinel is no registered project; it still meets the
+            // migration lock (ADR-0076).
+            await gate.RequireBankAvailableAsync(TnMemoryPerformance, cancellationToken);
+        }
+        else
+        {
+            canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPerformance, cancellationToken);
+        }
+
         var report = await reportService.GetReportAsync(canonical, McpToolInventory.Names(),
             windowMinutes is { } w ? TimeSpan.FromMinutes(w) : null,
             bucketMinutes is { } b ? TimeSpan.FromMinutes(b) : null,

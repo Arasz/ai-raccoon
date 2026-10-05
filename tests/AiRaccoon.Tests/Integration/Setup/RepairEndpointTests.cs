@@ -166,6 +166,20 @@ public sealed class RepairEndpointTests : IAsyncLifetime
     }
 
     [RetryFact]
+    public async Task ProjectIdsReport_CarriesRepairOpenToTheClient()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var before = await _client.GetFromJsonAsync<ProjectIdCensusReport>("/repair?kind=project-ids", ct);
+        before.ShouldNotBeNull().RepairOpen.ShouldBeFalse();
+
+        (await _client.PostAsJsonAsync("/repair", new RepairRequest("project-ids"), ct)).StatusCode
+            .ShouldBe(HttpStatusCode.NoContent);
+
+        var after = await _client.GetFromJsonAsync<ProjectIdCensusReport>("/repair?kind=project-ids", ct);
+        after.ShouldNotBeNull().RepairOpen.ShouldBeTrue("the wire carries the open request to the CLI");
+    }
+
+    [RetryFact]
     public async Task PostProjectIds_WithMalformedMapJson_IsABadRequest()
     {
         var before = await RequestCountAsync("project-ids");

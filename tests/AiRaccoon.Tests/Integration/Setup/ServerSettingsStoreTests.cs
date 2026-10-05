@@ -94,10 +94,22 @@ public sealed class ServerSettingsStoreTests : IAsyncLifetime
     [RetryFact]
     public async Task KeysAreEscaped_SoAKeyCannotForgeAQueryString()
     {
-        await _store.SetSettingAsync("access.mode.project:a&prefix=b", "ro", TestContext.Current.CancellationToken);
+        await _store.SetSettingAsync("test.escape:a&prefix=b", "ro", TestContext.Current.CancellationToken);
 
-        (await _store.GetSettingAsync("access.mode.project:a&prefix=b", TestContext.Current.CancellationToken))
+        (await _store.GetSettingAsync("test.escape:a&prefix=b", TestContext.Current.CancellationToken))
             .ShouldBe("ro");
+    }
+
+    /// <summary>A per-project write under an id the server does not know comes back as the server's reason, not a bare HTTP error.</summary>
+    [RetryFact]
+    public async Task SetSetting_On409_ThrowsProjectRefusedWithBody()
+    {
+        const string unknown = "0199a1b2-0000-7000-8000-0000000000c6";
+
+        var error = await Should.ThrowAsync<ProjectRefusedException>(
+            () => _store.SetSettingAsync($"access.mode.project:{unknown}", "ro", TestContext.Current.CancellationToken));
+
+        error.Message.ShouldStartWith($"ai-raccoon: settings write refused: Project '{unknown}' is not registered.");
     }
 
     /// <summary>WP7-T7's server-refused row: the wrong token must say so, not read as absent.</summary>

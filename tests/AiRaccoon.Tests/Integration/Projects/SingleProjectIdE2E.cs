@@ -231,7 +231,7 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
         var marker = new SqliteProjectIdsMigrationGate(_factory);
         var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, marker);
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(),
-            new NeverMigratingStore(), guard, migrationGate: marker);
+            new NeverMigratingStore(), guard);
         var settings = new InMemorySettings();
         return new MemoryTools(_store, gate,
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
@@ -244,7 +244,7 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
         var marker = new SqliteProjectIdsMigrationGate(_factory);
         var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, marker);
         var gate = new ToolGate(new MemoryAccessGuard(_store), queue,
-            new NeverMigratingStore(), guard, migrationGate: marker);
+            new NeverMigratingStore(), guard);
         return new PromotionTools(queue, gate);
     }
 

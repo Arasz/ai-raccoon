@@ -213,6 +213,6 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
             TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         Service = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver(),
             new SqliteProjectIdsMigrationGate(Factory));
-        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()));
+        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
     }
 }

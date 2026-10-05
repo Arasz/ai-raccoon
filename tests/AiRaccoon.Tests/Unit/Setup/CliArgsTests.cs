@@ -838,6 +838,21 @@ public class CliArgsTests
         parsed!.Errors.ShouldNotBeEmpty();
     }
 
+    /// <summary>`project` is both an install-scope value and a top-level verb; the value must stay the option's.</summary>
+    [Theory]
+    [InlineData(new[] { "--install-scope", "project", "serve" }, new[] { "serve" })]
+    [InlineData(new[] { "--install-scope", "project" }, new string[0])]
+    [InlineData(new[] { "--install-scope", "project", "settings", "access", "list" }, new[] { "settings", "access", "list" })]
+    public void InstallScopeProject_BeforeAVerb_StillParses(string[] args, string[] commandPath)
+    {
+        var ok = CliArgs.TryParse(args, out var parsed);
+
+        ok.ShouldBeTrue();
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.Options.InstallScope.ShouldBe(InstallScope.Project);
+        parsed.CommandPath.ShouldBe(commandPath);
+    }
+
     [Fact]
     public void Parse_ValidTopLevelOptionsWithVerb_StillParseCleanly()
     {

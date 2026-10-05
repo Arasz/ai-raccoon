@@ -5,14 +5,13 @@ using Shouldly;
 using Xunit;
 using xRetry.v3;
 
-namespace AiRaccoon.Tests.Unit.Setup;
+namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
-///     The pack-and-inspect version contract (diagnose-fast-tests): opens the ACTUAL .nupkg, so it
-///     runs a full `dotnet pack` — heavyweight and host-crash-prone on loaded runners, kept out of
-///     the 15-minute fast lane (build-slow still gates it on every push and carries crash dumps).
+///     Checks the version and native runtime placement in the actual packages produced by `dotnet pack`.
+///     Requires the fetched WebGPU and MLX artifacts; the slow CI lane prepares them before running it.
 /// </summary>
-[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public class VersionContractPackedTests
 {

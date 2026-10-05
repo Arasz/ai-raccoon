@@ -211,7 +211,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         await _sut.RecordSearchAsync("corr-join-1", "query", "all", "proj-a", "memory", "sess-test",
             2, ["/a.md"], TestContext.Current.CancellationToken, TwoRowEvidence());
         await _sut.RecordGradeAsync("proj-a", "corr-join-1", 4, "useful", TestContext.Current.CancellationToken);
-        await _sut.RecordFollowThroughAsync("corr-join-1", "/a.md", ct: TestContext.Current.CancellationToken);
+        await _sut.RecordFollowThroughAsync("proj-a", "corr-join-1", "/a.md", ct: TestContext.Current.CancellationToken);
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var row = await connection.QuerySingleAsync(new CommandDefinition(

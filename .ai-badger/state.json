@@ -5,7 +5,7 @@
   "completedTasks": [
     {
       "id": "air-fix-cuda-runtime-provider-fallback",
-      "summary": "CUDA inference errors retry once on persistent WebGPU/CPU fallback; Windows CUDA/cuDNN DLL directories required on inherited PATH;14 regression tests;1.56.2",
+      "summary": "CUDA inference errors retry once on persistent WebGPU/CPU fallback; Windows CUDA/cuDNN DLL directories required on inherited PATH;14 regression tests;1.57.1",
       "pr": 848,
       "hasNotes": true
     },
@@ -73,7 +73,7 @@
       "summary": "1.53.6 checklist: 186 live file groups with duplicate chunk_index; boundary repair re-ingested must-cut files every run. Fix: ChunkBoundaryRepair scans before re-ingest; exact match (MatchesStoredRows) repositions in place, stale/grown files re-ingest, gone/workspace-changed renumber in stored order; job renamed chunk-boundary-repair-v2. One rule in Core DocumentChunks: (ctx, source_file) partition, file rows first by first occurrence, citing notes after, total = partition row count; FileIngestor/scanner/ChunkIndexRepair agree; position-only moves skip section (no FTS rewrite). repair chunk-index reports RowsRetotalled; CLI client has no timeout, 100 s per-request deadline except repair reports. Released 1.53.7 (publish awaits production approval). Two debug lanes + integration review (B1 reused-HttpClient Timeout throw, S1 two total definitions) + 3 bot review rounds."
     }
   ],
-  "next": "Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) \u2014 owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
+  "next": "Finish air-refuse-unregistered-project-id-tools (1.57.0, PR #846): recovered Claude/Pi handoff; residual correctness fixes integrated and independently approved; 207 focused tests passed, combined build clean. Await required CI and an approving GitHub review before merge. Recovery evidence: docs/work/2026-10-05-1.57.0-resume.md. After merge: Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) \u2014 owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",

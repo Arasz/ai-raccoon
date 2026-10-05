@@ -26,7 +26,8 @@ internal sealed class ConfigCommands(
     ReingestRepairCommands reingestRepair,
     ProjectIdsRepairCommands projectIdsRepair,
     DoctorCommands doctor,
-    ModelDownloadCommands modelDownload)
+    ModelDownloadCommands modelDownload,
+    ProjectIdCommands projectIds)
 {
     public async Task<int> RunAsync(CliInput cliInput,
         StandardStreams streams,
@@ -135,6 +136,9 @@ internal sealed class ConfigCommands(
                 ["serve", "observability"] => await serve.Observability(cliInput, streams, ctx),
                 ["serve"] => await serve.StartNode(cliInput, streams, ctx),
                 ["doctor"] => await doctor.RunAsync(streams, ctx),
+                ["project", "id", "register"] => await projectIds.RegisterAsync(parsedCliArgs, streams, ctx),
+                ["project", "id", "get"] => await projectIds.GetAsync(parsedCliArgs, streams, ctx),
+                ["project", "id", "check"] => await projectIds.CheckAsync(parsedCliArgs, streams, ctx),
                 _ => throw new UnhandledCommandException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }
@@ -158,6 +162,12 @@ internal sealed class ConfigCommands(
             // CliFailureFormatting, which would double it.
             await streams.WriteErrorLineAsync(ex.Message);
             return ErrorCode.Internal.ServerError;
+        }
+        catch (ProjectRefusedException ex)
+        {
+            // The server's 409 body already carries the "ai-raccoon: " prefix and the reason.
+            await streams.WriteErrorLineAsync(ex.Message);
+            return ErrorCode.Usage.ProjectUnknown;
         }
         catch (BankMissingException ex)
         {
