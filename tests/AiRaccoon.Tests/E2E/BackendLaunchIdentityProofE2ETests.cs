@@ -235,14 +235,6 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         }
     }
 
-    /// <summary>
-    ///     The dispose path under a stateful client: the proxy holds MCP sessions on its private
-    ///     children, so their shutdown has more to send than the stop. Every child dies and a racer
-    ///     takes each port; each racer still gets the challenge alone — no session close, no stop,
-    ///     no token — and each child is reported as not proven.
-    /// </summary>
-
-
     private async Task AcquireCellAsync(Attacker attacker)
     {
         var port = FreePort();
