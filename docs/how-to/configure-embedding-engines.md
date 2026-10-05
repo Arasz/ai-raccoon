@@ -139,9 +139,10 @@ had one — for example WebGPU's own `"CPU (GPU refused: …)"` — followed by 
 candidate (MLX, then CUDA) it tried and lost, in that fixed order regardless of what it landed on:
 `"WebGPU (CUDA refused: provider library not found: <path>)"`, or, on a host with no usable GPU
 driver, `"CPU (GPU refused: …) (CUDA refused: …)"`. On linux-arm64 the WebGPU reason reads
-`"this platform's ONNX Runtime core has no WebGPU"`. A session never throws because a GPU attempt failed — it always finishes on
-some provider, and the log line says which one and why the others were skipped. Force the CPU
-outright with `ai-raccoon settings model device cpu`.
+`"this platform's ONNX Runtime core has no WebGPU"`. During construction, a refused GPU
+attempt falls through to the next provider, and the log line says which one was selected and why
+the others were skipped. CUDA inference failures also attempt fallback; if building or running
+that replacement fails, the error propagates. Force the CPU outright with `ai-raccoon settings model device cpu`.
 
 **`mlx` is opt-in and bundled-engine-only** ([ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md)):
 it runs the bundled engine through the onnxruntime MLX plugin execution provider instead of

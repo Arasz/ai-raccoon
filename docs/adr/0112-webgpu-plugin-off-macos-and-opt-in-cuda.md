@@ -89,7 +89,8 @@ for every candidate that was tried and lost — for example `"WebGPU (CUDA refus
 refused: …)"`. A plugin WebGPU session takes the same process-wide `GpuGate` the built-in one
 already does, and sets `_needsGpuGateForRun`. A CUDA session takes the gate only while it registers
 and builds (plugin registration and device enumeration go through the one shared `OrtEnv`); its runs
-take no gate, since CUDA sessions share no device context (D5).
+take no process-wide `GpuGate`, since CUDA sessions share no device context (D5). Inference and
+disposal use an instance lock to protect runtime session replacement.
 
 **`gpu` and `cuda` both reach the plugin path, at different scopes.** `device gpu` for a
 downloaded, non-bundled model now goes through the same `CreateGpuSessionOrNull` the bundled engine
