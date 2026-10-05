@@ -48,7 +48,7 @@ public sealed class MemorySearchKindToolTests
     public MemorySearchKindToolTests()
     {
         var access = new MemoryAccessGuard(_store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, _quality),
             new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
@@ -383,7 +383,7 @@ public sealed class MemorySearchKindToolTests
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
         var recorder = new SpyMeasurementRecorder();
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
@@ -399,7 +399,7 @@ public sealed class MemorySearchKindToolTests
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         var recorder = new SpyMeasurementRecorder();
-        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
+        var tools = new MemoryTools(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, _codeSearch, _quality), new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), recorder, _settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
@@ -499,7 +499,7 @@ public sealed class MemorySearchKindToolTests
         var quality = new SqliteSearchQualityService(new ThrowingConnectionFactory(),
             NullLogger<SqliteSearchQualityService>.Instance);
         var tools = new MemoryTools(_store,
-            new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
+            new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, _codeSearch, quality), new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
             _settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
@@ -615,13 +615,13 @@ public sealed class MemorySearchKindToolTests
             return Task.CompletedTask;
         }
 
-        public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null,
+        public Task<bool> RecordFollowThroughAsync(string projectId, string correlationId, string filePath, int? servedRank = null,
             CancellationToken ct = default) =>
-            Task.CompletedTask;
+            Task.FromResult(true);
 
-        public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
+        public Task<bool> RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
             CancellationToken ct = default) =>
-            Task.CompletedTask;
+            Task.FromResult(true);
 
         public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
             CancellationToken ct = default) =>

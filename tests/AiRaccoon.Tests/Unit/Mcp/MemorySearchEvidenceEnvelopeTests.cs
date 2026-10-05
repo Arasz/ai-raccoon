@@ -37,7 +37,7 @@ public sealed class MemorySearchEvidenceEnvelopeTests
         // EVIDENCE fields are additive, not that a fresh bank carries the F6 warning.
         _settings.Values[EmbeddingSettingsKeys.Provider] = "local";
         var access = new MemoryAccessGuard(_store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(migrated: false));
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, new NoOpSearchQualityService()),
             new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
@@ -349,9 +349,4 @@ public sealed class MemorySearchEvidenceEnvelopeTests
 
     /// <summary>Unmigrated gate: these search-behavior tests predate the project-ids repair,
     /// so the fold stays off and pre-migration behavior is preserved.</summary>
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
-    }
 }

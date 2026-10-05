@@ -43,7 +43,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
     {
         await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
-        _factory = new McpServerFactory();
+        _factory = new McpServerFactory { Projects = ["reconnect"] };
         _backend = await _factory.CreateClientAsync();
         _recorder = new BackendRecorder(_backend);
 
@@ -94,7 +94,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
             throw new HttpRequestException("no backend could be started");
         }
 
-        var factory = new McpServerFactory();
+        var factory = new McpServerFactory { Projects = ["reconnect"] };
         _reacquired.Add(factory);
         return await factory.CreateClientAsync();
     }

@@ -86,7 +86,7 @@
     },
     {
       "item": "keyword-search-across-a-chunk-boundary",
-      "expected-result": "memory_write a note made of\"The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.\" ten times, space-joined, then \" Invoice reference vk83jq was filed with the parish council.\" Premise: sqlite shows more than one entries row for the note's path. memory_search {query: \"vk83jq\", kind: memory, minRelativeScore: 0} returns the note with an `fts` leg in evidenceByHash, and one of its rows holds `vk83jq` whole (`instr(value,'vk83jq')`). A vector-only hit does not count: the vector leg finds this note on a broken build too. Then write a note holding one whitespace-free term of about 2,500 characters (40 concatenated SHA-256 hex digests); premise: no row holds the whole term; searching the whole term returns that note with an `fts` leg. A build without ADR-0120 returns both notes by the vector leg only, and no row holds vk83jq (ADR-0120)",
+      "expected-result": "memory_write a note made of\"The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.\" forty-five times, space-joined (ten fit in one chunk since 1.56), then \" Invoice reference vk83jq was filed with the parish council.\" Premise: sqlite shows more than one entries row for the note's path. memory_search {query: \"vk83jq\", kind: memory, minRelativeScore: 0} returns the note with an `fts` leg in evidenceByHash, and one of its rows holds `vk83jq` whole (`instr(value,'vk83jq')`). A vector-only hit does not count: the vector leg finds this note on a broken build too. Then write a note holding one whitespace-free term of about 2,500 characters (40 concatenated SHA-256 hex digests); premise: no row holds the whole term; searching the whole term returns that note with an `fts` leg. A build without ADR-0120 returns both notes by the vector leg only, and no row holds vk83jq (ADR-0120)",
       "command": "",
       "evidence": "",
       "observed-result": "",
@@ -96,7 +96,7 @@
     },
     {
       "item": "note-opening-chunk-reports-index-zero",
-      "expected-result": "memory_write a note with sourceFile /notes/minutes.md made of 62 paragraphs separated by blank lines (\"Paragraph N of the parish minutes records the treasurer's report on hall repairs, roof slates and the organ fund.\"), the first opening with \"Opening marker zq71\". Premise: sqlite shows more than one row for the note's path. memory_search {query: \"zq71\", kind: memory, minRelativeScore: 0} returns it with chunkIndex 0, and sqlite gives chunk_index 0 for the row where `instr(value,'zq71') > 0`. A build without ADR-0122 puts the opening at the last index (7 of 8) (ADR-0122)",
+      "expected-result": "memory_write a note with sourceFile /notes/minutes.md made of 62 paragraphs separated by blank lines (\"Paragraph N of the parish minutes records the treasurer's report on hall repairs, roof slates and the organ fund.\"), the first opening with \"Opening marker zq71\". Premise: sqlite shows more than one row for the note's path. memory_search {query: \"zq71\", kind: memory, minRelativeScore: 0} returns it with chunkIndex 0, and sqlite gives chunk_index 0 for the row where `instr(value,'zq71') > 0`. A build without ADR-0122 puts the opening at the last index (1 of 2 on 1.56.1) (ADR-0122)",
       "command": "",
       "evidence": "",
       "observed-result": "",
@@ -127,6 +127,16 @@
     {
       "item": "read-path-query-guard",
       "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "long-query-keyword-terms-capped",
+      "expected-result": "Copy the live bank with VACUUM INTO (clear its watches) and serve the copy. A memory_search for the first ~7,000 characters of CLAUDE.md, and one for ~7,000 characters of stopwords plus two content words, each return in seconds at vectorWeight 0, and data.warning says keyword matching is capped at the first 64 distinct words, with no clause saying it still sees the query in full. On a fresh bank with vectorWeight 0 and minRelativeScore 0, a marker word placed after 70 distinct filler words gets no hit, and the same word placed first gets an `fts` leg. Repeats do not use up the cap: the marker after 80 repeats of two words is still found. A 6-token query keeps the stopword `the`, and a 71-token query drops it. Negative control: install the release before the cap into a scratch --tool-path and run the same copy and queries. There the paste takes tens of seconds, the stopword run times out, and both the trailing marker and the 71-token `the` are found (ADR-0126)",
       "command": "",
       "evidence": "",
       "observed-result": "",

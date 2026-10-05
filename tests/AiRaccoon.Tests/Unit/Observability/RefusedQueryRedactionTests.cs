@@ -141,7 +141,7 @@ public sealed class RefusedQueryRedactionTests
         ISearchQualityService? quality = null)
     {
         var access = new MemoryAccessGuard(store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new StubMigrationGate(migrated: false));
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
         return new MemoryTools(store, gate,
             new SearchDispatcher(store, new NoOpCodeSearchService(), quality ?? new NoOpSearchQualityService()),
             new QueryGuardService(store),
@@ -196,11 +196,11 @@ public sealed class RefusedQueryRedactionTests
             return Task.CompletedTask;
         }
 
-        public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null,
-            CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> RecordFollowThroughAsync(string projectId, string correlationId, string filePath, int? servedRank = null,
+            CancellationToken ct = default) => Task.FromResult(true);
 
-        public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
-            CancellationToken ct = default) => Task.CompletedTask;
+        public Task<bool> RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
+            CancellationToken ct = default) => Task.FromResult(true);
 
         public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
             CancellationToken ct = default) => Task.FromResult(new SearchQualityMetrics(0, 0, 0, 0, 0, 0, 0));
@@ -226,9 +226,4 @@ public sealed class RefusedQueryRedactionTests
                     .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal));
     }
 
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
-    }
 }

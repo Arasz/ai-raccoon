@@ -57,6 +57,57 @@ public sealed class QualityToolsTests
         _gate.LastToolName.ShouldBe("memory_record_followthrough");
     }
 
+    [Fact]
+    public async Task Grade_ServiceFalseThenTrue_RecordedFollowsTheService()
+    {
+        _quality.Result = false;
+        var refused = await _tools.RecordGrade("proj-a", "corr-1", 4,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _quality.Result = true;
+        var recorded = await _tools.RecordGrade("proj-a", "corr-1", 4,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        refused.Data.ShouldNotBeNull().Recorded.ShouldBeFalse("the service matched no row for this project");
+        recorded.Data.ShouldNotBeNull().Recorded.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task FollowThrough_ServiceFalseThenTrue_RecordedFollowsTheService()
+    {
+        _quality.Result = false;
+        var refused = await _tools.RecordFollowThrough("proj-a", "corr-1", "/file.md",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _quality.Result = true;
+        var recorded = await _tools.RecordFollowThrough("proj-a", "corr-1", "/file.md",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        refused.Data.ShouldNotBeNull().Recorded.ShouldBeFalse("the service matched no row for this project");
+        recorded.Data.ShouldNotBeNull().Recorded.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task FollowThrough_PassesTheGateCanonicalId()
+    {
+        _gate.Canonical = "winner";
+
+        await _tools.RecordFollowThrough("loser", "corr-1", "/file.md",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _quality.LastProjectId.ShouldBe("winner");
+    }
+
+    [Fact]
+    public async Task Grade_PassesTheGateCanonicalId()
+    {
+        _gate.Canonical = "winner";
+
+        await _tools.RecordGrade("loser", "corr-1", 4, cancellationToken: TestContext.Current.CancellationToken);
+
+        _quality.LastProjectId.ShouldBe("winner");
+    }
+
     private sealed class FakeToolGate : IToolGate
     {
         public string? LastProjectId { get; private set; }
@@ -64,6 +115,9 @@ public sealed class QualityToolsTests
         public AccessRequirement? LastRequirement { get; private set; }
 
         public string? LastToolName { get; private set; }
+
+        /// <summary>When set, the gate answers this canonical id instead of echoing the argument.</summary>
+        public string? Canonical { get; set; }
 
         public Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken) =>
             Task.CompletedTask;
@@ -74,7 +128,7 @@ public sealed class QualityToolsTests
             LastProjectId = projectId;
             LastRequirement = requirement;
             LastToolName = toolName;
-            return Task.FromResult(projectId ?? string.Empty);
+            return Task.FromResult(Canonical ?? projectId ?? string.Empty);
         }
 
         public Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) =>
@@ -84,6 +138,10 @@ public sealed class QualityToolsTests
     /// <summary>Dumb record-and-return quality spy: captures the follow-through call, nothing more.</summary>
     private sealed class CapturingQualityService : ISearchQualityService
     {
+        public bool Result { get; set; } = true;
+
+        public string? LastProjectId { get; private set; }
+
         public string? LastCorrelationId { get; private set; }
 
         public string? LastFilePath { get; private set; }
@@ -104,18 +162,23 @@ public sealed class QualityToolsTests
             IReadOnlyList<RetrievalEvidence>? evidence = null) =>
             Task.CompletedTask;
 
-        public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null,
+        public Task<bool> RecordFollowThroughAsync(string projectId, string correlationId, string filePath, int? servedRank = null,
             CancellationToken ct = default)
         {
+            LastProjectId = projectId;
             LastCorrelationId = correlationId;
             LastFilePath = filePath;
             LastServedRank = servedRank;
-            return Task.CompletedTask;
+            return Task.FromResult(Result);
         }
 
-        public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
-            CancellationToken ct = default) =>
-            Task.CompletedTask;
+        public Task<bool> RecordGradeAsync(string projectId, string correlationId, int grade, string? note,
+            CancellationToken ct = default)
+        {
+            LastProjectId = projectId;
+            LastCorrelationId = correlationId;
+            return Task.FromResult(Result);
+        }
 
         public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
             CancellationToken ct = default) =>

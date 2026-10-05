@@ -78,15 +78,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     }
 
     private MemoryTools BuildMemoryTools() =>
-        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate()),
-            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
-            new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
-            NoOpMeasurementRecorder.Instance, new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
-
-    /// <summary>The P3-activated choke: identical stack except the marker reads migrated, so the alias fold runs.</summary>
-    private MemoryTools BuildMigratedTools() =>
-        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(),
-                migrationGate: new StubMigrationGate(Migrated: true)),
+        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
             NoOpMeasurementRecorder.Instance, new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
@@ -156,7 +148,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     public async Task MemoryShareExtract_UnderARespelledForm_ThreadsTheCanonicalId_ToTheExtractionRunner()
     {
         var extraction = new RecordingExtractionRunner();
-        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
+        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
         var tools = new ShareTools(_store, gate, new ShareExtractService(_store, extraction, new FakePromotionQueue()));
 
         await tools.ShareExtract([_respelled], cancellationToken: TestContext.Current.CancellationToken);
@@ -169,7 +161,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     public async Task MemoryPromotionList_UnderARespelledForm_ListsUnderTheCanonicalId()
     {
         var queue = new FakePromotionQueue();
-        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), new NeverMigratedGate());
+        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard());
         var tools = new PromotionTools(queue, gate);
 
         await tools.List(_respelled, cancellationToken: TestContext.Current.CancellationToken);
@@ -188,7 +180,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     [RetryFact]
     public async Task MemoryWrite_UnderAnAliasLoser_WritesTheVerbatimPartition_AndVecCtx()
     {
-        var tools = BuildMigratedTools();
+        var tools = BuildMemoryTools();
 
         var written = await tools.Write("job-search-ai-assistant", "alias fold reaches the narwhal partition",
             cancellationToken: TestContext.Current.CancellationToken);
@@ -218,7 +210,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     {
         var queue = new FakePromotionQueue();
         var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(),
-            new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(Migrated: true));
+            new AllowingRegistrationGuard());
         var tools = new PromotionTools(queue, gate);
 
         await tools.List("job-search-ai-assistant", cancellationToken: TestContext.Current.CancellationToken);
@@ -236,7 +228,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     {
         var extraction = new RecordingExtractionRunner();
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(),
-            new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(Migrated: true));
+            new AllowingRegistrationGuard());
         var tools = new ShareTools(_store, gate, new ShareExtractService(_store, extraction, new FakePromotionQueue()));
 
         await tools.ShareExtract(["job-search-ai-assistant"], cancellationToken: TestContext.Current.CancellationToken);
@@ -264,11 +256,5 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
             LastProjectId = projectId;
             return Task.FromResult<IReadOnlyList<ShareCandidate>>([]);
         }
-    }
-
-    private sealed class StubMigrationGate(bool Migrated) : AiRaccoon.Core.Projects.IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Migrated);
     }
 }

@@ -21,6 +21,18 @@ public class ConfigCommandsAccessModelTests
             TestData.CreateConfigCommands(store, settings: new SettingsCommands(), modelMigrations: store, codeEngine: store));
 
 
+    /// <summary>The server refused the project: the CLI prints its reason as-is and exits ProjectUnknown.</summary>
+    [Fact]
+    public async Task AccessSet_Refused_Exits18()
+    {
+        var (exit, stdout, err) = await CliRun.RunAsync(["settings", "access", "set", "acme", "ro"],
+            TestData.CreateConfigCommands(new ProjectRefusingStore(), settings: new SettingsCommands()));
+
+        exit.ShouldBe(ErrorCode.Usage.ProjectUnknown);
+        err.Trim().ShouldBe(ProjectRefusingStore.Reason);
+        stdout.ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task AccessDefaultSet_WritesGlobalRow()
     {

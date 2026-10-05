@@ -26,6 +26,7 @@ public static class CommandsRegistration
             serviceCollection.AddSingleton<ReingestRepairCommands>();
             serviceCollection.AddSingleton<ProjectIdsRepairCommands>();
             serviceCollection.AddSingleton<DoctorCommands>();
+            serviceCollection.AddSingleton<ProjectIdCommands>();
             serviceCollection.AddSingleton(sp => new EncryptionCommands(
                 sp.GetRequiredService<ISqliteConnectionFactory>(),
                 sp.GetRequiredService<ICliSecretManager>(),

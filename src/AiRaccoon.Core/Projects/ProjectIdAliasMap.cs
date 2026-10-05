@@ -7,6 +7,9 @@ namespace AiRaccoon.Core.Projects;
 /// <summary>A loser id and the canonical winner its rows fold into.</summary>
 public sealed record ProjectIdAliasEntry(string Alias, string Canonical);
 
+/// <summary>A project id after <see cref="ProjectIdAliasMap.Apply" />: the id to use, and whether it is retired.</summary>
+public sealed record FoldedProjectId(string ProjectId, bool Dropped);
+
 /// <summary>One-shot loser-to-winner map for the project-ids repair: file-loaded per invocation and JSON-round-trippable, so the CLI dry-run planner and the server apply job consume the same table with no bank FK and no compiled-in ids.</summary>
 /// <remarks>
 ///     d-425 SHOULD-5: every lookup is <see cref="StringComparison.Ordinal" /> — case-SENSITIVE
@@ -135,6 +138,19 @@ public sealed class ProjectIdAliasMap
     public bool IsDropped(string projectId)
     {
         return _dropped.Contains(projectId);
+    }
+
+    /// <summary>The stored id after canonicalizing and folding aliases; a dropped winner remains retired.</summary>
+    public FoldedProjectId Apply(string projectId)
+    {
+        var canonical = ProjectId.Canonicalize(projectId);
+        if (IsDropped(canonical))
+        {
+            return new FoldedProjectId(canonical, Dropped: true);
+        }
+
+        var folded = Fold(canonical);
+        return new FoldedProjectId(folded, Dropped: IsDropped(folded));
     }
 
     /// <summary>Serializes the map for durable hand-off (plan artifact, settings snapshot); no bank schema involved.</summary>

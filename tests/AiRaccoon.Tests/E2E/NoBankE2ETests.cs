@@ -27,6 +27,17 @@ public sealed class NoBankE2ETests : IAsyncLifetime
     /// <summary>The verbs that are not auto-launch paths by ruling: they become or inspect the bank themselves (D4).</summary>
     private static readonly string[] SelfContainedVerbs = ["serve", "doctor"];
 
+    /// <summary>
+    ///     Routed leaves that cannot run bare, with arguments that pass the verb's own validation so the
+    ///     run reaches the bank-presence check: a valid id is validated first, then the bank is looked for.
+    /// </summary>
+    private static readonly string[][] ArgumentedLeaves =
+    [
+        ["project", "id", "check", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
+        ["project", "id", "get", "--name", "x"],
+        ["project", "id", "register", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"]
+    ];
+
     private readonly string _parent = TestData.CreateTempRoot("no-bank-typo");
     private IAsyncDisposable? _env;
 
@@ -124,6 +135,7 @@ public sealed class NoBankE2ETests : IAsyncLifetime
             verbs.Add(path);
         }
 
+        verbs.AddRange(ArgumentedLeaves);
         return verbs;
     }
 

@@ -265,14 +265,14 @@ public sealed class SearchDispatcherEvidenceTests
             return Task.CompletedTask;
         }
 
-        public Task RecordFollowThroughAsync(string correlationId, string filePath, int? servedRank = null, CancellationToken ct = default)
+        public Task<bool> RecordFollowThroughAsync(string projectId, string correlationId, string filePath, int? servedRank = null, CancellationToken ct = default)
         {
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
-        public Task RecordGradeAsync(string projectId, string correlationId, int grade, string? note, CancellationToken ct = default)
+        public Task<bool> RecordGradeAsync(string projectId, string correlationId, int grade, string? note, CancellationToken ct = default)
         {
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from, CancellationToken ct = default)

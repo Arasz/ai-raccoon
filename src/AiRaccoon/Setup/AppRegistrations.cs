@@ -362,6 +362,7 @@ public static partial class AppRegistrations
             // ADR-0089: same instance as IMemoryStore, same reason as IModelMigrationStore above.
             // Server graph only — the CLI graph's wiring is carried to post-delta-5 §WP1.
             services.AddSingleton<IProjectRegistry>(sp => sp.GetRequiredService<SqliteMemoryStore>());
+            services.AddRequiredSingleton<IProjectDirectory, SqliteProjectDirectory>();
             // §3.3 D-E9: a store of its own, not another SqliteMemoryStore constructor parameter —
             // same ADR-0075 reason the two registrations above are split out.
             services.AddRequiredSingleton<ICodeEngineStore, SqliteCodeEngineStore>();

@@ -31,7 +31,7 @@ public sealed class MemorySearchFusionSignalMetricsTests
     private MemoryTools CreateTools(IMeasurementRecorder? recorder = null) =>
         new(_store,
             new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(),
-                new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(migrated: false)),
+                new AllowingRegistrationGuard()),
             new SearchDispatcher(_store, _codeSearch, new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue()),
@@ -205,9 +205,4 @@ public sealed class MemorySearchFusionSignalMetricsTests
 
     /// <summary>Unmigrated gate: these search-behavior tests predate the project-ids repair,
     /// so the fold stays off and pre-migration behavior is preserved.</summary>
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
-    }
 }

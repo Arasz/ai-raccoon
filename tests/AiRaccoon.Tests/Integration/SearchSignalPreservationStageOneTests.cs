@@ -213,7 +213,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
 
         var followFile = envelope.Data!.Results[0].SourceFile.ShouldNotBeNull();
         await quality.RecordGradeAsync("acme", correlationId, 5, "p7 telemetry join", ct);
-        await quality.RecordFollowThroughAsync(correlationId, followFile, ct: ct);
+        await quality.RecordFollowThroughAsync("acme", correlationId, followFile, ct: ct);
 
         var labeled = await ReadQualityRowAsync(connection, correlationId, ct);
         labeled.UsefulnessGrade.ShouldBe(5L);
@@ -551,7 +551,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         ICodeSearchService? codeSearch = null)
     {
         var gate = new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(),
-            new NeverMigratingStore(), new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(migrated: false));
+            new NeverMigratingStore(), new AllowingRegistrationGuard());
         var settings = new InMemorySettings();
         return new MemoryTools(store, gate,
             new SearchDispatcher(store, codeSearch ?? new NoOpCodeSearchService(),
@@ -689,9 +689,4 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
 
     /// <summary>Unmigrated gate: these search-behavior tests predate the project-ids repair,
     /// so the fold stays off and pre-migration behavior is preserved.</summary>
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
-    }
 }

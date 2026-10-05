@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
@@ -9,6 +10,8 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
+using NSubstitute;
+using SQLitePCL;
 using Xunit;
 using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
@@ -150,6 +153,98 @@ public sealed class SqliteRepairStoreTests : IDisposable
 
         thrown.ShouldBeNull($"a read-only report must not fail under write contention, but got: {thrown}");
         elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(2), "a read-only report must not wait on the bank's write lock");
+    }
+
+    [RetryFact]
+    public async Task ReportProjectIds_RepairOpen_TracksTheRequestRow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        (await _store.ReportProjectIdsAsync(ct)).RepairOpen.ShouldBeFalse("no request yet");
+
+        await _store.RequestRepairAsync(RepairKind.ProjectIds, ct);
+        (await _store.ReportProjectIdsAsync(ct)).RepairOpen.ShouldBeTrue("the request is open until the server stamps it");
+
+        await using (var connection = await _factory.OpenBankAsync(ct))
+        {
+            await connection.ExecuteAsync(MemorySql.FinishRepairRequest,
+                new { finishedAt = FixedNow.ToUnixTimeSeconds(), kind = RepairKind.ProjectIds.ToKey() });
+        }
+
+        (await _store.ReportProjectIdsAsync(ct)).RepairOpen.ShouldBeFalse("finished_at is stamped");
+    }
+
+    [RetryFact]
+    public async Task ReportProjectIds_RepairCommitsBetweenCensusAndRequestRead_KeepsOneSnapshot()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await _store.RequestRepairAsync(RepairKind.ProjectIds, ct);
+        await using var writer = await _factory.OpenBankAsync(ct);
+        await writer.ExecuteAsync("INSERT INTO projects (id, created_at) VALUES ('retire-me', 1)");
+        var plan = ProjectIdsFoldPlan.FromCensus(await ProjectIdCensus.CollectAsync(writer, ct), ProjectIdAliasMap.Empty);
+        plan.RetiredProjects.ShouldBe(["retire-me"]);
+        await using var reader = await _factory.OpenBankSkippingEnsureAsync(ct);
+        var committed = false;
+        Exception? repairFailure = null;
+        raw.sqlite3_set_authorizer(reader.Handle, (_, action, table, _, _, _) =>
+        {
+            if (action == raw.SQLITE_READ && table == "repair_requests" && !committed)
+            {
+                try
+                {
+                    new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(writer, plan, ct).GetAwaiter().GetResult();
+                    writer.Execute(MemorySql.FinishRepairRequest,
+                        new { finishedAt = FixedNow.ToUnixTimeSeconds(), kind = RepairKind.ProjectIds.ToKey() });
+                    committed = true;
+                }
+                catch (Exception exception)
+                {
+                    repairFailure = exception;
+                    return raw.SQLITE_DENY;
+                }
+            }
+
+            return raw.SQLITE_OK;
+        }, null);
+        var factory = Substitute.For<ISqliteConnectionFactory>();
+        factory.OpenBankSkippingEnsureAsync(ct).Returns(reader);
+        var store = new SqliteRepairStore(factory,
+            new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
+            TestData.CreateEmbeddingService(), _memoryStore, new FakeTimeProvider(FixedNow));
+
+        var report = await store.ReportProjectIdsAsync(ct);
+
+        repairFailure.ShouldBeNull();
+        committed.ShouldBeTrue("the real repair committed between the two reads");
+        report.Rows.ShouldContain(row => row.ProjectId == "retire-me" && row.Registered);
+        report.RepairOpen.ShouldBeTrue("the census predates the repair, so the request must also come from that snapshot");
+        (await writer.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM projects WHERE id = 'retire-me'")).ShouldBe(0);
+        (await writer.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM repair_requests WHERE finished_at IS NULL")).ShouldBe(0);
+    }
+
+    [RetryFact]
+    public async Task ReportProjectIds_RepairOpen_IgnoresOtherKinds()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await _store.RequestRepairAsync(RepairKind.Reingest, ct);
+        await _store.RequestRepairAsync(RepairKind.ChunkIndex, ct);
+
+        (await _store.ReportProjectIdsAsync(ct)).RepairOpen.ShouldBeFalse();
+    }
+
+    /// <summary>The report stays SELECT-only: another connection's data_version does not move across it.</summary>
+    [RetryFact]
+    public async Task ReportProjectIds_RunsUnderQueryOnly()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await _store.RequestRepairAsync(RepairKind.ProjectIds, ct);
+        await _store.ReportProjectIdsAsync(ct);
+        await using var observer = await _factory.OpenBankAsync(ct);
+        var before = await observer.ExecuteScalarAsync<long>("PRAGMA data_version");
+
+        await _store.ReportProjectIdsAsync(ct);
+
+        (await observer.ExecuteScalarAsync<long>("PRAGMA data_version")).ShouldBe(before,
+            "a report that writes would bump the data_version other connections see");
     }
 
     /// <summary>

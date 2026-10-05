@@ -86,22 +86,116 @@ public sealed class ProjectRegistrationGuardTests
             "post-migration rows-without-registration still warn-and-work");
     }
 
-    /// <summary>
-    ///     Reads never refuse — the marker changes nothing on the read path (same shape as
-    ///     MemoryAccessGuard.EnsureAsync's early return for Read).
-    ///     Ledger — refuse-reads : --filter AReadRequirement_AfterMigration_IsNeverRefused :
-    ///     migrated read against an empty registry.
-    /// </summary>
+    /// <summary>D1: a read under an unregistered, row-less id is refused like a write — before migration.</summary>
     [Fact]
-    public async Task AReadRequirement_AfterMigration_IsNeverRefused()
+    public async Task Read_UnregisteredGuidWithNoRows_IsRefused()
+    {
+        var registry = new FakeProjectRegistry();
+        var guard = NewGuard(registry, migrated: false);
+
+        await Should.ThrowAsync<UnregisteredProjectException>(() =>
+            guard.EnsureAsync(Guid.CreateVersion7().ToString("D"), AccessRequirement.Read,
+                TestContext.Current.CancellationToken));
+
+        registry.Registered.ShouldBeEmpty("a refused read registers nothing");
+    }
+
+    /// <summary>D1, after the repair marker: the marker changes nothing for a read.</summary>
+    [Fact]
+    public async Task Read_UnregisteredGuid_AfterMigration_IsRefused()
     {
         var registry = new FakeProjectRegistry();
         var guard = NewGuard(registry, migrated: true);
 
-        await guard.EnsureAsync("jsaaa", AccessRequirement.Read, TestContext.Current.CancellationToken);
+        await Should.ThrowAsync<UnregisteredProjectException>(() =>
+            guard.EnsureAsync(Guid.CreateVersion7().ToString("D"), AccessRequirement.Read,
+                TestContext.Current.CancellationToken));
 
-        registry.IsRegisteredCalls.ShouldBeEmpty();
-        registry.HasRowsCalls.ShouldBeEmpty();
+        registry.Registered.ShouldBeEmpty();
+    }
+
+    /// <summary>Reads never inherit the pre-migration auto-registration a raw-text write gets.</summary>
+    [Fact]
+    public async Task Read_UnregisteredRawText_BeforeMigration_IsRefusedAndRegistersNothing()
+    {
+        var registry = new FakeProjectRegistry();
+        var guard = NewGuard(registry, migrated: false);
+
+        await Should.ThrowAsync<UnregisteredProjectException>(() =>
+            guard.EnsureAsync("jsaa", AccessRequirement.Read, TestContext.Current.CancellationToken));
+
+        registry.Registered.ShouldBeEmpty("a read must not create a projects row");
+    }
+
+    [Fact]
+    public async Task Read_RegisteredId_PassesSilently()
+    {
+        var canonical = Guid.CreateVersion7().ToString("D");
+        var registry = new FakeProjectRegistry { Registered = { canonical } };
+        var logger = new FakeLogger<ProjectRegistrationGuard>();
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true));
+
+        await guard.EnsureAsync(canonical, AccessRequirement.Read, TestContext.Current.CancellationToken);
+
+        logger.Collector.GetSnapshot().ShouldBeEmpty();
+    }
+
+    /// <summary>A legacy id the bank holds rows for stays readable, warned once per process.</summary>
+    [Fact]
+    public async Task Read_UnregisteredIdWithRows_PassesAndWarnsOnce()
+    {
+        var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
+        var logger = new FakeLogger<ProjectRegistrationGuard>();
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true));
+
+        await guard.EnsureAsync("jsaa", AccessRequirement.Read, TestContext.Current.CancellationToken);
+        await guard.EnsureAsync("jsaa", AccessRequirement.Read, TestContext.Current.CancellationToken);
+
+        logger.Collector.GetSnapshot().Count(r => r.Id.Id == 433).ShouldBe(1);
+        registry.Registered.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task LegacyWarning_GuidId_NamesRegister()
+    {
+        var id = Guid.CreateVersion7().ToString("D");
+        var registry = new FakeProjectRegistry { RowsFor = { id } };
+        var logger = new FakeLogger<ProjectRegistrationGuard>();
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true));
+
+        await guard.EnsureAsync(id, AccessRequirement.Read, TestContext.Current.CancellationToken);
+
+        var message = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 433).Message;
+        message.ShouldContain($"register it with 'ai-raccoon project id register {id}'");
+        message.ShouldNotContain("repair project-ids");
+        message.ShouldNotContain("convert");
+    }
+
+    [Fact]
+    public async Task LegacyWarning_RawTextId_NamesRepairMapAndRegister()
+    {
+        var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
+        var logger = new FakeLogger<ProjectRegistrationGuard>();
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true));
+
+        await guard.EnsureAsync("jsaa", AccessRequirement.Read, TestContext.Current.CancellationToken);
+
+        var message = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 433).Message;
+        message.ShouldContain(
+            "fold it into a registered project with 'ai-raccoon repair project-ids --map <file> --apply', " +
+            "or keep it with 'ai-raccoon project id register jsaa'");
+        message.ShouldNotContain("convert");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ABlankId_IsRejectedForEveryRequirement(string projectId)
+    {
+        var guard = NewGuard(new FakeProjectRegistry());
+
+        await Should.ThrowAsync<ArgumentException>(() =>
+            guard.EnsureAsync(projectId, AccessRequirement.Read, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -190,21 +284,6 @@ public sealed class ProjectRegistrationGuardTests
         var guard = NewGuard(registry);
 
         await guard.EnsureAsync(canonical, AccessRequirement.Write, TestContext.Current.CancellationToken);
-    }
-
-    [Fact]
-    public async Task AReadRequirement_IsNeverRefused()
-    {
-        // No registration, no rows — would refuse on Write/Destructive, but Read skips the guard
-        // entirely (same shape as MemoryAccessGuard.EnsureAsync's early return for Read).
-        var registry = new FakeProjectRegistry();
-        var guard = NewGuard(registry);
-
-        await guard.EnsureAsync(Guid.CreateVersion7().ToString("D"), AccessRequirement.Read,
-            TestContext.Current.CancellationToken);
-
-        registry.IsRegisteredCalls.ShouldBeEmpty("Read must skip the registry lookups entirely, not just tolerate a false answer");
-        registry.HasRowsCalls.ShouldBeEmpty();
     }
 
     private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate

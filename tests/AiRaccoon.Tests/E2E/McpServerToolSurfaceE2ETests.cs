@@ -39,7 +39,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
     {
         await TestData.CreateBundledModel().EnsureAsync(TestContext.Current.CancellationToken);
         _openAi = await FakeEmbeddingEndpoint.StartAsync(TestContext.Current.CancellationToken);
-        _factory = new McpServerFactory();
+        _factory = new McpServerFactory { Projects = [ProjectId] };
         _client = await _factory.CreateClientAsync();
     }
 

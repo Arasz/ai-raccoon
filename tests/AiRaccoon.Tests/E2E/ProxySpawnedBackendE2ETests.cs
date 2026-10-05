@@ -1,3 +1,4 @@
+using AiRaccoon.Tests.Integration.Observability;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -45,6 +46,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
         // F39: the proxy's auto-launch refuses an empty non-default root before it probes or spawns;
         // the spawned `serve` still mints the token it asserts on, but the bank must already exist.
         await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
+        await TelemetryServerHost.SeedProjectRegistrationAsync(_dataRoot, "acme", TestContext.Current.CancellationToken);
     }
 
     /// <summary>

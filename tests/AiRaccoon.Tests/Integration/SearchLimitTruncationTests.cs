@@ -120,7 +120,7 @@ public sealed class SearchLimitTruncationTests : IDisposable
     private static MemoryTools BuildTools(SqliteMemoryStore store)
     {
         var gate = new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(),
-            new NeverMigratingStore(), new AllowingRegistrationGuard(), migrationGate: new StubMigrationGate(migrated: false));
+            new NeverMigratingStore(), new AllowingRegistrationGuard());
         return new MemoryTools(store, gate,
             new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
             new QueryGuardService(new InMemorySettings()),
@@ -129,11 +129,5 @@ public sealed class SearchLimitTruncationTests : IDisposable
             new InMemorySettings(),
             NullLogger<MemoryTools>.Instance,
             new CountingEmbeddingService());
-    }
-
-    private sealed class StubMigrationGate(bool migrated) : IProjectIdsMigrationGate
-    {
-        public Task<bool> IsMigratedAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(migrated);
     }
 }

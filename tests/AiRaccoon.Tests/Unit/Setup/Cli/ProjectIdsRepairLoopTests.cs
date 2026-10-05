@@ -121,6 +121,80 @@ public sealed class ProjectIdsRepairLoopTests
         LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary — stuck:");
     }
 
+    /// <summary>The server stamps finished_at some polls after the commit: no verdict prints before it does.</summary>
+    [Fact]
+    public async Task Apply_DoesNotReportSettledWhileTheRequestIsOpen()
+    {
+        using var scope = new TempScope();
+        var store = new SequenceRepairStore(
+        [
+            Report(("a", 2), ("w", 0)),
+            Open(Report(("w", 2))),
+            Open(Report(("w", 2))),
+            Report(("w", 2))
+        ]);
+
+        var stdout = await RunLoopAsync(["repair", "project-ids", "--apply", "--map", scope.MapPath], store, scope.DataRoot);
+
+        var firstVerdict = stdout.IndexOf("summary — converged", StringComparison.Ordinal);
+        firstVerdict.ShouldBeGreaterThan(-1);
+        store.ReportCalls.ShouldBe(4, "the verdict waits for the read that reports the request closed");
+        stdout.Split("reaped:").Length.ShouldBe(2, "one pass reaps once, after the request closed");
+    }
+
+    [Fact]
+    public async Task Apply_KeepsPollingUntilTheRequestCloses()
+    {
+        using var scope = new TempScope();
+        var store = new SequenceRepairStore(
+        [
+            Report(("a", 2), ("w", 0)),
+            Open(Report(("a", 2), ("w", 0))),
+            Open(Report(("a", 2), ("w", 0))),
+            Open(Report(("a", 1), ("w", 1))),
+            Report(("w", 2))
+        ]);
+
+        await RunLoopAsync(["repair", "project-ids", "--apply", "--map", scope.MapPath], store, scope.DataRoot);
+
+        store.RequestCalls.ShouldBe(1);
+        store.ReportCalls.ShouldBe(5, "one initial read plus a read per poll until the request closes");
+    }
+
+    [Fact]
+    public async Task Apply_BudgetSpentWithRequestOpen_Exits37NamingTheServer()
+    {
+        using var scope = new TempScope();
+        var store = new SequenceRepairStore([Report(("a", 2), ("w", 0)), Open(Report(("a", 2), ("w", 0)))]);
+        var options = new ProjectIdsRepairCommands.RepairLoopOptions(3, TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(30));
+
+        var stdout = await RunLoopAsync(["repair", "project-ids", "--apply", "--map", scope.MapPath], store, scope.DataRoot,
+            ErrorCode.Bank.RepairStuck, options);
+
+        stdout.ShouldContain("the server has not finished");
+        stdout.ShouldNotContain("summary — converged");
+        stdout.ShouldNotContain("summary — pinned-only");
+        // A request still open at the budget is not a completed pass: no reaped or census verdict.
+        stdout.ShouldNotContain("reaped");
+        stdout.ShouldNotContain("census totals");
+    }
+
+    /// <summary>A request left open by an earlier run must not hang or change a settled census.</summary>
+    [Fact]
+    public async Task Apply_StaleOpenRequestAtPassZero_EndsAsToday()
+    {
+        using var scope = new TempScope();
+        var store = new SequenceRepairStore([Open(Report(("w", 2)))]);
+
+        var stdout = await RunLoopAsync(["repair", "project-ids", "--apply", "--map", scope.MapPath], store, scope.DataRoot);
+
+        store.RequestCalls.ShouldBe(0);
+        store.ReportCalls.ShouldBe(1);
+        LastNonEmptyLine(stdout).ShouldStartWith("project-ids repair: summary — converged:");
+    }
+
+    private static ProjectIdCensusReport Open(ProjectIdCensusReport report) => report with { RepairOpen = true };
+
     /// <summary>
     ///     F AC(3) / ADR-0075: the loop issues requests plus reads only — it constructs against a
     ///     fake implementing exactly <see cref="IRepairStore" /> (no bank surface exists to write),
@@ -386,13 +460,13 @@ public sealed class ProjectIdsRepairLoopTests
         stdout.Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0).Last();
 
     private static async Task<string> RunLoopAsync(string[] argv, IRepairStore store, string dataRoot,
-        int expectedExit = ErrorCode.Ok.Success)
+        int expectedExit = ErrorCode.Ok.Success, ProjectIdsRepairCommands.RepairLoopOptions? options = null)
     {
         CliArgs.TryParse(argv, out var parsed).ShouldBeTrue();
         var stdout = new StringWriter();
         var stderr = new StringWriter();
         var exit = await new ProjectIdsRepairCommands(
-                store, ProjectIdsRepairCommands.RepairLoopOptions.Test, TimeProvider.System)
+                store, options ?? ProjectIdsRepairCommands.RepairLoopOptions.Test, TimeProvider.System)
             .RunAsync(parsed!.ParsedCliArgs, dataRoot,
                 new StandardStreams(TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         exit.ShouldBe(expectedExit, $"stdout: {stdout}\nstderr: {stderr}");
