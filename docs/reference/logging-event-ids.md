@@ -9,10 +9,14 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **219** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **213** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
+
+(Remeasured 2026-10-05, proxy identity refusal: **213**. Automatic private startup
+and cleanup removed six events: 631-632 and 688-691. All six IDs remain reserved;
+proof refusal is written to stderr with exit code 50.)
 
 (Remeasured 2026-10-05: **219**. `CudaFallbackReporter` owns 449 for the CUDA inference
 fallback warning. Retired 418 remains unused; the generator’s existing 414-415/417 block is
@@ -145,6 +149,10 @@ build failure instead of a live-log surprise.
 
 ## The full allocation
 
+Historical measurements above retain the events that existed at the time. In
+1.57.2, private-backend events 631-632 and 688-691 were retired and remain reserved.
+The allocation below records their current status.
+
 One block per source file that owns a `Log` class or equivalent:
 
 | Ids | File |
@@ -187,7 +195,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 613-614 | `src/AiRaccoon/Hosting/Watchdog/InstallWatchdog.cs` (added 2026-09-25, ADR-0116: shuts the serve host down cleanly once its own install directory has been removed, most likely by `dotnet tool update -g ai-raccoon` replacing it out from under a still-running backend — automates ADR-0022's manual `serve --restart`; 613 is the one warning logged before stopping, 614 a failed check that leaves the loop to retry) |
 | 620-623 | `src/AiRaccoon/Hosting/Node/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
 | 630 | `src/AiRaccoon/Hosting/Proxy/ProxyRunner.cs` (ADR-0020) |
-| 631-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs` (ADR-0020; path corrected 2026-08-22 — moved from `Setup/Serve/`. 635's message extended with the captured stderr, delta-review plan C1. 631/632 added 2026-09-22, PSR P1.3/K1 — 631 is the private-spawn start line, 632 the private backend that never reported a URL; 633-635 are the attach path unchanged) |
+| 631-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs`: 633 starts the shared backend, 634 reports it live, 635 reports startup failure. 631-632 are reserved since 1.57.2 removed automatic private backend startup. |
 | 636-639 | `src/AiRaccoon/Hosting/Proxy/ProxyForwarder.cs` (ADR-0020) |
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
 | 650-657 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043; 657 is the unproven-listener refusal before the token is read, ADR-0106) |
@@ -199,7 +207,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 685 | `src/AiRaccoon/Settings/NoiseSummaryEndpoint.cs` (ADR-0075 amendment: the control-plane noise-summary resource — read-only, no outbox; closes `noise entries`' latent bank-open) |
 | 686 | `src/AiRaccoon/Settings/WatchRegisteredEndpoint.cs` (ADR-0075 amendment: the control-plane watch-registered resource — read-only, no outbox; closes `watch registered`'s latent bank-open) |
 | 687 | `src/AiRaccoon/Settings/CliSettingsBackend.cs` (added 2026-09-22, owner ruling N1: the F38 residual disclosure — a settings command's acquired backend keeps running after the command exits, and the line names how to stop it; the 4h idle watchdog stays intended, so this is disclosure only) |
-| 688-691 | `src/AiRaccoon/Hosting/Proxy/BackendSessions.cs` (688-689 added 2026-09-22, owner ruling 2026-09-22: the private backend's lifetime belongs to the proxy that started it — 688 it stopped with the proxy over the token-guarded /shutdown, 689 it did not stop within the bound and is left to its idle timeout; an attached shared server is never stopped. 690-691 added 2026-09-23, ADR-0106: 690 the configured port could not be proven and the private fallback is started, naming the held port and the remedy; 691 the private backend could not prove at stop time, so nothing was sent and it is left to its idle timeout) |
+| 688-691 | Reserved since 1.57.2 removed `BackendSessions` private-backend shutdown and fallback warnings. Proof refusal is written to stderr as `Server.Unproven`; these IDs are not reused. |
 | 692 | `src/AiRaccoon/Hosting/Common/OwnerOnlyFile.cs` (added 2026-09-23, ADR-0106 D1: an owned state directory whose only leak is group/world read or execute was tightened to owner-only, 0700 — logged once by `serve` through `NodeRunner`; a group/world-writable or foreign-owned directory is still refused) |
 | 693 | `src/AiRaccoon/Hosting/Common/BackendLaunchArguments.cs` (added 2026-09-25, ADR-0116 follow-up: `ResolveExecutable` falls back off a missing own executable — the dotnet global-tool shim, then `PATH` — for a proxy whose resolved `Environment.ProcessPath` was deleted by `dotnet tool update`; logged once naming the missing own path and the fallback in use. New owner, since `BackendSessions`' 688-691 had no room to grow between `CliSettingsBackend`'s 687 and this file's own neighbor at 692) |
 | 694 | `src/AiRaccoon.Infrastructure/Sqlite/SqliteProjectDirectory.cs` (added 2026-10-04: the project directory registered an id — a guid, or a raw-text id the bank already holds rows for — through `POST /projects`; logged once per registration, never for an id that was already registered) |

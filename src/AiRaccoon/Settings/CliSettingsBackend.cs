@@ -8,8 +8,7 @@ namespace AiRaccoon.Settings;
 /// <summary>
 ///     Acquires the settings server for a CLI process (ADR-0075 §5.1): attach-or-start behind the
 ///     identity proof (ADR-0106). A proven listener on <see cref="ServerConfig.Port" /> is reused,
-///     nothing listening starts one there, and a holder that cannot prove gets a private fallback
-///     with a bounded idle timeout — never a secret byte to the unproven listener. The acquired
+///     confirmed connection refusal starts one there, and an unproven holder causes refusal. The acquired
 ///     backend is shared and outlives this command under its own idle timeout (ruling N1); the
 ///     disclosure line (<see cref="Log.BackendOutlivesCommand" />) fires once the acquire has a
 ///     live, token-checked store to hand back. An undialable --port is an <see cref="UndialablePortException" />;
@@ -63,7 +62,7 @@ internal static partial class CliSettingsBackend
         try
         {
             acquired = await BackendSessions.AcquireSharedAsync(probe, prover, launcher, executable, config,
-                BackendLaunchArguments.FallbackIdleTimeout, logger, ctx);
+                logger, ctx);
         }
         catch (BackendStartException ex)
         {
@@ -72,14 +71,19 @@ internal static partial class CliSettingsBackend
 
         if (acquired.Result.Url is null)
         {
-            throw new SettingsServerUnavailableException(acquired.Fallback ? ErrorCode.Reach.PrivateFallbackFailed : ErrorCode.Reach.Unavailable,
+            if (acquired.ProofFailure is { } failure)
+            {
+                throw new SettingsServerUnavailableException(ErrorCode.Server.Unproven, BackendSessions.Refusal(config.Port, failure));
+            }
+
+            throw new SettingsServerUnavailableException(ErrorCode.Reach.Unavailable,
                 $"ai-raccoon: no settings server at {ServerProbe.EndpointFor(config.Port)} " +
                 $"(serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})" +
                 (acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty));
         }
 
         // ADR-0107 PC.4: acquired.Result.Url is only ever non-null once identity is already proven
-        // (attach) or this process spawned the backend itself, so "another data root" never applies
+        // for both attach and start, so "another data root" never applies
         // here — RefusalReason (e.g. a chmod-700 remedy) is the real, actionable cause when set.
         var tokenFile = new McpTokenFile(config.Options);
         var token = tokenFile.Read() ?? throw new SettingsServerUnavailableException(ErrorCode.Server.NoToken,
@@ -88,7 +92,7 @@ internal static partial class CliSettingsBackend
 
         // F38 residual (owner ruling N1, 2026-09-22): the idle default stays intended, so this is
         // disclosure only — the backend survives this command; the line names the port that actually
-        // holds it (the fallback's ephemeral port included) and how to stop it.
+        // holds it and how to stop it.
         Log.BackendOutlivesCommand(logger, new Uri(acquired.Result.Url).Port);
         return new ServerSettingsStore(CreateClient(acquired.Result.Url), token, RequestDeadline);
     }

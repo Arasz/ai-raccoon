@@ -5,20 +5,13 @@ namespace AiRaccoon.Hosting.Common;
 /// <summary>
 ///     The launch identity a caller hands the backend launcher to acquire an
 ///     <c>ai-raccoon serve</c>: the flags every backend needs regardless of who is acquiring it
-///     (the proxy, or a CLI settings command, ADR-0075 §5.1) precede the verb. The private-spawn
-///     arguments pin <c>--port 0</c>; the attach arguments carry the configured port.
+///     (the proxy, or a CLI settings command) precede the verb and carry the configured port.
 /// </summary>
 internal static partial class BackendLaunchArguments
 {
     /// <summary>The dotnet host's own file name: what `Environment.ProcessPath` names under `dotnet run`,
     /// `dotnet exec`, or a dotnet-tool published without an apphost (a `dotnet &lt;dll&gt;` shim).</summary>
     private const string DotnetMuxerFileName = "dotnet";
-
-    /// <summary>
-    ///     How long a one-shot settings command's private fallback outlives it when the configured
-    ///     port could not be proven: the command exits immediately, so nothing else can stop it.
-    /// </summary>
-    public static readonly TimeSpan FallbackIdleTimeout = TimeSpan.FromMinutes(5);
 
     /// <summary>This binary's own filename on the dotnet global-tool shim and on PATH (".exe" on Windows).</summary>
     internal static string ExecutableFileName => OperatingSystem.IsWindows() ? "ai-raccoon.exe" : "ai-raccoon";
@@ -52,26 +45,6 @@ internal static partial class BackendLaunchArguments
             : "the running executable path is unknown";
 
     public static string[] ServeArguments(ServerConfig config) => Arguments(config, config.Port);
-
-    /// <summary>
-    ///     The private-spawn arguments (F70/K1): the same launch identity with <c>--port 0</c>, so
-    ///     the OS picks an ephemeral port and only this child can print the URL it bound. The
-    ///     launcher never probes the configured port on this path.
-    /// </summary>
-    public static string[] PrivateServeArguments(ServerConfig config) => Arguments(config, 0);
-
-    /// <summary>
-    ///     The private fallback arguments: the same ephemeral child, with an idle timeout when the
-    ///     caller must bound it (the one-shot settings fallback). Omitted, the child keeps the
-    ///     default idle watchdog and the proxy owns its stop (K1a).
-    /// </summary>
-    public static string[] PrivateServeArguments(ServerConfig config, TimeSpan? idleTimeout) =>
-        idleTimeout is { } idle ? [.. Arguments(config, 0), "--idle-timeout", FormatIdleTimeout(idle)] : Arguments(config, 0);
-
-    private static string FormatIdleTimeout(TimeSpan idle) =>
-        idle.TotalSeconds % 60 == 0
-            ? $"{(int)idle.TotalMinutes}m"
-            : $"{(int)idle.TotalSeconds}s";
 
     private static string[] Arguments(ServerConfig config, int port)
     {

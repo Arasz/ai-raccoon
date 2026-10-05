@@ -5,6 +5,8 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using AiRaccoon.Hosting.Proxy;
+using AiRaccoon.Hosting.Common;
+using AiRaccoon.Setup;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -19,8 +21,8 @@ namespace AiRaccoon.Tests.Integration.Setup.Serve;
 /// <summary>
 ///     BackendLauncher acceptance (ADR-0020): the proxy's stdout stays clean, a missing backend is
 ///     started and polled until it answers, an existing one is attached to without a spawn, a
-///     backend that cannot start fails inside the budget instead of hanging, and a private child
-///     that printed its URL and died is not handed back for the caller to dial (F70/K1 TOCTOU).
+///     backend that cannot start fails inside the budget instead of hanging. Occupied or inconclusive
+///     ports never authorize a new process.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -48,6 +50,87 @@ public sealed class BackendLauncherTests : IDisposable
         }
 
         TestData.DeleteTempRoot(_dataRoot);
+    }
+
+    [Theory]
+    [InlineData(ProbeVerdict.Answered)]
+    [InlineData(ProbeVerdict.Unanswered)]
+    public async Task AcquireShared_WhenAListenerAppearsBeforeLauncherProbe_StartsNothing(ProbeVerdict secondVerdict)
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the recording executable is a POSIX shell wrapper");
+        var marker = Path.Combine(_dataRoot, "raced-start");
+        var wrapper = Path.Combine(_dataRoot, "raced-wrapper");
+        await File.WriteAllTextAsync(wrapper, $"#!/bin/sh\necho started > '{marker}'\nexit 7\n", TestContext.Current.CancellationToken);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(wrapper, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        var probe = new ChangingProbe(secondVerdict);
+        var prover = new FakeIdentityProver();
+        var launcher = new BackendLauncher(probe, TimeSpan.FromSeconds(1), TimeProvider.System, NullLogger<BackendLauncher>.Instance);
+        var config = new ServerConfig(54321, McpTransport.Http, TestData.CreateInfrastructureOptions(_dataRoot));
+        var result = await BackendSessions.AcquireSharedAsync(probe, prover, launcher, wrapper, config,
+            NullLogger.Instance, TestContext.Current.CancellationToken);
+        File.Exists(marker).ShouldBeFalse();
+        result.Result.Url.ShouldBe(secondVerdict is ProbeVerdict.Answered ? UrlFor(54321) : null);
+        prover.Calls.Count.ShouldBe(secondVerdict is ProbeVerdict.Answered ? 1 : 0);
+    }
+
+    [Fact]
+    public async Task Acquire_WhenCancellationArrivesWithRefusal_DoesNotStart()
+    {
+        using var caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var probe = new ChangingProbe(ProbeVerdict.NotListening, caller);
+        var launcher = new BackendLauncher(probe, TimeSpan.FromSeconds(1), TimeProvider.System, NullLogger<BackendLauncher>.Instance);
+        await Should.ThrowAsync<OperationCanceledException>(() => launcher.AcquireAsync(54321,
+            "ai-raccoon-no-such-executable", [], caller.Token));
+    }
+
+    private sealed class ChangingProbe(ProbeVerdict next, CancellationTokenSource? cancellation = null) : IServerProbe
+    {
+        private bool _first = true;
+        public Task<ProbeVerdict> ProbeAsync(int port, CancellationToken ctx)
+        {
+            cancellation?.Cancel();
+            var verdict = _first ? ProbeVerdict.NotListening : next;
+            _first = false;
+            return Task.FromResult(verdict);
+        }
+        public Task<ProbeVerdict> ProbeAsync(Uri endpoint, CancellationToken ctx) => ProbeAsync(endpoint.Port, ctx);
+        public async Task<bool> RespondsAsync(int port, CancellationToken ctx) => await ProbeAsync(port, ctx) is ProbeVerdict.Answered;
+        public Task<bool> RespondsAsync(Uri endpoint, CancellationToken ctx) => RespondsAsync(endpoint.Port, ctx);
+    }
+
+    [Fact]
+    public async Task Acquire_WhenStartedChildExitsAndLastChanceIsInconclusive_ReturnsNoUrlAndStartsOnce()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the recording child uses a POSIX shell");
+        var marker = Path.Combine(_dataRoot, "last-chance-starts");
+        var launcher = new BackendLauncher(new ChangingProbe(ProbeVerdict.Unanswered),
+            TimeSpan.FromSeconds(1), TimeProvider.System, NullLogger<BackendLauncher>.Instance);
+        var result = await launcher.AcquireAsync(54321, "sh", ["-c", $"echo started >> '{marker}'; exit 7"], TestContext.Current.CancellationToken);
+        result.Url.ShouldBeNull();
+        result.ServeExitCode.ShouldBe(7);
+        (await File.ReadAllLinesAsync(marker, TestContext.Current.CancellationToken)).ShouldBe(["started"]);
+    }
+
+    [Fact]
+    public async Task Acquire_WithAnInconclusiveProbe_DoesNotStart()
+    {
+        var marker = Path.Combine(_dataRoot, "started");
+        var launcher = new BackendLauncher(new FakeServerProbe(ProbeVerdict.Unanswered),
+            TimeSpan.FromSeconds(1), TimeProvider.System, NullLogger<BackendLauncher>.Instance);
+        var result = await launcher.AcquireAsync(54321, "sh", ["-c", $"echo started > '{marker}'"], TestContext.Current.CancellationToken);
+        result.Url.ShouldBeNull();
+        File.Exists(marker).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Acquire_WithARespondingForeignHttpListener_DoesNotStart()
+    {
+        var port = HoldListener(ForeignServerResponse);
+        var result = await Launcher().AcquireAsync(port, "/no-such-executable", [], TestContext.Current.CancellationToken);
+        result.Url.ShouldBeNull();
     }
 
     [RetryFact]
@@ -123,25 +206,6 @@ public sealed class BackendLauncherTests : IDisposable
     }
 
     [RetryFact]
-    public async Task Acquire_WhenTheBackendCannotStart_FailsWithinTheBudget()
-    {
-        using var env = await AcquireCleanEnvAsync(TestContext.Current.CancellationToken);
-        var port = HoldListener(ForeignServerResponse);
-
-        var result = await Launcher().AcquireAsync(port, ServeExecutable, ServeArguments(port),
-            TestContext.Current.CancellationToken);
-
-        result.Url.ShouldBeNull();
-        // ServeExitCode IS the fast-path/budget-expiry discriminator, so no clock is needed to
-        // tell them apart: the HasExited fast path reports the child's exit code, and budget
-        // expiry reports null — see Acquire_WhenTheBackendNeverAnswers_GivesUpAtTheBudget, which
-        // asserts exactly that null on the other path. This used to also assert
-        // `stopwatch.Elapsed < 20s`, which added no discrimination and could only ever go red
-        // because the host was busy (owner ruling 2026-08-22: no test asserts wall clock).
-        result.ServeExitCode.ShouldBe(ErrorCode.Port.InUse);
-    }
-
-    [RetryFact]
     public async Task Acquire_WhenTheBackendNeverAnswers_GivesUpAtTheBudget()
     {
         using var lease = LoopbackPort.Reserve();
@@ -193,129 +257,11 @@ public sealed class BackendLauncherTests : IDisposable
         result.ServeStderr.ShouldContain("could not decrypt the bank");
     }
 
-    /// <summary>
-    ///     F70/K1 private spawn: the URL is taken only from the child's own stdout. A child that
-    ///     prints it is trusted, whatever else might be listening; this test's child is a shell so
-    ///     the mechanics are pinned without a real serve.
-    /// </summary>
-    [RetryFact]
-    public async Task StartPrivate_WhenTheChildReportsAUrl_ReturnsThatUrl()
-    {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake child is a POSIX shell script");
-
-        var result = await Launcher().StartPrivateAsync("sh",
-            ["-c", "echo http://127.0.0.1:54321/mcp; sleep 1"], TestContext.Current.CancellationToken);
-
-        result.Url.ShouldBe("http://127.0.0.1:54321/mcp");
-        result.ServeExitCode.ShouldBeNull();
-    }
-
-    /// <summary>
-    ///     The defect this gates: a child that starts and then fails used to leave the operator with
-    ///     a bare exit code, exactly as on the attach path.
-    /// </summary>
-    [RetryFact]
-    public async Task StartPrivate_WhenTheChildExitsWithStderr_SurfacesItInTheResult()
-    {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake failing child is a POSIX shell script");
-
-        var result = await Launcher().StartPrivateAsync("sh",
-            ["-c", "echo 'ai-raccoon: could not decrypt the bank' 1>&2; exit 7"], TestContext.Current.CancellationToken);
-
-        result.Url.ShouldBeNull();
-        result.ServeExitCode.ShouldBe(7);
-        result.ServeStderr.ShouldNotBeNull();
-        result.ServeStderr.ShouldContain("could not decrypt the bank");
-    }
-
-    /// <summary>
-    ///     The defect this gates: a child that printed its URL and exited left the URL in the
-    ///     return value, and the caller then dialled the freed ephemeral port — where a racer
-    ///     binding it would receive the token. The child's death has to reach the caller instead.
-    /// </summary>
-    [RetryFact]
-    public async Task StartPrivate_WhenTheChildPrintsAUrlThenExits_DoesNotReturnTheUrl()
-    {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake child is a POSIX shell script");
-
-        var result = await Launcher().StartPrivateAsync("sh",
-            ["-c", "echo http://127.0.0.1:54321/mcp; exit 7"], TestContext.Current.CancellationToken);
-
-        result.Url.ShouldBeNull("a URL from a child that already exited must never be dialled");
-        result.ServeExitCode.ShouldBe(7);
-    }
-
     /// <summary>A child that never prints a URL is given the same budget as the attach path.</summary>
-    [RetryFact]
-    public async Task StartPrivate_WhenTheChildNeverReportsAUrl_GivesUpAtTheBudget()
-    {
-        var clock = new FakeTimeProvider();
-        var timers = new TimerRegistrations(clock);
-        var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
-            timers, NullLogger<BackendLauncher>.Instance);
 
-        var acquire = launcher.StartPrivateAsync("sleep", ["10"], TestContext.Current.CancellationToken);
-        (await timers.WaitForAsync(2, TestContext.Current.CancellationToken))
-            .ShouldBeTrue("the launcher never registered its timers");
-        acquire.IsCompleted.ShouldBeFalse();
-
-        clock.Advance(BackendLauncher.DefaultBudget);
-        var result = await acquire.WaitAsync(TestContext.Current.CancellationToken);
-
-        result.Url.ShouldBeNull();
-        result.ServeExitCode.ShouldBeNull();
-    }
-
-    /// <summary>
-    ///     The defect this gates: a private child that never reported its URL was left running once
-    ///     the budget expired. Nothing else holds it — the caller got no URL to stop it through — so
-    ///     the launcher that started it must stop it.
-    /// </summary>
-    [RetryFact]
-    public async Task StartPrivate_WhenTheChildNeverReportsAUrl_StopsItAtTheBudget()
-    {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake child is a POSIX shell script");
-        var clock = new FakeTimeProvider();
-        var timers = new TimerRegistrations(clock);
-        var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
-            timers, NullLogger<BackendLauncher>.Instance);
-        var pidFile = Path.Combine(_dataRoot, "child.pid");
-
-        var start = launcher.StartPrivateAsync("sh", SilentChild(pidFile), TestContext.Current.CancellationToken);
-        (await timers.WaitForAsync(2, TestContext.Current.CancellationToken))
-            .ShouldBeTrue("the launcher never registered its timers");
-        var pid = await ChildPidAsync(pidFile);
-
-        clock.Advance(BackendLauncher.DefaultBudget);
-        var result = await start.WaitAsync(TestContext.Current.CancellationToken);
-
-        result.Url.ShouldBeNull();
-        (await ExitsWithinAsync(pid, TimeSpan.FromSeconds(10))).ShouldBeTrue(
-            $"the private child (pid {pid}) never reported a URL but is still running after the budget expired");
-    }
 
     /// <summary>A caller that gives up mid-start leaves nobody holding the child either.</summary>
-    [RetryFact]
-    public async Task StartPrivate_WhenTheCallerCancels_StopsTheChild()
-    {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "the fake child is a POSIX shell script");
-        var clock = new FakeTimeProvider();
-        var timers = new TimerRegistrations(clock);
-        var launcher = new BackendLauncher(TestData.CreateServerProbe(), BackendLauncher.DefaultBudget,
-            timers, NullLogger<BackendLauncher>.Instance);
-        var pidFile = Path.Combine(_dataRoot, "child.pid");
-        using var caller = new CancellationTokenSource();
 
-        var start = launcher.StartPrivateAsync("sh", SilentChild(pidFile), caller.Token);
-        (await timers.WaitForAsync(2, TestContext.Current.CancellationToken))
-            .ShouldBeTrue("the launcher never registered its timers");
-        var pid = await ChildPidAsync(pidFile);
-        await caller.CancelAsync();
-
-        await Should.ThrowAsync<OperationCanceledException>(() => start.WaitAsync(TestContext.Current.CancellationToken));
-        (await ExitsWithinAsync(pid, TimeSpan.FromSeconds(10))).ShouldBeTrue(
-            $"the private child (pid {pid}) is still running after its caller cancelled the start");
-    }
 
     [RetryFact]
     public async Task Acquire_WhenTheBackendCannotBeStarted_FailsWithTheCommandItTried()
@@ -369,48 +315,6 @@ public sealed class BackendLauncherTests : IDisposable
         TimeProvider.System, NullLogger<BackendLauncher>.Instance);
 
     private static string UrlFor(int port) => $"http://127.0.0.1:{port}/mcp";
-
-    /// <summary>A child that records its pid, then outlives any budget without printing a URL.</summary>
-    private static string[] SilentChild(string pidFile) => ["-c", "echo $$ > \"$0.tmp\" && mv \"$0.tmp\" \"$0\"; exec sleep 60", pidFile];
-
-    private static async Task<int> ChildPidAsync(string pidFile)
-    {
-        using var bound = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        bound.CancelAfter(TimeSpan.FromSeconds(10));
-        while (!File.Exists(pidFile))
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(20), bound.Token);
-        }
-
-        return int.Parse((await File.ReadAllTextAsync(pidFile, bound.Token)).Trim(), CultureInfo.InvariantCulture);
-    }
-
-    private static async Task<bool> ExitsWithinAsync(int pid, TimeSpan bound)
-    {
-        Process process;
-        try
-        {
-            process = Process.GetProcessById(pid);
-        }
-        catch (ArgumentException)
-        {
-            return true;
-        }
-
-        using (process)
-        {
-            try
-            {
-                await process.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(bound);
-                return true;
-            }
-            catch (TimeoutException)
-            {
-                RaccoonProcess.KillTree(process);
-                return false;
-            }
-        }
-    }
 
     /// <summary>A short idle timeout so a spawned backend retires on its own — nothing here ever kills it.</summary>
     private string[] ServeArguments(int port) =>

@@ -190,7 +190,7 @@ environment or the product first.
 | 61 | `Reach.NothingListening` | `serve observability`: nothing is listening on the port. | no |
 | 62 | `Reach.StoppedAnswering` | A settings server was acquired but a request failed at the transport (connection reset, timeout); the write certainly did not land. | yes |
 | 63 | `Reach.BackendUnavailable` | The proxy found no backend on the port and could not start one there. | yes |
-| 64 | `Reach.PrivateFallbackFailed` | The proxy's listener did not prove its identity, and the private fallback backend could not be started either. | yes |
+| 64 | Reserved (formerly `Reach.PrivateFallbackFailed`) | Automatic private fallback was removed in 1.57.2; an unproven listener now refuses with 50 under ADR-0128. | no |
 | 65 | `Reach.StartFailed` | The backend executable could not be started as a process. | no |
 | 66 | `Reach.AutoStartUnsupported` | This process cannot auto-start a backend: launched through the dotnet host, or its executable path is unknown. | no |
 
