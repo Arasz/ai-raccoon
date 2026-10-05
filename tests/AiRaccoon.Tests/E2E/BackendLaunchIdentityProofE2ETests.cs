@@ -357,8 +357,10 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             {
                 (await proxy.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
                 (await WaitUntilGoneAsync(childPid)).ShouldBeTrue("the proven child must be stopped with the proxy");
-                ReadQuietLog().ShouldContain($"shutdown requested over /shutdown; stopping pid {childPid}");
-                (proxy.Stderr + ReadQuietLog()).ShouldNotContain("no longer proves");
+                var quietLog = ReadQuietLog();
+                quietLog.ShouldContain(
+                    $"the private backend at http://127.0.0.1:{childPort}/mcp stopped with this proxy — it was started for this proxy only");
+                (proxy.Stderr + quietLog).ShouldNotContain("no longer proves");
                 return;
             }
 
