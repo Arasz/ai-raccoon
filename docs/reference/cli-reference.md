@@ -56,6 +56,10 @@ without it, stderr may carry the backend-acquire notice. A blank argument exits 
 server is contacted. They reach the server like every other routed verb and never open the
 bank, so a server older than `/projects` exits 57.
 
+Registration refuses the nil GUID (exit 10). A supplied `--name` must be nonblank,
+at most 200 characters, and contain no control characters. Only direct registration can
+fill an unset name; registering an alias leaves the winner unchanged.
+
 ## settings
 
 Every family below lives under `ai-raccoon settings <family> …`, except the operations

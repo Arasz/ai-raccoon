@@ -423,8 +423,7 @@ tool it is (see [ADR-0024](../adr/0024-unknown-id-contract.md)):
   that was never begun.
 - **An unregistered `projectId` is refused on every call, reads included, not silently founded.**
   ADR-0089 decision 3, amended by ADR-0127: a call is refused (`project-not-registered`, see
-  [Error shapes](#error-shapes)) unless the id is registered (`project_id_get`,
-  `project_id_token_get`, or `ai-raccoon project id register <id>`) or the bank already holds rows
+  [Error shapes](#error-shapes)) unless the id is registered (`project_id_token_get` or `ai-raccoon project id register <id>`) or the bank already holds rows
   for it (a legacy id, which keeps working with a one-time warning, EventId 433). Reads never
   register an id; until a project-ids repair finishes, a write under an unregistered raw-text id
   still registers it. The only calls that pass without a registered id are `project_id_token_get`,

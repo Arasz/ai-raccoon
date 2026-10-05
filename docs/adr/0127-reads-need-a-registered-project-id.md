@@ -80,7 +80,8 @@ The research record is `docs/work/2026-10-04-unregistered-project-id-research.md
        `already registered <winner>` and writes no row.
      - A retired id is refused.
      - A raw-text id that is neither registered nor row-holding is refused as not a guid.
-     - The first non-null name wins, so a later `--name` fills a NULL name.
+     - The first non-null name wins, so a later direct registration with `--name` fills a NULL
+       name. Registering an alias leaves the winner's name unchanged.
    - `project id get --name <n>` prints the stored id. Raw-text legacy ids are printed as stored.
    - `project id check <id>` reports `known`, `unknown` or `retired`.
    - All three reach the server over the `/projects` endpoint. The CLI never opens the bank.

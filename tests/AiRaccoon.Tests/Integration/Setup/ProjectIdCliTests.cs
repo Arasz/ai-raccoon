@@ -160,8 +160,8 @@ public sealed class ProjectIdCliTests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     The cross-step chain: a registered id passes a read over MCP and a settings write; an
-    ///     unregistered one is refused by the read.
+    ///     The cross-step chain: register, look up, read, set access and check the same id, while
+    ///     reads and settings writes under an unknown id are refused.
     /// </summary>
     [RetryFact]
     public async Task RegisterThenSearchAndSettings_ChainOverOneServer()
@@ -180,6 +180,15 @@ public sealed class ProjectIdCliTests : IAsyncLifetime
 
         var set = await RunAsync(["--quiet", "settings", "access", "set", Fresh, "ro"]);
         set.ExitCode.ShouldBe(0, set.Stderr);
+
+        var refused = await RunAsync(["--quiet", "settings", "access", "set", "0199a1b2-0000-7000-8000-0000000000ff", "ro"]);
+        refused.ExitCode.ShouldBe(ErrorCode.Usage.ProjectUnknown, refused.Stderr);
+        refused.Stdout.ShouldBeEmpty();
+
+        var check = await RunAsync(["--quiet", "project", "id", "check", Fresh]);
+        check.ExitCode.ShouldBe(0, check.Stderr);
+        check.Stdout.ShouldBe("known " + Fresh + Environment.NewLine);
+        check.Stderr.ShouldBeEmpty();
     }
 
     /// <summary>The settings half of the chain: a write under an id no project owns is refused with the project exit.</summary>
