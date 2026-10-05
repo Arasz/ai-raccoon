@@ -10,9 +10,7 @@ namespace AiRaccoon.Tests.E2E;
 
 /// <summary>
 ///     The built proxy driven over raw JSON-RPC on its stdio, the way a well-behaved MCP client ends
-///     a session: close stdin and wait. The SDK's stdio client waits out its shutdown timeout before
-///     it closes stdin and then kills the tree, so the proxy's own shutdown — proving and stopping its
-///     private backends — never runs under it; this driver lets it run.
+///     a session: close stdin and wait for the proxy's own session cleanup to finish.
 /// </summary>
 internal sealed class ProxyProcess : IAsyncDisposable
 {
