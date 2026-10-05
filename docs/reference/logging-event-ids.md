@@ -195,7 +195,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 613-614 | `src/AiRaccoon/Hosting/Watchdog/InstallWatchdog.cs` (added 2026-09-25, ADR-0116: shuts the serve host down cleanly once its own install directory has been removed, most likely by `dotnet tool update -g ai-raccoon` replacing it out from under a still-running backend — automates ADR-0022's manual `serve --restart`; 613 is the one warning logged before stopping, 614 a failed check that leaves the loop to retry) |
 | 620-623 | `src/AiRaccoon/Hosting/Node/ObservabilityRunner.cs` (landed in `4c4be1c`, #109) |
 | 630 | `src/AiRaccoon/Hosting/Proxy/ProxyRunner.cs` (ADR-0020) |
-| 631-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs`: 633 starts the shared backend, 634 reports it live, 635 reports startup failure. 631-632 are reserved since 1.57.2 removed automatic private backend startup. |
+| 631-635 | `src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs`: 633 starts the shared backend, 634 reports it answering (pre-proof; proven only after the identity challenge), 635 reports startup failure. 631-632 are reserved since 1.57.2 removed automatic private backend startup. |
 | 636-639 | `src/AiRaccoon/Hosting/Proxy/ProxyForwarder.cs` (ADR-0020) |
 | 640 | `src/AiRaccoon/Observability/OtlpExport.cs` (ADR-0009; OTLP export disabled warning) |
 | 650-657 | `src/AiRaccoon/Hosting/Node/ServerRestart.cs` (ADR-0022; 656 is the unanswered probe, ADR-0043; 657 is the unproven-listener refusal before the token is read, ADR-0106) |

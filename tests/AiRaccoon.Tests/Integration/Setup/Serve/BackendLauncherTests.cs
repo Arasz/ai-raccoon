@@ -122,6 +122,7 @@ public sealed class BackendLauncherTests : IDisposable
             TimeSpan.FromSeconds(1), TimeProvider.System, NullLogger<BackendLauncher>.Instance);
         var result = await launcher.AcquireAsync(54321, "sh", ["-c", $"echo started > '{marker}'"], TestContext.Current.CancellationToken);
         result.Url.ShouldBeNull();
+        result.ServeStderr.ShouldNotBeNull().ShouldContain("inconclusive");
         File.Exists(marker).ShouldBeFalse();
     }
 
@@ -131,6 +132,7 @@ public sealed class BackendLauncherTests : IDisposable
         var port = HoldListener(ForeignServerResponse);
         var result = await Launcher().AcquireAsync(port, "/no-such-executable", [], TestContext.Current.CancellationToken);
         result.Url.ShouldBeNull();
+        result.ServeStderr.ShouldNotBeNull().ShouldContain("inconclusive");
     }
 
     [RetryFact]

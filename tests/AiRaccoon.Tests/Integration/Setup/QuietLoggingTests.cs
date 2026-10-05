@@ -286,10 +286,10 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         stdout.ShouldBeEmpty();
         stderr.ShouldNotContain(FallbackWarning);
         stderr.ShouldContain("no extra backend was started", Case.Sensitive);
-        if (File.Exists(LogFilePath(options)))
-        {
-            File.ReadAllText(LogFilePath(options)).ShouldNotContain(FallbackWarning);
-        }
+        // Quiet mode opens the log file at provider construction even when nothing is written,
+        // so its existence is asserted unconditionally: a missing file must fail, not skip.
+        File.Exists(LogFilePath(options)).ShouldBeTrue("quiet mode always opens its log file");
+        File.ReadAllText(LogFilePath(options)).ShouldNotContain(FallbackWarning);
     }
 
     /// <summary>The actionable refusal also reaches stderr without quiet mode.</summary>

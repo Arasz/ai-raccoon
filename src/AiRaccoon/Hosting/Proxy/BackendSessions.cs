@@ -39,7 +39,7 @@ public sealed class BackendSessions(
     /// <summary>Makes disposal idempotent: a second dispose must not re-stop (or re-fail) anything.</summary>
     private bool _disposed;
 
-    /// <summary>The endpoint the last successful acquire returned; empty until one succeeds.</summary>
+    /// <summary>The endpoint the last successful acquire returned; empty until one succeeds. A failed open leaves the previous value unchanged, so readers must only use it after a successful OpenAsync.</summary>
     public string Url { get; private set; } = string.Empty;
 
     public async Task<McpClient> OpenAsync(string? revision, CancellationToken ctx)
@@ -106,27 +106,27 @@ public sealed class BackendSessions(
             ctx.ThrowIfCancellationRequested();
             if (started.Url is null)
             {
-                return new AcquireOutcome(started, verdict, null);
+                return new AcquireOutcome(started, null);
             }
 
             var failure = await prover.ProveAsync(new Uri(started.Url), ctx);
             ctx.ThrowIfCancellationRequested();
             if (failure is null)
             {
-                return new AcquireOutcome(started, ProbeVerdict.Answered, null);
+                return new AcquireOutcome(started, null);
             }
 
-            return new AcquireOutcome(started with { Url = null }, verdict, failure);
+            return new AcquireOutcome(started with { Url = null }, failure);
         }
 
         var proofFailure = await prover.ProveAsync(endpoint, ctx);
         ctx.ThrowIfCancellationRequested();
         if (proofFailure is null)
         {
-            return new AcquireOutcome(new BackendResult(endpoint.ToString(), null), verdict, null);
+            return new AcquireOutcome(new BackendResult(endpoint.ToString(), null), null);
         }
 
-        return new AcquireOutcome(new BackendResult(null, null), verdict, proofFailure);
+        return new AcquireOutcome(new BackendResult(null, null), proofFailure);
     }
 
     private async Task<AcquireOutcome> AcquireBackend(CancellationToken ctx)
@@ -199,6 +199,6 @@ public sealed class BackendSessions(
     internal static string Refusal(int port, IdentityProofFailure failure) =>
         $"ai-raccoon: the listener at {ServerProbe.EndpointFor(port)} is unproven ({IdentityProof.RefusalText(failure)}); no extra backend was started — check the data root and identity key, or explicitly stop the conflicting server before retrying";
 
-    /// <summary>A URL is returned only after the endpoint proves this root's identity.</summary>
-    internal readonly record struct AcquireOutcome(BackendResult Result, ProbeVerdict Verdict, IdentityProofFailure? ProofFailure);
+    /// <summary>A URL is returned only after the endpoint proves this root's identity. The initial probe verdict is consumed inside the acquire and never carried: callers branch on Url/ProofFailure only.</summary>
+    internal readonly record struct AcquireOutcome(BackendResult Result, IdentityProofFailure? ProofFailure);
 }

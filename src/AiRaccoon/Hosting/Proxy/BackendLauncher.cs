@@ -38,7 +38,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         Guard.IsGreaterThan(_budget, TimeSpan.Zero);
     }
 
-    /// <summary>Returns an answering endpoint, starting the command only after confirmed connection refusal.</summary>
+    /// <summary>Returns an answering endpoint, starting the command only after confirmed connection refusal. A returned URL is answering, not yet proven: the caller proves identity before any token rides.</summary>
     public async Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments,
         CancellationToken ctx)
     {
@@ -49,13 +49,16 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         var verdict = await _probe.ProbeAsync(port, ctx);
         if (verdict is ProbeVerdict.Answered)
         {
-            Log.BackendLive(_logger, url);
+            Log.BackendAnswering(_logger, url);
             return new BackendResult(url, null);
         }
 
         if (verdict is not ProbeVerdict.NotListening)
         {
-            return new BackendResult(null, null);
+            // Inconclusive (timeout, reset, foreign HTTP): the port may still be held, so no
+            // start is authorized. Carry the reason in ServeStderr so the refusal names it.
+            return new BackendResult(null, null,
+                $"the probe of port {port} was inconclusive ({verdict}); startup requires confirmed connection refusal");
         }
 
         ctx.ThrowIfCancellationRequested();
@@ -74,7 +77,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
             {
                 if (await _probe.RespondsAsync(port, waiting.Token))
                 {
-                    Log.BackendLive(_logger, url);
+                    Log.BackendAnswering(_logger, url);
                     return new BackendResult(url, null);
                 }
 
@@ -95,9 +98,9 @@ internal sealed partial class BackendLauncher : IBackendLauncher
             // One last probe: another starter may have won the port between the two. It gets its own
             // bound, because the budget token may already be spent.
             ctx.ThrowIfCancellationRequested();
-            if (await ProbeWithinAsync(port, LastChanceBudget, ctx))
+            if (await ProbeVerdictWithinAsync(port, LastChanceBudget, ctx) is ProbeVerdict.Answered)
             {
-                Log.BackendLive(_logger, url);
+                Log.BackendAnswering(_logger, url);
                 return new BackendResult(url, null);
             }
         }
@@ -105,18 +108,18 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         return GaveUp(url, backend.HasExited ? backend.ExitCode : null, stderr.Snapshot());
     }
 
-    /// <summary>A probe under its own bound: the bound expiring is a miss, the caller's token is not.</summary>
-    private async Task<bool> ProbeWithinAsync(int port, TimeSpan bound, CancellationToken cancellationToken)
+    /// <summary>A probe under its own bound, keeping the three-state verdict: the bound expiring is Unanswered, the caller's token is not.</summary>
+    private async Task<ProbeVerdict> ProbeVerdictWithinAsync(int port, TimeSpan bound, CancellationToken cancellationToken)
     {
         using var boundary = new CancellationTokenSource(bound, _timeProvider);
         using var probing = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, boundary.Token);
         try
         {
-            return await _probe.RespondsAsync(port, probing.Token);
+            return await _probe.ProbeAsync(port, probing.Token);
         }
         catch (OperationCanceledException) when (boundary.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            return false;
+            return ProbeVerdict.Unanswered;
         }
     }
 
@@ -213,8 +216,8 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         [LoggerMessage(EventId = 633, Level = LogLevel.Information, Message = "ai-raccoon: starting the backend on port {Port}")]
         public static partial void StartingBackend(ILogger logger, int port);
 
-        [LoggerMessage(EventId = 634, Level = LogLevel.Debug, Message = "ai-raccoon: backend live at {Url}")]
-        public static partial void BackendLive(ILogger logger, string url);
+        [LoggerMessage(EventId = 634, Level = LogLevel.Debug, Message = "ai-raccoon: backend answering at {Url} (identity proof pending)")]
+        public static partial void BackendAnswering(ILogger logger, string url);
 
         [LoggerMessage(EventId = 635, Level = LogLevel.Error,
             Message = "ai-raccoon: the backend at {Url} did not answer within {BudgetSeconds}s (serve exit {ServeExitCode}) stderr: {ServeStderr}")]
