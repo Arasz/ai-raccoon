@@ -59,6 +59,7 @@ bank, so a server older than `/projects` exits 57.
 Registration refuses the nil GUID (exit 10). A supplied `--name` must be nonblank,
 at most 200 characters, and contain no control characters. Only direct registration can
 fill an unset name; registering an alias leaves the winner unchanged.
+Project settings alias resolution never rewrites a per-project key into a machine-global key.
 
 ## settings
 

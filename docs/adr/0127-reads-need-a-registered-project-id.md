@@ -71,6 +71,8 @@ The research record is `docs/work/2026-10-04-unregistered-project-id-research.md
    - **Exceptions.** A scope write whose new list is a subset of the stored list passes, and so
      does the `*` wildcard. DELETE routes are unaffected, so stale per-project state can always be
      removed.
+   - Alias resolution never rewrites a per-project key into a machine-global key. Repair
+     preserves machine-global keys when an alias map contains the literal `global` owner.
    - **Consequence.** A raw-text id that is neither registered nor holding rows cannot take
      `ingest scope add` or `watch enable` until it is registered; an id that holds rows passes.
 
