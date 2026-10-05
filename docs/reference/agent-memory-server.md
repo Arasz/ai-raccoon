@@ -517,11 +517,11 @@ against the bank (results to stdout), bare `ai-raccoon` (with optional launch fl
 runs the server. A server-routed verb (`settings …`, `model …`, `watch registered`,
 `noise entries`, `repair`, …) reaches its backend the same way the proxy does:
 attach-or-start behind a cryptographic proof of backend identity
-([ADR 0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), reverting
-[ADR 0105](../adr/0105-private-spawn-is-the-launch-default.md)). A **proven** listener
-already on `--port` is attached to; nothing answering starts one there; a listener that
-cannot prove it holds this root's identity key gets a bounded, idle-timed private
-fallback instead of the shared backend. A shared backend (whether attached to or just
+([ADR-0128](../adr/0128-refuse-unproven-backend-without-private-fallback.md),
+retaining the identity protocol from ADR-0106). A proven listener on `--port` is
+attached to. Connection refusal permits startup there. Failed proof causes
+refusal without starting another backend. An inconclusive probe never permits
+startup, but valid identity proof can still permit attachment. A shared backend (whether attached to or just
 started) is shared and outlives the command under the 4h idle watchdog, so the command
 says so on stderr and names how to stop it:
 `ai-raccoon: the backend on port <n> keeps running after this command exits, under its
@@ -532,7 +532,7 @@ own idle timeout — stop it with ai-raccoon serve --restart --port <n>`.
 | `--transport` | `proxy`, `http` (`stdio` and `https` are rejected at parse) | `proxy` |
 | `--data-root <path>` | any (`~` expanded) | `~/.ai-raccoon` |
 | `--install-scope` | `user`, `project` | `user` |
-| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only, and the default proxy picks its own ephemeral port for a private fallback | `7721` |
+| `--port <n>` | `1`-`65535`; `0` (random free port) is `serve`-only | `7721` |
 | `--quiet` | flag | off |
 
 `--attach` no longer exists — root and `serve` spellings alike; passing it is an
@@ -547,22 +547,19 @@ configured port and, when a listener there proves it holds this root's identity 
 over a bounded `POST /identity/prove` challenge, attaches to it and starts nothing —
 this process never dials `/mcp` on an unproven listener, so a process that merely
 holds the configured port cannot receive the loopback token or a tool payload
-([ADR 0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), F70). Nothing
-answering the probe starts `ai-raccoon serve --port <configured>` there instead, taking
-the bound URL from that child's stdout alone. A listener that answers but cannot prove
-(wrong root, no key, or the probe times out) makes the proxy fall back to its own
-private `ai-raccoon serve --port 0` backend — proof-gated too, so a racer on the
-fallback child's ephemeral port still gets nothing. That private backend is the
-proxy's alone and stops with it over the token-guarded `POST /shutdown`, proving the
-listener again immediately before the stop request; a shared backend (attached to, or
-started on the configured port) is never stopped by this process — it serves other
-clients too. No tool method is named in the proxy, so a new tool needs no proxy
-change. If neither an attach, a fresh start, nor the private fallback can produce a
-working backend within budget, the process exits `ErrorCode.Reach.BackendUnavailable`
-(63) with one stderr line of this exact form (`BackendSessions.Unavailable()`):
-`ai-raccoon: {reason}; no in-process fallback exists — start the backend first: ai-raccoon serve --port <port>`
-(`{reason}` names the failure: the URL, the serve exit code, and any captured
-backend stderr tail). A `--port` the proxy cannot dial (`0`, or outside 1-65535) is a bad
+([ADR 0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), F70). Only connection refusal permits starting `ai-raccoon serve --port <configured>`.
+The launcher rechecks the three-state probe immediately before starting; an
+inconclusive result is not an absent listener. Failed proof, including failure
+of a listener returned by a new shared start, causes exit `50` (`Server.Unproven`)
+and never starts a private fallback. The existing server remains untouched.
+A shared backend serves other clients and outlives this proxy under its idle
+watchdog. Reopening repeats acquisition against the configured port.
+
+No tool method is named in the proxy, so a new tool needs no proxy change.
+Ordinary startup failure exits `63` (`Reach.BackendUnavailable`); failure to prove
+identity preserves the proof reason and names the configured endpoint. Both
+paths write a diagnostic to stderr, including under `--quiet`.
+A `--port` the proxy cannot dial (`0`, or outside 1-65535) is a bad
 value, not an unavailable backend: it exits 13 (`Usage.UndialablePort`) before anything is spawned, and so does a
 settings verb given one. A separate, earlier refusal applies before any of this: **F39**
 — a `--data-root` that resolves to neither the default root nor an existing bank
@@ -611,15 +608,12 @@ removal release.
 
 ### Serve mode
 
-Since ADR-0020, `serve` is not only a manual verb. The default `proxy`
-transport attaches to a proven backend already on its configured port, or
-starts one there when nothing answers, and stops that backend again when the
-proxy shuts down only if the proxy itself started it as a private fallback
-([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md)); a
-shared backend outlives the proxy. While the proxy lives, a client that
-connects and never calls a tool still leaves the backend running. This
-section describes `serve` itself, whether started by the proxy or run by
-hand.
+Since ADR-0020, `serve` is also the backend launched by the default proxy.
+The proxy attaches after identity proof, or starts on the configured port after
+confirmed connection refusal. It closes its sessions at exit but leaves the
+shared server running under the idle watchdog. Failed identification refuses
+acquisition without creating another backend ([ADR-0128](../adr/0128-refuse-unproven-backend-without-private-fallback.md)).
+This section describes `serve` itself, whether started by the proxy or by hand.
 
 `ai-raccoon serve` is the HTTP mode as a first-class verb: it forces the http
 transport, applies a 4h idle watchdog (`--idle-timeout 90s|30m|4h|1d`, `0`

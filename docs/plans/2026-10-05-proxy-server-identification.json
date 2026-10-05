@@ -1,0 +1,122 @@
+{
+  "task_id": "air-block-duplicate-backend-after-proof",
+  "task_description_ref": "docs/plans/2026-10-05-proxy-server-identification.md",
+  "task_context": "Planning-only artifact, not executed; configured-endpoint fail-closed acquisition retaining existing cryptographic proof. Three serial steps with S3 single integration sink.",
+  "loop": "low",
+  "source_refs": [
+    "src/AiRaccoon/Hosting/Proxy/BackendSessions.cs:136",
+    "src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs:144",
+    "src/AiRaccoon/Hosting/Common/ServerProbe.cs:42",
+    "src/AiRaccoon/Hosting/Proxy/IdentityProver.cs:140",
+    "src/AiRaccoon/Settings/CliSettingsBackend.cs:62",
+    "docs/adr/0106-attach-or-start-with-backend-identity-proof.md",
+    "tests/AiRaccoon.Tests/Unit/Hosting/BackendSessionsTests.cs",
+    "tests/AiRaccoon.Tests/Integration/Setup/Serve/BackendSessionsTokenExposureTests.cs",
+    "tests/AiRaccoon.Tests/E2E/BackendLaunchIdentityProofE2ETests.cs"
+  ],
+  "steps": [
+    {
+      "id": "s1",
+      "goal": "Refuse unproven acquisition and reproduce the live-server defect",
+      "instructions": "Write and observe RED for a real running ai-raccoon whose verifier trust anchor no longer matches; assert zero additional starts and original-server survival. Remove both automatic private fallback branches, retain proof failures, guard launcher starts with ProbeVerdict.NotListening, propagate cancellation, convert proxy and CLI consumers to Server.Unproven, and remove unreachable private lifecycle APIs after caller search. Preserve existing crypto, no-bank/no-token and executable-resolution controls. Convert fallback-dependent tests in this package; run scoped RED/GREEN and build.",
+      "effort": "high",
+      "depends_on": [],
+      "files": [
+        "src/AiRaccoon/Hosting/Proxy/BackendSessions.cs",
+        "src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs",
+        "src/AiRaccoon/Hosting/Proxy/IBackendLauncher.cs",
+        "src/AiRaccoon/Hosting/Common/BackendLaunchArguments.cs",
+        "src/AiRaccoon/Settings/CliSettingsBackend.cs",
+        "tests/AiRaccoon.Tests/Unit/Hosting/BackendSessionsTests.cs",
+        "tests/AiRaccoon.Tests/Unit/Setup/CliSettingsBackendTests.cs",
+        "tests/AiRaccoon.Tests/Integration/Setup/Serve/BackendLauncherTests.cs",
+        "tests/AiRaccoon.Tests/Integration/Setup/Serve/BackendSessionsTokenExposureTests.cs",
+        "tests/AiRaccoon.Tests/TestHelpers/FakeIdentityProver.cs",
+        "tests/AiRaccoon.Tests/TestHelpers/FakeServerProbe.cs"
+      ],
+      "acceptance_criteria": [
+        {
+          "id": "ac1",
+          "statement": "Real-server proof-fault reproduction first fails on extra starts, then passes with zero starts and original-server survival.",
+          "check": "dotnet test --filter FullyQualifiedName~BackendSessionsTokenExposureTests.Acquire_RealRunningServerWithChangedTrustAnchor_RefusesWithoutStartingBackend; require nonzero count and observed RED on extra starts, then GREEN with zero delegated starts and restored-key original-server proof."
+        },
+        {
+          "id": "ac2",
+          "statement": "All acquisition policy rows hold: only NotListening permits a start; a post-start proof failure returns no URL and invokes no second launch.",
+          "check": "Focused BackendSessionsTests and BackendLauncherTests with start/request counters; apply and revert NotListening guard and proof-fallback mutations, record RED/GREEN."
+        },
+        {
+          "id": "ac3",
+          "statement": "Proxy and CLI preserve proof failure as Server.Unproven without token-bearing requests, trust minting or stores; positive attach/start, no-bank/no-token, cancellation and executable-resolution controls remain valid.",
+          "check": "Focused consumer and token-exposure tests with nonzero counts and side effects, then dotnet build."
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "goal": "Prove executable behavior and reopen/security compatibility",
+      "instructions": "Add a marker-backed real-process integration test at the existing BackendSessions constructor processPath seam: a test wrapper records serve invocation before forwarding to the real binary. Fresh IdentityProver instances after trust-key replacement/restoration avoid cached signer state. Actual production proxy E2E uses real Environment.ProcessPath and asserts refusal, zero secret traffic, and original-server liveness; a startup wrapper cannot intercept its child path. Cover CLI/reopen via recording launcher counters. Update acquisition attacker cells to refusal, retain restart channel tests, retire removed private-dispose lifecycle tests with reasons. Obtain independent review-tests.",
+      "effort": "high",
+      "depends_on": [
+        "s1"
+      ],
+      "files": [
+        "tests/AiRaccoon.Tests/E2E/BackendLaunchIdentityProofE2ETests.cs",
+        "tests/AiRaccoon.Tests/E2E/ProxyProcess.cs",
+        "tests/AiRaccoon.Tests/Unit/Hosting/BackendSessionsTests.cs",
+        "tests/AiRaccoon.Tests/Unit/Setup/CliSettingsBackendTests.cs",
+        "tests/AiRaccoon.Tests/Integration/Setup/Serve/BackendSessionsTokenExposureTests.cs",
+        "tests/AiRaccoon.Tests/Integration/Setup/Serve/IdentityProofChannelTests.cs",
+        "tests/AiRaccoon.Tests/TestHelpers/BackendServeMarker.cs"
+      ],
+      "acceptance_criteria": [
+        {
+          "id": "ac4",
+          "statement": "Real-process acquisition through the existing processPath seam refuses the live-server proof fault with zero serve markers; actual proxy E2E refuses and preserves server liveness, while CLI and reopen have zero launcher calls.",
+          "check": "Scoped integration marker regression: baseline or restored fallback mutation records serve --port 0 and reddens the assertion, restored implementation passes; actual binary E2E and consumer controls verify composition, refusal and original-server liveness with nonzero counts."
+        },
+        {
+          "id": "ac5",
+          "statement": "Unproven acquire threat cells refuse while disclosing zero secrets; proven full flow and restart proof-channel security remain valid.",
+          "check": "Run affected threat-matrix and identity-channel tests with nonzero counts; list private-dispose test retirements and their removed production lifecycle."
+        },
+        {
+          "id": "ac6",
+          "statement": "Modified tests have independent review with no unresolved blocker/major finding and reconciled resource and RED/GREEN evidence.",
+          "check": "Independent review-tests report plus resource-control scan reconciliation and executed mutation evidence for modified checks."
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "goal": "Publish the new contract and close cross-consumer evidence",
+      "instructions": "Write an ADR superseding only private fallback in ADR-0106; update current server configuration, CLI/error and logging documentation and source comments. Keep numeric IDs reserved and historical research/changelogs historical. Review recorded tests against the user request and policy matrix; do not claim tests passed unless outputs prove nonzero executed counts.",
+      "effort": "medium",
+      "depends_on": [
+        "s2"
+      ],
+      "files": [
+        "docs/adr/0106-attach-or-start-with-backend-identity-proof.md",
+        "docs/adr/new-proxy-server-identification.md",
+        "docs/how-to/configure-ai-raccoon-server.md",
+        "docs/reference/cli-reference.md",
+        "docs/reference/logging-event-ids.md",
+        "src/AiRaccoon/Hosting/Proxy/BackendSessions.cs",
+        "src/AiRaccoon/Hosting/Proxy/BackendLauncher.cs",
+        "src/AiRaccoon/Settings/CliSettingsBackend.cs"
+      ],
+      "acceptance_criteria": [
+        {
+          "id": "ac7",
+          "statement": "Current docs agree with three-state probe policy, Server.Unproven refusal, endpoint scope, shared lifetime, reopen and concurrent starter limitations; crypto identification stays required.",
+          "check": "Scoped current fallback-guidance search and source-backed independent document/code review, including ADR supersession and reserved IDs."
+        },
+        {
+          "id": "ac8",
+          "statement": "Cross-consumer evidence proves startup, reopen and CLI use one acquisition policy and do not create an extra backend for responding, inconclusive or unproven endpoints.",
+          "check": "Review S1/S2 observed start/marker/request counts and one-start controls against every request point and final diff; all implementation ACs must be checked before completion."
+        }
+      ]
+    }
+  ]
+}

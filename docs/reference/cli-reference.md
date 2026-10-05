@@ -181,7 +181,7 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 42 | `Port.LostDuringRestart` | `serve --restart`: another server took the port while this one was starting | yes |
 | 43 | `Port.HeldUnanswered` | `serve --restart`: the port gave the probe no answer | no |
 | 44 | `Port.RestartTimedOut` | `serve --restart`: the server accepted shutdown but still held the port at the bound | no |
-| 50 | `Server.Unproven` | An ai-raccoon listener holds the port but did not prove it serves this data root (the message names why the proof failed) | no |
+| 50 | `Server.Unproven` | The configured listener could not prove it serves this data root; proxy/settings acquisition starts no additional backend (the message names why proof failed) | no |
 | 51 | `Server.NoToken` | This data root holds no token, so the server on the port cannot be asked anything | no |
 | 52 | `Server.RestartTokenRefused` | `serve --restart`: the server refused this root's token | no |
 | 53 | `Server.RequestTokenRefused` | A control-plane request got 401 | no |
@@ -195,7 +195,7 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 61 | `Reach.NothingListening` | `serve observability`: nothing is listening on the port | n/a |
 | 62 | `Reach.StoppedAnswering` | A settings server was acquired but a request failed at the transport | n/a |
 | 63 | `Reach.BackendUnavailable` | The proxy found no backend on the port and could not start one there | n/a |
-| 64 | `Reach.PrivateFallbackFailed` | The listener did not prove its identity and the private fallback could not start either | n/a |
+| 64 | Reserved (formerly `Reach.PrivateFallbackFailed`) | Automatic private fallback was removed in 1.57.2 | n/a |
 | 65 | `Reach.StartFailed` | The backend executable could not be started as a process | n/a |
 | 66 | `Reach.AutoStartUnsupported` | This process cannot auto-start a backend (launched through the `dotnet` host, or its path is unknown) | no |
 | 70 | `Model.DownloadFailed` | A model download failed after the plan was accepted; nothing half-installed is left | no |
