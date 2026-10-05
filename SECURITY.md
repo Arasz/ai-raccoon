@@ -34,7 +34,7 @@ network surface beyond an optional localhost HTTP endpoint. The honest threat mo
 
 | Surface                    | What it does                                                                                                                                                                            | Who controls the input                        |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------|
-| proxy transport (default)  | Reads MCP JSON-RPC from the client's stdin and forwards every message to a running ai-raccoon server over loopback HTTP: a **proven** listener on the configured port is attached to (ADR-0106), nothing listening means the proxy starts one on that port, and an unproven listener makes the client fall back to a private ephemeral backend. Opens no bank, holds no key, runs no tool. The only stdio shape left is this proxy wire: the `stdio` transport value was removed outright (ADR-0104) | The MCP client that launched the process      |
+| proxy transport (default)  | Reads MCP JSON-RPC from the client's stdin and forwards every message to a running ai-raccoon server over loopback HTTP: a **proven** listener on the configured port is attached to, confirmed connection refusal permits startup on that port, and an unproven listener causes refusal without another backend (ADR-0128). Opens no bank, mints no identity key, runs no tool. The only stdio shape left is this proxy wire: the `stdio` transport value was removed outright (ADR-0104) | The MCP client that launched the process      |
 | `serve` HTTP endpoint (autostarted) | Serves MCP over Streamable HTTP at `/mcp` on `localhost`. **Guarded by a loopback token** read from the bank state directory (`<data-root>/mcp-token`, or `<data-root>/.ai-raccoon/mcp-token` for a project-scope install; 0600 — ADR-0106/F49), presented as `X-AiRaccoon-Token` or `Authorization: Bearer`; on the default **proxy path** the proxy supplies it itself, so no client config carries a secret there — a client connected **directly** to this endpoint, bypassing the proxy, does carry one (e.g. in `~/.claude.json` or `~/.hermes/.env`) | Any local process that can read the token file |
 | `/identity/prove` endpoint (HTTP mode) | Pre-token challenge-response on the same loopback port as `/mcp` (ADR-0106, wire v1). The caller sends a fresh 32-byte nonce, the root fingerprint it expects and the key id; the listener answers only if it holds this root's `identity-key` (ECDSA P-256, bank state directory, 0600), signing a bounded transcript that binds nonce, key id, root and the port the caller actually dialled. Allowlisted through the token gate by design — it discloses a signature, never a secret — and a root mismatch is refused without signing or echoing the fingerprint. Bounded and rate-limited (8 KB bodies, 4 in flight, 503 beyond) | Any process that can reach the listening port |
 | bare `--transport http` | Parses but launches the proxy like any bare run (ADR-0104). There is no ungated direct launch anymore | The MCP client that launched the process |
@@ -74,14 +74,17 @@ attaching; ADR-0106 restores attach-or-start and answers it by **proof**: `serve
 per-root ECDSA P-256 `identity-key` into the bank state directory, and a listener must
 demonstrate possession of it over `POST /identity/prove` — a fresh caller nonce signed
 together with the root fingerprint, the key id and the port the caller dialled — before
-any secret reaches it. A proven listener is attached to and nothing is spawned; nothing
-listening → one is started on the configured port; an unproven listener, a failed proof
-or an unanswered probe → the client falls back to a private ephemeral backend, while
-`serve` on an unproven port holder refuses with exit `50` (`Server.Unproven`). The proof is
-required again immediately before every token-bearing request — the acquire, `serve --restart`'s
-shutdown POST, and the proxy's stop of its own child — so a listener that cannot prove is
-sent nothing at any of those moments. `--attach` no longer exists: passing it, in either
-the root or the `serve` spelling, is an unrecognized argument (exit `11`, `Usage.Unparseable`).
+any secret reaches it. [ADR-0128](docs/adr/0128-refuse-unproven-backend-without-private-fallback.md)
+retains that proof and removes automatic private fallback. A proven listener is attached
+to without spawning anything. Only confirmed connection refusal permits startup on the
+configured port, and the launcher checks again before starting. An inconclusive probe
+never authorizes startup, but valid proof can still permit attachment. Failed proof,
+including after a shared start, causes refusal with exit `50` (`Server.Unproven`) and
+never another launch. Reopening and server-routed CLI commands use the same policy.
+Proof is required before acquisition sends credentials and before `serve --restart`'s
+shutdown POST. The proxy closes its sessions at exit and leaves shared servers running
+under their idle watchdog; it has no private backend to stop.
+`--attach` no longer exists: passing it, in either the root or the `serve` spelling, is an unrecognized argument (exit `11`, `Usage.Unparseable`).
 The same proof rule governs the server-routed CLI commands (`settings …`, `model …`,
 `watch registered`, `noise entries`, `repair`, …).
 
