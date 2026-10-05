@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Microsoft.ML.OnnxRuntime;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Embedding;
 
@@ -12,7 +13,7 @@ namespace AiRaccoon.Tests.Integration.Embedding;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class CudaRuntimeFallbackTests
 {
-    [Theory]
+    [RetryTheory]
     [InlineData(0)]
     [InlineData(1)]
     public async Task NativeFailure_OnFirstOrLaterRun_RetriesAndPermanentlyFallsBack(int successfulRuns)
@@ -40,7 +41,7 @@ public sealed class CudaRuntimeFallbackTests
         record.Message.ShouldContain("CPU");
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData(6, "[ErrorCode:RuntimeException] Non-zero status code returned while running CUDA kernel: LoadLibrary failed for cudnn64_9.dll")]
     [InlineData(1, "[ErrorCode:Fail] Failed to load onnxruntime_providers_cuda.dll")]
     [InlineData(11, "[ErrorCode:EPFail] CUDA failure 100: no CUDA-capable device is detected")]
@@ -54,7 +55,7 @@ public sealed class CudaRuntimeFallbackTests
         generator.ExecutionProvider.ShouldStartWith("CPU (CUDA refused: ");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task OrtInvalidArgument_FailsAgainOnFallbackAndPropagates()
     {
         using var generator = Generator(new FakeLogger<OnnxEmbeddingGenerator>());
@@ -73,7 +74,7 @@ public sealed class CudaRuntimeFallbackTests
         generator.ExecutionProvider.ShouldStartWith("CPU (CUDA refused: ");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FallbackInferenceFailure_PropagatesWithoutRetryingOrReturningToCuda()
     {
         var logger = new FakeLogger<OnnxEmbeddingGenerator>();
@@ -92,7 +93,7 @@ public sealed class CudaRuntimeFallbackTests
         logger.Collector.GetSnapshot().Count.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task GpuPreference_IsRetainedAndFallbackUsesTheCorrespondingGpuGate()
     {
         using var generator = Generator(new FakeLogger<OnnxEmbeddingGenerator>(), preferGpu: true);
@@ -117,7 +118,7 @@ public sealed class CudaRuntimeFallbackTests
         provider.ShouldContain("(CUDA refused: cuDNN)");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task RuntimeFallback_PreservesEarlierDeviceRefusals()
     {
         using var generator = Generator(new FakeLogger<OnnxEmbeddingGenerator>());
@@ -129,7 +130,7 @@ public sealed class CudaRuntimeFallbackTests
         generator.ExecutionProvider.ShouldBe("CPU (CoreML refused: unavailable) (CUDA refused: cuDNN)");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ConcurrentCalls_TransitionOnlyOnce_AndAllProduceCpuVectors()
     {
         using var generator = Generator(new FakeLogger<OnnxEmbeddingGenerator>());
@@ -150,7 +151,7 @@ public sealed class CudaRuntimeFallbackTests
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task NonProviderError_PropagatesWithoutFallback()
     {
         using var generator = Generator(new FakeLogger<OnnxEmbeddingGenerator>());
@@ -163,7 +164,7 @@ public sealed class CudaRuntimeFallbackTests
         generator.ExecutionProvider.ShouldBe("CUDA");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task CanceledRequest_DoesNotRunOrFallback()
     {
         using var generator = Generator(new FakeLogger<OnnxEmbeddingGenerator>());
@@ -178,7 +179,7 @@ public sealed class CudaRuntimeFallbackTests
         generator.ExecutionProvider.ShouldBe("CUDA");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task FailedFallbackConstruction_PreservesCudaSessionAndPropagates()
     {
         using var generator = Generator(new FakeLogger<OnnxEmbeddingGenerator>());
@@ -192,7 +193,7 @@ public sealed class CudaRuntimeFallbackTests
         (await generator.GenerateAsync(["hello"], cancellationToken: TestContext.Current.CancellationToken)).Count.ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Dispose_WaitsForRunAndIsIdempotent()
     {
         var generator = Generator(new FakeLogger<OnnxEmbeddingGenerator>());

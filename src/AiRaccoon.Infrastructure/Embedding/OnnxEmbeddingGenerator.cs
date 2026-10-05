@@ -348,7 +348,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         _needsGpuGateForRun = ExecutionProvider == WebGpuProvider;
         ExecutionProvider += originalProvider[CudaProvider.Length..];
         AppendRefusal(CudaProvider, exception.Message);
-        Log.CudaRuntimeFallback(_logger, exception, ExecutionProvider);
+        new CudaFallbackReporter(_logger).Report(exception, ExecutionProvider);
         failedSession.Dispose();
     }
 
@@ -990,10 +990,6 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
 
     public static partial class Log
     {
-        [LoggerMessage(EventId = 418, Level = LogLevel.Warning,
-            Message = "CUDA inference failed; retrying this embedding with {ExecutionProvider}. Later embeddings will use the fallback session.")]
-        public static partial void CudaRuntimeFallback(ILogger logger, Exception exception, string executionProvider);
-
         /// <summary>
         ///     A STORED entry exceeded the window (docs/adr/0036). Should stay at zero once chunk budgets
         ///     are engine-aware — which it could not, while queries reached this same event (ADR-0071).
