@@ -30,7 +30,7 @@ public sealed partial class SqliteProjectDirectory(
 
         if (await registry.IsRegisteredAsync(id, cancellationToken))
         {
-            if (name is not null)
+            if (name is not null && ProjectId.Canonicalize(projectId) == id)
             {
                 await registry.RegisterAsync(id, name, cancellationToken);
             }

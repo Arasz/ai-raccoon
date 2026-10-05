@@ -141,6 +141,49 @@ public sealed class SqliteProjectDirectoryTests : IAsyncLifetime
 
         registration.ShouldBe(new ProjectRegistration(Winner, ProjectRegistrationOutcome.AlreadyRegistered));
         (await ProjectRowCountAsync(Alias)).ShouldBe(0);
+        (await _directory.FindByNameAsync("acme", ct)).ShouldBeEmpty();
+    }
+
+    [RetryFact]
+    public async Task Register_AlreadyRegisteredUnderDirectSpelling_StillFillsName()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await Registry.RegisterAsync(Winner, null, ct);
+
+        var registration = await _directory.RegisterAsync(Winner, "acme", ct);
+
+        registration.ShouldBe(new ProjectRegistration(Winner, ProjectRegistrationOutcome.AlreadyRegistered));
+        (await _directory.FindByNameAsync("acme", ct)).ShouldBe([Winner]);
+    }
+
+    [RetryFact]
+    public async Task Register_DroppedAliasOfLiveWinner_IsRetired_LeavesWinnerNameUntouched()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await Registry.RegisterAsync(Winner, null, ct);
+        ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap(
+            [new ProjectIdAliasEntry(Alias, Winner)], [Winner], [Alias]));
+
+        var registration = await _directory.RegisterAsync(AliasSpelling, "acme", ct);
+
+        registration.ShouldBe(new ProjectRegistration(Alias, ProjectRegistrationOutcome.Retired));
+        (await _directory.FindByNameAsync("acme", ct)).ShouldBeEmpty();
+        (await ProjectRowCountAsync(Alias)).ShouldBe(0);
+        (await ProjectRowCountAsync(Winner)).ShouldBe(1);
+    }
+
+    [RetryFact]
+    public async Task Register_AliasOfDroppedWinner_IsRetired_NoWinnerRow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap(
+            [new ProjectIdAliasEntry(Alias, Winner)], [Winner], [Winner]));
+
+        var registration = await _directory.RegisterAsync(AliasSpelling, "acme", ct);
+
+        registration.ShouldBe(new ProjectRegistration(Winner, ProjectRegistrationOutcome.Retired));
+        (await ProjectRowCountAsync(Winner)).ShouldBe(0);
+        (await ProjectRowCountAsync(Alias)).ShouldBe(0);
     }
 
     [RetryFact]

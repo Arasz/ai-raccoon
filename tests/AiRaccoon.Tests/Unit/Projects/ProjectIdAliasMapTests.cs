@@ -274,4 +274,26 @@ public sealed class ProjectIdAliasMapTests
     {
         GuidMap().Apply(projectId).ShouldBe(new FoldedProjectId(projectId, Dropped: false));
     }
+
+    [Fact]
+    public void Apply_DroppedAliasOfLiveWinner_PreservesSourceRetirement()
+    {
+        var map = new ProjectIdAliasMap([new ProjectIdAliasEntry(GuidLoser, "live-winner")], ["live-winner"], [GuidLoser]);
+
+        map.Apply(GuidLoser.ToUpperInvariant()).ShouldBe(new FoldedProjectId(GuidLoser, Dropped: true));
+        map.Apply("live-winner").ShouldBe(new FoldedProjectId("live-winner", Dropped: false));
+    }
+
+    [Fact]
+    public void Apply_AliasWhoseWinnerIsDropped_ReportsDroppedUnderTheWinner()
+    {
+        var droppedWinner = GuidDropped;
+        var map = new ProjectIdAliasMap(
+            [new ProjectIdAliasEntry(GuidLoser, droppedWinner)],
+            [droppedWinner],
+            [droppedWinner]);
+
+        map.Apply(GuidLoser).ShouldBe(new FoldedProjectId(droppedWinner, Dropped: true));
+        map.Apply(droppedWinner).ShouldBe(new FoldedProjectId(droppedWinner, Dropped: true));
+    }
 }

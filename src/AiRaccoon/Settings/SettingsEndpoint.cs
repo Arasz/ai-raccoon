@@ -64,7 +64,14 @@ internal static partial class SettingsEndpoint
                         }
 
                         var folded = ProjectIdAliasMap.Default.Apply(owner);
-                        key = ProjectSettingsKeys.WithProjectId(write.Key, folded.ProjectId);
+                        try
+                        {
+                            key = ProjectSettingsKeys.WithProjectId(write.Key, folded.ProjectId);
+                        }
+                        catch (ArgumentException exception)
+                        {
+                            return Results.BadRequest(exception.Message);
+                        }
                         if (await RefuseProjectAsync(key, write.Value, folded, store, registration, ctx) is { } refusal)
                         {
                             return Refused(refusal);
@@ -168,10 +175,22 @@ internal static partial class SettingsEndpoint
     }
 
     /// <summary>A per-project key under its alias winner's id; any other key, or a blank owner, unchanged.</summary>
-    private static string Resolve(string key) =>
-        ProjectSettingsKeys.TryGetProjectId(key, out var owner) && !string.IsNullOrWhiteSpace(owner)
-            ? ProjectSettingsKeys.WithProjectId(key, ProjectIdAliasMap.Default.Apply(owner).ProjectId)
-            : key;
+    private static string Resolve(string key)
+    {
+        if (!ProjectSettingsKeys.TryGetProjectId(key, out var owner) || string.IsNullOrWhiteSpace(owner))
+        {
+            return key;
+        }
+
+        try
+        {
+            return ProjectSettingsKeys.WithProjectId(key, ProjectIdAliasMap.Default.Apply(owner).ProjectId);
+        }
+        catch (ArgumentException)
+        {
+            return key;
+        }
+    }
 
     /// <summary>
     ///     The refusal for a per-project write, or null to write it. A scope list that only loses

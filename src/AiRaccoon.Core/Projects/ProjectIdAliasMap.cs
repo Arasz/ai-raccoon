@@ -140,16 +140,17 @@ public sealed class ProjectIdAliasMap
         return _dropped.Contains(projectId);
     }
 
-    /// <summary>
-    ///     The id a choke point stores under: a dropped id comes back canonicalized and flagged,
-    ///     anything else comes back as <see cref="Fold" /> returns it.
-    /// </summary>
+    /// <summary>The stored id after canonicalizing and folding aliases; a dropped winner remains retired.</summary>
     public FoldedProjectId Apply(string projectId)
     {
         var canonical = ProjectId.Canonicalize(projectId);
-        return IsDropped(canonical)
-            ? new FoldedProjectId(canonical, Dropped: true)
-            : new FoldedProjectId(Fold(canonical), Dropped: false);
+        if (IsDropped(canonical))
+        {
+            return new FoldedProjectId(canonical, Dropped: true);
+        }
+
+        var folded = Fold(canonical);
+        return new FoldedProjectId(folded, Dropped: IsDropped(folded));
     }
 
     /// <summary>Serializes the map for durable hand-off (plan artifact, settings snapshot); no bank schema involved.</summary>

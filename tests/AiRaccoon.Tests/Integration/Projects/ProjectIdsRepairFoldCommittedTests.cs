@@ -35,6 +35,62 @@ public sealed class ProjectIdsRepairFoldCommittedTests : IDisposable
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
+    [RetryTheory]
+    [InlineData("global", Winner)]
+    [InlineData(Loser, "global")]
+    public async Task FoldSettings_GlobalOwner_PreservesMachineKeysAndPairsMatchingPrefixes(string loser, string winner)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+        foreach (var prefix in ProjectSettingsKeys.Prefixes)
+        {
+            await connection.ExecuteAsync("INSERT INTO settings (key, value) VALUES (@key, @value)",
+                new { key = prefix.Prefix + loser, value = "source:" + prefix.Prefix });
+            if (loser != "global" && prefix.ExcludesGlobal)
+            {
+                await connection.ExecuteAsync("INSERT INTO settings (key, value) VALUES (@key, 'machine')",
+                    new { key = prefix.Prefix + "global" });
+            }
+        }
+
+        await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection,
+            new ProjectIdsFoldPlan([new ProjectIdFold(loser, winner)], [], [], []), ct);
+
+        foreach (var prefix in ProjectSettingsKeys.Prefixes)
+        {
+            if (prefix.ExcludesGlobal)
+            {
+                (await connection.ExecuteScalarAsync<string>("SELECT value FROM settings WHERE key = @key",
+                    new { key = prefix.Prefix + "global" })).ShouldBe(loser == "global" ? "source:" + prefix.Prefix : "machine");
+            }
+            else
+            {
+                (await connection.ExecuteScalarAsync<string>("SELECT value FROM settings WHERE key = @key",
+                    new { key = prefix.Prefix + winner })).ShouldBe("source:" + prefix.Prefix);
+                (await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM settings WHERE key = @key",
+                    new { key = prefix.Prefix + loser })).ShouldBe(0);
+            }
+        }
+    }
+
+    [RetryFact]
+    public async Task DropSettings_GlobalOwner_LeavesMachineGlobalKeys()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+        foreach (var prefix in ProjectSettingsKeys.Prefixes)
+        {
+            await connection.ExecuteAsync("INSERT INTO settings (key, value) VALUES (@key, 'value')",
+                new { key = prefix.Prefix + "global" });
+        }
+
+        await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection,
+            new ProjectIdsFoldPlan([], ["global"], [], []), ct);
+
+        (await connection.QueryAsync<string>("SELECT key FROM settings WHERE key LIKE '%global' ORDER BY key"))
+            .ShouldBe(["ingest.scope.global", "watch.concurrency.global", "watch.enabled.global"]);
+    }
+
     /// <summary>
     ///     B AC1: project-NULL + custom-labeled (+ custom-NULL) loser rows fold to zero loser rows
     ///     in one apply; the winner's own NULL bulk row stays put (the fold re-keys loser ids only).
