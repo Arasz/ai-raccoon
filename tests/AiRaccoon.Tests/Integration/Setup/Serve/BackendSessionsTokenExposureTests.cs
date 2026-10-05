@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Hosting.Proxy;
@@ -16,15 +17,12 @@ namespace AiRaccoon.Tests.Integration.Setup.Serve;
 ///     Attach-or-start with the identity proof (ADR-0106): a proven listener on the configured port
 ///     is attached to and nothing is spawned; nothing listening starts one on the configured port;
 ///     an unproven listener gets zero secret bytes — only the existing /mcp probe and the bounded
-///     nonce challenge — and the client continues on a private fallback. The dispose-time stop is
-///     proof-gated too: a racer on the dead child's port is sent nothing (F3).
+///     nonce challenge — and the client refuses without starting another backend.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class BackendSessionsTokenExposureTests : IDisposable
 {
-    private static readonly TimeSpan PortFreeDeadline = TimeSpan.FromSeconds(30);
-
     private readonly string _dataRoot = TestData.CreateTempRoot("backend-sessions-attach-or-start");
 
     private static string ServeExecutable => Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "AiRaccoon.exe" : "AiRaccoon");
@@ -80,11 +78,14 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
 
         try
         {
-            await using var sessions = Subject(port, RealLauncher());
-            var session = await sessions.OpenAsync(null, TestContext.Current.CancellationToken);
-
-            new Uri(sessions.Url).Port.ShouldBe(port, "the started backend belongs on the configured port");
-            (await session.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken)).ShouldNotBeEmpty();
+            await using (var sessions = Subject(port, RealLauncher()))
+            {
+                var session = await sessions.OpenAsync(null, TestContext.Current.CancellationToken);
+                new Uri(sessions.Url).Port.ShouldBe(port);
+                (await session.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken)).ShouldNotBeEmpty();
+            }
+            (await TestData.CreateServerProbe().RespondsAsync(port, TestContext.Current.CancellationToken))
+                .ShouldBeTrue("the newly started shared backend must outlive proxy disposal");
         }
         finally
         {
@@ -96,147 +97,158 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
     ///     The re-shaped F70 gate, in the honest D5 wording: a squatter that holds the configured
     ///     port and answers /mcp with a JSON-RPC-shaped body receives zero secret bytes — no token
     ///     header, no tool payload — and only the probe and the nonce challenge. The client
-    ///     continues on a private fallback whose URL the squatter never sees.
+    ///     refuses without starting another backend.
     /// </summary>
-    [RetryFact]
-    public async Task Acquire_WithASquatter_FallsBackToPrivate_AndSendsZeroSecretBytes()
+    [Fact]
+    public async Task Acquire_WithASquatter_RefusesAndSendsZeroSecretBytes()
     {
-        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
-            (EnvEncryptionKeyProvider.EnvVarName, null));
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken, (EnvEncryptionKeyProvider.EnvVarName, null));
         await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
         await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
         (await new IdentityKeyFile(TestData.CreateInfrastructureOptions(_dataRoot)).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
         using var squatter = new Squatter();
-        var privatePort = 0;
-
-        await using (var sessions = Subject(squatter.Port, RealLauncher()))
-        {
-            var session = await sessions.OpenAsync(null, TestContext.Current.CancellationToken);
-
-            sessions.Url.ShouldNotBeNullOrWhiteSpace();
-            new Uri(sessions.Url).Port.ShouldNotBe(squatter.Port);
-            (await session.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken)).ShouldNotBeEmpty();
-            privatePort = new Uri(sessions.Url).Port;
-
-            squatter.TokenHeaderValues.ShouldBeEmpty(
-                $"the squatter received the data root's token; requests:\n{string.Join("\n---\n", squatter.Requests)}");
-            var requestLines = RequestLines(squatter);
-            requestLines.ShouldContain(line => line.StartsWith("POST /identity/prove", StringComparison.Ordinal),
-                "the listener must have been challenged before the fallback decision");
-            requestLines.ShouldAllBe(line =>
-                line.StartsWith("POST /mcp", StringComparison.Ordinal) ||
-                line.StartsWith("POST /identity/prove", StringComparison.Ordinal));
-        }
-
-        if (privatePort != 0)
-        {
-            await RaccoonBackendCleanup.ShutdownIfRunningAsync(_dataRoot, privatePort, CancellationToken.None);
-        }
+        await using var sessions = Subject(squatter.Port, new ThrowingBackendLauncher());
+        var error = await Should.ThrowAsync<BackendUnavailableException>(() => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+        error.Code.ShouldBe(ErrorCode.Server.Unproven);
+        sessions.Url.ShouldBeEmpty();
+        squatter.TokenHeaderValues.ShouldBeEmpty();
+        RequestLines(squatter).ShouldContain(line => line.StartsWith("POST /identity/prove", StringComparison.Ordinal));
+        RequestLines(squatter).ShouldAllBe(line => line.StartsWith("POST /mcp", StringComparison.Ordinal) || line.StartsWith("POST /identity/prove", StringComparison.Ordinal));
     }
 
-    /// <summary>
-    ///     F3: the private child dies, a racer takes its port, and the dispose-time stop proves
-    ///     first — the racer gets the challenge and nothing else. The challenge assertion keeps the
-    ///     gate from passing because the stop path never ran.
-    /// </summary>
-    [RetryFact]
-    public async Task DisposeStop_WithARacerOnTheDeadChildsPort_SendsNoSecretBytes()
-    {
-        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
-            (EnvEncryptionKeyProvider.EnvVarName, null));
-        await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(_dataRoot), TestContext.Current.CancellationToken);
-        (await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
-        (await new IdentityKeyFile(TestData.CreateInfrastructureOptions(_dataRoot)).EnsureAsync(TestContext.Current.CancellationToken)).ShouldNotBeNull();
-        using var squatter = new Squatter();
-
-        await using (var sessions = Subject(squatter.Port, RealLauncher()))
-        {
-            await sessions.OpenAsync(null, TestContext.Current.CancellationToken);
-            var privatePort = new Uri(sessions.Url).Port;
-
-            // Kill the child through its own token-guarded stop path and wait until its port is free.
-            await RaccoonBackendCleanup.ShutdownIfRunningAsync(_dataRoot, privatePort, CancellationToken.None);
-            (await WaitForPortFreeAsync(privatePort, TestContext.Current.CancellationToken))
-                .ShouldBeTrue("the private child never let go of its port, so no racer could take it");
-
-            using var racer = new Squatter(privatePort);
-            await sessions.DisposeAsync();
-
-            racer.TokenHeaderValues.ShouldBeEmpty(
-                $"the racer on the dead child's port received the token; requests:\n{string.Join("\n---\n", racer.Requests)}");
-            RequestLines(racer).ShouldNotContain(line => line.StartsWith("POST /shutdown", StringComparison.Ordinal));
-            RequestLines(racer).ShouldContain(line => line.StartsWith("POST /identity/prove", StringComparison.Ordinal),
-                "the stop path must have attempted the proof against whoever holds the port");
-        }
-    }
-
-    /// <summary>
-    ///     F3 with the window forced instead of waited for: the private child answers the stop-time
-    ///     challenge, and before that answer is read it has let go of its port and a racer holds it.
-    ///     The proof is good, so only a stop that rides the very connection the proof rode can reach
-    ///     the child; any new connection reaches the racer. When the child also closes that
-    ///     connection, nothing may be sent at all.
-    /// </summary>
-    [RetryTheory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task DisposeStop_WhenTheChildLosesItsPortRightAfterProving_SendsTheRacerNoSecretBytes(bool childClosesTheConnection)
+    [Fact]
+    public async Task Acquire_RealRunningServerWithChangedTrustAnchor_RefusesWithoutStartingBackend()
     {
         await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
             (EnvEncryptionKeyProvider.EnvVarName, null));
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         await TestData.SeedBankAsync(options, TestContext.Current.CancellationToken);
-        var token = await new McpTokenFile(_dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
-        token.ShouldNotBeNull();
-        var keyFile = new IdentityKeyFile(options);
-        using var key = await keyFile.EnsureAsync(TestContext.Current.CancellationToken);
-        key.ShouldNotBeNull();
-        using var child = new DyingBackend(key, IdentityProof.RootFingerprint(keyFile.StateDirectory));
-        using var squatter = new Squatter();
-
-        await using (var sessions = Subject(squatter.Port, new PrivateOnlyLauncher(child.Url)))
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
+        await using var server = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        await server.WaitForUrlAsync(TestContext.Current.CancellationToken);
+        using var client = new HttpClient();
+        var endpoint = ServerProbe.EndpointFor(port);
+        (await new IdentityProver(options, client).ProveAsync(endpoint, TestContext.Current.CancellationToken)).ShouldBeNull();
+        var keyPath = new IdentityKeyFile(options).Path;
+        var original = await File.ReadAllTextAsync(keyPath, TestContext.Current.CancellationToken);
+        var launcher = new RecordingLauncher(RealLauncher());
+        try
         {
-            // The child refuses the MCP session; the acquire has proven it and recorded it by then.
-            await Should.ThrowAsync<BackendUnavailableException>(() =>
-                sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+            using var replacement = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            await IdentityTestKey.WriteAsync(keyPath, replacement.ExportPkcs8PrivateKeyPem(), TestContext.Current.CancellationToken);
+            var prover = new IdentityProver(options, client);
+            var failure = await prover.ProveAsync(endpoint, TestContext.Current.CancellationToken);
+            failure.ShouldNotBeNull();
+            var config = new ServerConfig(port, McpTransport.Http, options);
+            var outcome = await BackendSessions.AcquireSharedAsync(TestData.CreateServerProbe(), prover, launcher,
+                ServeExecutable, config, NullLogger.Instance, TestContext.Current.CancellationToken);
+            launcher.Starts.ShouldBe(0, "failed identity of a running real server must never authorize another backend");
+            outcome.Result.Url.ShouldBeNull();
+            outcome.ProofFailure.ShouldBe(failure);
+        }
+        finally
+        {
+            await IdentityTestKey.WriteAsync(keyPath, original, CancellationToken.None);
+            using var restoredClient = new HttpClient();
+            (await new IdentityProver(options, restoredClient).ProveAsync(endpoint, TestContext.Current.CancellationToken)).ShouldBeNull();
+            (await server.StopAsync()).ShouldBe(ErrorCode.Ok.Success);
+        }
+    }
 
-            child.HandOverOn($"POST {IdentityProof.EndpointPath}", childClosesTheConnection);
-            await sessions.DisposeAsync();
+    [Fact]
+    public async Task Open_RealRunningServerWithChangedTrustAnchor_WritesNoServeMarker()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "the recording executable is a POSIX shell wrapper");
+        await using var env = await EnvScope.AcquireAsync(TestContext.Current.CancellationToken,
+            (EnvEncryptionKeyProvider.EnvVarName, null));
+        var options = TestData.CreateInfrastructureOptions(_dataRoot);
+        await TestData.SeedBankAsync(options, TestContext.Current.CancellationToken);
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        lease.ReleaseForBind();
+        await using var server = ServeHarness.Start(["--data-root", _dataRoot, "serve", "--port", port.ToString()]);
+        await server.WaitForUrlAsync(TestContext.Current.CancellationToken);
+        using var client = new HttpClient();
+        var endpoint = ServerProbe.EndpointFor(port);
+        (await new IdentityProver(options, client).ProveAsync(endpoint, TestContext.Current.CancellationToken)).ShouldBeNull();
+        var keyPath = new IdentityKeyFile(options).Path;
+        var original = await File.ReadAllTextAsync(keyPath, TestContext.Current.CancellationToken);
+        var marker = Path.Combine(_dataRoot, "serve-marker");
+        var wrapper = Path.Combine(_dataRoot, "recording-ai-raccoon");
+        await File.WriteAllTextAsync(wrapper, $"#!/bin/sh\nprintf '%s\\n' \"$$ $*\" >> '{marker}'\nexec '{ServeExecutable}' \"$@\"\n", TestContext.Current.CancellationToken);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(wrapper, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        try
+        {
+            using var replacement = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            await IdentityTestKey.WriteAsync(keyPath, replacement.ExportPkcs8PrivateKeyPem(), TestContext.Current.CancellationToken);
+            var prover = new IdentityProver(options, client);
+            var failure = await prover.ProveAsync(endpoint, TestContext.Current.CancellationToken);
+            failure.ShouldNotBeNull();
+            await using var sessions = Subject(port, RealLauncher(), wrapper);
+            BackendUnavailableException? refusal = null;
+            try
+            {
+                await sessions.OpenAsync(null, TestContext.Current.CancellationToken);
+            }
+            catch (BackendUnavailableException ex)
+            {
+                refusal = ex;
+            }
+            File.Exists(marker).ShouldBeFalse("no extra serve invocation may occur after failed proof");
+            refusal.ShouldNotBeNull().Code.ShouldBe(ErrorCode.Server.Unproven);
+            sessions.Url.ShouldBeEmpty();
+        }
+        finally
+        {
+            await IdentityTestKey.WriteAsync(keyPath, original, CancellationToken.None);
+            if (File.Exists(marker))
+            {
+                foreach (var line in await File.ReadAllLinesAsync(marker, CancellationToken.None))
+                {
+                    if (int.TryParse(line.Split(' ')[0], out var pid))
+                    {
+                        try
+                        {
+                            using var child = System.Diagnostics.Process.GetProcessById(pid);
+                            child.Kill(entireProcessTree: true);
+                            await child.WaitForExitAsync(CancellationToken.None);
+                        }
+                        catch (ArgumentException) { }
+                        catch (InvalidOperationException) { }
+                    }
+                }
+            }
+            using var restoredClient = new HttpClient();
+            (await new IdentityProver(options, restoredClient).ProveAsync(endpoint, TestContext.Current.CancellationToken)).ShouldBeNull();
+            (await server.StopAsync()).ShouldBe(ErrorCode.Ok.Success);
+        }
+    }
 
-            var racer = child.Racer.ShouldNotBeNull("the stop path never challenged the child, so the handover never ran");
-            racer.TokenHeaderValues.ShouldBeEmpty(
-                $"the racer on the child's port received the token; requests:\n{string.Join("\n---\n", racer.Requests)}");
-            var shutdowns = child.Requests.Where(head => head.StartsWith($"POST {ShutdownEndpoint.Path}", StringComparison.Ordinal)).ToList();
-            if (childClosesTheConnection)
-            {
-                shutdowns.ShouldBeEmpty("the proven connection was gone, so nothing may carry the stop");
-            }
-            else
-            {
-                shutdowns.Count.ShouldBe(1, "the stop rides the connection the proof rode, so the proven child still receives it");
-                shutdowns[0].ShouldContain($"{McpTokenGate.HeaderName}: {token}");
-            }
+    private sealed class RecordingLauncher(IBackendLauncher inner) : IBackendLauncher
+    {
+        public int Starts { get; private set; }
+
+        public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments, CancellationToken ctx)
+        {
+            Starts++;
+            return inner.AcquireAsync(port, fileName, arguments, ctx);
         }
     }
 
     private static IReadOnlyList<string> RequestLines(Squatter squatter) => [.. squatter.Requests.Select(request => request.Split("\r\n")[0])];
 
-    /// <summary>True once nothing holds the port; a backend shutting down keeps it a moment longer.</summary>
-    private static Task<bool> WaitForPortFreeAsync(int port, CancellationToken cancellationToken) =>
-        WaitByPolling.WaitForAsync(() =>
-            {
-                using var taken = LoopbackPort.TryOccupy(port);
-                return ValueTask.FromResult(taken is not null);
-            }, WaitByPolling.DefaultFirstTick, WaitByPolling.DefaultMaxTick, PortFreeDeadline, TimeProvider.System,
-            cancellationToken).AsTask();
-
-    private BackendSessions Subject(int port, IBackendLauncher launcher)
+    private BackendSessions Subject(int port, IBackendLauncher launcher, string? executable = null)
     {
         var config = new ServerConfig(port, McpTransport.Http,
             new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User });
         return new BackendSessions(launcher, new IdentityProver(config.Options, new HttpClient()),
             TestData.CreateServerProbe(), new PlainHttpClientFactory(), NullLoggerFactory.Instance,
-            ServeExecutable, config, File.Exists, null, null, currentProcessPath: ServeExecutable);
+            executable ?? ServeExecutable, config, File.Exists, null, null, currentProcessPath: ServeExecutable);
     }
 
     private static BackendLauncher RealLauncher() =>
@@ -248,21 +260,10 @@ public sealed class BackendSessionsTokenExposureTests : IDisposable
     /// <summary>Any launcher call is a gate failure: the proven path must never consult it.</summary>
     private sealed class ThrowingBackendLauncher : IBackendLauncher
     {
-        public Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ctx) =>
-            throw new InvalidOperationException("a proven listener must be attached to, never spawn anything");
+
 
         public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments, CancellationToken ctx) =>
             throw new InvalidOperationException("a proven listener must be attached to, never start anything");
-    }
-
-    /// <summary>Hands out one fixed private backend; the configured port is never started on.</summary>
-    private sealed class PrivateOnlyLauncher(string url) : IBackendLauncher
-    {
-        public Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ctx) =>
-            Task.FromResult(new BackendResult(url, null));
-
-        public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments, CancellationToken ctx) =>
-            throw new InvalidOperationException("the squatted configured port must never be started on");
     }
 
     private sealed class PlainHttpClientFactory : IHttpClientFactory

@@ -179,7 +179,7 @@ public static class ErrorCode
         /// <summary>The proxy found no backend on the port and could not start one there.</summary>
         public const int BackendUnavailable = 63;
 
-        /// <summary>The listener did not prove its identity and the private fallback backend could not be started either.</summary>
+        /// <summary>Reserved: formerly private fallback startup failure; no longer emitted.</summary>
         public const int PrivateFallbackFailed = 64;
 
         /// <summary>The backend executable could not be started as a process.</summary>

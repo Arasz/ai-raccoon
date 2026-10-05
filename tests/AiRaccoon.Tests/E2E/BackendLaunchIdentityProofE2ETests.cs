@@ -63,10 +63,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         Acquire,
 
         /// <summary>A bare `serve --restart` asking the configured port's holder to stop.</summary>
-        Restart,
-
-        /// <summary>The proxy stopping its private fallback at exit, after its port changed hands.</summary>
-        Dispose
+        Restart
     }
 
     /// <summary>Only stops a hang from wedging the run.</summary>
@@ -129,9 +126,42 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task Proxy_RealRunningServerWithChangedTrustAnchor_RefusesAndLeavesOriginalAlive()
+    {
+        var port = FreePort();
+        await using var server = await RealServe.StartAsync(_options, port, Ct);
+        using var client = new HttpClient();
+        var endpoint = ServerProbe.EndpointFor(port);
+        (await new AiRaccoon.Hosting.Proxy.IdentityProver(_options, client).ProveAsync(endpoint, Ct)).ShouldBeNull();
+        var keyPath = new IdentityKeyFile(_options).Path;
+        var original = await File.ReadAllTextAsync(keyPath, Ct);
+        try
+        {
+            using var replacement = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            await IdentityTestKey.WriteAsync(keyPath, replacement.ExportPkcs8PrivateKeyPem(), Ct);
+            (await new AiRaccoon.Hosting.Proxy.IdentityProver(_options, client).ProveAsync(endpoint, Ct)).ShouldNotBeNull();
+            await using var proxy = StartProxy(port, ProxyProcess.Stateful);
+            await Should.ThrowAsync<IOException>(() => proxy.ListToolsAsync(Ct));
+            (await proxy.CloseAsync(HardCap)).ShouldBe(ErrorCode.Server.Unproven, proxy.Stderr);
+            proxy.Stderr.ShouldContain("no extra backend was started");
+            ChildPorts().ShouldBeEmpty();
+            var settings = await RunCliAsync(port, "settings", "sweep", "show");
+            settings.ExitCode.ShouldBe(ErrorCode.Server.Unproven, settings.Stderr);
+            settings.Stdout.ShouldBeEmpty();
+            (await RealServe.PidOnAsync(port, Ct)).ShouldBe(server.Process.Id);
+        }
+        finally
+        {
+            await IdentityTestKey.WriteAsync(keyPath, original, CancellationToken.None);
+            using var restored = new HttpClient();
+            (await new AiRaccoon.Hosting.Proxy.IdentityProver(_options, restored).ProveAsync(endpoint, Ct)).ShouldBeNull();
+        }
+    }
+
     [Theory]
     [MemberData(nameof(Cells))]
-    public async Task ThreatMatrix_FiveAttackers_ThreePaths_ZeroSecretBytesEverywhere(Attacker attacker, LaunchPath path)
+    public async Task ThreatMatrix_FiveAttackers_AcquireAndRestart_ZeroSecretBytesEverywhere(Attacker attacker, LaunchPath path)
     {
         switch (path)
         {
@@ -140,9 +170,6 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
                 break;
             case LaunchPath.Restart:
                 await RestartCellAsync(attacker);
-                break;
-            case LaunchPath.Dispose:
-                await DisposeCellAsync(attacker);
                 break;
         }
     }
@@ -214,55 +241,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
     ///     takes each port; each racer still gets the challenge alone — no session close, no stop,
     ///     no token — and each child is reported as not proven.
     /// </summary>
-    [Fact]
-    public async Task DisposeStop_UnderAStatefulClient_EveryRacerOnADeadChildsPortGetsOnlyTheChallenge()
-    {
-        var configured = FreePort();
-        using var squatter = new Impostor(configured, _ => Task.FromResult(Busy));
-        await using var proxy = StartProxy(configured, ProxyProcess.Stateful);
-        (await proxy.ListToolsAsync(Ct)).ShouldNotBeEmpty();
-        var childPorts = ChildPorts();
-        childPorts.ShouldHaveSingleItem("a reopen reuses the proven fallback child instead of starting another");
 
-        var racers = new List<Impostor>();
-        try
-        {
-            foreach (var childPort in childPorts)
-            {
-                var pid = await RealServe.PidOnAsync(childPort, Ct)
-                          ?? throw new InvalidOperationException($"nothing answers on the child's port {childPort}");
-                using (var child = Process.GetProcessById(pid))
-                {
-                    (await RaccoonProcess.KillTreeAndWaitAsync(child, HardCap, Ct)).ShouldBeTrue();
-                }
-
-                racers.Add(new Impostor(childPort, _ => Task.FromResult(new ImpostorReply(200, "{}"))));
-            }
-
-            var exit = await proxy.CloseAsync(HardCap);
-
-            foreach (var racer in racers)
-            {
-                AssertNothingSecret(racer);
-                racer.Challenges.ShouldBeGreaterThan(0, "the stop must have reached the proof");
-                ReadQuietLog().ShouldContain(
-                    $"the private backend at http://127.0.0.1:{racer.Port}/mcp no longer proves it serves this data root ({nameof(IdentityProofFailure.Malformed)})");
-            }
-
-            proxy.Stderr.ShouldNotContain("no longer proves", Case.Sensitive, "under --quiet the proxy's warnings go to the quiet log only");
-
-            exit.ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
-
-            AssertNothingSecret(squatter);
-        }
-        finally
-        {
-            foreach (var racer in racers)
-            {
-                racer.Dispose();
-            }
-        }
-    }
 
     private async Task AcquireCellAsync(Attacker attacker)
     {
@@ -293,23 +272,10 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         }
 
         AssertTheAttackGotNothing(attack, attacker, LaunchPath.Acquire);
-        ReadQuietLog().ShouldContain(
-            $"the listener on port {port} did not prove it serves this data root ({ExpectedReason(attacker, LaunchPath.Acquire)}); starting a private backend");
-        // The 690 warning's own wording: the PlantedKey refusal below repeats the listener clause on stderr.
-        proxy.Stderr.ShouldNotContain("starting a private backend on an ephemeral port", Case.Sensitive,
-            "under --quiet the proxy's warnings go to the quiet log only");
-        if (attacker is Attacker.PlantedKey)
-        {
-            // The fallback `serve` refuses the shared key too, so there is no backend at all — and still no secret.
-            failure.ShouldNotBeNull();
-            exit.ShouldBe(ErrorCode.Reach.PrivateFallbackFailed, proxy.Stderr);
-            proxy.Stderr.ShouldContain("no private backend could be started");
-        }
-        else
-        {
-            failure.ShouldBeNull(failure?.ToString());
-            exit.ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
-        }
+        failure.ShouldNotBeNull();
+        exit.ShouldBe(ErrorCode.Server.Unproven, proxy.Stderr);
+        proxy.Stderr.ShouldContain("no extra backend was started");
+        ChildPorts().ShouldBeEmpty();
     }
 
     private async Task RestartCellAsync(Attacker attacker)
@@ -338,55 +304,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         run.Stderr.ShouldContain("stop the listener yourself");
     }
 
-    private async Task DisposeCellAsync(Attacker attacker)
-    {
-        // An unproven listener on the configured port sends the proxy to a private fallback child. It
-        // refuses the challenge outright, so no mutation of the answer check can make it the backend.
-        var configured = FreePort();
-        using var squatter = new Impostor(configured, _ => Task.FromResult(Busy));
-        await using var proxy = StartProxy(configured);
-        Attack? attack = null;
-        try
-        {
-            (await proxy.ListToolsAsync(Ct)).ShouldNotBeEmpty();
-            var childPort = ChildPorts().ShouldHaveSingleItem("the proxy must have started exactly one fallback child");
-            var childPid = await RealServe.PidOnAsync(childPort, Ct)
-                           ?? throw new InvalidOperationException($"nothing answers on the child's port {childPort}");
 
-            if (attacker is Attacker.Honest)
-            {
-                (await proxy.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
-                (await WaitUntilGoneAsync(childPid)).ShouldBeTrue("the proven child must be stopped with the proxy");
-                ReadQuietLog().ShouldContain($"shutdown requested over /shutdown; stopping pid {childPid}");
-                (proxy.Stderr + ReadQuietLog()).ShouldNotContain("no longer proves");
-                return;
-            }
-
-            var captured = attacker is Attacker.Replay ? await ChallengeAsync(childPort) : null;
-            // The child dies and its port changes hands before the proxy gets round to stopping it.
-            using (var child = Process.GetProcessById(childPid))
-            {
-                (await RaccoonProcess.KillTreeAndWaitAsync(child, HardCap, Ct)).ShouldBeTrue();
-            }
-
-            attack = await MountAsync(attacker, childPort, captured);
-            var exit = await proxy.CloseAsync(HardCap);
-
-            AssertTheAttackGotNothing(attack, attacker, LaunchPath.Dispose);
-            AssertNothingSecret(squatter);
-            exit.ShouldBe(ErrorCode.Ok.Success, proxy.Stderr);
-            ReadQuietLog().ShouldContain(
-                $"the private backend at http://127.0.0.1:{childPort}/mcp no longer proves it serves this data root ({ExpectedReason(attacker, LaunchPath.Dispose)})");
-            proxy.Stderr.ShouldNotContain("no longer proves", Case.Sensitive, "under --quiet the proxy's warnings go to the quiet log only");
-        }
-        finally
-        {
-            if (attack is not null)
-            {
-                await attack.DisposeAsync();
-            }
-        }
-    }
 
     /// <summary>The failure each defence reports: which check stopped the attack on that path.</summary>
     private static string ExpectedReason(Attacker attacker, LaunchPath path) => attacker switch
@@ -394,11 +312,8 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         Attacker.Squatter => nameof(IdentityProofFailure.Malformed),
         Attacker.RelaySameRootOtherPort => nameof(IdentityProofFailure.BadSignature),
         Attacker.Replay => nameof(IdentityProofFailure.BadSignature),
-        // A key others can read is no trust anchor: refused before any challenge is sent. At dispose
-        // the verifier already holds the key it read at acquire, so the planted one fails the pin.
-        Attacker.PlantedKey => path is LaunchPath.Dispose
-            ? nameof(IdentityProofFailure.BadSignature)
-            : nameof(IdentityProofFailure.NoKey),
+        // A shared-readable key is refused before a challenge is sent.
+        Attacker.PlantedKey => nameof(IdentityProofFailure.NoKey),
         Attacker.CrossRootCopy => nameof(IdentityProofFailure.RootMismatch),
         _ => throw new ArgumentOutOfRangeException(nameof(attacker), attacker, null)
     };
@@ -408,7 +323,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         if (attack.Listener is { } listener)
         {
             AssertNothingSecret(listener);
-            if (attacker is Attacker.PlantedKey && path is not LaunchPath.Dispose)
+            if (attacker is Attacker.PlantedKey)
             {
                 listener.Challenges.ShouldBe(0, "a key file others can read is refused before any challenge goes out");
             }
@@ -430,7 +345,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             attack.Server!.Process.HasExited.ShouldBeFalse("the copied-root server must never be asked to stop");
             if (path is LaunchPath.Acquire)
             {
-                ChildPorts().ShouldNotBeEmpty("the session must run on this root's own fallback, never on the copied-root server");
+                ChildPorts().ShouldBeEmpty("an unproven copied-root server must cause refusal without another backend");
             }
         }
     }
@@ -586,7 +501,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
         return reader.ReadToEnd();
     }
 
-    /// <summary>Every private backend the proxy's launcher reported live, by port.</summary>
+    /// <summary>Every started backend the proxy's launcher reported live, by port.</summary>
     private int[] ChildPorts() =>
     [
         .. BackendLiveLine().Matches(ReadQuietLog())

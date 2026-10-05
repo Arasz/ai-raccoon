@@ -13,8 +13,7 @@ namespace AiRaccoon.Tests.Unit.Setup;
 /// <summary>
 ///     The CLI's half of attach-or-start with the identity proof (ADR-0106): every settings-routed
 ///     verb attaches to a <em>proven</em> listener on <see cref="ServerConfig.Port" />, starts one
-///     on the configured port when nothing listens, and falls back to a short-lived private child
-///     when the port is held but not proven. Exercised against fake probe/verifier/launcher seams,
+///     on the configured port after confirmed refusal, and refuses unproven listeners without spawning. Exercised against fake probe/verifier/launcher seams,
 ///     so the acquire/token/wrap logic is pinned without a real process spawn and without depending
 ///     on how the test host itself was launched.
 /// </summary>
@@ -75,46 +74,7 @@ public sealed class CliSettingsBackendTests
 
             store.ShouldBeOfType<ServerSettingsStore>();
             launcher.AcquireCalls.ShouldBe(1);
-            launcher.PrivateCalls.ShouldBe(0);
-        }
-        finally
-        {
-            TestData.DeleteTempRoot(dataRoot);
-        }
-    }
 
-    /// <summary>
-    ///     The settings half of the re-shaped F70 gate: an unproven listener gets nothing secret;
-    ///     the command continues on a bounded private fallback, and the warning names the held port
-    ///     and the remedy while the disclosure names the stop command that still exists.
-    /// </summary>
-    [Fact]
-    public async Task AcquireAsync_WithASquatter_FallsBackPrivately_WithABoundedIdleTimeout()
-    {
-        var dataRoot = TestData.CreateTempRoot("cli-settings-squatter");
-        try
-        {
-            await TestData.SeedBankAsync(TestData.CreateInfrastructureOptions(dataRoot), TestContext.Current.CancellationToken);
-            await new McpTokenFile(dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
-            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54223/mcp", null));
-            var prover = new FakeIdentityProver(IdentityProofFailure.BadSignature);
-            prover.AnswerNext(null); // the fallback child proves under this root's key
-            var logger = new FakeLogger();
-
-            var store = await CliSettingsBackend.AcquireAsync(launcher, prover, new FakeServerProbe(ProbeVerdict.Answered),
-                AppHost, Config(54224, dataRoot), logger, TestContext.Current.CancellationToken);
-
-            store.ShouldBeOfType<ServerSettingsStore>();
-            launcher.AcquireCalls.ShouldBe(0);
-            launcher.PrivateCalls.ShouldBe(1);
-            launcher.PrivateArguments[Array.IndexOf(launcher.PrivateArguments, "--port") + 1].ShouldBe("0");
-            launcher.PrivateArguments[Array.IndexOf(launcher.PrivateArguments, "--idle-timeout") + 1].ShouldBe("5m");
-
-            var warning = logger.Collector.GetSnapshot().Single(r => r.Id == 690);
-            warning.Message.ShouldContain("54224");
-            warning.Message.ShouldContain("stop the listener");
-            var disclosure = logger.Collector.GetSnapshot().Single(r => r.Id == 687);
-            disclosure.Message.ShouldContain("serve --restart --port 54223");
         }
         finally
         {
@@ -123,7 +83,7 @@ public sealed class CliSettingsBackendTests
     }
 
     [Fact]
-    public async Task AcquireAsync_WhenTheFallbackChildDoesNotProve_ThrowsUnavailable()
+    public async Task AcquireAsync_WhenTheListenerCannotProve_RefusesWithoutStarting()
     {
         var dataRoot = TestData.CreateTempRoot("cli-settings-fallback-unproven");
         try
@@ -138,7 +98,8 @@ public sealed class CliSettingsBackendTests
                     new FakeLogger(), TestContext.Current.CancellationToken));
 
             error.Message.ShouldContain("54226");
-            error.Code.ShouldBe(ErrorCode.Reach.PrivateFallbackFailed);
+            error.Code.ShouldBe(ErrorCode.Server.Unproven);
+            launcher.AcquireCalls.ShouldBe(0);
         }
         finally
         {
@@ -305,6 +266,8 @@ public sealed class CliSettingsBackendTests
                     AppHost, Config(1, dataRoot), new FakeLogger(), TestContext.Current.CancellationToken));
 
             error.Message.ShouldContain(McpTokenFile.FileName);
+            launcher.Calls.ShouldBe(0);
+            File.Exists(new McpTokenFile(dataRoot).Path).ShouldBeFalse();
             error.Code.ShouldBe(ErrorCode.Server.NoToken);
             // ADR-0107 PC.4: identity is already proven (FakeIdentityProver defaults to proven) by
             // the time the token is read, so "another data root" is never a live possibility here.
@@ -367,20 +330,7 @@ public sealed class CliSettingsBackendTests
 
         public int AcquireCalls { get; private set; }
 
-        public int PrivateCalls { get; private set; }
-
         public string? FileName { get; private set; }
-
-        public string[] PrivateArguments { get; private set; } = [];
-
-        public Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ctx)
-        {
-            Calls++;
-            PrivateCalls++;
-            FileName = fileName;
-            PrivateArguments = [.. arguments];
-            return _throws is null ? Task.FromResult(_result) : Task.FromException<BackendResult>(_throws);
-        }
 
         public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments, CancellationToken ctx)
         {
@@ -394,8 +344,6 @@ public sealed class CliSettingsBackendTests
     /// <summary>Any launcher call is a gate failure: the proven path must never consult it.</summary>
     private sealed class ThrowingBackendLauncher : IBackendLauncher
     {
-        public Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ctx) =>
-            throw new InvalidOperationException("a proven listener must be attached to, never spawn anything");
 
         public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments, CancellationToken ctx) =>
             throw new InvalidOperationException("a proven listener must be attached to, never start anything");

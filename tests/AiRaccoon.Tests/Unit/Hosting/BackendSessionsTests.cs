@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
+using NSubstitute;
 using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Hosting;
@@ -16,7 +17,7 @@ namespace AiRaccoon.Tests.Unit.Hosting;
 /// <summary>
 ///     The proxy's half of auto-start: <see cref="BackendSessions" /> acquires the backend through
 ///     <see cref="BackendSessions.AcquireSharedAsync" /> with explicit probe/prover/launcher seams,
-///     so the attach, start-on-port, proven-fallback and answered/unanswered-probe paths are pinned
+///     so proven attach, configured-port start and unproven refusal are pinned
 ///     without a real spawn and without depending on how the test host itself was launched. The
 ///     forwarder above it is covered by <c>ProxyForwardTests</c>.
 /// </summary>
@@ -38,8 +39,8 @@ public sealed class BackendSessionsTests
             fileExists ?? (_ => true), userProfileDirectory, pathVariable, currentProcessPath ?? processPath);
 
     private static Task<BackendSessions.AcquireOutcome> AcquireAsync(IServerProbe probe, IIdentityProver prover,
-        IBackendLauncher launcher, ServerConfig config, ILogger? logger = null, TimeSpan? fallbackIdle = null) =>
-        BackendSessions.AcquireSharedAsync(probe, prover, launcher, AppHost, config, fallbackIdle,
+        IBackendLauncher launcher, ServerConfig config, ILogger? logger = null) =>
+        BackendSessions.AcquireSharedAsync(probe, prover, launcher, AppHost, config,
             logger ?? new FakeLogger(), TestContext.Current.CancellationToken);
 
     // ── Acquire policy ──
@@ -54,7 +55,6 @@ public sealed class BackendSessionsTests
         var outcome = await AcquireAsync(new FakeServerProbe(ProbeVerdict.Answered), prover, launcher, config);
 
         outcome.Result.Url.ShouldBe("http://127.0.0.1:54240/mcp");
-        outcome.Fallback.ShouldBeFalse();
         launcher.Calls.ShouldBe(0, "a proven listener is attached to, never probed-and-spawned again");
         prover.Calls.Count.ShouldBe(1);
         prover.Calls[0].ShouldBe(new Uri("http://127.0.0.1:54240/mcp"));
@@ -70,171 +70,95 @@ public sealed class BackendSessionsTests
         var outcome = await AcquireAsync(new FakeServerProbe(ProbeVerdict.NotListening), prover, launcher, config);
 
         outcome.Result.Url.ShouldBe("http://127.0.0.1:54241/mcp");
-        outcome.Fallback.ShouldBeFalse();
         launcher.AttachCalls.ShouldBe(1);
-        launcher.PrivateCalls.ShouldBe(0);
+
         prover.Calls.Count.ShouldBe(1, "the listener that started on the configured port must prove before the token rides");
     }
 
-    [Fact]
-    public async Task AcquireShared_WithAnUnprovenListener_FallsBackPrivatelyWithAWarning()
+    [Theory]
+    [InlineData(ProbeVerdict.Answered, IdentityProofFailure.BadSignature)]
+    [InlineData(ProbeVerdict.Answered, IdentityProofFailure.NoKey)]
+    [InlineData(ProbeVerdict.Answered, IdentityProofFailure.RootMismatch)]
+    [InlineData(ProbeVerdict.Answered, IdentityProofFailure.Malformed)]
+    [InlineData(ProbeVerdict.Answered, IdentityProofFailure.NonSuccessStatus)]
+    [InlineData(ProbeVerdict.Answered, IdentityProofFailure.Timeout)]
+    [InlineData(ProbeVerdict.Unanswered, IdentityProofFailure.Timeout)]
+    [InlineData(ProbeVerdict.Unanswered, IdentityProofFailure.BadSignature)]
+    public async Task AcquireShared_WithAnUnprovenListener_RefusesWithoutStarting(ProbeVerdict verdict, IdentityProofFailure failure)
     {
-        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54242/mcp", null),
-            privateResult: new BackendResult("http://127.0.0.1:54298/mcp", null));
-        var prover = new FakeIdentityProver(IdentityProofFailure.BadSignature);
-        prover.AnswerNext(null); // the fallback child proves under this root's key
-        var logger = new FakeLogger();
-        var config = Config(54242, "/tmp/unused");
-
-        var outcome = await AcquireAsync(new FakeServerProbe(ProbeVerdict.Answered), prover, launcher, config, logger);
-
-        outcome.Result.Url.ShouldBe("http://127.0.0.1:54298/mcp");
-        outcome.Fallback.ShouldBeTrue();
-        launcher.AttachCalls.ShouldBe(0, "an unproven listener is never attached to");
-        launcher.PrivateCalls.ShouldBe(1);
-        prover.Calls[0].ShouldBe(new Uri("http://127.0.0.1:54242/mcp"),
-            "the configured listener must be challenged before the fallback decision");
-        prover.Calls[1].ShouldBe(new Uri("http://127.0.0.1:54298/mcp"), "the fallback child must prove too");
-        launcher.PrivateArguments.ShouldContain("--port");
-        launcher.PrivateArguments[Array.IndexOf(launcher.PrivateArguments, "--port") + 1].ShouldBe("0");
-        var record = logger.Collector.GetSnapshot().Single(r => r.Id == 690);
-        record.Message.ShouldContain("54242");
-        record.Message.ShouldContain("stop the listener");
-        record.Message.ShouldContain("BadSignature");
-    }
-
-    [Fact]
-    public async Task HangingProbe_ChallengesThenFallsBack()
-    {
-        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54243/mcp", null),
-            privateResult: new BackendResult("http://127.0.0.1:54299/mcp", null));
-        var prover = new FakeIdentityProver(IdentityProofFailure.Timeout);
-        prover.AnswerNext(null);
-        var config = Config(54243, "/tmp/unused");
-
-        var outcome = await AcquireAsync(new FakeServerProbe(ProbeVerdict.Unanswered), prover, launcher, config);
-
-        prover.Calls[0].ShouldBe(new Uri("http://127.0.0.1:54243/mcp"),
-            "an unanswered probe is challenged before the fallback decision, never treated as 'nothing there'");
-        prover.Calls[1].ShouldBe(new Uri("http://127.0.0.1:54299/mcp"));
-        outcome.Fallback.ShouldBeTrue();
-        launcher.PrivateCalls.ShouldBe(1);
-        launcher.AttachCalls.ShouldBe(0,
-            "an unanswered holder is not 'nothing listening' — the port must not be started on");
-    }
-
-    [Fact]
-    public async Task AcquireShared_WhenTheFallbackChildDoesNotProve_HandsBackNoUrl()
-    {
-        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54244/mcp", null),
-            privateResult: new BackendResult("http://127.0.0.1:54297/mcp", null));
-        var prover = new FakeIdentityProver(IdentityProofFailure.BadSignature);
-        var config = Config(54244, "/tmp/unused");
-
-        var outcome = await AcquireAsync(new FakeServerProbe(ProbeVerdict.Answered), prover, launcher, config);
-
-        outcome.Result.Url.ShouldBeNull("a fallback child that does not prove must never be handed to the token-bearing caller");
-        outcome.Fallback.ShouldBeTrue();
-        prover.Calls[1].ShouldBe(new Uri("http://127.0.0.1:54297/mcp"),
-            "the no-url verdict must come from the fallback child's own failed proof");
-    }
-
-    [Fact]
-    public async Task AcquireShared_WhenTheStartedListenerCannotProve_FallsBackPrivately()
-    {
-        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54245/mcp", null),
-            privateResult: new BackendResult("http://127.0.0.1:54296/mcp", null));
-        // The configured-port start hands back a URL, but a racer owns it: proof fails there, then
-        // the fallback child proves.
-        var prover = new FakeIdentityProver(IdentityProofFailure.BadSignature);
-        prover.AnswerNext(null);
-        var config = Config(54245, "/tmp/unused");
-
-        var outcome = await AcquireAsync(new FakeServerProbe(ProbeVerdict.NotListening), prover, launcher, config);
-
-        outcome.Fallback.ShouldBeTrue();
-        launcher.AttachCalls.ShouldBe(1);
-        launcher.PrivateCalls.ShouldBe(1);
-        prover.Calls[0].ShouldBe(new Uri("http://127.0.0.1:54245/mcp"));
-        prover.Calls[1].ShouldBe(new Uri("http://127.0.0.1:54296/mcp"));
-        outcome.Result.Url.ShouldBe("http://127.0.0.1:54296/mcp");
-    }
-
-    [Fact]
-    public async Task AcquireShared_PassesTheFallbackIdleBoundToThePrivateChild()
-    {
-        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54246/mcp", null));
-        var prover = new FakeIdentityProver(IdentityProofFailure.BadSignature);
-        prover.AnswerNext(null);
-        var config = Config(54246, "/tmp/unused");
-
-        await AcquireAsync(new FakeServerProbe(ProbeVerdict.Answered), prover, launcher, config,
-            fallbackIdle: TimeSpan.FromMinutes(5));
-
-        launcher.PrivateArguments.ShouldContain("--idle-timeout");
-        launcher.PrivateArguments[Array.IndexOf(launcher.PrivateArguments, "--idle-timeout") + 1].ShouldBe("5m");
-    }
-
-    // ── Reopen: one private fallback per proxy ──
-
-    private static Task<BackendSessions.AcquireOutcome> ReacquireAsync(Uri? privateBackend, IServerProbe probe,
-        IIdentityProver prover, IBackendLauncher launcher, ServerConfig config) =>
-        BackendSessions.ReuseOrAcquireAsync(privateBackend, probe, prover, launcher, AppHost, config, null,
-            new FakeLogger(), TestContext.Current.CancellationToken);
-
-    [Fact]
-    public async Task Reacquire_WhenThePrivateBackendStillProves_ReusesItWithoutProbingOrLaunching()
-    {
-        var privateBackend = new Uri("http://127.0.0.1:54290/mcp");
-        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54250/mcp", null),
-            privateResult: new BackendResult("http://127.0.0.1:54291/mcp", null));
-        var prover = new FakeIdentityProver();
-        var probe = new FakeServerProbe(ProbeVerdict.Answered);
-
-        var outcome = await ReacquireAsync(privateBackend, probe, prover, launcher, Config(54250, "/tmp/unused"));
-
-        outcome.Result.Url.ShouldBe(privateBackend.ToString());
-        outcome.Fallback.ShouldBeTrue("the reused backend is still this proxy's private fallback");
-        launcher.PrivateCalls.ShouldBe(0, "a proven private child is reused, not started a second time");
-        launcher.AttachCalls.ShouldBe(0);
-        probe.Calls.ShouldBeEmpty("the configured port is not probed while the private child still proves");
-        prover.Calls.ShouldBe([privateBackend], "only the private child is challenged, never the configured port");
-    }
-
-    [Fact]
-    public async Task Reacquire_WhenThePrivateBackendNoLongerProves_FallsThroughToANormalAcquire()
-    {
-        var privateBackend = new Uri("http://127.0.0.1:54292/mcp");
-        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54251/mcp", null),
-            privateResult: new BackendResult("http://127.0.0.1:54293/mcp", null));
-        var prover = new FakeIdentityProver(IdentityProofFailure.Timeout);
-        prover.AnswerNext(IdentityProofFailure.BadSignature); // the squatter still holds the configured port
-        prover.AnswerNext(null); // the new private child proves
-        var probe = new FakeServerProbe(ProbeVerdict.Answered);
-
-        var outcome = await ReacquireAsync(privateBackend, probe, prover, launcher, Config(54251, "/tmp/unused"));
-
-        prover.Calls[0].ShouldBe(privateBackend, "the old private child is re-proved before anything else");
-        prover.Calls[1].ShouldBe(new Uri("http://127.0.0.1:54251/mcp"));
-        launcher.PrivateCalls.ShouldBe(1, "a dead private child is replaced by a fresh one");
-        outcome.Result.Url.ShouldBe("http://127.0.0.1:54293/mcp");
-        outcome.Fallback.ShouldBeTrue();
-    }
-
-    [Fact]
-    public async Task Reacquire_WithNoPrivateBackend_IsTheNormalAcquire()
-    {
-        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:1/mcp", null));
-        var prover = new FakeIdentityProver();
-        var probe = new FakeServerProbe(ProbeVerdict.Answered);
-
-        var outcome = await ReacquireAsync(null, probe, prover, launcher, Config(54252, "/tmp/unused"));
-
-        outcome.Result.Url.ShouldBe("http://127.0.0.1:54252/mcp");
-        outcome.Fallback.ShouldBeFalse();
-        probe.Calls.ShouldBe([54252]);
-        prover.Calls.ShouldBe([new Uri("http://127.0.0.1:54252/mcp")]);
+        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54242/mcp", null));
+        var prover = new FakeIdentityProver(failure);
+        var outcome = await AcquireAsync(new FakeServerProbe(verdict), prover, launcher, Config(54242, "/tmp/unused"));
+        outcome.Result.Url.ShouldBeNull();
+        outcome.ProofFailure.ShouldBe(failure);
+        outcome.Verdict.ShouldBe(verdict);
         launcher.Calls.ShouldBe(0);
+        prover.Calls.ShouldBe([new Uri("http://127.0.0.1:54242/mcp")]);
+    }
+
+    [Fact]
+    public async Task AcquireShared_WhenTheStartedListenerCannotProve_RefusesWithoutSecondStart()
+    {
+        var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54245/mcp", null));
+        var prover = new FakeIdentityProver(IdentityProofFailure.BadSignature);
+        var outcome = await AcquireAsync(new FakeServerProbe(ProbeVerdict.NotListening), prover, launcher, Config(54245, "/tmp/unused"));
+        outcome.Result.Url.ShouldBeNull();
+        outcome.ProofFailure.ShouldBe(IdentityProofFailure.BadSignature);
+        launcher.Calls.ShouldBe(1);
+        prover.Calls.ShouldBe([new Uri("http://127.0.0.1:54245/mcp")]);
+    }
+
+    [Fact]
+    public async Task AcquireShared_WithAnInconclusiveProbeAndValidProof_Attaches()
+    {
+        var launcher = new FakeBackendLauncher(new BackendResult(null, null));
+        var outcome = await AcquireAsync(new FakeServerProbe(ProbeVerdict.Unanswered), new FakeIdentityProver(), launcher, Config(54242, "/tmp/unused"));
+        outcome.Result.Url.ShouldBe("http://127.0.0.1:54242/mcp");
+        launcher.Calls.ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AcquireShared_WhenCallerCancelsAtACompletedBoundary_PropagatesBeforeFurtherWork(bool cancelAfterProbe)
+    {
+        using var caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var probe = Substitute.For<IServerProbe>();
+        var prover = Substitute.For<IIdentityProver>();
+        var proofCalls = 0;
+        probe.ProbeAsync(54242, caller.Token).Returns(_ =>
+        {
+            if (cancelAfterProbe) { caller.Cancel(); }
+            return Task.FromResult(ProbeVerdict.Answered);
+        });
+        prover.ProveAsync(ServerProbe.EndpointFor(54242), caller.Token).Returns(_ =>
+        {
+            proofCalls++;
+            caller.Cancel();
+            return Task.FromResult<IdentityProofFailure?>(null);
+        });
+        var launcher = new FakeBackendLauncher(new BackendResult(null, null));
+        await Should.ThrowAsync<OperationCanceledException>(() => BackendSessions.AcquireSharedAsync(
+            probe, prover, launcher, AppHost, Config(54242, "/tmp/unused"), NullLogger.Instance, caller.Token));
+        proofCalls.ShouldBe(cancelAfterProbe ? 0 : 1);
+        launcher.Calls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task AcquireShared_WhenLauncherCancelsAndReturnsNoUrl_PropagatesCancellation()
+    {
+        using var caller = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var launcher = Substitute.For<IBackendLauncher>();
+        launcher.AcquireAsync(54242, AppHost, Arg.Any<IReadOnlyList<string>>(), caller.Token).Returns(_ =>
+        {
+            caller.Cancel();
+            return Task.FromResult(new BackendResult(null, null));
+        });
+        var prover = new FakeIdentityProver();
+        await Should.ThrowAsync<OperationCanceledException>(() => BackendSessions.AcquireSharedAsync(
+            new FakeServerProbe(ProbeVerdict.NotListening), prover, launcher, AppHost, Config(54242, "/tmp/unused"),
+            NullLogger.Instance, caller.Token));
+        prover.Calls.ShouldBeEmpty();
     }
 
     // ── OpenAsync around the policy ──
@@ -282,7 +206,7 @@ public sealed class BackendSessionsTests
             error.Message.ShouldContain("could not decrypt the bank");
             launcher.FileName.ShouldBe(AppHost);
             launcher.AttachCalls.ShouldBe(1);
-            launcher.PrivateCalls.ShouldBe(0);
+
         }
         finally
         {
@@ -352,6 +276,9 @@ public sealed class BackendSessionsTests
                 sessions.OpenAsync(null, TestContext.Current.CancellationToken));
 
             error.Message.ShouldContain(McpTokenFile.FileName);
+            error.Code.ShouldBe(ErrorCode.Server.NoToken);
+            launcher.Calls.ShouldBe(0);
+            File.Exists(new McpTokenFile(dataRoot).Path).ShouldBeFalse();
             // ADR-0107 PC.4: identity is already proven (FakeIdentityProver defaults to proven) by
             // the time the token is read, so "another data root" is never a live possibility here.
             error.Message.ShouldNotContain("another data root");
@@ -540,126 +467,35 @@ public sealed class BackendSessionsTests
 
     // ── Proof before every token-bearing request ──
 
-    /// <summary>
-    ///     F3 ordering: the acquire proves before the MCP session (the first token-bearing
-    ///     request), and the dispose stop proves before /shutdown. The shared event log holds the
-    ///     prover's calls and the HTTP requests in one sequence, so the order is a fact, not an
-    ///     inference from the code.
-    /// </summary>
     [Fact]
-    public async Task ProveIsRequired_BeforeEveryTokenBearingRequest()
+    public async Task OpenAsync_WhenReopenedAfterProofFault_RefusesWithoutAnotherSessionOrStart()
     {
-        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-ordering", TestContext.Current.CancellationToken);
+        var root = await TestData.CreateTempRootWithBankAsync("proxy-reopen-proof", TestContext.Current.CancellationToken);
         try
         {
-            await new McpTokenFile(dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
+            await new McpTokenFile(root).EnsureAsync(TestContext.Current.CancellationToken);
             var log = new List<string>();
-            var prover = new RecordingProver(log, IdentityProofFailure.BadSignature);
-            prover.AnswerNext(null); // the fallback child proves
-            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54260/mcp", null));
-            var config = Config(54260, dataRoot);
-            await using var sessions = new BackendSessions(launcher, prover,
-                new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
-                NullLoggerFactory.Instance, AppHost, config, _ => true, null, null, currentProcessPath: AppHost);
-
-            // The session cannot open against the unreachable fake URL; the acquire has already run.
-            await Should.ThrowAsync<BackendUnavailableException>(() =>
-                sessions.OpenAsync(null, TestContext.Current.CancellationToken));
-
-            var fallbackProof = log.IndexOf("prove http://127.0.0.1:54260/mcp");
-            var firstMcp = log.FindIndex(entry => entry.StartsWith("http POST /mcp", StringComparison.Ordinal));
-            fallbackProof.ShouldBeGreaterThanOrEqualTo(0, $"no proof was attempted; log: {string.Join(", ", log)}");
-            firstMcp.ShouldBeGreaterThan(fallbackProof,
-                $"an MCP request rode before the fallback child proved; log: {string.Join(", ", log)}");
-
-            // Hostile half: a listener that no longer proves gets no shutdown request at all.
+            var prover = new RecordingProver(log, null);
             prover.AnswerNext(IdentityProofFailure.BadSignature);
+            var launcher = new FakeBackendLauncher(new BackendResult(null, null));
+            await using var sessions = new BackendSessions(launcher, prover, new FakeServerProbe(ProbeVerdict.Answered),
+                new RecordingHttpClientFactory(log), NullLoggerFactory.Instance, AppHost, Config(54262, root),
+                _ => true, null, null, AppHost);
+            var initial = await Should.ThrowAsync<BackendUnavailableException>(() => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+            initial.Code.ShouldBe(ErrorCode.Server.SessionRefused);
+            var requestCount = log.Count(entry => entry.StartsWith("http", StringComparison.Ordinal));
+            requestCount.ShouldBeGreaterThan(0);
+            log[0].ShouldBe("prove http://127.0.0.1:54262/mcp");
+            var refusal = await Should.ThrowAsync<BackendUnavailableException>(() => sessions.OpenAsync(null, TestContext.Current.CancellationToken));
+            refusal.Code.ShouldBe(ErrorCode.Server.Unproven);
+            launcher.Calls.ShouldBe(0);
+            log.Count(entry => entry.StartsWith("http", StringComparison.Ordinal)).ShouldBe(requestCount);
             await sessions.DisposeAsync();
             log.ShouldNotContain(entry => entry.Contains("/shutdown", StringComparison.Ordinal));
         }
         finally
         {
-            TestData.DeleteTempRoot(dataRoot);
-        }
-    }
-
-    /// <summary>
-    ///     The positive control for the ordering gate: with a listener that still proves, the
-    ///     dispose stop does send /shutdown — and only after its proof.
-    /// </summary>
-    [Fact]
-    public async Task DisposeStop_WithAProvenBackend_SendsTheShutdownAfterTheProof()
-    {
-        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-ordering-control", TestContext.Current.CancellationToken);
-        try
-        {
-            await new McpTokenFile(dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
-            var log = new List<string>();
-            var prover = new RecordingProver(log, IdentityProofFailure.BadSignature);
-            prover.AnswerNext(null); // the fallback child proves at acquire
-            prover.AnswerNext(null); // and again at stop
-            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54261/mcp", null));
-            await using var sessions = new BackendSessions(launcher, prover,
-                new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
-                NullLoggerFactory.Instance, AppHost, Config(54261, dataRoot), _ => true, null, null, currentProcessPath: AppHost);
-
-            try
-            {
-                await sessions.OpenAsync(null, TestContext.Current.CancellationToken);
-            }
-            catch (BackendUnavailableException)
-            {
-                // The fake URL refuses the session; the acquire and the private-backend record stand.
-            }
-
-            await sessions.DisposeAsync();
-
-            var stopProof = log.LastIndexOf("prove http://127.0.0.1:54261/mcp");
-            var shutdown = log.FindIndex(entry => entry.Contains("/shutdown", StringComparison.Ordinal));
-            shutdown.ShouldBeGreaterThanOrEqualTo(0, $"no shutdown request was sent; log: {string.Join(", ", log)}");
-            stopProof.ShouldBeGreaterThanOrEqualTo(0);
-            stopProof.ShouldBeLessThan(shutdown, $"the token rode before the stop proof; log: {string.Join(", ", log)}");
-            log[shutdown].ShouldBe("channel POST /shutdown",
-                $"the stop must ride the channel the proof handed back, not a fresh connection; log: {string.Join(", ", log)}");
-        }
-        finally
-        {
-            TestData.DeleteTempRoot(dataRoot);
-        }
-    }
-
-    [Fact]
-    public async Task OpenAsync_Twice_AfterAFallback_ReusesTheOneChildAndStopsItOnce()
-    {
-        var dataRoot = await TestData.CreateTempRootWithBankAsync("backend-sessions-reopen", TestContext.Current.CancellationToken);
-        try
-        {
-            await new McpTokenFile(dataRoot).EnsureAsync(TestContext.Current.CancellationToken);
-            var log = new List<string>();
-            // The squatter on the configured port never proves; the private child always does.
-            var prover = new EndpointProver(log, new Uri("http://127.0.0.1:54262/mcp"));
-            var launcher = new FakeBackendLauncher(new BackendResult("http://127.0.0.1:54262/mcp", null),
-                privateResult: new BackendResult("http://127.0.0.1:54295/mcp", null));
-            await using var sessions = new BackendSessions(launcher, prover,
-                new FakeServerProbe(ProbeVerdict.Answered), new RecordingHttpClientFactory(log),
-                NullLoggerFactory.Instance, AppHost, Config(54262, dataRoot), _ => true, null, null, currentProcessPath: AppHost);
-
-            for (var open = 0; open < 2; open++)
-            {
-                // The fake URL refuses the session; the acquire and the private-backend record stand.
-                await Should.ThrowAsync<BackendUnavailableException>(() =>
-                    sessions.OpenAsync(null, TestContext.Current.CancellationToken));
-            }
-
-            await sessions.DisposeAsync();
-
-            launcher.PrivateCalls.ShouldBe(1, "a reopen reuses the proven private child");
-            log.Count(entry => entry.Contains("/shutdown", StringComparison.Ordinal)).ShouldBe(1,
-                $"the reused child is recorded once, so it is stopped once; log: {string.Join(", ", log)}");
-        }
-        finally
-        {
-            TestData.DeleteTempRoot(dataRoot);
+            TestData.DeleteTempRoot(root);
         }
     }
 
@@ -693,21 +529,6 @@ public sealed class BackendSessionsTests
         public void AnswerNext(IdentityProofFailure? next) => _pending.Enqueue(next);
     }
 
-    /// <summary>Logs every proof like <see cref="RecordingProver" />; only the squatted endpoint fails.</summary>
-    private sealed class EndpointProver(List<string> log, Uri squatted) : IIdentityProver
-    {
-        public Task<IdentityProofFailure?> ProveAsync(Uri endpoint, CancellationToken ctx)
-        {
-            log.Add($"prove {endpoint}");
-            return Task.FromResult<IdentityProofFailure?>(endpoint == squatted ? IdentityProofFailure.BadSignature : null);
-        }
-
-        public async Task<ProvenChannel> ProveChannelAsync(Uri endpoint, CancellationToken ctx) =>
-            await ProveAsync(endpoint, ctx) is { } failure
-                ? ProvenChannel.NotProven(failure)
-                : ProvenChannel.Proven(new HttpClient(new RecordingHandler(log, "channel")));
-    }
-
     private sealed class RecordingHttpClientFactory(List<string> log) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new(new RecordingHandler(log, "http"));
@@ -735,37 +556,21 @@ public sealed class BackendSessionsTests
 
     private sealed class FakeBackendLauncher : IBackendLauncher
     {
-        private readonly BackendResult? _privateResult;
         private readonly BackendResult _result;
         private readonly Exception? _throws;
 
-        public FakeBackendLauncher(BackendResult result, BackendResult? privateResult = null)
+        public FakeBackendLauncher(BackendResult result)
         {
             _result = result;
-            _privateResult = privateResult;
         }
 
         public FakeBackendLauncher(Exception throws) => _throws = throws;
 
         public int Calls { get; private set; }
 
-        public int PrivateCalls { get; private set; }
-
         public int AttachCalls { get; private set; }
 
         public string? FileName { get; private set; }
-
-        public string[] PrivateArguments { get; private set; } = [];
-
-        public Task<BackendResult> StartPrivateAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ctx)
-        {
-            Calls++;
-            PrivateCalls++;
-            FileName = fileName;
-            PrivateArguments = [.. arguments];
-            var result = _privateResult ?? _result;
-            return _throws is null ? Task.FromResult(result) : Task.FromException<BackendResult>(_throws);
-        }
 
         public Task<BackendResult> AcquireAsync(int port, string fileName, IReadOnlyList<string> arguments, CancellationToken ctx)
         {

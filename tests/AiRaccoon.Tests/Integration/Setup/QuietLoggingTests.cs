@@ -270,39 +270,37 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         recorder.Entries.ShouldContain(e => e.Contains("proxy-app-info-marker", StringComparison.Ordinal));
     }
 
-    /// <summary>The 690 fallback warning's own wording; the refusal line never carries it.</summary>
+    /// <summary>The retired fallback warning must never reappear.</summary>
     private const string FallbackWarning = "starting a private backend on an ephemeral port instead";
 
-    /// <summary>
-    ///     The proxy's own logger follows quiet mode: the 690 fallback warning lands in the quiet log,
-    ///     not on stderr, while the refusal that follows (no private backend could start) stays on
-    ///     stderr because it is written there directly.
-    /// </summary>
+    /// <summary>Quiet mode keeps the actionable identity refusal on stderr.</summary>
     [RetryFact]
-    public async Task QuietProxy_FallbackWarning_GoesToTheQuietLog_AndTheRefusalStaysOnStderr()
+    public async Task QuietProxy_UnprovenListener_RefusalStaysOnStderr()
     {
         var options = QuietOptions(InstallScope.User);
         var (stdout, stderr) = await RunProxyAgainstAnUnprovenSquatterAsync(options, "--quiet");
 
         stdout.ShouldBeEmpty();
         stderr.ShouldNotContain(FallbackWarning);
-        stderr.ShouldContain("no in-process fallback exists", Case.Sensitive, "the refusal is written straight to stderr");
-        File.ReadAllText(LogFilePath(options)).ShouldContain(FallbackWarning);
+        stderr.ShouldContain("no extra backend was started", Case.Sensitive);
+        if (File.Exists(LogFilePath(options)))
+        {
+            File.ReadAllText(LogFilePath(options)).ShouldNotContain(FallbackWarning);
+        }
     }
 
-    /// <summary>Positive control: without --quiet the same fallback warning reaches stderr.</summary>
+    /// <summary>The actionable refusal also reaches stderr without quiet mode.</summary>
     [RetryFact]
-    public async Task LoudProxy_FallbackWarning_ReachesStderr()
+    public async Task LoudProxy_UnprovenListener_RefusalReachesStderr()
     {
         var options = LoudOptions(InstallScope.User);
         var (_, stderr) = await RunProxyAgainstAnUnprovenSquatterAsync(options);
 
-        stderr.ShouldContain(FallbackWarning);
+        stderr.ShouldContain("no extra backend was started");
         File.Exists(LogFilePath(options)).ShouldBeFalse();
     }
 
-    /// <summary>A listener with no identity route squats the port, so the proxy logs 690 and tries a
-    /// private child; the apphost path does not exist, so that start fails and the proxy refuses.</summary>
+    /// <summary>A listener without identity proof must be refused even when the executable is missing.</summary>
     private static async Task<(string Out, string Err)> RunProxyAgainstAnUnprovenSquatterAsync(
         InfrastructureOptions options, params string[] flags)
     {
@@ -318,7 +316,7 @@ public sealed class QuietLoggingTests : IAsyncLifetime
         {
             var exit = await new AppRunner(CliSettingsBackend.AcquireAsync, AppHost).Run(
                 [.. flags, "--data-root", options.DataRoot, "--port", port.ToString()]);
-            exit.ShouldBe(ErrorCode.Reach.StartFailed);
+            exit.ShouldBe(ErrorCode.Server.Unproven);
         });
     }
 
