@@ -216,8 +216,6 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 61 | `Reach.NothingListening` | `serve observability`: nothing is listening on the port | n/a |
 | 62 | `Reach.StoppedAnswering` | A settings server was acquired but a request failed at the transport | n/a |
 | 63 | `Reach.BackendUnavailable` | The proxy found no backend on the port and could not start one there | n/a |
-
-`60` and `63` name the same underlying condition (nothing answering, nothing started) on different surfaces: settings commands exit `60`, the proxy exits `63`.
 | 64 | Reserved (formerly `Reach.PrivateFallbackFailed`) | Automatic private fallback was removed in 1.57.2 | n/a |
 | 65 | `Reach.StartFailed` | The backend executable could not be started as a process | n/a |
 | 66 | `Reach.AutoStartUnsupported` | This process cannot auto-start a backend (launched through the `dotnet` host, or its path is unknown) | no |
@@ -246,6 +244,9 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 93 | `Internal.ManifestBug` | A model download succeeded but the manifest it generated failed validation | no |
 | 94 | `Internal.UnhandledCommand` | A parsed command path has no dispatch arm | no |
 | 95 | `Internal.Timeout` | An operation timed out inside the command, outside paths that name their own timeout | yes |
+
+`60` and `63` name the same underlying condition (nothing answering, nothing started) on
+different surfaces: settings commands exit `60`, the proxy exits `63`.
 
 See [ADR-0107](../adr/0107-categorized-two-digit-exit-codes.md) for the design rationale,
 and `docs/how-to/configure-ai-raccoon-server.md` for the test-verified subset `doctor`

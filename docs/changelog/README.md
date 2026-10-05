@@ -11,7 +11,9 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.57.3 — an inconclusive probe says why no backend was started](1.57.3-inconclusive-probe-names-its-reason.md)
 - [1.57.2 — failed identification no longer starts another server](1.57.2-proxy-refuses-unproven-backend.md)
+- [1.57.1 — recover CUDA failures during embedding](1.57.1-cuda-runtime-fallback.md)
 - [1.57.0 — reads need a registered project id too](1.57.0-reads-need-a-registered-project.md)
 - [1.56.1 — long queries no longer time out in keyword search](1.56.1-long-query-fts-cap.md)
 - [1.56.0 — stop-path secrets ride the proven connection; cancel-safe writes everywhere](1.56.0-stop-path-token-and-cancel-safe-writes.md)
