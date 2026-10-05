@@ -410,6 +410,28 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         (await BankSettingAsync(loserKey)).ShouldBeNull();
     }
 
+    [RetryFact]
+    public async Task ScopeRemoveUnderAlias_RemovesLastWinnerPath()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await Registry.RegisterAsync(Winner, null, ct);
+        var path = Path.GetFullPath(Path.Combine(_dataRoot, "only-scope"));
+        var winnerKey = $"ingest.scope.{Winner}";
+        var loserKey = $"ingest.scope.{Loser}";
+        await BankStore.SetSettingAsync(winnerKey, IngestScopeList.ToJson([path]), ct);
+        ProjectIdAliasMap.ReplaceDefault(AliasMap());
+        using var http = new HttpClient { BaseAddress = new Uri(_app.Urls.First()) };
+        var cli = new ServerSettingsStore(http, Token, CliSettingsBackend.RequestDeadline);
+
+        var current = IngestScopeList.Parse(await cli.GetSettingAsync(loserKey, ct));
+        var updated = IngestScopeList.Remove(current, path);
+        updated.ShouldBeEmpty();
+        await cli.DeleteSettingAsync(loserKey, ct);
+
+        (await BankSettingAsync(winnerKey)).ShouldBeNull();
+        (await BankSettingAsync(loserKey)).ShouldBeNull();
+    }
+
     /// <summary>
     ///     <c>ingest scope remove</c> stays open under any id. Only <c>ingest.scope.</c> is exercised:
     ///     every bank open renames a legacy <c>watch.scope.</c> row to <c>ingest.scope.</c>.

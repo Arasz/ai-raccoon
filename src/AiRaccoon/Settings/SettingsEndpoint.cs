@@ -94,17 +94,18 @@ internal static partial class SettingsEndpoint
 
                     try
                     {
+                        var resolvedKey = Resolve(key);
                         // ADR-0076 (#592): deleting embedding.provider while a migration is open
                         // would strand the outbox — the one key only ModelResetAsync deletes. This
                         // route is the ADR-0075 write choke point; a future server-side
                         // IMemoryStore.DeleteSettingAsync caller would bypass this guard (R1 F12).
-                        if (key == EmbeddingSettingsKeys.Provider && await migrations.HasOpenModelMigrationAsync(ctx))
+                        if (resolvedKey == EmbeddingSettingsKeys.Provider && await migrations.HasOpenModelMigrationAsync(ctx))
                         {
                             throw new ModelMigrationInProgressException(ModelResetRefusedMessage);
                         }
 
-                        await store.DeleteSettingAsync(key, ctx);
-                        Log.KeyDeleted(logger, key);
+                        await store.DeleteSettingAsync(resolvedKey, ctx);
+                        Log.KeyDeleted(logger, resolvedKey);
                         return Results.NoContent();
                     }
                     catch (ModelMigrationInProgressException ex)
