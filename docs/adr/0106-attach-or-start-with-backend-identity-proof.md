@@ -4,7 +4,7 @@ Date: 2026-09-23 (owner ruling, 2026-09-22 late: "revert the changes to the back
 there is any squatter - we need other solution - we are not limited to MCP protocol - we can use a
 proof based approach, we can generate a private key for ai-raccoon and use it to prove identity")
 
-Status: Accepted
+Status: Accepted; private fallback acquisition and its lifetime policy superseded by [ADR-0128](0128-refuse-unproven-backend-without-private-fallback.md). The identity protocol remains accepted.
 
 ## Context
 
@@ -26,6 +26,10 @@ and a backup of `.ai-raccoon/` left the credential behind. **F39**: a mistyped `
 an empty directory minted a full bank there on the first auto-launched settings command.
 
 ## Decision
+
+The launch and private-child paragraphs below record the original decision. Since
+1.57.2, an unproven listener causes refusal, and automatic private fallback and
+its disposal/reuse paths are removed. ADR-0128 defines the current launch policy.
 
 A launch that is about to use a data root probes the configured port. A **proven** ai-raccoon
 listener is attached to — nothing new is spawned. Nothing listening → one is started on the
@@ -194,9 +198,9 @@ the old server manually before running the new binary against the same root.
    connection, so the stop token reaches the proven server or nobody. Still open: MCP session
    traffic (including the SDK's `DELETE /mcp` on dispose) and acquire-time attach run on pooled
    connections. Channel binding / unix sockets remain future work for those.
-3. **DoS** — squatting the port forces every client onto the fallback; a listener that accepts and
-   never answers costs the same; fallback sprawl costs a model load each; the endpoint is rate-bounded
-   but unauthenticated by construction.
+3. **DoS** — under ADR-0128, a squatter or hanging listener causes bounded refusal rather than
+   private fallback. Availability is still lost, but each client no longer loads another model.
+   The proof endpoint remains rate-bounded and unauthenticated by construction.
 4. **The bearer token, once handed over, is still full access** — environment propagation, `/proc`,
    crash dumps, transcripts.
 5. **Copied or restored state directory** — cross-root confusion is refused via `rootFp`; restoring to
@@ -207,7 +211,8 @@ the old server manually before running the new binary against the same root.
    is plaintext even with an encrypted bank; state-dir backups carry the trust anchor.
 8. **The F39 default-root carve-out is a deliberate product decision** (path identity).
 9. **Metadata** — `/observability` still reveals pid and version; `rootFp` is never echoed.
-10. **A missing or corrupt key file means "cannot attach"**, only "spawn private" — never "mint here".
+10. **A missing or corrupt key file means "cannot attach"**. Under ADR-0128 it causes refusal,
+    with no private spawn and no verifier-side minting.
 11. **The invariant's precise form** is the one above — not "zero requests".
 12. **The overruled precedent** — ADR-0105's oracle objection is answered above, not dropped.
 13. **The dispose-time prove-then-stop needs a client that closes stdin.** The MCP SDK's stdio client

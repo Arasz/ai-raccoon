@@ -33,8 +33,8 @@ public sealed partial class HowToExitTableTests
     private static readonly int[] SettingsCodes =
     [
         ErrorCode.Usage.UndialablePort, ErrorCode.Usage.RequestRejected, ErrorCode.Bank.NoBank,
-        ErrorCode.Server.NoToken, ErrorCode.Server.RequestTokenRefused, ErrorCode.Server.EndpointMissing, ErrorCode.Server.MigrationRefused,
-        ErrorCode.Reach.Unavailable, ErrorCode.Reach.StoppedAnswering, ErrorCode.Reach.PrivateFallbackFailed,
+        ErrorCode.Server.Unproven, ErrorCode.Server.NoToken, ErrorCode.Server.RequestTokenRefused, ErrorCode.Server.EndpointMissing, ErrorCode.Server.MigrationRefused,
+        ErrorCode.Reach.Unavailable, ErrorCode.Reach.StoppedAnswering,
         ErrorCode.Reach.StartFailed, ErrorCode.Reach.AutoStartUnsupported,
         ErrorCode.Internal.ServerError, ErrorCode.Internal.UnusableResponse, ErrorCode.Ok.SIGC
     ];

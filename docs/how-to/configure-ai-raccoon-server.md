@@ -77,19 +77,22 @@ listener only after it proves it holds this root's identity key over the bounded
 
 ### Backend launch: attach-or-start behind the identity proof
 
-`serve`, a bare `ai-raccoon` proxy launch, and every server-routed settings verb probe
-the configured `--port` first. A **proven** listener there is attached to and nothing
-new starts; nothing answering starts one on that port; a listener that answers but
-cannot prove it holds this root's identity key is treated as untrusted
-([ADR-0106](../adr/0106-attach-or-start-with-backend-identity-proof.md), reverting
-[ADR-0105](../adr/0105-private-spawn-is-the-launch-default.md)):
+`serve`, a bare `ai-raccoon` proxy launch, and server-routed settings commands
+check the configured `--port`. A listener that proves it holds this data root's
+identity key can be reused. Automatic startup requires connection refusal, the
+`NotListening` verdict that confirms the port is free.
 
-- The proxy and settings verbs fall back to a private, proof-gated backend instead —
-  never a secret byte reaches the unproven listener.
-- `serve` itself refuses with exit code `50` (`Server.Unproven`) after the proof attempt,
-  naming the manual remedy (stop the listener yourself, or pass `--port 0` for a private
-  one) — never a flag, since `--attach` no longer exists (passing it is an unrecognized
-  argument, exit `11`, `Usage.Unparseable`).
+If a listener cannot prove its identity, the proxy and settings commands refuse
+with exit `50` (`Server.Unproven`). They start no additional backend. A timeout,
+reset, or foreign HTTP reply also prevents startup unless identity proof succeeds.
+Check the selected port and data root, then resolve the identity-key problem or
+stop the conflicting server yourself before retrying. A missing key is a refusal,
+not permission to mint one in the verifier or start on another port.
+
+The identity challenge is unchanged; an unproven listener receives no loopback
+token or tool payload. See [ADR-0128](../adr/0128-refuse-unproven-backend-without-private-fallback.md).
+`serve` still accepts an explicit `--port 0` for a random free port. `--attach`
+remains an unrecognized argument (exit `11`, `Usage.Unparseable`).
 
 A `--data-root` that resolves to neither the default root nor an existing bank refuses
 before any of this — a client auto-launch never mints a bank at a typo'd path (F39,
@@ -112,10 +115,10 @@ A one-shot CLI settings command that attaches to a proven listener, or finds non
 starts one, leaves that shared backend running under this watchdog — deliberately
 shared and long-lived. The command discloses that on stderr (`ai-raccoon: the backend
 on port <n> keeps running after this command exits, under its own idle timeout …`) and
-names the stop: `ai-raccoon serve --restart --port <n>`. A listener that could not
-prove got a private, 5-minute-bounded fallback instead, so there is nothing further to
-stop by hand. The proxy is different again: its own private fallback is stopped when
-the proxy itself shuts down.
+names the stop: `ai-raccoon serve --restart --port <n>`.
+An unproven listener makes the command refuse without starting another server.
+A shared backend also outlives a proxy that started it; proxy exit closes its MCP
+sessions and leaves backend lifetime to the idle watchdog.
 
 ---
 
@@ -243,18 +246,20 @@ delivered never reports success:
 | `13` | `Usage.UndialablePort` — `--port` is 0 or outside 1-65535 on a path that must dial a fixed port |
 | `17` | `Usage.RequestRejected` — the server rejected the request as malformed (HTTP 400) for a reason the CLI pre-flight did not catch |
 | `31` | `Bank.NoBank` — no bank file exists at the resolved path; a client auto-launch refuses rather than minting one at a non-default root (F39) |
+| `50` | `Server.Unproven` — the configured listener could not prove this data root's identity; no additional backend was started |
 | `51` | `Server.NoToken` — this data root holds no token, so the server on the port cannot be asked anything |
 | `53` | `Server.RequestTokenRefused` — the server refused the loopback token — it may serve another data root |
 | `57` | `Server.EndpointMissing` — the server predates this verb (404 on its endpoint) |
 | `59` | `Server.MigrationRefused` — the settings server refused a model verb (`settings model reset`, `model embedding set`) because a model migration outbox row is open (ADR-0076); every MCP tool call is refused until it finishes, and nothing changed |
 | `60` | `Reach.Unavailable` — no settings server answered at the port within the acquire budget, and none could be started there |
 | `62` | `Reach.StoppedAnswering` — a settings server was acquired but a request failed at the transport; the write certainly did not land |
-| `64` | `Reach.PrivateFallbackFailed` — the listener on the port did not prove it serves this data root, and the private fallback server could not be started either |
 | `65` | `Reach.StartFailed` — the backend executable could not be started as a process |
 | `66` | `Reach.AutoStartUnsupported` — this process cannot auto-start a backend (launched through the dotnet host, or its executable path is unknown) |
 | `91` | `Internal.ServerError` — the server answered but failed with a 5xx — a server-side fault, distinct from `10` (`Usage.InvalidValue`, "you mistyped") |
 | `92` | `Internal.UnusableResponse` — the server answered with a status or body the CLI cannot use |
 | `130` | `Ok.SIGC` — the command was cancelled before it finished (Ctrl-C / SIGTERM); the command changed nothing |
+
+Exit `64` remains reserved for the removed private-fallback failure.
 
 Two categories apply to every command, not just this channel ([ADR-0107](../adr/0107-categorized-two-digit-exit-codes.md)).
 Any `Usage.*` code (10-17) means a value you passed was rejected — a bad enum, an undialable
