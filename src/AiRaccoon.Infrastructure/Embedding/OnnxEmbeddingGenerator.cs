@@ -29,7 +29,12 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     private const string KeyValueCachePrefix = "past_key_values.";
 
     private readonly ILogger _logger;
-    private readonly InferenceSession _session;
+    private InferenceSession _session;
+    private readonly string _modelPath;
+    private readonly bool _preferGpu;
+    private readonly Lock _sessionGate = new();
+    private bool _serializeRuns;
+    private bool _cudaActive;
     private readonly IEmbeddingTokenizer _tokenizer;
     private readonly int _window;
     private readonly string _pooling;
@@ -78,7 +83,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     internal void AppendRefusal(string device, string reason) => ExecutionProvider = $"{ExecutionProvider} ({device} refused: {reason})";
 
     /// <summary>True only for a session that actually landed on WebGPU (not a "(… refused: …)" fallback) — <see cref="Run" />'s gate check.</summary>
-    private readonly bool _needsGpuGateForRun;
+    private bool _needsGpuGateForRun;
 
     /// <summary>Non-null only for an MLX session: the plugin is thread-affine (a session may run
     /// only on the exact OS thread it first ran on), so every call this generator makes into it —
@@ -114,6 +119,8 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         int intraOpThreads = 0, bool preferGpu = false, bool preferMlx = false, string? cudaLibraryPath = null)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
+        _modelPath = modelPath;
+        _preferGpu = preferGpu;
         _logger = logger;
         _tokenizer = tokenizer;
         _window = descriptor.ContextWindowTokens;
@@ -137,6 +144,8 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         {
             _session = cudaSession;
             ExecutionProvider = CudaProvider;
+            _cudaActive = true;
+            _serializeRuns = true;
         }
         else
         {
@@ -212,6 +221,21 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
 
     public void Dispose()
     {
+        if (_serializeRuns)
+        {
+            lock (_sessionGate)
+            {
+                DisposeSession();
+            }
+
+            return;
+        }
+
+        DisposeSession();
+    }
+
+    private void DisposeSession()
+    {
         if (_disposed)
         {
             return;
@@ -251,22 +275,81 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     /// Dispose, so a throwing disposal can be proven not to leak the executor. Test seam.</summary>
     internal void SetMlxSessionDisposeActionForTesting(Action action) => _mlxSessionDisposeAction = action;
 
+    private Func<InferenceSession, List<NamedOnnxValue>, IDisposableReadOnlyCollection<DisposableNamedOnnxValue>>? _sessionRunForTesting;
+    private Action? _beforeCudaFallbackForTesting;
+
+    /// <summary>Exercises CUDA inference failure with real CPU sessions on hosts without CUDA.</summary>
+    internal void AttachCudaForTesting(
+        Func<InferenceSession, List<NamedOnnxValue>, IDisposableReadOnlyCollection<DisposableNamedOnnxValue>> run,
+        Action? beforeFallback = null)
+    {
+        ExecutionProvider = CudaProvider;
+        _cudaActive = true;
+        _serializeRuns = true;
+        _sessionRunForTesting = run;
+        _beforeCudaFallbackForTesting = beforeFallback;
+    }
+
+    private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> RunSession(List<NamedOnnxValue> feed) =>
+        _sessionRunForTesting?.Invoke(_session, feed) ?? _session.Run(feed);
+
     private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Run(List<NamedOnnxValue> feed)
     {
+        if (_cudaActive)
+        {
+            try
+            {
+                return RunSession(feed);
+            }
+            catch (Exception ex) when (IsPluginLoadFailure(ex))
+            {
+                // ORT does not expose its error code. Retry only CUDA's Run; an invalid feed
+                // or a failure in the replacement session still propagates from the one retry below.
+                FallBackFromCuda(ex);
+            }
+        }
+
         if (_mlxExecutor is { } executor)
         {
-            return executor.Run(() => _session.Run(feed));
+            return executor.Run(() => RunSession(feed));
         }
 
         if (!_needsGpuGateForRun)
         {
-            return _session.Run(feed);
+            return RunSession(feed);
         }
 
         lock (GpuGate)
         {
-            return _session.Run(feed);
+            return RunSession(feed);
         }
+    }
+
+    private void FallBackFromCuda(Exception exception)
+    {
+        var originalProvider = ExecutionProvider;
+        InferenceSession replacement;
+        try
+        {
+            _beforeCudaFallbackForTesting?.Invoke();
+            ExecutionProvider = CpuProvider;
+            replacement = (_preferGpu ? CreateGpuSessionOrNull(_modelPath, IntraOpThreads) : null)
+                          ?? CreateCpuSession(_modelPath, IntraOpThreads);
+        }
+        catch
+        {
+            ExecutionProvider = originalProvider;
+            throw;
+        }
+
+        var failedSession = _session;
+        _session = replacement;
+        _cudaActive = false;
+        _needsGpuGateForRun = ExecutionProvider == WebGpuProvider;
+        ExecutionProvider += originalProvider[CudaProvider.Length..];
+        AppendRefusal(CudaProvider, exception.Message);
+        Log.CudaRuntimeFallback(_logger, exception, ExecutionProvider);
+        failedSession.Dispose();
     }
 
     /// <summary>Whether the loaded core has WebGPU compiled in: the NuGet core on macOS, the bundled WebGPU core elsewhere (ADR-0115).</summary>
@@ -676,6 +759,22 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         IReadOnlyList<EncodedText> items, GeneratedEmbeddings<Embedding<float>> embeddings,
         CancellationToken cancellationToken)
     {
+        if (_serializeRuns)
+        {
+            lock (_sessionGate)
+            {
+                return RunBatchOnSession(items, embeddings, cancellationToken);
+            }
+        }
+
+        return RunBatchOnSession(items, embeddings, cancellationToken);
+    }
+
+    private GeneratedEmbeddings<Embedding<float>> RunBatchOnSession(
+        IReadOnlyList<EncodedText> items, GeneratedEmbeddings<Embedding<float>> embeddings,
+        CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
         var maxLen = Math.Min(_window, items.Max(i => i.Ids.Length));
         if (_bucketRows)
@@ -891,6 +990,10 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
 
     public static partial class Log
     {
+        [LoggerMessage(EventId = 418, Level = LogLevel.Warning,
+            Message = "CUDA inference failed; retrying this embedding with {ExecutionProvider}. Later embeddings will use the fallback session.")]
+        public static partial void CudaRuntimeFallback(ILogger logger, Exception exception, string executionProvider);
+
         /// <summary>
         ///     A STORED entry exceeded the window (docs/adr/0036). Should stay at zero once chunk budgets
         ///     are engine-aware — which it could not, while queries reached this same event (ADR-0071).
