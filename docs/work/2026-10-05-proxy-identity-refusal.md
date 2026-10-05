@@ -1,6 +1,6 @@
 # Proxy identity refusal verification
 
-Task: `air-block-duplicate-backend-after-proof`. Implementation and independent review completed on macOS arm64/.NET 10; PR #851 awaits remote gates.
+Task: `air-block-duplicate-backend-after-proof`. Implementation and independent review completed on macOS arm64/.NET 10; PR #852 awaits remote gates (replaces draft #851 after a fresh-main rebase; the local hook blocked force-with-lease even after explicit user approval).
 
 The real-server regression first failed because a running genuine ai-raccoon with a replaced verifier trust anchor caused one additional launch. It then passed with zero launches, the original process alive, and successful proof after restoring the trust key. Both replacements used fresh verifiers.
 
