@@ -1,0 +1,69 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-10-06",
+    "branch": "main",
+    "commit": "1ca5ab63 (1.57.3 build point; HEAD at run time)",
+    "data-root": "per run under /tmp/air1572/lane-1573 and lane-c2; ~/.ai-raccoon read only, never bound; port 7721 never touched",
+    "note": "SCOPED RUN: 1.57.3 is a repack of 1.57.2 — zero src/ changes (git diff 08ee359d..1ca5ab63 = VERSION, changelog, ai-badger state only) and the decompiled assemblies differ only in CommitTimestamp/AssemblyVersion. The deep behaviour items therefore reuse the same-day 2026-10-05-1.57.2-release.json run rather than being re-run; this checklist covers everything a repack can change (package identity, install/version, lifecycle, write/search smoke, full surface, observability). The live server on 7721 was not running during the lifecycle test (no listener before or after) and was not touched."
+  },
+  "derived": {
+    "version": "1.57.3",
+    "mcp-tool-count": "30",
+    "mcp-prompt-count": "2",
+    "note": "Produced by scripts/derive-facts.py at run time (exit 0), never typed from memory or a previous run."
+  },
+  "findings-against-prior-runs": [],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "dotnet tool update ai-raccoon --global --no-http-cache (1.57.2 -> 1.57.3); ai-raccoon --version; python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py <repo> (HEAD 1ca5ab63); shasum -a 256 of ~/.dotnet/tools/.store/ai-raccoon/1.57.3/{ai-raccoon,ai-raccoon.osx-arm64}/1.57.3/*.nupkg against the nuget.org flat-container downloads; unzip both osx-arm64 packages (1.57.2 vs 1.57.3) and compare every file hash; ilspycmd each of the three assemblies in both packages and diff the decompilation (filtering only AssemblyInformationalVersion/AssemblyVersion/CommitTimestamp); git diff --stat 08ee359d..1ca5ab63",
+      "evidence": "dotnet tool update: \"Tool 'ai-raccoon' was successfully updated from version '1.57.2' to version '1.57.3'.\"\nai-raccoon --version: 1.57.3+1ca5ab63c8279dcfcfe56274b0f2a7a23273fddb\nderive-facts: version=1.57.3, mcp-tool-count=30, mcp-prompt-count=2\nai-raccoon.1.57.3.nupkg store 5b4bcdcddb9deb38adcd33873dcdbcff89685a1a8b300d0be8a3ddada0fd84c0 == nuget.org 5b4bcdcddb9deb38adcd33873dcdbcff89685a1a8b300d0be8a3ddada0fd84c0\nai-raccoon.osx-arm64.1.57.3.nupkg store ea441f88b455459df5dbd22d9c49a3684b5bda7276b69724c8f20342d88c5670 == nuget.org ea441f88b455459df5dbd22d9c49a3684b5bda7276b69724c8f20342d88c5670\ngit diff --stat 08ee359d..1ca5ab63: VERSION, docs/changelog/README.md, docs/changelog/1.57.3-*.md, docs/reference/cli-reference.md, .ai-badger/state.json — zero src/ changes\npackage diff 1.57.2 vs 1.57.3: identical file inventory (105 files), 94 byte-identical, 11 differing (AiRaccoon.dll/Core.dll/Infrastructure.dll + their pdbs + AiRaccoon.deps.json + .mcp/server.json + .nuspec + .signature.p7s + psmdcp)\ndecompiled assemblies: identical line counts (AiRaccoon.Core 27954 / AiRaccoon 16561 / AiRaccoon.Infrastructure 27380); after filtering version metadata the only differences are CommitTimestamp (23:11:11 -> 23:24:51) and AssemblyVersion 1.57.2.0 -> 1.57.3.0",
+      "observed-result": "No local Release build/pack was run: the item is substituted and the instrument is the published-package identity check — force-install of the published 1.57.3 tool, NuGet hash identity for both packages, version equality with derive-facts at HEAD, and a code-identity proof against the already-verified 1.57.2 package (same file inventory, 94/105 byte-identical, and decompiled assemblies that differ only in version metadata). The 1.57.3 release is a repack of 1.57.2's code.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Accept as substituted. Instrument: published-package identity — force-install 1.57.2 -> 1.57.3, sha256 equality with nuget.org for both packages, and --version equality with derive-facts at HEAD. The repack claim is proven: identical file inventory, 94/105 files byte-identical, and the 11 differing files are the three assemblies differing only in CommitTimestamp/AssemblyVersion after decompilation. 1.57.3 therefore carries the already-verified 1.57.2 code."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "python3 /tmp/air1572/driver-lifecycle-1573.py: serve --data-root /tmp/air1572/lane-1573/data --port 0 --idle-timeout 0; serve --restart --port <bound> --idle-timeout 0; control serve --restart --port 0; lsof -nP -iTCP:7721 -sTCP:LISTEN before/after. Logs: /tmp/air1572/lane-1573/serve-{1,2,3}.log",
+      "evidence": "serve1: port=50393 pid=96966\nserve --restart --port 50393: returned port=50393 new pid=96969; log carries ServerRestart[650] ('asking the server on port 50393 to stop') and ServerRestart[651] ('stopped and the port is free')\ncontrol serve --restart --port 0: port=50402 pid=96972 while port 50393 stayed pid=96969 (not cycled)\n7721 listeners before: [] | after: [] (unchanged; no listener was running at test time and none was created)\ncleanup: stopped pids 96969 and 96972; remaining listener on 50393: none",
+      "observed-result": "Same behaviour as the 1.57.2 run: --port 0 binds ephemerally and reports it, --restart on the bound port stops and replaces the server while keeping the port, the --port 0 control starts an unrelated instance, and 7721 was never bound or cycled. Both servers started here were stopped by PID.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Accept. Directly observed on 1.57.3: --port 0 bound ephemerally and reported it; --restart on that port stopped pid 96966 and rebound 50393 under pid 96969 with ServerRestart[650]/[651]; the --port 0 control started an unrelated instance while 50393 stayed put; lsof showed no listener on 7721 before or after."
+    },
+    {
+      "item": "memory-write-and-search-round-trip",
+      "expected-result": "memory_write stores an entry and returns a hash; memory_get returns it by hash; memory_search returns it on a meaning-based query and on a keyword query",
+      "command": "python3 /tmp/air1572/driver-c2.py against 1.57.3: project_id_token_get; memory_write {projectId, content:'The harbour tide table is revised each spring.'}; memory_write {content:'Second surface note about ferry timetables.'}; memory_get {hash}; memory_search {query:'ferry timetables'}; memory_stats. Transcript: /tmp/air1572/1573-surface.out",
+      "evidence": "memory_write: isError=False {\"data\": {\"hash\": \"95635f711385aff2ad8ce279d8e75acda6f0087d0db5499ab01666157f175b43\", \"path\": \"e39641f2c680b33f...\", \"stored\": true}}\nmemory_get {hash 94c79e5f...}: {\"value\": \"The harbour tide table is revised each spring.\"}\nmemory_search 'ferry timetables': {\"results\": [{\"hash\": \"95635f71...\", \"ranking\": 1, ...}]}\nmemory_stats: {\"entries\": 2, \"pending\": 2, \"contexts\": [\"project:01a11094-4948-70ef-9bb1-aea1615960c0\"]}",
+      "observed-result": "A fresh 1.57.3 server stores notes with real hashes, returns the full entry by hash, finds the stored note by a meaning-based query, and reports the two entries. The result hashes are byte-for-byte the same as the 1.57.2 run's for the same content, consistent with the code-identity proof.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Accept. A fresh 1.57.3 server stored two notes with real hashes, memory_get returned the full value by hash, a meaning-based query returned the stored note, and memory_stats reported 2 entries; the result hashes are byte-identical to the 1.57.2 run's for the same content, consistent with the code-identity proof."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "python3 /tmp/air1572/driver-c2.py against 1.57.3: tools/list + prompts/list; settings access default set full; settings ingest scope add/watch enable; register a project; tools/call all 30 tools in dependency order; prompts/get both prompts. Transcript: /tmp/air1572/1573-surface.out",
+      "evidence": "tools 30: ['code_get','memory_delete','memory_delete_context','memory_embed_pending','memory_get','memory_ingest_directory','memory_ingest_file','memory_list','memory_performance','memory_promotion_discard','memory_promotion_list','memory_record_followthrough','memory_record_grade','memory_search','memory_set_ttl','memory_share','memory_share_extract','memory_stats','memory_sweep','memory_sync','memory_watch_add','memory_watch_remove','memory_watch_status','memory_workspace_begin','memory_workspace_consolidate','memory_workspace_discard','memory_workspace_status','memory_write','project_id_get','project_id_token_get']\nprompts 2: ['workspace-consolidation-guide','memory-usage-guide']\nNOT CALLED: []\nCALLED: 30 of 30\nPROMPT workspace-consolidation-guide messages=1; PROMPT memory-usage-guide messages=1\nSame three well-formed domain refusals as 1.57.2 (code_get -> unknown-hash, memory_workspace_discard -> unknown-workspace, memory_sync -> sync-not-configured), everything else returned data",
+      "observed-result": "The 1.57.3 surface is the derived 30 tools and 2 prompts; all 30 were called and answered and both prompts fetched, with only the same three deliberate domain refusals. Identical to the 1.57.2 run.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Accept. Exactly the derived 30 tools and 2 prompts; all 30 called and answered, both prompts fetched, only the same three deliberate domain refusals. Identical to the 1.57.2 surface."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "python3 /tmp/air1572/events.py /Users/arasz/RiderProjects/ai-raccoon /tmp/air1572/lane-1573/serve-{1,2,3}.log /tmp/air1572/lane-c2/serve.log (doc and src read at HEAD 1ca5ab63, the checked build's commit)",
+      "evidence": "logs scanned: 4\ndistinct ids emitted: 14: [446, 447, 510, 525, 601, 650, 651, 660, 672, 692, 910, 911, 1003, 1005]\nunresolved in doc table: []\nunresolved among declared src EventIds: []\ne.g. 446 -> NoteChunkOrderRepairJob.cs; 447 -> ChunkBoundaryRepairJob.cs; 510 -> BankMaintenanceHostedService.cs; 525 -> MaintenanceJobRunner.cs; 601 -> NodeRunner.cs; 650/651 -> ServerRestart.cs; 660 -> ShutdownEndpoint.cs; 692 -> OwnerOnlyFile.cs; 910/911 -> ToolRefusals.cs; 1003/1005 -> EmbedDrainReporter.cs",
+      "observed-result": "All 14 distinct event ids emitted by the 1.57.3 servers resolve in the logging-event-id reference at the build's own commit and to declared src EventIds; nothing unresolved.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Accept. All 14 distinct event ids emitted by the 1.57.3 servers resolve in the reference at the checked build's commit and to declared src EventIds; nothing unresolved. Re-run during acceptance and reproduced exactly (14 ids, unresolved [])."
+    }
+  ]
+}
