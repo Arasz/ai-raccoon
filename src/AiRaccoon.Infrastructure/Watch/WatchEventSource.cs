@@ -16,6 +16,14 @@ public sealed partial class WatchEventSource(
     Action<WatchEventError> onError,
     ILogger<WatchEventSource> logger) : IDisposable
 {
+    /// <summary>
+    ///     Windows allocates this buffer from non-paged kernel pool and defaults it to 8 KB; a burst
+    ///     of changes (git checkout, IDE reformat, install) overflows it, raises Error and loses the
+    ///     events it could not store. 64 KB is the documented maximum (ADR-0129); other platforms
+    ///     ignore the value.
+    /// </summary>
+    private const int EventBufferSize = 64 * 1024;
+
     // File-mode registrations: WatchKey(projectId, registeredPath) → the watched file. FileSystemWatcher
     // requires a directory, so the watcher sits on the parent; Translate filters to this file.
     private readonly Dictionary<WatchKey, string> _fileTargets = new();
@@ -70,7 +78,8 @@ public sealed partial class WatchEventSource(
                 watcher = new FileSystemWatcher(watchDirectory)
                 {
                     IncludeSubdirectories = includeSubdirectories,
-                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
+                    InternalBufferSize = EventBufferSize
                 };
                 if (filter is not null)
                 {
@@ -138,6 +147,20 @@ public sealed partial class WatchEventSource(
         lock (_gate)
         {
             return _watchers.ContainsKey(new WatchKey(projectId, normalized));
+        }
+    }
+
+    /// <summary>The live watcher for a registration, or null when not watching; the buffer-size test reads this.</summary>
+    internal FileSystemWatcher? WatcherFor(string projectId, string path)
+    {
+        if (!TryNormalize(path, out var normalized))
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            return _watchers.GetValueOrDefault(new WatchKey(projectId, normalized));
         }
     }
 

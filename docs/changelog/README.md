@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.57.4 — the file watcher's event buffer is 64 KB](1.57.4-file-watcher-buffer-64kb.md)
 - [1.57.3 — an inconclusive probe says why no backend was started](1.57.3-inconclusive-probe-names-its-reason.md)
 - [1.57.2 — failed identification no longer starts another server](1.57.2-proxy-refuses-unproven-backend.md)
 - [1.57.1 — recover CUDA failures during embedding](1.57.1-cuda-runtime-fallback.md)
