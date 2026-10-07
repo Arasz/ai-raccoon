@@ -168,6 +168,22 @@ public sealed class WatchEventSourceTests
         source.IsWatching(Project, other.Path).ShouldBeFalse();
     }
 
+    [RetryFact]
+    public void Start_SetsInternalBufferTo64Kb_SoAChangeBurstIsNotDropped()
+    {
+        using var dir = TempDir.New("source-buffer");
+        var source = NewSource([], []);
+
+        source.Start(Project, dir.Path);
+
+        var watcher = source.WatcherFor(Project, dir.Path);
+        watcher.ShouldNotBeNull();
+        // Windows allocates this buffer from non-paged pool and defaults it to 8192; the
+        // documented maximum is 65536. A burst larger than the buffer raises Error and the
+        // events it could not store are lost (ADR-0129).
+        watcher.InternalBufferSize.ShouldBe(64 * 1024);
+    }
+
     // FileSystemWatcher only accepts directories, so a FILE registration watches the parent
     // directory and translates events for that file only.
 
