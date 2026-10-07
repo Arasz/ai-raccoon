@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 
 VALID_LEVELS = ("low", "medium", "high")
 
-ID_RE = re.compile(r"^openrouter/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+MODEL_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9~@][A-Za-z0-9._~@:+-]*)+")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
@@ -156,8 +156,8 @@ def _validate_member(label: str, index: int, member: Any) -> List[str]:
         if key not in MEMBER_REQUIRED and key not in MEMBER_OPTIONAL:
             errors.append(f"{where} has unexpected key {key!r}")
     ident = member.get("id")
-    if "id" in member and (not isinstance(ident, str) or not ID_RE.match(ident)):
-        errors.append(f"{where} has id {ident!r}: must match ^openrouter/<vendor>/<name>$")
+    if "id" in member and (not isinstance(ident, str) or not MODEL_ID_RE.fullmatch(ident)):
+        errors.append(f"{where} has id {ident!r}: must match <provider>/<model>")
     if "preferred" in member and not isinstance(member["preferred"], bool):
         errors.append(f"{where} preferred must be a boolean")
     if "pricing" in member:
@@ -311,9 +311,9 @@ def load_groups(path: Any = None) -> Dict[str, List[Dict[str, Any]]]:
 def _emit_id(member: Dict[str, Any], *, source: Any) -> str:
     """The one field the resolver returns, re-validated before emit."""
     ident = member.get("id")
-    if not isinstance(ident, str) or not ID_RE.match(ident):
+    if not isinstance(ident, str) or not MODEL_ID_RE.fullmatch(ident):
         raise RegistryInvalid([f"refusing to emit id {ident!r}: must match "
-                                "^openrouter/<vendor>/<name>$"], source=source)
+                                "<provider>/<model>"], source=source)
     return ident
 
 

@@ -139,7 +139,7 @@ inventory is `docs/reference/data-access.md` in the ai-badger repository.
 |---|---|
 | `AI_BADGER_MEMORY_CONTEXT=0` | Hook off: no spawn, no HTTP, no block |
 | `AI_BADGER_MEMORY_CONTEXT_PIPELINE=0` | Single search even with a key; no HTTP |
-| `AI_BADGER_MEMORY_CONTEXT_PLANNER_MODEL` | Planner model override (an OpenRouter model id) |
+| `AI_BADGER_MEMORY_CONTEXT_PLANNER_MODEL` | Planner OpenRouter `vendor/model` override (optional `openrouter/` prefix; native paths and punctuation are refused) |
 | `AI_BADGER_ALLOW_THIRD_PARTY=1` | Opts in to third-party egress (pipeline mode); must be exactly `"1"`, and a `dataPolicy` lock overrides it |
 | `OPENROUTER_API_KEY` | The pipeline's credential; does nothing without the opt-in |
 | `AI_BADGER_PROJECT_ID` | Overrides `.ai-badger/project-id`; exported globally, it routes every repo to one project |

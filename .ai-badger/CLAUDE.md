@@ -4,7 +4,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon, changelog
-> Scaffolded by ai-badger 0.187.4. Source of truth for this file: `.ai-badger/CLAUDE.md`.
+> Scaffolded by ai-badger 0.189.2. Source of truth for this file: `.ai-badger/CLAUDE.md`.
 
 ## Commands
 
@@ -97,11 +97,11 @@ execution starts; `steps_ready` returns the dispatchable frontier and its waves.
 `step_start`, `step_complete` (evidence + AC results), `step_fail`, `step_skip`, `ac_check`;
 `progress_checklist` is the status view, and `plan_get`, `step_get`, `plan_export` read back.
 
-Launched as `uv run --script .ai-badger/skills/task-decomposition/scripts/task_graph_server.py`
-(`uv` on PATH; the PEP 723 env is fetched on first launch). No project `.mcp.json` (Hermes,
-worktree sessions) → use the CLI twin: `task_graph_cli.py <tool> --json`. Hermes operators:
-add the proposed `mcp_servers:` entry to `~/.hermes/config.yaml`, anchoring the script path to
-the project root — the declaration is project-relative.
+Launched by `uv run --no-project python -c …`: a stdlib walk-up from the session directory to the
+nearest `.ai-badger/skills/task-decomposition/scripts/task_graph_server.py`, run with `uv run --script`
+(`uv` on PATH; no shell, no git). No project `.mcp.json` (worktree sessions) → use the CLI twin:
+`task_graph_cli.py <tool> --json`. Hermes operators: add the proposed `mcp_servers:` entry to
+`~/.hermes/config.yaml`; Hermes walks up from its own working directory.
 
 
 

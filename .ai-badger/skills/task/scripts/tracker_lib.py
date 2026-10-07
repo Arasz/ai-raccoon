@@ -28,7 +28,7 @@ persona routing) lives in the project's `.ai-badger/config.json`, not here.
 from __future__ import annotations
 
 import contextlib
-import fcntl
+import importlib
 import json
 import os
 import subprocess
@@ -37,6 +37,21 @@ import tempfile
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
+
+# File locking is the one place this module needs a platform primitive: fcntl on POSIX,
+# msvcrt on Windows. An unconditional `import fcntl` killed every tracker command on
+# Windows — including `--help` — because the POSIX-only module does not exist there, so the
+# tracking store was never written and the worktree the tracker was supposed to create never
+# appeared. Both stay optional; the lock degrades only on a platform that has neither.
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows has no fcntl
+    fcntl = None  # type: ignore[assignment]
+
+# msvcrt is Windows-only and unresolvable on POSIX, so it is imported lazily rather than in a
+# top-level `import` statement: a static import reads to gates/deps_guard.py as an undeclared
+# third-party dependency on the Linux CI that runs this repo. On Windows it is stdlib.
+msvcrt = importlib.import_module("msvcrt") if sys.platform == "win32" else None
 
 # Session sources: how the tracker identifies the current session and reads its token
 # usage. Every agent registers its own source the same way — an adjustment
@@ -327,6 +342,40 @@ def spawn_detached(argv: list, cwd: Path | None = None, log_path: Path | None = 
     return proc
 
 
+def lock_file(fh, *, blocking: bool = True) -> bool:
+    """Take an exclusive advisory lock on the open file handle *fh*.
+
+    Returns False only when non-blocking and the lock is already held; True otherwise, so the
+    blocking form is indistinguishable from the platform's own acquire. fcntl.flock carries
+    POSIX, msvcrt.locking carries Windows, and a platform with neither proceeds unlocked.
+    """
+    if fcntl is not None:
+        flags = fcntl.LOCK_EX if blocking else fcntl.LOCK_EX | fcntl.LOCK_NB
+        try:
+            fcntl.flock(fh, flags)
+            return True
+        except BlockingIOError:
+            return False
+    if msvcrt is not None:  # pragma: no cover - real msvcrt is Windows-only; tests fake it
+        mode = msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK
+        try:
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), mode, 1)
+            return True
+        except OSError:
+            return False
+    return True
+
+
+def unlock_file(fh) -> None:
+    """Release a lock taken by lock_file(); a no-op where no primitive exists."""
+    if fcntl is not None:
+        fcntl.flock(fh, fcntl.LOCK_UN)
+    elif msvcrt is not None:  # pragma: no cover - real msvcrt is Windows-only; tests fake it
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+
+
 class locked_store:
     """Context manager: exclusive lock over the tracking data dir for read-modify-write."""
 
@@ -339,11 +388,11 @@ class locked_store:
         # the other way a suite process can touch real tracking state.
         _record_real_write(LOCK_FILE)
         self._fh = open(LOCK_FILE, "w", encoding="utf-8")
-        fcntl.flock(self._fh, fcntl.LOCK_EX)
+        lock_file(self._fh)
         return self
 
     def __exit__(self, *exc):
-        fcntl.flock(self._fh, fcntl.LOCK_UN)
+        unlock_file(self._fh)
         self._fh.close()
         return False
 
@@ -1035,8 +1084,6 @@ def state_json_updated_since(started_at: str) -> bool:
 # agents can coexist — and absent all of them, the tracker has no session source at all. The
 # import must never fail the tracker over a module that was never installed.
 try:
-    import importlib
-
     for _path in sorted(SCRIPT_DIR.glob("*_session_source.py")):
         importlib.import_module(_path.stem)
         sys.modules[_path.stem].register(sys.modules[__name__])

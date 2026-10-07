@@ -29,7 +29,6 @@ Usage: resume_cron.py run [--dry-run]
 from __future__ import annotations
 
 import argparse
-import fcntl
 import shutil
 import subprocess
 import sys
@@ -141,10 +140,9 @@ def run(dry_run: bool) -> int:
     # Held open (not `with`) for the process lifetime: releasing it early via `with` would
     # drop the exclusive lock before the run actually completes.
     lock_fh = open(CRON_LOCK, "w", encoding="utf-8")  # pylint: disable=consider-using-with
-    try:
-        fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    if not lib.lock_file(lock_fh, blocking=False):
         log("another cron run is active; skipping")
+        lock_fh.close()
         return 0
 
     tasks = lib.load_tasks()

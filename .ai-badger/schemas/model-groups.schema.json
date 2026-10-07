@@ -43,8 +43,8 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^openrouter/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
-          "description": "Fully-qualified model id. Bare aliases never appear here."
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9~@][A-Za-z0-9._~@:+-]*)+$(?![\\s\\S])",
+          "description": "Fully-qualified <provider>/<model> id. Bare aliases never appear here."
         },
         "preferred": { "type": "boolean" },
         "pricing": { "$ref": "#/$defs/pricing" },

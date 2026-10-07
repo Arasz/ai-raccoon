@@ -369,18 +369,24 @@ def parse_plan(text: Any) -> PlanResult:
     return PlanResult("fallback", "invalid-shape" if parsed_any else "no-json-object", None)
 
 
+OPENROUTER_MODEL_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+
+
 def planner_model(override: Optional[str], resolver: Any, registry: Any) -> Optional[str]:
-    """The OpenRouter model id: a `vendor/name` override, else the resolver's `medium` pin."""
+    """Return an OpenRouter API vendor/name id; native resolver pins fall back pre-network."""
     if isinstance(override, str) and override.strip():
-        ref = override.strip()
-        return ref.removeprefix("openrouter/") if "/" in ref else None
+        ref = override.strip().removeprefix("openrouter/")
+        return ref if OPENROUTER_MODEL_RE.fullmatch(ref) else None
     if resolver is None:
         return None
     try:
         ident = resolver.resolve(level="medium", groups=resolver.load_groups(registry))
     except Exception:  # pylint: disable=broad-exception-caught
         return None
-    return ident.removeprefix("openrouter/") if isinstance(ident, str) and ident else None
+    if not isinstance(ident, str) or not ident.startswith("openrouter/"):
+        return None
+    ref = ident.removeprefix("openrouter/")
+    return ref if OPENROUTER_MODEL_RE.fullmatch(ref) else None
 
 
 def _chat_text(document: Any) -> str:
