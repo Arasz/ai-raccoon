@@ -75,10 +75,13 @@ public sealed partial class WatchEventSource(
             FileSystemWatcher? watcher = null;
             try
             {
+                // DirectoryName is deliberately not watched: a directory event has nothing to digest
+                // (WatchDigestExecutor) and only adds buffer pressure; the 5-minute reconcile heals a
+                // directory delete or rename (ADR-0130).
                 watcher = new FileSystemWatcher(watchDirectory)
                 {
                     IncludeSubdirectories = includeSubdirectories,
-                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
                     InternalBufferSize = EventBufferSize
                 };
                 if (filter is not null)

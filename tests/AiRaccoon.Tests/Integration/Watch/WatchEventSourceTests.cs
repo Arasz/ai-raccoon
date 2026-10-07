@@ -184,6 +184,22 @@ public sealed class WatchEventSourceTests
         watcher.InternalBufferSize.ShouldBe(64 * 1024);
     }
 
+    [RetryFact]
+    public void Start_DoesNotWatchDirectoryNameNotifications()
+    {
+        using var dir = TempDir.New("source-notify");
+        var source = NewSource([], []);
+
+        source.Start(Project, dir.Path);
+
+        var watcher = source.WatcherFor(Project, dir.Path);
+        watcher.ShouldNotBeNull();
+        // Directory events only add buffer pressure: the digest returns for any directory path
+        // (WatchDigestExecutor), and the 5-minute reconcile heals a directory delete or rename
+        // (ADR-0130). File events plus LastWrite are all the adapter ingests.
+        watcher.NotifyFilter.ShouldBe(NotifyFilters.FileName | NotifyFilters.LastWrite);
+    }
+
     // FileSystemWatcher only accepts directories, so a FILE registration watches the parent
     // directory and translates events for that file only.
 
