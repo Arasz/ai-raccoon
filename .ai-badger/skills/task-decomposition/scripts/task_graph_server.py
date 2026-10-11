@@ -1288,12 +1288,32 @@ def _handle_line(line: str) -> Optional[dict]:
                               f"Internal error: {type(exc).__name__}")
 
 
+def _write_line(sink, text: str) -> None:
+    """Write one response to ``sink``: UTF-8 bytes where it has a buffer, else text.
+
+    ``sys.stdout`` on Windows encodes with cp1252, which cannot represent the ``\u2192``
+    (U+2192) the tool descriptions carry; that ``UnicodeEncodeError`` killed the
+    ``tools/list`` reply. Writing UTF-8 to the underlying buffer mirrors the byte read on
+    the input side (``sys.stdin.buffer``) and sidesteps the console codec. An in-memory
+    text sink (``io.StringIO`` in tests) has no buffer and takes the plain write.
+    """
+    buffer = getattr(sink, "buffer", None)
+    if buffer is not None:
+        buffer.write(text.encode("utf-8"))
+        buffer.flush()
+        return
+    sink.write(text)
+    sink.flush()
+
+
 def serve(stdin=None, stdout=None) -> int:
     """The NDJSON loop: one JSON object per line in, one response per request out.
 
     Input is read as bytes where the stream offers them (``sys.stdin.buffer``): a line of
     invalid UTF-8 decodes with replacement and answers a JSON-RPC parse error, instead of
-    killing the loop with the ``UnicodeDecodeError`` a text read would raise.
+    killing the loop with the ``UnicodeDecodeError`` a text read would raise. Output is
+    written as UTF-8 bytes where the sink offers a buffer, so a non-UTF-8 console codec
+    (Windows cp1252) cannot break a response carrying non-ASCII.
     """
     source = (getattr(sys.stdin, "buffer", sys.stdin) if stdin is None else stdin)
     sink = sys.stdout if stdout is None else stdout
@@ -1305,8 +1325,7 @@ def serve(stdin=None, stdout=None) -> int:
             continue
         response = _handle_line(line)
         if response is not None:
-            sink.write(json.dumps(response, ensure_ascii=False) + "\n")
-            sink.flush()
+            _write_line(sink, json.dumps(response, ensure_ascii=False) + "\n")
     return 0
 
 
