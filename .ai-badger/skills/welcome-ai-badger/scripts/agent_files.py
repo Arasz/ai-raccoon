@@ -49,6 +49,10 @@ class AgentFiles:
         for file_entry in scaffolding["files"]:
             source = feature_dir / file_entry["source"]
             target = self.ctx.target / file_entry["target"]
+            if target.is_symlink() and (agent_name == "codex" or
+                    agent_name == "pi" and "codex" in self.ctx.config.get("agents", [])):
+                self.ctx.notes.append(f"preserved native instruction symlink {file_entry['target']}")
+                continue
             managed = file_entry.get("managed", True)
             seed_once = file_entry.get("seedOnce", False)
             is_template = file_entry.get("template", False)
@@ -152,5 +156,9 @@ class AgentFiles:
         declares what files to write. No hardcoded fallback — all agents are data-driven.
         """
         agents = self.ctx.config.get("agents", [])
+        if "codex" in agents:
+            override = self.ctx.target / "AGENTS.override.md"
+            if override.is_file() and "Managed by ai-badger" not in override.read_text(encoding="utf-8"):
+                self.ctx.notes.append("hand-authored AGENTS.override.md masks Codex AGENTS.md; preserved unchanged — merge shared guidance into the override")
         for agent_name in agents:
             self._apply_scaffolding(agent_name, instructions_doc, instr_paths, invariants)

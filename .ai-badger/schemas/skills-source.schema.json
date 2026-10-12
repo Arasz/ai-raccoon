@@ -55,7 +55,8 @@
                     "claude",
                     "copilot",
                     "hermes",
-                    "pi"
+                    "pi",
+                    "codex"
                   ]
                 },
                 "minItems": 1

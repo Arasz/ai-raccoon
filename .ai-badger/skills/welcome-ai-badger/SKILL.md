@@ -47,7 +47,7 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
    python3 "$AI_BADGER/features/common/skills/welcome-ai-badger/scripts/detect.py" --target . --root "$AI_BADGER" > /tmp/proposed-config.json
    ```
    This proposes stacks (with `requires` expanded), detected coding agents
-   (claude/copilot/hermes — only those with traces in the repo or user scope), source control,
+   (claude/copilot/hermes/pi/codex, detected from repo or user-scope traces), source control,
    and build/test/lint/run commands.
 
 2. **Author `config.json`.** Read the proposal. Fill in `project.summary` and `project.domain`
@@ -82,7 +82,12 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
    ```
    Produces `.ai-badger/` (config.json, manifest.json, CLAUDE.md, agents/, instructions/,
    invariants/, skills/, agent-instructions/, state.json) and agent-discovery copies for each
-   detected agent (`CLAUDE.md`, `.github/copilot-instructions.md`). Note the
+   detected agent (`CLAUDE.md`, `.github/copilot-instructions.md`, `HERMES.md`,
+   `AGENTS.override.md`, `AGENTS.md`). Codex receives `.agents/skills/` symlinks and
+   `.codex/agents/*.toml`, project MCP configuration and the supported native hook subset.
+   Review project and hook trust in Codex before expecting hooks to run; scaffolding does not
+   grant trust. A root pi `AGENTS.override.md` wins over `AGENTS.md`, so check its guidance
+   when both agents share a repository. Note the
    printed plugin-setup commands and run them per the chosen scope (or hand them to the user).
    **Existing hand-authored discovery files are preserved by default** — see the preserve note
    below; on a mature repo the scaffold will report which files it left untouched.

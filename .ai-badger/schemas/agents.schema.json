@@ -19,14 +19,16 @@
           "claude",
           "copilot",
           "hermes",
-          "pi"
+          "pi",
+          "codex"
         ]
       },
       "default": [
         "claude",
         "copilot",
         "hermes",
-        "pi"
+        "pi",
+        "codex"
       ]
     }
   }

@@ -36,6 +36,10 @@
           "script": {
             "type": "string",
             "description": "Filename in the adjustments/ directory."
+          },
+          "cleanupOnDeselection": {
+            "type": "boolean",
+            "description": "Run this adjustment without installing resources when its agent is not selected, to remove only owned merged entries."
           }
         }
       }

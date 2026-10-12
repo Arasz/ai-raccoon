@@ -67,7 +67,8 @@
               "claude": { "$ref": "#/$defs/agentOverride" },
               "hermes": { "$ref": "#/$defs/agentOverride" },
               "copilot": { "$ref": "#/$defs/agentOverride" },
-              "pi": { "$ref": "#/$defs/agentOverride" }
+              "pi": { "$ref": "#/$defs/agentOverride" },
+              "codex": { "$ref": "#/$defs/agentOverride" }
             }
           }
         }

@@ -570,7 +570,8 @@ class Scaffolder:
         """
         # An adjustment is loaded by path: what it cannot resolve itself travels in the context.
         declared_mcp = sorted(self.mcp.split_servers_by_scope(self.mcp.declared_servers())[0])
-        for agent_name in self.config.get("agents", []):
+        selected = self.config.get("agents", [])
+        for agent_name in dict.fromkeys([*selected, *bl.AGENT_NAMES]):
             adj_path = self.root / "features" / agent_name / "adjustments" / "adjustment.json"
             if not adj_path.exists():
                 continue
@@ -581,6 +582,8 @@ class Scaffolder:
                 continue
 
             for adj in adj_manifest.get("adjustments", []):
+                if agent_name not in selected and not adj.get("cleanupOnDeselection", False):
+                    continue
                 script_name = adj.get("script")
                 if not script_name:
                     continue

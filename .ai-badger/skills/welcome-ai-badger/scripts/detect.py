@@ -300,6 +300,9 @@ def detect_agents(target: Path) -> List[str]:
     # pi detection: .pi/ directory in repo or ~/.pi/ in user scope
     if (target / ".pi").is_dir() or (home / ".pi").is_dir():
         agents.append("pi")
+    codex_home = Path(os.environ.get("CODEX_HOME", str(home / ".codex"))).expanduser()
+    if (target / ".codex").is_dir() or codex_home.is_dir():
+        agents.append("codex")
     return agents or ["claude"]
 
 

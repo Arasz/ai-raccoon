@@ -30,7 +30,8 @@
           "claude",
           "copilot",
           "hermes",
-          "pi"
+          "pi",
+          "codex"
         ]
       },
       "additionalProperties": {

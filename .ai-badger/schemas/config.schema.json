@@ -74,7 +74,8 @@
           "claude",
           "copilot",
           "hermes",
-          "pi"
+          "pi",
+          "codex"
         ]
       },
       "description": "Coding agents detected as present in the repo/user scope; only these are initialized. Keep in sync with AGENT_NAMES in badger_lib.py."

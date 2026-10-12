@@ -232,7 +232,7 @@ def inclusions(config: Dict[str, Any]) -> Dict[str, Set[str]]:
 
 # Canonical agent list — keep in sync with schemas/agents.schema.json and
 # schemas/config.schema.json agents enum.
-AGENT_NAMES = ["claude", "copilot", "hermes", "pi"]
+AGENT_NAMES = ["claude", "copilot", "hermes", "pi", "codex"]
 
 
 # ---------------------------------------------------------------------- breaking versions
