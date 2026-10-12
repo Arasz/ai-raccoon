@@ -27,6 +27,12 @@ public sealed partial class SqliteConnectionFactory(
     /// </summary>
     private static readonly ConditionalWeakTable<sqlite3, StrongBox<BankState>> InitializedHandles = new();
 
+    /// <summary>
+    ///     Serializes pool checkouts across the process: Microsoft.Data.Sqlite 10.0.12 can lend one
+    ///     pooled native connection to two concurrent opens (ADR-0131).
+    /// </summary>
+    internal static readonly SemaphoreSlim PoolCheckoutGate = new(1, 1);
+
     private const string BankStateSql =
         "SELECT (SELECT data_version FROM pragma_data_version) AS DataVersion, " +
         "(SELECT schema_version FROM pragma_schema_version) AS SchemaVersion, " +
@@ -554,21 +560,44 @@ public sealed partial class SqliteConnectionFactory(
         return connection;
     }
 
-    private static async Task OpenWithPragmasAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    /// <summary>Opens a pooled connection with its checkout taken under <see cref="PoolCheckoutGate" />.</summary>
+    internal static async Task OpenPooledAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        await connection.OpenAsync(cancellationToken);
+        await PoolCheckoutGate.WaitAsync(cancellationToken);
+        try
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+        finally
+        {
+            PoolCheckoutGate.Release();
+        }
+    }
 
-        await using var fk = connection.CreateCommand();
-        fk.CommandText = "PRAGMA foreign_keys = ON";
-        await fk.ExecuteNonQueryAsync(cancellationToken);
+    /// <summary>Opens with the shared pragmas; disposes the connection and rethrows if any step fails.</summary>
+    internal static async Task OpenWithPragmasAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await OpenPooledAsync(connection, cancellationToken);
 
-        await using var wal = connection.CreateCommand();
-        wal.CommandText = "PRAGMA journal_mode=WAL";
-        await wal.ExecuteNonQueryAsync(cancellationToken);
+            await using var fk = connection.CreateCommand();
+            fk.CommandText = "PRAGMA foreign_keys = ON";
+            await fk.ExecuteNonQueryAsync(cancellationToken);
 
-        await using var busy = connection.CreateCommand();
-        busy.CommandText = "PRAGMA busy_timeout=5000";
-        await busy.ExecuteNonQueryAsync(cancellationToken);
+            await using var wal = connection.CreateCommand();
+            wal.CommandText = "PRAGMA journal_mode=WAL";
+            await wal.ExecuteNonQueryAsync(cancellationToken);
+
+            await using var busy = connection.CreateCommand();
+            busy.CommandText = "PRAGMA busy_timeout=5000";
+            await busy.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch
+        {
+            await connection.DisposeAsync();
+            throw;
+        }
     }
 
     private static partial class Log

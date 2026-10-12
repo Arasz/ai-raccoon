@@ -436,7 +436,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         }
 
         var connection = new SqliteConnection(csb.ToString());
-        await connection.OpenAsync(cancellationToken);
+        await SqliteConnectionFactory.OpenPooledAsync(connection, cancellationToken);
         connection.EnableExtensions();
         connection.LoadVector();
         return connection;
