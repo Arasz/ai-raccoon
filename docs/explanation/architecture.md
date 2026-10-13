@@ -285,8 +285,10 @@ path (ADR 0019).
 
 ### Connection opens
 
-Every bank connection is pooled, and every pooled open takes its pool checkout under one
-process-wide gate, `SqliteConnectionFactory.PoolCheckoutGate` (ADR-0131). Microsoft.Data.Sqlite
+Normal bank opens are pooled, and every pooled open takes its pool checkout under one
+process-wide gate, `SqliteConnectionFactory.PoolCheckoutGate` (ADR-0131). Two rekey paths open
+with `Pooling = false` and skip the gate, because no pool means nothing to race:
+`LegacyKeyOpensHealthyBankAsync` (the legacy-key probe) and `OpenRekeyConnectionAsync`. Microsoft.Data.Sqlite
 10.0.12 can hand one native connection to two opens that race, and the pool later disposes it
 under whichever owner still holds it. That surfaced as `ObjectDisposedException:
 'SQLitePCL.sqlite3'` on the first PRAGMA. Only the checkout is serialized. The PRAGMAs, the
