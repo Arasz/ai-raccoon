@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-10-05",
+  "lastUpdated": "2026-10-13",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+        "id": "air-serialize-pooled-sqlite-bank-opens",
+        "title": "Serialize pooled SQLite opens (efcore#39008) and dispose on failed pragma",
+        "summary": "Process-wide PoolCheckoutGate around every pooled OpenAsync (bank, sync snapshots, doctor) works around Microsoft.Data.Sqlite 10.0.12 lending one native handle to two connections (ObjectDisposedException 'SQLitePCL.sqlite3' in the watch reconcile). OpenWithPragmasAsync disposes on failure. ADR-0131, 1.57.6. PR #861 merged as 651b58f1; pin-comment NIT followed up in #862. Remove the gate when a Microsoft.Data.Sqlite release with efcore#39012 is pinned.",
+        "pr": 861,
+        "merged": true,
+        "mergeCommit": "651b58f1",
+        "date": "2026-10-13",
+        "hasNotes": false
+    },
     {
         "id": "air-fix-proxy-refusal-integration-nits",
         "title": "Fix proxy-refusal integration nits from PR #852 review",
