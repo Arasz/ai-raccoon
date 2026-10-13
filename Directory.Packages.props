@@ -6,6 +6,7 @@
   <ItemGroup Label="Application">
     <PackageVersion Include="DotNext" Version="6.9.0" />
     <PackageVersion Include="DotNext.Threading" Version="6.9.0" />
+    <!-- 10.0.12 carries the pool race ADR-0131 gates; on moving to a release with dotnet/efcore#39012, remove SqliteConnectionFactory.PoolCheckoutGate. -->
     <PackageVersion Include="Microsoft.Data.Sqlite.Core" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
