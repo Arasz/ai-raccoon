@@ -15,64 +15,32 @@
   },
   "findings-against-prior-runs": [
     {
-      "lane": "A",
-      "finding": "None contradicted. Re-derived: the 1.57.2 run's port-7721 'unchanged pid' check relied on a live owner server; in this run no server listened on 7721 at all, so the same wording cannot be reused blindly - the check degrades to 'nothing bound 7721'."
+      "prior-run": "2026-10-05-1.57.2-release.json",
+      "prior-claim": "promotion-queue-state: memory_share_extract propose adding no candidates was 'a property of the small fixture'.",
+      "what-is-actually-true": "SelectExtractionCandidates admits only rows with embed_state='embedded'; that fixture had no embedding engine, so no row could ever be a candidate. The scorer was never exercised; only the fixed score-5 agent-requested-share path was.",
+      "evidence": "src/AiRaccoon.Infrastructure/Sqlite/MemorySql.cs:54-63; this run with a stub engine queued the decision note at score 2.2422 with reasons [organic-note, durable-fact-language, short-definitional-floor].",
+      "so-what": "Seed an embedding engine before judging extraction candidates; an empty extract on an engine-less bank is not evidence."
     },
     {
-      "lane": "A",
-      "finding": "Environment note, not a prior-run error: three stdio proxy processes (pids 69134, 81074, 1140, started Oct 12-13) still execute the deleted pre-update 1.57.5 binary from ~/.dotnet/tools/.store/.stage/lr4nerht.5qo; any evidence gathered through those proxies (e.g. the connected ai-raccoon MCP tools in an agent session) reflects 1.57.5, not the installed 1.57.6. This lane used its own 1.57.6 server throughout."
+      "prior-run": "2026-10-05-1.57.2-release.json",
+      "prior-claim": "watch-catch-up-heals-a-missed-change: the node_modules decoy showed the exclusion holds.",
+      "what-is-actually-true": "The driver chmod 000'd node_modules, so the decoy was unreadable whether or not it was excluded.",
+      "evidence": "Lane C driver review; this run relied on the hidden-directory decoy as the real exclusion control.",
+      "so-what": "Use a readable decoy (hidden dir or unlocked node_modules) or the exclusion leg cannot fail."
     },
     {
-      "lane": "A",
-      "finding": "Driver needs `X-AiRaccoon-Token` from <data-root>/mcp-token for /mcp; the memory/prior notes do not mention this, and the prior drivers (/tmp/air1572/*) no longer exist - a reusable driver in the repo would save every run rewriting it."
+      "prior-run": "2026-10-05-1.57.2-release.json",
+      "prior-claim": "read-path-query-guard: a 30-line stack-frame query showed the structural detector warns when armed.",
+      "what-is-actually-true": "That shape trips the regex warn tier (StackFrameLineRegex) by itself, so the leg could not tell the structural detector apart.",
+      "evidence": "This run used a log-line query with no regex marker: off gave no warning, on at threshold 0.5 gave the structural warning, off again removed it.",
+      "so-what": "Structural-detector fixtures must avoid regex markers."
     },
     {
-      "lane": "B",
-      "finding": "memory-write: also run 1.57.2 hash identity: hash b4faa710... is identical to the 1.57.2 run's astro hash, so it is content/context-stable, not a per-run value."
-    },
-    {
-      "lane": "B",
-      "finding": "keyword-search-across-a-chunk-boundary: the checklist's literal fixture (sentence x10 + vk83jq) no longer produces more than one entries row on this build (1 row, len 1189) because the memory chunk window is 1022 tokens (ADR-0125); the item's own premise ('more than one entries row') cannot hold for it. The 1.57.2 run noticed (x45 fallback) but the template text was not updated. Template should specify a note long enough (>~4,700 chars) or a size sweep; a sweep of 90 sizes here placed the id within 14 chars of the cut and never split it."
-    },
-    {
-      "lane": "B",
-      "finding": "read-path-query-guard: the 1.57.2 structural-detector step used a 30-line stack-frame query; that shape trips the regex warn tier (StackFrameLineRegex) on its own, so the 'warns when armed' leg could not distinguish the structural detector. This run used a log-line shape with no regex marker; only then does the 'off vs on' difference prove the detector. The previous verdict was right about the outcome but the instrument could not fail."
-    },
-    {
-      "lane": "B",
-      "finding": "long-query-keyword-terms-capped: 1.57.2 recorded 1.70 s for the 7,259-char paste at vw0; 1.57.6 measured 7-10 s on a fresh 23,243-entry copy. Cause here is host load (load average 43-47, another lane's server at ~745% CPU), confirmed by the 1.56.0 control being 4-40x slower under the same load, not a regression. Timings need an idle host to be comparable across runs."
-    },
-    {
-      "lane": "B",
-      "finding": "sqlite3 -readonly ~/.ai-raccoon/memory.db fails with 'unable to open database file' when the live server is not holding the WAL (no -shm); SKILL.md already mentions this for scratch banks, but the checklist's VACUUM INTO route for the live bank is the same trap. Copying the file (cp) works when no -wal file exists."
-    },
-    {
-      "lane": "B",
-      "finding": "search results collapse identical-text rows from different notes into one result (82 distinct texts of 91 rows holding the id); an expectation of 'every row holding the id is returned' must compare distinct values, not rows."
-    },
-    {
-      "lane": "C",
-      "finding": "1.57.2 promotion-queue-state: it concluded 'memory_share_extract propose added no additional candidates ... a property of the small fixture'. The real cause: SelectExtractionCandidates (MemorySql.cs:54-63) only admits rows with embed_state='embedded', and that fixture had no embedding engine so every row was pending. With an engine configured, propose returns ranked candidates immediately. The prior run only ever exercised the agent-requested-share path (a fixed score 5) and never the scorer."
-    },
-    {
-      "lane": "C",
-      "finding": "1.57.2 watch-catch-up premise note: its driver used chmod 000 on node_modules so the node_modules decoy could never be read; that decoy proves nothing about exclusion (a hidden-dir decoy, or an unlocked node_modules, is the real control)."
-    },
-    {
-      "lane": "C",
-      "finding": "docs/reference/logging-event-ids.md is missing event ids emitted at runtime in these runs: 703 (PromotionQueueService, Discarded N queued row(s)), 1003 (embed drain pass finished) and 1005 (embed drain pass failed) are in src (PromotionQueueService.cs:304, EmbedDrainReporter.cs:85,93) but grep of the reference finds no row for them: the Observability item's 'ids resolve against the reference' check would fail for these. Not tracked by this lane; report to the observability lane/owner."
-    },
-    {
-      "lane": "C",
-      "finding": "docs/reference/agent-memory-server.md writes watch states lowercase (healthy) while memory_watch_status returns 'Healthy' (PascalCase)."
-    },
-    {
-      "lane": "orchestrator",
-      "finding": "CORRECTION to lane C's finding that events 703, 1003, 1005 lack a row in docs/reference/logging-event-ids.md: they are covered by ranged rows '700, 702-704, 707-709' (line 214) and '1002-1013' (line 231). Lanes A and B resolved them correctly. Not a doc gap."
-    },
-    {
-      "lane": "orchestrator",
-      "finding": "CORRECTION to lane B's 'stale premise' finding on keyword-search-across-a-chunk-boundary: the template was already updated. It specifies the sentence forty-five times ('ten fit in one chunk since 1.56'). Lane B took the 10x fixture from the 2026-10-05 1.57.2 run file, not the template. Its size-sweep substitute still exercised the premise (54 multi-row notes), so the item verdict stands, and the template needs no change."
+      "prior-run": "2026-10-05-1.57.2-release.json",
+      "prior-claim": "server-lifecycle: port 7721's server pid unchanged.",
+      "what-is-actually-true": "The check needs a live owner server. In this run nothing listened on 7721, so it degrades to \"nothing bound 7721\".",
+      "evidence": "lsof on 7721 empty before and after (lane A).",
+      "so-what": "Record which form of the check ran; do not reuse the wording when no owner server exists."
     }
   ],
   "event-ids-seen": [
@@ -172,9 +140,9 @@
       "command": "lane-b/i5.py + i5b.py + i5-search: memory_write the literal spec fixture (sentence x10 + ' Invoice reference vk83jq was filed with the parish council.') plus 30 sweep notes (filler 3600..5400 chars step 60) and 60 edge notes (filler 4540..4660 step 2) so the id lands across the cut; /notes/longterm.md = 40 concatenated sha256 hex (2560 chars); sqlite3 premise queries; memory_search 'vk83jq' kind=memory minRelativeScore=0 limit=200 (default and vectorWeight=0); whole term; controls 'vk83jr' and 'zz9plural77x' vw=0",
       "evidence": "SPEC FIXTURE: /notes/fete-spec.md 1 row only (len 1189) -> the spec's multi-row premise is NOT met by the literal x10 fixture (ADR-0125: chunk window is 1022 tokens)\nSWEEP/EDGE: 60 edge notes, 54 multi-row; whole id in exactly 1 row for all 60; fragments of the id at any row edge: 0; 4 notes cut within 14 chars of the id, e.g. edge-17 row0 tail 'ce vk83jq ' row1 head 'was filed ' (id at 4602, row len 4609)\nsearch vk83jq: sqlite rows holding id 91 (82 distinct texts), returned holders 82 distinct, 82 of 82 with fts leg, non-holders with fts leg 0 (rows with identical text collapse to one result)\nedge-16: chunk 0/2 legs [fts, vector]; fete-spec legs [fts, vector]\nlongterm: rows (0,2,len 1710),(1,2,len 850); whole term in any row: 0; search whole term vw=0 -> 1 result /notes/longterm.md chunk 0/2 legs [fts]; default: legs [fts, vector]\ncontrols: 'vk83jr' vw0 n=0; 'zz9plural77x' vw0 n=0",
       "observed-result": "Identifier never split (0 fragments in 60 boundary-adjacent notes) and found whole with an fts leg; oversized term unsplittable into a whole row yet found by the keyword leg alone; absent/near-miss tokens return nothing.",
-      "status": "pass",
+      "status": "substituted",
       "accepted": true,
-      "acceptance-reason": "Accept (ADR-0120). Judged by fts leg per the skill. The checklist's literal x10 fixture no longer meets its own premise (single row at the 1022-token window); I substituted a size sweep that does (flagged in findings-against-prior-runs). Not marked substituted because the behaviour and instrument (live server + sqlite) are the item's own."
+      "acceptance-reason": "Accept as substituted (ADR-0120). Instrument: a 60-note size sweep (54 multi-row) replaced the template's 45-sentence fixture, because the lane ran the stale 10x fixture from the 1.57.2 run file, which fails the multi-row premise. The sweep meets the premise and was judged by the fts leg per the skill: vk83jq whole in exactly one row of every note, 0 fragments at row edges, every holder returned with an fts leg, and the 2,560-char term found with legs=[fts] at vectorWeight=0."
     },
     {
       "item": "note-opening-chunk-reports-index-zero",
@@ -191,10 +159,10 @@
       "expected-result": "ADR-0119: a memory row the engine refuses is split from its refused batch (single-row retry), charged one embed attempt per failure, abandoned at 3 (event 444) while batch-mates embed; memory_embed_pending returns, does not grow the engine's poison-line count; stats.pending stays 1. Negative control: stub.log shows a 'poison 5' batch line then 'ok 1' single-row lines.",
       "command": "ai-raccoon --data-root lane-c/poison serve --port 0 --idle-timeout 0 (bound 65266; bearer token from poison/mcp-token); project_id_token_get; memory_write x5 (4 ordinary + 'Cartography note POISON-7Q refuses to embed.'); sqlite3 -readonly GROUP BY; poison-embedding-stub.py --port 0 --log stub.log (http://127.0.0.1:65325/v1); ai-raccoon --data-root lane-c/poison --port 65266 model embedding set openai stub-embed http://127.0.0.1:65325/v1 --api-key stub-key; sleep 10; sqlite3 GROUP BY; 3x memory_embed_pending with grep -c poison stub.log between; memory_stats; grep [44x] serve.log",
       "evidence": "before engine: stats {entries:5,pending:5}; sqlite 'pending|0|5'. After engine set (background migration, no manual call): sqlite 'embedded|0|4' and 'pending|3|1'. stub.log: ok 1 / poison 5 / ok 1 / ok 1 / ok 1 / ok 1 / poison 1 / poison 1 / poison 1 / ok 1 / poison 1 / poison 1 / ok 1. Three memory_embed_pending calls each -> {\"processed\":0,\"pending\":1} with grep -c poison = 6 before and after every call. memory_stats {entries:5,pending:1}. serve.log: EntryEmbedder[443] 'Memory row 5 (952c7d35...md) failed to embed on attempt 1/2/3 of 3; it stays pending' then EntryEmbedder[444] 'Giving up on memory row 5 (952c7d35...md) after 3 failed embed attempts'. Pending row path 952c7d35... equals the POISON-7Q write's path.",
-      "observed-result": "Batch of 5 refused once ('poison 5'), then rows answered singly: 4 embedded, poison row failed on its own 3 times (poison 1 x3, interleaved with ok 1s, then a further 2 poison 1 on the following drain passes inside the 3-attempt budget's final tick), charged embed_attempts=3 and abandoned with event 444 naming its path. Poison-line count then frozen at 6 across 3 explicit memory_embed_pending calls; pending stays 1 (abandoned rows still counted, per ADR-0119). Note: the migration drain performed the isolation before my first explicit memory_embed_pending, so the item's 'processed/pending' calls observed the already-converged state; the frozen poison counter across calls is the proof the ceiling holds.",
+      "observed-result": "Batch of 5 refused once ('poison 5'), then the four batch-mates embedded singly and the poison row was charged on its first single-row failure. Two later drain passes each sent the poison row twice (a singleton EmbedBatchAsync call, then its EmbedRowByRowAsync fallback) plus one engine probe ('ok 1'), charging once per pass. embed_attempts=3, event 444 abandoned the row, and the engine's poison-line count stayed at 6 across 3 memory_embed_pending calls. pending stays 1, since ADR-0119 still counts abandoned rows. The full stub accounting was reproduced on a fresh bank (see observations).",
       "status": "pass",
       "accepted": true,
-      "acceptance-reason": "Every ADR-0119 observable was read: isolation (poison 5 then ok 1 lines), per-row charge to 3 in sqlite, events 443 x3 + 444, frozen engine poison count, pending=1. Negative control present in stub.log. Not run against a pre-0119 build, so 'a build without the ADR fails' is the ADR's claim, not re-observed."
+      "acceptance-reason": "Accept (ADR-0119). Isolation, a per-row charge of 3 in sqlite, events 443x3 and 444, the frozen engine poison count and pending=1 were all read. The 5 single-row poison calls against 3 charges are explained by the singleton-batch fallback plus the engine probe, and reproduced. Only the row-by-row failure is charged (EntryEmbedder.cs:468-523). Not run against a pre-0119 build."
     },
     {
       "item": "write-path-noise-filtering",
@@ -222,9 +190,9 @@
       "command": "cp ~/.ai-raccoon/memory.db (read-only source; sqlite3 -readonly on the live bank fails 'unable to open database file' because WAL bank has no -shm, so copied the file, no -wal existed) -> lane-b/big and lane-b/big-old; delete from watches in both copies; serve 1.57.6 on lane-b/big (port 58663) and 1.56.0 (dotnet tool install --tool-path lane-b/tool-1560 --version 1.56.0) on lane-b/big-old (port 61426); i7.py: memory_search projectId=ai-raccoon scope=all kind=memory minRelativeScore=0 for CLAUDE.md[:7259] and 7,022 chars of stopwords+'astrolabe observatory'; i7cap.py on fresh lane-b/data bank for cap probes",
       "evidence": "SCALE: 23,243 entries total, 9,482 in project ai-raccoon (766 MB bank copy), 15 watches deleted in copy\n1.57.6 (host load average ~43-47 from other lanes): P1 paste-7259 vw0 s=7.06..10.10 n=8 legs[fts]; P2 default s=9.0..9.95; P3 stopword-7022 vw0 s=2.16 n=8; P4 default s=1.94\nwarning: 'Keyword (FTS) matching is capped too: it searches only the first 64 distinct words of a query this long.' (no 'in full' clause)\n1.56.0 same bank, same load: P1 33.79 s; P2 31.16 s; P3 stopword 81.47 s; P4 70.21 s\ncap probes (fresh bank, vw0, minRelativeScore0): A marker after 70 distinct filler words -> [] ; B marker first -> quokkaglyph note legs [fts]; C marker after 80 repeats of 2 words -> wombatrune note found [fts]; D 6-token query with 'the' -> 'the'-containing notes matched (stopword kept); F 71 tokens starting with 'the' + marker inside first 64 -> only the marker note (stopword dropped)",
       "observed-result": "The cap works: the 7k paste is 4-5x faster than 1.56.0 under identical load and the stopword paste 40x faster (2 s vs 81 s); the warning states the cap; marker and stopword semantics match ADR-0126. Absolute timings are inflated vs the 1.57.2 run (1.70 s at P1) because the machine was at load average 43-47 while another lane's server burned ~745% CPU; this is a load artifact, not a measured regression.",
-      "status": "pass",
+      "status": "substituted",
       "accepted": true,
-      "acceptance-reason": "Accept (ADR-0126): stated scale 23,243 entries / 9,482 in project; control build 1.56.0 shows the pre-cap slowness on the same copy. Timings caveat recorded; if exact seconds matter re-run on an idle host."
+      "acceptance-reason": "Accept as substituted (ADR-0126). Deviations: the live bank was copied with plain cp, not VACUUM INTO, because the read-only open fails on a stopped WAL bank with no -shm. The semantic cap probes (marker after 70 distinct words not found, marker first found, 80 repeats found, stopword kept at 6 tokens and dropped at 71) ran on 1.57.6 only. The 1.56.0 control on the same 23,243-entry copy measured timings only (31-81 s against 2-10 s). Timings were taken under host load average 43-47; re-run on an idle host if exact seconds matter."
     },
     {
       "item": "file-watch-status",
@@ -285,6 +253,48 @@
       "status": "pass",
       "accepted": true,
       "acceptance-reason": "Accept as pass-with-caveat only. The race (dotnet/efcore#39008) is nondeterministic and I did not run the same load against 1.57.5 to see it reproduce, so absence here is weak evidence: this run could not have distinguished a fixed build from a lucky run. It does show the serialized-open gate causes no deadlock/failures under 64-way contention; the real proof of the fix is the unit/integration tests in ADR-0131's PR."
+    }
+  ],
+  "observations": [
+    {
+      "source": "orchestrator, reproduced",
+      "note": "poison-memory-row stub accounting (raised in PR #864 review): 13 stub lines = 'ok 1' (model-set probe) | pass 1: 'poison 5', 4x 'ok 1', 'poison 1' (charge 1; batch-mates already answered, so no probe) | passes 2 and 3: 'poison 1' (singleton batch via EmbedBatchAsync), 'poison 1' (EmbedRowByRowAsync fallback of the same singleton), 'ok 1' (EngineAnswersAsync probe), then the charge (2, 3). Reproduced on a fresh scratch bank with an identical 13-line sequence in one migration pass, and 0 further calls across 2 memory_embed_pending. Only the row-by-row failure is charged, so the 3-attempt cap holds (EntryEmbedder.cs:435-523). The singleton-batch double call is a minor redundancy, not a contract breach."
+    },
+    {
+      "source": "lane B",
+      "note": "long-query-keyword-terms-capped: 1.57.2 recorded 1.70 s for the 7,259-char paste at vw0; 1.57.6 measured 7-10 s on a fresh 23,243-entry copy. Cause here is host load (load average 43-47, another lane's server at ~745% CPU), confirmed by the 1.56.0 control being 4-40x slower under the same load, not a regression. Timings need an idle host to be comparable across runs."
+    },
+    {
+      "source": "lane B",
+      "note": "sqlite3 -readonly ~/.ai-raccoon/memory.db fails with 'unable to open database file' when the live server is not holding the WAL (no -shm); SKILL.md already mentions this for scratch banks, but the checklist's VACUUM INTO route for the live bank is the same trap. Copying the file (cp) works when no -wal file exists."
+    },
+    {
+      "source": "lane B",
+      "note": "search results collapse identical-text rows from different notes into one result (82 distinct texts of 91 rows holding the id); an expectation of 'every row holding the id is returned' must compare distinct values, not rows."
+    },
+    {
+      "source": "lane B",
+      "note": "memory-write: also run 1.57.2 hash identity: hash b4faa710... is identical to the 1.57.2 run's astro hash, so it is content/context-stable, not a per-run value."
+    },
+    {
+      "source": "lane A",
+      "note": "Environment note, not a prior-run error: three stdio proxy processes (pids 69134, 81074, 1140, started Oct 12-13) still execute the deleted pre-update 1.57.5 binary from ~/.dotnet/tools/.store/.stage/lr4nerht.5qo; any evidence gathered through those proxies (e.g. the connected ai-raccoon MCP tools in an agent session) reflects 1.57.5, not the installed 1.57.6. This lane used its own 1.57.6 server throughout."
+    },
+    {
+      "source": "lane A",
+      "note": "Driver needs `X-AiRaccoon-Token` from <data-root>/mcp-token for /mcp; the memory/prior notes do not mention this, and the prior drivers (/tmp/air1572/*) no longer exist - a reusable driver in the repo would save every run rewriting it."
+    },
+    {
+      "source": "lane C",
+      "note": "docs/reference/agent-memory-server.md writes watch states lowercase (healthy) while memory_watch_status returns 'Healthy' (PascalCase)."
+    },
+    {
+      "source": "retracted on review",
+      "note": "Lane C reported events 703, 1003, 1005 missing from docs/reference/logging-event-ids.md. Wrong: they are covered by the ranged rows '700, 702-704, 707-709' (line 214) and '1002-1013' (line 231)."
+    },
+    {
+      "source": "retracted on review",
+      "note": "Lane B reported the keyword-search template fixture as stale. Wrong: the template already specifies the sentence forty-five times ('ten fit in one chunk since 1.56'). Lane B took the 10x fixture from the 1.57.2 run file."
     }
   ]
 }
