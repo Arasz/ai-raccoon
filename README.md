@@ -42,6 +42,7 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 
 ## What's new
 
+- `ai-raccoon encryption 1password` keys the bank from an SSH Key item in 1Password, read through the `op` CLI. (1.58.0) [ADR-0132](docs/adr/0132-1password-cli-as-a-second-bank-key-source.md) · [how-to](docs/how-to/configure-ai-raccoon-server.md#key-the-bank-from-1password)
 - `ai-raccoon project id register | get | check` and the MCP tool `project_id_get` find or register the id a project already uses, before a new one is minted. (1.57.0) [ADR-0127](docs/adr/0127-reads-need-a-registered-project-id.md)
 - On Apple silicon the bundled engine can also run on the Neural Engine, opt-in with `ai-raccoon settings model device coreml`. (1.53.0) [ADR-0118](docs/adr/0118-opt-in-coreml-device-on-the-neural-engine.md) · [how-to](docs/how-to/configure-embedding-engines.md)
 - On Windows and Linux x64 the bundled engine runs on the GPU through WebGPU again, from ONNX Runtime's own WebGPU-enabled core that now ships inside the package; linux-arm64 stays on the CPU. (1.52.0) [ADR-0115](docs/adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md) · [how-to](docs/how-to/configure-embedding-engines.md)
