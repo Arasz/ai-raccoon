@@ -21,6 +21,9 @@ public sealed class Hooks(ScenarioContext scenarioContext)
         // runner); registered under its own type — the native-memory registrations stay as-is.
         scenarioContext.ScenarioContainer.RegisterInstanceAs(new EncryptionBitwardenFeatureContext());
 
+        // The encryption-1password feature's context (resolver-backed bank + fake-op runner).
+        scenarioContext.ScenarioContainer.RegisterInstanceAs(new EncryptionOnePasswordFeatureContext());
+
         // The code-corpus feature's context: its own SqliteMemoryStore composed with an
         // IIgnoreRulesProvider + IWatchStore wired into FileIngestor (ctx above does not carry
         // those), registered under its own type only.
@@ -51,6 +54,28 @@ public sealed class Hooks(ScenarioContext scenarioContext)
         }
     }
 
+    /// <summary>
+    ///     The 1password scenarios shell out to a fake op script that inherits this process's
+    ///     environment. The scenarios define their own world: every OP_* variable is cleared for the
+    ///     whole scenario, and a step that wants a token sets it inside this scope (restored on exit).
+    /// </summary>
+    [BeforeScenario("1password")]
+    public async Task BeforeOnePasswordScenario()
+    {
+        var scope = await EnvScope.AcquireAsync(CancellationToken.None,
+            ("OP_SERVICE_ACCOUNT_TOKEN", null), ("OP_ACCOUNT", null), ("OP_CONNECT_HOST", null), ("OP_CONNECT_TOKEN", null));
+        scenarioContext.Set(scope, "1password-env");
+    }
+
+    [AfterScenario("1password")]
+    public async Task AfterOnePasswordScenario()
+    {
+        if (scenarioContext.TryGetValue<EnvScope>("1password-env", out var scope))
+        {
+            await scope.DisposeAsync();
+        }
+    }
+
     [AfterScenario]
     public void AfterScenario()
     {
@@ -62,6 +87,7 @@ public sealed class Hooks(ScenarioContext scenarioContext)
 
         ctx.Dispose();
         scenarioContext.ScenarioContainer.Resolve<EncryptionBitwardenFeatureContext>().Dispose();
+        scenarioContext.ScenarioContainer.Resolve<EncryptionOnePasswordFeatureContext>().Dispose();
         scenarioContext.ScenarioContainer.Resolve<CodeCorpusFeatureContext>().Dispose();
     }
 }

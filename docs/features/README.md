@@ -9,6 +9,7 @@ Diátaxis tree (see `docs/README.md`); each subdirectory is one feature.
 |------------------------------------|-----------------------------------------|------------------------------------------------------------------------------------|
 | [`file-watcher/`](file-watcher/)   | Implemented (merged to main 2026-08-05) | [spec.json](file-watcher/spec.json) — watch a path and mirror FS changes into memory (3 MCP tools + `watch` CLI verbs) |
 | [`encryption-bitwarden/`](encryption-bitwarden/) | Implemented                             | [spec.json](encryption-bitwarden/spec.json) — encryption key sources: env (default, kept) + Bitwarden Secrets Manager via `bws` CLI (`encryption bitwarden`/`show`/`unset`/`migrate` CLI verbs) |
+| [`encryption-1password/`](encryption-1password/) | Implemented                             | [encryption-1password.feature](encryption-1password/encryption-1password.feature) — the 1Password CLI (`op`) as a second bank key source (`encryption 1password`; ADR-0132) |
 | [`code-corpus/`](code-corpus/)     | Implemented (merged to main 2026-08-22, #405) | [spec.json](code-corpus/spec.json) — a second, code-only corpus (`code_entries`/`code_fts`/`vec_code`) searched via `memory_search kind=memory\|code\|both` + `code_get` |
 
 Earlier wave dossiers (agent-memory, native-memory) live under
