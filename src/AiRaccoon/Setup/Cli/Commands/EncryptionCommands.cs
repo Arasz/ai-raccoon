@@ -73,7 +73,7 @@ public sealed partial class EncryptionCommands
         {
             await _bws.RunAsync(["--version"], null, PresenceTimeout, ctx);
         }
-        catch (BwsInvocationException ex)
+        catch (CliSecretInvocationException ex)
         {
             Log.BwsInvocationFailed(_logger, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
@@ -84,12 +84,12 @@ public sealed partial class EncryptionCommands
         var secretId = await PromptAsync(streams, $"secret id [{DefaultSecretId}]", DefaultSecretId, ctx);
 
         var token = parseResult.GetResult("-t") is not null ? parseResult.GetValue<string>("-t") : null;
-        BwsResult fetched;
+        CliSecretResult fetched;
         try
         {
             fetched = await _bws.RunAsync(["secret", "get", secretId], token, FetchTimeout, ctx);
         }
-        catch (BwsInvocationException ex)
+        catch (CliSecretInvocationException ex)
         {
             Log.BwsInvocationFailed(_logger, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
@@ -101,7 +101,7 @@ public sealed partial class EncryptionCommands
             var errorLine = fetched.FirstErrorLine;
             Log.BwsCommandFailed(_logger, fetched.ExitCode, errorLine);
             await streams.WriteErrorLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {errorLine}");
-            return ErrorCode.Key.BwsFailed;
+            return ErrorCode.Key.SecretCliFailed;
         }
 
         byte[] seed;

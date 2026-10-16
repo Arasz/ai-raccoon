@@ -451,9 +451,9 @@ model migration is open (schema shape is still healthy), so it composes into a s
 |---|---|
 | `0` | `Ok.Success` — HEALTHY, including `model migration: none open` |
 | `20` | `Key.Unresolved` — the encryption key could not be resolved |
-| `23` | `Key.BwsNotInstalled` — the Bitwarden CLI (`bws`) is not on `PATH` or cannot be started |
-| `24` | `Key.BwsTimedOut` — `bws` did not answer within its bound (5 s presence, 15 s fetch) |
-| `25` | `Key.BwsFailed` — `bws` ran but gave nothing usable (non-zero exit or empty output) |
+| `23` | `Key.SecretCliNotInstalled` — the secret CLI (`bws` or `op`) is not on `PATH` or cannot be started |
+| `24` | `Key.SecretCliTimedOut` — the secret CLI did not answer within its bound (5 s presence; 15 s `bws` fetch, 30 s `op` fetch) |
+| `25` | `Key.SecretCliFailed` — the secret CLI ran but gave nothing usable (non-zero exit or empty output) |
 | `26` | `Key.SecretNotAKey` — the Bitwarden secret is not a parseable OpenSSH ed25519 private key |
 | `27` | `Key.SourceSidecarInvalid` — the `memory.db.source` sidecar is corrupt, names an unknown source, or is `bitwarden` without a secret id |
 | `30` | `Bank.OpenFailed` — the bank could not be opened read-only |

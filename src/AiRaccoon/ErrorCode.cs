@@ -49,7 +49,7 @@ public static class ErrorCode
         public const int ProjectAmbiguous = 19;
     }
 
-    /// <summary>The encryption key cannot be resolved, is wrong, or its source (env, Bitwarden CLI, sidecar) is unusable.</summary>
+    /// <summary>The encryption key cannot be resolved, is wrong, or its source (env, bws or op CLI, sidecar) is unusable.</summary>
     public static class Key
     {
         /// <summary>No encryption key could be resolved; the most general key failure.</summary>
@@ -61,16 +61,16 @@ public static class ErrorCode
         /// <summary>The bank is still keyed under the pre-ADR-0012 derivation; 'encryption migrate' fixes it.</summary>
         public const int LegacyKeyDerivation = 22;
 
-        /// <summary>The Bitwarden CLI (bws) is not on PATH or cannot be started.</summary>
-        public const int BwsNotInstalled = 23;
+        /// <summary>The secret CLI (bws or op) is not on PATH or cannot be started.</summary>
+        public const int SecretCliNotInstalled = 23;
 
-        /// <summary>bws did not answer within its bound; retryable.</summary>
-        public const int BwsTimedOut = 24;
+        /// <summary>The secret CLI did not answer within its bound; retryable.</summary>
+        public const int SecretCliTimedOut = 24;
 
-        /// <summary>bws ran but gave nothing usable: a non-zero exit (auth, unknown secret id) or empty output.</summary>
-        public const int BwsFailed = 25;
+        /// <summary>The secret CLI ran but gave nothing usable: a non-zero exit (auth, unknown secret id) or empty output.</summary>
+        public const int SecretCliFailed = 25;
 
-        /// <summary>The Bitwarden secret is not a parseable OpenSSH ed25519 private key.</summary>
+        /// <summary>The fetched secret is not a parseable OpenSSH ed25519 private key.</summary>
         public const int SecretNotAKey = 26;
 
         /// <summary>The memory.db.source sidecar is corrupt, names an unknown source, or is bitwarden without a secret id.</summary>

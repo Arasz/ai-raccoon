@@ -464,7 +464,7 @@ public static partial class AppRegistrations
 
         private void RegisterEncryptionServices(InfrastructureOptions options)
         {
-            services.AddSingleton<ICliSecretManager>(_ => new BitwardenCliSecretManager());
+            services.AddSingleton<ICliSecretManager>(_ => new CliSecretManager(CliSecretTool.Bitwarden));
             services.AddSingleton<IEncryptionSourceSidecar>(_ => new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)));
             services.AddSingleton<IEncryptionKeyProvider, NoneEncryptionKeyProvider>();
             services.AddSingleton<IEncryptionKeyProvider, EnvEncryptionKeyProvider>();

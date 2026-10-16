@@ -39,7 +39,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     [Fact]
     public async Task ResolveAsync_NoSidecar_ReturnsEnvValue()
     {
-        var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
+        var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new CliSecretResult(0, "", "")));
 
         (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe("env-pass");
     }
@@ -47,7 +47,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     [Fact]
     public async Task ResolveAsync_NoSidecar_EnvNull_ReturnsNull()
     {
-        var resolver = Resolver(new StubEnvProvider(null), new FakeBwsRunner(new BwsResult(0, "", "")));
+        var resolver = Resolver(new StubEnvProvider(null), new FakeBwsRunner(new CliSecretResult(0, "", "")));
 
         (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBeNull();
     }
@@ -56,7 +56,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     public async Task ResolveAsync_SidecarEnv_ReturnsEnvValueAndNeverTouchesBws()
     {
         WriteSidecar("""{"source":"env"}""");
-        var runner = new FakeBwsRunner(new BwsInvocationException(BwsFailure.Failed, "bws must not run"));
+        var runner = new FakeBwsRunner(new CliSecretInvocationException(CliSecretFailure.Failed, "bws must not run"));
         var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
 
         (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe("env-pass");
@@ -67,7 +67,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     public async Task ResolveAsync_SidecarBitwarden_FetchesSecretAndDerives()
     {
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
 
         var passphrase = (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase;
@@ -81,7 +81,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     public async Task ResolveAsync_SidecarCorrupt_ThrowsLoudNamingThePath()
     {
         WriteSidecar("{not json");
-        var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
+        var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new CliSecretResult(0, "", "")));
 
         var ex = await Should.ThrowAsync<EncryptionSourceException>(() => resolver.ResolveAsync(TestContext.Current.CancellationToken));
 
@@ -94,7 +94,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     public async Task ResolveAsync_SidecarBitwardenWithoutSecretId_ThrowsEncryptionSourceException()
     {
         WriteSidecar("""{"source":"bitwarden"}""");
-        var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
+        var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new CliSecretResult(0, "", "")));
 
         var ex = await Should.ThrowAsync<EncryptionSourceException>(() => resolver.ResolveAsync(TestContext.Current.CancellationToken));
 
@@ -105,7 +105,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     public async Task ResolveAsync_ReadsSidecarFreshOnEveryCall()
     {
         var resolver = Resolver(new StubEnvProvider("env-pass"),
-            new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")));
+            new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")));
 
         (await resolver.ResolveAsync(TestContext.Current.CancellationToken)).Passphrase.ShouldBe("env-pass");
 
@@ -117,7 +117,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     [Fact]
     public async Task ResolveAsync_NoSidecar_ReportsEnvSourceAndEnvPassphrase()
     {
-        var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new BwsResult(0, "", "")));
+        var resolver = Resolver(new StubEnvProvider("env-pass"), new FakeBwsRunner(new CliSecretResult(0, "", "")));
 
         var resolved = await resolver.ResolveAsync(TestContext.Current.CancellationToken);
 
@@ -130,7 +130,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     {
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
         var resolver = Resolver(new StubEnvProvider("env-pass"),
-            new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")));
+            new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")));
 
         var resolved = await resolver.ResolveAsync(TestContext.Current.CancellationToken);
 
@@ -147,7 +147,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     public async Task ResolveAsync_CalledRepeatedlyWithUnchangedSidecar_InvokesBwsExactlyOnce()
     {
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
 
         for (var i = 0; i < 5; i++)
@@ -163,7 +163,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
     public async Task ResolveAsync_SidecarSecretIdChanges_InvokesBwsAgain()
     {
         WriteSidecar("""{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""");
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         var resolver = Resolver(new StubEnvProvider("env-pass"), runner);
 
         await resolver.ResolveAsync(TestContext.Current.CancellationToken);
@@ -218,15 +218,15 @@ public sealed class EncryptionKeyResolverTests : IDisposable
 
     private sealed class FakeBwsRunner : ICliSecretManager
     {
-        private readonly BwsInvocationException? _exception;
-        private readonly BwsResult? _result;
+        private readonly CliSecretInvocationException? _exception;
+        private readonly CliSecretResult? _result;
 
-        public FakeBwsRunner(BwsResult result)
+        public FakeBwsRunner(CliSecretResult result)
         {
             _result = result;
         }
 
-        public FakeBwsRunner(BwsInvocationException exception)
+        public FakeBwsRunner(CliSecretInvocationException exception)
         {
             _exception = exception;
         }
@@ -235,7 +235,7 @@ public sealed class EncryptionKeyResolverTests : IDisposable
         public string? Token { get; private set; }
         public int CallCount { get; private set; }
 
-        public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+        public Task<CliSecretResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
             CancellationToken cancellationToken = default)
         {
             Args = args;

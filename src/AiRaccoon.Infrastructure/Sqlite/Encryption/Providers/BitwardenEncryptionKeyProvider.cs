@@ -31,7 +31,7 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
 
         if (result.ExitCode != 0)
         {
-            throw new BwsInvocationException(BwsFailure.Failed, $"bws failed (exit {result.ExitCode}): {result.FirstErrorLine}");
+            throw new CliSecretInvocationException(CliSecretFailure.Failed, $"bws failed (exit {result.ExitCode}): {result.FirstErrorLine}");
         }
 
         var seed = OpenSshPrivateKeyParser.ParseSeed(result.Stdout.Trim());

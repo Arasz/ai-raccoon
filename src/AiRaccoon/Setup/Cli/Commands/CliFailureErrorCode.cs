@@ -36,11 +36,11 @@ internal static class CliFailureErrorCode
                 SqliteNotADatabase => ErrorCode.Bank.Corrupted,
                 _ => ErrorCode.Bank.OpenFailed
             },
-            BwsInvocationException bws => bws.Failure switch
+            CliSecretInvocationException secretCli => secretCli.Failure switch
             {
-                BwsFailure.NotInstalled => ErrorCode.Key.BwsNotInstalled,
-                BwsFailure.TimedOut => ErrorCode.Key.BwsTimedOut,
-                _ => ErrorCode.Key.BwsFailed
+                CliSecretFailure.NotInstalled => ErrorCode.Key.SecretCliNotInstalled,
+                CliSecretFailure.TimedOut => ErrorCode.Key.SecretCliTimedOut,
+                _ => ErrorCode.Key.SecretCliFailed
             },
             EncryptionKeyException => ErrorCode.Key.SecretNotAKey,
             EncryptionSourceException => ErrorCode.Key.SourceSidecarInvalid,

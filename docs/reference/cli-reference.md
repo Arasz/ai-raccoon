@@ -180,9 +180,9 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 20 | `Key.Unresolved` | No encryption key could be resolved | no |
 | 21 | `Key.WrongKey` | The resolved key does not open the bank | no |
 | 22 | `Key.LegacyKeyDerivation` | The bank is still keyed under the pre-ADR-0012 derivation; `encryption migrate` fixes it | no |
-| 23 | `Key.BwsNotInstalled` | The Bitwarden CLI (`bws`) is not on `PATH` or cannot be started | no |
-| 24 | `Key.BwsTimedOut` | `bws` did not answer within its bound | yes |
-| 25 | `Key.BwsFailed` | `bws` ran but gave nothing usable | no |
+| 23 | `Key.SecretCliNotInstalled` | The secret CLI (`bws` or `op`) is not on `PATH` or cannot be started | no |
+| 24 | `Key.SecretCliTimedOut` | The secret CLI did not answer within its bound | yes |
+| 25 | `Key.SecretCliFailed` | The secret CLI ran but gave nothing usable | no |
 | 26 | `Key.SecretNotAKey` | The Bitwarden secret is not a parseable OpenSSH ed25519 private key | no |
 | 27 | `Key.SourceSidecarInvalid` | The `memory.db.source` sidecar is corrupt or names an unknown source | no |
 | 28 | `Key.NoEnvPassphrase` | `encryption unset` cannot rekey back to env: no `AIRACCOON_DB_PASSPHRASE` | no |

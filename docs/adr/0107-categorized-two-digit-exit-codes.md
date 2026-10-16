@@ -134,9 +134,9 @@ environment or the product first.
 | 20 | `Key.Unresolved` | No encryption key could be resolved (the resolver threw); the most general key failure. | no |
 | 21 | `Key.WrongKey` | The resolved key does not open the bank (keyed to another secret, or the env passphrase is missing); indistinguishable from corrupt today. | no |
 | 22 | `Key.LegacyKeyDerivation` | The bank is still keyed under the pre-ADR-0012 derivation; `encryption migrate` fixes it. | no |
-| 23 | `Key.BwsNotInstalled` | The Bitwarden CLI (`bws`) is not on `PATH` or cannot be started. | no |
-| 24 | `Key.BwsTimedOut` | `bws` did not answer within its bound (5 s presence, 15 s fetch). | yes |
-| 25 | `Key.BwsFailed` | `bws` ran but gave nothing usable: non-zero exit (auth, unknown secret id) or empty output. | no |
+| 23 | `Key.SecretCliNotInstalled` | The secret CLI (`bws` or `op`, ADR-0132) is not on `PATH` or cannot be started. | no |
+| 24 | `Key.SecretCliTimedOut` | The secret CLI did not answer within its bound (5 s presence; 15 s `bws` fetch, 30 s `op` fetch). | yes |
+| 25 | `Key.SecretCliFailed` | The secret CLI ran but gave nothing usable: non-zero exit (auth, unknown secret id) or empty output. | no |
 | 26 | `Key.SecretNotAKey` | The Bitwarden secret is not a parseable OpenSSH ed25519 private key. | no |
 | 27 | `Key.SourceSidecarInvalid` | The `memory.db.source` sidecar is corrupt, names an unknown source, or is `bitwarden` without a secret id. | no |
 | 28 | `Key.NoEnvPassphrase` | `encryption unset` cannot rekey back to env: `AIRACCOON_DB_PASSPHRASE` is not set. | no |
@@ -243,7 +243,7 @@ audited catalog found behind that old number today.
 
 | Old code | New code(s) it splits into |
 |---|---|
-| `1` | `Key.Unresolved` (20), `Key.BwsNotInstalled` (23), `Key.BwsTimedOut` (24), `Key.BwsFailed` (25), `Key.SecretNotAKey` (26), `Key.NoEnvPassphrase` (28) |
+| `1` | `Key.Unresolved` (20), `Key.SecretCliNotInstalled` (23), `Key.SecretCliTimedOut` (24), `Key.SecretCliFailed` (25), `Key.SecretNotAKey` (26), `Key.NoEnvPassphrase` (28) |
 | `2` | `Key.WrongKey` (21), `Key.LegacyKeyDerivation` (22), `Bank.OpenFailed` (30), `Bank.Corrupted` (32), `Bank.Busy` (33) |
 | `3` | `Port.InUse` (40), `Port.ForeignListener` (41), `Server.Unproven` (50) |
 | `4` | `Server.TooOldForObservability` (56), `Reach.NothingListening` (61) |
