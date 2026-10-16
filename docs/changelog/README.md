@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.58.0 — the 1Password CLI can key the bank](1.58.0-1password-key-source.md)
 - [1.57.6 — concurrent bank opens no longer share a pooled connection](1.57.6-serialized-pooled-opens.md)
 - [1.57.5 — the file watcher ignores directory-name notifications](1.57.5-watcher-ignores-directory-events.md)
 - [1.57.4 — the file watcher's event buffer is 64 KB](1.57.4-file-watcher-buffer-64kb.md)

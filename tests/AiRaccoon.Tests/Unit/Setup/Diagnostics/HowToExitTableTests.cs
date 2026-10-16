@@ -23,7 +23,7 @@ public sealed partial class HowToExitTableTests
     private static readonly int[] DoctorCodes =
     [
         ErrorCode.Ok.Success,
-        ErrorCode.Key.Unresolved, ErrorCode.Key.BwsNotInstalled, ErrorCode.Key.BwsTimedOut, ErrorCode.Key.BwsFailed,
+        ErrorCode.Key.Unresolved, ErrorCode.Key.SecretCliNotInstalled, ErrorCode.Key.SecretCliTimedOut, ErrorCode.Key.SecretCliFailed,
         ErrorCode.Key.SecretNotAKey, ErrorCode.Key.SourceSidecarInvalid,
         ErrorCode.Bank.OpenFailed, ErrorCode.Bank.NoBank, ErrorCode.Bank.Corrupted, ErrorCode.Bank.Busy,
         ErrorCode.Bank.SchemaMismatch, ErrorCode.Bank.SchemaNewerThanBinary, ErrorCode.Bank.MigrationOpen

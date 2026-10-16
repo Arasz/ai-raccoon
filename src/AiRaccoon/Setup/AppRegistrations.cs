@@ -464,11 +464,11 @@ public static partial class AppRegistrations
 
         private void RegisterEncryptionServices(InfrastructureOptions options)
         {
-            services.AddSingleton<ICliSecretManager>(_ => new BitwardenCliSecretManager());
             services.AddSingleton<IEncryptionSourceSidecar>(_ => new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)));
             services.AddSingleton<IEncryptionKeyProvider, NoneEncryptionKeyProvider>();
             services.AddSingleton<IEncryptionKeyProvider, EnvEncryptionKeyProvider>();
-            services.AddSingleton<IEncryptionKeyProvider, BitwardenEncryptionKeyProvider>();
+            services.AddSingleton<IEncryptionKeyProvider>(_ => new BitwardenEncryptionKeyProvider(new CliSecretManager(CliSecretTool.Bitwarden)));
+            services.AddSingleton<IEncryptionKeyProvider>(_ => new OnePasswordEncryptionKeyProvider(new CliSecretManager(CliSecretTool.OnePassword)));
             services.AddSingleton<IEncryptionKeyResolver>(sp => new EncryptionKeyResolver(sp.GetRequiredService<IEncryptionSourceSidecar>(), [.. sp.GetServices<IEncryptionKeyProvider>()]));
         }
     }

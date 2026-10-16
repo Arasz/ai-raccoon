@@ -11,6 +11,10 @@ Only banks using the **Bitwarden/SSH key source**. If your bank is keyed by the
 `AIRACCOON_DB_PASSPHRASE` environment variable, this does not apply — that path never
 went through `SshKeyDerivation` and is unaffected by ADR 0012.
 
+A bank keyed with `ai-raccoon encryption 1password` never had the old derivation, so it
+is never eligible and `encryption migrate` leaves it alone. To change its key, rotate the
+key in 1Password and run `ai-raccoon encryption 1password` again, which rekeys the bank.
+
 If you are not sure which source your bank uses:
 
 ```bash

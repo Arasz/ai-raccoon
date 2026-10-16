@@ -61,9 +61,9 @@ public sealed class CommandFailureExitCodeTests
     [InlineData("wrong-key", ErrorCode.Key.WrongKey)]
     [InlineData("legacy-key", ErrorCode.Key.LegacyKeyDerivation)]
     [InlineData("bank-corrupted", ErrorCode.Bank.Corrupted)]
-    [InlineData("bws-missing", ErrorCode.Key.BwsNotInstalled)]
-    [InlineData("bws-timeout", ErrorCode.Key.BwsTimedOut)]
-    [InlineData("bws-failed", ErrorCode.Key.BwsFailed)]
+    [InlineData("bws-missing", ErrorCode.Key.SecretCliNotInstalled)]
+    [InlineData("bws-timeout", ErrorCode.Key.SecretCliTimedOut)]
+    [InlineData("bws-failed", ErrorCode.Key.SecretCliFailed)]
     [InlineData("secret-not-a-key", ErrorCode.Key.SecretNotAKey)]
     [InlineData("sidecar", ErrorCode.Key.SourceSidecarInvalid)]
     [InlineData("argument", ErrorCode.Usage.InvalidValue)]
@@ -267,9 +267,9 @@ public sealed class CommandFailureExitCodeTests
             "wrong-key" => new BankKeyMismatchException("the key does not open the bank"),
             "legacy-key" => new BankKeyMismatchException("still under the old derivation", legacyDerivation: true),
             "bank-corrupted" => new BankCorruptedException("the bank file itself is corrupt"),
-            "bws-missing" => new BwsInvocationException(BwsFailure.NotInstalled, "bws not found"),
-            "bws-timeout" => new BwsInvocationException(BwsFailure.TimedOut, "bws timed out after 15s"),
-            "bws-failed" => new BwsInvocationException(BwsFailure.Failed, "bws failed (exit 1): no access"),
+            "bws-missing" => new CliSecretInvocationException(CliSecretFailure.NotInstalled, "bws not found"),
+            "bws-timeout" => new CliSecretInvocationException(CliSecretFailure.TimedOut, "bws timed out after 15s"),
+            "bws-failed" => new CliSecretInvocationException(CliSecretFailure.Failed, "bws failed (exit 1): no access"),
             "secret-not-a-key" => new UnsupportedKeyTypeException(),
             "sidecar" => new EncryptionSourceException("encryption source sidecar 'x' is corrupt: bad json"),
             "argument" => new ArgumentException("bad key"),

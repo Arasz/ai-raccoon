@@ -120,7 +120,7 @@ public class SettingsCommandTreeTests
     ///     that cannot run with no arguments at all (`model download` needs a repo-id).
     /// </summary>
     private static readonly string[] WriteOptOuts =
-        ["model embedding set local", "model embedding set openai", "model code set default", "model code set local", "model download", "encryption bitwarden", "encryption show", "encryption unset", "encryption migrate", "serve", "serve observability"];
+        ["model embedding set local", "model embedding set openai", "model code set default", "model code set local", "model download", "encryption bitwarden", "encryption 1password", "encryption show", "encryption unset", "encryption migrate", "serve", "serve observability"];
 
     /// <summary>Sample arguments for the leaves outside `settings` that cannot run bare.</summary>
     private static readonly Dictionary<string, string[]> RequiredArguments = new(StringComparer.Ordinal)

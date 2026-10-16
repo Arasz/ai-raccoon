@@ -77,7 +77,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         _lastLogger = logger;
         var encryptionState = new EncryptionSourceSidecar(BankPath());
         var envProvider = new StubEnvProvider(envPassphrase);
-        var encryptionCommands = new EncryptionCommands(bank, runner, envProvider, encryptionState, logger);
+        var encryptionCommands = new EncryptionCommands(bank, runner, new FakeBwsRunner(new CliSecretResult(0, "", "")), envProvider, encryptionState, logger);
         var exit = await TestData.CreateConfigCommands(store, encryptionCommands: encryptionCommands)
             .RunAsync(parsed, new StandardStreams(stdin ?? TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return new RunResult(exit, stdout.ToString(), stderr.ToString(), bank);
@@ -138,27 +138,15 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
-    /// <summary>The seed is a byte[] local to the command; DeriveAndZeroSeed is the one call site free to clear it.</summary>
-    [RetryFact]
-    public void DeriveAndZeroSeed_DerivesTheRawKeyThenZeroesTheSeed()
-    {
-        var seed = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-
-        var value = EncryptionCommands.DeriveAndZeroSeed(seed);
-
-        value.ShouldBe(DerivedRawKey);
-        seed.ShouldAllBe(b => b == 0);
-    }
-
     [RetryFact]
     public async Task Bitwarden_BwsMissing_ReturnsInstallErrorAndChangesNothing()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsInvocationException(BwsFailure.NotInstalled, BwsNotFoundText));
+        var runner = new FakeBwsRunner(new CliSecretInvocationException(CliSecretFailure.NotInstalled, BwsNotFoundText));
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(ErrorCode.Key.BwsNotInstalled);
+        exit.ShouldBe(ErrorCode.Key.SecretCliNotInstalled);
         err.ShouldContain("bws not found");
         err.ShouldContain("https://bitwarden.com/help/cli/");
         store.Settings.ShouldBeEmpty();
@@ -173,7 +161,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_InteractiveDefaults_NoEnvOverride_AreObviouslyFakePlaceholdersNotOwnerIds()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, stdout, err, _) = await WithBitwardenIdEnvVars(null, null, () =>
             Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n")));
@@ -203,7 +191,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_InteractiveDefaults_EnvOverrideConfigured_OffersTheConfiguredIds()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, _, err, _) = await WithBitwardenIdEnvVars("env-project-id", "env-secret-id", () =>
             Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n")));
@@ -219,7 +207,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_NonDefaultIdsViaStdin_ArePersisted()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, _, _, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("p-111\ns-222\n"));
 
@@ -236,7 +224,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_Token_UsedForValidationOnlyNeverPersisted()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, _, _, _) = await Run(["encryption", "bitwarden", "-t", "tok-123"], store, runner,
             new StringReader("\n\n"));
@@ -252,11 +240,11 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_UnreachableSecret_ReturnsBwsErrorAndNoChange()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(1, "", "secret not found (code: 404)"));
+        var runner = new FakeBwsRunner(new CliSecretResult(1, "", "secret not found (code: 404)"));
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(ErrorCode.Key.BwsFailed);
+        exit.ShouldBe(ErrorCode.Key.SecretCliFailed);
         err.ShouldContain("bws failed (exit 1)");
         err.ShouldContain("secret not found (code: 404)");
         err.ShouldNotContain("PRAGMA rekey");
@@ -272,11 +260,11 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_BwsTimesOut_ExitsBwsTimedOutAndChangesNothing()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsInvocationException(BwsFailure.TimedOut, "bws timed out after 5s"));
+        var runner = new FakeBwsRunner(new CliSecretInvocationException(CliSecretFailure.TimedOut, "bws timed out after 5s"));
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
-        exit.ShouldBe(ErrorCode.Key.BwsTimedOut);
+        exit.ShouldBe(ErrorCode.Key.SecretCliTimedOut);
         err.ShouldContain("timed out");
         store.Settings.ShouldBeEmpty();
         File.Exists(SidecarPath()).ShouldBeFalse();
@@ -286,7 +274,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_MalformedSecretValue_ReturnsMalformedErrorAndNoChange()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, "not an openssh key", ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, "not an openssh key", ""));
 
         var (exit, _, err, _) = await Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n"));
 
@@ -301,7 +289,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_EnvKeyedBank_RekeysToDerivedKey()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
@@ -335,7 +323,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_SelfHeal_BankAlreadyDerivedKeyed_SkipsRekeyAndPersists()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
                 [new StubEnvProvider("env-pass"), new BitwardenEncryptionKeyProvider(runner)]));
@@ -360,7 +348,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         // Unset crash-window fix (docs/plans/encryption-bitwarden-implementation.md, review
         // amendments): bank rekeyed back to env; sidecar is deleted to stay consistent.
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -386,7 +374,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Bitwarden_StaleSidecarAndEnvKeyedBank_NoEnvPassphrase_ErrorsWithoutChange()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -412,7 +400,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Show_NoRowsNoSidecar_PrintsEnvSource()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, stdout, _, _) = await Run(["encryption", "show"], store, runner);
 
@@ -432,7 +420,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 [EncryptionSettingsKeys.SecretId] = FixtureSecretId
             }
         };
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var (exit, stdout, _, _) = await Run(["encryption", "show"], store, runner);
 
@@ -446,7 +434,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Show_NoRows_SidecarFallback_PrintsBitwardenWithIds()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", "p-9", "s-9");
 
         var (exit, stdout, _, _) = await Run(["encryption", "show"], store, runner);
@@ -470,7 +458,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 [EncryptionSettingsKeys.SecretId] = FixtureSecretId
             }
         };
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
 
         var (exit, stdout, err, _) = await Run(["encryption", "unset"], store, runner);
@@ -495,7 +483,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 [EncryptionSettingsKeys.SecretId] = FixtureSecretId
             }
         };
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -533,7 +521,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 [EncryptionSettingsKeys.SecretId] = FixtureSecretId
             }
         };
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -580,7 +568,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
                 [EncryptionSettingsKeys.SecretId] = FixtureSecretId
             }
         };
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         WriteSidecar("bitwarden", FixtureProjectId, FixtureSecretId);
         var bank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
@@ -603,7 +591,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     {
         var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(null!,
-                new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
                 new FakeLogger<EncryptionCommands>()));
@@ -617,10 +606,25 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
                 null!,
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
                 new FakeLogger<EncryptionCommands>()));
         ex.ParamName.ShouldBe("bws");
+    }
+
+    [RetryFact]
+    public void Constructor_NullOp_ThrowsArgumentNullException()
+    {
+        var ex = Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(new SqliteConnectionFactory(Options(),
+                    new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                null!,
+                new StubEnvProvider(null),
+                new EncryptionSourceSidecar(BankPath()),
+                new FakeLogger<EncryptionCommands>()));
+        ex.ParamName.ShouldBe("op");
     }
 
     [RetryFact]
@@ -629,7 +633,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
-                new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 null!,
                 new EncryptionSourceSidecar(BankPath()),
                 new FakeLogger<EncryptionCommands>()));
@@ -642,7 +647,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
-                new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 null!,
                 new FakeLogger<EncryptionCommands>()));
@@ -655,7 +661,8 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
-                new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
                 null!));
@@ -668,7 +675,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Migrate_LegacyKeyedBank_RekeysToTheCurrentDerivationAndKeepsData()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         // An installed user's bank: keyed with SHA-256(Label ‖ seed), holding a row.
         var legacyBank = new SqliteConnectionFactory(Options(),
@@ -697,7 +704,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Migrate_BankAlreadyOnCurrentDerivation_ReportsNoChange()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var currentBank = new SqliteConnectionFactory(Options(),
             new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(DerivedRawKey)]));
@@ -718,7 +725,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     public async Task Migrate_CorruptBank_FailsLoudlyAndLeavesTheFileByteIdentical()
     {
         var store = new FakeConfigStore();
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
 
         var bankDirectory = Path.GetDirectoryName(BankPath());
         bankDirectory.ShouldNotBeNull();
@@ -750,22 +757,22 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
 
     private sealed class FakeBwsRunner : ICliSecretManager
     {
-        private readonly BwsInvocationException? _exception;
-        private readonly BwsResult? _result;
+        private readonly CliSecretInvocationException? _exception;
+        private readonly CliSecretResult? _result;
 
-        public FakeBwsRunner(BwsResult result)
+        public FakeBwsRunner(CliSecretResult result)
         {
             _result = result;
         }
 
-        public FakeBwsRunner(BwsInvocationException exception)
+        public FakeBwsRunner(CliSecretInvocationException exception)
         {
             _exception = exception;
         }
 
         public List<(IReadOnlyList<string> Args, string? Token)> Calls { get; } = [];
 
-        public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+        public Task<CliSecretResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
             CancellationToken cancellationToken = default)
         {
             Calls.Add(([.. args], token));

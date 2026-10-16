@@ -180,7 +180,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     {
         var envProvider = new StubEnvProvider(EnvPassphrase);
         var encryptionState = new EncryptionSourceSidecar(BankPath);
-        var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), envProvider, encryptionState, new FakeLogger<EncryptionCommands>());
+        var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), new CliSecretManager(CliSecretTool.OnePassword), envProvider, encryptionState, new FakeLogger<EncryptionCommands>());
         var (exit, stdout, stderr) = await TestHelpers.CliRun.RunAsync(args,
             TestData.CreateConfigCommands(ConfigStore, encryptionCommands: encryptionCommands),
             new StringReader(stdin));
@@ -231,7 +231,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
         }
     }
 
-    public ICliSecretManager NewRunner() => new BitwardenCliSecretManager(BwsExecutable);
+    public ICliSecretManager NewRunner() => new CliSecretManager(CliSecretTool.Bitwarden, BwsExecutable);
 
     /// <summary>Assembles an unencrypted ed25519 openssh-key-v1 PEM from synthetic bytes — deterministic, no real key material.</summary>
     private static string BuildEd25519Pem(byte[] seed, byte[] pub) => new TestOpenSshKeyBuilder().Build(seed, pub);
@@ -241,9 +241,9 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
 
     private sealed class PathSwitchingRunner(Func<string> path) : ICliSecretManager
     {
-        public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+        public Task<CliSecretResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
             CancellationToken cancellationToken = default) =>
-            new BitwardenCliSecretManager(path()).RunAsync(args, token, timeout, cancellationToken);
+            new CliSecretManager(CliSecretTool.Bitwarden, path()).RunAsync(args, token, timeout, cancellationToken);
     }
 
     private sealed class StubEnvProvider(string? passphrase) : IEncryptionKeyProvider

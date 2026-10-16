@@ -1,4 +1,3 @@
-using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -12,7 +11,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Encryption;
 
 /// <summary>
-///     Composition-root smoke: the provider family (none/env/bitwarden) is registered behind the resolver,
+///     Composition-root smoke: the provider family (none/env/bitwarden/1password) is registered behind the resolver,
 ///     and the resolver reads the env passphrase when no sidecar exists (docs/plans/encryption-bitwarden-implementation.md S2b).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
@@ -32,8 +31,8 @@ public sealed class DependenciesEncryptionSmokeTests
             using var provider = services.BuildServiceProvider();
 
             provider.GetRequiredService<IEncryptionKeyResolver>().ShouldNotBeNull();
-            provider.GetServices<IEncryptionKeyProvider>().Count().ShouldBe(3);
-            provider.GetRequiredService<ICliSecretManager>().ShouldNotBeNull();
+            provider.GetServices<IEncryptionKeyProvider>().Count().ShouldBe(4);
+            provider.GetServices<IEncryptionKeyProvider>().ShouldContain(p => p is OnePasswordEncryptionKeyProvider);
             provider.GetRequiredService<SqliteConnectionFactory>().ShouldNotBeNull();
             provider.GetRequiredService<IHttpClientFactory>().ShouldNotBeNull();
         }

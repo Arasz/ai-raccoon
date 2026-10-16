@@ -17,6 +17,7 @@ public sealed class CliWriteOptOutsTests
 {
     [Theory]
     [InlineData("encryption", "bitwarden")]
+    [InlineData("encryption", "1password")]
     [InlineData("encryption", "show")]
     [InlineData("encryption", "unset")]
     [InlineData("encryption", "migrate")]

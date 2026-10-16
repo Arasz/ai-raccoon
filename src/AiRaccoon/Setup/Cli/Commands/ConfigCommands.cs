@@ -109,6 +109,7 @@ internal sealed class ConfigCommands(
                 ["settings", "watch", "remove"] => await watch.RemoveAsync(parsedCliArgs, store, streams, ctx),
                 ["watch", "registered"] => await watch.RegisteredAsync(parsedCliArgs, streams, ctx),
                 ["encryption", "bitwarden"] => await encryptionCommands.BitwardenAsync(parsedCliArgs, store, streams, ctx),
+                ["encryption", "1password"] => await encryptionCommands.OnePasswordAsync(store, streams, ctx),
                 ["settings", "extract", "enable"] => await extract.SetEnabledAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "extract", "mode"] => await extract.SetModeAsync(parsedCliArgs, store, streams, ctx),
                 ["settings", "extract", "interval"] => await extract.SetIntervalAsync(parsedCliArgs, store, streams, ctx),

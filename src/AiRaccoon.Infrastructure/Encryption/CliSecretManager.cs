@@ -4,35 +4,35 @@ using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Infrastructure.Encryption;
 
-/// <summary>How a bws run failed.</summary>
-public enum BwsFailure
+/// <summary>How a secret-CLI run failed.</summary>
+public enum CliSecretFailure
 {
     NotInstalled,
     TimedOut,
     Failed
 }
 
-/// <summary>bws could not be invoked or did not produce usable output; <see cref="Failure" /> says how.</summary>
-public sealed class BwsInvocationException(BwsFailure failure, string message, Exception? inner = null) : InvalidOperationException(message, inner)
+/// <summary>The secret CLI could not be invoked or did not produce usable output; <see cref="Failure" /> says how.</summary>
+public sealed class CliSecretInvocationException(CliSecretFailure failure, string message, Exception? inner = null) : InvalidOperationException(message, inner)
 {
-    public BwsFailure Failure { get; } = failure;
+    public CliSecretFailure Failure { get; } = failure;
 }
 
-/// <summary>Runs the bws CLI with redirected output and a hard timeout.</summary>
-public sealed class BitwardenCliSecretManager : ICliSecretManager
+/// <summary>Runs a secret-manager CLI (bws or op) with redirected output and a hard timeout.</summary>
+public sealed class CliSecretManager : ICliSecretManager
 {
-    private const string NotFoundText =
-        "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)";
-
     private readonly string _executable;
+    private readonly CliSecretTool _tool;
 
-    public BitwardenCliSecretManager(string executable = "bws")
+    public CliSecretManager(CliSecretTool tool, string? executable = null)
     {
-        Guard.IsNotNullOrWhiteSpace(executable);
-        _executable = executable;
+        Guard.IsNotNull(tool);
+        _tool = tool;
+        _executable = executable ?? tool.Name;
+        Guard.IsNotNullOrWhiteSpace(_executable);
     }
 
-    public async Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+    public async Task<CliSecretResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNull(args);
@@ -42,6 +42,7 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
         {
             FileName = _executable,
             UseShellExecute = false,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
@@ -50,26 +51,34 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
             startInfo.ArgumentList.Add(arg);
         }
 
+        foreach (var other in CliSecretTool.All.Where(other => other.TokenEnvVar != _tool.TokenEnvVar))
+        {
+            startInfo.Environment.Remove(other.TokenEnvVar);
+        }
+
         if (token is not null)
         {
             // Never argv: any same-user process can read another process's command line (ps aux)
             // for its whole lifetime. The env var is the same channel the inherited-token path
             // already relies on (see ICliSecretManager), just set explicitly for this run.
-            startInfo.EnvironmentVariables["BWS_ACCESS_TOKEN"] = token;
+            startInfo.EnvironmentVariables[_tool.TokenEnvVar] = token;
         }
 
         Process process;
         try
         {
-            process = Process.Start(startInfo) ?? throw new BwsInvocationException(BwsFailure.NotInstalled, NotFoundText);
+            process = Process.Start(startInfo) ?? throw new CliSecretInvocationException(CliSecretFailure.NotInstalled, _tool.NotFoundText);
         }
         catch (Exception ex) when (ex is FileNotFoundException or Win32Exception)
         {
-            throw new BwsInvocationException(BwsFailure.NotInstalled, NotFoundText);
+            throw new CliSecretInvocationException(CliSecretFailure.NotInstalled, _tool.NotFoundText);
         }
 
         using (process)
         {
+            // Never let the child read the terminal this process inherited: close its stdin at once.
+            process.StandardInput.Close();
+
             // Started before the wait, same as a sync ReadToEnd would be: the child's pipes must
             // drain concurrently with the wait, or a full buffer deadlocks it.
             var stdoutTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
@@ -88,7 +97,7 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
                 await process.WaitForExitAsync(CancellationToken.None);
                 if (timeoutCts.IsCancellationRequested)
                 {
-                    throw new BwsInvocationException(BwsFailure.TimedOut, $"bws timed out after {(int)timeout.TotalSeconds}s");
+                    throw new CliSecretInvocationException(CliSecretFailure.TimedOut, $"{_tool.Name} timed out after {(int)timeout.TotalSeconds}s");
                 }
 
                 throw; // the caller's own token cancelled the run — propagate as-is
@@ -99,10 +108,10 @@ public sealed class BitwardenCliSecretManager : ICliSecretManager
 
             if (process.ExitCode == 0 && string.IsNullOrWhiteSpace(stdout))
             {
-                throw new BwsInvocationException(BwsFailure.Failed, "bws returned no output");
+                throw new CliSecretInvocationException(CliSecretFailure.Failed, $"{_tool.Name} returned no output");
             }
 
-            return new BwsResult(process.ExitCode, stdout, stderr);
+            return new CliSecretResult(process.ExitCode, stdout, stderr);
         }
 
         static void TryKill(Process process)

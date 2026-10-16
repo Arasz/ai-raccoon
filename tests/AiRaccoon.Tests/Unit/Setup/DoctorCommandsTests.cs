@@ -697,9 +697,9 @@ public sealed class DoctorCommandsTests : IDisposable
     /// <summary>A key source that fails says how it failed; a failure no Key case names stays Unresolved.</summary>
     [RetryTheory]
     [InlineData("unnamed", ErrorCode.Key.Unresolved)]
-    [InlineData("bws-missing", ErrorCode.Key.BwsNotInstalled)]
-    [InlineData("bws-timeout", ErrorCode.Key.BwsTimedOut)]
-    [InlineData("bws-failed", ErrorCode.Key.BwsFailed)]
+    [InlineData("bws-missing", ErrorCode.Key.SecretCliNotInstalled)]
+    [InlineData("bws-timeout", ErrorCode.Key.SecretCliTimedOut)]
+    [InlineData("bws-failed", ErrorCode.Key.SecretCliFailed)]
     [InlineData("secret-not-a-key", ErrorCode.Key.SecretNotAKey)]
     [InlineData("sidecar", ErrorCode.Key.SourceSidecarInvalid)]
     public async Task Doctor_WhenTheEncryptionKeyCannotBeResolved_ExitsTheKeyCase(string failure, int expected)
@@ -720,9 +720,9 @@ public sealed class DoctorCommandsTests : IDisposable
         name switch
         {
             "unnamed" => new InvalidOperationException("simulated encryption key resolution failure"),
-            "bws-missing" => new BwsInvocationException(BwsFailure.NotInstalled, "bws not found"),
-            "bws-timeout" => new BwsInvocationException(BwsFailure.TimedOut, "bws timed out after 15s"),
-            "bws-failed" => new BwsInvocationException(BwsFailure.Failed, "bws returned no output"),
+            "bws-missing" => new CliSecretInvocationException(CliSecretFailure.NotInstalled, "bws not found"),
+            "bws-timeout" => new CliSecretInvocationException(CliSecretFailure.TimedOut, "bws timed out after 15s"),
+            "bws-failed" => new CliSecretInvocationException(CliSecretFailure.Failed, "bws returned no output"),
             "secret-not-a-key" => new MalformedPrivateKeyException("truncated"),
             "sidecar" => new EncryptionSourceException("encryption source sidecar 'x' is corrupt: bad json"),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, null)

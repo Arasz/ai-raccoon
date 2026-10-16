@@ -17,7 +17,7 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     End-to-end through the real stack: a fake `bws` script → BitwardenCliSecretManager →
+///     End-to-end through the real stack: a fake `bws` script → CliSecretManager →
 ///     BitwardenEncryptionKeyProvider → EncryptionKeyResolver → SqliteConnectionFactory against real
 ///     temp SQLCipher banks (docs/plans/encryption-bitwarden-implementation.md S4).
 /// </summary>
@@ -95,7 +95,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
     private EncryptionKeyResolver Resolver() =>
         new(new EncryptionSourceSidecar(BankPath()),
-            [new StubEnvProvider("env-passphrase"), new BitwardenEncryptionKeyProvider(new BitwardenCliSecretManager(_fakeBws))]);
+            [new StubEnvProvider("env-passphrase"), new BitwardenEncryptionKeyProvider(new CliSecretManager(CliSecretTool.Bitwarden, _fakeBws))]);
 
     /// <summary>Resolver pinned to the derived key, independent of the sidecar (the old StubEnvProvider semantics).</summary>
     private EncryptionKeyResolver DerivedKeyResolver() => new(new FixedState(), [new StubEnvProvider(DerivedRawKey)]);
@@ -396,7 +396,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         // No InstallFakeBws: the runner points at an absolute path that does not exist.
         WriteSidecar();
 
-        var ex = await Should.ThrowAsync<BwsInvocationException>(() => Resolver().ResolveAsync());
+        var ex = await Should.ThrowAsync<CliSecretInvocationException>(() => Resolver().ResolveAsync());
 
         ex.Message.ShouldBe(
             "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)");
@@ -410,7 +410,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         {
             WriteSidecar(UnknownSecretId);
 
-            var ex = await Should.ThrowAsync<BwsInvocationException>(() => Resolver().ResolveAsync());
+            var ex = await Should.ThrowAsync<CliSecretInvocationException>(() => Resolver().ResolveAsync());
 
             ex.Message.ShouldBe($"bws failed (exit 1): bws: secret not found: {UnknownSecretId}");
         });
@@ -422,7 +422,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         InstallFakeBws();
         await WithBwsAccessToken(null, async () =>
         {
-            var ex = await Should.ThrowAsync<BwsInvocationException>(() => new BitwardenCliSecretManager(_fakeBws).RunAsync(["secret", "get", SleepSecretId], null, TimeSpan.FromSeconds(2)));
+            var ex = await Should.ThrowAsync<CliSecretInvocationException>(() => new CliSecretManager(CliSecretTool.Bitwarden, _fakeBws).RunAsync(["secret", "get", SleepSecretId], null, TimeSpan.FromSeconds(2)));
 
             ex.Message.ShouldBe("bws timed out after 2s");
         });
@@ -449,7 +449,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
     {
         InstallFakeBws();
 
-        var result = await new BitwardenCliSecretManager(_fakeBws)
+        var result = await new CliSecretManager(CliSecretTool.Bitwarden, _fakeBws)
             .RunAsync(["secret", "get", SecretId], KnownToken, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
 
         result.ExitCode.ShouldBe(0);
@@ -466,7 +466,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
         {
             WriteSidecar();
 
-            var ex = await Should.ThrowAsync<BwsInvocationException>(() => Resolver().ResolveAsync());
+            var ex = await Should.ThrowAsync<CliSecretInvocationException>(() => Resolver().ResolveAsync());
 
             ex.Message.ShouldBe("bws failed (exit 1): bws: invalid access token");
         });
@@ -526,7 +526,7 @@ public sealed class EncryptionBitwardenIntegrationTests : IDisposable
 
         var (exit, stderr, stdout) = await RunServerProcessAsync(emptyPathDir, port);
 
-        exit.ShouldBe(ErrorCode.Key.BwsNotInstalled);
+        exit.ShouldBe(ErrorCode.Key.SecretCliNotInstalled);
         // serve names a key failure on stderr (ADR-0107); stdout stays reserved for the bound URL.
         stdout.ShouldBeEmpty();
         stderr.ShouldContain("could not resolve the encryption key");

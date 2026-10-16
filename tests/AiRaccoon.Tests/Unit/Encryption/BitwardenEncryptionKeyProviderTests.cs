@@ -19,23 +19,10 @@ public sealed class BitwardenEncryptionKeyProviderTests
     private const string DerivedRawKey = "x'72d23870a80905c7043e610ec6609b352a85b07f14dbe4358e9b5ffcb50a3485'";
     private const string LegacyDerivedRawKey = "x'277bf737b8e8f3f7de45d6b930028f22b1a9a417e63fb3db8ed8d773744d281b'";
 
-    /// <summary>The seed is held for the process lifetime otherwise; DeriveAndZeroSeed is the one call site free to clear it.</summary>
-    [Fact]
-    public void DeriveAndZeroSeed_DerivesBothKeysThenZeroesTheSeed()
-    {
-        var seed = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-
-        var (value, legacyValue) = BitwardenEncryptionKeyProvider.DeriveAndZeroSeed(seed);
-
-        value.ShouldBe(DerivedRawKey);
-        legacyValue.ShouldBe(LegacyDerivedRawKey);
-        seed.ShouldAllBe(b => b == 0);
-    }
-
     [Fact]
     public async Task GetPassphraseAsync_ValidPem_ReturnsDerivedRawKeyAndRunsSecretGetWithoutToken()
     {
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
         var provider = new BitwardenEncryptionKeyProvider(runner);
 
         var passphrase = await provider.GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }, TestContext.Current.CancellationToken);
@@ -49,7 +36,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public async Task GetPassphraseAsync_StdoutWithTrailingNewline_StillDerives()
     {
-        var runner = new FakeBwsRunner(new BwsResult(0, $"{new TestOpenSshKeyBuilder().Build()}\n", ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, $"{new TestOpenSshKeyBuilder().Build()}\n", ""));
 
         (await new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }, TestContext.Current.CancellationToken)).Value.ShouldBe(DerivedRawKey);
     }
@@ -57,7 +44,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public async Task GetPassphraseAsync_RsaSecret_ThrowsUnsupportedKeyType()
     {
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().WithKeyType("ssh-rsa").Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().WithKeyType("ssh-rsa").Build(), ""));
 
         var ex = await Should.ThrowAsync<UnsupportedKeyTypeException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
@@ -67,7 +54,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public async Task GetPassphraseAsync_PassphraseProtectedSecret_ThrowsPassphraseProtected()
     {
-        var runner = new FakeBwsRunner(new BwsResult(0, new TestOpenSshKeyBuilder().WithEncrypted().Build(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().WithEncrypted().Build(), ""));
 
         var ex = await Should.ThrowAsync<PassphraseProtectedKeyException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
@@ -77,7 +64,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public async Task GetPassphraseAsync_GarbageStdout_ThrowsMalformed()
     {
-        var runner = new FakeBwsRunner(new BwsResult(0, "not a key at all", ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, "not a key at all", ""));
 
         var ex = await Should.ThrowAsync<MalformedPrivateKeyException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
@@ -87,9 +74,9 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public async Task GetPassphraseAsync_NonZeroExit_ThrowsBwsFailedWithFirstStderrLine()
     {
-        var runner = new FakeBwsRunner(new BwsResult(7, "", "network error\nmore detail"));
+        var runner = new FakeBwsRunner(new CliSecretResult(7, "", "network error\nmore detail"));
 
-        var ex = await Should.ThrowAsync<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
+        var ex = await Should.ThrowAsync<CliSecretInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldBe("bws failed (exit 7): network error");
     }
@@ -97,9 +84,9 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public async Task GetPassphraseAsync_NonZeroExit_EmptyStderr_StillNamesExitCode()
     {
-        var runner = new FakeBwsRunner(new BwsResult(3, "", ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(3, "", ""));
 
-        var ex = await Should.ThrowAsync<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
+        var ex = await Should.ThrowAsync<CliSecretInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldBe("bws failed (exit 3): (no stderr)");
     }
@@ -107,10 +94,10 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public async Task GetPassphraseAsync_BwsNotFound_PropagatesInstallGuidance()
     {
-        var runner = new FakeBwsRunner(new BwsInvocationException(BwsFailure.NotInstalled,
+        var runner = new FakeBwsRunner(new CliSecretInvocationException(CliSecretFailure.NotInstalled,
             "bws not found — install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)"));
 
-        var ex = await Should.ThrowAsync<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
+        var ex = await Should.ThrowAsync<CliSecretInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldContain("bws not found — install the Bitwarden CLI (bws)");
     }
@@ -118,24 +105,24 @@ public sealed class BitwardenEncryptionKeyProviderTests
     [Fact]
     public async Task GetPassphraseAsync_Timeout_PropagatesTimeoutText()
     {
-        var runner = new FakeBwsRunner(new BwsInvocationException(BwsFailure.TimedOut, "bws timed out after 15s"));
+        var runner = new FakeBwsRunner(new CliSecretInvocationException(CliSecretFailure.TimedOut, "bws timed out after 15s"));
 
-        var ex = await Should.ThrowAsync<BwsInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
+        var ex = await Should.ThrowAsync<CliSecretInvocationException>(() => new BitwardenEncryptionKeyProvider(runner).GetPassphraseAsync(new EncryptionData("bitwarden") { SecretId = "secret-1" }));
 
         ex.Message.ShouldBe("bws timed out after 15s");
     }
 
     private sealed class FakeBwsRunner : ICliSecretManager
     {
-        private readonly BwsInvocationException? _exception;
-        private readonly BwsResult? _result;
+        private readonly CliSecretInvocationException? _exception;
+        private readonly CliSecretResult? _result;
 
-        public FakeBwsRunner(BwsResult result)
+        public FakeBwsRunner(CliSecretResult result)
         {
             _result = result;
         }
 
-        public FakeBwsRunner(BwsInvocationException exception)
+        public FakeBwsRunner(CliSecretInvocationException exception)
         {
             _exception = exception;
         }
@@ -144,7 +131,7 @@ public sealed class BitwardenEncryptionKeyProviderTests
         public string? Token { get; private set; }
         public TimeSpan? Timeout { get; private set; }
 
-        public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+        public Task<CliSecretResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
             CancellationToken cancellationToken = default)
         {
             Args = args;

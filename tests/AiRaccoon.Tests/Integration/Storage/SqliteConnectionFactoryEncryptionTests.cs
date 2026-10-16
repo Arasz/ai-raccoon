@@ -473,7 +473,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         // Sidecar points at bitwarden; the fake bws secret derives a key that is NOT bank-key-A.
         await File.WriteAllTextAsync($"{bankFactory.BankPath}.source", """{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""", TestContext.Current.CancellationToken);
         var resolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
-            [new StubEncryptionKeyProvider(null), new BitwardenEncryptionKeyProvider(new FakeBwsRunner(new BwsResult(0, ValidEd25519Pem(), "")))]);
+            [new StubEncryptionKeyProvider(null), new BitwardenEncryptionKeyProvider(new FakeBwsRunner(new CliSecretResult(0, ValidEd25519Pem(), "")))]);
         var resolverFactory = new SqliteConnectionFactory(options, resolver);
 
         var ex = await Should.ThrowAsync<BankKeyMismatchException>(async () =>
@@ -657,7 +657,7 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         var options = Options();
         await File.WriteAllTextAsync($"{SqliteConnectionFactory.BankPathFor(options)}.source",
             """{"source":"bitwarden","projectId":"p-1","secretId":"s-1"}""", TestContext.Current.CancellationToken);
-        var runner = new FakeBwsRunner(new BwsResult(0, ValidEd25519Pem(), ""));
+        var runner = new FakeBwsRunner(new CliSecretResult(0, ValidEd25519Pem(), ""));
         var resolver = new EncryptionKeyResolver(new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)),
             [new StubEncryptionKeyProvider(null), new BitwardenEncryptionKeyProvider(runner)]);
         var factory = new SqliteConnectionFactory(options, resolver);
@@ -714,11 +714,11 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         stream.Write(value);
     }
 
-    private sealed class FakeBwsRunner(BwsResult result) : ICliSecretManager
+    private sealed class FakeBwsRunner(CliSecretResult result) : ICliSecretManager
     {
         public int CallCount { get; private set; }
 
-        public Task<BwsResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
+        public Task<CliSecretResult> RunAsync(IReadOnlyList<string> args, string? token, TimeSpan timeout,
             CancellationToken cancellationToken = default)
         {
             CallCount++;

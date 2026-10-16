@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Security.Cryptography;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Encryption;
@@ -12,14 +11,16 @@ using Microsoft.Data.Sqlite;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
-///     encryption bitwarden/show/unset handlers: bws presence check, interactive id
-///     collection with configurable defaults, per-run-only -t token, reachability validation, and
-///     the rekey→sidecar→settings persist order (sidecar is the pre-open source of truth; settings mirror it).
+///     encryption bitwarden/1password/show/unset handlers: CLI presence check, interactive id or
+///     reference collection with configurable defaults, per-run-only -t token (bitwarden only),
+///     reachability validation, and the rekey→sidecar→settings persist order (sidecar is the
+///     pre-open source of truth; settings mirror it).
 /// </summary>
 public sealed partial class EncryptionCommands
 {
     private readonly ISqliteConnectionFactory _bankConnectionFactory;
     private readonly ICliSecretManager _bws;
+    private readonly ICliSecretManager _op;
     private readonly IEncryptionKeyProvider _env;
     private readonly IEncryptionSourceSidecar _sidecar;
     private readonly ILogger<EncryptionCommands> _logger;
@@ -27,17 +28,20 @@ public sealed partial class EncryptionCommands
     public EncryptionCommands(
         ISqliteConnectionFactory bank,
         ICliSecretManager bws,
+        ICliSecretManager op,
         IEncryptionKeyProvider env,
         IEncryptionSourceSidecar sidecar,
         ILogger<EncryptionCommands> logger)
     {
         ArgumentNullException.ThrowIfNull(bank);
         ArgumentNullException.ThrowIfNull(bws);
+        ArgumentNullException.ThrowIfNull(op);
         ArgumentNullException.ThrowIfNull(env);
         ArgumentNullException.ThrowIfNull(sidecar);
         ArgumentNullException.ThrowIfNull(logger);
         _bankConnectionFactory = bank;
         _bws = bws;
+        _op = op;
         _env = env;
         _sidecar = sidecar;
         _logger = logger;
@@ -48,20 +52,33 @@ public sealed partial class EncryptionCommands
 
     public const string SecretIdEnvVar = "AIRACCOON_BITWARDEN_SECRET_ID";
 
+    /// <summary>Env var an operator can set to offer their own 1Password secret reference as the interactive default.</summary>
+    public const string OnePasswordReferenceEnvVar = "AIRACCOON_1PASSWORD_REFERENCE";
+
     // Obviously fake — no default should identify a real vault entry (no hardcoded secrets).
     private const string FallbackProjectId = "00000000-0000-0000-0000-000000000000";
     private const string FallbackSecretId = "11111111-1111-1111-1111-111111111111";
+    private const string FallbackReference = "op://example-vault/example-item/private key?ssh-format=openssh";
+    private const string ReferencePrefix = "op://";
 
-    private const string RotationWarning =
-        "ai-raccoon: warning: rotating the secret in the Bitwarden UI without PRAGMA rekey bricks the bank — rotate the secret and rekey the bank together";
-
-    private const string MismatchText =
-        "ai-raccoon: encryption mismatch: the bank cannot be opened with the bitwarden key — if the secret was rotated, the bank must be rekeyed (run 'ai-raccoon encryption bitwarden')";
+    private const string NotAKeyHint =
+        "use an SSH Key item and add ?ssh-format=openssh to the reference so op returns the OpenSSH private key";
 
     private static readonly TimeSpan PresenceTimeout = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan BitwardenFetchTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan OnePasswordFetchTimeout = TimeSpan.FromSeconds(30);
+
+    private static string RotationWarning(string source) =>
+        source == OnePasswordEncryptionKeyProvider.EncryptionSource
+            ? "ai-raccoon: warning: rotating the key in 1Password without PRAGMA rekey bricks the bank — rotate the key and rekey the bank together"
+            : "ai-raccoon: warning: rotating the secret in the Bitwarden UI without PRAGMA rekey bricks the bank — rotate the secret and rekey the bank together";
+
+    private static string MismatchText(string source) =>
+        $"ai-raccoon: encryption mismatch: the bank cannot be opened with the {source} key — if the secret was rotated, the bank must be rekeyed (run 'ai-raccoon encryption {source}')";
 
     private static string DefaultProjectId => Environment.GetEnvironmentVariable(ProjectIdEnvVar) is { Length: > 0 } value ? value : FallbackProjectId;
+
+    private static string DefaultReference => Environment.GetEnvironmentVariable(OnePasswordReferenceEnvVar) is { Length: > 0 } value ? value : FallbackReference;
 
     private static string DefaultSecretId => Environment.GetEnvironmentVariable(SecretIdEnvVar) is { Length: > 0 } value ? value : FallbackSecretId;
 
@@ -69,55 +86,111 @@ public sealed partial class EncryptionCommands
         StandardStreams streams,
         CancellationToken ctx)
     {
-        try
+        if (await CheckPresenceAsync(_bws, CliSecretTool.Bitwarden, streams, ctx) is { } missing)
         {
-            await _bws.RunAsync(["--version"], null, PresenceTimeout, ctx);
-        }
-        catch (BwsInvocationException ex)
-        {
-            Log.BwsInvocationFailed(_logger, ex);
-            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
-            return CliFailureErrorCode.For(ex);
+            return missing;
         }
 
         var projectId = await PromptAsync(streams, $"project id [{DefaultProjectId}]", DefaultProjectId, ctx);
         var secretId = await PromptAsync(streams, $"secret id [{DefaultSecretId}]", DefaultSecretId, ctx);
 
         var token = parseResult.GetResult("-t") is not null ? parseResult.GetValue<string>("-t") : null;
-        BwsResult fetched;
+        var (fetched, failure) = await FetchAsync(_bws, CliSecretTool.Bitwarden, ["secret", "get", secretId], token, BitwardenFetchTimeout, streams, ctx);
+        if (fetched is null)
+        {
+            return failure;
+        }
+
+        return await SwitchSourceAsync(CliSecretTool.Bitwarden, BitwardenEncryptionKeyProvider.EncryptionSource, fetched, null,
+            new EncryptionData(BitwardenEncryptionKeyProvider.EncryptionSource) { ProjectId = projectId, SecretId = secretId }, store, streams, ctx);
+    }
+
+    public async Task<int> OnePasswordAsync(IMemoryStore store, StandardStreams streams, CancellationToken ctx)
+    {
+        if (await CheckPresenceAsync(_op, CliSecretTool.OnePassword, streams, ctx) is { } missing)
+        {
+            return missing;
+        }
+
+        var reference = await PromptAsync(streams, $"secret reference [{DefaultReference}]", DefaultReference, ctx);
+        if (!reference.StartsWith(ReferencePrefix, StringComparison.Ordinal))
+        {
+            await streams.WriteErrorLineAsync($"ai-raccoon: the secret reference must start with {ReferencePrefix} (for example {FallbackReference})");
+            return ErrorCode.Usage.InvalidValue;
+        }
+
+        var (fetched, failure) = await FetchAsync(_op, CliSecretTool.OnePassword, ["read", reference], null, OnePasswordFetchTimeout, streams, ctx);
+        if (fetched is null)
+        {
+            return failure;
+        }
+
+        return await SwitchSourceAsync(CliSecretTool.OnePassword, OnePasswordEncryptionKeyProvider.EncryptionSource, fetched, NotAKeyHint,
+            new EncryptionData(OnePasswordEncryptionKeyProvider.EncryptionSource) { SecretId = reference }, store, streams, ctx);
+    }
+
+    /// <summary>Runs <c>--version</c>; returns the exit code when the CLI is missing or broken, null when it is usable.</summary>
+    private async Task<int?> CheckPresenceAsync(ICliSecretManager runner, CliSecretTool tool, StandardStreams streams, CancellationToken ctx)
+    {
         try
         {
-            fetched = await _bws.RunAsync(["secret", "get", secretId], token, FetchTimeout, ctx);
+            await runner.RunAsync(["--version"], null, PresenceTimeout, ctx);
+            return null;
         }
-        catch (BwsInvocationException ex)
+        catch (CliSecretInvocationException ex)
         {
-            Log.BwsInvocationFailed(_logger, ex);
+            Log.SecretCliInvocationFailed(_logger, tool.Name, ex);
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
             return CliFailureErrorCode.For(ex);
+        }
+    }
+
+    /// <summary>Fetches the key text; a null result carries the exit code to return instead.</summary>
+    private async Task<(CliSecretResult? Fetched, int Failure)> FetchAsync(ICliSecretManager runner, CliSecretTool tool, string[] args,
+        string? token, TimeSpan timeout, StandardStreams streams, CancellationToken ctx)
+    {
+        CliSecretResult fetched;
+        try
+        {
+            fetched = await runner.RunAsync(args, token, timeout, ctx);
+        }
+        catch (CliSecretInvocationException ex)
+        {
+            Log.SecretCliInvocationFailed(_logger, tool.Name, ex);
+            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
+            return (null, CliFailureErrorCode.For(ex));
         }
 
         if (fetched.ExitCode != 0)
         {
             var errorLine = fetched.FirstErrorLine;
-            Log.BwsCommandFailed(_logger, fetched.ExitCode, errorLine);
-            await streams.WriteErrorLineAsync($"ai-raccoon: bws failed (exit {fetched.ExitCode}): {errorLine}");
-            return ErrorCode.Key.BwsFailed;
+            Log.SecretCliCommandFailed(_logger, tool.Name, fetched.ExitCode, errorLine);
+            await streams.WriteErrorLineAsync($"ai-raccoon: {tool.Name} failed (exit {fetched.ExitCode}): {errorLine}");
+            return (null, ErrorCode.Key.SecretCliFailed);
         }
 
-        byte[] seed;
+        return (fetched, 0);
+    }
+
+    /// <summary>
+    ///     The shared tail of both source commands: derive the key, rekey the bank when it needs it, then
+    ///     persist sidecar before settings. <paramref name="notAKeyHint" /> is appended to the not-a-key error.
+    /// </summary>
+    private async Task<int> SwitchSourceAsync(CliSecretTool tool, string source, CliSecretResult fetched, string? notAKeyHint,
+        EncryptionData data, IMemoryStore store, StandardStreams streams, CancellationToken ctx)
+    {
+        string derived;
         try
         {
-            seed = OpenSshPrivateKeyParser.ParseSeed(fetched.Stdout.Trim());
+            derived = SshKeyPassphrase.FromOpenSsh(fetched.Stdout).Value;
         }
         catch (EncryptionKeyException ex)
         {
-            await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
+            await streams.WriteErrorLineAsync(notAKeyHint is null ? $"ai-raccoon: {ex.Message}" : $"ai-raccoon: {ex.Message} — {notAKeyHint}");
             return ErrorCode.Key.SecretNotAKey;
         }
 
-        var derived = DeriveAndZeroSeed(seed);
-
-        await streams.WriteErrorLineAsync(RotationWarning);
+        await streams.WriteErrorLineAsync(RotationWarning(source));
 
         var bankPath = _bankConnectionFactory.BankPath;
         if (File.Exists(bankPath))
@@ -137,9 +210,9 @@ public sealed partial class EncryptionCommands
 
             if (openError is null)
             {
-                Log.RekeyingBank(_logger, BitwardenEncryptionKeyProvider.EncryptionSource);
+                Log.RekeyingBank(_logger, source);
                 await _bankConnectionFactory.RekeyBankAsync(derived, ctx);
-                Log.BankRekeyed(_logger, BitwardenEncryptionKeyProvider.EncryptionSource);
+                Log.BankRekeyed(_logger, source);
             }
             else if (await IsCorrectKey(derived, ctx))
             {
@@ -155,17 +228,25 @@ public sealed partial class EncryptionCommands
                     return ErrorCode.Key.BankKeyedToEnv;
                 }
 
-                await streams.WriteErrorLineAsync(MismatchText);
+                await streams.WriteErrorLineAsync(MismatchText(source));
                 return ErrorCode.Key.WrongKey;
             }
         }
 
-        _sidecar.Write(new EncryptionData(BitwardenEncryptionKeyProvider.EncryptionSource) { ProjectId = projectId, SecretId = secretId });
-        await store.SetSettingAsync(EncryptionSettingsKeys.Source, BitwardenEncryptionKeyProvider.EncryptionSource, ctx);
-        await store.SetSettingAsync(EncryptionSettingsKeys.ProjectId, projectId, ctx);
-        await store.SetSettingAsync(EncryptionSettingsKeys.SecretId, secretId, ctx);
+        _sidecar.Write(data);
+        await store.SetSettingAsync(EncryptionSettingsKeys.Source, source, ctx);
+        if (data.ProjectId is null)
+        {
+            await store.DeleteSettingAsync(EncryptionSettingsKeys.ProjectId, ctx);
+        }
+        else
+        {
+            await store.SetSettingAsync(EncryptionSettingsKeys.ProjectId, data.ProjectId, ctx);
+        }
 
-        await streams.WriteOutputLineAsync("encryption source set to bitwarden");
+        await store.SetSettingAsync(EncryptionSettingsKeys.SecretId, data.SecretId!, ctx);
+
+        await streams.WriteOutputLineAsync($"encryption source set to {source}");
         return 0;
     }
 
@@ -213,17 +294,24 @@ public sealed partial class EncryptionCommands
     {
         await using var probe = await _bankConnectionFactory.OpenBankAsync(cancellationToken);
 
-        var sourceRow = await store.GetSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
+        // The sidecar decides how the bank opens; the settings rows only mirror it and can be stale after an interrupted switch.
         var encryptionData = _sidecar.Read();
-        if (sourceRow == BitwardenEncryptionKeyProvider.EncryptionSource || encryptionData.Source == BitwardenEncryptionKeyProvider.EncryptionSource)
+        var fromSidecar = encryptionData.Source != EncryptionData.NoneEncryptedSource;
+        var source = fromSidecar ? encryptionData.Source : await store.GetSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
+        var secretId = fromSidecar ? encryptionData.SecretId : await store.GetSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
+        if (source == BitwardenEncryptionKeyProvider.EncryptionSource)
         {
-            var projectId = await store.GetSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken)
-                            ?? encryptionData.ProjectId ?? "(unset)";
-            var secretId = await store.GetSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken)
-                           ?? encryptionData.SecretId ?? "(unset)";
+            var projectId = fromSidecar ? encryptionData.ProjectId : await store.GetSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken);
             await streams.WriteOutputLineAsync("source: bitwarden");
-            await streams.WriteOutputLineAsync($"projectId: {projectId}");
-            await streams.WriteOutputLineAsync($"secretId: {secretId}");
+            await streams.WriteOutputLineAsync($"projectId: {projectId ?? "(unset)"}");
+            await streams.WriteOutputLineAsync($"secretId: {secretId ?? "(unset)"}");
+            return 0;
+        }
+
+        if (source == OnePasswordEncryptionKeyProvider.EncryptionSource)
+        {
+            await streams.WriteOutputLineAsync("source: 1password");
+            await streams.WriteOutputLineAsync($"reference: {secretId ?? "(unset)"}");
             return 0;
         }
 
@@ -257,9 +345,10 @@ public sealed partial class EncryptionCommands
             }
             else
             {
-                Log.UnsetSkippedRekey(_logger);
+                var currentSource = _sidecar.Read().Source;
+                Log.UnsetSkippedRekey(_logger, currentSource);
                 await streams.WriteErrorLineAsync(
-                    "ai-raccoon: warning: no AIRACCOON_DB_PASSPHRASE set — the bank stays keyed to the bitwarden secret; set AIRACCOON_DB_PASSPHRASE and re-run 'ai-raccoon encryption unset' to rekey it back to the env passphrase (automatic decryption without an env passphrase is not supported)");
+                    $"ai-raccoon: warning: no AIRACCOON_DB_PASSPHRASE set — the bank stays keyed to the {currentSource} secret; set AIRACCOON_DB_PASSPHRASE and re-run 'ai-raccoon encryption unset' to rekey it back to the env passphrase (automatic decryption without an env passphrase is not supported)");
                 return ErrorCode.Key.NoEnvPassphrase;
             }
         }
@@ -283,19 +372,6 @@ public sealed partial class EncryptionCommands
         return string.IsNullOrEmpty(value) ? fallback : value;
     }
 
-    /// <summary>Derives the raw key from the seed, then zeroes it — the seed must not outlive this call.</summary>
-    internal static string DeriveAndZeroSeed(byte[] seed)
-    {
-        try
-        {
-            return SshKeyDerivation.DeriveRawKey(seed);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(seed);
-        }
-    }
-
     private static partial class Log
     {
         [LoggerMessage(EventId = 800, Level = LogLevel.Information, Message = "Rekeying the bank to the {Source} encryption key")]
@@ -309,14 +385,14 @@ public sealed partial class EncryptionCommands
         // Error/Warning, the default (non-quiet) console's AddConsole also prints them, so the
         // failure appears twice: once as the clean CLI line, once as "fail: ...EncryptionCommands[NNN] ...".
         // --quiet mode is unaffected (QuietLogging sets its minimum level to Trace).
-        [LoggerMessage(EventId = 802, Level = LogLevel.Debug, Message = "bws invocation failed")]
-        public static partial void BwsInvocationFailed(ILogger logger, Exception exception);
+        [LoggerMessage(EventId = 802, Level = LogLevel.Debug, Message = "{Tool} invocation failed")]
+        public static partial void SecretCliInvocationFailed(ILogger logger, string tool, Exception exception);
 
-        [LoggerMessage(EventId = 803, Level = LogLevel.Debug, Message = "Bank stays keyed to the bitwarden secret: AIRACCOON_DB_PASSPHRASE is not set")]
-        public static partial void UnsetSkippedRekey(ILogger logger);
+        [LoggerMessage(EventId = 803, Level = LogLevel.Debug, Message = "Bank stays keyed to the {Source} secret: AIRACCOON_DB_PASSPHRASE is not set")]
+        public static partial void UnsetSkippedRekey(ILogger logger, string source);
 
-        [LoggerMessage(EventId = 804, Level = LogLevel.Debug, Message = "bws failed (exit {ExitCode}): {Error}")]
-        public static partial void BwsCommandFailed(ILogger logger, int exitCode, string error);
+        [LoggerMessage(EventId = 804, Level = LogLevel.Debug, Message = "{Tool} failed (exit {ExitCode}): {Error}")]
+        public static partial void SecretCliCommandFailed(ILogger logger, string tool, int exitCode, string error);
 
         // The migration records nothing in the bank or the sidecar
         // (docs/plans/2026-08-07-hkdf-rekey-migration.md Decision 4) — these events are the whole audit trail.

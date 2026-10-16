@@ -886,6 +886,7 @@ ai-raccoon settings watch remove {project-id|*}
 
 # encryption: bank key source (unaffected — the bootstrap path stays on the CLI)
 ai-raccoon encryption bitwarden [-t <token>]
+ai-raccoon encryption 1password
 ai-raccoon encryption show
 ai-raccoon encryption unset
 ai-raccoon encryption migrate
@@ -931,6 +932,20 @@ Secrets Manager secret via the `bws` CLI and derives the raw SQLCipher key with
 accepts a per-run-only `-t <token>`, warns that rotating the secret in the Bitwarden UI
 without `PRAGMA rekey` bricks the bank, then rekeys + persists. Server startup refuses
 loudly when the configured source cannot produce the key.
+
+`encryption 1password` is the second source ([ADR 0132](../adr/0132-1password-cli-as-a-second-bank-key-source.md)).
+It reads an SSH Key item's ed25519 private key with `op read <reference>`, where the reference is
+`op://<vault>/<item>/private key?ssh-format=openssh`, and runs the same parse, HKDF derivation,
+sidecar and rekey flow. The prompt (`AIRACCOON_1PASSWORD_REFERENCE` sets its default) refuses a
+reference that does not start with `op://`. The reference is stored verbatim in the `SecretId`
+slot of the sidecar and settings; `ProjectId` stays unset. `op` authenticates through the
+inherited `OP_SERVICE_ACCOUNT_TOKEN` (headless; service accounts cannot read the Personal or
+Private vaults) or the desktop-app integration, with `OP_ACCOUNT` choosing among several accounts.
+There is no `-t` option, because a token on argv is visible through `ps`. The `op read` bound is
+30 s, twice the `bws` bound, since the desktop app may wait on an approval prompt. A 1Password
+bank has no pre-ADR-0012 key, so `encryption migrate` never applies to it. `encryption show` prints
+`source: 1password` and `reference: <op://...>`. Rotation means rotating the key and re-running
+the command together.
 
 **`encryption migrate`** rekeys a bank still encrypted under the pre-ADR-0012
 `SHA-256(label ‖ seed)` derivation to the current HKDF key. It affects only the

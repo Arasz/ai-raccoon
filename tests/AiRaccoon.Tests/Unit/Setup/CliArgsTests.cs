@@ -941,6 +941,24 @@ public class CliArgsTests
     }
 
     [Fact]
+    public void Parse_EncryptionOnePassword_ParsesCommandPath()
+    {
+        CliArgs.TryParse(["encryption", "1password"], out var parsed);
+
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["encryption", "1password"]);
+    }
+
+    /// <summary>A token on ai-raccoon's argv would leak through `ps`: the 1password command takes none (ADR-0132).</summary>
+    [Fact]
+    public void Parse_EncryptionOnePasswordWithToken_IsRejected()
+    {
+        CliArgs.TryParse(["encryption", "1password", "-t", "tok-123"], out var parsed);
+
+        parsed!.Errors.ShouldNotBeEmpty();
+    }
+
+    [Fact]
     public void Parse_EncryptionShow_ParsesCommandPath()
     {
         CliArgs.TryParse(["encryption", "show"], out var parsed);

@@ -38,6 +38,7 @@ proxy; full servers come only from `serve`).
 | `extract prune [--apply]` | Reports (default) or removes `promotion_queue` rows whose backing entry is gone |
 | `noise entries` | Summarizes `noise_entries`, the training-data source for a future noise learner |
 | `encryption bitwarden [-t <token>]` | Configures Bitwarden Secrets Manager as the bank key source; rekeys the bank |
+| `encryption 1password` | Configures the 1Password CLI (`op`) as the bank key source: prompts for an `op://` reference to an SSH Key item, authenticates through the inherited `OP_SERVICE_ACCOUNT_TOKEN` or the desktop app (no `-t` option), rekeys the bank |
 | `encryption show` | Shows the current encryption source |
 | `encryption unset` | Returns to the env-passphrase default; rekeys when `AIRACCOON_DB_PASSPHRASE` is set |
 | `encryption migrate` | Rekeys a bank still on the pre-ADR-0012 key derivation |
@@ -180,13 +181,13 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 20 | `Key.Unresolved` | No encryption key could be resolved | no |
 | 21 | `Key.WrongKey` | The resolved key does not open the bank | no |
 | 22 | `Key.LegacyKeyDerivation` | The bank is still keyed under the pre-ADR-0012 derivation; `encryption migrate` fixes it | no |
-| 23 | `Key.BwsNotInstalled` | The Bitwarden CLI (`bws`) is not on `PATH` or cannot be started | no |
-| 24 | `Key.BwsTimedOut` | `bws` did not answer within its bound | yes |
-| 25 | `Key.BwsFailed` | `bws` ran but gave nothing usable | no |
-| 26 | `Key.SecretNotAKey` | The Bitwarden secret is not a parseable OpenSSH ed25519 private key | no |
+| 23 | `Key.SecretCliNotInstalled` | The secret CLI (`bws` or `op`) is not on `PATH` or cannot be started | no |
+| 24 | `Key.SecretCliTimedOut` | The secret CLI did not answer within its bound | yes |
+| 25 | `Key.SecretCliFailed` | The secret CLI ran but gave nothing usable | no |
+| 26 | `Key.SecretNotAKey` | The Bitwarden secret or 1Password item is not a parseable OpenSSH ed25519 private key | no |
 | 27 | `Key.SourceSidecarInvalid` | The `memory.db.source` sidecar is corrupt or names an unknown source | no |
 | 28 | `Key.NoEnvPassphrase` | `encryption unset` cannot rekey back to env: no `AIRACCOON_DB_PASSPHRASE` | no |
-| 29 | `Key.BankKeyedToEnv` | `encryption bitwarden` did not switch the source | no |
+| 29 | `Key.BankKeyedToEnv` | `encryption bitwarden` or `encryption 1password` did not switch the source | no |
 | 30 | `Bank.OpenFailed` | SQLite refused to open or read the bank | no |
 | 31 | `Bank.NoBank` | No bank file exists at the resolved path | no |
 | 32 | `Bank.Corrupted` | The file exists but does not open as a database: a corrupt bank or a wrong key, which SQLCipher cannot tell apart (the message names both remedies) | no |

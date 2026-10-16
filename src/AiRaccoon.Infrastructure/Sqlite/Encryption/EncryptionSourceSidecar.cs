@@ -14,6 +14,13 @@ public sealed class EncryptionSourceException(string message) : InvalidOperation
 /// </summary>
 public sealed class EncryptionSourceSidecar : IEncryptionSourceSidecar
 {
+    private static readonly string[] KnownSources =
+    [
+        EnvEncryptionKeyProvider.EncryptionSource,
+        BitwardenEncryptionKeyProvider.EncryptionSource,
+        OnePasswordEncryptionKeyProvider.EncryptionSource
+    ];
+
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public EncryptionSourceSidecar(string encryptionDataFilePath)
@@ -42,17 +49,15 @@ public sealed class EncryptionSourceSidecar : IEncryptionSourceSidecar
             throw Corrupt(ex.Message);
         }
 
-        return config.Source is not (EnvEncryptionKeyProvider.EncryptionSource or BitwardenEncryptionKeyProvider.EncryptionSource)
-            ? throw Corrupt($"unknown source '{config.Source}'")
-            : config;
+        return IsKnown(config.Source) ? config : throw Corrupt($"unknown source '{config.Source}'");
     }
 
     public void Write(EncryptionData config)
     {
         Guard.IsNotNull(config);
-        if (config.Source is not (EnvEncryptionKeyProvider.EncryptionSource or BitwardenEncryptionKeyProvider.EncryptionSource))
+        if (!IsKnown(config.Source))
         {
-            throw new ArgumentException($"source must be \"env\" or \"bitwarden\", was \"{config.Source}\"", nameof(config));
+            throw new ArgumentException($"source must be one of {string.Join(", ", KnownSources.Select(source => $"\"{source}\""))}, was \"{config.Source}\"", nameof(config));
         }
 
         var tempPath = $"{FilePath}.{Guid.NewGuid():N}.tmp";
@@ -68,6 +73,8 @@ public sealed class EncryptionSourceSidecar : IEncryptionSourceSidecar
     public void Delete() => File.Delete(FilePath);
 
     public static string PathFor(string encryptionDataFilePath) => $"{encryptionDataFilePath}.source";
+
+    private static bool IsKnown(string source) => KnownSources.Contains(source, StringComparer.Ordinal);
 
     private EncryptionSourceException Corrupt(string reason) => new($"encryption source sidecar '{FilePath}' is corrupt: {reason}");
 }

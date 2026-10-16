@@ -47,6 +47,28 @@ ai-raccoon
 
 When encrypted, FTS5 and vec0 virtual tables stay encrypted on disk without breaking hybrid search.
 
+### Key the bank from 1Password
+
+If your SSH keys live in 1Password, `ai-raccoon encryption 1password` derives the bank key from one of them instead of a passphrase in the environment. It needs the [1Password CLI](https://www.1password.dev/cli) (`op`) on `PATH`.
+
+1. In 1Password, create an **SSH Key** item and generate an **ed25519** key. Other key types are refused.
+2. Build the secret reference for its private key in OpenSSH format: `op://<vault>/<item>/private key?ssh-format=openssh`. Without `?ssh-format=openssh`, `op` returns a format ai-raccoon cannot parse.
+3. Authenticate `op`. For a server nobody sits in front of, export `OP_SERVICE_ACCOUNT_TOKEN`. Service accounts cannot read the Personal or Private vaults, so keep the item in a shared vault. With several accounts, set `OP_ACCOUNT`. Interactively you can use the desktop-app integration instead, which may show an approval prompt; a server that no one can answer needs the token.
+4. Run the command and give it the reference when prompted:
+
+```bash
+export OP_SERVICE_ACCOUNT_TOKEN="..."   # headless; omit to use the desktop app
+ai-raccoon encryption 1password
+# secret reference [op://example-vault/example-item/private key?ssh-format=openssh]: op://team/bank-key/private key?ssh-format=openssh
+# encryption source set to 1password
+```
+
+Set `AIRACCOON_1PASSWORD_REFERENCE` to change the prompt's default. A reference that does not start with `op://` is refused with exit code `10` (`Usage.InvalidValue`) before `op` runs. The command rekeys the bank to the derived key, so stop any running server first. `ai-raccoon encryption show` prints `source: 1password` and the `reference:`; `ai-raccoon encryption unset` rekeys back to `AIRACCOON_DB_PASSPHRASE` (which must be set).
+
+There is no `-t` option, unlike `encryption bitwarden`. A token on the command line is readable through `ps` by any process of the same user, so `op` reads `OP_SERVICE_ACCOUNT_TOKEN` from the environment and nothing else. The server opens the bank at start-up through the same `op read`, so `op` must be reachable there, with the token in the server's own environment.
+
+Rotating the key in 1Password without rekeying locks the bank. Rotate the key and run `ai-raccoon encryption 1password` again together. See [ADR 0132](../adr/0132-1password-cli-as-a-second-bank-key-source.md).
+
 ---
 
 ## Serve mode lifecycle and authentication
@@ -451,11 +473,11 @@ model migration is open (schema shape is still healthy), so it composes into a s
 |---|---|
 | `0` | `Ok.Success` — HEALTHY, including `model migration: none open` |
 | `20` | `Key.Unresolved` — the encryption key could not be resolved |
-| `23` | `Key.BwsNotInstalled` — the Bitwarden CLI (`bws`) is not on `PATH` or cannot be started |
-| `24` | `Key.BwsTimedOut` — `bws` did not answer within its bound (5 s presence, 15 s fetch) |
-| `25` | `Key.BwsFailed` — `bws` ran but gave nothing usable (non-zero exit or empty output) |
-| `26` | `Key.SecretNotAKey` — the Bitwarden secret is not a parseable OpenSSH ed25519 private key |
-| `27` | `Key.SourceSidecarInvalid` — the `memory.db.source` sidecar is corrupt, names an unknown source, or is `bitwarden` without a secret id |
+| `23` | `Key.SecretCliNotInstalled` — the secret CLI (`bws` or `op`) is not on `PATH` or cannot be started |
+| `24` | `Key.SecretCliTimedOut` — the secret CLI did not answer within its bound (5 s presence; 15 s `bws` fetch, 30 s `op` fetch) |
+| `25` | `Key.SecretCliFailed` — the secret CLI ran but gave nothing usable (non-zero exit or empty output) |
+| `26` | `Key.SecretNotAKey` — the Bitwarden secret or 1Password item is not a parseable OpenSSH ed25519 private key |
+| `27` | `Key.SourceSidecarInvalid` — the `memory.db.source` sidecar is corrupt, names an unknown source, or is `bitwarden` or `1password` without a secret id or reference |
 | `30` | `Bank.OpenFailed` — the bank could not be opened read-only |
 | `31` | `Bank.NoBank` — no bank file exists at the resolved path — distinct from HEALTHY, so a wrong `--data-root` is never mistaken for a healthy bank. A client auto-launch (the proxy, a settings verb) returns the same code when it refuses to mint one at a non-default root |
 | `32` | `Bank.Corrupted` — the bank file exists but is not a SQLite database — corrupt, or not readable with the resolved encryption key; restore it from a backup or check `--data-root` |

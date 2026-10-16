@@ -1005,7 +1005,7 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
   Metrics/                  MeasurementBuffer (thin adapter over EventPump<Measurement>, ADR-0091), MetricsFlusher (fixed-interval
                             BackgroundService), SqliteMetricsStore, MetricsRecorder,
                             MetricsReportService (window/bucket aggregation for memory_performance)
-  Encryption/               BitwardenCliSecretManager (Bitwarden key source)
+  Encryption/               CliSecretManager + CliSecretTool (runs `bws` for the Bitwarden key source and `op` for the 1Password one, ADR-0132)
   Degradation/              SweepService
   Options/                  SyncOptions, InfrastructureOptions
 ```
