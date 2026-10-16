@@ -7,7 +7,7 @@ public sealed record CliSecretTool(string Name, string TokenEnvVar, string Insta
         "install the Bitwarden CLI (bws) and configure BWS_ACCESS_TOKEN (https://bitwarden.com/help/cli/)");
 
     public static readonly CliSecretTool OnePassword = new("op", "OP_SERVICE_ACCOUNT_TOKEN",
-        "install the 1Password CLI (op) and sign in or set OP_SERVICE_ACCOUNT_TOKEN (https://developer.1password.com/docs/cli/)");
+        "install the 1Password CLI (op) and sign in or set OP_SERVICE_ACCOUNT_TOKEN (https://www.1password.dev/cli)");
 
     public string NotFoundText => $"{Name} not found — {InstallHint}";
 }

@@ -4,7 +4,7 @@ Task-oriented recipes: the reader has a goal (configure server, switch embedding
 
 ## Contents
 
-- [Configure and run the AiRaccoon server](configure-ai-raccoon-server.md) — launch flags, environment variables, SQLite passphrase encryption, serve mode lifecycle, idle watchdog, and zero-downtime updates with `serve --restart`.
+- [Configure and run the AiRaccoon server](configure-ai-raccoon-server.md) — launch flags, environment variables, SQLite passphrase encryption (including keying the bank from 1Password), serve mode lifecycle, idle watchdog, and zero-downtime updates with `serve --restart`.
 - [Configure embedding engines](configure-embedding-engines.md): switch between the bundled local ONNX model (`granite-embedding-small-english-r2`) and remote OpenAI-compatible backends (Ollama, LM Studio, OpenAI) with `ai-raccoon model`.
 - [Configure Rider AI completion with a local Qwen3.5-9B](configure-rider-local-autocompletion.md) — point a Rider AI-completion plugin at a local Qwen3.5-9B endpoint and paste a system prompt that matches the repo's C# conventions.
 - [Monitor and export server telemetry](monitor-and-export-telemetry.md) — live process discovery, `dotnet-counters`/`dotnet-trace` integration, and OTLP metrics/traces export.
