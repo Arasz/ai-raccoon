@@ -169,4 +169,38 @@ public sealed class EncryptionStateTests : IDisposable
 
         Should.Throw<ArgumentException>(() => sidecar.Write(new EncryptionData("ssh-key")));
     }
+
+    [RetryFact]
+    public void WriteThenRead_RoundTripsOnePasswordReferenceInSecretId()
+    {
+        var sidecar = new EncryptionSourceSidecar(BankPath());
+
+        sidecar.Write(new EncryptionData("1password") { SecretId = "op://vault/item/private key?ssh-format=openssh" });
+        var read = sidecar.Read();
+
+        read.Source.ShouldBe("1password");
+        read.ProjectId.ShouldBeNull();
+        read.SecretId.ShouldBe("op://vault/item/private key?ssh-format=openssh");
+    }
+
+    [RetryFact]
+    public void Read_HandWrittenOnePasswordSidecar_IsAccepted()
+    {
+        File.WriteAllText(SidecarPath(), """{"source":"1password","secretId":"op://v/i/f"}""");
+
+        new EncryptionSourceSidecar(BankPath()).Read().SecretId.ShouldBe("op://v/i/f");
+    }
+
+    [RetryFact]
+    public void Write_InvalidSource_NamesEveryAcceptedSource()
+    {
+        var sidecar = new EncryptionSourceSidecar(BankPath());
+
+        var ex = Should.Throw<ArgumentException>(() => sidecar.Write(new EncryptionData("ssh-key")));
+
+        ex.Message.ShouldContain("env");
+        ex.Message.ShouldContain("bitwarden");
+        ex.Message.ShouldContain("1password");
+        ex.Message.ShouldContain("ssh-key");
+    }
 }
