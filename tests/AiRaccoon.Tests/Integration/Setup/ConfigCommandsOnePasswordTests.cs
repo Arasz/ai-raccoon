@@ -362,6 +362,28 @@ public sealed class ConfigCommandsOnePasswordTests : IDisposable
         stdout.ShouldContain("reference: op://v/i/sidecar");
     }
 
+    /// <summary>The sidecar decides how the bank opens, so show reports it even when an interrupted switch left stale rows.</summary>
+    [RetryFact]
+    public async Task Show_SidecarDisagreesWithRows_ReportsTheSidecar()
+    {
+        new EncryptionSourceSidecar(BankPath()).Write(new EncryptionData("1password") { SecretId = "op://v/i/sidecar" });
+        var store = new FakeConfigStore
+        {
+            Settings =
+            {
+                [EncryptionSettingsKeys.Source] = "bitwarden", [EncryptionSettingsKeys.ProjectId] = "stale-project",
+                [EncryptionSettingsKeys.SecretId] = "stale-secret"
+            }
+        };
+
+        var (exit, stdout, _, _) = await Run(["encryption", "show"], store, FakeOpPrintingKey());
+
+        exit.ShouldBe(0);
+        stdout.ShouldContain("source: 1password");
+        stdout.ShouldContain("reference: op://v/i/sidecar");
+        stdout.ShouldNotContain("stale");
+    }
+
     [RetryFact]
     public async Task Unset_FromOnePassword_RekeysTheBankBackToEnv()
     {

@@ -226,6 +226,25 @@ public sealed class CliSecretManagerTests : IDisposable
         }
     }
 
+    /// <summary>A child only ever sees its own tool's credential: op must not inherit the Bitwarden token.</summary>
+    [RetryFact]
+    public async Task RunAsync_OnePassword_DoesNotInheritTheBitwardenToken()
+    {
+        var runner = new CliSecretManager(CliSecretTool.OnePassword, FakeBwsPath("echo \"bws=[$BWS_ACCESS_TOKEN]\""));
+        var previousBws = Environment.GetEnvironmentVariable("BWS_ACCESS_TOKEN");
+        Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", "bws-secret-77");
+        try
+        {
+            var result = await runner.RunAsync(["read", "op://v/i/f"], null, TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
+
+            result.Stdout.Trim().ShouldBe("bws=[]");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("BWS_ACCESS_TOKEN", previousBws);
+        }
+    }
+
     [RetryFact]
     public async Task RunAsync_OnePasswordNotFound_TextNamesOpAndItsInstallHint()
     {

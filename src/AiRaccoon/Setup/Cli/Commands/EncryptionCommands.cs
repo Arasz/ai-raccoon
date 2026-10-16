@@ -294,26 +294,24 @@ public sealed partial class EncryptionCommands
     {
         await using var probe = await _bankConnectionFactory.OpenBankAsync(cancellationToken);
 
-        var sourceRow = await store.GetSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
+        // The sidecar decides how the bank opens; the settings rows only mirror it and can be stale after an interrupted switch.
         var encryptionData = _sidecar.Read();
-        if (sourceRow == BitwardenEncryptionKeyProvider.EncryptionSource || encryptionData.Source == BitwardenEncryptionKeyProvider.EncryptionSource)
+        var fromSidecar = encryptionData.Source != EncryptionData.NoneEncryptedSource;
+        var source = fromSidecar ? encryptionData.Source : await store.GetSettingAsync(EncryptionSettingsKeys.Source, cancellationToken);
+        var secretId = fromSidecar ? encryptionData.SecretId : await store.GetSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken);
+        if (source == BitwardenEncryptionKeyProvider.EncryptionSource)
         {
-            var projectId = await store.GetSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken)
-                            ?? encryptionData.ProjectId ?? "(unset)";
-            var secretId = await store.GetSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken)
-                           ?? encryptionData.SecretId ?? "(unset)";
+            var projectId = fromSidecar ? encryptionData.ProjectId : await store.GetSettingAsync(EncryptionSettingsKeys.ProjectId, cancellationToken);
             await streams.WriteOutputLineAsync("source: bitwarden");
-            await streams.WriteOutputLineAsync($"projectId: {projectId}");
-            await streams.WriteOutputLineAsync($"secretId: {secretId}");
+            await streams.WriteOutputLineAsync($"projectId: {projectId ?? "(unset)"}");
+            await streams.WriteOutputLineAsync($"secretId: {secretId ?? "(unset)"}");
             return 0;
         }
 
-        if (sourceRow == OnePasswordEncryptionKeyProvider.EncryptionSource || encryptionData.Source == OnePasswordEncryptionKeyProvider.EncryptionSource)
+        if (source == OnePasswordEncryptionKeyProvider.EncryptionSource)
         {
-            var reference = await store.GetSettingAsync(EncryptionSettingsKeys.SecretId, cancellationToken)
-                            ?? encryptionData.SecretId ?? "(unset)";
             await streams.WriteOutputLineAsync("source: 1password");
-            await streams.WriteOutputLineAsync($"reference: {reference}");
+            await streams.WriteOutputLineAsync($"reference: {secretId ?? "(unset)"}");
             return 0;
         }
 

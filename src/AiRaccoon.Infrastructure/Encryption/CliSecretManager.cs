@@ -51,6 +51,11 @@ public sealed class CliSecretManager : ICliSecretManager
             startInfo.ArgumentList.Add(arg);
         }
 
+        foreach (var other in CliSecretTool.All.Where(other => other.TokenEnvVar != _tool.TokenEnvVar))
+        {
+            startInfo.Environment.Remove(other.TokenEnvVar);
+        }
+
         if (token is not null)
         {
             // Never argv: any same-user process can read another process's command line (ps aux)

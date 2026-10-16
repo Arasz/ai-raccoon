@@ -9,5 +9,8 @@ public sealed record CliSecretTool(string Name, string TokenEnvVar, string Insta
     public static readonly CliSecretTool OnePassword = new("op", "OP_SERVICE_ACCOUNT_TOKEN",
         "install the 1Password CLI (op) and sign in or set OP_SERVICE_ACCOUNT_TOKEN (https://www.1password.dev/cli)");
 
+    /// <summary>Every supported tool; a child is started with every other tool's token removed.</summary>
+    public static IReadOnlyList<CliSecretTool> All { get; } = [Bitwarden, OnePassword];
+
     public string NotFoundText => $"{Name} not found — {InstallHint}";
 }
