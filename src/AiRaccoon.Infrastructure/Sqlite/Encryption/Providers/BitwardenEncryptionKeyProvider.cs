@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using CommunityToolkit.Diagnostics;
@@ -34,27 +33,11 @@ public sealed class BitwardenEncryptionKeyProvider(ICliSecretManager cliSecretMa
             throw new CliSecretInvocationException(CliSecretFailure.Failed, $"bws failed (exit {result.ExitCode}): {result.FirstErrorLine}");
         }
 
-        var seed = OpenSshPrivateKeyParser.ParseSeed(result.Stdout.Trim());
-        var (value, legacyValue) = DeriveAndZeroSeed(seed);
+        var keys = SshKeyPassphrase.FromOpenSsh(result.Stdout);
         return new Passphrase(Source)
         {
-            Value = value,
-            LegacyValue = legacyValue
+            Value = keys.Value,
+            LegacyValue = keys.LegacyValue
         };
     }
-
-    /// <summary>Derives both keys from the seed, then zeroes it — the seed must not outlive this call.</summary>
-    internal static DerivedKeys DeriveAndZeroSeed(byte[] seed)
-    {
-        try
-        {
-            return new DerivedKeys(SshKeyDerivation.DeriveRawKey(seed), SshKeyDerivation.DeriveLegacyRawKey(seed));
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(seed);
-        }
-    }
-
-    internal readonly record struct DerivedKeys(string Value, string LegacyValue);
 }

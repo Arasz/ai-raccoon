@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Security.Cryptography;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Encryption;
@@ -104,18 +103,16 @@ public sealed partial class EncryptionCommands
             return ErrorCode.Key.SecretCliFailed;
         }
 
-        byte[] seed;
+        string derived;
         try
         {
-            seed = OpenSshPrivateKeyParser.ParseSeed(fetched.Stdout.Trim());
+            derived = SshKeyPassphrase.FromOpenSsh(fetched.Stdout).Value;
         }
         catch (EncryptionKeyException ex)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
             return ErrorCode.Key.SecretNotAKey;
         }
-
-        var derived = DeriveAndZeroSeed(seed);
 
         await streams.WriteErrorLineAsync(RotationWarning);
 
@@ -281,19 +278,6 @@ public sealed partial class EncryptionCommands
         await streams.WriteErrorAsync($"{label}: ");
         var value = (await streams.ReadLineAsync(cancellationToken))?.Trim();
         return string.IsNullOrEmpty(value) ? fallback : value;
-    }
-
-    /// <summary>Derives the raw key from the seed, then zeroes it — the seed must not outlive this call.</summary>
-    internal static string DeriveAndZeroSeed(byte[] seed)
-    {
-        try
-        {
-            return SshKeyDerivation.DeriveRawKey(seed);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(seed);
-        }
     }
 
     private static partial class Log

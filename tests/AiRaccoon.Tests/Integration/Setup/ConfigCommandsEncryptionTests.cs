@@ -138,18 +138,6 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         }
     }
 
-    /// <summary>The seed is a byte[] local to the command; DeriveAndZeroSeed is the one call site free to clear it.</summary>
-    [RetryFact]
-    public void DeriveAndZeroSeed_DerivesTheRawKeyThenZeroesTheSeed()
-    {
-        var seed = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-
-        var value = EncryptionCommands.DeriveAndZeroSeed(seed);
-
-        value.ShouldBe(DerivedRawKey);
-        seed.ShouldAllBe(b => b == 0);
-    }
-
     [RetryFact]
     public async Task Bitwarden_BwsMissing_ReturnsInstallErrorAndChangesNothing()
     {
