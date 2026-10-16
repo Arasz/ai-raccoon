@@ -77,7 +77,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         _lastLogger = logger;
         var encryptionState = new EncryptionSourceSidecar(BankPath());
         var envProvider = new StubEnvProvider(envPassphrase);
-        var encryptionCommands = new EncryptionCommands(bank, runner, envProvider, encryptionState, logger);
+        var encryptionCommands = new EncryptionCommands(bank, runner, new FakeBwsRunner(new CliSecretResult(0, "", "")), envProvider, encryptionState, logger);
         var exit = await TestData.CreateConfigCommands(store, encryptionCommands: encryptionCommands)
             .RunAsync(parsed, new StandardStreams(stdin ?? TextReader.Null, stdout, stderr), TestContext.Current.CancellationToken);
         return new RunResult(exit, stdout.ToString(), stderr.ToString(), bank);
@@ -592,6 +592,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(null!,
                 new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
                 new FakeLogger<EncryptionCommands>()));
@@ -605,10 +606,25 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
                 null!,
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),
                 new FakeLogger<EncryptionCommands>()));
         ex.ParamName.ShouldBe("bws");
+    }
+
+    [RetryFact]
+    public void Constructor_NullOp_ThrowsArgumentNullException()
+    {
+        var ex = Should.Throw<ArgumentNullException>(() =>
+            new EncryptionCommands(new SqliteConnectionFactory(Options(),
+                    new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                null!,
+                new StubEnvProvider(null),
+                new EncryptionSourceSidecar(BankPath()),
+                new FakeLogger<EncryptionCommands>()));
+        ex.ParamName.ShouldBe("op");
     }
 
     [RetryFact]
@@ -617,6 +633,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 null!,
                 new EncryptionSourceSidecar(BankPath()),
@@ -631,6 +648,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
                 new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 null!,
                 new FakeLogger<EncryptionCommands>()));
@@ -643,6 +661,7 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
         var ex = Should.Throw<ArgumentNullException>(() =>
             new EncryptionCommands(new SqliteConnectionFactory(Options(),
                     new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()), [new StubEnvProvider(null)])),
+                new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), "")),
                 new StubEnvProvider(null),
                 new EncryptionSourceSidecar(BankPath()),

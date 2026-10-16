@@ -180,7 +180,7 @@ public sealed class EncryptionBitwardenFeatureContext : MemoryFeatureContext
     {
         var envProvider = new StubEnvProvider(EnvPassphrase);
         var encryptionState = new EncryptionSourceSidecar(BankPath);
-        var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), envProvider, encryptionState, new FakeLogger<EncryptionCommands>());
+        var encryptionCommands = new EncryptionCommands(Bank, NewRunner(), new CliSecretManager(CliSecretTool.OnePassword), envProvider, encryptionState, new FakeLogger<EncryptionCommands>());
         var (exit, stdout, stderr) = await TestHelpers.CliRun.RunAsync(args,
             TestData.CreateConfigCommands(ConfigStore, encryptionCommands: encryptionCommands),
             new StringReader(stdin));

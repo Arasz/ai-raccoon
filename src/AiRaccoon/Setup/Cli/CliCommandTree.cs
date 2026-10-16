@@ -414,6 +414,8 @@ internal static class CliCommandTree
             new Option<string>("-t") { Description = "access token for this run only — never persisted; defaults to BWS_ACCESS_TOKEN", HelpName = "token" }
         };
         encryption.Add(bitwarden);
+        encryption.Add(new Command("1password",
+            "Configures the 1Password CLI (op) as the bank key source (prompts for an op:// secret reference to an SSH Key item; authenticates through the inherited OP_SERVICE_ACCOUNT_TOKEN or the desktop app; rekeys the bank)"));
         var show = new Command("show", "Shows the current encryption source");
         show.Aliases.Add("list");
         encryption.Add(show);

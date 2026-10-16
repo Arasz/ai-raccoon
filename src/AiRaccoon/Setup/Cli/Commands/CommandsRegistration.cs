@@ -29,7 +29,8 @@ public static class CommandsRegistration
             serviceCollection.AddSingleton<ProjectIdCommands>();
             serviceCollection.AddSingleton(sp => new EncryptionCommands(
                 sp.GetRequiredService<ISqliteConnectionFactory>(),
-                sp.GetRequiredService<ICliSecretManager>(),
+                new CliSecretManager(CliSecretTool.Bitwarden),
+                new CliSecretManager(CliSecretTool.OnePassword),
                 sp.GetServices<IEncryptionKeyProvider>().OfType<EnvEncryptionKeyProvider>().Single(),
                 sp.GetRequiredService<IEncryptionSourceSidecar>(),
                 sp.GetRequiredService<ILogger<EncryptionCommands>>()));
