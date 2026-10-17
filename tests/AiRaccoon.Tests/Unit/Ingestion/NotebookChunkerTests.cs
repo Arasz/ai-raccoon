@@ -113,7 +113,7 @@ public class NotebookChunkerTests
         var chunks = Chunker.ChunkWithHeadings(notebook, 120);
 
         Assert.True(chunks.Count > 1);
-        Assert.All(chunks.Where(c => c.Text.Trim() != "## cell 1 (code)"),
-            c => Assert.Contains("cell 1 (code)", c.HeadingPath));
+        Assert.All(chunks, c => Assert.Contains("cell 1 (code)", c.HeadingPath));
+        Assert.All(chunks, c => Assert.Contains("value_", c.Text));
     }
 }

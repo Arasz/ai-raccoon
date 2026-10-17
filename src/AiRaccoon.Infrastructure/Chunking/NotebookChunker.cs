@@ -22,14 +22,23 @@ public sealed class NotebookChunker : INotebookChunker
     public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null)
     {
         var markdown = Flatten(text);
-        return markdown.Length == 0 ? [] : _markdownChunker.Chunk(markdown, maxTokens, overlayTokens, countTokens);
+        return markdown.Length == 0
+            ? []
+            : _markdownChunker.Chunk(markdown, maxTokens, overlayTokens, countTokens).Where(HasContent).ToList();
     }
 
     public IReadOnlyList<TextChunk> ChunkWithHeadings(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null)
     {
         var markdown = Flatten(text);
-        return markdown.Length == 0 ? [] : _markdownChunker.ChunkWithHeadings(markdown, maxTokens, overlayTokens, countTokens);
+        return markdown.Length == 0
+            ? []
+            : _markdownChunker.ChunkWithHeadings(markdown, maxTokens, overlayTokens, countTokens)
+                .Where(chunk => HasContent(chunk.Text)).ToList();
     }
+
+    // The markdown chunker can emit a chunk holding only a cell heading when a cell's fence is split.
+    private static bool HasContent(string chunk) =>
+        chunk.Split('\n').Any(line => line.Trim() is { Length: > 0 } trimmed && !trimmed.StartsWith("## cell ", StringComparison.Ordinal));
 
     private static string Flatten(string text)
     {
