@@ -168,7 +168,7 @@ jobs:
       - name: Upload test stderr log
         # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-fast-test-stderr
           path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
@@ -230,7 +230,7 @@ jobs:
       - name: Upload test stderr log
         # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-bdd-test-stderr
           path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
@@ -337,7 +337,7 @@ jobs:
       - name: Upload test stderr log
         # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-slow-test-stderr
           path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
@@ -355,7 +355,7 @@ jobs:
 
       - name: Upload crash dumps
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-slow-dumps
           path: dumps/
@@ -423,7 +423,7 @@ jobs:
         run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Slow&Performance!=Benchmark" --no-build -v m
       - name: Upload test stderr log
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-arm64-test-stderr
           path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
@@ -496,7 +496,7 @@ jobs:
       - name: Upload test stderr log
         # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-mlx-test-stderr
           path: tests/AiRaccoon.Tests/bin/Debug/net10.0/osx-arm64/test-stderr.log
@@ -524,7 +524,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Install stdlib-test deps
