@@ -37,7 +37,7 @@ Three reasons it cannot be an in-process flag:
 
 | step | statements |
 |---|---|
-| `OpenBankSkippingEnsureAsync` — pooled checkout, taken under the process-wide gate (ADR-0131); `EnableExtensions` / `LoadVector` are free, no SQL | 0 |
+| `OpenBankSkippingEnsureAsync` — pooled checkout; `EnableExtensions` / `LoadVector` are free, no SQL | 0 |
 | `MemorySchema.EnsureCheapAsync` — `PRAGMA application_id`; falls back to full `EnsureAsync` only on a digest mismatch | 1 |
 | `SELECT count(*) FROM model_migration WHERE id = 1 AND finished_at IS NULL` | 1 |
 

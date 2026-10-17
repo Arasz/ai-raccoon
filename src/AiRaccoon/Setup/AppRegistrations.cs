@@ -142,7 +142,7 @@ public static partial class AppRegistrations
             static async Task<SqliteConnection> OpenSnapshotWithKey(IServiceProvider sp, string path, CancellationToken ct)
             {
                 var conn = new SqliteConnection(await SnapshotConnectionString(sp, path, false, ct));
-                await SqliteConnectionFactory.OpenPooledAsync(conn, ct);
+                await conn.OpenAsync(ct);
                 conn.EnableExtensions();
                 conn.LoadVector();
                 return conn;
@@ -151,7 +151,7 @@ public static partial class AppRegistrations
             static async Task<SqliteConnection> OpenSnapshotReadOnly(IServiceProvider sp, string path, CancellationToken ct)
             {
                 var conn = new SqliteConnection(await SnapshotConnectionString(sp, path, true, ct));
-                await SqliteConnectionFactory.OpenPooledAsync(conn, ct);
+                await conn.OpenAsync(ct);
                 conn.EnableExtensions();
                 conn.LoadVector();
                 return conn;
