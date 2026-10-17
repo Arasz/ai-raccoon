@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/tool.schema.json",
+  "title": "Tool catalog entry",
+  "description": "features/<stack>/tools/<tool>/meta.json — an external CLI tool's identity, what must be installed for it, and which agents it can hook. The marker index_build.py keys the tools discovery rule on. Its prose lives beside it in tool.md. Which projects use it is config.tools; the file each harness writes is owned by that agent's adjust_tools.py, not recorded here.",
+  "type": "object",
+  "required": ["name", "prerequisite"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "The tool name, matching the directory name and the key config.tools uses."
+    },
+    "package": {
+      "type": "string",
+      "description": "Distribution name for install reference (Homebrew, crates.io)."
+    },
+    "description": {
+      "type": "string",
+      "description": "What the tool is, for a human reading the catalog. tool.md is what reaches a session."
+    },
+    "homepage": {
+      "type": "string",
+      "description": "Where the tool is documented."
+    },
+    "prerequisite": {
+      "type": "object",
+      "description": "What must already be on the machine for the tool's hooks to do anything.",
+      "required": ["summary"],
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What has to be installed, in a phrase a reader can act on, including any version floor."
+        },
+        "check": {
+          "type": "string",
+          "description": "A command that exits 0 when the prerequisite is present."
+        },
+        "install": {
+          "type": "string",
+          "description": "Where to get it — an install URL or the exact command."
+        }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "description": "The agents this tool can hook, keyed by agent. native: ai-badger writes the hook itself; init: ai-badger runs the tool's own installer in the project; propose: ai-badger only prints the command for the user.",
+      "propertyNames": { "enum": ["claude", "codex", "copilot", "pi", "hermes"] },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["mode"],
+        "additionalProperties": false,
+        "properties": {
+          "mode": { "enum": ["native", "init", "propose"] },
+          "arg": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The tool's own name for this agent, passed to its hook or init command."
+          }
+        }
+      }
+    }
+  }
+}

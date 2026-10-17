@@ -240,6 +240,33 @@
         }
       }
     },
+    "tools": {
+      "type": "object",
+      "description": "Catalog tools (features/<stack>/tools/<tool>/) this project opts into, keyed by tool name. Omit for none: no tool is wired unless named here.",
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hooks": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "claude",
+                "codex",
+                "copilot",
+                "pi",
+                "hermes"
+              ]
+            },
+            "description": "Agents whose hooks route through this tool. An agent absent here, or absent from config.agents, gets no hook."
+          }
+        }
+      }
+    },
     "mcpToolIndex": {
       "type": "object",
       "description": "MCP tool index configuration. When enabled, the mcp-index skill and ai_badger_hooks plugin use index-based tool recommendations.",

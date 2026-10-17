@@ -21,6 +21,7 @@ GITIGNORE_ARTIFACTS = (
     ".ai-badger/task-tracking/*.db-wal",
     ".ai-badger/task-tracking/*.db-shm",
     ".ai-badger.bckp/",
+    "CLAUDE.local.md",
 )
 
 

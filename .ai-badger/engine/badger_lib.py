@@ -75,6 +75,10 @@ FEATURE_TYPES: Tuple[FeatureType, ...] = (
     # manifest entry is keyed by an mcp item's name either, for a different reason than the
     # three above (ADR-0014).
     FeatureType("mcp", "mcp", False),
+    # A tool item describes an external CLI; it reaches a project through document slots and
+    # per-harness hook wiring written by each agent's adjust_tools.py, never under its own
+    # name — the same reason as mcp.
+    FeatureType("tools", "tools", False),
 )
 
 FEATURES = [ft.name for ft in FEATURE_TYPES]

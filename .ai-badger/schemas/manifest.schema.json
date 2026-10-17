@@ -61,7 +61,7 @@
         "required": ["feature", "stack", "name", "source", "target", "frameworkVersion", "hash"],
         "additionalProperties": false,
         "properties": {
-          "feature": { "enum": ["skills", "personas", "invariants", "instructions", "templates", "hooks", "adjustments", "mcp"] },
+          "feature": { "enum": ["skills", "personas", "invariants", "instructions", "templates", "hooks", "adjustments", "mcp", "tools"] },
           "stack": { "type": "string" },
           "name": { "type": "string" },
           "source": { "type": "string", "description": "Path within the framework repo." },

@@ -110,6 +110,8 @@ def is_text_search(tool_name: Any, tool_input: Any) -> bool:
         tokens = shlex.split(command)
     except ValueError:  # unterminated quotes — not a shape we can judge
         return False
+    if tokens and tokens[0].rsplit("/", 1)[-1] == "rtk":  # rtk's `grep`/`rg`/`find` filters
+        tokens = [t for t in tokens[1:] if not t.startswith("-")][:1]
     return bool(tokens) and tokens[0].lower() in _SEARCH_COMMANDS
 
 

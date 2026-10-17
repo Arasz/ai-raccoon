@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Sequence
 import frontmatter as fm
 from _shared import MANAGED_HEADER, _MANAGED_PREFIX
 from scaffold_context import ScaffoldContext
+from tool_catalog import tool_instructions
 
 # The lane a persona that names no `model:` runs in — whatever model the session already uses.
 SESSION_DEFAULT_LANE = "session default"
@@ -29,6 +30,20 @@ DELEGATION_TEMPLATE = "delegation.md.tmpl"
 # fingerprinted; this prose is the one thing a scaffold re-renders faithfully while it goes
 # stale, which is why drift.py surfaces exactly this list for staleness review.
 PROSE_SLOTS: Dict[str, str] = {"summary": "PROJECT_SUMMARY", "domain": "PROJECT_DOMAIN"}
+
+# Slots that stand alone on their line and take the line with them when empty, so a project
+# that enables nothing renders the same bytes as before the slot existed.
+LINE_SLOTS = ("TOOLS_INSTRUCTIONS",)
+
+
+def fill_slots(text: str, slots: Dict[str, str]) -> str:
+    """Replace every ``{{SLOT}}`` in *text*; a LINE_SLOTS slot replaces its line's newline too."""
+    for name in LINE_SLOTS:
+        if name in slots:
+            text = text.replace("{{" + name + "}}\n", str(slots[name]))
+    for k, v in slots.items():
+        text = text.replace("{{" + k + "}}", str(v))
+    return text
 
 
 def frontmatter_fields(text: str) -> Dict[str, str]:
@@ -175,6 +190,7 @@ class TemplateRendering:
             "PERSONA_ROUTING": route_md,
             "PATH_INSTRUCTIONS": instr_md,
             "MCP_INSTRUCTIONS": self._render_instruction_blocks(self.ctx.mcp_described),
+            "TOOLS_INSTRUCTIONS": self._render_instruction_blocks(tool_instructions(self.ctx)),
             "FRAMEWORK_VERSION": self.ctx.index["frameworkVersion"],
             "SOURCE_OF_TRUTH": source_of_truth,
         }
@@ -186,10 +202,7 @@ class TemplateRendering:
         """Render a template file from features/common/templates/ with the given slots."""
         tmpl_path = self.ctx.root / "features" / "common" / "templates" / tmpl_name
         if tmpl_path.exists():
-            doc = tmpl_path.read_text(encoding="utf-8")
-            for k, v in slots.items():
-                doc = doc.replace("{{" + k + "}}", str(v))
-            return doc
+            return fill_slots(tmpl_path.read_text(encoding="utf-8"), slots)
         # fallback minimal doc if template missing
         return (f"# {slots['PROJECT_NAME']}\n\n{slots['PROJECT_SUMMARY']}\n\n"
                 f"## Invariants\n\n{slots['INVARIANTS']}\n\n## Commands\n\n{slots['COMMANDS']}\n")
@@ -271,11 +284,8 @@ class TemplateRendering:
     def render_template_file(self, source: Path, instr_paths: List[Path],
                                invariants: List[str], source_of_truth: str = "CLAUDE.md") -> str:
         """Render a .tmpl file with the standard scaffold slots."""
-        tmpl = source.read_text(encoding="utf-8")
         slots = self.compute_doc_slots(invariants, instr_paths, source_of_truth)
-        for k, v in slots.items():
-            tmpl = tmpl.replace("{{" + k + "}}", str(v))
-        return tmpl
+        return fill_slots(source.read_text(encoding="utf-8"), slots)
 
     def carried_body(self, dest: Path, body: str) -> Optional[str]:
         """`body` plus dest's preserved regions, or None when dest's markers are malformed."""

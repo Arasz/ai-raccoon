@@ -202,6 +202,7 @@ from template_rendering import TemplateRendering, invariant_summary  # noqa: E40
 from agent_files import AgentFiles  # noqa: E402
 from extensions import Extensions  # noqa: E402
 from mcp_tools import McpTools  # noqa: E402
+from tool_catalog import ToolCatalog  # noqa: E402
 from statusline_wiring import StatusLineWiring  # noqa: E402
 # relink_hermes_skills is re-exported: den-refresh's refresh.py calls it on this module.
 from skill_delivery import SkillDelivery, prune_namespaces, relink_hermes_skills  # noqa: E402
@@ -278,6 +279,7 @@ class Scaffolder:
         self.superseded = SupersededPrune(self.ctx, self.skill_delivery)
         self.install = install
         self.execute = execute
+        self.tools = ToolCatalog(self.ctx, execute=execute)
         self.commit, self.dirty = git_provenance(root)
         self.entries: List[Dict[str, Any]] = []
         self._completed_steps: List[str] = []
@@ -635,6 +637,7 @@ class Scaffolder:
                         "mcp_servers": declared_mcp,
                         "mcp_declarations": self.mcp.declarations_for_agent(agent_name),
                         "mcp_declined": self.mcp.declined_servers(),
+                        "tools": self.tools.prepare(),
                     }
                     result = mod.adjust(context)
                     if result.get("applied"):
@@ -718,6 +721,7 @@ class Scaffolder:
         self._record_progress("agent-files")
         self.wire_hooks()
         self.statusline.wire()
+        self.tools.prepare()  # check/install under --execute, before any arm reads check_ok
         self.run_adjustments()
         self._record_progress("hooks")
         plugin_cmds = self.install_plugins()
