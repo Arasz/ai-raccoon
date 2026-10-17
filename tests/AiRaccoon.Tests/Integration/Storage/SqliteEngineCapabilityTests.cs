@@ -9,7 +9,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 /// <summary>
 ///     Pins the SQLite engine surface (docs/work/archive/2026-08-06-sqlite3mc-feature-surface.md): the app
 ///     depends on the 3.53.0 WAL-reset fix and on SQLite3MC's temp-in-memory and encryption properties.
-///     Floor assertions (>= 3.53.4, 2.4.x) let patch bumps through but fail on a major/minor regression.
+///     Floor assertions (>= 3.53.4, 2.6.x) let patch bumps through but fail on a major/minor regression.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -39,13 +39,13 @@ public class SqliteEngineCapabilityTests
     }
 
     [RetryFact]
-    public void Engine_ReportsSqlite3mc24x()
+    public void Engine_ReportsSqlite3mc26x()
     {
         using var conn = OpenMemory();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT sqlite3mc_version()";
 
-        cmd.ExecuteScalar().ShouldBeOfType<string>().ShouldStartWith("SQLite3 Multiple Ciphers 2.4");
+        cmd.ExecuteScalar().ShouldBeOfType<string>().ShouldStartWith("SQLite3 Multiple Ciphers 2.6");
     }
 
     [RetryFact]

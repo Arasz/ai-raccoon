@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.58.1 — SQLite3 Multiple Ciphers 2.6.1 and the upstream pool fix](1.58.1-sqlite-engine-and-pool-fix.md)
 - [1.58.0 — the 1Password CLI can key the bank](1.58.0-1password-key-source.md)
 - [1.57.6 — concurrent bank opens no longer share a pooled connection](1.57.6-serialized-pooled-opens.md)
 - [1.57.5 — the file watcher ignores directory-name notifications](1.57.5-watcher-ignores-directory-events.md)

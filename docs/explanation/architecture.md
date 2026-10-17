@@ -285,15 +285,12 @@ path (ADR 0019).
 
 ### Connection opens
 
-Normal bank opens are pooled, and every pooled open takes its pool checkout under one
-process-wide gate, `SqliteConnectionFactory.PoolCheckoutGate` (ADR-0131). Two rekey paths open
-with `Pooling = false` and skip the gate, because no pool means nothing to race:
-`LegacyKeyOpensHealthyBankAsync` (the legacy-key probe) and `OpenRekeyConnectionAsync`. Microsoft.Data.Sqlite
-10.0.12 can hand one native connection to two opens that race, and the pool later disposes it
-under whichever owner still holds it. That surfaced as `ObjectDisposedException:
-'SQLitePCL.sqlite3'` on the first PRAGMA. Only the checkout is serialized. The PRAGMAs, the
-schema check and all queries still run in parallel. The gate comes out once the package pin
-moves to a release that carries dotnet/efcore#39012.
+Normal bank opens are pooled. Two rekey paths open with `Pooling = false`:
+`LegacyKeyOpensHealthyBankAsync` (the legacy-key probe) and `OpenRekeyConnectionAsync`.
+`OpenWithPragmasAsync` disposes the connection when any pragma after the open fails, so a failed
+open hands its native connection back to the pool at once. Before 1.58.1 every pooled checkout
+was also serialized, because Microsoft.Data.Sqlite 10.0.12 could lend one native connection to two
+racing opens (ADR-0131). The pinned 10.0.13 carries the upstream fix, dotnet/efcore#39012.
 
 `OpenWithPragmasAsync` owns the connection until it returns. If the open or any of its PRAGMAs
 throws, it disposes the connection before rethrowing, so a failed open never leaves a live

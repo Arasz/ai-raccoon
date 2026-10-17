@@ -2,7 +2,8 @@
 
 Date: 2026-10-13
 
-Status: Accepted
+Status: Accepted; the gate was removed in 1.58.1, when `Microsoft.Data.Sqlite.Core` moved to 10.0.13,
+which carries dotnet/efcore#39012. The dispose-on-failure in `OpenWithPragmasAsync` stays.
 
 ## Context
 
