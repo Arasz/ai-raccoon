@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-10-13",
+  "lastUpdated": "2026-10-14",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+        "id": "ahr-initialize-dotnet-mcp-websearch-repo",
+        "title": "Initialize ai-hero-rat (new repo): .NET 10 MCP web-search tool skeleton",
+        "summary": "Work lives in Arasz/ai-hero-rat, not here. Public repo created; ai-badger 0.191.0 scaffold (empty repo detects no stacks: config hand-authored; badger scripts run via uv --with-requirements); .NET tool skeleton with Spectre.Console.Cli (owner chose it over ai-raccoon's System.CommandLine), serve/version commands, xunit.v3 tests incl. stdout-clean serve test, lefthook, SHA-pinned build.yml, README/SECURITY/CONTRIBUTING/ADR-0001/changelog 0.1.0. ai-hero-rat PR #1 merged (53d605c) by owner; follow-up search-backend research record in ai-hero-rat PR #2.",
+        "pr": null,
+        "merged": true,
+        "mergeCommit": null,
+        "date": "2026-10-14",
+        "hasNotes": false
+    },
     {
         "id": "air-serialize-pooled-sqlite-bank-opens",
         "title": "Serialize pooled SQLite opens (efcore#39008) and dispose on failed pragma",
