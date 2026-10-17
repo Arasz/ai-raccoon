@@ -43,24 +43,23 @@ def first_sentence(text: str) -> str:
 
 
 def invariant_summary(text: str, name: str) -> str:
-    """One bullet: the rule's title, the sentence that states it, and where the rest lives.
+    """One bullet: the rule's title, its file name, and the sentence that states it.
 
     Bodies used to be inlined whole and were over half of every agent file. The binding sentence
-    stays in the context an agent always has; the rationale moves to the copy under
+    stays in the context an agent always has; the rationale stays in the copy under
     `.ai-badger/invariants/`, which is a document in its own right.
     """
     lines = text.strip().splitlines()
     title = lines[0].lstrip("#").strip() if lines and lines[0].startswith("#") else name
     body = "\n".join(lines[1:]).strip()
     opening = body.split("\n\n", maxsplit=1)[0].strip() if body else ""
+    label = f"- **{title}** (`{name}`)"
     if _leads_into_a_list(opening):
         # The list *is* the rule — "Every release must:" alone says nothing. Keep it whole,
         # indented under the bullet, rather than truncating at the colon.
-        head = f"- **{title}** — " + opening.replace("\n", "\n  ")
-    else:
-        rule = _rule_sentence(opening)
-        head = f"- **{title}**" + (f" — {rule}." if rule else "")
-    return f"{head}\n  → `.ai-badger/invariants/{name}.md`"
+        return f"{label} — " + opening.replace("\n", "\n  ")
+    rule = _rule_sentence(opening)
+    return label + (f" — {rule}." if rule else "")
 
 
 _ABBREVIATION = re.compile(r"\b(?:e\.g|i\.e|etc|cf|vs|approx)\.$", re.IGNORECASE)
@@ -161,7 +160,7 @@ class TemplateRendering:
         commands = self.ctx.config.get("commands", {})
         routing = self.ctx.config.get("personaRouting", [])
 
-        inv_md = "\n\n".join(invariants) if invariants else "_None yet._"
+        inv_md = "\n".join(invariants) if invariants else "_None yet._"
         cmd_md = "\n".join(f"- `{k}`: `{v}`" for k, v in commands.items()) or "_None configured._"
         route_md = "\n".join(f"- {r['work']} → `{r['agent']}`" for r in routing) or (
             "_None configured — work is not dispatched to a persona. Add entries to "
