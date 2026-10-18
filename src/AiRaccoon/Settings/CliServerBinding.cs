@@ -28,6 +28,7 @@ internal static class CliServerBinding
             services.AddSingleton<INoiseSummaryStore>(store);
             services.AddSingleton<IWatchRegisteredStore>(store);
             services.AddSingleton<IProjectDirectory>(store);
+            services.AddSingleton<IWatchControl>(store);
         }
     }
 }
