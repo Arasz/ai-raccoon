@@ -9,7 +9,7 @@ namespace AiRaccoon.Settings;
 /// <summary>
 ///     Serves `watch add|remove|status` (ADR-0075 amendment): the same <see cref="IToolGate" /> and
 ///     <see cref="IWatchService" /> as memory_watch_add/remove/status, so the CLI gets the tools'
-///     guards and results. A mapped refusal answers 422 with a <see cref="WatchRefusal" />; guarded by <see cref="McpTokenGate" />.
+///     guards and results. A mapped refusal answers 422 problem details (RFC 9457) carrying <c>kind</c> and, for an overlap, <c>coveringPath</c>; guarded by <see cref="McpTokenGate" />.
 /// </summary>
 internal static class WatchEndpoint
 {
@@ -74,8 +74,14 @@ internal static class WatchEndpoint
         }
         catch (Exception ex) when (ToolRefusals.PrefixFor(ex) is { } kind)
         {
-            return Results.Json(new WatchRefusal(kind, ex.Message, (ex as WatchOverlapException)?.CoveringPath),
-                statusCode: StatusCodes.Status422UnprocessableEntity);
+            var extensions = new Dictionary<string, object?> { [WatchProtocol.KindExtension] = kind };
+            if (ex is WatchOverlapException { CoveringPath: { } covering })
+            {
+                extensions[WatchProtocol.CoveringPathExtension] = covering;
+            }
+
+            return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity,
+                title: "Watch refused", extensions: extensions);
         }
     }
 }

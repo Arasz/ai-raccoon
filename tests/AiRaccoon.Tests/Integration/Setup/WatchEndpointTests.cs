@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
@@ -199,14 +200,18 @@ public sealed class WatchEndpointTests : IAsyncLifetime
     }
 
     [RetryFact]
-    public async Task Refusal_IsA422WithTheKindInTheBody()
+    public async Task Refusal_IsA422ProblemDetails_WithTheKindAsAnExtension()
     {
         await RegisterAsync(Project);
 
         var response = await _http.PostAsJsonAsync(WatchProtocol.Path, new WatchAddRequest(Project, Repo), Ct);
 
         response.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
-        (await response.Content.ReadFromJsonAsync<WatchRefusal>(Ct)).ShouldNotBeNull().Kind.ShouldBe("watching-disabled");
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
+        var problem = (await response.Content.ReadFromJsonAsync<JsonElement>(Ct));
+        problem.GetProperty("status").GetInt32().ShouldBe(422);
+        problem.GetProperty("kind").GetString().ShouldBe("watching-disabled");
+        problem.GetProperty("detail").GetString().ShouldNotBeNullOrWhiteSpace();
     }
 
     [RetryFact]

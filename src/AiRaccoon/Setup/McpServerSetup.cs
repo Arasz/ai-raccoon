@@ -64,6 +64,7 @@ internal static partial class McpServerSetup
         builder.Services.RegisterMemoryServices(serverConfig.Options);
         builder.Services.AddOtlpExport(serverConfig.Options);
         builder.Services.AddSingleton(timeProvider);
+        builder.Services.AddProblemDetails();
         HostLogging.Configure(builder.Logging, serverConfig.Options);
 
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, serverConfig.Port));

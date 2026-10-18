@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Net;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
@@ -321,7 +322,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         CancellationToken cancellationToken)
     {
         if (response.StatusCode == HttpStatusCode.UnprocessableEntity
-            && await response.Content.ReadFromJsonAsync<WatchRefusal>(cancellationToken) is { } refusal)
+            && WatchRefusal.FromProblem(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken)) is { } refusal)
         {
             throw WatchRefusedException.For(refusal, projectId, path);
         }
