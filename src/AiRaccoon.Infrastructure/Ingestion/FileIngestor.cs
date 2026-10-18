@@ -58,8 +58,18 @@ public sealed class FileIngestor(
         }
 
         var content = await File.ReadAllTextAsync(path, cancellationToken);
+        if (BinaryContent.IsBinary(content))
+        {
+            return new FileIngestResult(0, false, [], Skipped: SkipReason.Binary);
+        }
+
         var (rows, hashes) = await InsertChunksAsync(connection, projectId, path, content, handler, context,
                 cancellationToken);
+        if (hashes.Count == 0 && !string.IsNullOrWhiteSpace(content))
+        {
+            return new FileIngestResult(0, false, hashes, Skipped: SkipReason.Unparseable);
+        }
+
         return new FileIngestResult(rows, true, hashes);
     }
 
@@ -74,7 +84,7 @@ public sealed class FileIngestor(
     {
         if (!codeFileTypeMatcher.IsCodeFile(path))
         {
-            return new FileIngestResult(0, true);
+            return await SkipUnroutedAsync(path, cancellationToken);
         }
 
         var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken);
@@ -87,6 +97,20 @@ public sealed class FileIngestor(
         return result.ContentWhitespaceOnly
             ? new FileIngestResult(0, true, CodeChunkHashes: codeChunkHashes)
             : new FileIngestResult(0, false, CodeChunkHashes: codeChunkHashes);
+    }
+
+    /// <summary>A file neither corpus routes: the ignore file itself is a control file, not a skip;
+    /// anything else is skipped as binary or as an unsupported type.</summary>
+    private static async Task<FileIngestResult> SkipUnroutedAsync(string path, CancellationToken cancellationToken)
+    {
+        if (string.Equals(Path.GetFileName(path), IgnoreRulesProvider.FileName, StringComparison.Ordinal))
+        {
+            return new FileIngestResult(0, true);
+        }
+
+        var content = await File.ReadAllTextAsync(path, cancellationToken);
+        var reason = BinaryContent.IsBinary(content) ? SkipReason.Binary : SkipReason.UnsupportedType;
+        return new FileIngestResult(0, false, Skipped: reason);
     }
 
     /// <summary>The null-vs-empty <see cref="CodeIngestResult.ChunkHashes" /> prune contract (S3,
