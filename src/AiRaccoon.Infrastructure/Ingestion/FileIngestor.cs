@@ -89,9 +89,10 @@ public sealed class FileIngestor(
             return await SkipUnroutedAsync(path, cancellationToken);
         }
 
+        // An empty code-hash set, not null: a file that turned binary must prune its old code rows.
         if (await Sniffer.IsBinaryAsync(path, cancellationToken))
         {
-            return new FileIngestResult(0, false, Skipped: SkipReason.Binary);
+            return new FileIngestResult(0, false, CodeChunkHashes: [], Skipped: SkipReason.Binary);
         }
 
         var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken);

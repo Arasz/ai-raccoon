@@ -98,6 +98,7 @@ public sealed class FileIngestorSkipReasonTests : IDisposable
 
         result.Skipped.ShouldBe(SkipReason.Binary);
         result.FingerprintEligible.ShouldBeFalse();
+        result.CodeChunkHashes.ShouldNotBeNull("null would tell the prune to keep the file's old code rows").ShouldBeEmpty();
     }
 
     /// <summary>Answers binary content the way <see cref="CodeIngestor" /> does: zero rows, nothing to chunk.</summary>
