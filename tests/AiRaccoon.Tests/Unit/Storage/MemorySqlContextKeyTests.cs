@@ -7,7 +7,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Storage;
 
 /// <summary>
-///     The vec0 `ctx` column (ADR-0068 demoted it from partition key to metadata): one context-key
+///     The vec0 `ctx` partition key (ADR-0133; a metadata column under ADR-0068): one context-key
 ///     encoding shared by the SQL fragment and its C# twin. Length-prefixed rather than
 ///     ':'-joined so a project id containing ':' cannot collide with a label containing ':'.
 ///     Total over a NULL project id (ADR-0124): the key a row with no project id gets is the key

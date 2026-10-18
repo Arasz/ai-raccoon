@@ -2,7 +2,7 @@
 
 Date: 2026-08-15
 
-Status: Accepted
+Status: Superseded by [ADR-0133](0133-ctx-is-the-vec0-partition-key-again.md)
 
 Supersedes the vec0 shape chosen in `docs/plans/2026-08-08-search-knn-perf.md` §3.1 (ladder step v2).
 That decision stands on everything else it settled — the context key's encoding, the single KNN over

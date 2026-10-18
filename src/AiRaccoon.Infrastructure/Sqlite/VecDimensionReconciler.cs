@@ -118,7 +118,7 @@ public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
         // The six vec triggers survive the DROP and bind to the recreated table by name; the drain's
         // MarkEmbedded refills both tables through them, so there is nothing to repopulate here.
         await connection.ExecuteAsync(new CommandDefinition(
-            $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT, embedding float[{targetDimension}] distance_metric=cosine)",
+            MemorySchema.VecTableDdl(table, targetDimension),
             transaction, cancellationToken: cancellationToken));
     }
 

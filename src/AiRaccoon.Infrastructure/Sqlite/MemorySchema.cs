@@ -62,12 +62,13 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV16Async" /> (F36, receipt-time tombstone GC),
     ///     <see cref="MigrateToV17Async" /> (F34, the workspace-XOR-scope CHECK rejects NEITHER, not
     ///     just BOTH),
-    ///     <see cref="MigrateToV18Async" /> (rowless watch fingerprints dropped once). Not every schema change needs a ladder
+    ///     <see cref="MigrateToV18Async" /> (rowless watch fingerprints dropped once),
+    ///     <see cref="MigrateToV19Async" /> (ADR-0133, `ctx` is the vec0 partition key again). Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 18;
+    internal const int CurrentVersion = 19;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -222,14 +223,14 @@ internal static class MemorySchema
                                           );
 
                                           -- vec0 stays empty until the embed pipeline fills it; the embedder owns the embedding
-                                          -- dimension if the model is not all-MiniLM (384). `ctx` is a vec0 metadata column,
-                                          -- filterable but not a partition key (ADR-0068, ladder step v9); cosine is declared
+                                          -- dimension if the model is not all-MiniLM (384). `ctx` is the vec0 partition key, so a
+                                          -- KNN reads only its own context's chunks (ADR-0133, ladder step v19); cosine is declared
                                           -- explicitly so a bare MATCH cannot fall back to L2.
-                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT, embedding float[384] distance_metric=cosine);
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
 
                                           -- Structure modality: heading-path vectors, rowid = entry id. Written by the
                                           -- embed transition (EntryEmbedder, ADR-0004); the triggers below keep it consistent.
-                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT, embedding float[384] distance_metric=cosine);
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
 
                                           CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
                                               DELETE FROM vec_structure WHERE rowid = OLD.id;
@@ -593,7 +594,7 @@ internal static class MemorySchema
 
                                           -- vec0 for the code corpus: `ctx` is the project id directly — code is project-scoped
                                           -- only, so it never needs ContextKeyExpression's shared/workspace/custom branching.
-                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_code USING vec0(ctx TEXT, embedding float[768] distance_metric=cosine);
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_code USING vec0(ctx TEXT partition key, embedding float[768] distance_metric=cosine);
 
                                           CREATE TRIGGER IF NOT EXISTS vec_code_au AFTER UPDATE OF embed_state ON code_entries
                                           WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
@@ -892,6 +893,11 @@ internal static class MemorySchema
             await MigrateToV18Async(connection, cancellationToken);
         }
 
+        if (healthy && storedVersion < 19)
+        {
+            await MigrateToV19Async(connection, cancellationToken);
+        }
+
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
         // digest on a degraded (unhealthy) run would let EnsureCheapAsync trust a bank whose ladder
         // never completed, the same bug this reordering exists to close (Data F1 / D5).
@@ -1011,9 +1017,10 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     Ladder step 9 (ADR-0068): rebuilds vec_entries/vec_structure with `ctx` demoted from
-    ///     partition key to an ordinary vec0 metadata column. Rethrows for the same reason the v2
-    ///     step does — an empty-shell vec_entries answers every query with silence.
+    ///     Ladder step 9: rebuilds vec_entries/vec_structure from entries. The shared VecTableDdl
+    ///     emits the current partition-key shape; v19 repairs banks already migrated by older
+    ///     binaries to the metadata-column shape. Rethrows for the same reason the v2 step does —
+    ///     an empty-shell vec_entries answers every query with silence.
     /// </summary>
     private static async Task MigrateToV9Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -1372,6 +1379,52 @@ internal static class MemorySchema
                                   WHERE c.project_id = watch_files.project_id AND c.path = watch_files.path)
                 """, cancellationToken: cancellationToken));
         }, cancellationToken);
+    }
+
+    /// <summary>
+    ///     v18→v19 (ADR-0133): rebuilds vec_entries, vec_structure and vec_code with `ctx` as the vec0
+    ///     partition key, so a KNN prunes every other context's chunks before reading them. A table
+    ///     already partitioned is left alone, which makes the step safe to re-run after a crash.
+    /// </summary>
+    private static async Task MigrateToV19Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var rebuilds = new List<(string Table, int Dimension, string Source, string Ctx, string Column, string Where)>();
+        foreach (var (table, source, ctx, column, where) in new[]
+                 {
+                     ("vec_entries", "entries", MemorySql.ContextKeyExpression(""), "embedding",
+                         "embed_state = 'embedded' AND embedding IS NOT NULL"),
+                     ("vec_structure", "entries", MemorySql.ContextKeyExpression(""), "structure_embedding",
+                         "structure_embedding IS NOT NULL"),
+                     ("vec_code", "code_entries", "project_id", "embedding",
+                         "embed_state = 'embedded' AND embedding IS NOT NULL")
+                 })
+        {
+            var sql = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table",
+                new { table }, cancellationToken: cancellationToken));
+            if (sql is null || sql.Contains("partition key", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            rebuilds.Add((table, await ReadVecDimensionAsync(connection, table, cancellationToken), source, ctx, column, where));
+        }
+
+        if (rebuilds.Count == 0)
+        {
+            return;
+        }
+
+        await connection.InWriteTransactionAsync(async () =>
+        {
+            foreach (var r in rebuilds)
+            {
+                await RebuildVecTableAsync(connection, r.Table, r.Dimension, r.Source, r.Ctx, r.Column, r.Where,
+                    cancellationToken);
+            }
+        }, cancellationToken);
+
+        await VacuumBestEffortAsync(connection, cancellationToken);
     }
 
     /// <summary>
@@ -2471,24 +2524,33 @@ internal static class MemorySchema
         }, cancellationToken);
     }
 
-    /// <summary>Drops and recreates one vec0 table in the partitioned shape, repopulating it from <paramref name="sourceColumn" />.</summary>
+    /// <summary>Drops and recreates one memory vec0 table, repopulating it from <paramref name="sourceColumn" /> of entries.</summary>
+    private static Task RebuildVecTableAsync(SqliteConnection connection, string table, int dimension,
+        string sourceColumn, string wherePredicate, CancellationToken cancellationToken) =>
+        RebuildVecTableAsync(connection, table, dimension, "entries", MemorySql.ContextKeyExpression(""), sourceColumn,
+            wherePredicate, cancellationToken);
+
+    /// <summary>Drops and recreates one vec0 table in the <see cref="VecTableDdl" /> shape, repopulating it from <paramref name="sourceTable" />.</summary>
     private static async Task RebuildVecTableAsync(SqliteConnection connection, string table, int dimension,
-        string sourceColumn, string wherePredicate, CancellationToken cancellationToken)
+        string sourceTable, string ctxExpression, string sourceColumn, string wherePredicate,
+        CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
                 new CommandDefinition($"DROP TABLE IF EXISTS {table}", cancellationToken: cancellationToken));
         await connection.ExecuteAsync(
-                new CommandDefinition(
-                    $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT, embedding float[{dimension}] distance_metric=cosine)",
-                    cancellationToken: cancellationToken));
+                new CommandDefinition(VecTableDdl(table, dimension), cancellationToken: cancellationToken));
         await connection.ExecuteAsync(
                 new CommandDefinition(
                     $"""
                      INSERT INTO {table}(rowid, ctx, embedding)
-                     SELECT id, {MemorySql.ContextKeyExpression("")}, {sourceColumn} FROM entries WHERE {wherePredicate}
+                     SELECT id, {ctxExpression}, {sourceColumn} FROM {sourceTable} WHERE {wherePredicate}
                      """,
                     cancellationToken: cancellationToken));
     }
+
+    /// <summary>The one runtime DDL for a vec0 table: `ctx` partitions the chunks, cosine is explicit (ADR-0133).</summary>
+    internal static string VecTableDdl(string table, int dimension) =>
+        $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT partition key, embedding float[{dimension}] distance_metric=cosine)";
 
     /// <summary>Reads the embedding dimension a vec0 table was declared with, falling back to 384 when the table (or a recognizable declaration) is absent.</summary>
     private static async Task<int> ReadVecDimensionAsync(SqliteConnection connection, string table,
