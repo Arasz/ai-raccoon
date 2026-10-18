@@ -42,16 +42,22 @@ public sealed class ToolRefusalsCancellationTests
         TextOf(result).ShouldStartWith("cancelled:");
     }
 
-    /// <summary>Dead connection: writing an answer to a gone client is pointless, so rethrow.</summary>
+    /// <summary>
+    ///     The caller gave up: answered like the live-token case; the SDK's stack-trace warn for it is
+    ///     dropped at the logging layer (CancelledRequestLoggingTests).
+    /// </summary>
     [Fact]
-    public async Task OperationCanceled_WithCancelledToken_Rethrows()
+    public async Task TaskCanceled_WithCancelledToken_ReturnsCancelledErrorResult()
     {
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        await Should.ThrowAsync<OperationCanceledException>(() =>
-            ToolRefusals.Filter(Throwing(new OperationCanceledException()))(
-                Request("memory_search"), cts.Token).AsTask());
+        var result = await ToolRefusals.Filter(Throwing(new TaskCanceledException()))(
+            Request("memory_search"), cts.Token);
+
+        result.IsError.ShouldBe(true);
+        TextOf(result).ShouldStartWith("cancelled:");
+        TextOf(result).ShouldContain("memory_search");
     }
 
     /// <summary>Protocol-level stays protocol-level, even though McpProtocolException derives from McpException.</summary>
@@ -79,7 +85,7 @@ public sealed class ToolRefusalsCancellationTests
         record.Exception.ShouldBeNull();
     }
 
-    /// <summary>A caller that gave up still rethrows, but leaves a line saying which call timed out and on what query.</summary>
+    /// <summary>A caller that gave up leaves one line saying which call timed out and on what query — no second cancel line.</summary>
     [Fact]
     public async Task OperationCanceled_WithCancelledToken_LogsTheTimeoutWithTheQueryLength()
     {
@@ -91,10 +97,10 @@ public sealed class ToolRefusalsCancellationTests
             ["query"] = JsonSerializer.SerializeToElement(new string('q', 4181))
         };
 
-        await Should.ThrowAsync<OperationCanceledException>(() =>
-            ToolRefusals.Filter(Throwing(new TaskCanceledException()))(
-                Request("memory_search", arguments, logger), cts.Token).AsTask());
+        await ToolRefusals.Filter(Throwing(new TaskCanceledException()))(
+            Request("memory_search", arguments, logger), cts.Token);
 
+        logger.Collector.Count.ShouldBe(1);
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
         record.Id.Id.ShouldBe(914);
@@ -118,9 +124,8 @@ public sealed class ToolRefusalsCancellationTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        await Should.ThrowAsync<OperationCanceledException>(() =>
-            ToolRefusals.Filter(Throwing(new OperationCanceledException()))(
-                Request("memory_sync", null, logger), cts.Token).AsTask());
+        await ToolRefusals.Filter(Throwing(new OperationCanceledException()))(
+            Request("memory_sync", null, logger), cts.Token);
 
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
