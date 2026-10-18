@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using Shouldly;
 using Xunit;
@@ -47,5 +48,24 @@ public sealed class WatchStateTests
     {
         var status = new WatchStatus("acme", "/repo", WatchState.Healthy, "err", DateTimeOffset.Parse("2026-08-04T10:00:00Z"));
         JsonSerializer.Deserialize<WatchStatus>(JsonSerializer.Serialize(status)).ShouldBe(status);
+    }
+
+    [Fact]
+    public void Status_SkippedFiles_SerializeWithKebabCaseReasons_AndRoundTrip()
+    {
+        var status = new WatchStatus("acme", "/repo", WatchState.Healthy, SkippedCount: 3,
+            Skipped:
+            [
+                new SkippedFile("/repo/a.png", SkipReason.Binary),
+                new SkippedFile("/repo/b.ipynb", SkipReason.Unparseable),
+                new SkippedFile("/repo/c.xyz", SkipReason.UnsupportedType)
+            ]);
+
+        var json = JsonSerializer.Serialize(status);
+
+        json.ShouldContain("\"binary\"");
+        json.ShouldContain("\"unparseable\"");
+        json.ShouldContain("\"unsupported-type\"");
+        JsonSerializer.Deserialize<WatchStatus>(json).ShouldBe(status);
     }
 }
