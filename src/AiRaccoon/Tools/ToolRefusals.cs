@@ -134,10 +134,9 @@ internal static partial class ToolRefusals
     internal static LogLevel LevelFor(string prefix) => WarningPrefixes.Contains(prefix) ? LogLevel.Warning : LogLevel.Information;
 
     /// <summary>
-    ///     The CallToolFilter: a protocol exception always rethrows, as does a cancellation whose
-    ///     own request token is already dead (answering a gone client is pointless); a cancellation
-    ///     with a live connection, a mapped refusal, or a bare <see cref="McpException" /> (already
-    ///     client-facing text) becomes an error result instead; anything else rethrows and stays fail-level.
+    ///     The CallToolFilter: a protocol exception always rethrows; a cancellation (logged as a
+    ///     timeout when the caller's own token is dead), a mapped refusal, a bare
+    ///     <see cref="McpException" /> (already client-facing text) or any other failure becomes an error result.
     /// </summary>
     internal static McpRequestHandler<CallToolRequestParams, CallToolResult> Filter(
         McpRequestHandler<CallToolRequestParams, CallToolResult> next) =>
@@ -154,8 +153,10 @@ internal static partial class ToolRefusals
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                // Answered like the live-token case. The SDK's send of it throws on this dead token, and
+                // CancelledRequestLogging drops the stack-trace warn that send logs — 914/915 is the record.
                 LogTimedOut(request, Stopwatch.GetElapsedTime(started));
-                throw;
+                return CancelledResult(request.Params?.Name ?? string.Empty);
             }
             catch (OperationCanceledException)
             {
@@ -236,16 +237,18 @@ internal static partial class ToolRefusals
         {
             Log.ToolCancelled(logger, toolName, reason);
         }
-        return new CallToolResult
-        {
-            IsError = true,
-            Content = [new TextContentBlock { Text = $"{CancelledPrefix}: tool '{toolName}' {reason}" }]
-        };
+        return CancelledResult(toolName);
     }
+
+    private static CallToolResult CancelledResult(string toolName) => new()
+    {
+        IsError = true,
+        Content = [new TextContentBlock { Text = $"{CancelledPrefix}: tool '{toolName}' request was cancelled" }]
+    };
 
     /// <summary>
     ///     Logs which call the caller gave up on, after how long, and how long its query was — the
-    ///     rethrown exception the SDK logs next to it names neither.
+    ///     generic "A task was canceled." never named either.
     /// </summary>
     private static void LogTimedOut(RequestContext<CallToolRequestParams> request, TimeSpan elapsed)
     {
