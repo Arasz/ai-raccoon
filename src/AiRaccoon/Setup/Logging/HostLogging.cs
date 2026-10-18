@@ -15,7 +15,7 @@ internal static class HostLogging
         // Sole surviving host is the web host: the floors always apply.
         loggingBuilder.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
         loggingBuilder.AddFilter("ModelContextProtocol", LogLevel.Warning);
-        CancelledRequestLogging.Add(loggingBuilder);
+        loggingBuilder.AddCancelledRequestFilter();
 
         if (options.Quiet)
         {

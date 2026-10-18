@@ -15,12 +15,18 @@ internal static class CancelledRequestLogging
 
     private const string SdkCategoryPrefix = "ModelContextProtocol";
 
-    internal static void Add(ILoggingBuilder loggingBuilder) =>
-        loggingBuilder.Services.Replace(ServiceDescriptor.Singleton<ILoggerFactory>(sp => new Factory(new LoggerFactory(
-            sp.GetServices<ILoggerProvider>(),
-            sp.GetRequiredService<IOptionsMonitor<LoggerFilterOptions>>(),
-            sp.GetService<IOptions<LoggerFactoryOptions>>(),
-            sp.GetService<IExternalScopeProvider>()))));
+    extension(ILoggingBuilder loggingBuilder)
+    {
+        internal ILoggingBuilder AddCancelledRequestFilter()
+        {
+            loggingBuilder.Services.Replace(ServiceDescriptor.Singleton<ILoggerFactory>(sp => new Factory(new LoggerFactory(
+                sp.GetServices<ILoggerProvider>(),
+                sp.GetRequiredService<IOptionsMonitor<LoggerFilterOptions>>(),
+                sp.GetService<IOptions<LoggerFactoryOptions>>(),
+                sp.GetService<IExternalScopeProvider>()))));
+            return loggingBuilder;
+        }
+    }
 
     private sealed class Factory(ILoggerFactory inner) : ILoggerFactory
     {
