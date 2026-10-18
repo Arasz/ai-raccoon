@@ -168,6 +168,22 @@ public sealed class WatchStoreCascadeTests
     }
 
     [RetryFact]
+    public async Task RemoveWatchAsync_ReportsWhetherARegistrationExisted()
+    {
+        using var stack = new Stack();
+        var watchPath = stack.Dir("known");
+        await stack.Store.AddWatchAsync(Project, watchPath, 1, 1, TestContext.Current.CancellationToken);
+
+        var first = await stack.Store.RemoveWatchAsync(Project, watchPath, TestContext.Current.CancellationToken);
+        var again = await stack.Store.RemoveWatchAsync(Project, watchPath, TestContext.Current.CancellationToken);
+        var unknown = await stack.Store.RemoveWatchAsync(Project, stack.Dir("never-added"), TestContext.Current.CancellationToken);
+
+        first.ShouldBeTrue();
+        again.ShouldBeFalse();
+        unknown.ShouldBeFalse();
+    }
+
+    [RetryFact]
     public async Task RemoveWatchAsync_WithNoFingerprints_StillRemovesTheWatch()
     {
         using var stack = new Stack();

@@ -203,7 +203,7 @@ public sealed partial class EncryptionCommands
                 }
             }
 
-            catch (Exception ex) when (ex is SqliteException or BankKeyMismatchException)
+            catch (Exception ex) when (ex is SqliteException or BankKeyMismatchException or BankKeyMissingException)
             {
                 openError = ex;
             }

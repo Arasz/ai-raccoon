@@ -36,7 +36,7 @@ proxy; full servers come only from `serve`).
 | `model download <repo-id> [--revision <rev>] [--file <path>]... [--dir <path>] [--dry-run] [--yes]` | Downloads a Hugging Face embedding model into `<data-root>/models/<slug>` with SHA-256 pins; does not activate it |
 | `watch registered [project-id]` | Lists registered watches (project, path, registered at, last change) from the watches table |
 | `watch add <project-id> <path>` | Registers a watch through the running server, with the same guards as `memory_watch_add`: watching enabled, path inside the ingest scope and existing, no overlap with an existing watch. Prints the registered path, any pruned narrower watches, and `absorbedBy` for an exact re-add. A refusal prints the fix (`settings watch enable …`, `settings ingest scope add …`); exit 18 for an unregistered or retired project, 10 for the other refusals |
-| `watch remove <project-id> <path>` | Removes a watch through the running server, like `memory_watch_remove` |
+| `watch remove <project-id> <path>` | Removes a watch through the running server, like `memory_watch_remove`. Prints `removed: <path>`, or `not watched: <path> (nothing removed)` when no watch was registered there; exit 0 either way |
 | `watch status [project-id]` | Live watch state from the running server, like `memory_watch_status`: state, last sync, last error, and the files the watcher skipped with the reason (`unsupported-type`, `binary`, `unparseable`). Without a project id it covers every project that has a watch |
 | `extract prune [--apply]` | Reports (default) or removes `promotion_queue` rows whose backing entry is gone |
 | `noise entries` | Summarizes `noise_entries`, the training-data source for a future noise learner |

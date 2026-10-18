@@ -949,6 +949,23 @@ public sealed class DoctorCommandsTests : IDisposable
         err.ShouldNotContain("corrupt");
     }
 
+    /// <summary>An encrypted bank (verifier present) with no key resolved is a missing key: doctor exits 20 and names the variable, not "wrong key or corrupt bank".</summary>
+    [RetryFact]
+    public async Task Doctor_NotASqliteDatabase_VerifierPresentButNoKeyResolved_ExitsKeyUnresolved_NamingTheEnvVariable()
+    {
+        var encryptedFactory = new SqliteConnectionFactory(_options, FixedKeyResolver("correct-key"));
+        await using (await encryptedFactory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+        }
+
+        var (exit, outp, err) = await Run(CreateDoctor(FixedKeyResolver(null)), ["doctor"]);
+
+        exit.ShouldBe(ErrorCode.Key.Unresolved);
+        outp.ShouldBeEmpty();
+        err.ShouldContain("AIRACCOON_DB_PASSPHRASE");
+        err.ShouldNotContain("wrong key or corrupt bank");
+    }
+
     /// <summary>Doctor is read-only: it diagnoses with the verifier but never mints, rewrites, or otherwise touches it.</summary>
     [RetryFact]
     public async Task Doctor_NeverWritesTheKeyCheckSidecar()
@@ -971,7 +988,7 @@ public sealed class DoctorCommandsTests : IDisposable
         File.Exists(sidecarPath).ShouldBeFalse();
     }
 
-    private static IEncryptionKeyResolver FixedKeyResolver(string passphrase) => new PinnedKeyResolver(passphrase);
+    private static IEncryptionKeyResolver FixedKeyResolver(string? passphrase) => new PinnedKeyResolver(passphrase);
 
     /// <summary>
     ///     F7: milliseconds in the seconds column is a real open outbox row (the server still refuses
@@ -1226,7 +1243,7 @@ public sealed class DoctorCommandsTests : IDisposable
         public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) => throw failure;
     }
 
-    private sealed class PinnedKeyResolver(string passphrase) : IEncryptionKeyResolver
+    private sealed class PinnedKeyResolver(string? passphrase) : IEncryptionKeyResolver
     {
         public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new ResolvedKey(passphrase, "test"));

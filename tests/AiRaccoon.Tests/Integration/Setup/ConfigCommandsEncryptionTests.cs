@@ -343,6 +343,26 @@ public sealed class ConfigCommandsEncryptionTests : IDisposable
     }
 
     [RetryFact]
+    public async Task Bitwarden_SelfHeal_BankAlreadyDerivedKeyed_NoEnvPassphrase_SkipsRekeyAndPersists()
+    {
+        var store = new FakeConfigStore();
+        var runner = new FakeBwsRunner(new CliSecretResult(0, new TestOpenSshKeyBuilder().Build(), ""));
+        var bank = new SqliteConnectionFactory(Options(),
+            new EncryptionKeyResolver(new EncryptionSourceSidecar(BankPath()),
+                [new StubEnvProvider(null), new BitwardenEncryptionKeyProvider(runner)]));
+        await using (await bank.OpenBankWithKeyAsync(DerivedRawKey, TestContext.Current.CancellationToken))
+        {
+        }
+
+        var (exit, _, err, _) = await WithEnvPassphrase(null, () =>
+            Run(["encryption", "bitwarden"], store, runner, new StringReader("\n\n")));
+
+        exit.ShouldBe(0, err);
+        store.Settings[EncryptionSettingsKeys.Source].ShouldBe("bitwarden");
+        File.Exists(SidecarPath()).ShouldBeTrue();
+    }
+
+    [RetryFact]
     public async Task Bitwarden_StaleSidecarAndEnvKeyedBank_FailsBankKeyedToEnv_AndStillDeletesSidecar()
     {
         // Unset crash-window fix (docs/plans/encryption-bitwarden-implementation.md, review

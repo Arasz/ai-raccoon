@@ -339,7 +339,7 @@ config channel (see [Command-line options](#command-line-options)).
   reason (`unsupported-type`, `binary`, `unparseable`). A skipped file is never fingerprinted, so
   every catch-up retries it, and it leaves the list once it indexes, is deleted, or is excluded. It
   is available in every access tier. `memory_watch_remove` stops and unregisters; a non-existent watch is a
-  no-op. Registration failures surface as `watching-disabled:` / `path-outside-scope:` /
+  no-op, and the result's `removed` says which happened. Registration failures surface as `watching-disabled:` / `path-outside-scope:` /
   `path-not-found:` / `watch-overlap:` tool errors; watch failures never fail the server.
 - **Healing a missed change:** a watch's catch-up scan re-queues a file whose mtime or size no
   longer matches the fingerprint recorded at its last digest — not only a file changed while the

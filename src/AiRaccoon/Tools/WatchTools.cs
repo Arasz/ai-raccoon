@@ -49,7 +49,7 @@ public sealed class WatchTools(
     }
 
     [McpServerTool(Name = TnWatchRemove)]
-    [Description("Stops watching a path for the project and removes its registration; a non-existent watch is a no-op.")]
+    [Description("Stops watching a path for the project and removes its registration; a non-existent watch is a no-op, reported as removed=false.")]
     public async Task<ApiEnvelope<WatchRemoveResult>> Remove(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("Absolute path of the watched file or directory.")]
@@ -58,8 +58,8 @@ public sealed class WatchTools(
     {
         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
 
-        await watch.RemoveAsync(canonical, path, cancellationToken);
-        var envelope = await gate.WrapAsync(canonical, new WatchRemoveResult(canonical, path), cancellationToken);
+        var removed = await watch.RemoveAsync(canonical, path, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, new WatchRemoveResult(canonical, path, removed), cancellationToken);
         return envelope;
     }
 
@@ -70,5 +70,5 @@ public sealed class WatchTools(
 
     public sealed record WatchStatusResult(IReadOnlyList<WatchStatus> Watches);
 
-    public sealed record WatchRemoveResult(string ProjectId, string Path);
+    public sealed record WatchRemoveResult(string ProjectId, string Path, bool Removed);
 }

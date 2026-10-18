@@ -226,8 +226,10 @@ public sealed class WatchServiceTests
         await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
 
         stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Created));
-        await stack.Service.RemoveAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var removed = await stack.Service.RemoveAsync(Project, dir.Path, TestContext.Current.CancellationToken);
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        removed.ShouldBeTrue();
 
         (await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken)).ShouldBeEmpty();
         stack.Store.Watches.ShouldBeEmpty();
@@ -240,8 +242,9 @@ public sealed class WatchServiceTests
         using var dir = TempDir.New("service-remove-missing");
         var stack = new WatchTestStack();
 
-        await stack.Service.RemoveAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var removed = await stack.Service.RemoveAsync(Project, dir.Path, TestContext.Current.CancellationToken);
 
+        removed.ShouldBeFalse();
         (await stack.Service.StatusAsync(Project, TestContext.Current.CancellationToken)).ShouldBeEmpty();
     }
 
