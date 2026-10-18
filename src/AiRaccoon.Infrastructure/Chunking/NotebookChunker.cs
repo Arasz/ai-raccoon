@@ -97,8 +97,7 @@ public sealed class NotebookChunker : INotebookChunker
         builder.Append("## cell ").Append(index).Append(" (").Append(cellType).Append(")\n\n");
         if (cellType == "code")
         {
-            var fence = new string('`', FenceLength(source));
-            builder.Append(fence).Append(language).Append('\n').Append(source).Append('\n').Append(fence).Append("\n\n");
+            builder.Append("```").Append(language).Append('\n').Append(EscapeFenceLines(source)).Append("\n```\n\n");
         }
         else
         {
@@ -106,55 +105,36 @@ public sealed class NotebookChunker : INotebookChunker
         }
     }
 
-    /// <summary>A fence longer than any backtick run opening a line of <paramref name="source" />, minimum three.</summary>
-    private static int FenceLength(string source)
+    // The markdown chunker toggles a fence on any line opening with ``` or ~~~, so such a line in a code
+    // cell would end the cell's fence early; a leading backslash keeps it literal.
+    private static string EscapeFenceLines(string source) =>
+        string.Join('\n', source.Split('\n').Select(line =>
+            IsFenceLine(line) ? line.Insert(line.Length - line.TrimStart().Length, "\\") : line));
+
+    private static bool IsFenceLine(string line)
     {
-        var longest = 0;
-        foreach (var line in source.Split('\n'))
-        {
-            var run = 0;
-            while (run < line.Length && line[run] == '`')
-            {
-                run++;
-            }
-
-            longest = Math.Max(longest, run);
-        }
-
-        return Math.Max(3, longest + 1);
+        var trimmed = line.TrimStart();
+        return trimmed.StartsWith("```", StringComparison.Ordinal) || trimmed.StartsWith("~~~", StringComparison.Ordinal);
     }
 
     /// <summary>
     ///     Pushes ATX headings in a markdown cell two levels down (capped at six) so they nest under the
-    ///     cell's own heading; lines inside fenced code and setext headings are left as written.
+    ///     cell's own heading; lines inside fenced code (by the markdown chunker's toggle rule) and setext headings stay as written.
     /// </summary>
     private static string DemoteHeadings(string source)
     {
         var lines = source.Split('\n');
-        char? fence = null;
-        var fenceLength = 0;
+        var inFence = false;
         for (var i = 0; i < lines.Length; i++)
         {
-            var trimmed = lines[i].TrimStart(' ');
-            var marker = trimmed.Length > 0 && trimmed[0] is '`' or '~' ? trimmed[0] : (char?)null;
-            if (marker is { } m)
+            if (IsFenceLine(lines[i]))
             {
-                var run = trimmed.TakeWhile(c => c == m).Count();
-                if (run >= 3 && fence is null)
-                {
-                    fence = m;
-                    fenceLength = run;
-                    continue;
-                }
-
-                if (run >= fenceLength && fence == m && trimmed[run..].Trim().Length == 0)
-                {
-                    fence = null;
-                    continue;
-                }
+                inFence = !inFence;
+                continue;
             }
 
-            if (fence is null && IsAtxHeading(trimmed, out var level))
+            var trimmed = lines[i].TrimStart(' ');
+            if (!inFence && IsAtxHeading(trimmed, out var level))
             {
                 lines[i] = new string('#', Math.Min(6, level + 2)) + trimmed[level..];
             }
