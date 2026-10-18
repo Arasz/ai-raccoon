@@ -3,9 +3,7 @@
 
 task_tracker.py reads current-session.json so the model never has to know its
 own session id. On resume, also surface any unfinished tracked tasks so the
-model reattaches instead of starting from scratch. Also launches the
-background usage-limit poller (poll_limit.py) so it is running for the
-duration of the session.
+model reattaches instead of starting from scratch. Launches no background process.
 
 Does NOT do Tier 1 drift detection (ADR-0001 decision 5): this script is a *scaffolded* copy
 living in a consumer's own `.ai-badger/`, so `$CLAUDE_PLUGIN_ROOT` -- a per-plugin command-string
@@ -15,12 +13,9 @@ handled entirely by the plugin-provided `drift_notice_hook.py`, registered via
 """
 # pylint: disable=missing-function-docstring
 # Ported from the originating job-search-ai-assistant repo's /task skill: kept in lockstep
-# with that source rather than churned for local docstring style rules. One deliberate
-# addition over the source: start_poll_limit_background() catches launch failures so a
-# broken poller can never crash SessionStart itself.
+# with that source rather than churned for local docstring style rules.
 
 import json
-import subprocess
 import sys
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
@@ -47,16 +42,6 @@ def _debug(event: str, **fields) -> None:
     project = fields.pop("project", None) or debug_log.resolve_project_root(_PAYLOAD)
     debug_log.log_event(COMPONENT, event, project=project, **fields)
 
-def start_poll_limit_background() -> None:
-    script = lib.SCRIPT_DIR / "poll_limit.py"
-    try:
-        lib.ensure_data_dir()
-        lib.spawn_detached(["python3", str(script)],
-                           log_path=lib.DATA_DIR / "poll_limit.log")
-    except (OSError, subprocess.SubprocessError):
-        pass
-
-
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -69,7 +54,6 @@ def main() -> int:
         lib.save_current_session(session_id, transcript, payload.get("cwd", ""))
     else:
         _debug("skip", reason="no_session_id")
-    start_poll_limit_background()
     _debug("start", session=session_id, resume=payload.get("source") == "resume")
 
     notices = []

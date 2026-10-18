@@ -14,7 +14,7 @@ scaffolded project (ai-raccoon: `agents: [claude, copilot, hermes]`,
   `shutil.copytree(src, dest, ignore=_test_ignore)` — **no agent-based filtering of
   `scripts/`**. Only `config.exclude` patterns filter (plus `_test_ignore` which drops
   tests/`__pycache__`/`*.pyc`).
-- Consequence: `session_start_hook.py`, `stop_hook.py`, `poll_limit.py` are present in
+- Consequence: `session_start_hook.py` and `stop_hook.py` are present in
   every scaffolded project including hermes-only ones. Under Hermes they are inert:
   Hermes executes Python plugins, not `hooks.json`.
 

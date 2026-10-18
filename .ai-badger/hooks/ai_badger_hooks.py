@@ -291,7 +291,7 @@ def _parse_major_minor(version: str) -> Optional[Tuple[int, int]]:
 # Duplicated from features/common/skills/task/scripts/drift_notice.py: this Hermes hook lives in
 # a directory that cannot import that Claude-side module cleanly. test_both_hosts_agree_on_
 # versions_diverge in tests/test_hook_cwd_resolution.py pins both spellings, the same convention
-# tests/conftest.py's SPAWN_LOG_ENV/REAL_WRITE_LOG_ENV comments describe.
+# tests/conftest.py's REAL_WRITE_LOG_ENV comment describes.
 def versions_diverge(scaffolded: str, running: str) -> bool:
     """True when a re-scaffold could change something a consumer would see.
 

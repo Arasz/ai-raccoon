@@ -2,8 +2,7 @@
 """Capture Claude Code statusLine JSON for task-skill automation, then delegate display.
 
 The user's rich status line remains the renderer. This wrapper persists the raw
-statusLine payload so poll_limit.py can use Claude Code's own rate-limit metadata
-instead of spending a probe while a reset time is known.
+statusLine payload into the tracking store.
 """
 # pylint: disable=missing-function-docstring
 # Originally ported from the job-search-ai-assistant repo's /task skill; its docstring style

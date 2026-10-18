@@ -8,10 +8,9 @@ Logic:
   limit looks like from the outside. A quiet transcript alone is not enough: an
   idle interactive session writes nothing, and resuming it would run it twice.
 - If nothing is stalled: do nothing (we haven't hit a limit, or nothing is tracked).
-- If something is stalled: probe with a one-shot cheap Haiku call. If the probe
-  fails (limit still in force), do nothing and try again in 30 min. If it
-  succeeds, resume every stalled task via `claude --resume <sessionId>` with a
-  continuation prompt, sequentially.
+- If something is stalled: resume every stalled task via `claude --resume <sessionId>`
+  with a continuation prompt, sequentially. No probe call is made first: if the
+  limit is still in force the resume simply fails and is retried after the cooldown.
 - At most one resume attempt per task per RETRY_COOLDOWN_MINUTES, and a lock
   file prevents overlapping cron runs.
 
@@ -40,8 +39,6 @@ import tracker_lib as lib
 
 STALE_MINUTES = 25
 RETRY_COOLDOWN_MINUTES = 45
-PROBE_MODEL = "claude-haiku-4-5-20251001"
-PROBE_TIMEOUT_S = 120
 RESUME_TIMEOUT_S = 3600
 CRON_LOCK = lib.DATA_DIR / ".cron.lock"
 
@@ -78,27 +75,6 @@ def recently_attempted(entry: dict) -> bool:
         return False
     last = lib.parse_iso(attempts[-1]["at"])
     return minutes_since(last) < RETRY_COOLDOWN_MINUTES
-
-
-def usage_limit_lifted() -> bool:
-    """One-shot cheap call. Success => we can spend tokens again."""
-    try:
-        result = subprocess.run(
-            [CLAUDE_BIN, "-p", "Reply with exactly: ok", "--model", PROBE_MODEL],
-            capture_output=True,
-            text=True,
-            timeout=PROBE_TIMEOUT_S,
-            cwd=str(lib.PROJECT_ROOT),
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
-        log(f"probe failed to run: {exc}")
-        return False
-    if result.returncode != 0:
-        tail = (result.stderr or result.stdout).strip()[:200]
-        log(f"probe exited {result.returncode}: {tail}")
-        return False
-    return True
 
 
 def resume_task(entry: dict, dry_run: bool) -> None:
@@ -160,10 +136,6 @@ def run(dry_run: bool) -> int:
         return 0  # nothing to do — no limit hit, or work is progressing
 
     log(f"stalled tasks: {[t['taskId'] for t in stalled]}")
-    if not dry_run and not usage_limit_lifted():
-        log("usage limit still in force; will retry next cycle")
-        return 0
-
     for entry in stalled:
         with lib.tracking_transaction() as store:
             fresh = lib.load_tasks(store)

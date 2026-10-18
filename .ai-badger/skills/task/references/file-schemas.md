@@ -118,8 +118,8 @@ manually-opened windows, worktree agents), so a single-slot record would let one
 clobber another's. Columns: `session_id` (PK), `transcript_path`, `cwd`, `pid`,
 `recorded_at`. Written by the SessionStart and UserPromptSubmit hooks on every fire,
 opportunistically pruning entries whose recorded pid is no longer alive. The usage-limit
-resumers (`poll_limit.py`, `resume_cron.py`) read it too: they resume only unfinished tracked
-tasks, and skip any whose session's recorded pid is still alive.
+resumer (`resume_cron.py`) reads it too: it resumes only unfinished tracked
+tasks, and skips any whose session's recorded pid is still alive.
 
 Tracker commands resolve *their own* session via `tracker_lib.resolve_own_session()`, never by
 grabbing "whatever's most recent":
@@ -137,7 +137,7 @@ already claimed by a different, not-yet-FINISHED task — see `find_other_entry_
 ### statusline (project DB, KV)
 
 One table, two rows: key `state` (rate limits, context window %, model info — written by
-`statusline_capture.py`, read by `poll_limit.py`) and key `delegate` (the statusline delegate
+`statusline_capture.py`) and key `delegate` (the statusline delegate
 record, owned by `statusline_wiring.py`). All KV tables share the shape `key` (PK), `value`
 (JSON document), `updated_at`.
 
