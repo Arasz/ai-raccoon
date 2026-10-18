@@ -9,7 +9,7 @@ public sealed class NoOpWatchService : IWatchService
     public Task<WatchAddOutcome> AddAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
         Task.FromResult(new WatchAddOutcome([], null));
 
-    public Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<bool> RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.FromResult(false);
 
     public Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId,
         CancellationToken cancellationToken = default) =>

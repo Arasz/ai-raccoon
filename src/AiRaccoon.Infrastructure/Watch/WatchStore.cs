@@ -12,7 +12,8 @@ public interface IWatchStore
     Task AddWatchAsync(string projectId, string path, long createdAt, long lastChangeTs,
         CancellationToken cancellationToken = default);
 
-    Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default);
+    /// <summary>Drops the watch and its fingerprints; true when a registration existed.</summary>
+    Task<bool> RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     No-overlapping-watches atomicity, resolved AND committed under one lock
@@ -72,19 +73,21 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
                     new { projectId, path, createdAt, lastChangeTs }, cancellationToken: cancellationToken));
     }
 
-    public async Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    public async Task<bool> RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
+        var deleted = 0;
         await connection.InWriteTransactionAsync(async () =>
         {
             await connection.ExecuteAsync(
                     new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
                         new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken: cancellationToken));
-            await connection.ExecuteAsync(
+            deleted = await connection.ExecuteAsync(
                     new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path },
                         cancellationToken: cancellationToken));
         }, cancellationToken);
+        return deleted > 0;
     }
 
     public async Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,

@@ -64,6 +64,17 @@ public sealed class WatchRegistrationCommandsTests
     }
 
     [Fact]
+    public async Task Remove_OfAnUnwatchedPath_SaysNothingWasRemoved_AndExitsZero()
+    {
+        var control = new FakeWatchControl { RemoveFound = false };
+
+        var (exit, stdout, _) = await Run(["watch", "remove", Project, "relative/dir"], control);
+
+        exit.ShouldBe(0);
+        Lines(stdout).ShouldBe([$"not watched: {Path.GetFullPath("relative/dir")} (nothing removed)"]);
+    }
+
+    [Fact]
     public async Task Status_PrintsOneBlockPerWatch_WithLastErrorOnlyWhenPresent()
     {
         var control = new FakeWatchControl
@@ -152,6 +163,8 @@ public sealed class WatchRegistrationCommandsTests
 
         public WatchRefusedException? Refusal { get; init; }
 
+        public bool RemoveFound { get; init; } = true;
+
         public string? LastProjectId { get; set; }
 
         public string? LastPath { get; private set; }
@@ -165,7 +178,7 @@ public sealed class WatchRegistrationCommandsTests
         public Task<WatchRemoveResponse> RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
         {
             Record(projectId, path);
-            return Task.FromResult(new WatchRemoveResponse(projectId, path));
+            return Task.FromResult(new WatchRemoveResponse(projectId, path, RemoveFound));
         }
 
         public Task<IReadOnlyList<WatchStatus>> StatusAsync(string? projectId, CancellationToken cancellationToken = default)

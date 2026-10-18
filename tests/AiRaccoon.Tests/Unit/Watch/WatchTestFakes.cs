@@ -131,9 +131,9 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
     }
 
     /// <summary>Mirrors the real cascade delete: fingerprints at or under the watch path die with it.</summary>
-    public Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    public Task<bool> RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
-        Watches.Remove(new WatchKey(projectId, path));
+        var existed = Watches.Remove(new WatchKey(projectId, path));
         foreach (var key in FileHashes.Keys
                      .Where(k => k.StartsWith($"{projectId}\u0000", StringComparison.Ordinal) &&
                                  IngestPath.IsWithinScope(k[(projectId.Length + 1)..], path))
@@ -143,7 +143,7 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         }
 
         RemoveWatchCalls++;
-        return Task.CompletedTask;
+        return Task.FromResult(existed);
     }
 
     /// <summary>The fake has no transaction to fail mid-way, and no real SQLite lock to serialize

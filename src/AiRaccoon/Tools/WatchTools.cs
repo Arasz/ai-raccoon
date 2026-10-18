@@ -58,8 +58,8 @@ public sealed class WatchTools(
     {
         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnWatchRemove, cancellationToken);
 
-        await watch.RemoveAsync(canonical, path, cancellationToken);
-        var envelope = await gate.WrapAsync(canonical, new WatchRemoveResult(canonical, path), cancellationToken);
+        var removed = await watch.RemoveAsync(canonical, path, cancellationToken);
+        var envelope = await gate.WrapAsync(canonical, new WatchRemoveResult(canonical, path, removed), cancellationToken);
         return envelope;
     }
 
@@ -70,5 +70,5 @@ public sealed class WatchTools(
 
     public sealed record WatchStatusResult(IReadOnlyList<WatchStatus> Watches);
 
-    public sealed record WatchRemoveResult(string ProjectId, string Path);
+    public sealed record WatchRemoveResult(string ProjectId, string Path, bool Removed);
 }

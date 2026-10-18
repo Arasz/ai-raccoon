@@ -22,7 +22,8 @@ public interface IWatchService
     /// </summary>
     Task<WatchAddOutcome> AddAsync(string projectId, string path, CancellationToken cancellationToken = default);
 
-    Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default);
+    /// <summary>Removes the watch; true when a registration existed (removal is idempotent either way).</summary>
+    Task<bool> RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId, CancellationToken cancellationToken = default);
 

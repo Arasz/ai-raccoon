@@ -114,10 +114,10 @@ public sealed class WatchToolsRetiredIdTests
             return Task.FromResult(new WatchAddOutcome([], null));
         }
 
-        public Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
+        public Task<bool> RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
         {
             RemoveCalls.Add((projectId, path));
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId,

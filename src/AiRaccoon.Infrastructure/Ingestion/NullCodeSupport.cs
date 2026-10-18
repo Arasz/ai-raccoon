@@ -36,7 +36,7 @@ public sealed class NullWatchStore : IWatchStore
         CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
-    public Task RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<bool> RemoveWatchAsync(string projectId, string path, CancellationToken cancellationToken = default) => Task.FromResult(false);
 
     public Task<WatchOverlapDecision> ResolveAndAddAsync(string projectId, WatchOverlapCandidate candidate,
         IWatchOverlapResolver overlapResolver, CancellationToken cancellationToken = default) =>

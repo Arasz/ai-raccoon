@@ -146,15 +146,19 @@ public sealed class WatchToolsTests
         _watch.Removed.ShouldBe([("proj-a", "/repo")]);
         result.Data!.ProjectId.ShouldBe("proj-a");
         result.Data!.Path.ShouldBe("/repo");
+        result.Data!.Removed.ShouldBeTrue();
     }
 
     [Fact]
     public async Task Remove_NonExistentWatch_IsNoOpAndDoesNotError()
     {
+        _watch.RemoveResult = false;
+
         var result = await _tools.Remove("proj-a", "/never-registered", TestContext.Current.CancellationToken);
 
         _watch.Removed.ShouldBe([("proj-a", "/never-registered")]);
         result.Data!.ShouldNotBeNull();
+        result.Data!.Removed.ShouldBeFalse();
     }
 
     private sealed class FakeWatchService : IWatchService
@@ -182,10 +186,12 @@ public sealed class WatchToolsTests
 
         public string? AbsorbedBy { get; set; }
 
-        public Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
+        public bool RemoveResult { get; set; } = true;
+
+        public Task<bool> RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
         {
             Removed.Add((projectId, path));
-            return Task.CompletedTask;
+            return Task.FromResult(RemoveResult);
         }
 
         public Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId,
