@@ -61,12 +61,13 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV15Async" /> (label-aware sync tombstones),
     ///     <see cref="MigrateToV16Async" /> (F36, receipt-time tombstone GC),
     ///     <see cref="MigrateToV17Async" /> (F34, the workspace-XOR-scope CHECK rejects NEITHER, not
-    ///     just BOTH). Not every schema change needs a ladder
+    ///     just BOTH),
+    ///     <see cref="MigrateToV18Async" /> (rowless watch fingerprints dropped once). Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 17;
+    internal const int CurrentVersion = 18;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -886,6 +887,11 @@ internal static class MemorySchema
             await EnsureEmbedAttemptsColumnAsync(connection, "entries", cancellationToken);
         }
 
+        if (healthy && storedVersion < 18)
+        {
+            await MigrateToV18Async(connection, cancellationToken);
+        }
+
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
         // digest on a degraded (unhealthy) run would let EnsureCheapAsync trust a bank whose ladder
         // never completed, the same bug this reordering exists to close (Data F1 / D5).
@@ -1345,6 +1351,26 @@ internal static class MemorySchema
                             "UPDATE sync_tombstones SET received_at = deleted_at WHERE received_at IS NULL",
                             cancellationToken: cancellationToken));
             }
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    ///     v17→v18: drops every watch fingerprint whose own project holds no memory or code rows for
+    ///     the path. Builds before skip reporting fingerprinted files they could not index, which then
+    ///     hash-skipped forever; without the fingerprint the next catch-up re-digests them.
+    /// </summary>
+    private static async Task MigrateToV18Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.InWriteTransactionAsync(async () =>
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                DELETE FROM watch_files
+                WHERE NOT EXISTS (SELECT 1 FROM entries e
+                                  WHERE e.path = watch_files.path AND e.project_id = watch_files.project_id)
+                  AND NOT EXISTS (SELECT 1 FROM code_entries c
+                                  WHERE c.project_id = watch_files.project_id AND c.path = watch_files.path)
+                """, cancellationToken: cancellationToken));
         }, cancellationToken);
     }
 

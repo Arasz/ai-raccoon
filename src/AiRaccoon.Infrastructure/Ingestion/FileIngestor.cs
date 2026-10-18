@@ -30,6 +30,8 @@ public sealed class FileIngestor(
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IndexableFileWalk walk) : IFileIngestor
 {
+    private static readonly FileSniffer Sniffer = new();
+
     /// <summary>
     ///     Ignore rules apply ahead of routing, for both the memory and code pipelines —
     ///     <see cref="ResolveIgnoreRootAsync" /> finds the right root. Rows are left <c>pending</c>;
@@ -58,8 +60,18 @@ public sealed class FileIngestor(
         }
 
         var content = await File.ReadAllTextAsync(path, cancellationToken);
+        if (BinaryContent.IsBinary(content))
+        {
+            return new FileIngestResult(0, false, [], Skipped: SkipReason.Binary);
+        }
+
         var (rows, hashes) = await InsertChunksAsync(connection, projectId, path, content, handler, context,
                 cancellationToken);
+        if (hashes.Count == 0 && !string.IsNullOrWhiteSpace(content))
+        {
+            return new FileIngestResult(0, false, hashes, Skipped: SkipReason.Unparseable);
+        }
+
         return new FileIngestResult(rows, true, hashes);
     }
 
@@ -74,7 +86,13 @@ public sealed class FileIngestor(
     {
         if (!codeFileTypeMatcher.IsCodeFile(path))
         {
-            return new FileIngestResult(0, true);
+            return await SkipUnroutedAsync(path, cancellationToken);
+        }
+
+        // An empty code-hash set, not null: a file that turned binary must prune its old code rows.
+        if (await Sniffer.IsBinaryAsync(path, cancellationToken))
+        {
+            return new FileIngestResult(0, false, CodeChunkHashes: [], Skipped: SkipReason.Binary);
         }
 
         var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken);
@@ -87,6 +105,19 @@ public sealed class FileIngestor(
         return result.ContentWhitespaceOnly
             ? new FileIngestResult(0, true, CodeChunkHashes: codeChunkHashes)
             : new FileIngestResult(0, false, CodeChunkHashes: codeChunkHashes);
+    }
+
+    /// <summary>A file neither corpus routes: the ignore file itself is a control file, not a skip;
+    /// anything else is skipped as binary or as an unsupported type.</summary>
+    private static async Task<FileIngestResult> SkipUnroutedAsync(string path, CancellationToken cancellationToken)
+    {
+        if (string.Equals(Path.GetFileName(path), IgnoreRulesProvider.FileName, StringComparison.Ordinal))
+        {
+            return new FileIngestResult(0, true);
+        }
+
+        var reason = await Sniffer.IsBinaryAsync(path, cancellationToken) ? SkipReason.Binary : SkipReason.UnsupportedType;
+        return new FileIngestResult(0, false, Skipped: reason);
     }
 
     /// <summary>The null-vs-empty <see cref="CodeIngestResult.ChunkHashes" /> prune contract (S3,

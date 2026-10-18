@@ -1811,4 +1811,71 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
 
         throw new InvalidOperationException($"no ingested file named '{file}' in this scenario");
     }
+
+    // ── Rule: Files a watch cannot index are reported as skipped, never hidden ──
+    [Given("^a watch for \"([^\"]*)\" on path \"([^\"]*)\" with an unsupported file \"([^\"]*)\" and a binary file \"([^\"]*)\"$")]
+    public async Task GivenWatchWithUnsupportedAndBinaryFiles(string projectId, string path, string unsupported, string binary)
+    {
+        Ctx.WriteFile(Path.Combine(Map(path), unsupported), "plain text no corpus routes");
+        Ctx.WriteFile(Path.Combine(Map(path), binary), "PNG\0\0\u0001binary bytes");
+        await SetupWatchAsync(projectId, path);
+    }
+
+    [Given("^a watch for \"([^\"]*)\" on path \"([^\"]*)\" with a malformed notebook \"([^\"]*)\"$")]
+    public async Task GivenWatchWithMalformedNotebook(string projectId, string path, string notebook)
+    {
+        _lastFile = Path.Combine(Map(path), notebook);
+        Ctx.WriteFile(_lastFile, "{ this is not a notebook");
+        await SetupWatchAsync(projectId, path);
+    }
+
+    [When("^\"([^\"]*)\" is rewritten as a valid notebook$")]
+    public void WhenRewrittenAsValidNotebook(string notebook)
+    {
+        var path = Resolve(notebook);
+        _lastFileContent = NextToken(notebook);
+        Ctx.WriteFile(path,
+            $$"""{"nbformat":4,"metadata":{},"cells":[{"cell_type":"markdown","source":["{{_lastFileContent}} findings"]}]}""");
+        _lastFile = path;
+    }
+
+    [Then("^the notebook's content is searchable for \"([^\"]*)\"$")]
+    public async Task ThenNotebookContentSearchable(string projectId) =>
+        (await EnsureSearchableAsync(projectId, _lastFileContent!, _lastFile)).ShouldBeTrue(
+            "the rewritten notebook did not become searchable");
+
+    [Given("^memory_watch_status for \"([^\"]*)\" reports the watch healthy with ([0-9]+) skipped files$")]
+    [Then("^memory_watch_status for \"([^\"]*)\" reports the watch healthy with ([0-9]+) skipped files$")]
+    public async Task ThenStatusReportsSkippedCount(string projectId, int count)
+    {
+        await Ctx.ReconcileOnceAsync();
+        var reached = await Ctx.StepUntilAsync(async () =>
+        {
+            var watch = (await StatusAsync(projectId)).Watches.SingleOrDefault();
+            return watch is { State: WatchState.Healthy } && watch.SkippedCount == count;
+        }, maxFakeSeconds: 6);
+        var status = _lastStatusDataData!.Watches.ShouldHaveSingleItem();
+        reached.ShouldBeTrue($"status stayed {status.State} with {status.SkippedCount} skipped files");
+        status.Skipped.Count.ShouldBe(count);
+    }
+
+    [Then("^the skipped files are \"([^\"]*)\" as \"([^\"]*)\" and \"([^\"]*)\" as \"([^\"]*)\"$")]
+    public void ThenSkippedFilesAre(string first, string firstReason, string second, string secondReason)
+    {
+        var skipped = _lastStatusDataData!.Watches.ShouldHaveSingleItem().Skipped;
+        skipped.Select(s => (Path.GetFileName(s.Path), s.Reason.ToWireName()))
+            .ShouldBe([(first, firstReason), (second, secondReason)]);
+    }
+
+    [Then("^no skipped file has a fingerprint$")]
+    public async Task ThenNoSkippedFileHasFingerprint()
+    {
+        await using var connection = await Ctx.OpenBankAsync();
+        foreach (var file in _lastStatusDataData!.Watches.ShouldHaveSingleItem().Skipped)
+        {
+            (await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    "SELECT count(*) FROM watch_files WHERE path = @path", new { path = file.Path })))
+                .ShouldBe(0L, $"{file.Path} was fingerprinted while skipped");
+        }
+    }
 }

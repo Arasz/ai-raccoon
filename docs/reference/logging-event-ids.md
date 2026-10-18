@@ -9,10 +9,14 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **213** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **214** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
+
+(Remeasured 2026-10-18, task/air-watch-cli-and-notebook-ingest: **214**. `WatchPipeline` grows
+from 302 to 302-303: 303 records at Debug a file a watch digest skipped, with its path and reason.
++1 over the 213 measured below.)
 
 (Remeasured 2026-10-05, proxy identity refusal: **213**. Automatic private startup
 and cleanup removed six events: 631-632 and 688-691. All six IDs remain reserved;
@@ -164,7 +168,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 200-202 | `src/AiRaccoon.Infrastructure/Sync/S3CloudStore.cs` |
 | 203-205 | `src/AiRaccoon.Infrastructure/Sync/AzureBlobCloudStore.cs` |
 | 300, 301 | `src/AiRaccoon.Infrastructure/Watch/WatchEventSource.cs` |
-| 302 | `src/AiRaccoon.Infrastructure/Watch/WatchPipeline.cs` |
+| 302-303 | `src/AiRaccoon.Infrastructure/Watch/WatchPipeline.cs` (303 added 2026-10-18: `FileSkipped` at Debug, a digest skipped a file as unsupported-type, binary or unparseable) |
 | 310-312 | `src/AiRaccoon.Infrastructure/Watch/WatchCatchUp.cs` |
 | 320-323 | `src/AiRaccoon.Infrastructure/Watch/WatchHostedService.cs` |
 | 330 | `src/AiRaccoon/Setup/AppRegistrations.cs` |

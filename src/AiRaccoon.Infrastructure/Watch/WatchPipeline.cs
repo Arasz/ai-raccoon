@@ -67,6 +67,7 @@ public sealed partial class WatchPipeline(
     private readonly Dictionary<WatchKey, WatchEvent> _pending = new();
     private readonly Dictionary<WatchKey, WatchRuntimeState> _runtime = new();
     private readonly Dictionary<string, List<string>> _watchPathsByProject = new(StringComparer.Ordinal);
+    private readonly Dictionary<WatchKey, SortedDictionary<string, SkipReason>> _skipped = new();
     public static TimeSpan TickInterval { get; } = TimeSpan.FromSeconds(1);
 
     /// <summary>
@@ -123,6 +124,7 @@ public sealed partial class WatchPipeline(
         lock (_gate)
         {
             _runtime.Remove(new WatchKey(projectId, normalized));
+            _skipped.Remove(new WatchKey(projectId, normalized));
             if (_watchPathsByProject.TryGetValue(projectId, out var watches))
             {
                 watches.Remove(normalized);
@@ -139,6 +141,43 @@ public sealed partial class WatchPipeline(
         retryPolicy.Forget(projectId, normalized);
         scanGuard.Cancel(projectId, normalized);
         Unregistered?.Invoke(projectId, normalized);
+    }
+
+    /// <summary>
+    ///     Forgets a watch's skipped files ahead of a full scan, which re-reports whatever is still
+    ///     skipped; a file the scan now filters out (an ignore edit) is otherwise never digested again.
+    /// </summary>
+    public void ClearSkips(string projectId, string path)
+    {
+        lock (_gate)
+        {
+            _skipped.Remove(new WatchKey(projectId, IngestPath.Normalize(path)));
+        }
+    }
+
+    /// <summary>Forgets a watch's skipped files that no longer exist — a delete whose event was missed.</summary>
+    public void ForgetMissingSkips(string projectId, string path)
+    {
+        var key = new WatchKey(projectId, IngestPath.Normalize(path));
+        string[] listed;
+        lock (_gate)
+        {
+            listed = _skipped.TryGetValue(key, out var files) ? [.. files.Keys] : [];
+        }
+
+        var missing = listed.Where(file => !File.Exists(file)).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (_skipped.TryGetValue(key, out var files))
+            {
+                missing.ForEach(file => files.Remove(file));
+            }
+        }
     }
 
     /// <summary>Marks a watch scanning (docs/plans/file-watcher-implementation.md S5's initial scan) — clears the last error.</summary>
@@ -162,11 +201,18 @@ public sealed partial class WatchPipeline(
             [
                 .. _runtime
                     .Where(kv => kv.Key.ProjectId == projectId)
-                    .Select(kv => new WatchStatus(projectId, kv.Key.Path, kv.Value.State, kv.Value.LastError,
-                        kv.Value.LastSync))
+                    .Select(kv => ToStatus(kv.Key, kv.Value))
                     .OrderBy(s => s.Path, IngestPath.PathComparer)
             ];
         }
+    }
+
+    private WatchStatus ToStatus(WatchKey key, WatchRuntimeState state)
+    {
+        var skipped = _skipped.GetValueOrDefault(key);
+        return new WatchStatus(key.ProjectId, key.Path, state.State, state.LastError, state.LastSync,
+            skipped?.Count ?? 0,
+            skipped?.Take(WatchStatus.MaxListedSkips).Select(kv => new SkippedFile(kv.Key, kv.Value)).ToArray());
     }
 
     /// <summary>Loop: tick every second until cancelled; a failing iteration never kills the loop.</summary>
@@ -242,7 +288,7 @@ public sealed partial class WatchPipeline(
         var evt = job.Event;
         try
         {
-            await executor.DigestAsync(evt.ProjectId, job.WatchPath, evt.Path, evt.Kind, evt.OldPath,
+            var skip = await executor.DigestAsync(evt.ProjectId, job.WatchPath, evt.Path, evt.Kind, evt.OldPath,
                     cancellationToken);
             retryPolicy.RecordSuccess(evt.ProjectId, job.WatchPath);
             var recovered = false;
@@ -250,12 +296,18 @@ public sealed partial class WatchPipeline(
             {
                 // A job dispatched before UnregisterWatch removed the entry must not resurrect it
                 // (D21): only update state for a watch that is still registered.
-                if (_runtime.TryGetValue(new WatchKey(evt.ProjectId, job.WatchPath), out var previous))
+                var key = new WatchKey(evt.ProjectId, job.WatchPath);
+                if (_runtime.TryGetValue(key, out var previous))
                 {
                     recovered = previous.State == WatchState.Retrying;
-                    _runtime[new WatchKey(evt.ProjectId, job.WatchPath)] =
-                        new WatchRuntimeState(WatchState.Healthy, null, timeProvider.GetUtcNow());
+                    _runtime[key] = new WatchRuntimeState(WatchState.Healthy, null, timeProvider.GetUtcNow());
+                    RecordSkip(key, evt, skip);
                 }
+            }
+
+            if (skip is { } reason)
+            {
+                Log.FileSkipped(logger, evt.Path, reason.ToWireName());
             }
 
             if (recovered)
@@ -278,6 +330,46 @@ public sealed partial class WatchPipeline(
                     _runtime[new WatchKey(evt.ProjectId, job.WatchPath)] = current with { State = state, LastError = ex.Message };
                 }
             }
+        }
+    }
+
+    /// <summary>Lists a skipped file under its watch; a digest that indexed, removed or excluded it takes
+    /// it off the list, with a renamed-away old path and anything under a vanished directory. Caller holds the gate.</summary>
+    private void RecordSkip(WatchKey key, WatchEvent evt, SkipReason? skip)
+    {
+        if (!_skipped.TryGetValue(key, out var files))
+        {
+            if (skip is null)
+            {
+                return;
+            }
+
+            files = new SortedDictionary<string, SkipReason>(StringComparer.Ordinal);
+            _skipped[key] = files;
+        }
+
+        if (evt.OldPath is not null)
+        {
+            foreach (var moved in files.Keys.Where(path => IngestPath.IsWithinScope(path, evt.OldPath)).ToArray())
+            {
+                files.Remove(moved);
+            }
+        }
+
+        if (skip is { } reason)
+        {
+            files[evt.Path] = reason;
+        }
+        else if (!File.Exists(evt.Path) && !Directory.Exists(evt.Path))
+        {
+            foreach (var gone in files.Keys.Where(path => IngestPath.IsWithinScope(path, evt.Path)).ToArray())
+            {
+                files.Remove(gone);
+            }
+        }
+        else
+        {
+            files.Remove(evt.Path);
         }
     }
 
@@ -325,5 +417,8 @@ public sealed partial class WatchPipeline(
     {
         [LoggerMessage(EventId = 302, Level = LogLevel.Error, Message = "Watch pipeline loop iteration failed")]
         public static partial void PipelineLoopError(ILogger logger, Exception exception);
+
+        [LoggerMessage(EventId = 303, Level = LogLevel.Debug, Message = "Watch skipped {Path}: {Reason}")]
+        public static partial void FileSkipped(ILogger logger, string path, string reason);
     }
 }

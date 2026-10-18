@@ -739,7 +739,7 @@ public sealed class WatchIntegrationTests
             Pipeline = new WatchPipeline(new WatchScheduler(),
                 new WatchDigestExecutor(Memory, WatchStore, Time,
                     new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
-                    new SqliteProjectIdsMigrationGate(_factory)),
+                    new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher()),
                 new WatchRetryPolicy(),
                 ScanGuard, Memory, Time, new FakeLogger<WatchPipeline>(_logs));
             EventSource = new WatchEventSource(evt =>

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Net;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
@@ -36,11 +37,12 @@ internal sealed class SettingsServerErrorException(string message) : Exception(m
 ///         <c>model code set local</c>, <c>repair</c>, <c>extract prune</c>,
 ///         <c>settings maintenance list</c>, <c>noise entries</c> and <c>watch registered</c> all
 ///         reach the same way, over the same connection — one class, one credential, one transport
-///         for every control-plane resource. <see cref="IProjectDirectory" /> serves <c>project id</c>.
+///         for every control-plane resource. <see cref="IProjectDirectory" /> serves <c>project id</c>;
+///         <see cref="IWatchControl" /> serves <c>watch add</c>, <c>watch remove</c> and <c>watch status</c>.
 ///     </para>
 /// </summary>
 internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, ICodeEngineStore, IRepairStore,
-    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore, IProjectDirectory
+    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore, IProjectDirectory, IWatchControl
 {
     /// <summary>Every 409 body reaches a user's terminal; the read stops at this many characters.</summary>
     private const int RefusalBodyMaxLength = 4096;
@@ -229,6 +231,35 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     }
 
     /// <inheritdoc />
+    public async Task<WatchAddResponse> AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(projectId);
+        Guard.IsNotNullOrWhiteSpace(path);
+        var response = await SendAsync(token =>
+            _client.PostAsJsonAsync(WatchProtocol.Path, new WatchAddRequest(projectId, path), token), cancellationToken);
+        await EnsureWatchAsync(response, projectId, path, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<WatchAddResponse>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<WatchRemoveResponse> RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(projectId);
+        Guard.IsNotNullOrWhiteSpace(path);
+        var response = await SendAsync(token => _client.DeleteAsync(WatchProtocol.ForRemove(projectId, path), token), cancellationToken);
+        await EnsureWatchAsync(response, projectId, path, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<WatchRemoveResponse>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<WatchStatus>> StatusAsync(string? projectId, CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(token => _client.GetAsync(WatchProtocol.ForStatus(projectId), token), cancellationToken);
+        await EnsureWatchAsync(response, projectId, null, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<WatchStatusResponse>(cancellationToken))!.Watches;
+    }
+
+    /// <inheritdoc />
     public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(projectId);
@@ -284,6 +315,19 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             throw new SettingsServerUnavailableException(ErrorCode.Reach.StoppedAnswering,
                 $"ai-raccoon: no settings server answered at {_client.BaseAddress} within {limit.TotalSeconds:0.###}s", ex);
         }
+    }
+
+    /// <summary>A 422 answer is a watch refusal: rethrown with its kind and the CLI fix.</summary>
+    private async Task EnsureWatchAsync(HttpResponseMessage response, string? projectId, string? path,
+        CancellationToken cancellationToken)
+    {
+        if (response.StatusCode == HttpStatusCode.UnprocessableEntity
+            && WatchRefusal.FromProblem(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken)) is { } refusal)
+        {
+            throw WatchRefusedException.For(refusal, projectId, path);
+        }
+
+        Ensure(response);
     }
 
     /// <summary>A 409 body is displayed to the user: read no more than <see cref="RefusalBodyMaxLength" /> characters, so a runaway body cannot become an unbounded CLI string.</summary>

@@ -26,9 +26,13 @@ public sealed class WatchDigestExecutor(
     IIgnoreRulesProvider ignoreRulesProvider,
     Lazy<IWatchScanInitiator> scanInitiator,
     IEventPump<EmbedDrainRequest> embedDrainPump,
-    IProjectIdsMigrationGate migrationGate) : IWatchDigestExecutor
+    IProjectIdsMigrationGate migrationGate,
+    IFileTypeMatcher fileTypeMatcher,
+    ICodeFileTypeMatcher codeFileTypeMatcher) : IWatchDigestExecutor
 {
-    public async Task DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
+    private static readonly FileSniffer Sniffer = new();
+
+    public async Task<SkipReason?> DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
         string? oldPath, CancellationToken cancellationToken = default)
     {
         // Bank-write boundary (air-merge: in-flight scans outlive the repair rename holding the
@@ -53,7 +57,7 @@ public sealed class WatchDigestExecutor(
             // A directory's own Created/Changed event: nothing to digest, and NOT a vanished file —
             // taking the delete cascade here would wipe the files inside it that a sibling digest in
             // the same batch just ingested (#509).
-            return;
+            return null;
         }
 
         if (!File.Exists(normalized))
@@ -61,7 +65,7 @@ public sealed class WatchDigestExecutor(
             if (!isIgnoreFile && await IsExcludedAsync(projectId, normalizedWatch, normalized, cancellationToken))
             {
                 await DeleteIfFingerprintedAsync(projectId, normalizedWatch, normalized, cancellationToken);
-                return;
+                return null;
             }
 
             await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken);
@@ -70,7 +74,7 @@ public sealed class WatchDigestExecutor(
                 scanInitiator.Value.EnqueueInitialScan(projectId, normalizedWatch);
             }
 
-            return;
+            return null;
         }
 
         if (!isIgnoreFile && await IsExcludedAsync(projectId, normalizedWatch, normalized, cancellationToken))
@@ -80,25 +84,31 @@ public sealed class WatchDigestExecutor(
             // DeleteSourcePathAsync already cascades the fingerprint delete for this exact path
             // (MemorySql.DeleteWatchFilesByProjectPathCascade).
             await DeleteIfFingerprintedAsync(projectId, normalizedWatch, normalized, cancellationToken);
-            return;
+            return null;
         }
 
         try
         {
-            await DigestExistingFileAsync(projectId, normalizedWatch, normalized, isIgnoreFile, cancellationToken);
+            return await DigestExistingFileAsync(projectId, normalizedWatch, normalized, isIgnoreFile, cancellationToken);
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException && !File.Exists(normalized))
         {
             // Deleted after the existence check above, e.g. by a branch switch: a delete, not a
             // digest failure that would count against the whole watch.
             await DeletePathAsync(projectId, normalizedWatch, normalized, cancellationToken);
+            return null;
         }
     }
 
     /// <summary>Hash-skip or replace for a file that existed when the digest looked; throws FileNotFoundException if it vanishes mid-way.</summary>
-    private async Task DigestExistingFileAsync(string projectId, string normalizedWatch, string normalized,
+    private async Task<SkipReason?> DigestExistingFileAsync(string projectId, string normalizedWatch, string normalized,
         bool isIgnoreFile, CancellationToken cancellationToken)
     {
+        if (!isIgnoreFile && !IsRouted(normalized))
+        {
+            return await SkipUnroutedAsync(projectId, normalizedWatch, normalized, cancellationToken);
+        }
+
         // Read before the content: a write racing the digest then leaves a size that no longer matches.
         var size = new FileInfo(normalized).Length;
         var content = await File.ReadAllTextAsync(normalized, cancellationToken);
@@ -109,7 +119,7 @@ public sealed class WatchDigestExecutor(
             // Hash-skip: metadata-only touch — refresh timestamps, never touch memory or hooks.
             await TouchAsync(projectId, normalizedWatch, normalized, hash, cancellationToken);
             await watchStore.SetFileSizeAsync(projectId, normalized, size, cancellationToken);
-            return;
+            return null;
         }
 
         // Delete + re-ingest + fingerprint are one transaction in the store: the pre-check above is
@@ -127,6 +137,22 @@ public sealed class WatchDigestExecutor(
         {
             scanInitiator.Value.EnqueueInitialScan(projectId, normalizedWatch);
         }
+
+        return replaceResult.Skipped;
+    }
+
+    private bool IsRouted(string path) => fileTypeMatcher.TryGetHandler(path, out _) || codeFileTypeMatcher.IsCodeFile(path);
+
+    /// <summary>
+    ///     A file no corpus routes is classified from a bounded prefix: never hashed, replaced or
+    ///     fingerprinted, so a tree of media files costs a few KB per file per scan. Rows or a
+    ///     fingerprint left from a build that did route it are removed.
+    /// </summary>
+    private async Task<SkipReason?> SkipUnroutedAsync(string projectId, string watchPath, string path,
+        CancellationToken cancellationToken)
+    {
+        await DeleteIfFingerprintedAsync(projectId, watchPath, path, cancellationToken);
+        return await Sniffer.IsBinaryAsync(path, cancellationToken) ? SkipReason.Binary : SkipReason.UnsupportedType;
     }
 
     private static bool IsIgnoreFileItself(string normalizedWatch, string normalizedPath) =>

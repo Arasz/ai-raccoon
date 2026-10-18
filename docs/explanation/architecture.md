@@ -343,12 +343,15 @@ opens the bank once for the whole call and hands the open connection to `FileIng
 against the project's declared ingest scope (`ingest.scope.<project>`, falling back to
 `ingest.scope.global`) and refuses with `PathOutsideScopeException` when it falls outside — the
 same rule and primitive `memory_watch_add` uses. An unscoped project refuses every ingest. Past
-the scope check, a memory-indexable file (`.md`/`.markdown`/`.txt`/`.json`) is split into
+the scope check, a memory-indexable file (`.md`/`.markdown`/`.txt`/`.json`/`.ipynb`) is split into
 **token-aware chunks** before hashing and insertion; a recognized code extension (`.cs`, `.py`,
 `.ts`, `.go`, `.rs`, … — the v1 list, `CodeExtensions`) routes instead to `CodeIngestor` and the
 code corpus (`code_entries`) — memory extensions always win on overlap, so a `.md` file inside a
-code directory still lands in `entries`. Anything neither pipeline claims, or hidden, is silently
-skipped in both. Every new memory or code chunk lands `embed_state = 'pending'` — no chunk is
+code directory still lands in `entries`. A hidden or ignored file is skipped silently. A file
+neither pipeline claims, a binary file, or a claimed file that yields no chunks is skipped with a
+`SkipReason` (`unsupported-type`, `binary`, `unparseable`): it is never fingerprinted, so it is
+retried on the next catch-up, and the watcher lists it in `memory_watch_status` and
+`ai-raccoon watch status`. Every new memory or code chunk lands `embed_state = 'pending'` — no chunk is
 embedded inline as part of ingest, whether or not an engine is configured (`FileIngestor` does
 not hold an embedder reference at all). The caller enqueues the corpus's `EmbedDrainRequest` on
 the shared embed topic once it is safe to (after any wrapping transaction commits), and

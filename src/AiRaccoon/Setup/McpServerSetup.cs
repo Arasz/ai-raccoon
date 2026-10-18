@@ -64,6 +64,7 @@ internal static partial class McpServerSetup
         builder.Services.RegisterMemoryServices(serverConfig.Options);
         builder.Services.AddOtlpExport(serverConfig.Options);
         builder.Services.AddSingleton(timeProvider);
+        builder.Services.AddProblemDetails();
         HostLogging.Configure(builder.Logging, serverConfig.Options);
 
         builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, serverConfig.Port));
@@ -110,6 +111,7 @@ internal static partial class McpServerSetup
                 // ADR-0075 amendment: noise entries and watch registered reach the server entirely too.
                 webApplication.MapNoiseSummary();
                 webApplication.MapWatchRegistered();
+                webApplication.MapWatch();
                 webApplication.MapProjects();
             }
 

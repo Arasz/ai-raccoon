@@ -35,7 +35,7 @@ A file whose first 8,000 characters contain a NUL byte is treated as binary and 
 its extension. The check applies to memory files too. A file that turns binary loses the chunks it
 had.
 
-Memory-owned extensions (`.md`, `.txt`, `.json`, etc.) are never ingested into the
+Memory-owned extensions (`.md`, `.txt`, `.json`, `.ipynb`, etc.) are never ingested into the
 code corpus. The two corpora are disjoint by design.
 
 Any manifest dimension works for the code engine: `model code set local <dir>` reconciles

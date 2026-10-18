@@ -209,7 +209,7 @@ public sealed partial class SqliteMemoryStore
     {
         var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, context,
             true, cancellationToken);
-        return new ReplaceResult(result.Ran, result.Corpus);
+        return new ReplaceResult(result.Ran, result.Corpus, result.Skipped);
     }
 
     /// <summary>A stale claim (its holder crashed mid-chunk and never released it) can be reclaimed after this long.</summary>
@@ -274,11 +274,10 @@ public sealed partial class SqliteMemoryStore
                             new { projectId, path }, cancellationToken));
                 }
 
-                // B1: a code-only file a stand-in chunker (e.g. NoOpCodeChunker) produced zero rows
-                // for must NOT be fingerprinted — a fingerprint here would hash-skip it forever, even
-                // past the point a real chunker starts producing rows for unchanged content. Every
-                // other outcome (memory match, mixed match, no corpus matches at all) fingerprints
-                // as before.
+                // A zero-row stand-in chunk or a skipped file must NOT be fingerprinted: a
+                // fingerprint would hash-skip it forever, even once its content becomes ingestable.
+                // The prune above removed the old chunks, so the old fingerprint goes with them —
+                // else restoring the old content would hash-skip and leave the file chunkless.
                 if (fingerprint && ingestResult.FingerprintEligible)
                 {
                     await connection.ExecuteAsync(
@@ -291,13 +290,19 @@ public sealed partial class SqliteMemoryStore
                                     updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
                                 }, cancellationToken));
                 }
+                else if (fingerprint)
+                {
+                    await connection.ExecuteAsync(
+                            Def(MemorySql.DeleteWatchFile, new { projectId, path }, cancellationToken));
+                }
 
                 await connection.ExecuteAsync(
                         new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
                 var heldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
                 Log.TransactionHeld(logger, waitMs, heldMs, ingestResult.RowsInserted);
                 RecordReplaceLockMetrics(projectId, waitMs, heldMs, ingestResult.RowsInserted);
-                return new ReplaceCoreResult(true, ingestResult.RowsInserted, ingestResult.WrittenCorpus);
+                return new ReplaceCoreResult(true, ingestResult.RowsInserted, ingestResult.WrittenCorpus,
+                    ingestResult.Skipped);
             }
             catch
             {
@@ -407,5 +412,5 @@ public sealed partial class SqliteMemoryStore
     }
 
     /// <summary><see cref="ReplaceCoreAsync" />'s outcome: whether it ran at all, the rows it wrote, and which corpus.</summary>
-    private readonly record struct ReplaceCoreResult(bool Ran, int Rows, CorpusKind Corpus);
+    private readonly record struct ReplaceCoreResult(bool Ran, int Rows, CorpusKind Corpus, SkipReason? Skipped = null);
 }

@@ -462,3 +462,27 @@ Feature: File watcher
             When "/repo/g/g.md" content changes
             Then "g.md" is searchable for "jsaa"
             And still no loser rows remain after post-repair edits
+
+    Rule: Files a watch cannot index are reported as skipped, never hidden
+        # 2026-10-18: a file neither corpus can take (unsupported type, binary content, or a
+        # memory file that parses to nothing) is listed in memory_watch_status with its reason,
+        # and is never fingerprinted — so every catch-up retries it, and a file that becomes
+        # ingestable indexes without a content change.
+        Scenario: a watched directory with an unsupported and a binary file reports them as skipped
+            Given a watch for "proj-a" on path "/repo" with an unsupported file "tool.xyz" and a binary file "image.dat"
+            Then memory_watch_status for "proj-a" reports the watch healthy with 2 skipped files
+            And the skipped files are "image.dat" as "binary" and "tool.xyz" as "unsupported-type"
+            And no skipped file has a fingerprint
+
+        Scenario: skipped files are reported again after a restart catch-up
+            Given a watch for "proj-a" on path "/repo" with an unsupported file "tool.xyz" and a binary file "image.dat"
+            And memory_watch_status for "proj-a" reports the watch healthy with 2 skipped files
+            When the server restarts and re-watches
+            Then memory_watch_status for "proj-a" reports the watch healthy with 2 skipped files
+
+        Scenario: a skipped file that becomes supported is indexed and leaves the skip list
+            Given a watch for "proj-a" on path "/repo" with a malformed notebook "analysis.ipynb"
+            And memory_watch_status for "proj-a" reports the watch healthy with 1 skipped files
+            When "analysis.ipynb" is rewritten as a valid notebook
+            Then the notebook's content is searchable for "proj-a"
+            And memory_watch_status for "proj-a" reports the watch healthy with 0 skipped files

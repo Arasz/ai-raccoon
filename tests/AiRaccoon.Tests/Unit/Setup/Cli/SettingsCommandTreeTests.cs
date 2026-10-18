@@ -127,7 +127,9 @@ public class SettingsCommandTreeTests
     {
         ["project id register"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
         ["project id get"] = ["--name", "acme"],
-        ["project id check"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"]
+        ["project id check"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
+        ["watch add"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70", "/tmp"],
+        ["watch remove"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70", "/tmp"]
     };
 
     public static TheoryData<string[]> SettingsArgv()

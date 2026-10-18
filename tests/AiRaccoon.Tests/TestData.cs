@@ -81,7 +81,7 @@ public static class TestData
         var embedder = CreateEntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider, new VecDimensionReconciler());
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new PlainTextFileTypeHandler(new PlainTextChunker(new O200kTokenizer().CountTokens)),
-             new JsonFileTypeHandler(jsonChunker)]);
+             new JsonFileTypeHandler(jsonChunker), new NotebookFileTypeHandler(new NotebookChunker(markdownChunker))]);
         // This helper's own documented contract is "omitted, the store behaves as a memory-only
         // bank" — a fixed no-op pump, never a caller override; a test that needs a real one
         // constructs FileIngestor/SqliteMemoryStore directly instead of through this convenience.
@@ -176,7 +176,7 @@ public static class TestData
     /// <summary>Real o200k-backed plain text chunker for tests that exercise token bounds without markdown structure.</summary>
     public static IPlainTextChunker RealPlainTextChunker() => new PlainTextChunker(new O200kTokenizer().CountTokens);
 
-    /// <summary>Real matcher for .md/.txt/.json — the same handler registry <c>ChunkBackfill</c> and
+    /// <summary>Real matcher for .md/.txt/.json/.ipynb — the same handler registry <c>ChunkBackfill</c> and
     /// the ingest path route through. <paramref name="markdown"/> overrides the markdown handler's
     /// (and the JSON handler's fallback) chunker; omitted, both get their own <see cref="RealMarkdownChunker"/>.</summary>
     public static IFileTypeMatcher RealFileTypeMatcher(IMarkdownChunker? markdown = null)
@@ -184,7 +184,8 @@ public static class TestData
         var noteChunker = markdown ?? RealMarkdownChunker();
         return new FileTypeMatcher(
             [new MarkdownFileTypeHandler(noteChunker), new PlainTextFileTypeHandler(RealPlainTextChunker()),
-             new JsonFileTypeHandler(RealJsonChunker(noteChunker))]);
+             new JsonFileTypeHandler(RealJsonChunker(noteChunker)),
+             new NotebookFileTypeHandler(new NotebookChunker(noteChunker))]);
     }
 
     /// <summary>Builds a <see cref="ConfigCommands"/> with only the sub-command(s) a test needs; unused sub-commands
@@ -207,8 +208,9 @@ public static class TestData
         DoctorCommands? doctor = null,
         ModelDownloadCommands? modelDownload = null,
         ICodeEngineStore? codeEngine = null,
-        ProjectIdCommands? projectIds = null) =>
-        new(store, modelMigrations!, codeEngine!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, projectIdsRepair!, doctor!, modelDownload!, projectIds!);
+        ProjectIdCommands? projectIds = null,
+        WatchRegistrationCommands? watchRegistrations = null) =>
+        new(store, modelMigrations!, codeEngine!, settings!, sync!, watch!, encryptionCommands!, extract!, maintenance!, performance!, serve!, noiseEntries!, chunkIndexRepair!, reingestRepair!, projectIdsRepair!, doctor!, modelDownload!, projectIds!, watchRegistrations!);
 
     /// <summary>A <see cref="ServerProbe"/> backed by a plain loopback HttpClient (the pre-DI-refactor ForLoopback shape).</summary>
     public static ServerProbe CreateServerProbe() => new(new LoopbackHttpClientFactory());

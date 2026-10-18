@@ -6,7 +6,8 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// <summary>
 ///     One file's ingest outcome. <see cref="FingerprintEligible" /> is false only when the file's
 ///     sole corpus is code, the chunker produced zero chunks and the content is not blank — a
-///     stand-in chunker must never fingerprint real content into a permanently hash-skipped state.
+///     stand-in chunker must never fingerprint real content into a permanently hash-skipped state —
+///     or when <see cref="Skipped" /> names why nothing was indexed.
 /// </summary>
 /// <param name="ChunkHashes">
 ///     Every memory-corpus chunk hash this ingest wrote OR rediscovered unchanged — the file's
@@ -22,11 +23,13 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     information about the file's real chunk set, so a caller pruning by this must treat null as
 ///     "leave code_entries alone" rather than "the current set is empty, delete everything".
 /// </param>
+/// <param name="Skipped">Why nothing was indexed for a file no corpus could take; null otherwise.</param>
 public readonly record struct FileIngestResult(
     int RowsInserted,
     bool FingerprintEligible,
     IReadOnlyList<string>? ChunkHashes = null,
-    IReadOnlyList<string>? CodeChunkHashes = null)
+    IReadOnlyList<string>? CodeChunkHashes = null,
+    SkipReason? Skipped = null)
 {
     /// <summary>Which corpus this ingest actually wrote new rows to — <see cref="CorpusKind.Neither" />
     /// when nothing was inserted (ignored/hidden/unrouted, or a rediscovered-unchanged file). One

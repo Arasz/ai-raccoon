@@ -11,9 +11,9 @@ public sealed class WatchTools(
     IWatchService watch,
     IToolGate gate)
 {
-    private const string TnWatchAdd = "memory_watch_add";
-    private const string TnWatchStatus = "memory_watch_status";
-    private const string TnWatchRemove = "memory_watch_remove";
+    internal const string TnWatchAdd = "memory_watch_add";
+    internal const string TnWatchStatus = "memory_watch_status";
+    internal const string TnWatchRemove = "memory_watch_remove";
 
     [McpServerTool(Name = TnWatchAdd)]
     [Description(
@@ -36,7 +36,7 @@ public sealed class WatchTools(
 
     [McpServerTool(Name = TnWatchStatus)]
     [Description(
-        "Lists the project's registered watches with their live state (scanning/healthy/retrying/stopped), last error and last sync; empty list when none. Available in every access tier.")]
+        "Lists the project's registered watches with their live state (scanning/healthy/retrying/stopped), last error, last sync, and the files the watch could not index: skippedCount plus up to 20 skipped entries (path, reason unsupported-type/binary/unparseable). Empty list when none. Available in every access tier.")]
     public async Task<ApiEnvelope<WatchStatusResult>> Status(
         [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)

@@ -296,9 +296,11 @@ public static partial class AppRegistrations
                 sp.GetRequiredService<TokenCount>(),
                 sp.GetRequiredService<IMarkdownChunker>(),
                 ChunkingDefaults.OverlayTokens));
+            services.AddSingleton<INotebookChunker>(sp => new NotebookChunker(sp.GetRequiredService<IMarkdownChunker>()));
             services.AddSingleton<IFileTypeHandler>(sp => new MarkdownFileTypeHandler(sp.GetRequiredService<IMarkdownChunker>()));
             services.AddSingleton<IFileTypeHandler>(sp => new PlainTextFileTypeHandler(sp.GetRequiredService<IPlainTextChunker>()));
             services.AddSingleton<IFileTypeHandler>(sp => new JsonFileTypeHandler(sp.GetRequiredService<IJsonChunker>()));
+            services.AddSingleton<IFileTypeHandler>(sp => new NotebookFileTypeHandler(sp.GetRequiredService<INotebookChunker>()));
             services.AddSingleton<IReadOnlyCollection<IFileTypeHandler>>(sp => sp.GetServices<IFileTypeHandler>().ToList());
             services.AddRequiredSingleton<IIgnoreRulesProvider, IgnoreRulesProvider>();
             services.AddRequiredSingleton<IFileTypeMatcher, FileTypeMatcher>();
