@@ -155,6 +155,31 @@ public sealed partial class WatchPipeline(
         }
     }
 
+    /// <summary>Forgets a watch's skipped files that no longer exist — a delete whose event was missed.</summary>
+    public void ForgetMissingSkips(string projectId, string path)
+    {
+        var key = new WatchKey(projectId, IngestPath.Normalize(path));
+        string[] listed;
+        lock (_gate)
+        {
+            listed = _skipped.TryGetValue(key, out var files) ? [.. files.Keys] : [];
+        }
+
+        var missing = listed.Where(file => !File.Exists(file)).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (_skipped.TryGetValue(key, out var files))
+            {
+                missing.ForEach(file => files.Remove(file));
+            }
+        }
+    }
+
     /// <summary>Marks a watch scanning (docs/plans/file-watcher-implementation.md S5's initial scan) — clears the last error.</summary>
     public void MarkScanning(string projectId, string path)
     {

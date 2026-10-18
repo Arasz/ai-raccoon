@@ -157,7 +157,11 @@ public sealed partial class WatchCatchUp(
         IgnoreRules ignoreRules, CancellationToken cancellationToken)
     {
         var stamps = changedOnly ? await watchStore.ListFileStampsAsync(projectId, cancellationToken) : null;
-        if (!changedOnly)
+        if (changedOnly)
+        {
+            pipeline.ForgetMissingSkips(projectId, path);
+        }
+        else
         {
             pipeline.ClearSkips(projectId, path);
         }
