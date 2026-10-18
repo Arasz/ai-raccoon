@@ -1017,9 +1017,10 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     Ladder step 9 (ADR-0068): rebuilds vec_entries/vec_structure with `ctx` demoted from
-    ///     partition key to an ordinary vec0 metadata column. Rethrows for the same reason the v2
-    ///     step does — an empty-shell vec_entries answers every query with silence.
+    ///     Ladder step 9: rebuilds vec_entries/vec_structure from entries. The shared VecTableDdl
+    ///     emits the current partition-key shape; v19 repairs banks already migrated by older
+    ///     binaries to the metadata-column shape. Rethrows for the same reason the v2 step does —
+    ///     an empty-shell vec_entries answers every query with silence.
     /// </summary>
     private static async Task MigrateToV9Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
