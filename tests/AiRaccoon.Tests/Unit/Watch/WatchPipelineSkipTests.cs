@@ -118,6 +118,24 @@ public sealed class WatchPipelineSkipTests
     }
 
     [Fact]
+    public async Task Status_DirectoryOfSkippedFilesRenamed_OldPathsLeaveTheList()
+    {
+        using var dir = TempDir.New("skip-dir-renamed");
+        var before = dir.File("assets");
+        Directory.CreateDirectory(before);
+        var stack = new WatchTestStack();
+        var file = await SkippedFileAsync(stack, dir, Path.Combine("assets", "tool.xyz"), SkipReason.UnsupportedType);
+        await RecordSkipAsync(stack, dir, file);
+
+        var after = dir.File("media");
+        Directory.Move(before, after);
+        stack.Pipeline.Enqueue(new WatchEvent(Project, after, WatchEventKind.Renamed, before));
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        AssertNoSkips(stack);
+    }
+
+    [Fact]
     public async Task Status_SkippedFileLaterExcluded_LeavesTheList()
     {
         using var dir = TempDir.New("skip-then-excluded");

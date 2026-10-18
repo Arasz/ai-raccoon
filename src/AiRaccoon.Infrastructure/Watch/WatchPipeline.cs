@@ -325,7 +325,10 @@ public sealed partial class WatchPipeline(
 
         if (evt.OldPath is not null)
         {
-            files.Remove(evt.OldPath);
+            foreach (var moved in files.Keys.Where(path => IngestPath.IsWithinScope(path, evt.OldPath)).ToArray())
+            {
+                files.Remove(moved);
+            }
         }
 
         if (skip is { } reason)
