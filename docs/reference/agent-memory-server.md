@@ -132,7 +132,7 @@ config channel (see [Command-line options](#command-line-options)).
   (the id `memory_record_grade`/`memory_record_followthrough` key off), since every search now
   has a row behind it. `sessionId` is required on every search. Pass your session id. Blank fails fast. The server stores the value verbatim on the row. When you open a file the search returned, call `memory_record_followthrough` with that id, the file path, and `servedRank` when you saw one. Rank is 1-based. Under `kind=both` a bare rank cannot name its section, and that ambiguity is intentional. Grade with `memory_record_grade` (1-5, 5 is best, plus an optional note) on the same id when you have a judgment. Both calls touch only a search record that belongs to the caller's `projectId`. `recorded` is true only when that record was updated; an unknown correlationId, or one from another project, changes nothing and returns `recorded: false`.
 - **`memory_ingest_file`/`memory_ingest_directory` feed the code corpus too:** a file is routed
-  by extension — the memory-owned extensions (`.md`/`.markdown`/`.txt`/`.json`) always win on
+  by extension — the memory-owned extensions (`.md`/`.markdown`/`.txt`/`.json`/`.ipynb`) always win on
   overlap; a recognized code extension (`.cs`, `.py`, `.ts`, `.go`, `.rs`, … — the v1 list is
   owner-adjustable) goes to the code corpus instead; anything else is skipped in both. A `.md`
   file inside a directory of otherwise-code files still routes to memory. `ai-raccoon.ignore`
