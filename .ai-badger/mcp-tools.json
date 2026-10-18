@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "generated_at": "2026-08-14T16:04:08Z",
+  "generated_at": "2026-10-18T13:23:45Z",
   "sources": [
     {
       "name": "dotnet-sdk",
@@ -27,7 +27,7 @@
             "diagnostic",
             "dotnet"
           ],
-          "intent": "Get or reset in-memory telemetry metrics for MCP tool invocations. Returns per-tool counts, average durations, and success/failure rates. Metrics are collected automatically via a message filter \u2014 no ",
+          "intent": "Get or reset in-memory telemetry metrics for MCP tool invocations. Returns per-tool counts, average durations, and success/failure rates. Metrics are collected automatically via a message filter — no ",
           "origin": "manual"
         },
         "dotnet_dev_certs": {
@@ -931,12 +931,19 @@
           ],
           "intent": "Wait for an element or condition to appear on the page before continuing.",
           "origin": "manual"
+        },
+        "browser_emulate_media": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Emulate CSS media features for the page, for example switch between the light and dark color scheme. Omitted parameters are left unchanged; null clears an override.",
+          "origin": "heuristic"
         }
       }
     },
     {
       "name": "code-review-graph",
-      "status": "unknown",
+      "status": "ok",
       "tools": {
         "build_or_update_graph_tool": {
           "tags": [
@@ -973,7 +980,7 @@
             "navigation",
             "search"
           ],
-          "intent": "Trace a known symbol's callers, callees, imports and what covers it \u2014 the structural answer a text search cannot give.",
+          "intent": "Trace a known symbol's callers, callees, imports and what covers it — the structural answer a text search cannot give.",
           "origin": "catalog"
         },
         "get_review_context_tool": {
@@ -1068,7 +1075,7 @@
             "navigation",
             "read"
           ],
-          "intent": "Orientation in an unfamiliar repository \u2014 its structure and major components \u2014 before reading any single file.",
+          "intent": "Orientation in an unfamiliar repository — its structure and major components — before reading any single file.",
           "origin": "catalog"
         },
         "detect_changes_tool": {
@@ -1175,28 +1182,32 @@
             "read"
           ],
           "intent": "Fetch a named prompt template this MCP server exposes; use when the task references a server-provided prompt",
-          "origin": "manual"
+          "origin": "manual",
+          "status": "removed"
         },
         "list_prompts": {
           "tags": [
             "read"
           ],
           "intent": "List prompt templates this MCP server exposes, with descriptions; use to discover what prompts are available",
-          "origin": "manual"
+          "origin": "manual",
+          "status": "removed"
         },
         "list_resources": {
           "tags": [
             "read"
           ],
           "intent": "List resources (documents, context files) this MCP server exposes for reading via read_resource",
-          "origin": "manual"
+          "origin": "manual",
+          "status": "removed"
         },
         "read_resource": {
           "tags": [
             "read"
           ],
           "intent": "TODO: describe what read_resource does",
-          "origin": "heuristic"
+          "origin": "heuristic",
+          "status": "removed"
         }
       }
     },
@@ -1337,7 +1348,7 @@
     },
     {
       "name": "rider",
-      "status": "unknown",
+      "status": "unreachable",
       "url": "http://127.0.0.1:64342/stream",
       "tools": {}
     },
@@ -1349,14 +1360,238 @@
     },
     {
       "name": "plugin:playwright:playwright",
-      "status": "unknown",
-      "tools": {}
+      "status": "ok",
+      "tools": {
+        "browser_click": {
+          "tags": [
+            "run",
+            "browser"
+          ],
+          "intent": "Click an interactive element by its accessibility snapshot ref ID or coordinates.",
+          "origin": "catalog"
+        },
+        "browser_close": {
+          "tags": [
+            "run",
+            "browser"
+          ],
+          "intent": "Close the active browser page or session.",
+          "origin": "catalog"
+        },
+        "browser_console_messages": {
+          "tags": [
+            "diagnostic",
+            "browser"
+          ],
+          "intent": "Read browser console logs, warnings, errors, and uncaught exceptions.",
+          "origin": "catalog"
+        },
+        "browser_drag": {
+          "tags": [
+            "run",
+            "browser"
+          ],
+          "intent": "Drag and drop between two elements by source and target ref IDs.",
+          "origin": "catalog"
+        },
+        "browser_drop": {
+          "tags": [
+            "write",
+            "browser"
+          ],
+          "intent": "Drop files or MIME-typed data onto a target element by ref ID.",
+          "origin": "catalog"
+        },
+        "browser_emulate_media": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Emulate CSS media features for the page, for example switch between the light and dark color scheme. Omitted parameters are left unchanged; null clears an override.",
+          "origin": "heuristic"
+        },
+        "browser_evaluate": {
+          "tags": [
+            "read",
+            "browser"
+          ],
+          "intent": "Evaluate a JavaScript expression on the page or inside a specific element context.",
+          "origin": "catalog"
+        },
+        "browser_file_upload": {
+          "tags": [
+            "write",
+            "browser"
+          ],
+          "intent": "Upload one or multiple files into a file input element.",
+          "origin": "catalog"
+        },
+        "browser_fill_form": {
+          "tags": [
+            "write",
+            "browser"
+          ],
+          "intent": "Fill multiple form fields in a single call using element ref IDs.",
+          "origin": "catalog"
+        },
+        "browser_find": {
+          "tags": [
+            "search",
+            "browser"
+          ],
+          "intent": "Search the accessibility snapshot of the current page for matching elements by text or role.",
+          "origin": "catalog"
+        },
+        "browser_handle_dialog": {
+          "tags": [
+            "run",
+            "browser"
+          ],
+          "intent": "Accept, dismiss, or respond to browser JavaScript dialogs (alert, confirm, prompt).",
+          "origin": "catalog"
+        },
+        "browser_hover": {
+          "tags": [
+            "navigation",
+            "browser"
+          ],
+          "intent": "Hover over an element by its ref ID to trigger hover states or tooltips.",
+          "origin": "catalog"
+        },
+        "browser_navigate": {
+          "tags": [
+            "navigation",
+            "browser"
+          ],
+          "intent": "Navigate to a URL in the active browser tab.",
+          "origin": "catalog"
+        },
+        "browser_navigate_back": {
+          "tags": [
+            "navigation",
+            "browser"
+          ],
+          "intent": "Navigate back to the previous page in session history.",
+          "origin": "catalog"
+        },
+        "browser_network_request": {
+          "tags": [
+            "diagnostic",
+            "browser"
+          ],
+          "intent": "Inspect full headers, query parameters, request body, and response payload of a single network request.",
+          "origin": "catalog"
+        },
+        "browser_network_requests": {
+          "tags": [
+            "diagnostic",
+            "browser"
+          ],
+          "intent": "List all HTTP network requests and responses made by the page since load.",
+          "origin": "catalog"
+        },
+        "browser_press_key": {
+          "tags": [
+            "write",
+            "browser"
+          ],
+          "intent": "Press a keyboard key (e.g. Enter, Escape, Tab, ArrowDown) on the focused element.",
+          "origin": "catalog"
+        },
+        "browser_resize": {
+          "tags": [
+            "run",
+            "browser"
+          ],
+          "intent": "Resize the browser viewport dimensions (width, height) to test responsive layouts.",
+          "origin": "catalog"
+        },
+        "browser_run_code_unsafe": {
+          "tags": [
+            "run",
+            "browser",
+            "unsafe"
+          ],
+          "intent": "Execute arbitrary multi-step Playwright scripts directly inside the browser process.",
+          "origin": "catalog"
+        },
+        "browser_select_option": {
+          "tags": [
+            "write",
+            "browser"
+          ],
+          "intent": "Select one or more options in a dropdown select element by value or ref ID.",
+          "origin": "catalog"
+        },
+        "browser_snapshot": {
+          "tags": [
+            "read",
+            "browser"
+          ],
+          "intent": "Capture structured accessibility snapshot of the current page with element ref IDs for text-first interaction.",
+          "origin": "catalog"
+        },
+        "browser_tabs": {
+          "tags": [
+            "navigation",
+            "browser"
+          ],
+          "intent": "List, create, select, or close browser tabs in the current session.",
+          "origin": "catalog"
+        },
+        "browser_take_screenshot": {
+          "tags": [
+            "read",
+            "browser"
+          ],
+          "intent": "Capture a visual PNG screenshot of the whole page or a specific element.",
+          "origin": "catalog"
+        },
+        "browser_type": {
+          "tags": [
+            "write",
+            "browser"
+          ],
+          "intent": "Type text into an editable input or textarea by its element ref ID.",
+          "origin": "catalog"
+        },
+        "browser_wait_for": {
+          "tags": [
+            "read",
+            "browser"
+          ],
+          "intent": "Wait for specific text to appear/disappear, element state changes, or time to elapse.",
+          "origin": "catalog"
+        }
+      }
     },
     {
       "name": "plugin:microsoft-docs:microsoft-learn",
-      "status": "unknown",
+      "status": "ok",
       "url": "https://learn.microsoft.com/api/mcp",
-      "tools": {}
+      "tools": {
+        "microsoft_code_sample_search": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Search for code snippets and examples in official Microsoft Learn documentation. This tool retrieves relevant code samples from Microsoft documentation pages providing developers with practical…",
+          "origin": "heuristic"
+        },
+        "microsoft_docs_fetch": {
+          "tags": [
+            "dotnet",
+            "read"
+          ],
+          "intent": "Fetch and convert a Microsoft Learn documentation webpage to markdown format. This tool retrieves the latest complete content of Microsoft documentation webpages including Azure, .NET, Microsoft…",
+          "origin": "manual"
+        },
+        "microsoft_docs_search": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Search official Microsoft/Azure documentation to find the most relevant and trustworthy content for a user's query. This tool returns up to 10 high-quality content chunks (each max 500 tokens)…",
+          "origin": "heuristic"
+        }
+      }
     },
     {
       "name": "plugin:terraform:terraform",
@@ -1365,8 +1600,169 @@
     },
     {
       "name": "plugin:dotnet-claude-kit:cwm-roslyn-navigator",
-      "status": "unknown",
-      "tools": {}
+      "status": "ok",
+      "tools": {
+        "detect_antipatterns": {
+          "tags": [
+            "csharp",
+            "diagnostic",
+            "dotnet"
+          ],
+          "intent": "Detect .NET anti-patterns in source code using Roslyn analysis. Finds async void, sync-over-async, new HttpClient(), DateTime.Now, broad catch, logging interpolation, missing pragma restore, missing…",
+          "origin": "manual"
+        },
+        "detect_circular_dependencies": {
+          "tags": [
+            "diagnostic",
+            "dotnet"
+          ],
+          "intent": "Detect circular dependencies at the project or type level. Finds cycles in project references or type dependencies within a project.",
+          "origin": "manual"
+        },
+        "find_callers": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Find all methods that call a specific method. Useful for impact analysis and understanding dependencies.",
+          "origin": "heuristic"
+        },
+        "find_dead_code": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Find unused types, methods, and properties across the solution. Identifies symbols with zero references that are not public API entry points, interface implementations, or overrides. Uses a fast…",
+          "origin": "heuristic"
+        },
+        "find_implementations": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Find all types that implement an interface or derive from a base class.",
+          "origin": "heuristic"
+        },
+        "find_overrides": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Find all overrides of a virtual or abstract method across the solution. Useful for understanding polymorphic behavior.",
+          "origin": "heuristic"
+        },
+        "find_references": {
+          "tags": [
+            "search"
+          ],
+          "intent": "Find all usages of a symbol across the solution. Returns file, line, snippet, and reference kind (usage, inheritance, invocation, instantiation, parameter, type-argument, assignment, implementation).",
+          "origin": "heuristic"
+        },
+        "find_symbol": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Find where a type, method, or property is defined in the solution. Returns file path, line number, and namespace.",
+          "origin": "heuristic"
+        },
+        "get_dependency_graph": {
+          "tags": [
+            "csharp",
+            "dotnet",
+            "navigation"
+          ],
+          "intent": "Get the call dependency graph for a method, showing all methods it calls recursively up to a specified depth. Useful for impact analysis and understanding code flow.",
+          "origin": "manual"
+        },
+        "get_di_registrations": {
+          "tags": [
+            "csharp",
+            "dotnet",
+            "navigation"
+          ],
+          "intent": "Map of dependency-injection registrations from Add{Singleton,Scoped,Transient}/AddKeyed*/TryAdd* calls: service, implementation, lifetime, and file:line. Flags duplicate registrations of the same…",
+          "origin": "manual"
+        },
+        "get_diagnostics": {
+          "tags": [
+            "diagnostic"
+          ],
+          "intent": "Get compiler diagnostics (errors, warnings) scoped to a file, project, or the entire solution. Does not run NuGet analyzers. Results are ordered errors-first; per-severity totals are always reported.",
+          "origin": "heuristic"
+        },
+        "get_endpoint_map": {
+          "tags": [
+            "csharp",
+            "dotnet",
+            "navigation"
+          ],
+          "intent": "Inventory of ASP.NET Core endpoints: Minimal API Map{Get,Post,Put,Delete,Patch} calls (MapGroup prefixes composed when statically resolvable) and controller actions with Http* attributes. Reports…",
+          "origin": "manual"
+        },
+        "get_file_outline": {
+          "tags": [
+            "files"
+          ],
+          "intent": "Get a token-cheap skeleton of one source file: namespace, types, and member signatures with line numbers — no bodies, no usings. Use before reading a file to decide which lines are worth reading.…",
+          "origin": "heuristic"
+        },
+        "get_nuget_packages": {
+          "tags": [
+            "dotnet",
+            "read"
+          ],
+          "intent": "List the NuGet PackageReference inventory per project: package id, version (resolved from the csproj or Directory.Packages.props when central package management is used), and target framework.…",
+          "origin": "manual"
+        },
+        "get_project_graph": {
+          "tags": [
+            "dotnet",
+            "navigation"
+          ],
+          "intent": "Get the solution project dependency tree with names, paths, target frameworks, and project references.",
+          "origin": "manual"
+        },
+        "get_public_api": {
+          "tags": [
+            "csharp",
+            "dotnet",
+            "navigation"
+          ],
+          "intent": "Get the public members of a type without reading the full source file. Returns method signatures, properties, events.",
+          "origin": "manual"
+        },
+        "get_symbol_detail": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Get detailed information about a symbol including full signature, parameters, return type, modifiers, and XML documentation. Perfect for understanding APIs without reading the whole file.",
+          "origin": "heuristic"
+        },
+        "get_symbol_source": {
+          "tags": [
+            "search",
+            "semantic"
+          ],
+          "intent": "Get the exact source of ONE symbol without reading the whole file. Members (methods, properties) return their full source including doc comment and attributes. Types return a signatures-only…",
+          "origin": "heuristic"
+        },
+        "get_test_coverage_map": {
+          "tags": [
+            "csharp",
+            "diagnostic",
+            "dotnet"
+          ],
+          "intent": "Heuristic test coverage map: identifies which production types have corresponding test classes. Matches by naming convention (e.g., OrderService → OrderServiceTests). Not runtime coverage —…",
+          "origin": "manual"
+        },
+        "get_type_hierarchy": {
+          "tags": [
+            "csharp",
+            "dotnet",
+            "navigation"
+          ],
+          "intent": "Get the full inheritance chain, interfaces, and derived types for a type. For interfaces, derived types include both derived interfaces and implementing types.",
+          "origin": "manual"
+        }
+      }
     },
     {
       "name": "plugin:dotnet-msbuild:binlog",
@@ -1380,13 +1776,13 @@
     },
     {
       "name": "ai-raccoon",
-      "status": "unknown",
+      "status": "ok",
       "tools": {
         "memory_write": {
           "tags": [
             "write"
           ],
-          "intent": "Persist a durable, project-scoped fact with its source path \u2014 one fact per entry, never raw chatter.",
+          "intent": "Persist a durable, project-scoped fact with its source path — one fact per entry, never raw chatter.",
           "origin": "catalog"
         },
         "memory_search": {
@@ -1415,7 +1811,7 @@
           "tags": [
             "write"
           ],
-          "intent": "Promote a durable, cross-project entry to the shared tier \u2014 curated and never swept.",
+          "intent": "Promote a durable, cross-project entry to the shared tier — curated and never swept.",
           "origin": "catalog"
         },
         "memory_delete": {
@@ -1547,7 +1943,7 @@
           "tags": [
             "read"
           ],
-          "intent": "Lists the propose tier \u2014 candidates waiting for promotion review, ranked by score",
+          "intent": "Lists the propose tier — candidates waiting for promotion review, ranked by score",
           "origin": "manual"
         },
         "memory_promotion_discard": {
@@ -1585,6 +1981,43 @@
             "write"
           ],
           "intent": "Record a human usefulness grade (1-5) for a prior retrieval result.",
+          "origin": "manual"
+        },
+        "code_get": {
+          "tags": [
+            "read",
+            "semantic"
+          ],
+          "intent": "Reads one code chunk's full source by its content hash, as returned by memory_search kind=code/both. Mirrors memory_get. An unknown hash is refused as unknown-hash.",
+          "origin": "manual"
+        },
+        "memory_get": {
+          "tags": [
+            "read",
+            "semantic"
+          ],
+          "intent": "Reads one entry's full content by its content hash, as returned by memory_write or memory_search. An unknown hash is refused as unknown-hash.",
+          "origin": "manual"
+        },
+        "memory_performance": {
+          "tags": [
+            "diagnostic"
+          ],
+          "intent": "Reports this project's self-instrumentation: one series per tool on the server's tool inventory, plus one series per memory_search phase (search.fts, search.vector, search.fusion, search.affinity…",
+          "origin": "manual"
+        },
+        "project_id_get": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Returns the project id registered under an exact, case-sensitive name, as stored. Call this before project_id_token_get. No match refuses with project-not-found (then mint one with…",
+          "origin": "manual"
+        },
+        "project_id_token_get": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Call project_id_get first; mint only when it finds nothing. Mints a new project id: a guidv7, registered so it is a real project from this call on. Call this once per project and keep the returned…",
           "origin": "manual"
         }
       }
@@ -1643,13 +2076,13 @@
     },
     {
       "name": "semantica",
-      "status": "unknown",
+      "status": "ok",
       "tools": {
         "get_graph_summary": {
           "tags": [
             "read"
           ],
-          "intent": "Orientation entry point: graph statistics, entity/relation counts, domain overview \u2014 before any specific query.",
+          "intent": "Orientation entry point: graph statistics, entity/relation counts, domain overview — before any specific query.",
           "origin": "catalog"
         },
         "extract_entities": {
@@ -1657,7 +2090,7 @@
             "write",
             "search"
           ],
-          "intent": "Named entity extraction from arbitrary text \u2014 feed in a document, conversation excerpt, or design spec and get structured entities back.",
+          "intent": "Named entity extraction from arbitrary text — feed in a document, conversation excerpt, or design spec and get structured entities back.",
           "origin": "catalog"
         },
         "extract_relations": {
@@ -1665,21 +2098,21 @@
             "write",
             "search"
           ],
-          "intent": "Extract triplet relations (subject-predicate-object) from text \u2014 builds the graph's edge structure from unstructured content.",
+          "intent": "Extract triplet relations (subject-predicate-object) from text — builds the graph's edge structure from unstructured content.",
           "origin": "catalog"
         },
         "add_entity": {
           "tags": [
             "write"
           ],
-          "intent": "Manually add a knowledge graph node with properties \u2014 for facts the agent knows but that aren't in text to extract.",
+          "intent": "Manually add a knowledge graph node with properties — for facts already known but not present in text to extract.",
           "origin": "catalog"
         },
         "add_relationship": {
           "tags": [
             "write"
           ],
-          "intent": "Manually add an edge between two existing entities \u2014 link concepts the agent connected through reasoning.",
+          "intent": "Manually add an edge between two existing entities — link concepts connected through reasoning.",
           "origin": "catalog"
         },
         "record_decision": {
@@ -1693,7 +2126,7 @@
           "tags": [
             "search"
           ],
-          "intent": "Search the decision history by keyword, date range, or domain \u2014 'what did we decide about authentication?'",
+          "intent": "Search the decision history by keyword, date range, or domain — 'what did we decide about authentication?'",
           "origin": "catalog"
         },
         "find_precedents": {
@@ -1701,7 +2134,7 @@
             "search",
             "semantic"
           ],
-          "intent": "Semantic precedent lookup \u2014 'has a decision like this been made before?' Returns similar past decisions ranked by relevance.",
+          "intent": "Semantic precedent lookup — 'has a decision like this been made before?' Returns similar past decisions ranked by relevance.",
           "origin": "catalog"
         },
         "get_causal_chain": {
@@ -1709,7 +2142,7 @@
             "navigation",
             "diagnostic"
           ],
-          "intent": "Full causal ancestry of a decision or entity \u2014 trace every 'because' back to root assumptions.",
+          "intent": "Full causal ancestry of a decision or entity — trace every 'because' back to root assumptions.",
           "origin": "catalog"
         },
         "run_reasoning": {
@@ -1717,7 +2150,7 @@
             "run",
             "batch"
           ],
-          "intent": "Forward-chaining IF/THEN rules over the graph \u2014 derive new facts, check consistency, or flag conflicts.",
+          "intent": "Forward-chaining IF/THEN rules over the graph — derive new facts, check consistency, or flag conflicts.",
           "origin": "catalog"
         },
         "export_graph": {
@@ -1726,6 +2159,179 @@
             "files"
           ],
           "intent": "Export the current graph in RDF, JSON, or Parquet format for archival snapshots or audit trails.",
+          "origin": "catalog"
+        },
+        "get_graph_analytics": {
+          "tags": [
+            "read",
+            "semantic"
+          ],
+          "intent": "Compute PageRank centrality and community detection over the knowledge graph.",
+          "origin": "manual"
+        }
+      }
+    },
+    {
+      "name": "claude.ai Exa",
+      "status": "unknown",
+      "url": "https://mcp.exa.ai/mcp",
+      "tools": {}
+    },
+    {
+      "name": "claude.ai Hugging Face",
+      "status": "unknown",
+      "url": "https://huggingface.co/mcp",
+      "tools": {}
+    },
+    {
+      "name": "plugin:context7:context7",
+      "status": "unknown",
+      "url": "https://mcp.context7.com/mcp?client=claude-code-plugin",
+      "tools": {}
+    },
+    {
+      "name": "plugin:figma:figma",
+      "status": "unknown",
+      "url": "https://mcp.figma.com/mcp",
+      "tools": {}
+    },
+    {
+      "name": "plugin:huggingface-skills:huggingface-skills",
+      "status": "unknown",
+      "url": "https://huggingface.co/mcp?login",
+      "tools": {}
+    },
+    {
+      "name": "plugin:imessage:imessage",
+      "status": "ok",
+      "tools": {
+        "reply": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Reply on iMessage. Pass chat_id from the inbound message. Optionally pass files (absolute paths) to attach images or other files.",
+          "origin": "manual"
+        },
+        "chat_messages": {
+          "tags": [
+            "read"
+          ],
+          "intent": "Fetch recent iMessage history as readable conversation threads. Each thread is labelled DM or Group with its participant list, followed by timestamped messages. Omit chat_guid to see all allowlisted…",
+          "origin": "manual"
+        }
+      }
+    },
+    {
+      "name": "plugin:canva:canva",
+      "status": "unauthenticated",
+      "url": "https://mcp.canva.com/mcp",
+      "tools": {}
+    },
+    {
+      "name": "plugin:browser-use:browser-use",
+      "status": "unknown",
+      "tools": {}
+    },
+    {
+      "name": "tinyfish",
+      "status": "unknown",
+      "url": "https://agent.tinyfish.ai/mcp?source=tinyfish_cli&client=claude-code&connect_attempt_id=dc101791-d0eb-4560-ba09-740b8d7867b0",
+      "tools": {}
+    },
+    {
+      "name": "task-graph",
+      "status": "ok",
+      "tools": {
+        "plan_create": {
+          "tags": [
+            "write",
+            "build"
+          ],
+          "intent": "After decomposing a task brief into steps with acceptance criteria, when the plan should become the graph execution lanes dispatch from.",
+          "origin": "catalog"
+        },
+        "plan_replace": {
+          "tags": [
+            "write",
+            "build"
+          ],
+          "intent": "Before execution starts, when review feedback changes the step set — replaces the whole plan under an expected-revision check.",
+          "origin": "catalog"
+        },
+        "plan_get": {
+          "tags": [
+            "read"
+          ],
+          "intent": "First read after a gap or handoff: counts, ready set, blocked steps and the current revision before any mutation.",
+          "origin": "catalog"
+        },
+        "plan_export": {
+          "tags": [
+            "read",
+            "files"
+          ],
+          "intent": "At a review or release boundary, to get the canonical stored plan document, schema URL included, as an artifact.",
+          "origin": "catalog"
+        },
+        "step_get": {
+          "tags": [
+            "read",
+            "navigation"
+          ],
+          "intent": "When one step's instructions, dependencies, blockers or criteria must be seen in full — cheaper than exporting the whole plan.",
+          "origin": "catalog"
+        },
+        "step_start": {
+          "tags": [
+            "write"
+          ],
+          "intent": "Take a ready step just before dispatching a lane so in_progress and started_at are recorded; after a failure this is a retry.",
+          "origin": "catalog"
+        },
+        "step_complete": {
+          "tags": [
+            "write"
+          ],
+          "intent": "When a lane's verification passed: record the evidence and per-criterion results that close the step; force is the only way past failed criteria.",
+          "origin": "catalog"
+        },
+        "step_fail": {
+          "tags": [
+            "write",
+            "diagnostic"
+          ],
+          "intent": "When a lane could not deliver: record the reason and evidence so dependents show blocked instead of silently waiting.",
+          "origin": "catalog"
+        },
+        "step_skip": {
+          "tags": [
+            "write"
+          ],
+          "intent": "When a step is deliberately not done (superseded, descoped): skipped still satisfies readiness, unlike failed.",
+          "origin": "catalog"
+        },
+        "ac_check": {
+          "tags": [
+            "write",
+            "diagnostic"
+          ],
+          "intent": "During verification, per acceptance criterion: record passed or failed with evidence while the step is in progress; completion freezes it.",
+          "origin": "catalog"
+        },
+        "steps_ready": {
+          "tags": [
+            "read",
+            "navigation",
+            "diagnostic"
+          ],
+          "intent": "Before each wave dispatch: the ready frontier, waves packed around file and resource conflicts, and steps blocked by failures.",
+          "origin": "catalog"
+        },
+        "progress_checklist": {
+          "tags": [
+            "read"
+          ],
+          "intent": "For a status report or checkpoint: per-step markers, criterion tallies, next and blocked — the text format is the status section verbatim.",
           "origin": "catalog"
         }
       }

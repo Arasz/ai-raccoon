@@ -203,11 +203,14 @@ def _refusal_line(text: str) -> str:
     return ""
 
 
-def run_cli(argv: List[str]) -> Outcome:
-    """Run a host CLI. A None exit code means it never ran, and the note says why."""
+def run_cli(argv: List[str], cwd: Optional[str] = None) -> Outcome:
+    """Run a host CLI in `cwd` — the project whose servers it lists, never the caller's cwd.
+
+    A None exit code means it never ran, and the note says why.
+    """
     try:
         proc = subprocess.run(list(argv), capture_output=True, text=True,
-                              timeout=TIMEOUT_SECONDS, check=False)
+                              timeout=TIMEOUT_SECONDS, check=False, cwd=cwd or None)
     except FileNotFoundError:
         return None, "", "not installed"
     except subprocess.TimeoutExpired:
@@ -215,6 +218,11 @@ def run_cli(argv: List[str]) -> Outcome:
     except OSError as exc:
         return None, "", f"could not run: {exc}"
     return proc.returncode, proc.stdout, _refusal_line(proc.stderr)
+
+
+def runner_in(cwd: Optional[str]) -> Callable[[List[str]], Outcome]:
+    """`run_cli` bound to a project directory, looked up at call time so tests can patch it."""
+    return lambda argv: run_cli(argv, cwd=cwd)
 
 
 def discover(host: Optional[str] = None,

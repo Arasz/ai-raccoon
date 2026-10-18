@@ -185,9 +185,21 @@ def describe_tool(server: str, name: str, description: str,
         }
     return {
         "tags": auto_tags(name, server, valid_tags),
-        "intent": description or f"TODO: describe what {name} does",
+        "intent": heuristic_intent(name, description),
         "origin": HEURISTIC,
     }
+
+
+# schemas/mcp-tools.schema.json bounds `intent`; a server's own description is often longer.
+INTENT_MIN, INTENT_MAX = 10, 200
+
+
+def heuristic_intent(name: str, description: str) -> str:
+    """A server's description as an intent the schema accepts: one line, cut at a word, or a TODO."""
+    text = " ".join(str(description or "").split())
+    if len(text) > INTENT_MAX:
+        text = text[:INTENT_MAX - 1].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
+    return text if len(text) >= INTENT_MIN else f"TODO: describe what {name} does"
 
 
 # ── Server status: opposite remedies must not share one silence ──────────────

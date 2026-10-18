@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
+# pylint: disable=too-many-lines  # one CLI module per skill; _bootstrap_lib is duplicated by design
 """mcp-index: manage the MCP tool index for ai-badger projects.
 
 Reads whichever host CLI still lists MCP servers (`host_listings.py` owns the chain and its
 measured output shapes) and produces .ai-badger/mcp-tools.json: the mcp catalog's curated tags
 and intents for every tool it describes, name heuristics for the rest, and a per-server
-`status` for the ones that reported no tools at all (ADR-0014 decision 7).
+`status` for the ones that reported no tools at all (ADR-0014 decision 7). `--discover` asks each
+server the listing left unenumerated for its own tools: `server_configs.py` finds its command or
+URL in Claude Code's config files, `mcp_client.py` speaks MCP to it (`tool_discovery.py` runs
+them), `hermes mcp test` covers the rest.
 
 Commands:
   init     — create index from MCP tool list
@@ -38,11 +42,12 @@ YAML_MISSING_HINT = (
     "mcp-index needs PyYAML: pip install pyyaml (it is in engine/requirements.txt)"
 )
 
-# host_listings.py, legacy_yaml_subset.py and tool_descriptions.py sit beside this file in every
-# deployment shape (sync_plugin_skills.py and the scaffold's skill installer both copy a skill's
-# scripts/ whole).
+# host_listings.py, tool_discovery.py (with mcp_client.py and server_configs.py),
+# legacy_yaml_subset.py and tool_descriptions.py sit beside this file in every deployment shape
+# (sync_plugin_skills.py and the scaffold's skill installer both copy a skill's scripts/ whole).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import host_listings as hl  # noqa: E402  pylint: disable=wrong-import-position,import-error
+import tool_discovery as tdisc  # noqa: E402  pylint: disable=wrong-import-position,import-error
 import tool_descriptions as td  # noqa: E402  pylint: disable=wrong-import-position,import-error
 from legacy_yaml_subset import parse_legacy_yaml_subset as _parse_legacy_yaml_subset  # noqa: E402  pylint: disable=wrong-import-position,import-error
 
@@ -202,16 +207,27 @@ def _report_quiet_sources(index: dict[str, Any]) -> None:
 
 # ── MCP tool discovery ──────────────────────────────────────────────────────
 
-def _discover_tools(servers: list[dict[str, Any]]) -> None:
-    """Enrich a names-only listing with `hermes mcp test`, one subprocess per server."""
-    print(f"Asking `hermes mcp test` for the tools of {len(servers)} server(s) — "
-          "one connection each.", file=sys.stderr)
-    for note in hl.enrich_with_hermes_test(servers):
-        print(f"  ({note})", file=sys.stderr)
+DISCOVER_TIMEOUT = tdisc.TIMEOUT
 
 
-def _fetch_mcp_tools(from_json: Optional[str] = None,
-                     host: Optional[str] = None) -> list[dict[str, Any]]:
+def _discover_tools(servers: list[dict[str, Any]], target: str,
+                    timeout: float = DISCOVER_TIMEOUT) -> None:
+    """Ask every unenumerated server for its own tools, then `hermes mcp test` for the rest."""
+    pending = sum(1 for s in servers if not s.get("tools_known", True))
+    if not pending:
+        return
+    print(f"Asking {pending} server(s) for their tools directly — each configured command is "
+          f"run, as `claude mcp list` does ({timeout:g}s each).", file=sys.stderr)
+    lines, unresolved = tdisc.enrich_with_mcp_client(servers, target, Path.home(), timeout)
+    for line in lines:
+        print(f"  {line}", file=sys.stderr)
+    if unresolved:
+        for note in hl.enrich_with_hermes_test(unresolved, run=hl.runner_in(target)):
+            print(f"  ({note})", file=sys.stderr)
+
+
+def _fetch_mcp_tools(from_json: Optional[str] = None, host: Optional[str] = None,
+                     target: Optional[str] = None) -> list[dict[str, Any]]:
     """The servers a host CLI reports, or a refusal naming every source that was asked.
 
     `from_json` takes the JSON *text* of a `hermes mcp list --json` document directly, not a
@@ -230,7 +246,7 @@ def _fetch_mcp_tools(from_json: Optional[str] = None,
                   "key, not a JSON list or scalar.", file=sys.stderr)
             sys.exit(2)
 
-    listing = hl.discover(host)
+    listing = hl.discover(host, run=hl.runner_in(target))
     if not listing.servers:
         tried = "".join(f"\n  - {note}" for note in listing.notes)
         print(f"ERROR: no host CLI listed any MCP server.{tried}\n"
@@ -450,11 +466,12 @@ def _note_missing_catalog(catalog: dict[str, dict[str, dict[str, Any]]]) -> None
 
 
 def cmd_init(target: str, from_json: Optional[str] = None,
-             host: Optional[str] = None, discover: bool = False) -> int:
+             host: Optional[str] = None, discover: bool = False, *,
+             discover_timeout: float = DISCOVER_TIMEOUT) -> int:
     """Create a new index from the current MCP tool list."""
-    servers = _fetch_mcp_tools(from_json, host)
+    servers = _fetch_mcp_tools(from_json, host, target)
     if discover:
-        _discover_tools(servers)
+        _discover_tools(servers, target, discover_timeout)
     catalog = load_catalog(FRAMEWORK_ROOT)
     _note_missing_catalog(catalog)
 
@@ -613,7 +630,8 @@ def _update_source(source: dict[str, Any], server: Optional[dict[str, Any]],
 
 
 def cmd_update(target: str, from_json: Optional[str] = None,
-               host: Optional[str] = None, discover: bool = False) -> int:
+               host: Optional[str] = None, discover: bool = False, *,
+               discover_timeout: float = DISCOVER_TIMEOUT) -> int:
     """Update index: add new tools, mark removed ones, restate status, preserve manual tags."""
     index, err = _read_index_safe(target)
     if err:
@@ -621,17 +639,19 @@ def cmd_update(target: str, from_json: Optional[str] = None,
         return 1
     if index is None:
         print("No existing index. Running init instead.", file=sys.stderr)
-        return cmd_init(target, from_json, host, discover)
+        return cmd_init(target, from_json, host, discover, discover_timeout=discover_timeout)
 
-    servers = _fetch_mcp_tools(from_json, host)
+    servers = _fetch_mcp_tools(from_json, host, target)
+    # A listing with no tool detail of its own cannot tell "this server is gone" from "this is a
+    # different host's listing", and calling it gone marks every tool in the source removed
+    # (issue #188). Decided before --discover: enumerating a named server proves its tools, not
+    # that the listing names every server.
+    absence_is_evidence = hl.carries_tool_detail(servers)
     if discover:
-        _discover_tools(servers)
+        _discover_tools(servers, target, discover_timeout)
     catalog = load_catalog(FRAMEWORK_ROOT)
     _note_missing_catalog(catalog)
     listed = {s.get("name", ""): s for s in servers}
-    # A listing with no tool detail cannot tell "this server is gone" from "this is a different
-    # host's listing", and calling it gone marks every tool in the source removed (issue #188).
-    absence_is_evidence = hl.carries_tool_detail(servers)
 
     changes = 0
     redescribed: list[str] = []
@@ -897,14 +917,14 @@ def _parse_target_and_remaining(
 
 
 def _extract_clean_args(args: list[str]) -> list[str]:
-    """Remove --target and its value from args list."""
+    """Remove --target / --discover-timeout and their values from args list."""
     clean: list[str] = []
     skip = False
     for a in args:
         if skip:
             skip = False
             continue
-        if a == "--target":
+        if a in ("--target", "--discover-timeout"):
             skip = True
             continue
         clean.append(a)
@@ -925,6 +945,17 @@ def _requested_host(args: list[str]) -> tuple[Optional[str], bool]:
     if host is None:
         return None, "--host" not in args
     return host, host in hl.HOSTS
+
+
+def _discover_timeout(args: list[str]) -> Optional[float]:
+    """Seconds per server for `--discover`; the default when absent, None when unusable."""
+    if "--discover-timeout" not in args:
+        return DISCOVER_TIMEOUT
+    try:
+        value = float(_flag_value(args, "--discover-timeout") or "")
+    except ValueError:
+        return None
+    return value if value > 0 else None
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -949,8 +980,14 @@ def main(argv: Optional[list[str]] = None) -> int:
                   f"{', '.join(sorted(hl.HOSTS))}.", file=sys.stderr)
             return 2
         from_json = _flag_value(remaining, "--from-json")
+        timeout = _discover_timeout(remaining)
+        if timeout is None:
+            print("ERROR: --discover-timeout takes a positive number of seconds.",
+                  file=sys.stderr)
+            return 2
         run = cmd_init if cmd == "init" else cmd_update
-        return run(target, from_json, host, "--discover" in remaining)
+        return run(target, from_json, host, "--discover" in remaining,
+                   discover_timeout=timeout)
 
     if cmd == "validate":
         return cmd_validate(target)
