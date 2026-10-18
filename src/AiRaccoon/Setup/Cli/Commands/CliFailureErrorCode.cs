@@ -31,6 +31,7 @@ internal static class CliFailureErrorCode
             HttpRequestException { StatusCode: not null } => ErrorCode.Internal.UnusableResponse,
             BankKeyMismatchException { LegacyDerivation: true } => ErrorCode.Key.LegacyKeyDerivation,
             BankKeyMismatchException => ErrorCode.Key.WrongKey,
+            BankKeyMissingException => ErrorCode.Key.Unresolved,
             BankCorruptedException => ErrorCode.Bank.Corrupted,
             SqliteException sqlite => sqlite.SqliteErrorCode switch
             {

@@ -287,6 +287,48 @@ public sealed class SqliteConnectionFactoryEncryptionTests : IDisposable
         ex.SqliteErrorCode.ShouldBe(26);
     }
 
+    /// <summary>An encrypted bank (its verifier exists) opened with no key resolved at all is a missing key, not corruption.</summary>
+    [RetryFact]
+    public async Task OpenBankAsync_EncryptedBankWithNoKeyResolved_ThrowsBankKeyMissing_NamingTheEnvVariable()
+    {
+        await CreateEncryptedBankAsync("correct-key");
+        var keyless = Factory(passphrase: null);
+
+        var ex = await Should.ThrowAsync<BankKeyMissingException>(async () =>
+        {
+            await using var conn = await keyless.OpenBankAsync(TestContext.Current.CancellationToken);
+        });
+
+        ex.Message.ShouldContain("AIRACCOON_DB_PASSPHRASE");
+        ex.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
+        CliFailureErrorCode.For(ex).ShouldBe(ErrorCode.Key.Unresolved);
+    }
+
+    /// <summary>Negative control: without the verifier the keyless open cannot tell encrypted from corrupt, so the raw signal stays.</summary>
+    [RetryFact]
+    public async Task OpenBankAsync_EncryptedBankWithNoKeyResolvedAndNoVerifier_ThrowsRawSqliteException()
+    {
+        await CreateEncryptedBankAsync("correct-key");
+        File.Delete(KeyCheckSidecar.PathFor(Factory().BankPath));
+        var keyless = Factory(passphrase: null);
+
+        var ex = await Should.ThrowAsync<SqliteException>(async () =>
+        {
+            await using var conn = await keyless.OpenBankAsync(TestContext.Current.CancellationToken);
+        });
+
+        ex.SqliteErrorCode.ShouldBe(26);
+    }
+
+    private async Task CreateEncryptedBankAsync(string passphrase)
+    {
+        var factory = Factory(passphrase);
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)";
+        await cmd.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+    }
+
     /// <summary>AC2: the right key against a genuinely corrupted file — the verifier proves the key is
     /// right, so this is <see cref="BankCorruptedException" /> (32), not a wrong-key verdict.</summary>
     [RetryFact]

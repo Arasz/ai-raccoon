@@ -308,7 +308,7 @@ public sealed partial class SqliteConnectionFactory(
     /// </summary>
     private Exception? TryDiagnoseWithKeyCheck(string? key, SqliteException openFailure)
     {
-        if (key is null || openFailure.SqliteErrorCode != NotADatabaseErrorCode)
+        if (openFailure.SqliteErrorCode != NotADatabaseErrorCode)
         {
             return null;
         }
@@ -326,6 +326,14 @@ public sealed partial class SqliteConnectionFactory(
         if (record is null)
         {
             return null;
+        }
+
+        if (key is null)
+        {
+            // A verifier exists, so the bank was opened under a key once; no key was resolved this time.
+            return new BankKeyMissingException(
+                $"the bank at '{BankPath}' is encrypted, but no encryption key was resolved — set AIRACCOON_DB_PASSPHRASE, or configure the key source this bank uses",
+                openFailure);
         }
 
         if (!KeyCheckSidecar.Verifies(record, key))
