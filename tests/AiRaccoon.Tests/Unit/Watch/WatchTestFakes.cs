@@ -369,6 +369,9 @@ internal sealed class FakeWatchMemoryStore : FakeMemoryStore
 
     public List<(string ProjectId, string Path)> DeletedPaths { get; } = [];
 
+    /// <summary>Paths the next replace skips with the given reason — no ingest, no fingerprint, like the real store.</summary>
+    public Dictionary<string, SkipReason> SkipReasons { get; } = new(IngestPath.PathComparer);
+
     /// <summary>When set, IngestFileAsync throws it (digest failure injection).</summary>
     public Exception? IngestError { get; set; }
 
@@ -419,6 +422,11 @@ internal sealed class FakeWatchMemoryStore : FakeMemoryStore
         }
 
         await DeleteSourcePathAsync(projectId, path, cancellationToken);
+        if (SkipReasons.TryGetValue(path, out var reason))
+        {
+            return new ReplaceResult(true, CorpusKind.Neither, reason);
+        }
+
         await IngestFileAsync(projectId, path, null, cancellationToken);
         WriteFingerprint?.Invoke(projectId, path, fileHash);
         return new ReplaceResult(true, IngestedCorpus);

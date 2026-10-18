@@ -59,7 +59,7 @@ config channel (see [Command-line options](#command-line-options)).
 | `memory_ingest_directory`      | `projectId`, `path`, `context?`                                                                                                                             | `{scanned: n}`                                                                                     |
 | `memory_embed_pending`         | `projectId`, `limit?`                                                                                                                                       | `{processed, pending}`                                                                             |
 | `memory_watch_add`             | `projectId`, `path`                                                                                                                                         | `{projectId, path, pruned: [], absorbedBy?}`                                                       |
-| `memory_watch_status`          | `projectId`                                                                                                                                                 | `{watches: [{projectId, path, state, lastError?, lastSync?}]}`                                     |
+| `memory_watch_status`          | `projectId`                                                                                                                                                 | `{watches: [{projectId, path, state, lastError?, lastSync?, skippedCount, skipped: [{path, reason}]}]}` |
 | `memory_watch_remove`          | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
 | `memory_workspace_begin`       | `projectId`, `agentId?`, `name?`                                                                                                                            | `{workspaceId, context}`                                                                           |
 | `memory_workspace_status`      | `projectId`, `workspaceId`                                                                                                                                  | `{entries, count, agentId, name}`                                                                  |
@@ -334,8 +334,11 @@ config channel (see [Command-line options](#command-line-options)).
   row + fingerprints removed, listed in the result's `pruned`) — already-ingested entries are
   kept, and the broader watch's catch-up scan re-covers them (idempotent, hash-skip cheap).
   `memory_watch_status` lists every registered watch with live state
-  (`scanning`/`healthy`/`retrying`/`stopped`), last error and last sync; it is available in
-  every access tier. `memory_watch_remove` stops and unregisters; a non-existent watch is a
+  (`scanning`/`healthy`/`retrying`/`stopped`), last error and last sync, and the files its
+  digests could not index: `skippedCount` is exact, `skipped` lists the first 20 by path with a
+  reason (`unsupported-type`, `binary`, `unparseable`). A skipped file is never fingerprinted, so
+  every catch-up retries it, and it leaves the list once it indexes, is deleted, or is excluded. It
+  is available in every access tier. `memory_watch_remove` stops and unregisters; a non-existent watch is a
   no-op. Registration failures surface as `watching-disabled:` / `path-outside-scope:` /
   `path-not-found:` / `watch-overlap:` tool errors; watch failures never fail the server.
 - **Healing a missed change:** a watch's catch-up scan re-queues a file whose mtime or size no

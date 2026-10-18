@@ -81,7 +81,7 @@ public static class TestData
         var embedder = CreateEntryEmbedder(embeddings, modelMigrationLease ?? ModelMigrationLease, timeProvider, new VecDimensionReconciler());
         var matcher = new FileTypeMatcher(
             [new MarkdownFileTypeHandler(markdownChunker), new PlainTextFileTypeHandler(new PlainTextChunker(new O200kTokenizer().CountTokens)),
-             new JsonFileTypeHandler(jsonChunker)]);
+             new JsonFileTypeHandler(jsonChunker), new NotebookFileTypeHandler(new NotebookChunker(markdownChunker))]);
         // This helper's own documented contract is "omitted, the store behaves as a memory-only
         // bank" — a fixed no-op pump, never a caller override; a test that needs a real one
         // constructs FileIngestor/SqliteMemoryStore directly instead of through this convenience.
