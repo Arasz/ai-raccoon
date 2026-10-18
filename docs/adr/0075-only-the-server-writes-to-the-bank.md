@@ -481,3 +481,26 @@ bank directly are the three allowlisted ones, and that is now a checked fact rat
 `LazyServerSettingsStoreTests` / `AppRunnerSettingsRoutingTests` / `ServerSettingsStoreTests`
 (CLI-graph routing, same shape as the maintenance-stats case). `dotnet build` clean; `Speed=Fast`
 2633 passed / 1 skipped / 0 failed.
+
+## Amendment 2026-10-18 — `watch add`, `watch remove` and `watch status` register watches through the server
+
+Watch registrations used to be creatable only by an agent calling `memory_watch_add`, so a machine
+could not be set up from a terminal alone. The CLI may now mutate watch registrations, and it does so
+the way this ADR requires: **through the server's watch service, never the bank.**
+
+- New token-gated route `/watch` (`WatchProtocol`/`WatchEndpoint`): `POST` adds, `DELETE` removes,
+  `GET` reports live status. Each handler runs the same `IToolGate.RequireAsync` the MCP tools run —
+  canonicalise and fold the id, enforce the access mode, refuse a retired or unregistered id — under
+  the tools' own names (`Write` for add/remove, `Read` for status), then calls `IWatchService`, so
+  overlap rejection, pruning and in-process pipeline registration are the tools' exactly. `GET`
+  without a project id lists every project holding a registration, unconditionally like `watch registered`.
+- A refusal answers **422** with `{kind, message, coveringPath}`; `kind` is the MCP refusal prefix
+  from `ToolRefusals.RefusalPrefixes` (`watching-disabled`, `path-outside-scope`, `path-not-found`,
+  `watch-overlap`, `project-not-registered`, …), one table for both surfaces. The CLI client
+  (`IWatchControl`, implemented by `ServerSettingsStore` and `LazyServerSettingsStore`, bound in
+  `CliServerBinding`) rethrows it as `WatchRefusedException` with the CLI fix appended
+  (`settings watch enable`, `settings ingest scope add`, `project id register`), and
+  `CliFailureErrorCode` maps it to an existing exit code: `ProjectUnknown` (18) for an unusable id,
+  `InvalidValue` (10) for the watch refusals, `MigrationRefused` (59) for an open migration.
+- The `encryption` graph (`CliWriteOptOuts`) never binds the server store, so `CommandsRegistration`
+  registers `DirectGraphWatchControl`, which refuses; the watch verbs are never dispatched there.

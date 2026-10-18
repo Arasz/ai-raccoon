@@ -501,21 +501,30 @@ internal static class CliCommandTree
             ScopeCommand("Scope allowlist (absolute paths, covers dir + subdirs) — the paths this server may read")
         };
 
-    /// <summary>The watches table is data, not configuration, so listing registrations stays top level.</summary>
+    /// <summary>The watches table is data, not configuration, so registering and listing watches stays top level.</summary>
     private static Command WatchCommand() =>
-        new("watch", "Registered watches. Watching is CONFIGURED under 'settings watch'; registrations are created by agents via the memory_watch_add MCP tool.")
+        new("watch",
+            "Registered watches: add, remove, live status and the raw registration list. Watching is CONFIGURED under 'settings watch' (enable) and 'settings ingest scope' (allowlist); 'watch add' and the memory_watch_add MCP tool register through the same server-side checks.")
         {
+            new Command("add",
+                    "Registers a file or directory to be mirrored into the project's memory (same checks and result as memory_watch_add). Watching must be enabled and the path inside the ingest scope; a path inside an existing watch is refused, a broader one prunes the watches it contains.")
+                { new Argument<string>("project-id") { HelpName = "project-id" }, new Argument<string>("path") { HelpName = "path" } },
+            new Command("remove", "Stops watching a path and removes its registration (same as memory_watch_remove); removing a path that is not watched is a no-op.")
+                { new Argument<string>("project-id") { HelpName = "project-id" }, new Argument<string>("path") { HelpName = "path" } },
+            new Command("status",
+                    "Shows each registered watch's live state (scanning/healthy/retrying/stopped), last sync and last error (same as memory_watch_status); without a project id, every project's watches.")
+                { new Argument<string?>("project-id") { HelpName = "project-id", Arity = ArgumentArity.ZeroOrOne } },
             new Command("registered",
-                    "Lists every REGISTERED watch (project, path, registered at, last change) from the watches table. Registrations are created via memory_watch_add; live state (scanning/healthy/…) is reported by memory_watch_status, not the CLI.")
+                    "Lists every REGISTERED watch (project, path, registered at, last change) from the watches table. Use 'watch status' for live state (scanning/healthy/…).")
                 { new Argument<string?>("project-id") { HelpName = "project-id", Arity = ArgumentArity.ZeroOrOne } }
         };
 
     private static Command SettingsWatchCommand()
     {
         var watch = new Command("watch",
-            "Watch configuration: enable/disable and concurrency per target. This node CONFIGURES watching — it does not register watches; use 'watch registered' to list registrations.")
+            "Watch configuration: enable/disable and concurrency per target. This node CONFIGURES watching — it does not register watches; use 'watch add' to register and 'watch registered' to list registrations.")
         {
-            new Command("enable", "Enables or disables watching for a target (configuration only — does not register a watch; use memory_watch_add to register)")
+            new Command("enable", "Enables or disables watching for a target (configuration only — does not register a watch; use 'watch add' or memory_watch_add to register)")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },
             new Command("disable", "Alias for enable … false")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },
