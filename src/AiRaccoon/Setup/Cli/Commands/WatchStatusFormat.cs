@@ -1,4 +1,5 @@
 using System.Globalization;
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 
 namespace AiRaccoon.Setup.Cli.Commands;
@@ -15,6 +16,22 @@ internal static class WatchStatusFormat
         if (!string.IsNullOrEmpty(status.LastError))
         {
             yield return $"lastError: {status.LastError}";
+        }
+
+        if (status.SkippedCount == 0)
+        {
+            yield break;
+        }
+
+        yield return $"skipped: {status.SkippedCount}";
+        foreach (var file in status.Skipped)
+        {
+            yield return $"  {file.Path} ({file.Reason.ToWireName()})";
+        }
+
+        if (status.SkippedCount > status.Skipped.Count)
+        {
+            yield return $"  … {status.SkippedCount - status.Skipped.Count} more";
         }
     }
 

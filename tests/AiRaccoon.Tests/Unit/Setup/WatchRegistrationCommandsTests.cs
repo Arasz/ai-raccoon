@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup.Cli.Commands;
@@ -81,6 +82,27 @@ public sealed class WatchRegistrationCommandsTests
         Lines(stdout).ShouldBe([
             $"project: {Project}", "path: /repo", "state: healthy", "lastSync: 2026-10-17T08:30:00Z", "",
             $"project: {Project}", "path: /docs", "state: retrying", "lastSync: never", "lastError: disk gone"
+        ]);
+    }
+
+    [Fact]
+    public async Task Status_ListsSkippedFilesWithReasons_AndCountsTheOnesBeyondTheList()
+    {
+        var control = new FakeWatchControl
+        {
+            Statuses =
+            [
+                new WatchStatus(Project, "/nb", WatchState.Healthy, null, null, 3,
+                    [new SkippedFile("/nb/a.bin", SkipReason.Binary), new SkippedFile("/nb/b.xyz", SkipReason.UnsupportedType)])
+            ]
+        };
+
+        var (exit, stdout, _) = await Run(["watch", "status", Project], control);
+
+        exit.ShouldBe(0);
+        Lines(stdout).ShouldBe([
+            $"project: {Project}", "path: /nb", "state: healthy", "lastSync: never",
+            "skipped: 3", "  /nb/a.bin (binary)", "  /nb/b.xyz (unsupported-type)", "  … 1 more"
         ]);
     }
 
