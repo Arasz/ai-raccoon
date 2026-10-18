@@ -7,6 +7,7 @@ namespace AiRaccoon.Core.Memory;
 ///     whether anything changed, and which corpus it wrote new rows to.
 ///     <see cref="CorpusKind.Neither" /> covers every case nothing was inserted — a hash-skip
 ///     (<see cref="Replaced" /> false), an ignored/hidden path, or a routeless extension — so a
-///     caller can gate a corpus-specific action on <see cref="Corpus" /> alone.
+///     caller can gate a corpus-specific action on <see cref="Corpus" /> alone. <see cref="Skipped" />
+///     names why no corpus could take the file; a skipped file is never fingerprinted.
 /// </summary>
-public readonly record struct ReplaceResult(bool Replaced, CorpusKind Corpus);
+public readonly record struct ReplaceResult(bool Replaced, CorpusKind Corpus, SkipReason? Skipped = null);
