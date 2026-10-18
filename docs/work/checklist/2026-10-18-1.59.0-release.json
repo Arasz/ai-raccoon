@@ -40,7 +40,7 @@
     },
     {
       "item": "server-lifecycle",
-      "expected-result": "(see run file)",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
       "command": "ai-raccoon --data-root lane-a/lc serve --port 0 --idle-timeout 0; then serve --restart --port 61107; lsof on 61107 and 7721 before/after",
       "evidence": "log: 'asking the server on port 61107 to stop (pid 98215...)' / 'the server on port 61107 (pid 98215) stopped and the port is free'; new listener pid 99325 on 61107, old pid 98215 gone; 7721 listener pid 92397 unchanged before and after; /observability pid 99325",
       "observed-result": "port 0 bound 61107; restart cycled the server (98215->99325), never touched 7721",
@@ -50,7 +50,7 @@
     },
     {
       "item": "memory-write-stores-and-reports-truthfully",
-      "expected-result": "(see run file)",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
       "command": "mcp.py JSON-RPC to scratch server: memory_write astro, finance, and '[IMPORTANT: Background process 4412 finished with exit code 0\\n]'; sqlite3 -readonly",
       "evidence": "stored:true with hashes 93978abc.. / dc85a649..; noise write: stored:false, hash '', reason \"rejected by noise policy 'HermesBackgroundProcessLog'\"; entries count 2, 0 rows containing 'Background process 4412' in entries, 1 row in noise_entries",
       "observed-result": "truthful report; rejected write has no hash",
@@ -60,7 +60,7 @@
     },
     {
       "item": "memory-search-hybrid-retrieval",
-      "expected-result": "(see run file)",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
       "command": "memory_search kind=memory minRelativeScore=0 q='ancient sailors gadget measuring altitude heavenly bodies' (no literal overlap) default/vectorWeight=0/ftsWeight=0; control 'how do I bake sourdough...'",
       "evidence": "hybrid: astro.md rank1 legs [vector 1], cosine 0.792, finance cosine 0.673; vectorWeight=0 -> n=0 (no lexical overlap); ftsWeight=0 -> same vector order. Overlapping query ('centuries-old device...a...') gave legs fts+vector rank1. Control sourdough cosines 0.678/0.641 under 0.79 floor",
       "observed-result": "written entry returned via vector leg; fusion works; control query not a strong hit",
@@ -70,7 +70,7 @@
     },
     {
       "item": "memory-get-returns-content-by-hash",
-      "expected-result": "(see run file)",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
       "command": "memory_get hash of astro note; hash 0*64; same hash under another projectId",
       "evidence": "known hash returns full value 'The astrolabe sits on the brass shelf...'; unknown: isError 'unknown-hash: No entry with hash 0000... in project ...'; other project's hash also unknown-hash",
       "observed-result": "refuses rather than empty",
@@ -80,7 +80,7 @@
     },
     {
       "item": "source-path-anchor-resolves-its-chunk",
-      "expected-result": "(see run file)",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
       "command": "memory_write 2026-outage.md section=decision and section=rollback, decoy 2025-outage.md section=decision, 12 filler notes; memory_search default limit for '2026-outage.md#decision','#rollback','#no-such-section'",
       "evidence": "#decision -> first result 2026-outage.md chunk 0/2 'Decision: we chose t', decoy 2025 ranked 2nd; #rollback -> first result 2026-outage.md chunk 1/2 'Rollback: we reverte'; #no-such-section -> 8 mixed results, no clean single hit",
       "observed-result": "exact chunk leads the default 8-result window; decoy not ahead of it (decoy still present lower in the window, anchor leads rather than filters)",
@@ -90,7 +90,7 @@
     },
     {
       "item": "keyword-search-across-a-chunk-boundary",
-      "expected-result": "(see run file)",
+      "expected-result": "memory_write a note made of\"The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.\" forty-five times, space-joined (ten fit in one chunk since 1.56), then \" Invoice reference vk83jq was filed with the parish council.\" Premise: sqlite shows more than one entries row for the note's path. memory_search {query: \"vk83jq\", kind: memory, minRelativeScore: 0} returns the note with an `fts` leg in evidenceByHash, and one of its rows holds `vk83jq` whole (`instr(value,'vk83jq')`). A vector-only hit does not count: the vector leg finds this note on a broken build too. Then write a note holding one whitespace-free term of about 2,500 characters (40 concatenated SHA-256 hex digests); premise: no row holds the whole term; searching the whole term returns that note with an `fts` leg. A build without ADR-0120 returns both notes by the vector leg only, and no row holds vk83jq (ADR-0120)",
       "command": "memory_write fete note (45 sentences + ' Invoice reference vk83jq...') and 2560-char sha256 term; sqlite3 premise; memory_search vk83jq kind=memory minRelativeScore=0 default and vectorWeight=0; whole term",
       "evidence": "sqlite: /notes/fete.md chunks 0 (4611 chars, instr 0) and 1 (533 chars, instr vk83jq=493); 'vk83jq' -> fete.md chunk 1/2 legs [fts,vector]; vw0 -> fete.md [fts]; longterm.md rows 1710+850 chars (no row holds whole term), whole-term search -> longterm.md legs [fts,vector], vw0 [fts]; control vk83jr vw0 -> n=0",
       "observed-result": "fts leg finds the id in the row that holds it whole",
@@ -100,7 +100,7 @@
     },
     {
       "item": "note-opening-chunk-reports-index-zero",
-      "expected-result": "(see run file)",
+      "expected-result": "memory_write a note with sourceFile /notes/minutes.md made of 62 paragraphs separated by blank lines (\"Paragraph N of the parish minutes records the treasurer's report on hall repairs, roof slates and the organ fund.\"), the first opening with \"Opening marker zq71\". Premise: sqlite shows more than one row for the note's path. memory_search {query: \"zq71\", kind: memory, minRelativeScore: 0} returns it with chunkIndex 0, and sqlite gives chunk_index 0 for the row where `instr(value,'zq71') > 0`. A build without ADR-0122 puts the opening at the last index (1 of 2 on 1.56.1) (ADR-0122)",
       "command": "memory_write /notes/minutes.md 62 paragraphs, first 'Opening marker zq71.'; sqlite3; memory_search zq71",
       "evidence": "sqlite: minutes.md chunk_index 0 length 4304 instr(zq71)=16; chunk 1 length 3015 instr 0; search zq71 -> minutes.md chunkIndex 0, totalChunks 2, legs [fts,vector]; vw0 [fts]",
       "observed-result": "opening chunk reports index 0",
@@ -140,7 +140,7 @@
     },
     {
       "item": "long-query-keyword-terms-capped",
-      "expected-result": "(see run file)",
+      "expected-result": "Copy the live bank with VACUUM INTO (clear its watches) and serve the copy. A memory_search for the first ~7,000 characters of CLAUDE.md, and one for ~7,000 characters of stopwords plus two content words, each return in seconds at vectorWeight 0, and data.warning says keyword matching is capped at the first 64 distinct words, with no clause saying it still sees the query in full. On a fresh bank with vectorWeight 0 and minRelativeScore 0, a marker word placed after 70 distinct filler words gets no hit, and the same word placed first gets an `fts` leg. Repeats do not use up the cap: the marker after 80 repeats of two words is still found. A 6-token query keeps the stopword `the`, and a 71-token query drops it. Negative control: install the release before the cap into a scratch --tool-path and run the same copy and queries. There the paste takes tens of seconds, the stopword run times out, and both the trailing marker and the 71-token `the` are found (ADR-0126)",
       "command": "VACUUM INTO copy (big/, watches deleted) served port 57658; i7.py pastes; i8.py cap probes on fresh bank; negative control: 1.56.0 in lane-a/tool-1560 on its own copy and fresh bank",
       "evidence": "1.59.0: CLAUDE.md[:7000] 12.0s cold/1.2s warm, stopword paste 3.8s/0.5s; warning 'Keyword (FTS) matching is capped too: it searches only the first 64 distinct words of a query this long' (no still-sees-full clause). Probes: marker after 70 fillers -> []; first -> fts leg; after 80 repeats of 2 words -> fts hit; 6-token query with 'the' hits the 'the' notes (fete/minutes), 71-token query does not. 1.56.0: stopword paste 62.0s (vs 0.5s), claude.md paste 15.7s, marker after 70 -> found. 1.56.0 71-token 'the' control inconclusive (fresh bank lacked 'the'-only notes)",
       "observed-result": "cap works; old build slow and finds trailing marker",
@@ -156,17 +156,17 @@
       "observed-result": "Status lists each registration with state/lastSync; removal drops it from both status and the watches table.",
       "status": "pass",
       "accepted": true,
-      "acceptance-reason": ""
+      "acceptance-reason": "Status, MCP and the watches table agree after each add and remove; negative control: empty before the adds and after removing all."
     },
     {
       "item": "watch-catch-up-heals-a-missed-change",
-      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "expected-result": "Watch a scratch directory (`settings ingest scope add`, `settings watch enable`, memory_watch_add) holding x.md, w.md and y.md, plus node_modules/pkg/index.md and .git/notes.md, each with a term found nowhere else. Wait for three watch_files rows, `chmod 000` node_modules, wait 2 s, then edit y.md so watches.last_change_ts moves past x.md's watch_files.updated_at. Read both values while the server runs, because a stopped WAL bank will not open read-only. Stop the server. Replace one word of x.md with a new term of the same byte length and `touch -t $(date -r <t> +%Y%m%d%H%M.%S)` it, where t is between x.md's updated_at and last_change_ts. Rewrite w.md at a different size with a new term, and touch it to before its own updated_at. Restart on the same data root. Within seconds memory_search finds both new terms, watch_files shows new updated_at and size for x.md and w.md, and memory_watch_status reads Healthy. Neither the node_modules term nor the .git term is ever found. Premise: before the restart, updated_at(x.md) <= mtime(x.md) <= last_change_ts. A build without ADR-0121 finds neither new term, because it re-queues only files with mtime > last_change_ts. The 5-minute heal pass (WatchHostedService.HealInterval, event 322 at Debug) is optional: it needs a server left up for over 5 minutes (ADR-0121)",
       "command": "dr2 server; scratch wc/ with x.md,w.md,y.md,node_modules/pkg/index.md (chmod 000), .git/notes.md; 3 watch_files rows; edit y.md; read values; kill; rewrite x.md same length (xylophoneaaa->xylophonebbb) utime 1792312230; rewrite w.md 18->22 bytes utime 1792312200; restart same root; sleep 14; sqlite3 + memory_search",
       "evidence": "premise: x.md updated_at 1792312226 <= mtime 1792312230 <= last_change_ts 1792312249; w.md mtime 200 < updated_at 226. After restart: watch_files x.md updated_at 1792312270 size 18 hash c25d0c3bcb; w.md 1792312270 size 22 hash 7244eac990; independent sha256(path+bytes) x=c25d0c3bcbd2 w=7244eac99088 match. search: xylophonebbb->wc/x.md (fts), walrusnewterm777->wc/w.md (fts), xylophoneaaa [], walrusold111 [], nmzzzterm [], gitzzzterm [], yakyakyak->y.md. status Healthy, skippedCount 0.",
-      "observed-result": "Both missed edits healed after restart; old terms gone; node_modules (unreadable) and .git terms never found; y.md control untouched (updated_at 1792312249).",
+      "observed-result": "Both missed edits healed after restart; old terms gone; the .git term never found; the node_modules term was also absent, but its decoy was unreadable, so that leg could not fail; y.md control untouched (updated_at 1792312249).",
       "status": "pass",
       "accepted": true,
-      "acceptance-reason": ""
+      "acceptance-reason": "Premise read and held; both new terms found, both old terms gone, row hashes equal an independent sha256; y.md is the unchanged control; the readable .git decoy was never found. The node_modules leg proves nothing in this run: the decoy was chmod 000, unreadable whether excluded or not (the flaw the 1.57.6 run recorded against 1.57.2). The template step is fixed to keep the decoy readable."
     },
     {
       "item": "promotion-queue-state",
@@ -200,7 +200,7 @@
     },
     {
       "item": "watch-cli-add-remove-status",
-      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "expected-result": "`ai-raccoon watch add <projectId> <path>` registers the path, or reports absorbedBy (already covered) or pruned (narrower watches it replaces); `watch status` lists it; CLI status, MCP memory_watch_status and the watches table agree; `watch remove` drops it from all three.",
       "command": "ai-raccoon --data-root <lane>/drN [--port <p>] watch add/status/remove (port of the lane server); MCP memory_watch_status; sqlite3 -readonly 'select project_id,path from watches'",
       "evidence": "fresh add wd2/other -> 'registered: .../wd2/other' (no absorbedBy), status 'state: scanning'; re-add wd2/sub -> 'registered: ... absorbedBy: .../wd2/sub'; broader add wd2 -> 'registered: .../wd2 pruned: .../wd2/sub'; MCP status = {path:.../wd2,state:Scanning}, watches table = same single wd2 row; remove -> 'removed: .../wd2'; final status 'no registered watches', watches count 0.",
       "observed-result": "add, status (CLI == MCP == table), re-add absorbedBy, prune on broader add and remove all behave as specified. Note: 'watch remove' of an already-removed path prints 'removed:' again (a no-op, but the wording does not say so).",
@@ -210,7 +210,7 @@
     },
     {
       "item": "watch-cli-refusals-name-their-fix",
-      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "expected-result": "Each refused `watch add` (watching disabled, path outside the ingest scope, overlap with an existing watch, unregistered project) exits non-zero and names the command that fixes it; an allowed add exits 0.",
       "command": "ai-raccoon --data-root <lane>/drN [--port <p>] watch add <id> <path> for each refusal; then an allowed add",
       "evidence": "watching-disabled: '...Fix: ai-raccoon settings watch enable 33333333-... true' [exit 10]; path-outside-scope: 'Path .../wd3 is outside the ingest scope. Fix: ai-raccoon settings ingest scope add 1111... .../wd3' [exit 10]; watch-overlap: 'Path .../wd2/sub/a.md is already covered by watch .../wd2/sub ... see ai-raccoon watch status 1111...' [exit 10]; project-not-registered: '...Fix: ... or register it with ai-raccoon project id register 2222-...' [exit 18]; allowed add 'registered: .../wd2/sub' [exit 0].",
       "observed-result": "All four refusals non-zero (10,10,10,18) and name the fixing command; allowed add exits 0.",
@@ -220,27 +220,27 @@
     },
     {
       "item": "notebook-cells-indexed-without-outputs",
-      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "expected-result": "A watched .ipynb is indexed as its cell sources with per-cell section labels; outputs, attachments and base64 payloads are not indexed; a ``` line inside a cell is escaped so fences stay balanced; a large notebook is chunked only between cells.",
       "command": "watch wd4/proj containing nb.ipynb (markdown+code cells, ``` line in a code cell, stream output OUTPUTMARKER_kk9921, display_data image/png base64 + OUTFIG_pp4410, attachment png); sqlite3 entries; memory_search with evidenceByHash; big.ipynb with 30 code cells to force chunking",
       "evidence": "entry section 'cell 1 (markdown) | cell 2 (code) | cell 3 (code) | cell 4 (markdown)', body '## cell 1 (markdown) ... ## cell 2 (code)'. count(value like): frobnicate_quux7731 1, zanzibar 1, fence_inside_cell_ww5512 1, tail_marker_rr3308 1, ctrlmd 1 (control), OUTPUTMARKER_kk9921 0, OUTFIG_pp4410 0, 'iVBOR' 0, base64 png prefix 0. search frobnicate_quux7731 -> nb.ipynb legs [fts rank 1]; 'zanzibar gnomon' -> nb.ipynb fts; OUTPUTMARKER_kk9921 [] ; OUTFIG [] . Fence cell body shows escaped '\\```' lines inside an outer fenced cell. big.ipynb 11 chunks, cell-aligned (3 cells each); chunk 6 holds the fence cell: fence=4 unescaped (balanced) esc=2; every chunk even fence count.",
       "observed-result": "Cells indexed, outputs/attachments/base64 absent, fence in cell escaped and balanced, chunks never split mid-cell.",
       "status": "pass",
       "accepted": true,
-      "acceptance-reason": ""
+      "acceptance-reason": "Output and attachment markers count 0 next to a control term counting 1; search legs show the FTS hits; fence balance checked in every chunk."
     },
     {
       "item": "watch-skipped-files-reported",
-      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "expected-result": "watch status (CLI and MCP) lists each file the watch cannot index with its reason (binary, unparseable, unsupported-type) and never an indexed file; the list survives a restart, drops a file once it is deleted or fixed, and shows at most 20 entries followed by '… N more'.",
       "command": "watch wd4 (proj/ctrl.md, nb.ipynb, big.ipynb, broken.ipynb, blob.txt, blob.cs, data.xyzq): watch status CLI + MCP; kill/restart w/o file changes; delete blob.txt; rewrite broken.ipynb valid; add 22 binaries",
       "evidence": "initial CLI: 'skipped: 4' blob.cs (binary), blob.txt (binary), broken.ipynb (unparseable), data.xyzq (unsupported-type); ctrl.md/nb.ipynb not listed; MCP skippedCount 4 with same reasons. Restart with no file change: immediately 'skipped: 4' identical. Live delete of blob.txt + fixing broken.ipynb: broken.ipynb and blob.txt gone from list, memory_search repaired_nb_ident_ss4417 finds broken.ipynb. With 22 extra binaries: 'skipped: 24', 20 listed then '… 4 more'; MCP skippedCount 24, 20 listed.",
       "observed-result": "Reasons correct, control not listed, persistence across restart, delete/fix removes entry, cap 20 with '… N more'. (Also: a restart with the files deleted/fixed while the server was down dropped them from the list: 'skipped: 2' after catch-up.)",
       "status": "pass",
       "accepted": true,
-      "acceptance-reason": ""
+      "acceptance-reason": "Each reason matched to its file; the indexed control files were never listed; the cap was checked with 24 skipped files against the limit of 20."
     },
     {
       "item": "fingerprint-repair-migration-v18",
-      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "expected-result": "Opening a v17 bank with 1.59.0 migrates it to user_version 18, deleting watch_files rows with no backing entries (files the old build skipped) and keeping backed rows, so a re-scan indexes the formerly skipped notebook.",
       "command": "live bank ~/.ai-raccoon user_version=18 (doctor: 'user_version: 18 (this binary: 18)') so pre-v18 case built: dotnet tool install ai-raccoon --version 1.58.0 --tool-path lane-c/old; serve with it on dr3, MCP memory_watch_add wd6 (backed.md, ctrl.md, old_nb.ipynb, data.xyzq); copy+VACUUM INTO dr4, DELETE FROM watches; serve with 1.59.0; sqlite3",
       "evidence": "pre (1.58.0 bank, user_version 17): watch_files rows backed.md, ctrl.md, old_nb.ipynb, data.xyzq; entries only backed.md, ctrl.md; code_entries 0; orphans pre = data.xyzq, old_nb.ipynb. After 1.59.0 opened dr4: user_version 18; watch_files = backed.md, ctrl.md; orphans after = 0. Re-adding watch: old_nb.ipynb now indexed as 'cell 1 (markdown) | ...', status 'skipped: 1' data.xyzq (unsupported-type).",
       "observed-result": "Migration to v18 removed exactly the unbacked rows, kept backed ones, and the notebook was re-scanned and indexed.",
