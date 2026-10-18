@@ -244,9 +244,9 @@
       "command": "live bank ~/.ai-raccoon user_version=18 (doctor: 'user_version: 18 (this binary: 18)') so pre-v18 case built: dotnet tool install ai-raccoon --version 1.58.0 --tool-path lane-c/old; serve with it on dr3, MCP memory_watch_add wd6 (backed.md, ctrl.md, old_nb.ipynb, data.xyzq); copy+VACUUM INTO dr4, DELETE FROM watches; serve with 1.59.0; sqlite3",
       "evidence": "pre (1.58.0 bank, user_version 17): watch_files rows backed.md, ctrl.md, old_nb.ipynb, data.xyzq; entries only backed.md, ctrl.md; code_entries 0; orphans pre = data.xyzq, old_nb.ipynb. After 1.59.0 opened dr4: user_version 18; watch_files = backed.md, ctrl.md; orphans after = 0. Re-adding watch: old_nb.ipynb now indexed as 'cell 1 (markdown) | ...', status 'skipped: 1' data.xyzq (unsupported-type).",
       "observed-result": "Migration to v18 removed exactly the unbacked rows, kept backed ones, and the notebook was re-scanned and indexed.",
-      "status": "substituted",
+      "status": "pass",
       "accepted": true,
-      "acceptance-reason": "Live bank is already v18, so a pre-v18 bank was created with ai-raccoon 1.58.0 (substituted instrument) and migrated by 1.59.0; accepted."
+      "acceptance-reason": "Direct instrument: the live bank is already v18, so a v17 bank was built with the published ai-raccoon 1.58.0 and migrated by 1.59.0 — exactly the upgrade path the item names."
     },
     {
       "item": "encrypted-bank-sqlite3mc-2-6-1",
