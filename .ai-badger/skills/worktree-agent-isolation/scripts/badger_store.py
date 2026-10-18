@@ -283,8 +283,7 @@ _DDL = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_searches_ts ON searches(ts)",
     # P2.0b session-store families (D10): one table per legacy surface. memory_first carries
-    # the denial count as a real defaulted column — it is filtered data (gate MAX_DENIALS),
-    # not payload; blast_radius_denials likewise. The two append-log tables follow the
+    # the denial count as a real defaulted column — it is filtered data, not payload; blast_radius_denials likewise. The two append-log tables follow the
     # ts-index convention (D17c) — hook_audit's idx lands with its DDL, P2.3 prunes it.
     """
     CREATE TABLE IF NOT EXISTS memory_first (
@@ -2274,13 +2273,14 @@ LOG_TABLES: dict[str, tuple[str, ...]] = {
 }
 
 
-def _open(db_path: Path, kind: str, families: Optional[dict] = None) -> Store:
+def _open(db_path: Path, kind: str, families: Optional[dict] = None,
+          timeout: float = 5.0) -> Store:
     _ensure_root(db_path)
     _precreate_db_file(db_path)
-    conn = sqlite3.connect(db_path, timeout=5.0, isolation_level=None)
+    conn = sqlite3.connect(db_path, timeout=timeout, isolation_level=None)
     store = Store(conn, db_path, kind, families)
     try:
-        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute(f"PRAGMA busy_timeout = {int(timeout * 1000)}")
         for attempt in range(4):
             # Parallel first opens race the WAL conversion: it takes a lock the
             # winner holds and returns BUSY without honouring busy_timeout, so
@@ -2325,16 +2325,17 @@ def open_user(families: Optional[dict] = None) -> Store:
     return store
 
 
-def open_audit(debug_dir: Optional[Path] = None) -> Store:
+def open_audit(debug_dir: Optional[Path] = None, timeout: float = 5.0) -> Store:
     """Open (creating when absent) the audit store with AUDIT_FAMILIES.
 
     Its DB and legacy seams sit under *debug_dir*, default ``AI_BADGER_DEBUG_DIR`` or the
-    real home's debug dir; debug_log passes its own redirectable directory.
+    real home's debug dir; debug_log passes its own redirectable directory. *timeout* is
+    the seconds a locked database is waited for (a hook on a budget passes less).
     """
     if debug_dir is None:
-        return _open(audit_db_path(), "audit", AUDIT_FAMILIES)
+        return _open(audit_db_path(), "audit", AUDIT_FAMILIES, timeout)
     root = Path(debug_dir)
-    return _open(root / "audit.db", "audit", _audit_families(lambda: root))
+    return _open(root / "audit.db", "audit", _audit_families(lambda: root), timeout)
 
 
 # -- CLI: `prune --status`, the retention scope's read-only inspection surface ---------

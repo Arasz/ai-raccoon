@@ -9,6 +9,7 @@ import re
 
 from typing import Any, Dict, List, Optional, Set
 
+import tool_hooks
 from scaffold_context import ScaffoldContext
 
 # Hook commands must name their script through this placeholder, never an absolute path:
@@ -169,6 +170,13 @@ def select_hooks(source_event_hooks, script):
     return selected
 
 
+def _tool_index(entries: List[Any]) -> int:
+    """Index of the first catalog tool's marked group, so framework groups land ahead of it."""
+    return next((i for i, entry in enumerate(entries) if isinstance(entry, dict)
+                 and any(isinstance(h, dict) and tool_hooks.is_ours(h.get("command"))
+                         for h in entry.get("hooks", []))), len(entries))
+
+
 def merge_hooks(existing_hooks: Dict[str, Any], new_hooks: Dict[str, Any]) -> None:
     """Merge *new_hooks* into *existing_hooks* in-place, deduplicating by matcher and script.
 
@@ -199,7 +207,7 @@ def merge_hooks(existing_hooks: Dict[str, Any], new_hooks: Dict[str, Any]) -> No
             if new_hs:
                 filtered = dict(new_entry)
                 filtered["hooks"] = new_hs
-                existing_event_hooks.append(filtered)
+                existing_event_hooks.insert(_tool_index(existing_event_hooks), filtered)
                 registered.update(_hook_key(matcher, h.get("command", "")) for h in new_hs)
         existing_hooks[event] = existing_event_hooks
 

@@ -156,6 +156,33 @@ hook reads: the nearest `.ai-badger/project-id`, with `AI_BADGER_PROJECT_ID` fir
 raccoon-side override is retired (see ADR-0036 in the ai-badger repository), so the denial and
 the search it demands cannot point at two different projects.
 
+**Repo text search: memory first, then `# memory-checked`.** The gate keys on the search
+pattern. A grep/egrep/fgrep/rg/find anywhere in a shell command (every segment of `a; b | c`
+counts, a piped grep included), or a Grep/Glob/search_files call, passes only when:
+
+1. every pattern it searches for was already memory-searched for this project, and
+2. a shell command ends its last line with the trailing comment `# memory-checked`, for
+   example `grep -n "def merge_hooks" hook_wiring.py  # memory-checked`. Grep/Glob/
+   search_files have no command string, so step 1 is enough for them.
+
+The first time a pattern is seen, the call is denied and the hook runs one `memory_search` for
+it itself; the hits come back in the deny reason and the pattern is recorded. Read them, then
+re-issue the call with the marker if you still need the grep. When the hook could not search
+(no `ai-raccoon`, timeout), it records nothing and asks you to run `memory_search` with that
+pattern as the query; your search's query is recorded, and a pattern that is a whole-word run
+of it counts as searched (comparison ignores case, `^ $ \b`, grouping parentheses and regex
+escapes such as `\.`). Searched patterns persist per project and are never reset. A marker the
+shell reads as part of a word (quoted, or after an escaped blank) does not count.
+
+**Excluded list.** A grep/egrep/fgrep/rg reading a pipe from git, gh, ps, ls, env, printenv,
+history, docker, kubectl, pip, npm, lsof, brew, dotnet is not repo search:
+`git log | grep fix` passes with no search and no marker, through `rtk`/`sudo` wrappers too.
+Only the program immediately before the grep counts (`git log | head -50 | grep fix` is gated:
+`head` is not listed). A grep with a file operand, `-r`/`-R`/`-d recurse`, `rg --files`, an
+input redirect, or run by `xargs` stays gated, as does any file grep elsewhere in the command.
+Exception: a listed program that prints repo files is not exempt — `git ls-files`, `git ls-tree`, `git grep` (subcommand found past `-C`/`-c`/`--git-dir`/`--work-tree`) and `ls -R`/`--recursive`; a grep over their output stays gated.
+A `memory_search` credits its query only when the call succeeded (not Claude's `PostToolUseFailure`, a Copilot `resultType` other than `success`, or a Hermes status other than ok) and its `projectId` equals the project the gate resolved; a search of another project, or one with no `projectId`, unlocks nothing. A `grep -f`/`rg -f`/`--file` search takes its patterns from a file the gate cannot read, so it is keyed on its own words.
+
 **Search log.** Each enriched prompt, and each planned query, is a real `memory_search` and
 lands in ai-raccoon's search log like any other search.
 

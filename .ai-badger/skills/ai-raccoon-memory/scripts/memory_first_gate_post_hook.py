@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: record the memory-first gate's consulted marker.
+"""PostToolUse hook: record a memory_search for the memory-first gate.
 
-The gate (memory_first_gate_hook.py, PreToolUse) blocks repo text-search until the
-session ran memory_search. Claude/Copilot have no in-process plugin, so this
-PostToolUse entry touches the consulted marker the same way the Hermes plugin's
-post_tool_call does. Advisory only, never blocking: no output, exit 0 on every
-path — Copilot's command preToolUse hooks are fail-closed, so a crash here must
-never deny the tool call the gate only meant to gate.
+The call's query is recorded as memory-searched for the project, so a grep for a pattern
+the query contains passes the gate (memory_first_gate_hook.py); the session's telemetry row
+is written as before. Advisory only, never blocking: no output, exit 0 on every path.
 
 All logic lives in memory_first_gate.py; this entry only transports.
 """
@@ -21,8 +18,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import memory_first_gate as gate  # pylint: disable=wrong-import-position
 
 
+def _args(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The call's arguments; Copilot may send `toolArgs` as a JSON string."""
+    args = payload.get("tool_input") or payload.get("toolArgs") or {}
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except ValueError:
+            return {}
+    return args if isinstance(args, dict) else {}
+
+
+def _failed(payload: Dict[str, Any]) -> bool:
+    """True when the host reports the call failed: Claude's PostToolUseFailure event, or a
+    Copilot toolResult whose resultType is not success."""
+    if (payload.get("hook_event_name") or payload.get("hookEventName")) == "PostToolUseFailure":
+        return True
+    result = payload.get("toolResult")
+    return isinstance(result, dict) and result.get("resultType", "success") != "success"
+
+
 def main(argv: Optional[list] = None) -> int:
-    """Read the hook payload from stdin; record the marker for memory_search; exit 0."""
+    """Read the hook payload from stdin; record a memory_search's query; exit 0."""
+    del argv
     try:
         payload: Dict[str, Any] = json.load(sys.stdin)
     except (json.JSONDecodeError, OSError):
@@ -32,8 +50,9 @@ def main(argv: Optional[list] = None) -> int:
     tool_name = payload.get("tool_name") or payload.get("toolName") or ""
     if not gate.is_memory_search(tool_name):
         return 0
-    session_id = payload.get("session_id") or payload.get("sessionId")
-    gate.record_search(session_id)
+    gate.record_search(payload.get("session_id") or payload.get("sessionId"))
+    gate.credit_search(gate.project_id(str(payload.get("cwd") or "")), _args(payload),
+                       failed=_failed(payload))
     return 0
 
 

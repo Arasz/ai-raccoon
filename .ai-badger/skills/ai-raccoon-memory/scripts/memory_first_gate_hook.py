@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """PreToolUse hook for the memory-first gate.
 
-Deny text-search tool calls until the session consulted memory_search, with a
-3-strike pass-through so an agent cannot stall. The consulted marker is recorded by
-memory_first_gate_post_hook.py (the PostToolUse entry both hosts already run) so one
-process serves each memory_search. Exit 0 on every path — Copilot's command preToolUse
-hooks are fail-closed, so a crash here would deny the very tool call the gate only meant
-to gate. All logic lives in memory_first_gate.py; this entry only transports.
+Deny a text-search call until every pattern it searches for was memory-searched for the
+project, and, for a shell command, until it ends with the `# memory-checked` marker. The
+first sighting of a pattern runs one memory search and returns its hits in the deny reason.
+Searched queries of the agent's own memory_search are recorded by
+memory_first_gate_post_hook.py. Exit 0 on every path — Copilot's command preToolUse hooks
+are fail-closed, so a crash here would deny the very tool call the gate only meant to gate.
+All logic lives in memory_first_gate.py; this entry only transports.
 """
 from __future__ import annotations
 
@@ -38,40 +39,32 @@ def _host(payload: Dict[str, Any]) -> str:
     return "copilot" if "toolName" in payload else "claude"
 
 
-def _deny(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """The per-host deny payload, or {} once the 3-strike guard passes through."""
-    session_id = payload.get("session_id") or payload.get("sessionId")
-    if gate.deny_count(session_id) >= gate.MAX_DENIALS:
-        return {}
-    gate.increment_denials(session_id)
-    return gate.build_decision(
-        _host(payload),
-        payload.get("tool_name") or payload.get("toolName") or "",
-        payload.get("tool_input") or payload.get("toolArgs"),
-        session_id,
-        cwd=str(payload.get("cwd") or ""),
-    )
+def tool_input(payload: Dict[str, Any]) -> Any:
+    """The call's arguments; Copilot may send `toolArgs` as a JSON string."""
+    args = payload.get("tool_input") or payload.get("toolArgs")
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except ValueError:
+            return {}
+    return args
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     """Read the hook payload from stdin; print a deny JSON or nothing; always exit 0.
 
     Silence means allow on every host (Claude and Copilot both treat a PreToolUse hook
-    with no output as no opinion), so pass paths emit nothing — the same discipline as
-    memory_grade_hook.py.
+    with no output as no opinion), so pass paths emit nothing.
     """
-    args = list(sys.argv[1:] if argv is None else argv)
+    del argv
     payload = _payload()
-    tool_name = payload.get("tool_name") or payload.get("toolName") or ""
-    tool_input = payload.get("tool_input") or payload.get("toolArgs")
-    session_id = payload.get("session_id") or payload.get("sessionId")
-
-    if not gate.is_text_search(tool_name, tool_input):
-        return 0
-    if gate.search_consulted(session_id):
-        return 0
-
-    decision = _deny(payload)
+    decision = gate.decide(
+        _host(payload),
+        payload.get("tool_name") or payload.get("toolName") or "",
+        tool_input(payload),
+        payload.get("session_id") or payload.get("sessionId"),
+        cwd=str(payload.get("cwd") or ""),
+    )
     if decision:
         print(json.dumps(decision))
     return 0

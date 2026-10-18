@@ -316,24 +316,12 @@ def reset_session_hints() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Memory-first gate — Hermes has no shell-hook session_id, so state is
-# per-process keyed by project cwd; a gateway handling several sessions for one
-# project shares the consulted flag until the next on_session_start reset.
+# Memory-first gate — the shared module decides; searched patterns persist per
+# project id (gate.project_id(cwd)) in the same store the Claude/Copilot hooks use,
+# and nothing clears them on session start.
 # ---------------------------------------------------------------------------
 
 MEMORY_FIRST_GATE_MODULE_NAME = "memory_first_gate"
-
-# Projects (resolved cwd) that already ran memory_search this session.
-_memory_consulted: set = set()
-# Denials per project; after MAX_DENIALS the gate passes through so an agent
-# cannot stall on a bank that simply has no hit for its query.
-_gate_denials: dict = {}
-
-
-def reset_gate_state() -> None:
-    """Forget the per-session memory-first gate state (called at session start)."""
-    _memory_consulted.clear()
-    _gate_denials.clear()
 
 
 def _load_memory_first_gate() -> Optional[Any]:
@@ -363,39 +351,36 @@ def _is_memory_search(tool_name: Any) -> bool:
     return name == "memory_search"
 
 
+# Hermes post_tool_call statuses that mean the tool ran; anything else is a failed call.
+_OK_STATUSES = ("ok", "success", "")
+
+
 def _maybe_record_memory_consult(tool_name: str, args: Dict[str, Any], cwd: str,
-                                 session_id: Optional[str] = None) -> None:
-    """After a memory_search call, unlock the gate for this project's session."""
+                                 session_id: Optional[str] = None, status: str = "ok") -> None:
+    """After a memory_search call, record its query as searched for the project."""
     if not _is_memory_search(tool_name):
         return
-    project = _project_cwd(cwd)
-    _memory_consulted.add(project)
     gate = _load_memory_first_gate()
     if gate is not None:
         gate.record_search(session_id)
+        gate.credit_search(gate.project_id(_project_cwd(cwd)), args or {},
+                           failed=str(status).lower() not in _OK_STATUSES)
 
 
 def pre_tool_call_memory_gate(tool_name: str = "", args: Optional[Dict[str, Any]] = None,
                               task_id: Optional[str] = None, **_kwargs: Any) -> Optional[Dict[str, str]]:
-    """Block text-search tools until the session's first memory_search call.
+    """Block a text-search call until its patterns were memory-searched (and, for a
+    terminal command, it ends with `# memory-checked`); the first sighting searches.
 
-    Returns a block decision naming memory_search, or None to allow. Never blocks
-    once consulted, after MAX_DENIALS, or when the gate module is missing.
+    Returns a block decision, or None to allow; None when the gate module is missing.
     """
     gate = _load_memory_first_gate()
     if gate is None:
         return None
-    project = _gate_project()
-    if project in _memory_consulted:
-        return None
     tool_name = tool_name or _kwargs.get("function_name") or ""
-    if not gate.is_text_search(tool_name, args or {}):
-        return None
-    denials = _gate_denials.get(project, 0)
-    if denials >= gate.MAX_DENIALS:
-        return None
-    _gate_denials[project] = denials + 1
-    return gate.build_decision("hermes", tool_name, args or {}, None, cwd=project)
+    decision = gate.decide("hermes", tool_name, args or {}, _kwargs.get("session_id"),
+                           cwd=_gate_project())
+    return decision or None
 
 
 HERMES_ISOLATION_MODULE_NAME = "ai_badger_hermes_isolation"
@@ -428,7 +413,6 @@ def on_session_start_drift_notice(cwd: str = "", **_kwargs: Any) -> None:
     error. A hook that breaks session start or nags unconditionally defeats its purpose.
     """
     reset_session_hints()
-    reset_gate_state()
     project = _project_cwd(cwd)
     _debug("ai_badger_hooks/session_start", "start", project=project)
     isolation = _load_hermes_isolation()
@@ -1198,7 +1182,8 @@ def post_tool_observer(tool_name: str = "", result: str = "",
         logger.warning("grounded feedback stash failed", exc_info=True)
 
     try:
-        _maybe_record_memory_consult(tool_name, args, cwd, session_id)
+        _maybe_record_memory_consult(tool_name, args, cwd, session_id,
+                                     str(kwargs.get("status", "ok")))
     except Exception:  # pylint: disable=broad-exception-caught
         logger.warning("memory-first gate record failed", exc_info=True)
 

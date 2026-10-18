@@ -171,12 +171,14 @@ def program_index(words: Sequence[str]) -> int:
 
 class Command(NamedTuple):
     """One simple command: its words with redirections removed, the index of the word that
-    runs, its redirections as (operator, target), and the subshell scope it runs in — a
-    child scope is its parent's tuple plus one id."""
+    runs, its redirections as (operator, target), the subshell scope it runs in — a child
+    scope is its parent's tuple plus one id — and the command whose output a `|` or `|&`
+    feeds it, None when its stdin is not a pipe from a simple command in the same list."""
     words: Tuple[str, ...]
     start: int
     redirects: Tuple[Tuple[str, str], ...]
     scope: Tuple[int, ...]
+    upstream: Optional["Command"] = None
 
     @property
     def program(self) -> str:
@@ -285,6 +287,7 @@ class _Parser:
         words: List[str] = []
         redirects: List[Tuple[str, str]] = []
         heredocs: List[Tuple[str, bool, bool]] = []
+        upstream: Optional[Command] = None  # what the next command's stdin is piped from
         while True:
             self.skip_blanks()
             char = self.peek()
@@ -292,12 +295,12 @@ class _Parser:
             if char == "":
                 if stop is not None:
                     raise ShellSyntaxError("unterminated substitution")
-                self.finish(words, redirects, scope)
+                self.finish(words, redirects, scope, upstream)
                 self.commit(top)
                 return
             if char == ")" and stop == ")":
                 self.pos += 1
-                self.finish(words, redirects, scope)
+                self.finish(words, redirects, scope, upstream)
                 return
             if char == "#":
                 end = self.text.find("\n", self.pos)
@@ -305,22 +308,28 @@ class _Parser:
                 continue
             if char == "\n":
                 self.pos += 1
-                self.finish(words, redirects, scope)
+                if self.finish(words, redirects, scope, upstream):
+                    upstream = None
                 self.read_heredocs(heredocs, scope)
             elif self.redirect_op():
                 self.redirect(redirects, heredocs, scope)
                 ended = False
             elif char in ";&|":
-                self.pos += 2 if self.text[self.pos:self.pos + 2] in (
-                    ";;", "&&", "||", "|&") else 1
-                self.finish(words, redirects, scope)
+                op = self.text[self.pos:self.pos + 2]
+                op = op if op in (";;", "&&", "||", "|&") else char
+                self.pos += len(op)
+                finished = self.finish(words, redirects, scope, upstream)
+                if finished or op not in ("|", "|&"):
+                    upstream = finished if op in ("|", "|&") else None
             elif char == "(":
                 self.pos += 1
-                self.finish(words, redirects, scope)
+                self.finish(words, redirects, scope, upstream)
                 self.parse_list(self.child(scope), ")")
+                upstream = None
             elif char == ")":  # unmatched: bash refuses it; read it as a separator
                 self.pos += 1
-                self.finish(words, redirects, scope)
+                self.finish(words, redirects, scope, upstream)
+                upstream = None
             else:
                 ended = False
                 start = self.pos
@@ -341,15 +350,17 @@ class _Parser:
             self.command_start = self.pos
 
     def finish(self, words: List[str], redirects: List[Tuple[str, str]],
-               scope: Tuple[int, ...]) -> None:
-        """Record one simple command, then the script it hands a shell or `eval`, if any."""
+               scope: Tuple[int, ...], upstream: Optional[Command] = None) -> Optional[Command]:
+        """Record one simple command, then the script it hands a shell or `eval`, if any;
+        the command recorded, None when there was none."""
         if not words and not redirects:
-            return
-        command = Command(tuple(words), program_index(words), tuple(redirects), scope)
+            return None
+        command = Command(tuple(words), program_index(words), tuple(redirects), scope, upstream)
         self.out.append(command)
         script = _script(command)
         if script is not None:
             self.nested(script, scope)
+        return command
 
     def skip_blanks(self) -> None:
         """Skip spaces, tabs and backslash-newline continuations."""
