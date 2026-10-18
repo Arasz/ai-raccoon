@@ -955,7 +955,7 @@ internal static class MemorySql
                                                      AND workspace_id IS @workspaceId
                                                    """;
 
-    // The vec0 `ctx` column — a partition key until v9, a metadata column since (ADR-0068).
+    // The vec0 `ctx` partition key (ADR-0133; a metadata column from v9 to v18, ADR-0068).
     // Length-prefixed, not
     // ':'-joined, because the naive join collides across project id/label boundaries. Total over
     // a NULL project_id (ADR-0124): every concatenating branch COALESCEs it to '', so a row with

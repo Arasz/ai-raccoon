@@ -10,58 +10,15 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
-///     WP5, ladder step v9: `ctx` stops being the vec0 partition key and becomes an ordinary vec0
-///     metadata column. Measured trade (docs/plans/2026-08-14-project-scope-improvement-plan.md §WP5):
-///     31.5 MB → 4.7 MB of chunk allocation against +1.4 ms per KNN. Demote, never remove — a table
-///     with no `ctx` at all answers with the GLOBAL top-k and is not a replacement for this behaviour.
+///     Ladder step v9 (ADR-0068) on a pre-v9 bank, run through the whole ladder: the vectors, their
+///     scoping and their ranking survive. The end shape is v19's partitioned table (ADR-0133), pinned
+///     by <see cref="Vec0PartitionKeyRestoreTests" />.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class Vec0PartitionKeyDemotionTests
 {
     private const int Dimension = 384;
-
-    [RetryFact]
-    public async Task EnsureAsync_OnAV8Bank_RebuildsVecEntries_WithCtxAsAMetadataColumn()
-    {
-        await using var connection = await OpenAsync();
-        await SeedV8BankAsync(connection, ("acme", 1), ("acme", 2));
-
-        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
-
-        var sql = await TableSqlAsync(connection, "vec_entries");
-        Has(sql, "partition key").ShouldBeFalse(
-            "v9 demotes ctx; 98% of the measured chunk waste is attributable to partitioning");
-        Has(sql, "ctx").ShouldBeTrue(
-            "demote, not remove — without ctx the KNN returns the global top-k and is unscoped");
-        Has(sql, "distance_metric=cosine").ShouldBeTrue();
-    }
-
-    [RetryFact]
-    public async Task EnsureAsync_OnAV8Bank_RebuildsVecStructure_WithCtxAsAMetadataColumn()
-    {
-        await using var connection = await OpenAsync();
-        await SeedV8BankAsync(connection, ("acme", 1));
-
-        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
-
-        var sql = await TableSqlAsync(connection, "vec_structure");
-        Has(sql, "partition key").ShouldBeFalse(
-            "the structure table carries the same waste and takes the same step");
-        Has(sql, "ctx").ShouldBeTrue();
-    }
-
-    [RetryFact]
-    public async Task EnsureAsync_OnAFreshBank_DeclaresCtxAsAMetadataColumn()
-    {
-        await using var connection = await OpenAsync();
-
-        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
-
-        Has(await TableSqlAsync(connection, "vec_entries"), "partition key").ShouldBeFalse(
-            "a bank created after v9 must not be born in the shape v9 exists to leave");
-        Has(await TableSqlAsync(connection, "vec_structure"), "partition key").ShouldBeFalse();
-    }
 
     /// <summary>
     ///     The acceptance criterion that matters: same top-k for a fixed query, verified against the

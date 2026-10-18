@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS memory_source (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source_identity
     ON memory_source(source_type, source_locator, COALESCE(section, ''));
 CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id);
-CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT, embedding float[4] distance_metric=cosine);
+CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT partition key, embedding float[4] distance_metric=cosine);
 CREATE TRIGGER IF NOT EXISTS vec_entries_pending AFTER UPDATE OF embed_state ON entries
 WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
 BEGIN
