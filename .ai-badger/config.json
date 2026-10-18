@@ -1,62 +1,61 @@
 {
-  "$schema": "./schemas/config.schema.json",
-  "frameworkVersion": "0.202.0",
-  "project": {
-    "name": "AiRaccoon",
-    "summary": "C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.",
-    "domain": "Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory."
-  },
-  "stacks": [
-    "dotnet",
-    "mcp",
-    "python",
-    "github",
-    "ai-raccoon",
-    "changelog"
-  ],
-  "agents": [
-    "claude",
-    "copilot",
-    "hermes",
-    "pi"
-  ],
-  "sourceControl": {
-    "platform": "github",
-    "repoUrl": "https://github.com/Arasz/ai-raccoon",
-    "projectUrl": null
-  },
-  "commands": {
-    "build": "dotnet build",
-    "test": "dotnet test"
-  },
-  "personaRouting": [
-    {
-      "work": "architecture, design decisions, project structure",
-      "agent": "architect"
+    "$schema": "./schemas/config.schema.json",
+    "frameworkVersion": "0.202.0",
+    "project": {
+        "name": "AiRaccoon",
+        "summary": "C# .NET 10 MCP server exposing agent memory management over sqlite-memory: project-scoped memory bank, workspace sandboxes, shared promotion tier, hybrid search, degradation, and optional cloud sync.",
+        "domain": "Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory."
     },
-    {
-      "work": "tests, test strategy, test coverage",
-      "agent": "test-engineer"
+    "stacks": [
+        "dotnet",
+        "mcp",
+        "python",
+        "github",
+        "ai-raccoon",
+        "changelog"
+    ],
+    "agents": [
+        "claude",
+        "copilot",
+        "pi"
+    ],
+    "sourceControl": {
+        "platform": "github",
+        "repoUrl": "https://github.com/Arasz/ai-raccoon",
+        "projectUrl": null
     },
-    {
-      "work": "code review, quality gates, PR review",
-      "agent": "code-reviewer"
+    "commands": {
+        "build": "dotnet build",
+        "test": "dotnet test"
     },
-    {
-      "work": "C#/.NET implementation, MCP tools, backend work",
-      "agent": "dotnet-engineer"
+    "personaRouting": [
+        {
+            "work": "architecture, design decisions, project structure",
+            "agent": "architect"
+        },
+        {
+            "work": "tests, test strategy, test coverage",
+            "agent": "test-engineer"
+        },
+        {
+            "work": "code review, quality gates, PR review",
+            "agent": "code-reviewer"
+        },
+        {
+            "work": "C#/.NET implementation, MCP tools, backend work",
+            "agent": "dotnet-engineer"
+        }
+    ],
+    "skillScope": "default",
+    "include": {
+        "skills": [
+            "sqlite-bank-space-diagnosis",
+            "sqlite-schema-review"
+        ]
+    },
+    "docs": {},
+    "agentDocs": {
+        "maxChars": 17500,
+        "maxLines": 280
     }
-  ],
-  "skillScope": "default",
-  "include": {
-    "skills": [
-      "sqlite-bank-space-diagnosis",
-      "sqlite-schema-review"
-    ]
-  },
-  "docs": {},
-  "agentDocs": {
-    "maxChars": 17500,
-    "maxLines": 280
-  }
 }

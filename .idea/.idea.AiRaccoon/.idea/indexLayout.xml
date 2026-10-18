@@ -7,6 +7,18 @@
       <Path>scripts</Path>
     </attachedFolders>
     <explicitIncludes />
-    <explicitExcludes />
+    <explicitExcludes>
+      <Path>.ai-badger</Path>
+      <Path>.ai-badger/task-tracking</Path>
+      <Path>.ai-badger/worktrees</Path>
+      <Path>.claude</Path>
+      <Path>.code-review-graph</Path>
+      <Path>.codex</Path>
+      <Path>.pi</Path>
+      <Path>.playwright-mcp</Path>
+      <Path>TestResults</Path>
+      <Path>data</Path>
+      <Path>integrations</Path>
+    </explicitExcludes>
   </component>
 </project>
