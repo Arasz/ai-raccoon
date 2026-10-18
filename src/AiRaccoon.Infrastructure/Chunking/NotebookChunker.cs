@@ -97,12 +97,76 @@ public sealed class NotebookChunker : INotebookChunker
         builder.Append("## cell ").Append(index).Append(" (").Append(cellType).Append(")\n\n");
         if (cellType == "code")
         {
-            builder.Append("```").Append(language).Append('\n').Append(source).Append("\n```\n\n");
+            var fence = new string('`', FenceLength(source));
+            builder.Append(fence).Append(language).Append('\n').Append(source).Append('\n').Append(fence).Append("\n\n");
         }
         else
         {
-            builder.Append(source).Append("\n\n");
+            builder.Append(DemoteHeadings(source)).Append("\n\n");
         }
+    }
+
+    /// <summary>A fence longer than any backtick run opening a line of <paramref name="source" />, minimum three.</summary>
+    private static int FenceLength(string source)
+    {
+        var longest = 0;
+        foreach (var line in source.Split('\n'))
+        {
+            var run = 0;
+            while (run < line.Length && line[run] == '`')
+            {
+                run++;
+            }
+
+            longest = Math.Max(longest, run);
+        }
+
+        return Math.Max(3, longest + 1);
+    }
+
+    /// <summary>
+    ///     Pushes ATX headings in a markdown cell two levels down (capped at six) so they nest under the
+    ///     cell's own heading; lines inside fenced code and setext headings are left as written.
+    /// </summary>
+    private static string DemoteHeadings(string source)
+    {
+        var lines = source.Split('\n');
+        char? fence = null;
+        var fenceLength = 0;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart(' ');
+            var marker = trimmed.Length > 0 && trimmed[0] is '`' or '~' ? trimmed[0] : (char?)null;
+            if (marker is { } m)
+            {
+                var run = trimmed.TakeWhile(c => c == m).Count();
+                if (run >= 3 && fence is null)
+                {
+                    fence = m;
+                    fenceLength = run;
+                    continue;
+                }
+
+                if (run >= fenceLength && fence == m && trimmed[run..].Trim().Length == 0)
+                {
+                    fence = null;
+                    continue;
+                }
+            }
+
+            if (fence is null && IsAtxHeading(trimmed, out var level))
+            {
+                lines[i] = new string('#', Math.Min(6, level + 2)) + trimmed[level..];
+            }
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private static bool IsAtxHeading(string line, out int level)
+    {
+        level = line.TakeWhile(c => c == '#').Count();
+        return level is >= 1 and <= 6 && (line.Length == level || line[level] is ' ' or '\t' or '\r');
     }
 
     private static string Source(JsonElement cell)

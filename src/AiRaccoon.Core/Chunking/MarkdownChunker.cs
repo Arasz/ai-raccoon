@@ -342,7 +342,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
             fenceLines.Add(line);
             fenceTokens += countTokens(line);
-            if (IsFenceDelimiter(line))
+            if (ClosesFence(fenceLines[0], line))
             {
                 FlushFence(units, fenceLines, fenceTokens, maxTokens, countTokens);
                 fenceLines = null;
@@ -520,6 +520,17 @@ public sealed class MarkdownChunker : IMarkdownChunker
             units.Add(new Unit([head], countTokens(head)));
             remaining = remaining[headLength..];
         }
+    }
+
+    /// <summary>CommonMark closing fence: the opener's character, at least as many of it, and nothing after.</summary>
+    private static bool ClosesFence(string openerLine, string line)
+    {
+        var opener = openerLine.TrimStart();
+        var candidate = line.TrimStart();
+        var marker = opener[0];
+        var openRun = opener.TakeWhile(c => c == marker).Count();
+        var run = candidate.TakeWhile(c => c == marker).Count();
+        return run >= openRun && candidate[run..].Trim().Length == 0;
     }
 
     private static bool IsFenceDelimiter(string line)

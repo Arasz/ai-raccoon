@@ -116,4 +116,28 @@ public class NotebookChunkerTests
         Assert.All(chunks, c => Assert.Contains("cell 1 (code)", c.HeadingPath));
         Assert.All(chunks, c => Assert.Contains("value_", c.Text));
     }
+
+    [Fact]
+    public void ChunkWithHeadings_CodeCellWithFenceLine_StaysOneCodeChunk()
+    {
+        var notebook = Notebook("""{"cell_type":"code","source":"s = \"\"\"\n```\n# not a heading\n```` x\n\"\"\""}""");
+
+        var chunks = Chunker.ChunkWithHeadings(notebook, 512);
+
+        Assert.All(chunks, c => Assert.Contains("cell 1 (code)", c.HeadingPath));
+        Assert.DoesNotContain(chunks.SelectMany(c => c.Sections), s => s.Contains("not a heading"));
+        Assert.Contains("# not a heading", Joined(chunks));
+    }
+
+    [Fact]
+    public void ChunkWithHeadings_MarkdownCellHeadings_NestUnderTheCellSection()
+    {
+        var notebook = Notebook("""{"cell_type":"markdown","source":["# Title\n","text\n","## Sub\n","more"]}""");
+
+        var chunks = Chunker.ChunkWithHeadings(notebook, 512);
+
+        Assert.All(chunks, c => Assert.Contains("cell 1 (markdown)", c.HeadingPath));
+        Assert.Contains("### Title", Joined(chunks));
+        Assert.Contains("#### Sub", Joined(chunks));
+    }
 }
