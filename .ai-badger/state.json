@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-10-14",
+  "lastUpdated": "2026-10-18",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+        "id": "air-watch-cli-and-notebook-ingest",
+        "title": "CLI watch add/remove/status; index .ipynb; report skipped files (1.59.0)",
+        "summary": "ai-raccoon watch add|remove|status go through a new token-gated /watch route over IToolGate + IWatchService (ADR-0075 amended), so a machine can be set up from a terminal alone; refusals are RFC 9457 problem details (first AddProblemDetails in the repo). Notebook handler flattens code/markdown cells under '## cell N' headings via the markdown chunker (outputs/base64 dropped; code-cell fence lines escaped, markdown headings demoted, open fences closed per cell). Skipped files (unsupported-type/binary/unparseable) are reported in memory_watch_status and watch status, never fingerprinted; unrouted files classified from an 8 KB sniff; schema v18 drops rowless watch fingerprints so 1.58.x-skipped notebooks re-ingest. Four Codex review rounds fixed 10 findings in-PR. PR #870 merged as fe12818e by owner.",
+        "pr": 870,
+        "merged": true,
+        "mergeCommit": "fe12818e",
+        "date": "2026-10-18",
+        "hasNotes": false
+    },
     {
         "id": "ahr-initialize-dotnet-mcp-websearch-repo",
         "title": "Initialize ai-hero-rat (new repo): .NET 10 MCP web-search tool skeleton",
