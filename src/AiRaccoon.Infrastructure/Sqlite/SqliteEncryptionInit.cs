@@ -22,10 +22,17 @@ public static class SqliteEncryptionInit
 
         _initialized = true;
 
-        var raw = typeof(raw);
-        raw.GetMethod("SetProvider", BindingFlags.Static | BindingFlags.Public)!
+        var rawType = typeof(raw);
+        rawType.GetMethod("SetProvider", BindingFlags.Static | BindingFlags.Public)!
             .Invoke(null, [Activator.CreateInstance(typeof(SQLite3Provider_sqlite3mc))]);
-        raw.GetMethod("FreezeProvider", BindingFlags.Static | BindingFlags.Public)!
+        rawType.GetMethod("FreezeProvider", BindingFlags.Static | BindingFlags.Public)!
             .Invoke(null, [true]);
+
+        // SQLITE_CONFIG_MEMSTATUS off: with it on, every SQLite malloc/free takes one process-wide
+        // mutex, so concurrent connections serialise on allocation. Must precede the library's
+        // initialisation, which the first connection triggers.
+        raw.sqlite3_config(MemStatusConfigOption, 0);
     }
+
+    private const int MemStatusConfigOption = 9;
 }
