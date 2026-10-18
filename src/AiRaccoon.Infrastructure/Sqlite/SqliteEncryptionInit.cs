@@ -29,6 +29,10 @@ public static class SqliteEncryptionInit
 
         raw.SetProvider(new SQLite3Provider_sqlite3mc());
         raw.FreezeProvider();
-        raw.sqlite3_config(MemStatusConfigOption, 0);
+        var result = raw.sqlite3_config(MemStatusConfigOption, 0);
+        if (result == raw.SQLITE_MISUSE)
+        {
+            throw new InvalidOperationException("SQLite3MC.PCLRaw bundle was already initialized. Settings are ignored.");
+        }
     }
 }
