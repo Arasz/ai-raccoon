@@ -1,0 +1,107 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-10-18",
+    "branch": "main",
+    "commit": "57b40f6c (tree for derived facts and the local 1.59.2 pack)",
+    "data-root": "per lane under the session scratchpad (ck/c590, ck/c591, ck/c592, ck/enc, ck/corrupt); ~/.ai-raccoon never opened, port 7721 never bound by this run",
+    "note": "Fix-verification run for 1.59.1 (#872, caller-cancelled tool calls) and 1.59.2 (#874, watch remove wording and missing-key message). Each fix is A/B'd against the release before it: 1.59.0 (nuget, scratch --tool-path) for the 1.59.1 fix, 1.59.1 (nuget, the global tool) for the 1.59.2 fixes. 1.59.2 is tagged on GitHub but not on nuget.org (publish.yml is workflow_dispatch and has not been dispatched for it), so 1.59.2 was packed locally from 57b40f6c and installed into a scratch --tool-path. Items outside those fixes are skipped; the 1.59.0 run covers them."
+  },
+  "derived": {
+    "version": "1.59.2",
+    "mcp-tool-count": 30,
+    "mcp-prompt-count": 2,
+    "source": "python3 .claude/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . at 57b40f6c"
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "docs/work/checklist/2026-10-18-1.59.0-release.json, item watch-cli-add-remove-status",
+      "prior-claim": "status pass, with the note: 'watch remove' of an already-removed path prints 'removed:' again (a no-op, but the wording does not say so)",
+      "what-is-actually-true": "That wording was a defect: the CLI and memory_watch_remove reported a removal that did not happen. 1.59.2 (#874) fixed it.",
+      "evidence": "1.59.1: `watch remove <id> <never-watched path>` -> 'removed: .../watch-c591/never-watched', exit 0. 1.59.2: same call -> 'not watched: ... (nothing removed)', exit 0.",
+      "so-what": "An observed wrong output recorded as a note under pass reads as a pass in a status count. It belonged as status fail, accepted as a known defect with its tracking reference."
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "git worktree add --detach <scratch>/wt 57b40f6c; python3 scripts/download-embedding-model.py; python3 scripts/download-mlx-runtime.py; dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=osx-arm64 -o <scratch>/artifacts; python3 scripts/patch-tool-shell.py <shell> osx-arm64; dotnet tool install ai-raccoon --version 1.59.2 --add-source <scratch>/artifacts --tool-path <scratch>/t592; <scratch>/t592/ai-raccoon --version; nuget flat-container index for ai-raccoon and ai-raccoon.osx-arm64; gh run list -w publish.yml",
+      "evidence": "Successfully created package 'ai-raccoon.osx-arm64.1.59.2.nupkg' and 'ai-raccoon.1.59.2.nupkg'. patch-tool-shell.py: 'expected 6 rids (publish.yml matrix), got 1: [osx-arm64]' exit 1. Tool 'ai-raccoon' (version '1.59.2') was successfully installed. --version: 1.59.2+57b40f6c333b4d09353750a2ef0f05555f7cbecf. nuget versions end at 1.59.1 for both packages; last publish run 2026-10-18T08:48:45Z (1.59.1).",
+      "observed-result": "The local 1.59.2 build installs and reports the derived version with the tree's commit. The global tool was not updated: 1.59.2 is not on nuget.org, and the global 1.59.1 is the control for the 1.59.2 fixes. The patch step's failure is its self-gate refusing a one-RID shell, which is expected for a one-RID local pack; the unpatched shell already lists osx-arm64.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Substituted: scratch --tool-path install of a local pack instead of a global force-update from nuget. Version and commit match the tree. Publishing 1.59.2 needs the owner's publish.yml dispatch and production approval."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "<bin> --data-root <scratch>/ck/<lane> serve --port 0 --idle-timeout 0 (bound port read back with lsof on the pid) for 1.59.0, 1.59.1, 1.59.2",
+      "evidence": "pid=91640 port=52544 (1.59.0); pid=91748 port=52548 (1.59.2); pid=91780 port=52555 (1.59.1)",
+      "observed-result": "--port 0 binds an ephemeral port on all three. --restart was not exercised.",
+      "status": "skipped",
+      "accepted": true,
+      "acceptance-reason": "Out of scope for this fix run; neither fix touches the lifecycle. --restart passed in the 1.59.0 run."
+    },
+    {
+      "item": "caller-cancelled-call-logs-only-the-timeout-line",
+      "expected-result": "A tool call whose HTTP request the client drops mid-flight logs one 914/915 Warning (tool, elapsed ms) and no SDK 'request handler failed' warn with a stack trace; the server stays healthy and the cancelled work stops. Negative control: 1.59.0 logs the SDK warn with its stack trace for the same call (1.59.1 changelog, #872)",
+      "command": "settings ingest scope add <id> <scratch>/corpus (1,968 files copied from docs/ and src/); mcpc.py abort memory_ingest_directory {projectId, path: corpus} 1500 (raw socket POST /mcp, closed after 1,500 ms); wait 8 s; grep the new serve.log lines for 'request handler', '^ *at ', '[91[45]]'; then memory_stats",
+      "evidence": "1.59.0: 'handler-failed: 1  stack-frames: 23  ev914/915: 1' — warn ToolRefusals[915] '\"memory_ingest_directory\" timed out after 1528 ms: the caller cancelled it', then warn McpServer[975074943] 'method 'tools/call' request handler failed in 1532.3493ms. System.Threading.Tasks.TaskCanceledException'. 1.59.1 (nuget): 'handler-failed: 0  stack-frames: 0  ev914/915: 1' — 915 '... timed out after 1528 ms'. 1.59.2: 'handler-failed: 0  stack-frames: 0  ev914/915: 1' — 915 '... timed out after 1510 ms'. memory_stats after: entries 317 (1.59.1), 297 (1.59.2), so ingest stopped at about 300 of 1,968 files and the server answered.",
+      "observed-result": "Fixed on both 1.59.1 and 1.59.2: only the 915 line, no SDK stack-trace warn. The control reproduces the old noise. The 914 rendering (a call with a query) was not driven: no query-bearing tool runs long enough on a scratch bank to cancel.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Clean A/B on the same call and corpus. 914 shares the code path and is pinned by CancelledRequestLoggingTests and ToolRefusalsCancellationTests."
+    },
+    {
+      "item": "watch-remove-reports-nothing-removed",
+      "expected-result": "`watch remove <id> <path>` on a path with no registration prints 'not watched: <path> (nothing removed)' and exits 0; on a registered path it prints 'removed: <path>'. memory_watch_remove returns removed:false and removed:true in those cases. Negative control: 1.59.1 prints 'removed:' for an unwatched path and has no removed field (1.59.2 changelog, #874)",
+      "command": "settings watch enable <id> true; watch remove <id> <dir> (never watched); watch add <id> <dir>; watch remove <id> <dir>; watch remove <id> <dir> again; MCP memory_watch_remove on an unwatched dir, memory_watch_add, memory_watch_remove; memory_watch_status. Same on 1.59.1 against its own lane server.",
+      "evidence": "1.59.2 CLI: 'not watched: .../watch-c592/a (nothing removed)' exit=0; after add: 'registered: ...', 'removed: .../watch-c592/a' exit=0; again: 'not watched: ... (nothing removed)' exit=0. 1.59.2 MCP: {\"path\":\".../watch-c592/c\",\"removed\":false} then after add {\"path\":\".../watch-c592/c\",\"removed\":true}. 1.59.1 CLI never-watched: 'removed: .../watch-c591/never-watched' exit=0. 1.59.1 MCP: {\"projectId\":...,\"path\":\".../watch-c591/b\"} with no removed field, before and after add. memory_watch_status after: {\"watches\":[]}.",
+      "observed-result": "Fixed. CLI wording and MCP removed flag match the registration state; the control shows the old false 'removed:'.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "A/B shows the defect on 1.59.1 and the fix on 1.59.2, for CLI and MCP, with both branches of the removed flag."
+    },
+    {
+      "item": "missing-encryption-key-is-named",
+      "expected-result": "An env-keyed encrypted bank (verifier sidecar present) opened with AIRACCOON_DB_PASSPHRASE unset: `encryption show`, `serve` and `doctor` say the bank is encrypted and no key was resolved, name AIRACCOON_DB_PASSPHRASE, and exit 20 (Key.Unresolved). Controls: the right key opens HEALTHY; a wrong key is still the mismatch (21); a corrupt bank with no verifier is still Bank.Corrupted (32); 1.59.1 shows raw 'SQLite Error 26' (1.59.2 changelog, #874)",
+      "command": "AIRACCOON_DB_PASSPHRASE=<openssl rand -hex 16> 1.59.2 serve --port 0 on a fresh data root, then kill; ls (memory.db.keycheck present; header not 'SQLite format 3'); env -u AIRACCOON_DB_PASSPHRASE <bin> --data-root <enc> encryption show | doctor | serve --port 0 for 1.59.2 and 1.59.1; right-key doctor; wrong-key encryption show; 8 KiB /dev/urandom memory.db with no sidecar -> doctor",
+      "evidence": "1.59.2 encryption show: \"the bank at '.../ck/enc/memory.db' is encrypted, but no encryption key was resolved — set AIRACCOON_DB_PASSPHRASE, or configure the key source this bank uses\" exit=20. 1.59.2 serve: 'could not open the bank at ...: the bank ... is encrypted, but no encryption key was resolved — set AIRACCOON_DB_PASSPHRASE ...' exit=20. 1.59.2 doctor: 'doctor: the bank at ... is encrypted, but no encryption key was resolved ...' exit=20, preceded by warn DoctorCommands[1016] '... is not a SQLite database' with SqliteException 'SQLite Error 26' and 9 stack frames. 1.59.1: encryption show 'SQLite Error 26: 'file is not a database'.' exit=32; serve 'could not open the bank ...: SQLite Error 26' exit=32; doctor '... wrong key or corrupt bank ...' exit=32. Right key doctor: 'status: HEALTHY' exit=0. Wrong key: '... its key verifier confirms this key is wrong ...' exit=21. Corrupt, no verifier: '... wrong key or corrupt bank ...' exit=32.",
+      "observed-result": "Fixed for all three commands, and all three controls behave as specified. Residual: doctor still writes its 1016 warn ('is not a SQLite database' plus a 9-frame SqliteException) to the console before the correct message, so the console shows two contradicting diagnoses for one bank.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The changelog's claims hold, with the control showing the old output. The 1016 warn is noise the changelog did not claim to remove; raised as a follow-up, not a regression."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "mcpc.py list against the 1.59.2 lane server (tools/list, prompts/list)",
+      "evidence": "tools 30 prompts 2 ['workspace-consolidation-guide', 'memory-usage-guide']",
+      "observed-result": "Listed counts match derived (30/2). Only project_id_token_get, memory_stats, memory_ingest_directory, memory_watch_add, memory_watch_remove and memory_watch_status were called.",
+      "status": "skipped",
+      "accepted": true,
+      "acceptance-reason": "Listing matches derived; calling every tool is out of scope here. The 1.59.0 run called all of them and neither fix adds or removes a tool."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "grep the reference for the ids this run emitted: 915 (ToolRefusals), 1016 (DoctorCommands), 687 (CliSettingsBackend)",
+      "evidence": "915: 3 mentions, '910-915 | src/AiRaccoon/Tools/ToolRefusals.cs'; 1016: 4 mentions, '1014-1016 | src/AiRaccoon/Setup/Cli/Commands/DoctorCommands.cs ... 1016 ... the bank exists but is not a SQLite database'; 687: 4 mentions.",
+      "observed-result": "Every AiRaccoon event id emitted in this run resolves. The SDK's own id 975074943 (control only) is not ours to register.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "All emitted ids resolve."
+    },
+    {
+      "item": "out-of-scope-template-items",
+      "expected-result": "memory-write, memory-search, memory-get, source-path anchor, keyword chunk boundary, note opening chunk, poison row, noise filtering, query guard, long-query cap, watch status, watch catch-up and promotion queue items as in the template",
+      "command": "not run",
+      "evidence": "not run",
+      "observed-result": "Not exercised: neither 1.59.1 nor 1.59.2 changes those paths (1.59.1: Setup/Logging and Tools/ToolRefusals.cs; 1.59.2: watch remove result, key diagnosis, doctor).",
+      "status": "skipped",
+      "accepted": true,
+      "acceptance-reason": "Fix-scoped run; the 1.59.0 run of the same day covers them."
+    }
+  ]
+}
