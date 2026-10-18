@@ -251,12 +251,12 @@
     {
       "item": "encrypted-bank-sqlite3mc-2-6-1",
       "expected-result": "1.58.1 (SQLite3MC 2.6.1): an encrypted scratch bank is created, written, searched, survives a restart, and refuses to open with a wrong key",
-      "command": "AIRACCOON_DB_PASSPHRASE='test-pass-lane-b-1' ai-raccoon --data-root lane-b/enc serve --port 0; MCP memory_write/memory_search; kill pid; file/sqlite3 -readonly; restart with AIRACCOON_DB_PASSPHRASE='WRONG-pass'; restart with right key and search",
-      "evidence": "memory.db: 'data' (xxd header 161e9cfa7ce7...), sqlite3 -readonly -> 'file is not a database (26)'. search 'zeppelin-quartz-4471' -> snippet 'The harbour lighthouse keeper logs zeppelin-quartz-4471 every dusk.'. wrong key: exit=21 'the bank at ... does not open with the resolved encryption key — its key verifier confirms this key is wrong'. After right-key restart: same snippet returned; negative query 'nonexistentqqq9999' -> 0 results. encryption show (with env) -> 'source: env'",
+      "command": "AIRACCOON_DB_PASSPHRASE='test-pass-lane-b-1' ai-raccoon --data-root lane-b/enc serve --port 0; MCP memory_write/memory_search; kill pid; file/sqlite3 -readonly; restart with AIRACCOON_DB_PASSPHRASE='WRONG-pass'; restart with right key and search; premise: strings -a <tool store>/1.59.0/.../osx-arm64/libsqlite3mc.dylib | grep 'Multiple Ciphers'; shasum -a 256 of the same file",
+      "evidence": "memory.db: 'data' (xxd header 161e9cfa7ce7...), sqlite3 -readonly -> 'file is not a database (26)'. search 'zeppelin-quartz-4471' -> snippet 'The harbour lighthouse keeper logs zeppelin-quartz-4471 every dusk.'. wrong key: exit=21 'the bank at ... does not open with the resolved encryption key — its key verifier confirms this key is wrong'. After right-key restart: same snippet returned; negative query 'nonexistentqqq9999' -> 0 results. encryption show (with env) -> 'source: env' Premise: the installed 1.59.0 tool's libsqlite3mc.dylib (sha256 c40774d02787966f4491f5280093f7780dce2380c837b2ff2fbc3497cbd51523) embeds 'SQLite3 Multiple Ciphers 2.6.1' and SQLite source id '2026-10-09 15:46:58 be8d059e9a49'.",
       "observed-result": "encrypted bank created, written, searched, survives restart, wrong key refused with exit 21",
       "status": "pass",
       "accepted": true,
-      "acceptance-reason": "Plain sqlite cannot read it; wrong key refused; data intact after refusal and restart. Uses embedded SQLite3MC of the installed 1.59.0 binary (version of the library not directly queried)."
+      "acceptance-reason": "Plain sqlite cannot read it; wrong key refused; data intact after refusal and restart. Premise checked: the library the installed 1.59.0 binary loads identifies itself as SQLite3 Multiple Ciphers 2.6.1."
     },
     {
       "item": "op-key-source",
