@@ -276,6 +276,8 @@ public sealed partial class SqliteMemoryStore
 
                 // A zero-row stand-in chunk or a skipped file must NOT be fingerprinted: a
                 // fingerprint would hash-skip it forever, even once its content becomes ingestable.
+                // The prune above removed the old chunks, so the old fingerprint goes with them —
+                // else restoring the old content would hash-skip and leave the file chunkless.
                 if (fingerprint && ingestResult.FingerprintEligible)
                 {
                     await connection.ExecuteAsync(
@@ -287,6 +289,11 @@ public sealed partial class SqliteMemoryStore
                                     fileHash,
                                     updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
                                 }, cancellationToken));
+                }
+                else if (fingerprint)
+                {
+                    await connection.ExecuteAsync(
+                            Def(MemorySql.DeleteWatchFile, new { projectId, path }, cancellationToken));
                 }
 
                 await connection.ExecuteAsync(

@@ -364,6 +364,8 @@ internal static class MemorySql
                                                 WHERE project_id = @projectId AND path = @path AND scan_owner = @owner
                                                 """;
 
+    public const string DeleteWatchFile = "DELETE FROM watch_files WHERE project_id = @projectId AND path = @path";
+
     public const string UpsertWatchFile = """
                                           INSERT INTO watch_files (project_id, path, file_hash, updated_at)
                                           VALUES (@projectId, @path, @fileHash, @updatedAt)

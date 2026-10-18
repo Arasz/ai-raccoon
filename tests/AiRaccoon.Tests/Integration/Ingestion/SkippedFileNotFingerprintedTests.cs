@@ -39,12 +39,49 @@ public sealed class SkippedFileNotFingerprintedTests : IDisposable
         second.Skipped.ShouldBe(SkipReason.UnsupportedType);
     }
 
+    [RetryFact]
+    public async Task ReplaceIfFileChangedAsync_IndexedFileTurnsBinary_DropsFingerprintAndChunks_AndRestoredContentIsIndexedAgain()
+    {
+        var provider = BuildProvider();
+        var store = provider.GetRequiredService<IMemoryStore>();
+        var file = Path.Combine(_dataRoot, "notes.md");
+        var original = "# Title\n\nsome indexed body text";
+        await store.SetSettingAsync(IngestScopeKeys.ScopeProject("acme"), IngestScopeKeys.Serialize([_dataRoot]),
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(file, original, TestContext.Current.CancellationToken);
+        (await store.ReplaceIfFileChangedAsync("acme", file, "hash-a", TestContext.Current.CancellationToken))
+            .Skipped.ShouldBeNull();
+        (await CountFingerprintsAsync(provider, file)).ShouldBe(1);
+
+        await File.WriteAllTextAsync(file, "binary\0blob", TestContext.Current.CancellationToken);
+        var turned = await store.ReplaceIfFileChangedAsync("acme", file, "hash-b", TestContext.Current.CancellationToken);
+
+        turned.Skipped.ShouldBe(SkipReason.Binary);
+        (await CountFingerprintsAsync(provider, file)).ShouldBe(0, "the old hash must not outlive the content it described");
+        (await CountChunksAsync(provider, file)).ShouldBe(0);
+
+        await File.WriteAllTextAsync(file, original, TestContext.Current.CancellationToken);
+        var restored = await store.ReplaceIfFileChangedAsync("acme", file, "hash-a", TestContext.Current.CancellationToken);
+
+        restored.Replaced.ShouldBeTrue("restoring the original content must not hash-skip");
+        (await CountChunksAsync(provider, file)).ShouldBeGreaterThan(0);
+        (await CountFingerprintsAsync(provider, file)).ShouldBe(1);
+    }
+
     private ServiceProvider BuildProvider()
     {
         var services = new ServiceCollection();
         services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
         services.RegisterCoreMemoryServices(TestData.CreateInfrastructureOptions(_dataRoot));
         return services.BuildServiceProvider();
+    }
+
+    private static async Task<int> CountChunksAsync(IServiceProvider provider, string path)
+    {
+        var factory = provider.GetRequiredService<ISqliteConnectionFactory>();
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM entries WHERE source_file = @path",
+            new { path = IngestPath.Normalize(path) });
     }
 
     private static async Task<int> CountFingerprintsAsync(IServiceProvider provider, string path)
