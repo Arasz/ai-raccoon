@@ -1,0 +1,313 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-10-18",
+    "branch": "main",
+    "commit": "ef6446f0 (tree for derived facts); installed binary 1.59.0+ef6446f0 from nuget.org",
+    "data-root": "per lane under the session scratchpad (ck/lane-a|b|c); ~/.ai-raccoon read only, port 7721 never bound",
+    "note": "Full run on the published 1.59.0 (upgrade from 1.58.0; 1.58.1 never reached nuget.org). Adds cases for #870 (CLI watch add/remove/status, .ipynb indexing, skipped-file reporting, v18 fingerprint repair) and for 1.58.0/1.58.1 (op key source, SQLite3MC 2.6.1)."
+  },
+  "derived": {
+    "version": "1.59.0",
+    "mcp-tool-count": 30,
+    "mcp-prompt-count": 2,
+    "source": "python3 .claude/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . at ef6446f0"
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "2026-10-13-1.57.6-release",
+      "finding": "pooled-open-concurrency-smoke dropped: 1.58.1 (#868) retired the ADR-0131 pool gate it exercised; the item's subject no longer exists (skill step 5)."
+    },
+    {
+      "prior-run": "2026-10-13-1.57.6-release",
+      "item": "source-path-anchor-resolves-its-chunk",
+      "finding": "1.57.6 recorded that the 2025 decoy note with the same section name was excluded and the anchor returned 'nothing else'. On 1.59.0 the decoy still appears at rank 2 for '#decision' (the anchored chunk leads). Either the prior observation overstated exclusion or ranking changed between 1.57.6 and 1.59.0; not bisected. The item's contract (the anchor leads with its exact chunk) holds."
+    },
+    "Prior poison run's promotion queue score for the decision note was 2.2422 with differing wording; now 2.12 (different note text), no contradiction.",
+    "Prior run recorded 'noise entries' total 5 for 5 positives; this run total 4 for 4 positives (P-set is 4 here).",
+    "Prior (1.57.6) watch-catch-up evidence reproduced on 1.59.0 with fresh derivation; no disagreement."
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Installed global tool is the published nuget.org 1.59.0; --version equals derived 1.59.0; shim resolves to 1.59.0",
+      "command": "dotnet tool update -g ai-raccoon --version 1.59.0; ai-raccoon --version; dotnet tool list -g; readlink ~/.dotnet/tools/ai-raccoon; curl nupkgs from api.nuget.org flat-container; shasum -a 256 vs ~/.dotnet/tools/.store copies; unzip RID nupkg and cmp every tools/net10.0/osx-arm64 file vs installed",
+      "evidence": "update: 'successfully updated from version 1.58.0 to version 1.59.0'\n--version: 1.59.0+ef6446f061851de076f8d6820b862eeef180ed67\ntool list: ai-raccoon 1.59.0\nreadlink: .store/ai-raccoon/1.59.0/ai-raccoon.osx-arm64/1.59.0/tools/net10.0/osx-arm64/AiRaccoon\nmeta nupkg 7d43fefb5961619bfa4660cfa068eda7f513153753c497a6a9f78b09e3e388c3 == store\nRID nupkg e65c4b613995f1825174568264b6f2fcad269148c8fbff2f7e01390318b333f1 == store\nfiles=97 diffs=0; AiRaccoon.dll 8671d051d369fab06722faff06c2b9a2f49da0157e59b818109ee9653c715593",
+      "observed-result": "Installed binary is byte-identical to nuget.org 1.59.0 (both nupkgs, all 97 RID files); informational commit ef6446f0 is the publish run's head (#871 merge on top of #870). File count 97 vs 98 at 1.57.6.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Substituted instrument: published-package identity (nupkg + per-file sha equality) instead of a local Release pack — a local pack would re-test different bytes than the ones users get. --version matches derived 1.59.0."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "(see run file)",
+      "command": "ai-raccoon --data-root lane-a/lc serve --port 0 --idle-timeout 0; then serve --restart --port 61107; lsof on 61107 and 7721 before/after",
+      "evidence": "log: 'asking the server on port 61107 to stop (pid 98215...)' / 'the server on port 61107 (pid 98215) stopped and the port is free'; new listener pid 99325 on 61107, old pid 98215 gone; 7721 listener pid 92397 unchanged before and after; /observability pid 99325",
+      "observed-result": "port 0 bound 61107; restart cycled the server (98215->99325), never touched 7721",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "command run and output read, with negative control"
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "(see run file)",
+      "command": "mcp.py JSON-RPC to scratch server: memory_write astro, finance, and '[IMPORTANT: Background process 4412 finished with exit code 0\\n]'; sqlite3 -readonly",
+      "evidence": "stored:true with hashes 93978abc.. / dc85a649..; noise write: stored:false, hash '', reason \"rejected by noise policy 'HermesBackgroundProcessLog'\"; entries count 2, 0 rows containing 'Background process 4412' in entries, 1 row in noise_entries",
+      "observed-result": "truthful report; rejected write has no hash",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "command run and output read, with negative control"
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "(see run file)",
+      "command": "memory_search kind=memory minRelativeScore=0 q='ancient sailors gadget measuring altitude heavenly bodies' (no literal overlap) default/vectorWeight=0/ftsWeight=0; control 'how do I bake sourdough...'",
+      "evidence": "hybrid: astro.md rank1 legs [vector 1], cosine 0.792, finance cosine 0.673; vectorWeight=0 -> n=0 (no lexical overlap); ftsWeight=0 -> same vector order. Overlapping query ('centuries-old device...a...') gave legs fts+vector rank1. Control sourdough cosines 0.678/0.641 under 0.79 floor",
+      "observed-result": "written entry returned via vector leg; fusion works; control query not a strong hit",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "command run and output read, with negative control"
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "(see run file)",
+      "command": "memory_get hash of astro note; hash 0*64; same hash under another projectId",
+      "evidence": "known hash returns full value 'The astrolabe sits on the brass shelf...'; unknown: isError 'unknown-hash: No entry with hash 0000... in project ...'; other project's hash also unknown-hash",
+      "observed-result": "refuses rather than empty",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "command run and output read, with negative control"
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "(see run file)",
+      "command": "memory_write 2026-outage.md section=decision and section=rollback, decoy 2025-outage.md section=decision, 12 filler notes; memory_search default limit for '2026-outage.md#decision','#rollback','#no-such-section'",
+      "evidence": "#decision -> first result 2026-outage.md chunk 0/2 'Decision: we chose t', decoy 2025 ranked 2nd; #rollback -> first result 2026-outage.md chunk 1/2 'Rollback: we reverte'; #no-such-section -> 8 mixed results, no clean single hit",
+      "observed-result": "exact chunk leads the default 8-result window; decoy not ahead of it (decoy still present lower in the window, anchor leads rather than filters)",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "command run and output read, with negative control"
+    },
+    {
+      "item": "keyword-search-across-a-chunk-boundary",
+      "expected-result": "(see run file)",
+      "command": "memory_write fete note (45 sentences + ' Invoice reference vk83jq...') and 2560-char sha256 term; sqlite3 premise; memory_search vk83jq kind=memory minRelativeScore=0 default and vectorWeight=0; whole term",
+      "evidence": "sqlite: /notes/fete.md chunks 0 (4611 chars, instr 0) and 1 (533 chars, instr vk83jq=493); 'vk83jq' -> fete.md chunk 1/2 legs [fts,vector]; vw0 -> fete.md [fts]; longterm.md rows 1710+850 chars (no row holds whole term), whole-term search -> longterm.md legs [fts,vector], vw0 [fts]; control vk83jr vw0 -> n=0",
+      "observed-result": "fts leg finds the id in the row that holds it whole",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "command run and output read, with negative control"
+    },
+    {
+      "item": "note-opening-chunk-reports-index-zero",
+      "expected-result": "(see run file)",
+      "command": "memory_write /notes/minutes.md 62 paragraphs, first 'Opening marker zq71.'; sqlite3; memory_search zq71",
+      "evidence": "sqlite: minutes.md chunk_index 0 length 4304 instr(zq71)=16; chunk 1 length 3015 instr 0; search zq71 -> minutes.md chunkIndex 0, totalChunks 2, legs [fts,vector]; vw0 [fts]",
+      "observed-result": "opening chunk reports index 0",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "command run and output read, with negative control"
+    },
+    {
+      "item": "poison-memory-row-isolated-and-abandoned",
+      "expected-result": "On a fresh scratch bank with no engine set, memory_write four ordinary notes and one containing POISON-7Q, so all five rows are pending. Start `python3 scripts/poison-embedding-stub.py --port 0 --log stub.log`, then run `model embedding set openai stub-embed <printed base URL> --api-key stub-key` against the scratch server. memory_embed_pending returns {processed, pending} and does not fail or hang. Later calls return pending 1. `sqlite3 -readonly memory.db \"SELECT embed_state, embed_attempts, count(*) FROM entries GROUP BY 1, 2\"` shows four rows embedded and the poison row pending at embed_attempts 3. memory_stats.pending is 1, and the count of poison lines in stub.log stays the same across three more memory_embed_pending calls. Negative control: stub.log holds a `poison 5` batch line followed by `ok 1` lines, so the engine refused the batch and answered the single rows. A build without ADR-0119 fails every memory_embed_pending with ClientResultException, keeps all five rows pending and adds a poison line per call (ADR-0119)",
+      "command": "serve --port 0 on lane-b/main (57533); 5 memory_write (4 ordinary + 'Cartography note POISON-7Q refuses to embed.'); poison-embedding-stub.py --port 0 --log stub.log (http://127.0.0.1:57574/v1); ai-raccoon --data-root lane-b/main --port 57533 model embedding set openai stub-embed http://127.0.0.1:57574/v1 --api-key stub-key; sleep 12; sqlite3 -readonly GROUP BY; 3x memory_embed_pending with grep -c poison stub.log before/after; memory_stats",
+      "evidence": "before engine: 'pending|0|5'. after: 'embedded|0|4' and 'pending|3|1'. stub.log: 'ok 1/poison 5/ok 1/ok 1/ok 1/ok 1/poison 1/poison 1/poison 1/ok 1/poison 1/poison 1/ok'. call1/2/3 {\"processed\":0,\"pending\":1} poison_before=6 after=6 each. memory_stats pending:1. serve.log 'Giving up on memory row 5 (952c7d35...) after 3 failed embed attempts'; pending row path 952c7d35....md",
+      "observed-result": "4 rows embedded, poison row pending at attempts 3, abandoned; no poison traffic growth over 3 more calls; batch 'poison 5' followed by single 'ok 1'/'poison 1' lines",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Negative control is the stub's own poison 5 batch refused then singles; pending path matches the POISON-7Q write; counts unchanged across calls."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "registry scan of src: only AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy> and INoiseDetector->NoOpNoiseDetector (src/AiRaccoon/Setup/AppRegistrations.cs); python noise.py over MCP memory_write (4 positives, 5 negatives incl. clean note); ai-raccoon --port 57533 noise entries; sqlite3 -readonly noise_entries / entries",
+      "evidence": "P1 '[IMPORTANT: Background process proc_77 finished with exit code 0]', P2 '  [async delegation batch complete] 3 tasks done', P3 'received signal 15', P4 '  Received Signal 1.' all stored False reason \"rejected by noise policy 'HermesBackgroundProcessLog'\". N1-N5 (mid-sentence ASYNC marker, 'We received signal 15 from the radio tower', 'received signal fifteen', [IMPORTANT: freeze deploys..., clean budget note) stored True. noise entries: 'total: 4 / HermesBackgroundProcessLog: 4'. noise_entries rows 1-4 hold the verbatim texts; entries containing proc_77/'received signal 15'/'3 tasks done': 0; N1,N3 present",
+      "observed-result": "single registered policy rejects exactly its 4 claimed shapes, 5 negatives incl. clean control stored; rejected text retrievable in noise_entries",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Registered-policy list derived from source; positives rejected and recoverable, negatives stored."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "python qg.py over MCP memory_search (port 57533) plus ai-raccoon --port 57533 settings queryguard show|structural threshold set 0.5|structural enable|structural disable|disable|enable",
+      "evidence": "default show: 'enabled: True shadow: False structural: False threshold: 0.98939822280316'. REFUSE-1/2 (bracketed IMPORTANT/ASYNC prefixes) -> ERR invalid-params 'This looks like tool output rather than a question'. CTRL-1 '[IMPORTANT: Background process notes] how do deploys work' OK n=0 warn=''; CTRL-2 plain question OK warn=''. WARN-1 stack frame and WARN-2 'info:/fail:' -> OK with warn 'This query contains what looks like log or stack-trace output'. Structural OFF: 9-line timestamp/hex log -> OK warn=''. After threshold 0.5 + enable (show structural: True): same query OK warn \"This query's shape (line layout, punctuation density, token structure)...\"; REFUSE-1/2 still refused by regex tier; after structural disable -> warn=''. guard disabled: REFUSE-1/2 -> OK n=0 warn=''; re-enabled",
+      "observed-result": "refuse and annotate tiers as ADR-0040; structural detector off by default, only annotates (never refuses), toggles cleanly",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Each tier has a control that does not trigger it and a toggle that proves the setting is what changes the outcome. Note: at threshold 0.5 CTRL-1 is also annotated (annotation only)."
+    },
+    {
+      "item": "long-query-keyword-terms-capped",
+      "expected-result": "(see run file)",
+      "command": "VACUUM INTO copy (big/, watches deleted) served port 57658; i7.py pastes; i8.py cap probes on fresh bank; negative control: 1.56.0 in lane-a/tool-1560 on its own copy and fresh bank",
+      "evidence": "1.59.0: CLAUDE.md[:7000] 12.0s cold/1.2s warm, stopword paste 3.8s/0.5s; warning 'Keyword (FTS) matching is capped too: it searches only the first 64 distinct words of a query this long' (no still-sees-full clause). Probes: marker after 70 fillers -> []; first -> fts leg; after 80 repeats of 2 words -> fts hit; 6-token query with 'the' hits the 'the' notes (fete/minutes), 71-token query does not. 1.56.0: stopword paste 62.0s (vs 0.5s), claude.md paste 15.7s, marker after 70 -> found. 1.56.0 71-token 'the' control inconclusive (fresh bank lacked 'the'-only notes)",
+      "observed-result": "cap works; old build slow and finds trailing marker",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "substituted: bank source was the owner's eval copy ~/ai-raccoon-eval/copies/cb99fe6ecbe0.db (live bank read denied by auto-mode classifier); same schema/content class"
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "serve --port 0 on lane-c/dr1; settings ingest scope add/watch enable; MCP memory_watch_add wd5/a, wd5/b; memory_watch_status; memory_watch_remove a; status + sqlite3 -readonly 'select path from watches'; remove b and wd4; status",
+      "evidence": "after add: [('-c/wd4','Healthy','2026-10-18T08:29:20Z'),('/wd5/a','Healthy','...08:29:47.100623'),('/wd5/b','Healthy','...47.102039')]; after remove a: [wd4 Healthy, wd5/b Healthy], table rows wd4, wd5/b; after removing all: {\"watches\":[]} and count(*) watches = 0. Registrations were non-empty in between (negative control: empty before and after).",
+      "observed-result": "Status lists each registration with state/lastSync; removal drops it from both status and the watches table.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "watch-catch-up-heals-a-missed-change",
+      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "command": "dr2 server; scratch wc/ with x.md,w.md,y.md,node_modules/pkg/index.md (chmod 000), .git/notes.md; 3 watch_files rows; edit y.md; read values; kill; rewrite x.md same length (xylophoneaaa->xylophonebbb) utime 1792312230; rewrite w.md 18->22 bytes utime 1792312200; restart same root; sleep 14; sqlite3 + memory_search",
+      "evidence": "premise: x.md updated_at 1792312226 <= mtime 1792312230 <= last_change_ts 1792312249; w.md mtime 200 < updated_at 226. After restart: watch_files x.md updated_at 1792312270 size 18 hash c25d0c3bcb; w.md 1792312270 size 22 hash 7244eac990; independent sha256(path+bytes) x=c25d0c3bcbd2 w=7244eac99088 match. search: xylophonebbb->wc/x.md (fts), walrusnewterm777->wc/w.md (fts), xylophoneaaa [], walrusold111 [], nmzzzterm [], gitzzzterm [], yakyakyak->y.md. status Healthy, skippedCount 0.",
+      "observed-result": "Both missed edits healed after restart; old terms gone; node_modules (unreadable) and .git terms never found; y.md control untouched (updated_at 1792312249).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "python promo.py a / promo2.py over MCP on lane-b/main (stub engine so rows embedded): memory_promotion_list (baseline), memory_write x3 (substantive decision note, 'ok done', status-update note), memory_share_extract mode=propose, memory_promotion_list includeFullValue, sqlite3 -readonly promotion_queue, memory_promotion_discard hash=b2e4b1fb..., re-extract, memory_write context=shared",
+      "evidence": "baseline rows:[] waiting 0. After extract list: 8875c004 score 2.12 ['organic-note','durable-fact-language','short-definitional-floor'] 'Decision: the parish roof fund keeps slate repairs...'; b2e4b1fb 'ok done' 0.5 ['organic-note','too-short']; waitingPromotionsCount 11; sqlite promotion_queue rows match (8875c004|2.12..., b2e4b1fb|0.5|too-short); status-update note (embedded) absent from queue (0 rows). discard -> {\"discarded\":1} waiting 10; re-extract: b2e4b1fb count 0; serve.log PromotionQueueService[703] 'Discarded 1 queued row(s)'. shared-context write -> 4085edb0 score 5.0 ['agent-requested-share'] listed",
+      "observed-result": "list content/scores/reasons equal the sqlite table; discarded candidate stays gone after re-extract; agent-requested share enqueued",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Asserted on content and reasons, with a below-threshold control (status note) and a discard."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "python3 mcpc.py-style JSON-RPC against 57533: tools/list, prompts/list, prompts/get x2; surf.py called every tool after settings access default set full, settings ingest scope add '*' <lane files>, settings watch enable '*' true",
+      "evidence": "tools/list = 30 (derived 30), prompts/list = ['workspace-consolidation-guide','memory-usage-guide'] (derived 2); both prompts/get returned messages. Tools called, MISSING [] : memory_watch_add, memory_promotion_discard, memory_share, project_id_token_get, memory_performance, memory_sync, memory_watch_remove, memory_record_grade, memory_stats, memory_ingest_file, memory_embed_pending, memory_workspace_discard, memory_set_ttl, memory_record_followthrough, memory_search, memory_sweep, memory_list, memory_delete, code_get, memory_get, memory_delete_context, memory_workspace_status, memory_write, memory_ingest_directory, memory_watch_status, memory_share_extract, project_id_get, memory_workspace_consolidate, memory_workspace_begin, memory_promotion_list. All ok except code_get (unknown-hash for a fabricated hash: reachable, correct refusal) and memory_sync (sync-not-configured: reachable, no sync configured)",
+      "observed-result": "30 tools + 2 prompts listed; all 30 reached and answered with their documented success or typed refusal",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Count equals derived facts; list names by-name diffed to calls (missing = none). code_get/memory_sync success paths not exercised (no code index / sync target)."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "collected [id] from info/warn lines in serve logs of all lane-b servers (enc, opd, main); resolved each against docs/reference/logging-event-ids.md ranges with a python range parser",
+      "evidence": "ids seen: 0,14,443,444,446,447,448,510,525,601,672,674,692,703,910,911,1003,1008. Resolved: 443/444 EntryEmbedder.cs; 446 NoteChunkOrderRepairJob; 447 ChunkBoundaryRepairJob; 448 ChunkBudgetReconciler; 510 BankMaintenanceHostedService; 525 MaintenanceJobRunner; 601 NodeRunner; 672/674 SettingsEndpoint; 692 OwnerOnlyFile; 703 PromotionQueueService; 910/911 ToolRefusals; 1003/1008 EmbedDrainReporter. 0 and 14 are category Microsoft.Hosting.Lifetime (framework), not AiRaccoon ids (14 coincidentally also in a 13-14 doc row)",
+      "observed-result": "every AiRaccoon-category id resolves to a doc row; two framework ids excluded by category",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Category taken from the log line, so framework ids are not mistaken for ours; no UNRESOLVED AiRaccoon id."
+    },
+    {
+      "item": "watch-cli-add-remove-status",
+      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "command": "ai-raccoon --data-root <lane>/drN [--port <p>] watch add/status/remove (port of the lane server); MCP memory_watch_status; sqlite3 -readonly 'select project_id,path from watches'",
+      "evidence": "fresh add wd2/other -> 'registered: .../wd2/other' (no absorbedBy), status 'state: scanning'; re-add wd2/sub -> 'registered: ... absorbedBy: .../wd2/sub'; broader add wd2 -> 'registered: .../wd2 pruned: .../wd2/sub'; MCP status = {path:.../wd2,state:Scanning}, watches table = same single wd2 row; remove -> 'removed: .../wd2'; final status 'no registered watches', watches count 0.",
+      "observed-result": "add, status (CLI == MCP == table), re-add absorbedBy, prune on broader add and remove all behave as specified. Note: 'watch remove' of an already-removed path prints 'removed:' again (a no-op, but the wording does not say so).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Three views agree; negative control: status empty before add and after remove."
+    },
+    {
+      "item": "watch-cli-refusals-name-their-fix",
+      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "command": "ai-raccoon --data-root <lane>/drN [--port <p>] watch add <id> <path> for each refusal; then an allowed add",
+      "evidence": "watching-disabled: '...Fix: ai-raccoon settings watch enable 33333333-... true' [exit 10]; path-outside-scope: 'Path .../wd3 is outside the ingest scope. Fix: ai-raccoon settings ingest scope add 1111... .../wd3' [exit 10]; watch-overlap: 'Path .../wd2/sub/a.md is already covered by watch .../wd2/sub ... see ai-raccoon watch status 1111...' [exit 10]; project-not-registered: '...Fix: ... or register it with ai-raccoon project id register 2222-...' [exit 18]; allowed add 'registered: .../wd2/sub' [exit 0].",
+      "observed-result": "All four refusals non-zero (10,10,10,18) and name the fixing command; allowed add exits 0.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Negative control: allowed add exit 0."
+    },
+    {
+      "item": "notebook-cells-indexed-without-outputs",
+      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "command": "watch wd4/proj containing nb.ipynb (markdown+code cells, ``` line in a code cell, stream output OUTPUTMARKER_kk9921, display_data image/png base64 + OUTFIG_pp4410, attachment png); sqlite3 entries; memory_search with evidenceByHash; big.ipynb with 30 code cells to force chunking",
+      "evidence": "entry section 'cell 1 (markdown) | cell 2 (code) | cell 3 (code) | cell 4 (markdown)', body '## cell 1 (markdown) ... ## cell 2 (code)'. count(value like): frobnicate_quux7731 1, zanzibar 1, fence_inside_cell_ww5512 1, tail_marker_rr3308 1, ctrlmd 1 (control), OUTPUTMARKER_kk9921 0, OUTFIG_pp4410 0, 'iVBOR' 0, base64 png prefix 0. search frobnicate_quux7731 -> nb.ipynb legs [fts rank 1]; 'zanzibar gnomon' -> nb.ipynb fts; OUTPUTMARKER_kk9921 [] ; OUTFIG [] . Fence cell body shows escaped '\\```' lines inside an outer fenced cell. big.ipynb 11 chunks, cell-aligned (3 cells each); chunk 6 holds the fence cell: fence=4 unescaped (balanced) esc=2; every chunk even fence count.",
+      "observed-result": "Cells indexed, outputs/attachments/base64 absent, fence in cell escaped and balanced, chunks never split mid-cell.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "watch-skipped-files-reported",
+      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "command": "watch wd4 (proj/ctrl.md, nb.ipynb, big.ipynb, broken.ipynb, blob.txt, blob.cs, data.xyzq): watch status CLI + MCP; kill/restart w/o file changes; delete blob.txt; rewrite broken.ipynb valid; add 22 binaries",
+      "evidence": "initial CLI: 'skipped: 4' blob.cs (binary), blob.txt (binary), broken.ipynb (unparseable), data.xyzq (unsupported-type); ctrl.md/nb.ipynb not listed; MCP skippedCount 4 with same reasons. Restart with no file change: immediately 'skipped: 4' identical. Live delete of blob.txt + fixing broken.ipynb: broken.ipynb and blob.txt gone from list, memory_search repaired_nb_ident_ss4417 finds broken.ipynb. With 22 extra binaries: 'skipped: 24', 20 listed then '… 4 more'; MCP skippedCount 24, 20 listed.",
+      "observed-result": "Reasons correct, control not listed, persistence across restart, delete/fix removes entry, cap 20 with '… N more'. (Also: a restart with the files deleted/fixed while the server was down dropped them from the list: 'skipped: 2' after catch-up.)",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "fingerprint-repair-migration-v18",
+      "expected-result": "(as in docs/work/checklist/2026-10-18-1.59.0-release.json)",
+      "command": "live bank ~/.ai-raccoon user_version=18 (doctor: 'user_version: 18 (this binary: 18)') so pre-v18 case built: dotnet tool install ai-raccoon --version 1.58.0 --tool-path lane-c/old; serve with it on dr3, MCP memory_watch_add wd6 (backed.md, ctrl.md, old_nb.ipynb, data.xyzq); copy+VACUUM INTO dr4, DELETE FROM watches; serve with 1.59.0; sqlite3",
+      "evidence": "pre (1.58.0 bank, user_version 17): watch_files rows backed.md, ctrl.md, old_nb.ipynb, data.xyzq; entries only backed.md, ctrl.md; code_entries 0; orphans pre = data.xyzq, old_nb.ipynb. After 1.59.0 opened dr4: user_version 18; watch_files = backed.md, ctrl.md; orphans after = 0. Re-adding watch: old_nb.ipynb now indexed as 'cell 1 (markdown) | ...', status 'skipped: 1' data.xyzq (unsupported-type).",
+      "observed-result": "Migration to v18 removed exactly the unbacked rows, kept backed ones, and the notebook was re-scanned and indexed.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Live bank is already v18, so a pre-v18 bank was created with ai-raccoon 1.58.0 (substituted instrument) and migrated by 1.59.0; accepted."
+    },
+    {
+      "item": "encrypted-bank-sqlite3mc-2-6-1",
+      "expected-result": "1.58.1 (SQLite3MC 2.6.1): an encrypted scratch bank is created, written, searched, survives a restart, and refuses to open with a wrong key",
+      "command": "AIRACCOON_DB_PASSPHRASE='test-pass-lane-b-1' ai-raccoon --data-root lane-b/enc serve --port 0; MCP memory_write/memory_search; kill pid; file/sqlite3 -readonly; restart with AIRACCOON_DB_PASSPHRASE='WRONG-pass'; restart with right key and search",
+      "evidence": "memory.db: 'data' (xxd header 161e9cfa7ce7...), sqlite3 -readonly -> 'file is not a database (26)'. search 'zeppelin-quartz-4471' -> snippet 'The harbour lighthouse keeper logs zeppelin-quartz-4471 every dusk.'. wrong key: exit=21 'the bank at ... does not open with the resolved encryption key — its key verifier confirms this key is wrong'. After right-key restart: same snippet returned; negative query 'nonexistentqqq9999' -> 0 results. encryption show (with env) -> 'source: env'",
+      "observed-result": "encrypted bank created, written, searched, survives restart, wrong key refused with exit 21",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Plain sqlite cannot read it; wrong key refused; data intact after refusal and restart. Uses embedded SQLite3MC of the installed 1.59.0 binary (version of the library not directly queried)."
+    },
+    {
+      "item": "op-key-source",
+      "expected-result": "1.58.0: the 1Password CLI (op) bank-key source supplies the key and opens an encrypted bank; an op failure is reported as a clear error, not an opened/garbled bank",
+      "command": "fake op script lane-b/fakebin/op first on PATH (--version -> 2.99.0-fake; 'read <ref>' -> prints OpenSSH ed25519 key k1 by default, FAKE_OP_MODE=fail -> stderr error exit 1, otherkey -> key k2); printf 'op://TestVault/BankKey/private key?ssh-format=openssh\\n' | ai-raccoon --data-root lane-b/opd encryption 1password; encryption show; serve; MCP write/search; restart variants",
+      "evidence": "config: 'encryption source set to 1password'; show: 'source: 1password / reference: op://TestVault/BankKey/private key?ssh-format=openssh'; op.calls shows 'read op://TestVault/BankKey/private key?ssh-format=openssh'. memory.db not plain sqlite. serve opened it; search 'marigold-basalt-8812' -> 'Op-keyed bank holds marigold-basalt-8812 sentinel.' (also after a restart). fail variant: exit=25 'could not resolve the encryption key: op failed (exit 1): [ERROR] ... not signed in to 1Password'. otherkey: exit=21 'does not open with the resolved encryption key ... key is wrong'. op not on PATH: exit=23 'op not found — install the 1Password CLI (op) and sign in or set OP_SERVICE_ACCOUNT_TOKEN'. memory.db sha256 identical before/after the failure variants (09e113ce...)",
+      "observed-result": "op supplies the key, bank opens and persists; op failure/missing/wrong key are clear typed errors with the bank left byte-identical",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Instrument: fake `op` shell script on PATH emitting a throwaway ed25519 key (real 1Password binary, vaults and desktop-app integration not touched). The real-op desktop-app path (ADR-0132 'Manual check required') remains unverified."
+    }
+  ],
+  "event-ids-seen": [
+    0,
+    14,
+    443,
+    444,
+    446,
+    447,
+    448,
+    510,
+    525,
+    601,
+    650,
+    651,
+    672,
+    674,
+    687,
+    692,
+    694,
+    703,
+    899,
+    910,
+    911,
+    1003,
+    1008
+  ],
+  "observations": [
+    "lane a: anchor decoy still appears in window (rank 2) for #decision; prior run said excluded - 'leads' is what the 1.59.0 spec states",
+    "lane a: 6-token query: stopwords retained so 'no literal overlap' semantic queries must avoid 'a','of','the'",
+    "lane a: all lane servers killed; 7721 untouched (pid 92397)",
+    "lane a: lc/data/big/big-old/old-fresh data roots and tool-1560 left under lane-a",
+    "lane b: `ai-raccoon encryption show` against an env-passphrase bank without AIRACCOON_DB_PASSPHRASE in the CLI shell fails with raw 'SQLite Error 26: file is not a database' rather than a key-specific message (exit code not recorded).",
+    "lane b: `model embedding set openai` rejects the stub's first stdout line 'listening on http://...' as a URL; the stub prints a prefix before the URL (script prints 'listening on <url>', docs in item say 'printed base URL') - pass only the URL.",
+    "lane b: In surf.py a memory_search for 'glassblowing furnace' right after writing the note returned results:[] (with a code engine warning); an identical later search returned the note. Likely write-to-FTS visibility timing or kind=both with a stub engine; not investigated.",
+    "lane b: At queryguard structural threshold 0.5, a benign bracketed question (CTRL-1) was annotated; threshold default 0.989 not exercised.",
+    "lane b: Servers started: enc, opd, main (+poison stub); all killed, none left running.",
+    "lane c: Exit codes differ per refusal kind: 10 for watching-disabled/outside-scope/overlap, 18 for project-not-registered.",
+    "lane c: 'watch remove' on a path that is not watched prints 'removed: <path>' (spec says no-op).",
+    "lane c: Version 1.58.0 has no 'watch add' CLI; MCP memory_watch_add used for the pre-v18 bank.",
+    "lane c: Skip list page cap is 20 with '… N more'; MCP lists 20 entries with skippedCount total.",
+    "lane c: Servers for the lane were stopped by pid (98759, 55157, 57879, 62263, 64580, 67653, 70570)."
+  ]
+}
