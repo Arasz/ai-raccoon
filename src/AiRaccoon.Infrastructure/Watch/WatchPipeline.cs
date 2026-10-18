@@ -143,6 +143,18 @@ public sealed partial class WatchPipeline(
         Unregistered?.Invoke(projectId, normalized);
     }
 
+    /// <summary>
+    ///     Forgets a watch's skipped files ahead of a full scan, which re-reports whatever is still
+    ///     skipped; a file the scan now filters out (an ignore edit) is otherwise never digested again.
+    /// </summary>
+    public void ClearSkips(string projectId, string path)
+    {
+        lock (_gate)
+        {
+            _skipped.Remove(new WatchKey(projectId, IngestPath.Normalize(path)));
+        }
+    }
+
     /// <summary>Marks a watch scanning (docs/plans/file-watcher-implementation.md S5's initial scan) — clears the last error.</summary>
     public void MarkScanning(string projectId, string path)
     {

@@ -688,6 +688,31 @@ public sealed class WatchCatchUpTests
     }
 
     [RetryFact]
+    public async Task EnqueueInitialScan_SkippedFileNowIgnored_LeavesTheSkipList_AndStillSkippedFilesAreReported()
+    {
+        using var dir = TempDir.New("catchup-skip-then-ignored");
+        var tool = dir.File("tool.xyz");
+        var other = dir.File("other.xyz");
+        await WriteAllTextAsync(tool, "nobody routes this", TestContext.Current.CancellationToken);
+        await WriteAllTextAsync(other, "nor this", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Pipeline.RegisterWatch(Project, dir.Path);
+        var catchUp = NewCatchUp(stack);
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Pipeline.GetStatuses(Project).ShouldHaveSingleItem().SkippedCount.ShouldBe(2);
+
+        stack.IgnoreRules.Set(dir.Path, "tool.xyz\n");
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        var status = stack.Pipeline.GetStatuses(Project).ShouldHaveSingleItem();
+        status.Skipped.ShouldBe([new SkippedFile(other, SkipReason.UnsupportedType)]);
+    }
+
+    [RetryFact]
     public async Task EnqueueInitialScan_FingerprintedFileNewlyIgnored_ReconcileDeletesIt()
     {
         using var dir = TempDir.New("catchup-reconcile-ignored");
