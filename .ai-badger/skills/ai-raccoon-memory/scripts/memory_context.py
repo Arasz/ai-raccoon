@@ -379,6 +379,13 @@ def child_env(env: Mapping[str, str]) -> Dict[str, str]:
             if name != "OPENROUTER_API_KEY" and not name.startswith(KILL_SWITCH + "_")}
 
 
+def search_params(project_id: str, session_id: str, query: str) -> Dict[str, Any]:
+    """The `tools/call` params of one project-scope `memory_search`."""
+    return {"name": "memory_search", "arguments": {
+        "projectId": project_id, "sessionId": session_id,
+        "query": query, "limit": SEARCH_LIMIT, "scope": "project"}}
+
+
 class RaccoonSession:
     """One `ai-raccoon` proxy child speaking MCP over stdio; single-threaded, deadline-bound.
 
@@ -436,9 +443,8 @@ class RaccoonSession:
     def search(self, query: str, budget: Budget) -> Optional[SearchResult]:
         """One `memory_search` (project scope, limit 5), or None; never raises."""
         try:
-            reply = self.request("tools/call", {"name": "memory_search", "arguments": {
-                "projectId": self.project_id, "sessionId": self.session_id,
-                "query": query, "limit": SEARCH_LIMIT, "scope": "project"}}, budget)
+            reply = self.request("tools/call",
+                                 search_params(self.project_id, self.session_id, query), budget)
             return None if reply is None else parse_search_reply(reply)
         except Exception:  # pylint: disable=broad-exception-caught
             self.poisoned = True
@@ -540,6 +546,63 @@ class RaccoonSession:
             self.process.stdout.close()
         except OSError:
             pass
+
+
+# --------------------------------------------------------------- session broker
+
+BROKER = "memory_broker"
+
+
+def load_broker() -> Optional[Any]:
+    """The sibling `memory_broker` (a per-session proxy shared by the session's hooks), or
+    None when this layout does not ship it."""
+    return _load_sibling(BROKER)
+
+
+class BrokerSession:
+    """Searches over the session's broker instead of a proxy of its own.
+
+    `search` returns None when the broker could not answer; `unavailable` says no broker
+    answers for the session at all, so the caller should fall back to a per-call proxy.
+    """
+
+    def __init__(self, module: Any, project_id: str, session_id: str, home: Optional[str]):
+        self.module = module
+        self.project_id = project_id
+        self.session_id = session_id
+        self.home = home
+        self.unavailable = False
+
+    @classmethod
+    def connect(cls, project_id: str, session_id: str,
+                env: Mapping[str, str]) -> Optional["BrokerSession"]:
+        """A session on the live broker for *session_id*, or None; never raises."""
+        try:
+            if sys.platform == "win32" or not js_trim(session_id or ""):
+                return None
+            module = load_broker()
+            home = env.get("HOME")
+            if module is None or not module.is_live(session_id, home):
+                return None
+            return cls(module, project_id, session_id, home)
+        except Exception:  # pylint: disable=broad-exception-caught
+            return None
+
+    def search(self, query: str, budget: Budget) -> Optional[SearchResult]:
+        """One `memory_search` through the broker within *budget*, or None; never raises."""
+        try:
+            reply = self.module.call(self.session_id, "tools/call",
+                                     search_params(self.project_id, self.session_id, query),
+                                     budget.remaining(), self.home)
+        except self.module.Unavailable:
+            self.unavailable = True
+            return None
+        except Exception:  # pylint: disable=broad-exception-caught
+            return None
+        return None if reply is None else parse_search_reply(reply)
+
+    def close(self, budget: Budget) -> None:
+        """Nothing to close: the broker owns the proxy."""
 
 
 # -------------------------------------------------------------- orchestration
@@ -780,7 +843,14 @@ def search_block(query: str, project_id: str, session_id: Optional[str], budget:
 
 def _single_search(exe: str, query: str, project_id: str, session_id: str, budget: Budget,
                    env: Mapping[str, str]) -> Optional[str]:
-    """One session, one search, closed: the block, `""` for no hits, None when it failed."""
+    """One search: over the session's broker when one answers, else one session opened and
+    closed here. The block, `""` for no hits, None when it failed."""
+    module = load_broker() if sys.platform != "win32" and js_trim(session_id) else None
+    if module is not None:
+        found = BrokerSession(module, project_id, session_id, env.get("HOME")).search(query,
+                                                                                      budget)
+        if found is not None or budget.expired():
+            return _render(query, found)
     session = RaccoonSession.open(exe, project_id, session_id, budget, env)
     if session is None:
         return None
@@ -788,6 +858,11 @@ def _single_search(exe: str, query: str, project_id: str, session_id: str, budge
         found = session.search(query, budget)
     finally:
         session.close(budget)
+    return _render(query, found)
+
+
+def _render(query: str, found: Optional[SearchResult]) -> Optional[str]:
+    """The block for *found*, `""` for no hits, None for no answer."""
     if found is None:
         return None
     mem, code = prune_hits(found[0])[:MAX_HITS], prune_hits(found[1])[:MAX_HITS]
@@ -825,8 +900,8 @@ def build(prompt: str, cwd: str, session_id: Optional[str], *,
                                    env)
             return block or None
         run_budget = budget if budget is not None else Budget(pipeline.limits.total)
-        session = RaccoonSession.open(exe, project_id, session_id,
-                                      run_budget.child(pipeline.limits.search), env)
+        session = BrokerSession.connect(project_id, session_id, env) or RaccoonSession.open(
+            exe, project_id, session_id, run_budget.child(pipeline.limits.search), env)
         if session is None:
             return None
         try:

@@ -14,6 +14,9 @@
                    way from the manifest's `<plugin>~g<generation>` dir; installed plugins win
 A bare name takes the first scope above that has it. `claude.ai <Name>` connectors are OAuth and
 host-managed, and managed enterprise config is not read: both resolve to no spec.
+
+A spec with a `headersHelper` also gets a `Helper`: where Claude Code would run it, whether it runs
+without credential variables, and whether its project is trusted (code.claude.com/docs/en/mcp).
 """
 
 from __future__ import annotations
@@ -36,11 +39,26 @@ GENERATION_MARK = "~g"
 Spec = Dict[str, Any]
 
 
+class Helper(NamedTuple):
+    """How Claude Code runs one server's `headersHelper`.
+
+    `cwd` follows where the server is declared; `scrub` drops credential variables for a helper
+    a repository or plugin supplied; `trusted` is False for a project or local server whose
+    directory never accepted the trust dialog, and such a helper is not run.
+    """
+
+    cwd: str
+    scrub: bool
+    trusted: bool
+    plugin_root: Optional[str] = None
+
+
 class Configs(NamedTuple):
-    """Runnable specs by listing name, and the project servers awaiting the user's approval."""
+    """Runnable specs by listing name, the project servers awaiting approval, and helpers."""
 
     specs: Dict[str, Spec]
     unapproved: Set[str]
+    helpers: Dict[str, Helper]
 
 
 def _read_json(path: Path) -> Any:
@@ -67,20 +85,29 @@ def _resolved(path: Path) -> Path:
         return path
 
 
-def _project_entry(claude_json: Any, target: Path) -> Dict[str, Any]:
-    """The `projects[...]` entry for the target, or for its nearest parent (a worktree)."""
+def _project_entry(claude_json: Any, target: Path) -> Tuple[Optional[Path], Dict[str, Any]]:
+    """(its dir, the `projects[...]` entry) for the target or its nearest parent (a worktree)."""
     projects = claude_json.get("projects") if isinstance(claude_json, dict) else None
     if not isinstance(projects, dict):
-        return {}
+        return None, {}
     here = _resolved(target)
-    best: Tuple[int, Dict[str, Any]] = (-1, {})
+    best: Tuple[int, Optional[Path], Dict[str, Any]] = (-1, None, {})
     for key, entry in projects.items():
         root = _resolved(Path(key))
         if isinstance(entry, dict) and (root == here or root in here.parents):
             depth = len(root.parts)
             if depth > best[0]:
-                best = (depth, entry)
-    return best[1]
+                best = (depth, root, entry)
+    return best[1], best[2]
+
+
+def _trusted(claude_json: Any, directory: Optional[Path]) -> bool:
+    """Whether that exact directory accepted the trust dialog; a parent's trust does not count."""
+    projects = claude_json.get("projects") if isinstance(claude_json, dict) else None
+    if directory is None or not isinstance(projects, dict):
+        return False
+    return any(isinstance(entry, dict) and entry.get("hasTrustDialogAccepted") is True
+               and _resolved(Path(key)) == directory for key, entry in projects.items())
 
 
 def _approval(entry: Dict[str, Any], target: Path, home: Path
@@ -144,7 +171,8 @@ def _data_dir(home: Path, label: str) -> str:
     return str(home / ".claude" / "plugins" / "data" / re.sub(r"[^A-Za-z0-9_-]", "-", label))
 
 
-def _add_plugin(configs: Dict[str, Spec], plugin: str, root: str, data: str) -> None:
+def _add_plugin(configs: Dict[str, Spec], roots: Dict[str, str], plugin: str, root: str,
+                data: str) -> None:
     """The plugin's servers under `plugin:<plugin>:<server>`; a name already present stays.
 
     The host launches plugin servers with CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA set; the
@@ -155,7 +183,8 @@ def _add_plugin(configs: Dict[str, Spec], plugin: str, root: str, data: str) -> 
         spec = _substitute(spec, plugin_vars)
         env = spec.get("env")
         spec["env"] = {**plugin_vars, **(env if isinstance(env, dict) else {})}
-        configs.setdefault(f"plugin:{plugin}:{name}", spec)
+        if configs.setdefault(f"plugin:{plugin}:{name}", spec) is spec:
+            roots[f"plugin:{plugin}:{name}"] = root
 
 
 def _installed_roots(home: Path) -> Dict[str, Tuple[str, str]]:
@@ -240,36 +269,47 @@ def _synced_roots(home: Path) -> Dict[str, Tuple[str, str]]:
     return roots
 
 
-def _plugins(home: Path) -> Dict[str, Spec]:
-    """Every plugin's servers keyed `plugin:<plugin>:<server>`, root expanded.
+def _plugins(home: Path) -> Tuple[Dict[str, Spec], Dict[str, str]]:
+    """(every plugin's servers keyed `plugin:<plugin>:<server>`, root expanded; their roots).
 
     Installed plugins go first, so on a name clash the one in `installed_plugins.json` wins over
     a claude.ai-synced plugin of the same name.
     """
     configs: Dict[str, Spec] = {}
+    server_roots: Dict[str, str] = {}
     for roots in (_installed_roots(home), _synced_roots(home)):
         for plugin, (root, data) in roots.items():
-            _add_plugin(configs, plugin, root, data)
-    return configs
+            _add_plugin(configs, server_roots, plugin, root, data)
+    return configs, server_roots
 
 
 def load(target: Path, home: Path) -> Configs:
     """Every server Claude Code would know for `target`, by the name its listing prints."""
     claude_json = _read_json(home / ".claude.json")
-    entry = _project_entry(claude_json, target)
+    entry_dir, entry = _project_entry(claude_json, target)
     project, waiting = _admitted(_servers(_read_json(target / ".mcp.json")),
                                  _approval(entry, target, home))
+    here = _resolved(target)
+    plugins, plugin_roots = _plugins(home)
+    user_dir = str(home / ".claude")
     scopes = (
-        _servers(entry.get("mcpServers")),
-        project,
-        _servers(claude_json.get("mcpServers") if isinstance(claude_json, dict) else None),
-        _plugins(home),
+        (_servers(entry.get("mcpServers")),
+         lambda _: Helper(str(entry_dir or here), False, _trusted(claude_json, entry_dir))),
+        (project, lambda _: Helper(str(here), True, _trusted(claude_json, here))),
+        (_servers(claude_json.get("mcpServers") if isinstance(claude_json, dict) else None),
+         lambda _: Helper(user_dir, False, True)),
+        (plugins, lambda name: Helper(plugin_roots[name], True, True, plugin_roots[name])),
     )
     specs: Dict[str, Spec] = {}
-    for scope in scopes:
-        for name, spec in scope.items():
-            specs.setdefault(name, dict(spec))
-    return Configs(specs, waiting - set(specs))
+    helpers: Dict[str, Helper] = {}
+    for servers, helper in scopes:
+        for name, spec in servers.items():
+            if name in specs:
+                continue
+            specs[name] = dict(spec)
+            if spec.get("headersHelper"):
+                helpers[name] = helper(name)
+    return Configs(specs, waiting - set(specs), helpers)
 
 
 def lookup(configs: Configs, name: str) -> Tuple[Optional[Spec], str]:
@@ -280,3 +320,8 @@ def lookup(configs: Configs, name: str) -> Tuple[Optional[Spec], str]:
     if spec is not None:
         return spec, ""
     return None, NOT_APPROVED if name in configs.unapproved else NO_CONFIG
+
+
+def trusted(target: Path, home: Path) -> bool:
+    """Whether `target` itself accepted Claude Code's trust dialog (a parent does not count)."""
+    return _trusted(_read_json(home / ".claude.json"), _resolved(target))

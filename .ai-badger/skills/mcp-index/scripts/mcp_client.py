@@ -5,7 +5,7 @@
 stdio, `{type: "http", url, headers}` for streamable HTTP. Both run initialize, then
 `notifications/initialized`, then `tools/list` following `nextCursor`, under one deadline. Every
 failure is an `McpClientError` whose message is one line a human can act on. No OAuth: a server
-that answers 401/403 raises `Unauthorized`.
+that answers 401/403 raises `Unauthorized`, carrying the status and its challenge's parameters.
 """
 
 from __future__ import annotations
@@ -47,7 +47,32 @@ class Timeout(McpClientError):
 
 
 class Unauthorized(McpClientError):
-    """The server refused the request without credentials this client does not hold."""
+    """A 401 (no or bad token) or 403 (insufficient scope, or a refused client).
+
+    `resource_metadata` and `scope` come from the `WWW-Authenticate` challenge (RFC 9728 /
+    RFC 6750) when the server sent one; they are what a sign-in would need.
+    """
+
+    def __init__(self, status: int, challenge: str = ""):
+        params = _challenge_params(challenge)
+        self.status = status
+        self.resource_metadata = _one_line(params.get("resource_metadata", ""))
+        self.scope = _one_line(params.get("scope", ""))
+        what = "forbidden" if status == 403 else "needs authorization"
+        super().__init__(f"{what} (HTTP {status})")
+
+
+# auth-param = token "=" ( token / quoted-string ), RFC 9110 §11.2
+_AUTH_PARAM = re.compile(r'([A-Za-z0-9_.-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s,]+))')
+
+
+def _challenge_params(challenge: str) -> Dict[str, str]:
+    """`{name: value}` from a `WWW-Authenticate` value; the first occurrence of a name wins."""
+    params: Dict[str, str] = {}
+    for match in _AUTH_PARAM.finditer(challenge or ""):
+        value = match.group(2) if match.group(2) is not None else match.group(3)
+        params.setdefault(match.group(1).lower(), re.sub(r"\\(.)", r"\1", value))
+    return params
 
 
 def _too_large() -> McpClientError:
@@ -295,7 +320,8 @@ class _Http:
             return self.opener.open(req, timeout=self._remaining(method))
         except urllib.error.HTTPError as exc:
             if exc.code in (401, 403):
-                raise Unauthorized(f"needs authorization (HTTP {exc.code})") from exc
+                challenge = exc.headers.get("WWW-Authenticate", "") if exc.headers else ""
+                raise Unauthorized(exc.code, challenge) from exc
             raise McpClientError(f"{method}: HTTP {exc.code} {_one_line(exc.reason)}") from exc
         except TimeoutError as exc:
             raise Timeout(f"timed out waiting for {method}") from exc

@@ -16,6 +16,11 @@
       },
       {
         "type": "command",
+        "bash": "if [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_broker_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_broker_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_broker_hook.py not found - hook skipped\"}'; fi",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
         "bash": "if [ -f \".ai-badger/skills/git-work/scripts/git_config_health_hook.py\" ]; then python3 \".ai-badger/skills/git-work/scripts/git_config_health_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/git-work/scripts/git_config_health_hook.py not found - hook skipped\"}'; fi",
         "timeoutSec": 10,
         "matcher": "startup|resume"
@@ -47,6 +52,11 @@
       {
         "type": "command",
         "bash": "if [ -f \".ai-badger/skills/send-message/scripts/message_delivery_hook.py\" ]; then python3 \".ai-badger/skills/send-message/scripts/message_delivery_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/send-message/scripts/message_delivery_hook.py not found - hook skipped\"}'; fi",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "bash": "if [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_broker_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_broker_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_broker_hook.py not found - hook skipped\"}'; fi",
         "timeoutSec": 10
       }
     ],
