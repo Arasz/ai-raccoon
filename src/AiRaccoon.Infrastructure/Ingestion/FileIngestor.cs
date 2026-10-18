@@ -89,6 +89,11 @@ public sealed class FileIngestor(
             return await SkipUnroutedAsync(path, cancellationToken);
         }
 
+        if (await Sniffer.IsBinaryAsync(path, cancellationToken))
+        {
+            return new FileIngestResult(0, false, Skipped: SkipReason.Binary);
+        }
+
         var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken);
         var codeChunkHashes = ResolveCodeChunkHashes(result);
         if (result.ChunkHashes is { Count: > 0 })
