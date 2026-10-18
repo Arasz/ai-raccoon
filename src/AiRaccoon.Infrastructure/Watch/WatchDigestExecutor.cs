@@ -26,8 +26,12 @@ public sealed class WatchDigestExecutor(
     IIgnoreRulesProvider ignoreRulesProvider,
     Lazy<IWatchScanInitiator> scanInitiator,
     IEventPump<EmbedDrainRequest> embedDrainPump,
-    IProjectIdsMigrationGate migrationGate) : IWatchDigestExecutor
+    IProjectIdsMigrationGate migrationGate,
+    IFileTypeMatcher fileTypeMatcher,
+    ICodeFileTypeMatcher codeFileTypeMatcher) : IWatchDigestExecutor
 {
+    private static readonly FileSniffer Sniffer = new();
+
     public async Task<SkipReason?> DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
         string? oldPath, CancellationToken cancellationToken = default)
     {
@@ -100,6 +104,11 @@ public sealed class WatchDigestExecutor(
     private async Task<SkipReason?> DigestExistingFileAsync(string projectId, string normalizedWatch, string normalized,
         bool isIgnoreFile, CancellationToken cancellationToken)
     {
+        if (!isIgnoreFile && !IsRouted(normalized))
+        {
+            return await SkipUnroutedAsync(projectId, normalizedWatch, normalized, cancellationToken);
+        }
+
         // Read before the content: a write racing the digest then leaves a size that no longer matches.
         var size = new FileInfo(normalized).Length;
         var content = await File.ReadAllTextAsync(normalized, cancellationToken);
@@ -130,6 +139,20 @@ public sealed class WatchDigestExecutor(
         }
 
         return replaceResult.Skipped;
+    }
+
+    private bool IsRouted(string path) => fileTypeMatcher.TryGetHandler(path, out _) || codeFileTypeMatcher.IsCodeFile(path);
+
+    /// <summary>
+    ///     A file no corpus routes is classified from a bounded prefix: never hashed, replaced or
+    ///     fingerprinted, so a tree of media files costs a few KB per file per scan. Rows or a
+    ///     fingerprint left from a build that did route it are removed.
+    /// </summary>
+    private async Task<SkipReason?> SkipUnroutedAsync(string projectId, string watchPath, string path,
+        CancellationToken cancellationToken)
+    {
+        await DeleteIfFingerprintedAsync(projectId, watchPath, path, cancellationToken);
+        return await Sniffer.IsBinaryAsync(path, cancellationToken) ? SkipReason.Binary : SkipReason.UnsupportedType;
     }
 
     private static bool IsIgnoreFileItself(string normalizedWatch, string normalizedPath) =>

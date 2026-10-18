@@ -20,6 +20,7 @@ public sealed class WatchPipelineSkipTests
         var stack = new WatchTestStack();
         var tool = await SkippedFileAsync(stack, dir, "tool.xyz", SkipReason.UnsupportedType);
         var image = await SkippedFileAsync(stack, dir, "image.dat", SkipReason.Binary);
+        await File.WriteAllBytesAsync(image, [0x00, 0x01], TestContext.Current.CancellationToken);
         await WriteAsync(dir.File("ok.md"), "fine");
         stack.Pipeline.RegisterWatch(Project, dir.Path);
         Enqueue(stack, tool, image, dir.File("ok.md"));
@@ -150,7 +151,7 @@ public sealed class WatchPipelineSkipTests
     {
         using var dir = TempDir.New("skip-retry");
         var stack = new WatchTestStack();
-        var file = await SkippedFileAsync(stack, dir, "tool.xyz", SkipReason.UnsupportedType);
+        var file = await SkippedFileAsync(stack, dir, "nb.ipynb", SkipReason.Unparseable);
         await RecordSkipAsync(stack, dir, file);
         stack.Memory.SkipReasons.Remove(file);
 

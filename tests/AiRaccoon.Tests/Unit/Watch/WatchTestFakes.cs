@@ -30,7 +30,7 @@ internal sealed class WatchTestStack
             Store.SetFingerprint(projectId, path, hash, Time.GetUtcNow().ToUnixTimeSeconds());
         var scanInitiatorLazy = new Lazy<IWatchScanInitiator>(() => ScanInitiator);
         Executor = new WatchDigestExecutor(Memory, Store, Time, IgnoreRules, scanInitiatorLazy, EmbedDrainPump,
-            migrationGate ?? new NeverMigratedGate());
+            migrationGate ?? new NeverMigratedGate(), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher());
         Pipeline = new WatchPipeline(
             new WatchScheduler(), Executor, RetryPolicy, ScanGuard,
             Memory, Time, NullLogger<WatchPipeline>.Instance);
@@ -412,10 +412,16 @@ internal sealed class FakeWatchMemoryStore : FakeMemoryStore
         return 1;
     }
 
+    /// <summary>How many times the digest asked the store to replace a file.</summary>
+    public int ReplaceCalls => Volatile.Read(ref _replaceCalls);
+
+    private int _replaceCalls;
+
     /// <summary>Mirrors the real transaction: re-check the fingerprint, then delete, ingest and store it.</summary>
     public override async Task<ReplaceResult> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
         CancellationToken cancellationToken = default)
     {
+        Interlocked.Increment(ref _replaceCalls);
         if (string.Equals(ReadFingerprint?.Invoke(projectId, path), fileHash, StringComparison.Ordinal))
         {
             return new ReplaceResult(false, CorpusKind.Neither);

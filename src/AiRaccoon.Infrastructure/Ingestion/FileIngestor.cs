@@ -30,6 +30,8 @@ public sealed class FileIngestor(
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IndexableFileWalk walk) : IFileIngestor
 {
+    private static readonly FileSniffer Sniffer = new();
+
     /// <summary>
     ///     Ignore rules apply ahead of routing, for both the memory and code pipelines —
     ///     <see cref="ResolveIgnoreRootAsync" /> finds the right root. Rows are left <c>pending</c>;
@@ -108,8 +110,7 @@ public sealed class FileIngestor(
             return new FileIngestResult(0, true);
         }
 
-        var content = await File.ReadAllTextAsync(path, cancellationToken);
-        var reason = BinaryContent.IsBinary(content) ? SkipReason.Binary : SkipReason.UnsupportedType;
+        var reason = await Sniffer.IsBinaryAsync(path, cancellationToken) ? SkipReason.Binary : SkipReason.UnsupportedType;
         return new FileIngestResult(0, false, Skipped: reason);
     }
 

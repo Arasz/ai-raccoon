@@ -202,7 +202,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         Pipeline = new WatchPipeline(new WatchScheduler(),
             new WatchDigestExecutor(Store, WatchStore, TimeProvider,
                 new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
-                new SqliteProjectIdsMigrationGate(Factory)),
+                new SqliteProjectIdsMigrationGate(Factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher()),
             new WatchRetryPolicy(), scanGuard, Store, TimeProvider,
             NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);

@@ -447,7 +447,7 @@ public sealed class WatchDigestConcurrencyTests
             WatchStore = new WatchStore(Factory);
             Executor = new WatchDigestExecutor(Memory, WatchStore, time, new IgnoreRulesProvider(),
                 new Lazy<IWatchScanInitiator>(() => new NoOpWatchScanInitiator()), TestData.NewEmbedDrainPump(),
-                new SqliteProjectIdsMigrationGate(Factory));
+                new SqliteProjectIdsMigrationGate(Factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher());
         }
 
         public SqliteConnectionFactory Factory { get; }

@@ -72,7 +72,7 @@ public sealed class PruneTombstoneSyncTests : IDisposable
         await _watchStore.AddWatchAsync(Project, watchDir, 0, 0, ct);
         var executor = new WatchDigestExecutor(_store, _watchStore, _time, new IgnoreRulesProvider(),
             new Lazy<IWatchScanInitiator>(() => new NoOpWatchScanInitiator()), TestData.NewEmbedDrainPump(),
-            new SqliteProjectIdsMigrationGate(_factory));
+            new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher());
         await executor.DigestAsync(Project, watchDir, file, WatchEventKind.Changed, null, ct);
 
         var keptHash = await HashForContentAsync(_factory, KeptParagraph, ct);
