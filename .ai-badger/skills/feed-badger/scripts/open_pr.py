@@ -193,13 +193,27 @@ def refuse(reasons: List[str]) -> int:
     return 1
 
 
-def stage(checkout: Path, rel_paths: List[str]) -> int:
-    """Stage exactly the declared paths into a clean index and scan what was staged.
+def current_branch(checkout: Path) -> str:
+    """The branch HEAD names in `checkout`, or "" when HEAD is detached."""
+    proc = subprocess.run(["git", "branch", "--show-current"], cwd=str(checkout),
+                          capture_output=True, text=True, check=True, env=git_env())
+    return proc.stdout.strip()
 
-    Refuses when anything was staged beforehand, because `git commit` would take it too.
-    On a scan refusal the index is reset, which puts back the clean index it started from.
+
+def declared(name: str, rel_paths: List[str]) -> bool:
+    """Whether the staged `name` is one of `rel_paths` or sits under one of them."""
+    return any(name == rel.rstrip("/") or name.startswith(rel.rstrip("/") + "/")
+               for rel in rel_paths)
+
+
+def stage(checkout: Path, rel_paths: List[str]) -> int:
+    """Stage exactly the declared paths and scan what was staged.
+
+    Refuses when the index already holds an undeclared path, because `git commit` would take
+    it too. Declared paths a failed earlier run left staged are kept, so a re-run resumes.
+    On a scan refusal the index is reset.
     """
-    already = staged_files(checkout)
+    already = [name for name in staged_files(checkout) if not declared(name, rel_paths)]
     if already:
         print("refusing to open a PR — the index already holds staged changes, and the commit "
               "would carry them although they were never declared or scanned:")
@@ -216,6 +230,15 @@ def stage(checkout: Path, rel_paths: List[str]) -> int:
         run(["git", "reset", "-q"], checkout, dry=False)
         return refuse(reasons)
     return 0
+
+
+def pending_steps(checkout: Path, branch: str, steps: List[List[str]]) -> List[List[str]]:
+    """The steps still to run: a checkout already on `branch` resumes a failed earlier run,
+    so it skips creating the branch, and skips the commit when nothing is left to commit."""
+    if current_branch(checkout) != branch:
+        return steps
+    return [step for step in steps
+            if step[1] != "checkout" and (step[1] != "commit" or staged_files(checkout))]
 
 
 def main(argv=None) -> int:
@@ -254,10 +277,11 @@ def main(argv=None) -> int:
         rc = stage(checkout, args.paths)
         if rc != 0:
             return rc
-    for step in steps:
+    for step in steps if dry else pending_steps(checkout, args.branch, steps):
         rc = run(step, checkout, dry)
         if rc != 0 and not dry:
-            print(f"step failed ({rc}); aborting.")
+            print(f"step failed ({rc}); aborting. Fix the cause and re-run the same command: "
+                  f"it resumes on {args.branch} with the paths already staged or committed.")
             return rc
     return 0
 

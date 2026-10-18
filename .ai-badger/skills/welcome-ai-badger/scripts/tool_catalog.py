@@ -80,7 +80,7 @@ class ToolCatalog:
             prereq = meta.get("prerequisite") or {}
             self._note_prerequisite(name, path, prereq)
             check_ok = self._check_and_install(name, path, prereq) if self.execute else None
-            agents = self._agents(name, meta, (entry or {}).get("hooks") or [], check_ok)
+            agents = self._agents(name, path, meta, (entry or {}).get("hooks") or [], check_ok)
             self._tools[name] = {"meta": meta, "agents": agents, "check_ok": check_ok}
         return self._tools
 
@@ -135,7 +135,7 @@ class ToolCatalog:
                                   f"{path / 'tool.md'}")
         return ok
 
-    def _agents(self, name: str, meta: Dict[str, Any], hooks: List[str],
+    def _agents(self, name: str, path: Path, meta: Dict[str, Any], hooks: List[str],
                 check_ok: Optional[bool]) -> Dict[str, Dict[str, Any]]:
         """Each opted-in, configured agent's arm; nothing at all on Windows."""
         if os.name == "nt":
@@ -153,14 +153,21 @@ class ToolCatalog:
             elif not spec:
                 self.ctx.notes.append(f"{name} declares no hook for '{agent}' — skipped")
             else:
-                agents[agent] = self._arm(name, spec, check_ok)
+                agents[agent] = self._arm(name, path, spec, check_ok)
         return agents
 
-    def _arm(self, name: str, spec: Dict[str, Any], check_ok: Optional[bool]) -> Dict[str, Any]:
-        """One agent's arm: the guarded command, the init gate, or a bare proposal."""
+    @staticmethod
+    def _arm(name: str, path: Path, spec: Dict[str, Any],
+             check_ok: Optional[bool]) -> Dict[str, Any]:
+        """One agent's arm: the guarded command, the init gate, or a bare proposal.
+
+        A spec naming a ``guard`` script runs that script, inlined, in place of ``<tool> hook``.
+        """
         arm = {"mode": spec["mode"], "arg": spec["arg"]}
         if spec["mode"] == "native":
-            arm["command"] = guarded_command(name, spec["arg"])
+            guard = spec.get("guard")
+            program = (path / guard).read_text(encoding="utf-8") if guard else None
+            arm["command"] = guarded_command(name, spec["arg"], program)
         elif spec["mode"] == "init":
             arm["run"] = check_ok is True
         return arm

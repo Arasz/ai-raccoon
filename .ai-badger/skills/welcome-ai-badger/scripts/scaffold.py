@@ -738,7 +738,7 @@ class Scaffolder:
         self.copy_engine_and_schemas()
 
         manifest = {
-            "$schema": "../schemas/manifest.schema.json",
+            "$schema": "./schemas/manifest.schema.json",
             "frameworkVersion": self.index["frameworkVersion"],
             "frameworkCommit": self.commit,
             "frameworkDirty": self.dirty,
