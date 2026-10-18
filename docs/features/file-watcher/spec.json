@@ -40,7 +40,8 @@
             "Containment: watch failures never fail the MCP server; errors surface through memory_watch_status",
             "Idempotency: add on an already-watched (projectId, path) is a no-op; remove on a non-existent watch is a no-op",
             "Access tiers: add/remove require rw+; status open to every tier; background mirroring runs regardless of tier",
-            "Status states: scanning / healthy / retrying / stopped; status returns watch states, last error, last sync"
+            "Status states: scanning / healthy / retrying / stopped; status returns watch states, last error, last sync",
+            "Skipped files: a file no corpus can index (unsupported-type, binary, unparseable) is listed in status with its reason (skippedCount exact, first 20 by path) and never fingerprinted, so catch-up retries it; it leaves the list once indexed, deleted, renamed away or excluded (2026-10-18)"
         ],
         "out": [
             "MCP-tool-based watch configuration (enable/scope are CLI-only, not agent tools)",
