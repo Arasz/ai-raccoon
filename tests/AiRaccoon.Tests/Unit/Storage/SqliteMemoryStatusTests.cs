@@ -12,6 +12,7 @@ namespace AiRaccoon.Tests.Unit.Storage;
 ///     statistics off before the library initialises; with them off the engine reports no usage.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class SqliteMemoryStatusTests
 {
     [Fact]
