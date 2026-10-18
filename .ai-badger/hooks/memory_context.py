@@ -759,6 +759,41 @@ def _report(where: str, on_error: Optional[Callable[[str], None]]) -> None:
         pass
 
 
+def search_block(query: str, project_id: str, session_id: Optional[str], budget: Budget, *,
+                 env: Optional[Mapping[str, str]] = None,
+                 home: Optional[str] = None) -> Optional[str]:
+    """One `memory_search` for *query*: the rendered block, `""` when it answered with no hits,
+    None when it could not run (no executable, a failed open or search); never raises.
+
+    Neither the prompt gate nor the session-id check applies; *budget* covers open, search
+    and close.
+    """
+    try:
+        env = os.environ if env is None else env
+        exe = find_executable(env, home if home is not None else env.get("HOME"))
+        if exe is None or not project_id:
+            return None
+        return _single_search(exe, query, project_id, session_id or "", budget, env)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return None
+
+
+def _single_search(exe: str, query: str, project_id: str, session_id: str, budget: Budget,
+                   env: Mapping[str, str]) -> Optional[str]:
+    """One session, one search, closed: the block, `""` for no hits, None when it failed."""
+    session = RaccoonSession.open(exe, project_id, session_id, budget, env)
+    if session is None:
+        return None
+    try:
+        found = session.search(query, budget)
+    finally:
+        session.close(budget)
+    if found is None:
+        return None
+    mem, code = prune_hits(found[0])[:MAX_HITS], prune_hits(found[1])[:MAX_HITS]
+    return format_block(query, mem, code) if mem or code else ""
+
+
 def build(prompt: str, cwd: str, session_id: Optional[str], *,
           env: Optional[Mapping[str, str]] = None, home: Optional[str] = None,
           budget: Optional[Budget] = None, limits: Any = None,
@@ -784,21 +819,19 @@ def build(prompt: str, cwd: str, session_id: Optional[str], *,
         if exe is None:
             return None
         pipeline = pipeline_for(env, cwd, limits, on_error=on_error)
-        if budget is not None:
-            run_budget = budget
-        else:
-            run_budget = Budget(pipeline.limits.total if pipeline else SINGLE_BUDGET_SECONDS)
-        open_budget = run_budget.child(pipeline.limits.search) if pipeline else run_budget
-        session = RaccoonSession.open(exe, project_id, session_id, open_budget, env)
+        if pipeline is None:
+            block = _single_search(exe, decision.query, project_id, session_id,
+                                   budget if budget is not None else Budget(SINGLE_BUDGET_SECONDS),
+                                   env)
+            return block or None
+        run_budget = budget if budget is not None else Budget(pipeline.limits.total)
+        session = RaccoonSession.open(exe, project_id, session_id,
+                                      run_budget.child(pipeline.limits.search), env)
         if session is None:
             return None
         try:
-            if pipeline:
-                mem, code = pipeline.run(decision.query, session, run_budget)
-                _report_proxy_faults(env, on_error)
-            else:
-                found = session.search(decision.query, run_budget)
-                mem, code = found if found else ([], [])
+            mem, code = pipeline.run(decision.query, session, run_budget)
+            _report_proxy_faults(env, on_error)
         finally:
             session.close(run_budget)
         mem, code = prune_hits(mem)[:MAX_HITS], prune_hits(code)[:MAX_HITS]

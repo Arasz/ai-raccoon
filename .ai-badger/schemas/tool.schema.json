@@ -60,6 +60,11 @@
             "type": "string",
             "minLength": 1,
             "description": "The tool's own name for this agent, passed to its hook or init command."
+          },
+          "guard": {
+            "type": "string",
+            "pattern": "^scripts/[a-z0-9_]+\\.py$",
+            "description": "A stdlib-only Python script in the tool directory that a native hook runs, inlined, in place of `<tool> hook <arg>`; it gets arg as its first argument and the hook JSON on stdin."
           }
         }
       }

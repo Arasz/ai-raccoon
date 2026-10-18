@@ -68,6 +68,13 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
    The declined item is not delivered and its discovery symlinks are removed; the copy already
    under `.ai-badger/skills/` stays on disk for the user to delete.
 
+   Catalog tools (`features/<stack>/tools/`, e.g. `rtk`) are never proposed by detection. Add
+   one only when the user asks for it: `{"tools": {"rtk": {"hooks": ["claude", "copilot"]}}}`
+   names the agents whose hooks route through it. For Claude the hook is ai-badger's guard, which
+   leaves a command a `permissions.ask` rule names unrewritten. The tool binary is checked, and installed only
+   under `--execute`. Removing the entry makes the next scaffold delete the hook files it
+   wrote; for pi it prints the `<tool> init --agent pi --uninstall` command instead.
+
 4. **Validate.**
    ```bash
    python3 "$AI_BADGER/tooling/validate.py" --kind config /tmp/proposed-config.json
