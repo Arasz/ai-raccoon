@@ -43,8 +43,8 @@ public sealed class ToolRefusalsCancellationTests
     }
 
     /// <summary>
-    ///     The caller gave up: answered, not rethrown — a rethrow reaches McpServerImpl, which logs a
-    ///     warn plus the full stack trace. The SDK still sends nothing, since its send uses the dead token.
+    ///     The caller gave up: answered like the live-token case; the SDK's stack-trace warn for it is
+    ///     dropped at the logging layer (CancelledRequestLoggingTests).
     /// </summary>
     [Fact]
     public async Task TaskCanceled_WithCancelledToken_ReturnsCancelledErrorResult()

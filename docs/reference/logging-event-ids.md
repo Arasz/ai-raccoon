@@ -42,7 +42,7 @@ partial migration was invisible in production. +1 over the 216 measured below.)
 Warning when the caller cancels a tool call it gave up on — the tool, the elapsed milliseconds and, on 914
 only, the query's length as a raw `QueryLength` number aggregation can filter on (915 is the no-query
 rendering; one EventId per `[LoggerMessage]` method is unconditional, so the two cannot share 914). Since
-1.59.1 that line is the only record: the call is answered `cancelled:`, not rethrown to the SDK's stack-trace warn.)
+1.59.1 that line is the only record: `CancelledRequestLogging` drops the SDK's stack-trace warn for a cancellation.)
 
 (Remeasured 2026-09-27, fix/778-note-chunk-order: **214**. ADR-0122 gives `NoteChunkOrderRepairJob`
 a single-id block, 446, right after `EntryEmbedder`'s 442-445 and before 497: one Information line per

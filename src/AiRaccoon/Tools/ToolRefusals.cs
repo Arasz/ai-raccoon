@@ -153,8 +153,8 @@ internal static partial class ToolRefusals
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // Answered, not rethrown: a rethrow reaches McpServerImpl, which logs a warn with the
-                // full stack trace. The SDK sends nothing back either way — its send uses this dead token.
+                // Answered like the live-token case. The SDK's send of it throws on this dead token, and
+                // CancelledRequestLogging drops the stack-trace warn that send logs — 914/915 is the record.
                 LogTimedOut(request, Stopwatch.GetElapsedTime(started));
                 return CancelledResult(request.Params?.Name ?? string.Empty);
             }
