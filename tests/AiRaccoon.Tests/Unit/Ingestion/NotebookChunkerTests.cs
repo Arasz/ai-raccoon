@@ -130,6 +130,16 @@ public class NotebookChunkerTests
     }
 
     [Fact]
+    public void ChunkWithHeadings_MarkdownCellWithUnclosedFence_DoesNotSwallowTheNextCell()
+    {
+        var notebook = Notebook("""{"cell_type":"markdown","source":"```python\nx = 1"},{"cell_type":"code","source":"y = 2"}""");
+
+        var chunks = Chunker.ChunkWithHeadings(notebook, 512);
+
+        Assert.Contains(chunks, c => c.Sections.Any(s => s.Contains("cell 2 (code)")) && c.Text.Contains("y = 2"));
+    }
+
+    [Fact]
     public void ChunkWithHeadings_MarkdownCellHeadings_NestUnderTheCellSection()
     {
         var notebook = Notebook("""{"cell_type":"markdown","source":["# Title\n","text\n","## Sub\n","more"]}""");

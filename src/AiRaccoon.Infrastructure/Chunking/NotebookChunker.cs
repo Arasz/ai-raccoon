@@ -140,7 +140,8 @@ public sealed class NotebookChunker : INotebookChunker
             }
         }
 
-        return string.Join('\n', lines);
+        // A fence may run to the end of its cell; closing it keeps it from swallowing the next cell.
+        return inFence ? string.Join('\n', lines) + "\n```" : string.Join('\n', lines);
     }
 
     private static bool IsAtxHeading(string line, out int level)
