@@ -49,7 +49,7 @@ public sealed class WatchTools(
     }
 
     [McpServerTool(Name = TnWatchRemove)]
-    [Description("Stops watching a path for the project and removes its registration; a non-existent watch is a no-op.")]
+    [Description("Stops watching a path for the project and removes its registration; a non-existent watch is a no-op, reported as removed=false.")]
     public async Task<ApiEnvelope<WatchRemoveResult>> Remove(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("Absolute path of the watched file or directory.")]

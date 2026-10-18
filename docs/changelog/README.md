@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.59.2 — `watch remove` says when nothing was watched; a missing encryption key is named](1.59.2-watch-remove-and-missing-key-messages.md)
 - [1.59.1 — a tool call the caller gave up on is answered, not logged as a stack trace](1.59.1-caller-cancelled-calls-answered.md)
 - [1.59.0 — register watches from a terminal; notebooks are indexed; skipped files are reported](1.59.0-watch-cli-and-notebooks.md)
 - [1.58.1 — SQLite3 Multiple Ciphers 2.6.1 and the upstream pool fix](1.58.1-sqlite-engine-and-pool-fix.md)
