@@ -75,6 +75,19 @@ public sealed class WatchRegistrationCommandsTests
     }
 
     [Fact]
+    public async Task Remove_AgainstAnOlderServerThatSendsNoRemovedField_PrintsTheRemovedPath()
+    {
+        var legacy = System.Text.Json.JsonSerializer.Deserialize<WatchRemoveResponse>(
+            $$"""{"projectId":"{{Project}}","path":"/x"}""", System.Text.Json.JsonSerializerOptions.Web)!;
+        var control = new FakeWatchControl { RemoveFound = legacy.Removed };
+
+        var (exit, stdout, _) = await Run(["watch", "remove", Project, "relative/dir"], control);
+
+        exit.ShouldBe(0);
+        Lines(stdout).ShouldBe([$"removed: {Path.GetFullPath("relative/dir")}"]);
+    }
+
+    [Fact]
     public async Task Status_PrintsOneBlockPerWatch_WithLastErrorOnlyWhenPresent()
     {
         var control = new FakeWatchControl
@@ -163,7 +176,7 @@ public sealed class WatchRegistrationCommandsTests
 
         public WatchRefusedException? Refusal { get; init; }
 
-        public bool RemoveFound { get; init; } = true;
+        public bool? RemoveFound { get; init; } = true;
 
         public string? LastProjectId { get; set; }
 

@@ -161,12 +161,12 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
         // The resolver path (no sidecar → env source) opens the bank with the env passphrase…
         await using var reopened = await Ctx.Bank.OpenBankAsync();
         reopened.State.ShouldBe(ConnectionState.Open);
-        // …and the bank is genuinely env-keyed: a keyless open is rejected.
-        var wrong = await Should.ThrowAsync<SqliteException>(async () =>
+        // …and the bank is genuinely env-keyed: a keyless open is rejected as a missing key.
+        var missing = await Should.ThrowAsync<BankKeyMissingException>(async () =>
         {
             await using var _ = await Ctx.Bank.OpenBankWithKeyAsync(null);
         });
-        wrong.SqliteErrorCode.ShouldBe(26);
+        missing.InnerException.ShouldBeOfType<SqliteException>().SqliteErrorCode.ShouldBe(26);
     }
 
     [Then("^the command errors with a message to install bws and configure a token$")]

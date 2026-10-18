@@ -28,7 +28,8 @@ internal sealed record WatchAddRequest(string ProjectId, string Path);
 /// <summary>The memory_watch_add result fields: canonical project, requested path, pruned watches, covering watch of an exact re-add.</summary>
 internal sealed record WatchAddResponse(string ProjectId, string Path, IReadOnlyList<string> Pruned, string? AbsorbedBy);
 
-internal sealed record WatchRemoveResponse(string ProjectId, string Path, bool Removed);
+/// <summary>The memory_watch_remove result; <c>Removed</c> is null from a pre-1.59.2 server, which never reported it; the CLI treats null as removed.</summary>
+internal sealed record WatchRemoveResponse(string ProjectId, string Path, bool? Removed);
 
 internal sealed record WatchStatusResponse(IReadOnlyList<WatchStatus> Watches);
 
