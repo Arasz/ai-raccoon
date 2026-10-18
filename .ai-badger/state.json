@@ -4,6 +4,12 @@
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+        "id": "air-watch-remove-encryption-show-messages",
+        "title": "watch remove says when nothing was watched; encryption show names a missing key (1.59.2)",
+        "summary": "From the 1.59.0 checklist (#873): watch remove on an unwatched path prints 'not watched … (nothing removed)' (MCP/endpoint result gains removed; null from a pre-1.59.2 server reads as removed). An encrypted bank opened with no key resolved and a key-check sidecar present raises BankKeyMissingException (exit 20, names AIRACCOON_DB_PASSPHRASE) in serve/encryption/doctor; source-switch crash recovery accepts it. PR #874 (d6c4e307).",
+        "finishedAt": "2026-10-18"
+    },
+    {
         "id": "air-watch-cli-and-notebook-ingest",
         "title": "CLI watch add/remove/status; index .ipynb; report skipped files (1.59.0)",
         "summary": "ai-raccoon watch add|remove|status go through a new token-gated /watch route over IToolGate + IWatchService (ADR-0075 amended), so a machine can be set up from a terminal alone; refusals are RFC 9457 problem details (first AddProblemDetails in the repo). Notebook handler flattens code/markdown cells under '## cell N' headings via the markdown chunker (outputs/base64 dropped; code-cell fence lines escaped, markdown headings demoted, open fences closed per cell). Skipped files (unsupported-type/binary/unparseable) are reported in memory_watch_status and watch status, never fingerprinted; unrouted files classified from an 8 KB sniff; schema v18 drops rowless watch fingerprints so 1.58.x-skipped notebooks re-ingest. Four Codex review rounds fixed 10 findings in-PR. PR #870 merged as fe12818e by owner.",
