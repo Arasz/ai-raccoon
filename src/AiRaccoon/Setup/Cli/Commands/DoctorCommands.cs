@@ -127,6 +127,14 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         Log.BankIsNotADatabase(logger, bankPath, ex);
 
         var verifier = TryReadKeyCheck(bankPath);
+        if (verifier is not null && resolvedKey.Passphrase is null)
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: doctor: the bank at {bankPath} is encrypted, but no encryption key was resolved — " +
+                "set AIRACCOON_DB_PASSPHRASE, or configure the key source this bank uses");
+            return ErrorCode.Key.Unresolved;
+        }
+
         if (verifier is not null && resolvedKey.Passphrase is not null)
         {
             if (!KeyCheckSidecar.Verifies(verifier, resolvedKey.Passphrase))
