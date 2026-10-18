@@ -4,6 +4,12 @@
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+        "id": "air-watch-remove-encryption-show-messages",
+        "title": "watch remove says when nothing was watched; encryption show names a missing key (1.59.2)",
+        "summary": "From the 1.59.0 checklist (#873): watch remove on an unwatched path prints 'not watched … (nothing removed)' (MCP/endpoint result gains removed; null from a pre-1.59.2 server reads as removed). An encrypted bank opened with no key resolved and a key-check sidecar present raises BankKeyMissingException (exit 20, names AIRACCOON_DB_PASSPHRASE) in serve/encryption/doctor; source-switch crash recovery accepts it. PR #874 (d6c4e307).",
+        "finishedAt": "2026-10-18"
+    },
+    {
         "id": "air-answer-caller-cancelled-tool-calls",
         "title": "Caller-cancelled tool calls no longer log a raw stack trace (1.59.1)",
         "summary": "A tool call whose request token was already dead (client timeout, e.g. memory_search embedding) was logged as 914/915 then rethrown, and McpServerImpl logged 'request handler failed' warn with the full trace. ToolRefusals now returns cancelled: on that path too, but that alone was not enough (Codex P2): SDK 2.2.0 SendMessageAsync calls ThrowIfCancellationRequested inside the same try that logs the warn. Fix: CancelledRequestLogging (ILoggingBuilder.AddCancelledRequestFilter, ILoggerFactory decorator) drops only the SDK's LogRequestHandlerException record when its exception is an OperationCanceledException; a reflection test pins the event name against the SDK assembly. Also PR #873: 1.59.0 manual checklist fixed per review (no self-referencing expected-results, node_modules chmod-000 decoy claim withdrawn and template fixed, SQLite3MC 2.6.1 premise recorded from the shipped dylib). PR #872 merged as 54285233 by owner.",
