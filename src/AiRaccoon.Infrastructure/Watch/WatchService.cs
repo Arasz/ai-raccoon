@@ -77,12 +77,13 @@ public sealed class WatchService(
         }
     }
 
-    public async Task RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
+    public async Task<bool> RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
         projectId = await FoldAsync(projectId, cancellationToken);
         var normalized = IngestPath.Normalize(path);
-        await store.RemoveWatchAsync(projectId, normalized, cancellationToken);
+        var removed = await store.RemoveWatchAsync(projectId, normalized, cancellationToken);
         pipeline.UnregisterWatch(projectId, normalized);
+        return removed;
     }
 
     public async Task<IReadOnlyList<WatchStatus>> StatusAsync(string projectId,

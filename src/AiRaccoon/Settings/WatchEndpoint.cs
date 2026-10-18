@@ -30,8 +30,8 @@ internal static class WatchEndpoint
                     RefusingAsync(async () =>
                     {
                         var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, WatchTools.TnWatchRemove, ctx);
-                        await watch.RemoveAsync(canonical, path, ctx);
-                        return Results.Ok(new WatchRemoveResponse(canonical, path));
+                        var removed = await watch.RemoveAsync(canonical, path, ctx);
+                        return Results.Ok(new WatchRemoveResponse(canonical, path, removed));
                     }));
 
             webApplication.MapGet(WatchProtocol.Path,

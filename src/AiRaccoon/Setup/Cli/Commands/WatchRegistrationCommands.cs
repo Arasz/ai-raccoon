@@ -41,7 +41,9 @@ internal sealed class WatchRegistrationCommands
         var projectId = parseResult.GetValue<string>("project-id")!;
         var path = Path.GetFullPath(parseResult.GetValue<string>("path")!);
         var removed = await _control.RemoveAsync(projectId, path, cancellationToken);
-        await streams.WriteOutputLineAsync($"removed: {removed.Path}");
+        await streams.WriteOutputLineAsync(removed.Removed
+            ? $"removed: {removed.Path}"
+            : $"not watched: {removed.Path} (nothing removed)");
         return ErrorCode.Ok.Success;
     }
 

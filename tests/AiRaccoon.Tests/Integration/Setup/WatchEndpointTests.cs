@@ -113,8 +113,18 @@ public sealed class WatchEndpointTests : IAsyncLifetime
 
         var removed = await _client.RemoveAsync(Project, Repo, Ct);
 
-        removed.ShouldBe(new WatchRemoveResponse(Project, Repo));
+        removed.ShouldBe(new WatchRemoveResponse(Project, Repo, true));
         (await _client.StatusAsync(Project, Ct)).ShouldBeEmpty();
+    }
+
+    [RetryFact]
+    public async Task Remove_AnUnwatchedPath_ReportsNothingRemoved()
+    {
+        await AllowAsync(Project);
+
+        var removed = await _client.RemoveAsync(Project, Repo, Ct);
+
+        removed.ShouldBe(new WatchRemoveResponse(Project, Repo, false));
     }
 
     [RetryFact]
