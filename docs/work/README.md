@@ -10,6 +10,7 @@ Active records:
 
 | File | What it is |
 |---|---|
+| [2026-10-19-live-parallel-search-1-59-4.md](2026-10-19-live-parallel-search-1-59-4.md) | Live 1.59.4 parallel `memory_search` timing at concurrency 1, 8, and 20, with caller-visible latency compared to server telemetry. |
 | [2026-08-26-doctor-memory-embedding-research.md](2026-08-26-doctor-memory-embedding-research.md) | Research record (task `doctor-feature-match`): doctor's code-engine report as the pattern to mirror, the memory-side facts it omits, and two live findings — a bank reporting HEALTHY with an open migration and 47,723 pending rows, and the migration relay draining with no logs or metrics at all. §3.3 carries a struck-and-corrected claim; §6 the live probe; §8 the witnessed gate run. |
 | [2026-08-26-doctor-parity-moe-p1-contract.md](2026-08-26-doctor-parity-moe-p1-contract.md) | MoE planning lane P1 (output contract): the frozen doctor line set, exit-code ruling (24), and the shared-component shape. Corrects the record's §3.3. |
 | [2026-08-26-doctor-parity-moe-p2-implementation.md](2026-08-26-doctor-parity-moe-p2-implementation.md) | MoE planning lane P2 (implementation shape): the extraction, queries, degraded states, formatting, work-package split. Superseded where the integrated brief differs. |
