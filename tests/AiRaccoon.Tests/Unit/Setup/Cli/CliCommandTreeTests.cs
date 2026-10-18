@@ -69,6 +69,18 @@ public class CliCommandTreeTests
     }
 
     [Fact]
+    public void ProjectIdsMapHelp_DescribesTheDefaultAndExplicitOverride()
+    {
+        var map = CommandAt("repair").Children.OfType<Command>().Single(c => c.Name == "project-ids")
+            .Children.OfType<Option>().Single(o => o.Name == "--map");
+
+        map.HelpName.ShouldBe("path");
+        map.Description.ShouldNotBeNull().ShouldContain("<data-root>/project-id-map.json");
+        map.Description.ShouldContain("override");
+        map.Description.ShouldContain("empty map");
+    }
+
+    [Fact]
     public void RepairAndDoctorHelpText_IsSelfContainedAndShort()
     {
         var repair = CommandAt("repair");

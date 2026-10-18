@@ -151,6 +151,8 @@ no status exemption — and it becomes frozen only when it reaches `Accepted`.
 | [0132 — The 1Password CLI is a second bank-key source beside Bitwarden](0132-1password-cli-as-a-second-bank-key-source.md) | Source `1password` fetches an SSH Key item's OpenSSH ed25519 key with `op read <reference>` and reuses the Bitwarden parse, derivation, sidecar and rekey flow. The reference is stored verbatim in the existing `SecretId` slot; auth is inherited (`OP_SERVICE_ACCOUNT_TOKEN` or the desktop app) with no `-t` option, because a token on argv leaks through `ps`; no legacy key exists. One `CliSecretManager(CliSecretTool)` runs both CLIs, and exit codes 23 to 25 keep their numbers under tool-neutral names. |
 | [0133 — `ctx` is the vec0 partition key again](0133-ctx-is-the-vec0-partition-key-again.md) | Supersedes 0068. A metadata `ctx` made every KNN read every context's chunks through uncached, decrypted blob reads; under 20 concurrent searches that was most of the server's time, in the kernel. Ladder v19 partitions `vec_entries`/`vec_structure`/`vec_code` by `ctx`: on a live-bank copy 20 concurrent searches went 3.94 s → 1.21 s and sys CPU 76 → 14 s, for +56 MB. |
 
+| [0134 — Operator alias map defaults beside the bank](0134-operator-alias-map-defaults-beside-the-bank.md) | `repair project-ids` loads `<data-root>/project-id-map.json` when present; `--map` overrides it and the public binary still ships no machine-local ids |
+
 ## Numbers never used
 
 | Number | Why |

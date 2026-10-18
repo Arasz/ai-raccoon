@@ -28,7 +28,7 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
 
     public static TheoryData<string> Scenarios() =>
     [
-        "dry-run-no-map", "dry-run-no-map-template-exists", "dry-run-with-map", "dry-run-converged",
+        "dry-run-no-map", "dry-run-no-map-template-exists", "apply-no-map", "dry-run-default-map", "queue-only-default-map", "dry-run-default-map-overridden", "invalid-default-map", "dry-run-with-map", "dry-run-converged",
         "queue-only-actionable", "queue-only-attention", "queue-only-converged", "apply-loop",
         "missing-map", "telemetry-quality-pinned-only"
     ];
@@ -55,7 +55,11 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
         var mapPath = WriteMap();
         string[] argv = scenario switch
         {
-            "dry-run-no-map" or "dry-run-no-map-template-exists" => ["repair", "project-ids"],
+            "dry-run-no-map" or "dry-run-no-map-template-exists" or "dry-run-default-map" => ["repair", "project-ids"],
+            "apply-no-map" => ["repair", "project-ids", "--apply"],
+            "queue-only-default-map" => ["repair", "project-ids", "--apply", "--queue-only"],
+            "dry-run-default-map-overridden" => ["repair", "project-ids", "--map", WriteFile("override.json", new ProjectIdAliasMap([], ["jsaa"], []).ToJson())],
+            "invalid-default-map" => ["repair", "project-ids"],
             "dry-run-with-map" or "dry-run-converged" => ["repair", "project-ids", "--map", mapPath],
             "queue-only-actionable" or "queue-only-attention" or "queue-only-converged" =>
                 ["repair", "project-ids", "--apply", "--queue-only", "--map", mapPath],
@@ -67,10 +71,29 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
         {
             WriteFile(ProjectIdsRepairCommands.TemplateFileName, "{}");
         }
+        if (scenario == "dry-run-default-map")
+        {
+            WriteFile(ProjectIdsRepairCommands.DefaultMapFileName, new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa")], ["jsaa"], []).ToJson(indented: true));
+        }
+        if (scenario == "queue-only-default-map")
+        {
+            WriteFile(ProjectIdsRepairCommands.DefaultMapFileName, new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa")], ["jsaa"], []).ToJson());
+        }
+        if (scenario == "dry-run-default-map-overridden")
+        {
+            WriteFile(ProjectIdsRepairCommands.DefaultMapFileName, new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa")], ["jsaa"], []).ToJson());
+        }
+        if (scenario == "invalid-default-map")
+        {
+            WriteFile(ProjectIdsRepairCommands.DefaultMapFileName, "{");
+        }
 
         var report = scenario switch
         {
-            "dry-run-converged" or "queue-only-converged" => ConvergedReport(),
+            "dry-run-converged" or "queue-only-converged" or "apply-no-map" => ConvergedReport(),
             "queue-only-attention" => AttentionReport(),
             "telemetry-quality-pinned-only" => TelemetryWithQualityReport(),
             _ => MixedReport()
@@ -84,7 +107,13 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
             .RunAsync(parsed!.ParsedCliArgs, _dataRoot, new StandardStreams(TextReader.Null, stdout, stderr),
                 TestContext.Current.CancellationToken);
 
-        return $"exit {exit}; requested {store.LastRepairRequest?.ToString() ?? "nothing"}\n{$"--- stdout\n{stdout}--- stderr\n{stderr}".Replace(_dataRoot, "<root>").Replace("\r\n", "\n")}";
+        var requested = store.LastRepairRequest?.ToString() ?? "nothing";
+        if (scenario == "queue-only-default-map")
+        {
+            requested += $"; default map forwarded {store.LastRepairMapJson == File.ReadAllText(ProjectIdsRepairCommands.DefaultMapPathFor(_dataRoot))}";
+        }
+
+        return $"exit {exit}; requested {requested}\n{$"--- stdout\n{stdout}--- stderr\n{stderr}".Replace(_dataRoot, "<root>").Replace("\r\n", "\n")}";
     }
 
     private string WriteMap() => WriteFile("map.json", new ProjectIdAliasMap(
@@ -145,7 +174,7 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
               'qa-noise-project'
               'mystery-guid-0001'
               'named-mystery' (registered as 'Named Mystery')
-            project-ids repair: no --map supplied — planned with the empty map (no folds). Wrote an editable alias-map template to '<root>/project-id-map.template.json' (example alias shape, __self_metrics__ + 2 registered canonical(s), 4 unattributed id(s) pre-filled in Dropped for review); edit Aliases/Dropped and re-run with --map.
+            project-ids repair: no --map supplied and no default map at '<root>/project-id-map.json' — planned with the empty map (no folds). Wrote an editable alias-map template to '<root>/project-id-map.template.json' (example alias shape, __self_metrics__ + 2 registered canonical(s), 4 unattributed id(s) pre-filled in Dropped for review); review it, save as 'project-id-map.json' beside the bank, or pass --map.
             project-ids repair: re-running will not clear the 4 id(s) above that need a human — attribute them, or wait for an alias-map update.
             project-ids repair: summary — repair needed: 0 fold, 0 drop, 1 retire, 4 unresolved, 1 pinned (pinned-telemetry-only: 'telemetry-only') — pass --apply to run the loop until it reports converged; 4 id(s) still need a human to attribute.
             --- stderr
@@ -164,9 +193,83 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
               'qa-noise-project'
               'mystery-guid-0001'
               'named-mystery' (registered as 'Named Mystery')
-            project-ids repair: no --map supplied — planned with the empty map (no folds). Edit the existing template at '<root>/project-id-map.template.json' and re-run with --map.
+            project-ids repair: no --map supplied and no default map at '<root>/project-id-map.json' — planned with the empty map (no folds). Review the existing template at '<root>/project-id-map.template.json', save it as 'project-id-map.json' beside the bank, or pass --map.
             project-ids repair: re-running will not clear the 4 id(s) above that need a human — attribute them, or wait for an alias-map update.
             project-ids repair: summary — repair needed: 0 fold, 0 drop, 1 retire, 4 unresolved, 1 pinned (pinned-telemetry-only: 'telemetry-only') — pass --apply to run the loop until it reports converged; 4 id(s) still need a human to attribute.
+            --- stderr
+
+            """,
+        ["dry-run-default-map"] = """
+            exit 0; requested nothing
+            --- stdout
+            project-ids repair: loaded the default alias map from '<root>/project-id-map.json'. Pass --map to use another file.
+            project-ids repair: 8 id(s) censused — 1 fold, 0 drop (test residue), 1 retire (registered, empty), 3 need a human to attribute, 1 pinned (waiting with reasons below), 2 need nothing (already correct or empty). Dry run — pass --apply to run this.
+            project-ids repair: 4 id(s) own entries with no projects-table registration.
+            project-ids repair: 'job-search-ai-assistant' owns 2 entries (1 NULL-context, fold), 4 queued — folds to 'jsaa'
+            project-ids repair: 1 id(s) pinned — waiting with reasons below:
+              pinned-telemetry-only: 'telemetry-only' — owns only telemetry (2 metrics + 0 noise rows) — regenerable derived data the repair never moves
+            project-ids repair: 'empty-registered-project' is registered with nothing left on it — retires (registry row removed)
+            project-ids repair: 3 id(s) match no known id — left alone for a human to attribute:
+              'qa-noise-project'
+              'mystery-guid-0001'
+              'named-mystery' (registered as 'Named Mystery')
+            project-ids repair: re-running will not clear the 3 id(s) above that need a human — attribute them, or wait for an alias-map update.
+            project-ids repair: summary — repair needed: 1 fold, 0 drop, 1 retire, 3 unresolved, 1 pinned (pinned-telemetry-only: 'telemetry-only') — pass --apply to run the loop until it reports converged; 3 id(s) still need a human to attribute.
+            --- stderr
+
+            """,
+        ["queue-only-default-map"] = """
+            exit 0; requested ProjectIds; default map forwarded True
+            --- stdout
+            project-ids repair: loaded the default alias map from '<root>/project-id-map.json'. Pass --map to use another file.
+            project-ids repair: 8 id(s) censused — 1 fold, 0 drop (test residue), 1 retire (registered, empty), 3 need a human to attribute, 1 pinned (waiting with reasons below), 2 need nothing (already correct or empty). Request will be queued for the server.
+            project-ids repair: 4 id(s) own entries with no projects-table registration.
+            project-ids repair: 'job-search-ai-assistant' owns 2 entries (1 NULL-context, fold), 4 queued — folds to 'jsaa'
+            project-ids repair: 1 id(s) pinned — waiting with reasons below:
+              pinned-telemetry-only: 'telemetry-only' — owns only telemetry (2 metrics + 0 noise rows) — regenerable derived data the repair never moves
+            project-ids repair: 'empty-registered-project' is registered with nothing left on it — retires (registry row removed)
+            project-ids repair: 3 id(s) match no known id — left alone for a human to attribute:
+              'qa-noise-project'
+              'mystery-guid-0001'
+              'named-mystery' (registered as 'Named Mystery')
+            project-ids repair: re-running will not clear the 3 id(s) above that need a human — attribute them, or wait for an alias-map update.
+            project-ids repair: request committed; the server applies it and drains the resulting embeddings on its next maintenance poll (~15s) — nothing left to run by hand.
+            project-ids repair: the fold is single-pass — quiesce writers under a folded id, or re-run 'repair project-ids' until it reports no folds.
+            project-ids repair: summary — repair in progress: 2 change(s) queued for the server — the server applies it on its next maintenance poll (~15s).
+            --- stderr
+
+            """,
+        ["dry-run-default-map-overridden"] = """
+            exit 0; requested nothing
+            --- stdout
+            project-ids repair: 8 id(s) censused — 0 fold, 0 drop (test residue), 1 retire (registered, empty), 4 need a human to attribute, 1 pinned (waiting with reasons below), 2 need nothing (already correct or empty). Dry run — pass --apply to run this.
+            project-ids repair: 4 id(s) own entries with no projects-table registration.
+            project-ids repair: 1 id(s) pinned — waiting with reasons below:
+              pinned-telemetry-only: 'telemetry-only' — owns only telemetry (2 metrics + 0 noise rows) — regenerable derived data the repair never moves
+            project-ids repair: 'empty-registered-project' is registered with nothing left on it — retires (registry row removed)
+            project-ids repair: 4 id(s) match no known id — left alone for a human to attribute:
+              'job-search-ai-assistant'
+              'qa-noise-project'
+              'mystery-guid-0001'
+              'named-mystery' (registered as 'Named Mystery')
+            project-ids repair: re-running will not clear the 4 id(s) above that need a human — attribute them, or wait for an alias-map update.
+            project-ids repair: summary — repair needed: 0 fold, 0 drop, 1 retire, 4 unresolved, 1 pinned (pinned-telemetry-only: 'telemetry-only') — pass --apply to run the loop until it reports converged; 4 id(s) still need a human to attribute.
+            --- stderr
+
+            """,
+        ["invalid-default-map"] = """
+            exit 15; requested nothing
+            --- stdout
+            --- stderr
+            project-ids repair: cannot load default map '<root>/project-id-map.json': Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. Path: $ | LineNumber: 0 | BytePositionInLine: 1.
+
+            """,
+        ["apply-no-map"] = """
+            exit 0; requested nothing
+            --- stdout
+            project-ids repair: 2 id(s) censused — 0 fold, 0 drop (test residue), 0 retire (registered, empty), 0 need a human to attribute, 2 need nothing (already correct or empty). Request will be queued for the server.
+            project-ids repair: no --map supplied and no default map at '<root>/project-id-map.json' — planned with the empty map (no folds). Pass --map or save a reviewed map as 'project-id-map.json' beside the bank.
+            project-ids repair: summary — converged: 0 fold, 0 drop, 0 retire, 0 unresolved, 0 pinned, P3 inert (durable alias map empty — no id folds through, none is refused).
             --- stderr
 
             """,

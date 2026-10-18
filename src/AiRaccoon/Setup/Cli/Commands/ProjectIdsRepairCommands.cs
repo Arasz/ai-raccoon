@@ -12,9 +12,10 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     --apply commits requests the server applies, rather than writing here. Doctor stays
 ///     read-only and never serves this report.
 ///     <para>
-///         ADR-0099: the public binary ships no machine-local ids. The fold map is a one-shot
-///         file parameter (<c>--map &lt;path&gt;</c>); a dry run without one plans with the empty
-///         map and writes an editable template beside the bank instead of guessing folds.
+    ///         ADR-0099: the public binary ships no machine-local ids. The operator map defaults
+    ///         to <c>&lt;data-root&gt;/project-id-map.json</c>, with <c>--map &lt;path&gt;</c> as
+    ///         an override; without either file, a dry run plans with the empty map and writes an
+    ///         editable template beside the bank instead of guessing folds.
 ///     </para>
 ///     <para>
 ///         Package F (D5): plain --apply runs the loop — derive→commit-request→poll→reap→re-derive
@@ -29,6 +30,9 @@ public sealed class ProjectIdsRepairCommands
 {
     /// <summary>File name of the editable alias-map template written beside the bank on a map-less dry run.</summary>
     public const string TemplateFileName = "project-id-map.template.json";
+
+    /// <summary>Default operator-maintained alias map loaded beside the bank when present.</summary>
+    public const string DefaultMapFileName = "project-id-map.json";
 
     /// <summary>
     ///     The D6 (iv) P3 clause, read off the bank the census just scanned rather than asserted:
@@ -73,27 +77,42 @@ public sealed class ProjectIdsRepairCommands
     /// <summary>Resolves the template path for a data root.</summary>
     public static string TemplatePathFor(string dataRoot) => Path.Combine(dataRoot, TemplateFileName);
 
+    /// <summary>Resolves the default operator map path beside the bank.</summary>
+    public static string DefaultMapPathFor(string dataRoot) => Path.Combine(dataRoot, DefaultMapFileName);
+
     public async Task<int> RunAsync(ParseResult parseResult, string dataRoot, StandardStreams streams, CancellationToken cancellationToken)
     {
         var apply = parseResult.GetValue<bool>("--apply");
         var queueOnly = parseResult.GetValue<bool>("--queue-only");
         var mapPath = parseResult.GetValue<string?>("--map");
 
-        var loaded = await LoadMapAsync(mapPath, streams);
+        var effectiveMapPath = mapPath ?? DefaultMapPathFor(dataRoot);
+        var loaded = await LoadMapAsync(effectiveMapPath, mapPath is null, streams);
         if (loaded is null)
         {
             return ErrorCode.Usage.AliasMapInvalid;
         }
 
-        var (map, mapJson) = loaded.Value;
+        var (map, mapJson, mapLoaded) = loaded.Value;
+
+        if (mapPath is null && mapLoaded)
+        {
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: loaded the default alias map from '{effectiveMapPath}'. Pass --map to use another file.");
+        }
 
         var report = await _repair.ReportProjectIdsAsync(cancellationToken);
         var plan = ProjectIdsFoldPlan.FromCensus(report, map);
         await WriteScoreboardAsync(report, plan, apply, streams);
         await WriteBucketsAsync(report, plan, streams);
-        if (mapPath is null && !apply)
+        if (mapPath is null && !mapLoaded && !apply)
         {
             await WriteTemplateNoteAsync(dataRoot, report, plan, streams);
+        }
+        else if (mapPath is null && !mapLoaded)
+        {
+            await streams.WriteOutputLineAsync(
+                $"project-ids repair: no --map supplied and no default map at '{DefaultMapPathFor(dataRoot)}' — planned with the empty map (no folds). Pass --map or save a reviewed map as '{DefaultMapFileName}' beside the bank.");
         }
 
         if (plan.Unresolved.Count > 0)
@@ -122,22 +141,22 @@ public sealed class ProjectIdsRepairCommands
     ///     The --map file, read once so the plan parses the exact bytes the apply forwards (AC3
     ///     identity); the empty map without one; null, with the reason on stderr, when it cannot load.
     /// </summary>
-    private static async Task<(ProjectIdAliasMap Map, string? Json)?> LoadMapAsync(string? mapPath, StandardStreams streams)
+    private static async Task<(ProjectIdAliasMap Map, string? Json, bool Loaded)?> LoadMapAsync(string mapPath, bool isDefaultMap, StandardStreams streams)
     {
-        if (mapPath is null)
-        {
-            return (ProjectIdAliasMap.Empty, null);
-        }
-
         try
         {
             var mapJson = File.ReadAllText(mapPath);
-            return (ProjectIdAliasMap.FromJson(mapJson), mapJson);
+            return (ProjectIdAliasMap.FromJson(mapJson), mapJson, true);
+        }
+        catch (Exception ex) when (isDefaultMap && (ex is FileNotFoundException or DirectoryNotFoundException))
+        {
+            // A missing default is the empty-map fallback; access and I/O errors remain failures.
+            return (ProjectIdAliasMap.Empty, null, false);
         }
         catch (Exception ex) when (ex is FileNotFoundException or JsonException or ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
         {
             await streams.WriteErrorLineAsync(
-                $"project-ids repair: cannot load --map '{mapPath}': {ex.Message}");
+                $"project-ids repair: cannot load {(isDefaultMap ? "default map" : "--map")} '{mapPath}': {ex.Message}");
             return null;
         }
     }
@@ -233,18 +252,18 @@ public sealed class ProjectIdsRepairCommands
             .Distinct(StringComparer.Ordinal)
             .ToList();
         var template = TryWriteTemplate(templatePath, plan.Unresolved, canonicalSeed);
-        const string planned = "project-ids repair: no --map supplied — planned with the empty map (no folds). ";
+        var planned = $"project-ids repair: no --map supplied and no default map at '{DefaultMapPathFor(dataRoot)}' — planned with the empty map (no folds). ";
         await streams.WriteOutputLineAsync(
             template.Wrote
                 ? planned +
                   $"Wrote an editable alias-map template to '{templatePath}' (example alias shape, " +
                   $"__self_metrics__ + {canonicalSeed.Count} registered canonical(s), {plan.Unresolved.Count} unattributed id(s) " +
-                  $"pre-filled in Dropped for review); edit Aliases/Dropped and re-run with --map."
+                  $"pre-filled in Dropped for review); review it, save as '{DefaultMapFileName}' beside the bank, or pass --map."
                 : template.Failure is not null
                     ? planned +
-                      $"Could not write the alias-map template to '{templatePath}': {template.Failure.TrimEnd('.', ' ')}; create it by hand or pass --map."
+                      $"Could not write the alias-map template to '{templatePath}': {template.Failure.TrimEnd('.', ' ')}; create '{DefaultMapFileName}' beside the bank or pass --map."
                     : planned +
-                      $"Edit the existing template at '{templatePath}' and re-run with --map.");
+                      $"Review the existing template at '{templatePath}', save it as '{DefaultMapFileName}' beside the bank, or pass --map.");
     }
 
     /// <summary>
