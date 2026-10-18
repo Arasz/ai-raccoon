@@ -222,7 +222,8 @@ Where the command or URL comes from (`scripts/server_configs.py`), first match w
 | local | `~/.claude.json` → `projects[<target or nearest parent>].mcpServers` |
 | project | `<target>/.mcp.json` — **only servers you approved**: named in `enabledMcpjsonServers` or covered by `enableAllProjectMcpServers`, and not in `disabledMcpjsonServers` (from the `~/.claude.json` project entry, `<target>/.claude/settings{,.local}.json`, `~/.claude/settings.json`) |
 | user | `~/.claude.json` → `mcpServers` |
-| plugin | `plugin:<p>:<s>` → `~/.claude/plugins/installed_plugins.json` `<p>@<market>` install path's `.mcp.json` or `.claude-plugin/plugin.json` `mcpServers`, `${CLAUDE_PLUGIN_ROOT}` expanded |
+| plugin | `plugin:<p>:<s>` → `~/.claude/plugins/installed_plugins.json` `<p>@<market>` install path's `.mcp.json` or `.claude-plugin/plugin.json` `mcpServers`; `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` (`~/.claude/plugins/data/<p>-<market>`) expanded and set in the server's env, config env winning |
+| synced plugin | `plugin:<p>:<s>` → `~/.claude/plugins/synced/<org>_<user>/` (claude.ai-synced, "Dynamic config"): `manifest.json`'s `<p>~g<generation>` dir, else the highest `<p>~gN`, else bare `<p>`; same files and expansion as plugin, data dir `<p>-synced`. An installed plugin of the same name wins |
 
 Transports: **stdio** and **unauthenticated streamable HTTP** (static `headers` from the config are
 sent, `${VAR}` / `${VAR:-default}` expanded, only to that URL — redirects are refused). One stderr

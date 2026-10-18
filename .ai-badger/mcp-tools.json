@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "generated_at": "2026-10-18T13:23:45Z",
+  "generated_at": "2026-10-18T14:08:05Z",
   "sources": [
     {
       "name": "dotnet-sdk",
@@ -1896,10 +1896,9 @@
         },
         "memory_set_ttl": {
           "tags": [
-            "write",
-            "unsafe"
+            "write"
           ],
-          "intent": "Set or clear one entry's TTL, the age gate memory_sweep needs before it can delete it.",
+          "intent": "Set or clear one entry's per-entry TTL in days, the age half of the sweep rule; an entry still needs a low rating before memory_sweep removes it.",
           "origin": "catalog"
         },
         "memory_sync": {
@@ -2229,8 +2228,23 @@
     },
     {
       "name": "plugin:browser-use:browser-use",
-      "status": "unknown",
-      "tools": {}
+      "status": "ok",
+      "tools": {
+        "browser_exec": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Execute Python in the browser-harness session. Helpers like new_tab(url), goto_url(url), page_info(), click_at_xy(x, y), type_text(text), js(code), cdp(method, ...), wait_for_load(), list_tabs() are…",
+          "origin": "heuristic"
+        },
+        "browser_screenshot": {
+          "tags": [
+            "browser"
+          ],
+          "intent": "Capture the current page and return it as an image. Prefer this over capture_screenshot() in browser_exec.",
+          "origin": "heuristic"
+        }
+      }
     },
     {
       "name": "tinyfish",
