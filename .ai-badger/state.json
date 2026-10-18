@@ -10,6 +10,16 @@
         "finishedAt": "2026-10-18"
     },
     {
+        "id": "air-answer-caller-cancelled-tool-calls",
+        "title": "Caller-cancelled tool calls no longer log a raw stack trace (1.59.1)",
+        "summary": "A tool call whose request token was already dead (client timeout, e.g. memory_search embedding) was logged as 914/915 then rethrown, and McpServerImpl logged 'request handler failed' warn with the full trace. ToolRefusals now returns cancelled: on that path too, but that alone was not enough (Codex P2): SDK 2.2.0 SendMessageAsync calls ThrowIfCancellationRequested inside the same try that logs the warn. Fix: CancelledRequestLogging (ILoggingBuilder.AddCancelledRequestFilter, ILoggerFactory decorator) drops only the SDK's LogRequestHandlerException record when its exception is an OperationCanceledException; a reflection test pins the event name against the SDK assembly. Also PR #873: 1.59.0 manual checklist fixed per review (no self-referencing expected-results, node_modules chmod-000 decoy claim withdrawn and template fixed, SQLite3MC 2.6.1 premise recorded from the shipped dylib). PR #872 merged as 54285233 by owner.",
+        "pr": 872,
+        "merged": true,
+        "mergeCommit": "54285233",
+        "date": "2026-10-18",
+        "hasNotes": false
+    },
+    {
         "id": "air-watch-cli-and-notebook-ingest",
         "title": "CLI watch add/remove/status; index .ipynb; report skipped files (1.59.0)",
         "summary": "ai-raccoon watch add|remove|status go through a new token-gated /watch route over IToolGate + IWatchService (ADR-0075 amended), so a machine can be set up from a terminal alone; refusals are RFC 9457 problem details (first AddProblemDetails in the repo). Notebook handler flattens code/markdown cells under '## cell N' headings via the markdown chunker (outputs/base64 dropped; code-cell fence lines escaped, markdown headings demoted, open fences closed per cell). Skipped files (unsupported-type/binary/unparseable) are reported in memory_watch_status and watch status, never fingerprinted; unrouted files classified from an 8 KB sniff; schema v18 drops rowless watch fingerprints so 1.58.x-skipped notebooks re-ingest. Four Codex review rounds fixed 10 findings in-PR. PR #870 merged as fe12818e by owner.",
