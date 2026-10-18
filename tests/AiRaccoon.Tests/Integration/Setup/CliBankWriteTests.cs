@@ -101,6 +101,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
 
         data.Add("noise entries", ["noise", "entries"]);
         data.Add("watch registered", ["watch", "registered"]);
+        data.Add("watch status", ["watch", "status"]);
         data.Add("extract prune", ["extract", "prune"]);
         data.Add("repair chunk-index", ["repair", "chunk-index"]);
         data.Add("repair reingest", ["repair", "reingest"]);

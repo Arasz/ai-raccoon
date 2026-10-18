@@ -27,7 +27,8 @@ internal sealed class ConfigCommands(
     ProjectIdsRepairCommands projectIdsRepair,
     DoctorCommands doctor,
     ModelDownloadCommands modelDownload,
-    ProjectIdCommands projectIds)
+    ProjectIdCommands projectIds,
+    WatchRegistrationCommands watchRegistrations)
 {
     public async Task<int> RunAsync(CliInput cliInput,
         StandardStreams streams,
@@ -108,6 +109,9 @@ internal sealed class ConfigCommands(
                 ["settings", "watch", "list"] => await watch.ListAsync(store, streams, ctx),
                 ["settings", "watch", "remove"] => await watch.RemoveAsync(parsedCliArgs, store, streams, ctx),
                 ["watch", "registered"] => await watch.RegisteredAsync(parsedCliArgs, streams, ctx),
+                ["watch", "add"] => await watchRegistrations.AddAsync(parsedCliArgs, streams, ctx),
+                ["watch", "remove"] => await watchRegistrations.RemoveAsync(parsedCliArgs, streams, ctx),
+                ["watch", "status"] => await watchRegistrations.StatusAsync(parsedCliArgs, streams, ctx),
                 ["encryption", "bitwarden"] => await encryptionCommands.BitwardenAsync(parsedCliArgs, store, streams, ctx),
                 ["encryption", "1password"] => await encryptionCommands.OnePasswordAsync(store, streams, ctx),
                 ["settings", "extract", "enable"] => await extract.SetEnabledAsync(parsedCliArgs, store, streams, ctx),

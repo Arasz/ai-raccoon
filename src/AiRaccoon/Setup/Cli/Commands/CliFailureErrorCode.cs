@@ -6,6 +6,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
+using AiRaccoon.Settings;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Setup.Cli.Commands;
@@ -22,6 +23,7 @@ internal static class CliFailureErrorCode
         ex switch
         {
             UndialablePortException => ErrorCode.Usage.UndialablePort,
+            WatchRefusedException refused => ForWatchRefusal(refused.Kind),
             ArgumentException or FormatException => ErrorCode.Usage.InvalidValue,
             HttpRequestException { StatusCode: HttpStatusCode.BadRequest } => ErrorCode.Usage.RequestRejected,
             HttpRequestException { StatusCode: HttpStatusCode.NotFound } => ErrorCode.Server.EndpointMissing,
@@ -61,6 +63,17 @@ internal static class CliFailureErrorCode
     /// <summary>The first code that names the failure, or <paramref name="general" /> when only the catch-all would.</summary>
     internal static int For(Exception? ex, int general) =>
         ex is null || For(ex) == ErrorCode.Internal.Unexpected ? general : For(ex);
+
+    /// <summary>A refused watch call: an unusable project id, an open migration, or a value the watch service rejected.</summary>
+    private static int ForWatchRefusal(string kind) =>
+        kind switch
+        {
+            "project-not-registered" or "project-retired" => ErrorCode.Usage.ProjectUnknown,
+            "model-migration-in-progress" => ErrorCode.Server.MigrationRefused,
+            "watching-disabled" or "path-outside-scope" or "path-not-found" or "watch-overlap" or "invalid-argument" =>
+                ErrorCode.Usage.InvalidValue,
+            _ => ErrorCode.Usage.RequestRejected
+        };
 
     private static bool IsBindDenied(Exception ex)
     {

@@ -532,6 +532,42 @@ public class CliArgsTests
         parsed.ParsedCliArgs.GetValue<string?>("project-id").ShouldBe("acme");
     }
 
+    [Theory]
+    [InlineData("add")]
+    [InlineData("remove")]
+    public void Parse_WatchAddOrRemove_ParsesProjectIdAndPath(string verb)
+    {
+        CliArgs.TryParse(["watch", verb, "acme", "/a/b"], out var parsed);
+
+        parsed!.Errors.ShouldBeEmpty();
+        parsed.CommandPath.ShouldBe(["watch", verb]);
+        parsed.ParsedCliArgs.GetValue<string>("project-id").ShouldBe("acme");
+        parsed.ParsedCliArgs.GetValue<string>("path").ShouldBe("/a/b");
+    }
+
+    [Theory]
+    [InlineData("add")]
+    [InlineData("remove")]
+    public void Parse_WatchAddOrRemove_WithoutAPath_ReturnsError(string verb)
+    {
+        CliArgs.TryParse(["watch", verb, "acme"], out var parsed);
+
+        parsed!.Errors.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public void Parse_WatchStatus_AcceptsOptionalProjectId()
+    {
+        CliArgs.TryParse(["watch", "status"], out var all);
+        CliArgs.TryParse(["watch", "status", "acme"], out var one);
+
+        all!.Errors.ShouldBeEmpty();
+        all.CommandPath.ShouldBe(["watch", "status"]);
+        all.ParsedCliArgs.GetValue<string?>("project-id").ShouldBeNull();
+        one!.Errors.ShouldBeEmpty();
+        one.ParsedCliArgs.GetValue<string?>("project-id").ShouldBe("acme");
+    }
+
     [Fact]
     public void Parse_WatchRemove_ParsesTarget()
     {
