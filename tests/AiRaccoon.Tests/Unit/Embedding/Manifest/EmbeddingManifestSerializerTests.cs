@@ -35,10 +35,10 @@ public class EmbeddingManifestSerializerTests
         Pooling: new PoolingManifest(PoolingMode.ModelOutput,
             new PoolingOutputNames("sentence_embedding", "token_embeddings")),
         Tokenizer: new TokenizerManifest(TokenizerFamily.SentencePiece,
-        [
-            new ManifestFile("sentencepiece.bpe.model",
-                "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865")
-        ],
+            [
+                new ManifestFile("sentencepiece.bpe.model",
+                    "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865")
+            ],
             new TokenizerOptionsManifest(true, true, new Dictionary<string, int>
             {
                 ["<s>"] = 0, ["<pad>"] = 1, ["</s>"] = 2, ["<unk>"] = 3
@@ -81,6 +81,24 @@ public class EmbeddingManifestSerializerTests
         json.ShouldContain("\"provider\": \"local\"");
         json.ShouldNotContain("modelOutput", Case.Sensitive);
         json.ShouldNotContain("sentencePiece", Case.Sensitive);
+    }
+
+    [Fact]
+    public void SchemaNameOf_UsesExplicitNamesForManifestEnums_AndKeepsGenericFallbacks()
+    {
+        KebabCaseEnumJsonConverter<TokenizerFamily>.SchemaNameOf(TokenizerFamily.SentencePiece)
+            .ShouldBe("sentencepiece");
+        KebabCaseEnumJsonConverter<TokenizerFamily>.SchemaNameOf(TokenizerFamily.TokenizerJson)
+            .ShouldBe("tokenizer-json");
+        KebabCaseEnumJsonConverter<PoolingMode>.SchemaNameOf(PoolingMode.ModelOutput)
+            .ShouldBe("model-output");
+        KebabCaseEnumJsonConverter<PoolingMode>.SchemaNameOf(PoolingMode.LastToken)
+            .ShouldBe("last-token");
+
+        KebabCaseEnumJsonConverter<UnannotatedEnum>.SchemaNameOf(UnannotatedEnum.PlainValue)
+            .ShouldBe("plain-value");
+        KebabCaseEnumJsonConverter<CustomSchemaEnum>.SchemaNameOf(CustomSchemaEnum.CustomValue)
+            .ShouldBe("custom-value");
     }
 
     [Fact]
@@ -127,8 +145,7 @@ public class EmbeddingManifestSerializerTests
     [Fact]
     public void UnknownFamily_FailsDeserialization_WithActionableMessage()
     {
-        var ex = Should.Throw<EmbeddingManifestFormatException>(
-            () => new EmbeddingManifestSerializer().Deserialize(ReadFixture("malformed/unknown-family.json")));
+        var ex = Should.Throw<EmbeddingManifestFormatException>(() => new EmbeddingManifestSerializer().Deserialize(ReadFixture("malformed/unknown-family.json")));
 
         ex.Message.ShouldContain("tokenizer.family");
         ex.Message.ShouldContain("tiktoken");
@@ -139,8 +156,7 @@ public class EmbeddingManifestSerializerTests
     public void UnknownPoolingMode_FailsDeserialization_WithActionableMessage()
     {
         var json = ReadFixture("bge-m3.full.json").Replace("\"mode\": \"model-output\"", "\"mode\": \"attention\"");
-        var ex = Should.Throw<EmbeddingManifestFormatException>(
-            () => new EmbeddingManifestSerializer().Deserialize(json));
+        var ex = Should.Throw<EmbeddingManifestFormatException>(() => new EmbeddingManifestSerializer().Deserialize(json));
 
         ex.Message.ShouldContain("pooling.mode");
         ex.Message.ShouldContain("attention");
@@ -149,16 +165,14 @@ public class EmbeddingManifestSerializerTests
     [Fact]
     public void MalformedJson_FailsDeserialization_WithFormatException()
     {
-        Should.Throw<EmbeddingManifestFormatException>(
-            () => new EmbeddingManifestSerializer().Deserialize(ReadFixture("malformed/not-json.json")));
+        Should.Throw<EmbeddingManifestFormatException>(() => new EmbeddingManifestSerializer().Deserialize(ReadFixture("malformed/not-json.json")));
     }
 
     [Fact]
     public void WrongType_FailsDeserialization_WithFormatException()
     {
         var json = ReadFixture("bge-m3.full.json").Replace("\"dimensions\": 1024", "\"dimensions\": \"many\"");
-        var ex = Should.Throw<EmbeddingManifestFormatException>(
-            () => new EmbeddingManifestSerializer().Deserialize(json));
+        var ex = Should.Throw<EmbeddingManifestFormatException>(() => new EmbeddingManifestSerializer().Deserialize(json));
 
         ex.Message.ShouldContain("dimensions");
     }
@@ -168,9 +182,18 @@ public class EmbeddingManifestSerializerTests
     {
         var json = ReadFixture("bge-m3.full.json").Replace("\"provider\": \"local\",", string.Empty);
 
-        var ex = Should.Throw<EmbeddingManifestFormatException>(
-            () => new EmbeddingManifestSerializer().Deserialize(json));
+        var ex = Should.Throw<EmbeddingManifestFormatException>(() => new EmbeddingManifestSerializer().Deserialize(json));
 
         ex.Message.ShouldContain("provider");
+    }
+
+    private enum UnannotatedEnum
+    {
+        PlainValue
+    }
+
+    private enum CustomSchemaEnum
+    {
+        [SchemaName("custom-value")] CustomValue
     }
 }

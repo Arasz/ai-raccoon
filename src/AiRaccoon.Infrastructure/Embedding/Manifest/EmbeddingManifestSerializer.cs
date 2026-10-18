@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -60,8 +61,7 @@ public sealed class EmbeddingManifestSerializer : IEmbeddingManifestSerializer
     /// <summary>Extra guidance for the shape mistakes that are easy to make by hand.</summary>
     private static string Hint(string? path) =>
         path?.Contains("specialTokens", StringComparison.OrdinalIgnoreCase) == true
-            ? " — tokenizer.options.specialTokens maps special-token names to NUMERIC ids taken from "
-              + "tokenizer_config.json (e.g. {\"<s>\": 0}), never a list or a string"
+            ? """ — tokenizer.options.specialTokens maps special-token names to NUMERIC ids taken from tokenizer_config.json (e.g. {"<s>": 0}), never a list or a string"""
             : string.Empty;
 }
 
@@ -108,14 +108,37 @@ public sealed class KebabCaseEnumJsonConverter<TEnum> : JsonConverter<TEnum>
 
     private static string SchemaName(TEnum value)
     {
+        var schemaName = ResolveSchemaNameByStaticMap(value);
+        if (!string.IsNullOrEmpty(schemaName))
+        {
+            return schemaName;
+        }
+
         var member = Enum.GetName(value)!;
         var attribute = typeof(TEnum).GetField(member)?.GetCustomAttribute<SchemaNameAttribute>();
         return attribute?.Name ?? HumpToKebab(member);
     }
 
+    private static string? ResolveSchemaNameByStaticMap(TEnum value) => value switch
+    {
+        TokenizerFamily tokenizerFamily => tokenizerFamily switch
+        {
+            TokenizerFamily.SentencePiece => "sentencepiece",
+            TokenizerFamily.TokenizerJson => "tokenizer-json",
+            _ => null
+        },
+        PoolingMode poolingMode => poolingMode switch
+        {
+            PoolingMode.ModelOutput => "model-output",
+            PoolingMode.LastToken => "last-token",
+            _ => null
+        },
+        _ => null
+    };
+
     private static string HumpToKebab(string name)
     {
-        var builder = new System.Text.StringBuilder();
+        var builder = new StringBuilder();
         foreach (var ch in name)
         {
             if (char.IsUpper(ch) && builder.Length > 0)
