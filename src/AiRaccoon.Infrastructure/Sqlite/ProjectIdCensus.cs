@@ -36,7 +36,9 @@ public static class ProjectIdCensus
     ///     'Active'/'Closed'/'Discarded' and older banks carry other spellings, so the comparison
     ///     names the terminal states only and ignores case. The census counts workspace ROWS
     ///     elsewhere; this is the live view — a closed workspace holds no scratch that must never
-    ///     move, so it must not keep a loser id from folding.
+    ///     move, so it must not keep a loser id from folding. The rows are counted under the
+    ///     workspace's project id, which is the id the write path gives the scratch row too (a
+    ///     workspace is only reachable under the project it belongs to).
     /// </summary>
     internal const string OpenWorkspacesSql =
         "SELECT w.project_id AS Id, COUNT(DISTINCT w.id) AS N, COUNT(e.id) AS M " +

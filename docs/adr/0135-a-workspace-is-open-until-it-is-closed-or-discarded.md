@@ -29,7 +29,9 @@ under the alias matched nothing under either spelling.
   which stay because `AttachmentCount` must keep counting every attachment a row owns.
 - The fold plan blocks on the open counts, never the totals. The pin reason names the open
   workspaces and the live scratch rows; a pin for an id that owns only closed workspaces says
-  that instead of claiming live scratch.
+  that instead of claiming live scratch. The retire verdict keeps counting every workspace row,
+  open or closed: the registry row is what the workspace rows name, and the change is about what
+  blocks a fold, not about what a retire may remove.
 
 ## Consequences
 
