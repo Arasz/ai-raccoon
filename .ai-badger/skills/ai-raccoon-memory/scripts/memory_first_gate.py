@@ -12,6 +12,7 @@ telemetry row. A hook must never raise: Copilot's preToolUse is fail-closed, so 
 """
 from __future__ import annotations
 
+import glob
 import hashlib
 import importlib.util
 import json
@@ -340,25 +341,40 @@ def pattern_hash(pattern: str) -> str:
     return hashlib.sha256(pattern.encode("utf-8")).hexdigest()
 
 
+def _glob_expands(arg: str, cwd: str) -> bool:
+    """True when the shell would replace a glob-bearing argument with path matches."""
+    if not glob.has_magic(arg):
+        return False
+    root = cwd or os.getcwd()
+    pattern = arg if os.path.isabs(arg) else os.path.join(root, arg)
+    return bool(glob.glob(pattern))
+
+
 def _capture_scope(cwd: str = "") -> str:
     """Namespace raw results by the real working directory to isolate repositories."""
     return hashlib.sha256(os.path.realpath(cwd or os.getcwd()).encode("utf-8")).hexdigest()
 
 
-def _capture_segment(parsed: Any, program: str, args: Tuple[str, ...]) -> str:
-    """Rebuild a grep command with its input pipeline and without adjacent commands."""
-    if parsed is None or not getattr(parsed, "upstream", None):
-        return shlex.join((program, *args))
-    pipeline = []
-    current = parsed
-    while current is not None:
-        words = shlex.join(current.words)
-        redirects = " ".join(
-            operator + (" " + shlex.quote(target) if target else "")
-            for operator, target in current.redirects)
-        pipeline.append((words + (" " + redirects if redirects else "")).strip())
-        current = current.upstream
-    return " | ".join(reversed(pipeline))
+def _capture_argv(parsed: Any, program: str, args: Tuple[str, ...],
+                  command_count: int, cwd: str) -> Optional[List[str]]:
+    """Return argv only for one literal standalone grep/rg invocation."""
+    if (parsed is None or command_count != 1 or parsed.upstream or parsed.redirects
+            or parsed.start >= len(parsed.words)):
+        return None
+    prefix = parsed.words[:parsed.start]
+    if prefix and not (len(prefix) == 1 and prefix[0].rsplit("/", 1)[-1] == "rtk"):
+        return None
+    if any("$" in arg or "`" in arg or "{" in arg or "}" in arg
+           or re.search(r"[<>][(]", arg) or arg.startswith("~")
+           or _glob_expands(arg, cwd)
+           for arg in args):
+        return None
+    patterns, files, _walks = _grep_parse(program, args)
+    if not patterns or "-" in files:
+        return None
+    if (program not in ("rg", "rg.exe") and not files):
+        return None
+    return [parsed.words[parsed.start], *args]
 
 
 def capture_greps(tool_name: Any, tool_input: Any, cwd: str = "",
@@ -371,22 +387,25 @@ def capture_greps(tool_name: Any, tool_input: Any, cwd: str = "",
         return []
     launched: List[Tuple[str, str]] = []
     captured: Set[str] = set()
-    for program, args, _words, parsed in _commands(command):
+    commands = _commands(command)
+    for program, args, _words, parsed in commands:
         if program not in _GREP_PROGRAMS + ("rg", "rg.exe"):
             continue
         patterns, files, walks = _grep_parse(program, args)
         if _reads_excluded_pipe(parsed, files, walks):
             continue
+        argv = _capture_argv(parsed, program, args, len(commands), cwd)
+        if argv is None:
+            continue
         patterns = [pattern for pattern in patterns
                     if (selected is None or pattern in selected) and pattern not in captured]
         if not patterns:
             continue
-        segment = _capture_segment(parsed, program, args)
         keys = [pattern_hash(pattern) for pattern in patterns]
         try:
             subprocess.Popen(
                 [sys.executable, str(RAW_GREP_SCRIPT), "--capture",
-                 _capture_scope(cwd) + ":" + ",".join(keys), segment],
+                 _capture_scope(cwd) + ":" + ",".join(keys), json.dumps(argv)],
                 cwd=cwd or os.getcwd(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
             launched.extend(zip(patterns, keys))

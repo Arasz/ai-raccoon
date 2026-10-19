@@ -10,13 +10,13 @@
       ]
     },
     "ai-raccoon": {
-      "command": "${HOME}/.dotnet/tools/ai-raccoon",
+      "command": "ai-raccoon",
       "tools": [
         "*"
       ]
     },
     "semantica": {
-      "command": "${HOME}/.local/bin/semantica-mcp",
+      "command": "semantica-mcp",
       "env": {
         "SEMANTICA_DISABLE_PROGRESS": "1"
       },
@@ -39,7 +39,7 @@
       ]
     },
     "task-graph": {
-      "command": "${HOME}/.local/bin/uv",
+      "command": "uv",
       "args": [
         "run",
         "--no-project",
@@ -48,6 +48,16 @@
         "python",
         "-c",
         "import os,sys,shutil,signal,subprocess;from pathlib import Path;r='.ai-badger/skills/task-decomposition/scripts/task_graph_server.py';c=Path.cwd();f=next((d/r for d in (c,*c.parents) if (d/r).is_file()),None);f or sys.exit('task-graph: '+r+' not found at or above '+str(c));u=os.environ.get('UV') or shutil.which('uv') or sys.exit('task-graph: uv not found: UV is unset and uv is not on PATH');p=subprocess.Popen([u,'run','--script',str(f)]);signal.signal(signal.SIGTERM,lambda *a:p.terminate());sys.exit(p.wait())"
+      ],
+      "tools": [
+        "*"
+      ]
+    },
+    "hermes": {
+      "command": "hermes",
+      "args": [
+        "mcp",
+        "serve"
       ],
       "tools": [
         "*"

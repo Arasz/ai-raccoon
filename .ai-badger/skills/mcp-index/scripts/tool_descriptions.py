@@ -53,6 +53,17 @@ def all_valid_tags(taxonomy: dict[str, Any]) -> set[str]:
 
 # ── Auto-tagging heuristics ──────────────────────────────────────────────────
 
+# The action a tool name's *first* `_`/`-` token names, matched whole (so `budget` is not `get`).
+# Actions only, never a technology (#171). These verbs led the 59 names the 2026-10-18 host-tools
+# smoke left `general`.
+_READ, _WRITE, _RUN = ("read",), ("write",), ("run",)
+LEADING_VERBS = {
+    **dict.fromkeys(("get", "list", "fetch", "download", "export", "whoami", "describe"), _READ),
+    **dict.fromkeys(("query", "search"), ("read", "search")),
+    **dict.fromkeys(("create", "update", "delete", "add", "upload", "set", "patch"), _WRITE),
+    **dict.fromkeys(("cancel", "pause", "resume", "start", "stop"), _RUN),
+}
+
 def auto_tags(tool_name: str, server_name: str, valid_tags: set[str]) -> list[str]:
     """Assign tags from tool-name heuristics, or ["general"] when none match."""
     name = tool_name.lower()
@@ -98,6 +109,7 @@ def auto_tags(tool_name: str, server_name: str, valid_tags: set[str]) -> list[st
         tags.add("write")
     if "terminal" in name or "shell" in name:
         tags.add("terminal")
+    tags.update(LEADING_VERBS.get(re.split(r"[_-]", name, maxsplit=1)[0], ()))
 
     valid = sorted(tags & valid_tags)
     return valid if valid else ["general"]
@@ -111,25 +123,30 @@ Catalog = Dict[str, Dict[str, Dict[str, Any]]]
 
 
 def load_catalog(fw_root: Optional[Path]) -> Catalog:
-    """Curated tool entries per server name, from every features/*/mcp/<server>/tools.json.
+    """Curated tool entries per server name.
 
-    Stacks in directory order, last writer wins on a duplicate tool. An unreachable framework
-    yields `{}` and the name heuristics carry the whole index.
+    From every installable `features/*/mcp/<server>/tools.json` (with its `meta.json`), then
+    every describe-only `features/*/mcp-catalog/<slug>/tools.json`: servers a host exposes but
+    ai-badger never installs, so nothing that offers or delivers servers reads that dir. Stacks
+    in directory order, last writer wins on a duplicate tool, and an installable entry outranks a
+    describe-only one. An unreachable framework yields `{}` and the heuristics carry the index.
     """
     if fw_root is None:
         return {}
     catalog: Catalog = {}
-    for path in sorted(Path(fw_root).glob("features/*/mcp/*/tools.json")):
-        if not (path.parent / "meta.json").is_file():
-            continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        tools = catalog.setdefault(data.get("server") or path.parent.name, {})
-        for tool in data.get("tools", []):
-            if tool.get("name"):
-                tools[tool["name"]] = tool
+    for pattern, overwrite in (("features/*/mcp/*/tools.json", True),
+                               ("features/*/mcp-catalog/*/tools.json", False)):
+        for path in sorted(Path(fw_root).glob(pattern)):
+            if overwrite and not (path.parent / "meta.json").is_file():
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            tools = catalog.setdefault(data.get("server") or path.parent.name, {})
+            for tool in data.get("tools", []):
+                if tool.get("name") and (overwrite or tool["name"] not in tools):
+                    tools[tool["name"]] = tool
     return catalog
 
 
@@ -199,7 +216,17 @@ def heuristic_intent(name: str, description: str) -> str:
     text = " ".join(str(description or "").split())
     if len(text) > INTENT_MAX:
         text = text[:INTENT_MAX - 1].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
-    return text if len(text) >= INTENT_MIN else f"TODO: describe what {name} does"
+    return text if len(text) >= INTENT_MIN else PLACEHOLDER_INTENT.format(name=name)
+
+
+# What `heuristic_intent` writes when it has nothing to say; `validate` refuses it.
+PLACEHOLDER_INTENT = "TODO: describe what {name} does"
+_PLACEHOLDER = re.compile(re.escape(PLACEHOLDER_INTENT).replace(re.escape("{name}"), ".+"))
+
+
+def is_placeholder(intent: str) -> bool:
+    """Whether an intent is the unwritten placeholder rather than a description."""
+    return bool(_PLACEHOLDER.fullmatch(str(intent or "")))
 
 
 # ── Server status: opposite remedies must not share one silence ──────────────

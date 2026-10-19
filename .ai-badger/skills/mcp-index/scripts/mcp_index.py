@@ -559,6 +559,8 @@ def cmd_validate(target: str) -> int:
             intent = tool.get("intent", "")
             if not intent:
                 errors.append(f"{full}: no intent")
+            elif td.is_placeholder(intent):
+                errors.append(f"{full}: intent is a placeholder")
             elif len(intent) < 10:
                 errors.append(
                     f"{full}: intent too short ({len(intent)} chars, min 10)"
