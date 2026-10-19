@@ -61,7 +61,7 @@ ai-raccoon serve observability otlp
 
 | Command | Metric / Trace Coverage |
 |---|---|
-| `counters` | `dotnet-counters monitor -p <pid> --counters AiRaccoon.MemoryTools,AiRaccoon.PromotionQueue,AiRaccoon.Background,System.Runtime,System.Net.Http` — all registered meters (the three AiRaccoon meters, runtime, and HTTP); the CLI now includes the full `--counters` list, so tool-call counts by `project_id`, background pass counts, and runtime counters are visible in one session |
+| `counters` | `dotnet-counters monitor -p <pid> --counters AiRaccoon.MemoryTools,AiRaccoon.PromotionQueue,AiRaccoon.Background,System.Runtime,System.Net.Http` (every meter the server registers). The CLI includes the full `--counters` list, so tool-call counts by `project_id`, background pass counts, and the runtime counters are visible in one session |
 | `trace` | Spans for every tool call with `tool`, `project_id`, `result`, and `error_type` |
 | `otlp` | Full batch export of metrics and trace spans to an OpenTelemetry collector |
 
