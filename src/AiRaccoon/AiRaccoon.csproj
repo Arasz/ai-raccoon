@@ -72,7 +72,8 @@
         <ProjectReference Include="../AiRaccoon.Infrastructure/AiRaccoon.Infrastructure.csproj"/>
         <ProjectReference Include="../AiRaccoon.Generators/AiRaccoon.Generators.csproj"
                           OutputItemType="Analyzer"
-                          ReferenceOutputAssembly="false"/>
+                          ReferenceOutputAssembly="false"
+                          GlobalPropertiesToRemove="RuntimeIdentifier"/>
     </ItemGroup>
 
     <ItemGroup>

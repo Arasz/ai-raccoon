@@ -99,6 +99,16 @@ public class VersionContractTests
     }
 
     [Fact]
+    public void AnalyzerProjectReference_DoesNotInheritPublishRuntimeIdentifier()
+    {
+        var project = XDocument.Load(TestData.RepoFile("src/AiRaccoon/AiRaccoon.csproj"));
+        var analyzer = project.Descendants("ProjectReference").Single(element =>
+            ((string?)element.Attribute("Include"))?.EndsWith("AiRaccoon.Generators.csproj", StringComparison.Ordinal) == true);
+
+        analyzer.Attribute("GlobalPropertiesToRemove")!.Value.ShouldContain("RuntimeIdentifier");
+    }
+
+    [Fact]
     public void McpServerJson_ConformsToRegistrySchemaConstraints()
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(TestData.RepoFile("src/AiRaccoon/.mcp/server.json")));
