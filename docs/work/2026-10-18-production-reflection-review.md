@@ -35,12 +35,12 @@ The selected implementation is an incremental Roslyn generator in the new `src/A
 **Evidence:** `src/AiRaccoon/Tools/McpToolInventory.cs`; `src/AiRaccoon/Tools/PerformanceTools.cs:39`; `tests/AiRaccoon.Tests/Unit/Mcp/McpToolInventoryTests.cs:17-28`; `tests/AiRaccoon.Tests/TestHelpers/RegisteredTools.cs:36`;
 `Directory.Packages.props` (Roslyn is centrally versioned); 30 tool declarations in `src/AiRaccoon/Tools`.
 
-### F5 — Source generation is unlikely to make this code meaningfully faster [INFERRED]
+### F5 — The remaining production reflection is unlikely to make this code meaningfully faster [INFERRED]
 
-The reflection sites are metadata reads and inventory discovery, not repeated computational work in a request loop (the MCP inventory is built when performance data is requested). Replacing them can improve trimming compatibility,
-compile-time checking, or cold-start work, but a measurable throughput gain is not established. A benchmark would only be useful if startup or inventory latency is an identified problem.
+After F4's inventory generation, the remaining reflection sites are build metadata reads and enum schema-attribute reads. They do not perform repeated computational work in a request loop. Replacing them can improve trimming compatibility,
+compile-time checking, or cold-start work, but a measurable throughput gain is not established. A benchmark would only be useful if startup latency is an identified problem.
 
-This inference follows from the cited call sites. No timing was measured.
+This inference follows from the remaining call sites in F2 and F3. No timing was measured.
 
 ## Still open
 
