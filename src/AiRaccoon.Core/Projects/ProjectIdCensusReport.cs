@@ -30,6 +30,16 @@ public sealed record ProjectIdCensusRow(
     long NoiseRows,
     IReadOnlyList<string> SettingsKeys)
 {
+    /// <summary>
+    ///     Workspaces that are still open — every status except the terminal Closed and Discarded.
+    ///     Counting workspace ROWS instead of open ones made a loser whose workspaces had all
+    ///     closed look like it owned live scratch, and the repair pinned it forever.
+    /// </summary>
+    public long OpenWorkspaces { get; init; }
+
+    /// <summary>Scratch rows living in an open workspace — the live user state that never moves.</summary>
+    public long OpenWorkspaceEntries { get; init; }
+
     /// <summary>Committed entries rows (project + custom + shared scope).</summary>
     public long EntryTotal => ProjectEntries + CustomEntries + SharedEntries;
 

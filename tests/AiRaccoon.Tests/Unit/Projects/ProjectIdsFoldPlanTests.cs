@@ -289,7 +289,7 @@ public sealed class ProjectIdsFoldPlanTests
     {
         // Workspaces never move across projects (isolation invariant): an otherwise-foldable
         // loser with open workspaces pins with a reason instead of folding or vanishing.
-        var report = Report(Row("AI-RACCOON", workspaces: 1, workspaceEntries: 2));
+        var report = Report(Row("AI-RACCOON", workspaces: 1, workspaceEntries: 2, openWorkspaces: 1, openWorkspaceEntries: 2));
 
         var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
@@ -297,7 +297,8 @@ public sealed class ProjectIdsFoldPlanTests
         var pin = plan.Pinned.ShouldHaveSingleItem();
         pin.ProjectId.ShouldBe("AI-RACCOON");
         pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedOpenWorkspaces);
-        pin.Reason.ShouldContain("workspace");
+        pin.Reason.ShouldContain("1 open workspace(s)");
+        pin.Reason.ShouldContain("2 live scratch row(s)");
         plan.Unresolved.ShouldBeEmpty();
     }
 
@@ -307,7 +308,7 @@ public sealed class ProjectIdsFoldPlanTests
     [Fact]
     public void FromCensus_MixedCommittedAndWorkspaceLoser_PinsOpenWorkspaces()
     {
-        var report = Report(Row("job-search-ai-assistant", projectEntries: 2, workspaces: 1));
+        var report = Report(Row("job-search-ai-assistant", projectEntries: 2, workspaces: 1, openWorkspaces: 1));
 
         var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
 
@@ -316,6 +317,42 @@ public sealed class ProjectIdsFoldPlanTests
         pin.ProjectId.ShouldBe("job-search-ai-assistant");
         pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedOpenWorkspaces);
         plan.Unresolved.ShouldBeEmpty();
+    }
+
+    // Ledger — closed-workspaces-fold : --filter FromCensus_ClosedWorkspaceLoser_FoldsInsteadOfPinning :
+    // alias loser, committed rows, 14 workspace rows of which none is open.
+    [Fact]
+    public void FromCensus_ClosedWorkspaceLoser_FoldsInsteadOfPinning()
+    {
+        // A closed workspace is dead state: it holds no live scratch, so it must not block the
+        // fold. Counting workspace ROWS instead of OPEN workspaces pinned this id forever and
+        // stranded its committed rows under a spelling no read path resolves.
+        var report = Report(Row("job-search-ai-assistant", projectEntries: 25, customEntries: 65,
+            workspaces: 14, workspaceEntries: 0, openWorkspaces: 0, openWorkspaceEntries: 0));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBe([new ProjectIdFold("job-search-ai-assistant", "jsaa")]);
+        plan.Pinned.ShouldBeEmpty();
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
+    // Ledger — closed-workspaces-reported : --filter FromCensus_ClosedWorkspaceOnlyLoser_PinsWithAReasonThatNamesThem :
+    // alias loser, 14 closed workspace rows, no committed rows.
+    [Fact]
+    public void FromCensus_ClosedWorkspaceOnlyLoser_PinsWithAReasonThatNamesThem()
+    {
+        // The id still has to surface — a pin with a reason, never a silent skip — and the reason
+        // says which rows it holds, so the operator sees dead workspaces rather than "nothing".
+        var report = Report(Row("job-search-ai-assistant", workspaces: 14, openWorkspaces: 0));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBeEmpty();
+        var pin = plan.Pinned.ShouldHaveSingleItem();
+        pin.ProjectId.ShouldBe("job-search-ai-assistant");
+        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedNoMoveableContent);
+        pin.Reason.ShouldContain("14 closed workspace(s)");
     }
 
     // Ledger — attributed-never-silent : --filter FromCensus_EmptyAliasLoser_PinsGenericInsteadOfSilentlyContinuing : alias loser, zero everywhere.
@@ -481,7 +518,8 @@ public sealed class ProjectIdsFoldPlanTests
     {
         // AC(2): retire never fires while open workspaces exist — workspace scratch is live
         // user state, and the C1 AttachmentCount change must not unblock this verdict.
-        var report = Report(Row("01a03024-0000-7000-8000-000000000001", registered: true, workspaces: 1, workspaceEntries: 2));
+        var report = Report(Row("01a03024-0000-7000-8000-000000000001", registered: true, workspaces: 1, workspaceEntries: 2,
+            openWorkspaces: 1, openWorkspaceEntries: 2));
 
         var plan = ProjectIdsFoldPlan.FromCensus(report, ProjectIdAliasMap.Empty);
 
@@ -526,7 +564,13 @@ public sealed class ProjectIdsFoldPlanTests
         long nullContextEntries = 0,
         long workspaces = 0,
         long workspaceEntries = 0,
+        long openWorkspaces = 0,
+        long openWorkspaceEntries = 0,
         params string[] settingsKeys) =>
         new(projectId, registered, registeredName, projectEntries, customEntries, sharedEntries, workspaceEntries, nullContextEntries, 0, 0, 0, 0, 0, 0,
-            queued, discards, qualityRows, watches, 0, 0, 0, workspaces, metricsRows, noiseRows, settingsKeys);
+            queued, discards, qualityRows, watches, 0, 0, 0, workspaces, metricsRows, noiseRows, settingsKeys)
+        {
+            OpenWorkspaces = openWorkspaces,
+            OpenWorkspaceEntries = openWorkspaceEntries
+        };
 }

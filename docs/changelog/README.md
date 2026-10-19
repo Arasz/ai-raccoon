@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.60.1 — the project id repair counts open workspaces](1.60.1-repair-counts-open-workspaces.md)
 - [1.60.0 — project id repair uses the default alias map](1.60.0-project-id-repair-default-map.md)
 - [1.59.5 — MCP tool inventory is generated at compile time](1.59.5-mcp-tool-inventory-generated.md)
 - [1.59.4 — vector search reads only its own context](1.59.4-partitioned-vector-search.md)

@@ -252,9 +252,15 @@ public sealed class ProjectIdsFoldPlan(
             (row.QualityRows > 0 ? $" + {row.QualityRows} search-quality" : string.Empty) + " rows) — " +
             "regenerable derived data the repair never moves");
 
-    /// <summary>True when the row owns live workspace scratch that never moves across projects (D3 block).</summary>
+    /// <summary>
+    ///     True when the row owns live workspace scratch that never moves across projects (D3 block).
+    ///     Openness is what counts: a workspace whose status is Closed or Discarded holds no live
+    ///     scratch, so a loser whose workspaces have all closed is foldable. Counting workspace
+    ///     ROWS here pinned such ids forever and stranded their committed rows under a spelling no
+    ///     read path resolves.
+    /// </summary>
     private static bool HasOpenWorkspaces(ProjectIdCensusRow row) =>
-        row.Workspaces > 0 || row.WorkspaceEntries > 0;
+        row.OpenWorkspaces > 0 || row.OpenWorkspaceEntries > 0;
 
     /// <summary>
     ///     Classifies an attributed-but-unmovable id into its waiting bucket with an ownership
@@ -266,7 +272,7 @@ public sealed class ProjectIdsFoldPlan(
         if (HasOpenWorkspaces(row))
         {
             return new ProjectIdPin(loser, PinnedOpenWorkspaces,
-                $"owns {row.Workspaces} open workspace(s) with {row.WorkspaceEntries} scratch row(s) — " +
+                $"owns {row.OpenWorkspaces} open workspace(s) with {row.OpenWorkspaceEntries} live scratch row(s) — " +
                 "workspaces never move across projects, so the id waits for its workspaces to close");
         }
 
@@ -282,6 +288,8 @@ public sealed class ProjectIdsFoldPlan(
         }
 
         return new ProjectIdPin(loser, PinnedNoMoveableContent,
-            $"is attributed to '{winner}' but owns no committed rows or other foldable surfaces — nothing to move");
+            $"is attributed to '{winner}' but owns no committed rows or other foldable surfaces" +
+            (row.Workspaces > 0 ? $" ({row.Workspaces} closed workspace(s) never move)" : string.Empty) +
+            " — nothing to move");
     }
 }

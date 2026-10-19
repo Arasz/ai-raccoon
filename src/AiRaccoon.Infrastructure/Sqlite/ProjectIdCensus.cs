@@ -30,6 +30,19 @@ public static class ProjectIdCensus
         "SELECT e.project_id AS Id, COUNT(*) AS N FROM v JOIN entries e ON v.rid = e.id " +
         "WHERE e.project_id IS NOT NULL GROUP BY e.project_id";
 
+    /// <summary>
+    ///     Open workspaces per id, with the scratch rows living inside them. A workspace is open
+    ///     unless its status is terminal (Closed, Discarded): the production writer stores
+    ///     'Active'/'Closed'/'Discarded' and older banks carry other spellings, so the comparison
+    ///     names the terminal states only and ignores case. The census counts workspace ROWS
+    ///     elsewhere; this is the live view — a closed workspace holds no scratch that must never
+    ///     move, so it must not keep a loser id from folding.
+    /// </summary>
+    internal const string OpenWorkspacesSql =
+        "SELECT w.project_id AS Id, COUNT(DISTINCT w.id) AS N, COUNT(e.id) AS M " +
+        "FROM workspaces w LEFT JOIN entries e ON e.workspace_id = w.id " +
+        "WHERE lower(w.status) NOT IN ('closed', 'discarded') GROUP BY w.project_id";
+
     /// <summary>Collects the census with SELECT statements only — safe under PRAGMA query_only.</summary>
     public static async Task<ProjectIdCensusReport> CollectAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -102,6 +115,14 @@ public static class ProjectIdCensus
             (row, n) => row.Tombstones += n, cancellationToken);
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM workspaces GROUP BY project_id",
             (row, n) => row.Workspaces += n, cancellationToken);
+        var openWorkspaces = await connection.QueryAsync<OpenWorkspaceGroup>(new CommandDefinition(
+            OpenWorkspacesSql, cancellationToken: cancellationToken));
+        foreach (var group in openWorkspaces)
+        {
+            var row = For(group.Id);
+            row.OpenWorkspaces = group.N;
+            row.OpenWorkspaceEntries = group.M;
+        }
         await CountByIdAsync(connection,
             "SELECT project_id AS Id, COUNT(*) AS N FROM metrics WHERE project_id IS NOT NULL GROUP BY project_id",
             (row, n) => row.MetricsRows += n, cancellationToken);
@@ -195,6 +216,13 @@ public static class ProjectIdCensus
         public long N { get; set; }
     }
 
+    private sealed class OpenWorkspaceGroup
+    {
+        public string Id { get; set; } = "";
+        public long N { get; set; }
+        public long M { get; set; }
+    }
+
     private sealed class ProjectRow
     {
         public string Id { get; set; } = "";
@@ -220,7 +248,11 @@ public static class ProjectIdCensus
             CodeEntries, CodeFtsRows, VecCodeRows, EntriesFtsRows, VecEntryRows, VecStructureRows,
             Queued, Discards, QualityRows, Watches, WatchFiles, DigestClaims,
             Tombstones, Workspaces, MetricsRows, NoiseRows,
-            SettingsKeys.Order(StringComparer.Ordinal).ToList());
+            SettingsKeys.Order(StringComparer.Ordinal).ToList())
+        {
+            OpenWorkspaces = OpenWorkspaces,
+            OpenWorkspaceEntries = OpenWorkspaceEntries
+        };
 
         public long CodeEntries;
         public long CodeFtsRows;
@@ -238,5 +270,7 @@ public static class ProjectIdCensus
         public long Workspaces;
         public long MetricsRows;
         public long NoiseRows;
+        public long OpenWorkspaces;
+        public long OpenWorkspaceEntries;
     }
 }

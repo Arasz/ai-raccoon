@@ -281,6 +281,55 @@ public sealed class ProjectIdCensusTests
         public string Detail { get; set; } = "";
     }
 
+    /// <summary>
+    ///     The census tells OPEN workspaces from closed ones: only a live workspace holds scratch
+    ///     that must never move, so a loser whose workspaces have all closed is foldable.
+    ///     Ledger — open-workspace-count : --filter Collect_CountsOpenWorkspacesSeparatelyFromClosedOnes :
+    ///     one open workspace with a scratch row, one Closed, one Discarded.
+    /// </summary>
+    [RetryFact]
+    public async Task Collect_CountsOpenWorkspacesSeparatelyFromClosedOnes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await OpenAsync(ct);
+        await MemorySchema.EnsureAsync(connection, ct);
+        await WorkspaceAsync(connection, "ws-open", "jsaa", "Active", ct);
+        await WorkspaceAsync(connection, "ws-closed", "jsaa", "Closed", ct);
+        await WorkspaceAsync(connection, "ws-discarded", "jsaa", "Discarded", ct);
+        await ScratchAsync(connection, "scratch-1", "jsaa", "ws-open", ct);
+
+        var report = await ProjectIdCensus.CollectAsync(connection, ct);
+
+        var jsaa = report.Row("jsaa");
+        jsaa.Workspaces.ShouldBe(3, "every workspace row is counted — the attachment view stays complete");
+        jsaa.OpenWorkspaces.ShouldBe(1, "only the live workspace counts as open");
+        jsaa.WorkspaceEntries.ShouldBe(1, "the scratch row is counted whatever its workspace's state");
+        jsaa.OpenWorkspaceEntries.ShouldBe(1, "the scratch row lives in the open workspace");
+    }
+
+    /// <summary>
+    ///     A closed workspace holds no live scratch: its rows are dead state, and an id owning only
+    ///     closed workspaces is foldable rather than pinned.
+    ///     Ledger — closed-workspaces-are-not-open : --filter Collect_CountsNoOpenWorkspaces_WhenEveryWorkspaceIsClosed :
+    ///     two closed workspaces, no scratch.
+    /// </summary>
+    [RetryFact]
+    public async Task Collect_CountsNoOpenWorkspaces_WhenEveryWorkspaceIsClosed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await OpenAsync(ct);
+        await MemorySchema.EnsureAsync(connection, ct);
+        await WorkspaceAsync(connection, "ws-closed", "job-search-ai-assistant", "Closed", ct);
+        await WorkspaceAsync(connection, "ws-discarded", "job-search-ai-assistant", "Discarded", ct);
+
+        var report = await ProjectIdCensus.CollectAsync(connection, ct);
+
+        var loser = report.Row("job-search-ai-assistant");
+        loser.Workspaces.ShouldBe(2);
+        loser.OpenWorkspaces.ShouldBe(0, "a closed workspace is not live state — it must not block a fold");
+        loser.OpenWorkspaceEntries.ShouldBe(0);
+    }
+
     private static async Task<SqliteConnection> OpenSeededAsync(CancellationToken ct)
     {
         var connection = await OpenAsync(ct);
@@ -433,5 +482,18 @@ public sealed class ProjectIdCensusTests
             "INSERT INTO search_quality (correlation_id, query, project_id, created_at) VALUES (@correlationId, 'q', @projectId, @now)",
             new { correlationId, projectId, now }, cancellationToken: ct));
     }
+
+    private static async Task WorkspaceAsync(SqliteConnection connection, string id, string projectId, string status,
+        CancellationToken ct) =>
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO workspaces (id, project_id, status, created_at) VALUES (@id, @projectId, @status, 1)",
+            new { id, projectId, status }, cancellationToken: ct));
+
+    private static async Task ScratchAsync(SqliteConnection connection, string hash, string projectId, string workspaceId,
+        CancellationToken ct) =>
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label, workspace_id, created_at, updated_at, embed_state) " +
+            "VALUES (@hash, @hash, @hash, 'seed.md', 's', NULL, @projectId, NULL, @workspaceId, 1, 1, 'pending')",
+            new { hash, projectId, workspaceId }, cancellationToken: ct));
 
 }
