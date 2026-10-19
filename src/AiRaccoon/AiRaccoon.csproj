@@ -70,6 +70,9 @@
     <ItemGroup>
         <ProjectReference Include="../AiRaccoon.Core/AiRaccoon.Core.csproj"/>
         <ProjectReference Include="../AiRaccoon.Infrastructure/AiRaccoon.Infrastructure.csproj"/>
+        <ProjectReference Include="../AiRaccoon.Generators/AiRaccoon.Generators.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false"/>
     </ItemGroup>
 
     <ItemGroup>

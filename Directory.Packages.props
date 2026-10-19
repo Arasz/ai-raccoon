@@ -30,6 +30,7 @@
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.11.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.11.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.13" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
     <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.13" />

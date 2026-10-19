@@ -11,6 +11,8 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.59.5 — MCP tool inventory is generated at compile time](1.59.5-mcp-tool-inventory-generated.md)
+
 - [1.59.4 — vector search reads only its own context](1.59.4-partitioned-vector-search.md)
 - [1.59.3 — concurrent searches run in parallel](1.59.3-parallel-searches.md)
 - [1.59.2 — `watch remove` says when nothing was watched; a missing encryption key is named](1.59.2-watch-remove-and-missing-key-messages.md)
