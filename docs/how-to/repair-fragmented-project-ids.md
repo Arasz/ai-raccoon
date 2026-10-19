@@ -20,19 +20,21 @@ declared on purpose, so it never merges two ids that only look alike.
 ai-raccoon repair project-ids
 ```
 
-This diagnoses only, nothing is queued or changed. It censuses every project id
-the bank knows about and buckets each one:
+This diagnoses only, nothing is queued or changed. It loads
+`<data-root>/project-id-map.json` when that operator-maintained file exists;
+`--map <path>` overrides it. Otherwise it uses the empty map, so no folds are
+planned. It censuses every project id the bank knows about and buckets each one:
 
-- **fold**: matches a canonical id under an alias map you supplied (none yet on a
-  first run).
+- **fold**: matches a canonical id under the default map or the explicit `--map`
+  override.
 - **drop**: test residue (empty, unregistered, no entries).
 - **retire**: registered in the projects table but owns nothing anymore.
 - **needs a human to attribute**: doesn't match anything, so you decide what it is.
 - **pinned**: would fold, but something is holding it back (reason printed inline).
 - **needs nothing**: already correct or genuinely empty.
 
-The first run also writes an editable alias-map template next to the bank
-(`<data-root>/project-id-map.template.json`), pre-filled with the bank's
+When no default map exists, the first run also writes an editable alias-map
+template next to the bank (`<data-root>/project-id-map.template.json`), pre-filled with the bank's
 registered ids as canonicals and its unresolved ids parked under `Dropped` for
 you to move into `Aliases` if they are really the same project. **Never run
 `--apply` against a template you haven't reviewed.** The whole point is that no
@@ -40,7 +42,7 @@ fold happens until a person confirms it.
 
 ## Step 2: Edit the alias map
 
-Open the template and move any id that is genuinely a duplicate from `Dropped`
+Review the template and move any id that is genuinely a duplicate from `Dropped`
 into `Aliases`, naming the old id and the canonical one it should fold into:
 
 ```json
@@ -57,8 +59,12 @@ left there is deleted (with a tombstone per removed hash) rather than folded.
 ## Step 3: Run it for real
 
 ```bash
-ai-raccoon repair project-ids --apply --map ./project-id-map.template.json
+ai-raccoon repair project-ids --apply
 ```
+
+Save a reviewed map as `<data-root>/project-id-map.json` to use it by default,
+or pass `--map <path>` to select a different file. The template is never used
+automatically, and the compiled binary still contains no project-specific ids.
 
 Plain `--apply` runs a **run-until-fixed loop**: it commits a fold request, waits
 one server maintenance poll (about 15 seconds), re-censuses, and repeats, until

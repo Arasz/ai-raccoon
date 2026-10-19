@@ -47,7 +47,7 @@ proxy; full servers come only from `serve`).
 | `encryption migrate` | Rekeys a bank still on the pre-ADR-0012 key derivation |
 | `repair chunk-index [--apply]` | Reports (default) or fixes chunk positions that drifted from document order |
 | `repair reingest [--apply]` | Reports (default) or re-ingests files a chunker change made unreproducible |
-| `repair project-ids [--apply] [--queue-only] [--diagnose] [--map <path>]` | Diagnoses (default) or folds fragment project ids into one |
+| `repair project-ids [--apply] [--queue-only] [--diagnose] [--map <path>]` | Diagnoses (default) or folds fragment project ids into one; loads `<data-root>/project-id-map.json` when present unless `--map` overrides it |
 | `project id register <id> [--name <name>]` | Registers a project id. Prints `registered <id>`, or `already registered <id>` for a registered id or an alias of one (the id it resolves to). A name fills an unset one and never overwrites it. Exits 10 for raw text that no project is registered or holds rows under, 18 for a retired id |
 | `project id get --name <name>` | Prints the one id registered under an exact, case-sensitive name, with no prefix. Exits 18 when none matches and 19 when several do, listing each id on stderr with stdout empty |
 | `project id check <id>` | Prints `known <id>` (the id it resolves to) and exits 0, or prints `unknown <id>` / `retired <id>` and exits 18. Accepts any non-blank id, guid or raw text |
@@ -176,7 +176,7 @@ non-retryable code needs the config, argv, environment or product fixed first.
 | 12 | `Usage.MissingValue` | A required value is absent | no |
 | 13 | `Usage.UndialablePort` | `--port` is `0` or outside 1-65535 on a path that must dial a fixed port | no |
 | 14 | `Usage.RemovedTransport` | `--transport` names a removed value (`stdio`, `https`) | no |
-| 15 | `Usage.AliasMapInvalid` | `repair project-ids --map` names a file that is missing, unreadable or invalid | no |
+| 15 | `Usage.AliasMapInvalid` | the explicit `--map` file or existing default `<data-root>/project-id-map.json` is missing, unreadable or invalid | no |
 | 16 | `Usage.ConfirmationDeclined` | `model download` over the size guard was not confirmed | no |
 | 17 | `Usage.RequestRejected` | The server rejected the request as malformed (HTTP 400) | no |
 | 18 | `Usage.ProjectUnknown` | The project id or name names no usable project: unknown, retired, or not found by name | no |

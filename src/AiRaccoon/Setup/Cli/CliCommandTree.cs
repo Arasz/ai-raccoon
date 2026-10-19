@@ -450,7 +450,7 @@ internal static class CliCommandTree
                 new Option<bool>("--apply") { Description = "Ask the server to fold the ids on its next maintenance poll (~15s)" },
                 new Option<bool>("--queue-only") { Description = "With --apply: queue one request and exit without waiting for the run-until-fixed loop to converge" },
                 new Option<bool>("--diagnose") { Description = "Show the id clusters without queueing anything (the default)" },
-                new Option<string?>("--map") { Description = "Path to a JSON alias map (see the template a map-less dry run writes); without it the empty map plans no folds", HelpName = "path" }
+                new Option<string?>("--map") { Description = "JSON alias map override; defaults to <data-root>/project-id-map.json when present, otherwise the empty map plans no folds", HelpName = "path" }
             }
         };
 
