@@ -8,6 +8,13 @@ using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
+/// <summary>Runs wall-clock concurrency measurements without other test collections competing for CPU.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class ConcurrentSearchOverlapCollection
+{
+    public const string Name = "Concurrent search overlap";
+}
+
 /// <summary>
 ///     Independent searches must overlap. Eight searches that run one after another take at least
 ///     8x one search; native contention (SQLite's global allocation mutex before MEMSTATUS was
@@ -16,6 +23,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
+[Collection(ConcurrentSearchOverlapCollection.Name)]
 public sealed class ConcurrentSearchOverlapTests : IDisposable
 {
     private const int Concurrency = 8;
