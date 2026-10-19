@@ -30,13 +30,23 @@ public sealed record ProjectIdCensusRow(
     long NoiseRows,
     IReadOnlyList<string> SettingsKeys)
 {
+    /// <summary>
+    ///     Workspaces that are still open — every status except the terminal Closed and Discarded.
+    ///     Counting workspace ROWS instead of open ones made a loser whose workspaces had all
+    ///     closed look like it owned live scratch, and the repair pinned it forever.
+    /// </summary>
+    public long OpenWorkspaces { get; init; }
+
+    /// <summary>Scratch rows living in an open workspace — the live user state that never moves.</summary>
+    public long OpenWorkspaceEntries { get; init; }
+
     /// <summary>Committed entries rows (project + custom + shared scope).</summary>
     public long EntryTotal => ProjectEntries + CustomEntries + SharedEntries;
 
     /// <summary>Owns entries but has no projects row — the research record's orphan shape.</summary>
     public bool Orphan => !Registered && EntryTotal > 0;
 
-    /// <summary>Non-entry attachments that must be reviewed before any retire/delete decision. Telemetry (metrics/noise) is excluded: regenerable derived data, never verdict-blocking (D3).</summary>
+    /// <summary>Non-entry attachments that must be reviewed before any retire/delete decision. Telemetry (metrics/noise) is excluded: regenerable derived data, never verdict-blocking (D3). Every workspace row counts here, open or closed — the retire verdict waits for the whole set.</summary>
     public long AttachmentCount =>
         Queued + Discards + QualityRows + Watches + WatchFiles + DigestClaims +
         Tombstones + Workspaces + WorkspaceEntries + CodeEntries + SettingsKeys.Count;

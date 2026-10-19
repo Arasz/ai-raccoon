@@ -153,6 +153,8 @@ no status exemption — and it becomes frozen only when it reaches `Accepted`.
 
 | [0134 — Operator alias map defaults beside the bank](0134-operator-alias-map-defaults-beside-the-bank.md) | `repair project-ids` loads `<data-root>/project-id-map.json` when present; `--map` overrides it and the public binary still ships no machine-local ids |
 
+| [0135 — A workspace is open until it is closed or discarded](0135-a-workspace-is-open-until-it-is-closed-or-discarded.md) | The census counted workspace ROWS, so a loser whose workspaces had all closed looked like it owned live scratch: the repair pinned it forever and its committed rows stayed under an id the read path folds away. A workspace is open unless its status is terminal (`Closed`, `Discarded`); the census reports the open count and the live scratch rows next to the totals, and the fold plan blocks on those. |
+
 ## Numbers never used
 
 | Number | Why |
