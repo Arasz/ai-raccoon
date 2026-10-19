@@ -30,6 +30,11 @@ public sealed class StructuredContentSdkBehaviorTests
             });
 
         tool.ProtocolTool.OutputSchema.ShouldNotBeNull();
+        var schema = tool.ProtocolTool.OutputSchema!.Value;
+        schema.GetProperty("properties").GetProperty("status").GetProperty("type")
+            .GetString().ShouldBe("string");
+        schema.GetProperty("properties").GetProperty("count").GetProperty("type")
+            .GetString().ShouldBe("integer");
         var result = await tool.InvokeAsync(context, CancellationToken.None);
 
         result.StructuredContent.ShouldNotBeNull();
