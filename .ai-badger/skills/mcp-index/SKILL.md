@@ -44,7 +44,7 @@ one spoke, in an `origin` field:
 | `origin` | source | survives `update`? |
 |---|---|---|
 | `manual` | you, via `mcp-index tag` / `mcp-index intent` | **yes** — a human outranks both |
-| `catalog` | `features/<stack>/mcp/<server>/tools.json` in the framework | refreshed from the catalog |
+| `catalog` | `features/<stack>/mcp/<server>/tools.json`, or describe-only `mcp-catalog/<slug>/tools.json` (never installed) | refreshed from the catalog |
 | `heuristic` | `_auto_tags` guessing from the tool name | replaced as soon as the catalog covers the tool |
 
 The catalog is a curation library, not a completeness claim: it applies to a server however that

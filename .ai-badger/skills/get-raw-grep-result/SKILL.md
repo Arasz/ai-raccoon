@@ -37,8 +37,9 @@ grep or `rg` output is needed.
 - Preserve the pattern exactly when using `--pattern`; even whitespace changes its hash.
 - A grep exit code of 1 means no matches and is still a completed `ready` result.
 - Each stdout and stderr stream is limited to 1 MiB; the JSON marks truncated streams.
-- The capture is best-effort and only starts for shell grep-family commands on a first-sighting
-  gate denial. It is not a durable search history.
+- The capture is best-effort and only starts for a standalone grep/rg command with literal
+  operands on a first-sighting gate denial. Pipelines, compound commands, and shell-expanded
+  operands are not captured. It is not a durable search history.
 
 ## Gotchas
 

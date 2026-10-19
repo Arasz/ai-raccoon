@@ -53,8 +53,13 @@ def _read_bounded(stream: Any) -> tuple[bytes, bool]:
     return bytes(retained), truncated
 
 
-def capture(capture_key: str, command: str) -> None:
-    """Run grep once and persist bounded output per pattern for no more than 120 seconds."""
+def capture(capture_key: str, command: list[str]) -> None:
+    """Run one executable directly and persist bounded output for no more than 120 seconds."""
+    if not command or any(not isinstance(part, str) for part in command):
+        return
+    program = command[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if program not in ("grep", "egrep", "fgrep", "rg", "rg.exe"):
+        return
     scope, separator, encoded_hashes = capture_key.partition(":")
     if not separator or len(scope) != 64 or any(c not in "0123456789abcdef" for c in scope):
         return
@@ -94,7 +99,7 @@ def capture(capture_key: str, command: str) -> None:
             options["start_new_session"] = True
         elif hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
             options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-        process = subprocess.Popen(command, shell=True, executable="/bin/bash",
+        process = subprocess.Popen(command, shell=False,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, **options)
         out_result: list[tuple[bytes, bool]] = []
         err_result: list[tuple[bytes, bool]] = []
@@ -126,7 +131,7 @@ def capture(capture_key: str, command: str) -> None:
                       stderr_truncated=stderr_truncated,
                       returncode=returncode, status=status)
     except (OSError, subprocess.SubprocessError) as error:
-        record.update(status="error", error=str(error), returncode=1)
+        record.update(status="error", error=str(error), stderr=str(error), returncode=1)
     store = _store()
     try:
         for key in claimed_keys:
@@ -169,7 +174,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     group.add_argument("--pattern-hash")
     args = parser.parse_args(argv)
     if args.capture:
-        capture(*args.capture)
+        try:
+            command = json.loads(args.capture[1])
+        except json.JSONDecodeError:
+            return 0
+        if isinstance(command, list):
+            capture(args.capture[0], command)
         return 0
     print(json.dumps(get_result(args.pattern, args.pattern_hash), ensure_ascii=False))
     return 0
