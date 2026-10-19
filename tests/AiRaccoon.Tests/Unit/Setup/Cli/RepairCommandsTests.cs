@@ -359,9 +359,10 @@ public sealed class RepairCommandsTests
         var stdout = await RunProjectIdsAsync(apply: false, inner, scope.DataRoot);
 
         File.ReadAllText(templatePath).ShouldBe("sentinel-operator-edits");
-        // Portable never-overwrite rule: the pre-existing file routes to the edit-it
+        // Portable never-overwrite rule: the pre-existing file routes to review-and-save
         // guidance, never to a "Could not write ... already exists.;" failure line.
-        stdout.ShouldContain("Edit the existing template");
+        stdout.ShouldContain("Review the existing template");
+        stdout.ShouldContain("save it as 'project-id-map.json'");
         stdout.ShouldNotContain("Could not write the alias-map template");
         stdout.ShouldNotContain(".;");
     }
