@@ -4,15 +4,23 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Observability;
 
-/// <summary>Golden shapes for the serve observability monitor-command renderer.</summary>
+/// <summary>Contract test: RenderCounters must name every meter from OtlpNames.Meters and only those.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public class MonitoringCommandRendererTests
 {
     [Fact]
-    public void RenderCounters_IsTheBareMonitorCommand()
+    public void RenderCounters_NamesEveryMeterAndOnlyMeters_FromOtlpNames()
     {
-        MonitoringCommandRenderer.RenderCounters(12345).ShouldBe("dotnet-counters monitor -p 12345");
+        var result = MonitoringCommandRenderer.RenderCounters(12345);
+
+        result.ShouldStartWith("dotnet-counters monitor -p 12345");
+        result.ShouldContain("--counters ");
+
+        // The value is the meter registry itself, not a second copy of it: every meter the
+        // server registers is named, and nothing else is.
+        var countersValue = result.Split("--counters ")[1];
+        countersValue.ShouldBe(string.Join(',', OtlpNames.Meters));
     }
 
     [Fact]

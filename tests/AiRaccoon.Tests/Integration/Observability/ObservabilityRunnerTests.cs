@@ -46,7 +46,7 @@ public sealed class ObservabilityRunnerTests : IDisposable
             var run = await RunObservabilityAsync("counters", port);
 
             run.Exit.ShouldBe(ErrorCode.Ok.Success);
-            run.Stdout.ShouldBe($"dotnet-counters monitor -p {Environment.ProcessId}{Environment.NewLine}");
+            run.Stdout.ShouldBe($"{MonitoringCommandRenderer.RenderCounters(Environment.ProcessId)}{Environment.NewLine}");
             run.Stderr.ShouldBeEmpty();
         }
         finally
