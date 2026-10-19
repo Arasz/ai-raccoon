@@ -203,3 +203,36 @@ exits non-zero or emits an error, attempt recovery before surfacing the failure.
 - [ ] Plugin-setup commands relayed per the chosen scope (default or local-only)
 - [ ] Preserved hand-authored discovery files reported, not overwritten
 - [ ] Any "competing copies" tree list relayed, and nothing outside the target deleted
+
+## Shared parent collections
+
+For a collection with explicit child repositories, use the existing renderer through:
+
+```bash
+python3 "$AI_BADGER/features/common/skills/welcome-ai-badger/scripts/shared_scope.py" collect \
+  --target /path/to/collection --repo python-app --repo dotnet-app --root "$AI_BADGER"
+```
+
+Supply `--config /path/to/parent-config.json` to author parent defaults. Collect uses only
+these members, computes their stack union, and materializes every selected child with that
+union. Each child keeps its identity and state. Its private `.ai-badger/shared-scope.json`
+records original local stacks and authored overrides; edit those overrides for persistent
+local settings. Objects merge and lists replace parent values.
+
+To refresh one child with its own stacks, run `shared_scope.py sync --target CHILD --source
+COLLECTION/.ai-badger --root FRAMEWORK`. Ordinary scaffold and den-refresh refuse shared
+children and print the command that restores them — `collect` for a child that carries the
+union, `sync` for one that carries its own stacks.
+
+To remove a member from the collection, run `shared_scope.py prune --target COLLECTION --repo
+CHILD --root FRAMEWORK`: the member keeps its own identity and its shared files as private
+copies, the parent's union shrinks to the remaining members, and the pruned repository
+rejoins the ordinary scaffold and refresh flow. A collection keeps at least one member, so
+the last one cannot be pruned.
+
+A member with no identity of its own is resolved through the canonical ai-raccoon lookup:
+the bank's id for that name is reused, a name the bank does not know gets a local id, and
+an uncertain answer refuses the enrollment before anything is written. Nothing is
+registered with the bank unless `--register` is passed. Verify child instruction and skill discovery,
+then confirm the child's project ID remains its own. Do not replace `.ai-badger` directories
+with symlinks; only the recorded immutable files may share parent copies.

@@ -1,10 +1,16 @@
-"""Shared memory-first gate: search-call matchers, the searched-pattern store, the deny decision.
+"""Shared memory-first gate: search-call matchers, the searched-pattern store, the decision.
 
 A repo text-search call (grep/egrep/fgrep/rg/find in any segment of a shell command, or a
 Grep/Glob/search_files tool) passes only when every pattern it searches for was already
-memory-searched for the project. The first sighting of a pattern
-is denied: the gate runs one memory search for it and records it as searched when the bank
-answered. An agent's own memory_search records its query too (the PostToolUse hook).
+memory-searched for the project.
+
+The first sighting of a pattern is the gate's moment. On a host whose tool-call seam
+carries model-side context (Claude Code, Codex and pi all speak the Claude envelope) the
+gate runs one memory search, hands the hits to the model as `additionalContext` and lets
+the search through: the agent gets the data, the user sees nothing. A host without that
+seam gets a one-line deny, and the agent runs the search itself. Either way the pattern
+is recorded as searched when the bank answered. An agent's own memory_search records its
+query too (the PostToolUse hook).
 
 Searched patterns live per project id in the audit store's hook_state table (file fallback
 under SEARCHED_DIR) and are never reset. record_search keeps the per-session memory_first
@@ -26,12 +32,19 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 try:
+    import fcntl
+except ImportError:  # pragma: no cover - advisory file locks are unavailable
+    fcntl = None
+
+try:
     import badger_store  # vendored beside this script in production; engine/ canonical in tests
 except ImportError:  # a deployment without the store keeps the file surfaces
     badger_store = None  # pylint: disable=invalid-name
 
 MARKER_DIR = Path.home() / ".ai-badger" / "memory-first"
 SEARCHED_DIR = Path.home() / ".ai-badger" / "memory-first-searched"
+SEARCH_LOG_PATH = Path.home() / ".ai-badger" / "memory-first-search" / "searches.jsonl"
+MAX_SEARCH_LOG_BYTES = 1024 * 1024
 
 
 # Wall clock for the gate's own memory search, from hook start: hook timeouts are 10 s and
@@ -332,8 +345,12 @@ def is_text_search(tool_name: Any, tool_input: Any) -> bool:
     return search_patterns(tool_name, tool_input) is not None
 
 
-RAW_GREP_SCRIPT = (Path(__file__).resolve().parents[2] / "get-raw-grep-result" /
-                   "scripts" / "get_raw_grep_result.py")
+RAW_TEXT_SEARCH_SCRIPT = (Path(__file__).resolve().parents[2] / "get-raw-text-search" /
+                          "scripts" / "get_raw_text_search.py")
+
+# Hosts whose tool-call seam carries model-side context: the gate delivers the memory
+# results to the model and lets the search through, so the user never sees the gate.
+CONTEXT_HOSTS = ("claude",)
 
 
 def pattern_hash(pattern: str) -> str:
@@ -404,7 +421,7 @@ def capture_greps(tool_name: Any, tool_input: Any, cwd: str = "",
         keys = [pattern_hash(pattern) for pattern in patterns]
         try:
             subprocess.Popen(
-                [sys.executable, str(RAW_GREP_SCRIPT), "--capture",
+                [sys.executable, str(RAW_TEXT_SEARCH_SCRIPT), "--capture",
                  _capture_scope(cwd) + ":" + ",".join(keys), json.dumps(argv)],
                 cwd=cwd or os.getcwd(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
@@ -668,32 +685,104 @@ def search_query(patterns: Iterable[str]) -> Tuple[str, List[str]]:
     return " ".join(included), included
 
 
-def deny_reason(project: str, unseen: List[str], hits: Optional[str],
-                captures: Optional[List[Tuple[str, str]]] = None) -> str:
-    """Why the call is denied, including any raw-result retrieval handles."""
-    retry = "re-issue the call."
-    handles = captures or []
-    raw = (" Raw output can be fetched with `get-raw-grep-result` using "
-           + ", ".join(f"pattern-hash={key}" for _pattern, key in handles) + ".") if handles else ""
-    if not unseen:
-        return ("Memory-first gate: every pattern here was already memory-searched "
-                f"(projectId={project}); {retry}{raw}")
-    listed = ", ".join(repr(p) for p in unseen)
-    if hits is None:
-        return (f"Memory-first gate: first sighting of {listed}. Run memory_search "
-                f"(projectId={project}) with that pattern as the query, then {retry}{raw}")
-    found = hits.strip()[:HITS_MAX_CHARS] or "(no hits)"
-    return (f"Memory-first gate: first sighting of {listed}; memory_search "
-            f"(projectId={project}) ran for you:\n{found}\nIf that answers it, skip the "
-            f"search; otherwise {retry}{raw}")
+def text_search_input(patterns: Iterable[str],
+                      captures: Optional[List[Tuple[str, str]]] = None) -> List[Dict[str, Any]]:
+    """One entry per searched pattern: the pattern, and the handle of its captured raw output.
+
+    Every pattern of the call appears, not only the ones a shell grep/rg capture stored:
+    a `find` call has no capture but still has patterns.
+    """
+    handles = dict(captures or [])
+    out: List[Dict[str, Any]] = []
+    for pattern in patterns:
+        entry: Dict[str, Any] = {"pattern": pattern}
+        handle = handles.get(pattern)
+        if handle:
+            entry["rawResultHash"] = handle
+        out.append(entry)
+    return out
+
+
+def search_result_payload(patterns: Iterable[str], hits: Optional[str],
+                          captures: Optional[List[Tuple[str, str]]] = None) -> Dict[str, Any]:
+    """The record of one first sighting: the text-search input and the memory hits."""
+    found = None if hits is None else hits.strip()[:HITS_MAX_CHARS] or "(no hits)"
+    return {
+        "textSearchInput": text_search_input(patterns, captures),
+        "searchResult": {"mem_search_result_output": found},
+    }
+
+
+def context_text(payload: Dict[str, Any]) -> str:
+    """The model-side context of a first sighting: the memory block, then the search input."""
+    block = (payload.get("searchResult") or {}).get("mem_search_result_output") or ""
+    inputs = json.dumps({"textSearchInput": payload.get("textSearchInput") or []},
+                         ensure_ascii=False)
+    return f"{block}\n\n{inputs}"
+
+
+def one_line_reason(project: str, patterns: Iterable[str]) -> str:
+    """The one line a host without a model-context channel shows: what to search, then retry."""
+    quoted = ", ".join(f'"{pattern}"' for pattern in list(patterns)[:3])
+    return (f"Memory-first: search memory for {quoted} (projectId={project}) first, "
+            "then re-run this search.")
+
+
+def append_search_result(payload: Dict[str, Any]) -> None:
+    """Append one compact JSON object to a private rolling memory-first JSONL log."""
+    try:
+        SEARCH_LOG_PATH.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(SEARCH_LOG_PATH.parent, 0o700)
+        line = (json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+        encoded = line.encode("utf-8")
+        if len(encoded) > MAX_SEARCH_LOG_BYTES:
+            return
+        descriptor = os.open(SEARCH_LOG_PATH, os.O_RDWR | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.fchmod(descriptor, 0o600)
+            if fcntl is not None:
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
+            current_size = os.fstat(descriptor).st_size
+            if current_size + len(encoded) > MAX_SEARCH_LOG_BYTES:
+                offset = max(0, current_size - MAX_SEARCH_LOG_BYTES)
+                os.lseek(descriptor, offset, os.SEEK_SET)
+                existing = os.read(descriptor, current_size - offset)
+                if offset:
+                    newline = existing.find(b"\n")
+                    existing = existing[newline + 1:] if newline >= 0 else b""
+                retained: List[bytes] = []
+                retained_size = len(encoded)
+                for previous in reversed(existing.splitlines(keepends=True)):
+                    if retained_size + len(previous) > MAX_SEARCH_LOG_BYTES:
+                        break
+                    retained.append(previous)
+                    retained_size += len(previous)
+                os.ftruncate(descriptor, 0)
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                chunks = [*reversed(retained), encoded]
+            else:
+                chunks = [encoded]
+            for chunk in chunks:
+                remaining = memoryview(chunk)
+                while remaining:
+                    remaining = remaining[os.write(descriptor, remaining):]
+        finally:
+            if fcntl is not None:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+    except (OSError, UnicodeError):
+        # Logging must not change the gate decision when the user-scoped log is unavailable.
+        pass
 
 
 def decide(host: str, tool_name: Any, tool_input: Any, session_id: Optional[str],
            cwd: str = "") -> Dict[str, Any]:
-    """The per-host deny payload for a search call that has not earned its pass, else {}.
+    """The per-host decision for a search call that has not earned its pass, else {}.
 
-    Fails open when the project id cannot be persisted or the searched patterns cannot be
-    recorded: a pattern the gate cannot remember would be denied forever.
+    A host that carries model-side context gets the memory results and lets the search
+    through; every other host gets a one-line deny and runs the search itself. Fails open
+    when the project id cannot be persisted or the searched patterns cannot be recorded:
+    a pattern the gate cannot remember would be denied forever.
     """
     started = time.monotonic()
     patterns = search_patterns(tool_name, tool_input)
@@ -706,28 +795,43 @@ def decide(host: str, tool_name: Any, tool_input: Any, session_id: Optional[str]
     if not unseen:
         return {}
     captures = capture_greps(tool_name, tool_input, cwd, set(unseen))
-    hits = None
-    if unseen:
+    context = None
+    if host in CONTEXT_HOSTS:
         query, queried = search_query(unseen)
+        hits = None
         try:
             hits = memory_hits(query, project, session_id,
                                SEARCH_SECONDS - (time.monotonic() - started))
         except Exception:  # pylint: disable=broad-exception-caught  # a gate never raises
             hits = None
-        if hits is not None and queried and not remember(project, queried):
-            return {}
+        if hits is not None:
+            if queried and not remember(project, queried):
+                return {}
+            payload = search_result_payload(unseen, hits, captures)
+            append_search_result(payload)
+            context = context_text(payload)
+    else:
+        # No context channel: the agent searches memory itself, so nothing is recorded here.
+        append_search_result(search_result_payload(unseen, None, captures))
     return build_decision(host, tool_name, tool_input, session_id, cwd,
-                          reason=deny_reason(project, unseen, hits, captures))
+                          reason=one_line_reason(project, unseen), context=context)
 
 
 def build_decision(host: str, tool_name: str, tool_input: Any,  # pylint: disable=unused-argument
                    session_id: Optional[str], cwd: str = "",
-                   reason: Optional[str] = None) -> Dict[str, Any]:
-    """The per-host deny payload, or {} for an unknown host (fail open)."""
+                   reason: Optional[str] = None,
+                   context: Optional[str] = None) -> Dict[str, Any]:
+    """The per-host decision: the search runs with the memory results as model-side context
+    where the host carries context, else a one-line deny. {} for an unknown host."""
     reason = reason or _REASON.format(project_id=project_id(cwd))
     if host == "hermes":
         return {"action": "block", "message": reason}
     if host == "claude":
+        if context:
+            # No permission decision: the host keeps its own permission flow and the model
+            # receives the memory results alongside the call.
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                           "additionalContext": context}}
         return {"hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",

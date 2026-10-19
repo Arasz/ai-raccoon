@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture grep output asynchronously or retrieve a recent result as JSON."""
+"""Capture text-search output asynchronously or retrieve a recent result as JSON."""
 from __future__ import annotations
 
 import argparse
@@ -17,7 +17,7 @@ import badger_store
 
 TTL_SECONDS = 120
 MAX_OUTPUT_BYTES = 1024 * 1024
-KEY_PREFIX = "memory_first.raw_grep."
+KEY_PREFIX = "memory_first.raw_text_search."
 
 
 def digest(pattern: str) -> str:

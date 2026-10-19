@@ -151,9 +151,9 @@ skill's `model_groups.py` and the project's `model-groups.json`. A project that 
 search unless the override is set. The planner model comes from project data and is billed to
 your key; the override pins it.
 
-The memory-first gate (the PreToolUse deny that precedes a text search) names the same id the
+The memory-first gate (the PreToolUse decision that precedes a text search) names the same id the
 hook reads: the nearest `.ai-badger/project-id`, with `AI_BADGER_PROJECT_ID` first. The old
-raccoon-side override is retired (see ADR-0036 in the ai-badger repository), so the denial and
+raccoon-side override is retired (see ADR-0036 in the ai-badger repository), so the decision and
 the search it demands cannot point at two different projects.
 
 **Repo text search: memory first.** The gate keys on the search pattern. A grep/egrep/fgrep/
@@ -161,14 +161,24 @@ rg/find anywhere in a shell command (every segment of `a; b | c` counts, a piped
 included), or a Grep/Glob/search_files call, passes only when every pattern was already
 memory-searched for this project. This includes `rg` and `rtk rg`.
 
-On a pattern's first sighting, the call is denied and the hook runs one `memory_search`; the
-hits return in the deny reason and the pattern is recorded. For shell grep-family commands,
-the hook also starts the original command asynchronously and saves its raw output in the
-ai-badger audit database for about two minutes. The deny reason includes a `pattern-hash`.
-When the raw output is needed, use the `get-raw-grep-result` skill or run its script with
-`--pattern-hash <hash>`; a known pattern can also be fetched with `--pattern <pattern>`. The
-result is JSON and may be `pending` if capture has not finished yet. After reading the memory
-hits, re-issue the search only if it is still needed. When the hook could not search (no
+On a pattern's first sighting the gate runs one `memory_search` and hands the result to the
+agent. On a host whose tool-call seam carries model-side context (Claude Code, Codex and pi)
+the search is **allowed** and the memory block arrives as `additionalContext`: the agent gets
+the data and the user sees nothing. A host without that seam (Copilot CLI, Hermes CLI) gets a
+one-line denial — "search memory for … first, then re-run this search" — and the agent runs
+the search itself, so the data is the same either way.
+The agent receives a JSON object with `textSearchInput`, an array of exact
+`{pattern, rawResultHash}` pairs: one entry per searched pattern, and a `rawResultHash` only
+for a pattern whose raw output the gate captured. A `find` call has patterns but no capture,
+so its entry carries the pattern alone. The same compact object is appended as
+one JSONL line to `~/.ai-badger/memory-first-search/searches.jsonl` (a private rolling log
+bounded to 1 MiB), and the pattern is recorded.
+For shell grep-family commands, the hook also starts the original command asynchronously and
+saves its raw output in the ai-badger audit database for about two minutes. When raw output is
+needed, use the `get-raw-text-search` skill or run its script with `--pattern-hash <hash>`;
+a known pattern can also be fetched with `--pattern <pattern>`. The result is JSON and may be
+`pending` if capture has not finished yet. After reading the memory hits, re-issue the search
+only if it is still needed. When the hook could not search (no
 `ai-raccoon`, timeout), it records nothing and asks you to run `memory_search` with that
 pattern as the query; your search's query is recorded, and a pattern that is a whole-word run
 of it counts as searched (comparison ignores case, `^ $ \b`, grouping parentheses and regex

@@ -54,6 +54,28 @@
         }
       }
     },
+    "sharedScope": {
+      "type": "object",
+      "required": ["mode", "source", "links"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["inherit", "sync"] },
+        "source": { "type": "string", "minLength": 1 },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "target", "source"],
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "target": { "type": "string", "minLength": 1 },
+              "source": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
     "entries": {
       "type": "array",
       "items": {

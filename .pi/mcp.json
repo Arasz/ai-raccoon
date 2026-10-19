@@ -34,14 +34,6 @@
         ".ai-badger/skills/task-decomposition/scripts/task_graph_server.py"
       ],
       "exposure": "direct"
-    },
-    "hermes": {
-      "command": "hermes",
-      "args": [
-        "mcp",
-        "serve"
-      ],
-      "exposure": "direct"
     }
   }
 }

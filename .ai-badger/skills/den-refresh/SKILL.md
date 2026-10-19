@@ -282,3 +282,11 @@ recovery before surfacing the failure to the user.
 - [ ] Prune candidates offered, never pruned — `config.json` untouched
 - [ ] Diff reviewed before commit
 - [ ] Seed-once files (`state.json`, `markers-context.json`, `model.json`) absent from the diff
+## Shared child recovery
+
+An enrolled shared child uses its private `.ai-badger/shared-scope.json` authored settings.
+Ordinary refresh refuses before changing it and prints a concrete `shared_scope.py sync`
+command. Run that command with the child's parent `.ai-badger` as `--source`. Sync renders
+only this child with its original local stacks, merges current parent defaults with its
+authored overrides, and preserves private identity and state. Review the child diff and
+verify its instruction and skill discovery after sync.

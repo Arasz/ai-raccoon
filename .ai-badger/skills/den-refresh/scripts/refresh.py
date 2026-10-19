@@ -247,6 +247,9 @@ def re_scaffold(root: Path, target: Path, config: Dict[str, Any],
     `config.exclude` is, and the Scaffolder applies it — `refreshedSkills` reports what it
     delivered, not what was offered.
     """
+    refusal = bl.shared_scope_refusal(target)
+    if refusal:
+        raise ValueError(refusal)
     scaffold_mod = _load_script("features/common/skills/welcome-ai-badger/scripts/scaffold.py", root)
 
     skill_names = list(dict.fromkeys(
@@ -354,6 +357,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     root = Path(args.root).resolve() if args.root else bl.find_root()
     target = Path(args.target).resolve()
+
+    try:
+        refusal = bl.shared_scope_refusal(target)
+    except (ValueError, OSError) as exc:
+        print(json.dumps({"error": f"invalid shared-scope metadata: {exc}"}))
+        return 2
+    if refusal:
+        print(json.dumps({"error": refusal}))
+        return 2
 
     # 1. Check prerequisites
     err = check_prerequisites(target)

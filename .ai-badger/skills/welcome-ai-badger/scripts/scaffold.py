@@ -691,8 +691,13 @@ class Scaffolder:
             self.notes.append(f"{step} failed ({type(exc).__name__}) — skipped; "
                               f"the project scaffold is unaffected")
 
-    def run(self, generated_at: Optional[str] = None) -> Dict[str, Any]:
+    def run(self, generated_at: Optional[str] = None,
+            allow_shared_scope: bool = False) -> Dict[str, Any]:
         """Run every scaffold step in order and return the manifest, plugin commands, and notes."""
+        if not allow_shared_scope:
+            refusal = bl.shared_scope_refusal(self.target)
+            if refusal:
+                raise ValueError(refusal)
         self.aib.mkdir(parents=True, exist_ok=True)
         _project_id, project_id_notes = ensure_project_id(
             self.aib, project_name(self.target), raccoon=self.install)
@@ -810,7 +815,11 @@ def main(argv=None) -> int:
                       overwrite=args.overwrite_agent_files,
                       reset_seed_files=args.reset_seed_files,
                       execute=args.execute)
-    result = scaf.run(generated_at=args.generated_at)
+    try:
+        result = scaf.run(generated_at=args.generated_at)
+    except (ValueError, OSError) as exc:
+        print(f"scaffold refused: {exc}", file=sys.stderr)
+        return 2
 
     print(f"scaffolded {len(result['manifest']['entries'])} entries into {scaf.aib}")
     for n in cli_notes + result["notes"]:

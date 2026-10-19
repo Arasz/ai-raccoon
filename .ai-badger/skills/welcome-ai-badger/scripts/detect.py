@@ -16,7 +16,7 @@ import subprocess
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 def _bootstrap_lib() -> Path:
@@ -374,22 +374,18 @@ def detect_commands(target: Path, stacks: List[str]) -> Dict[str, str]:
     return cmds
 
 
-def main(argv=None) -> int:
-    """CLI entry point: emit a proposed config.json for `--target` to stdout."""
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--target", default=".")
-    ap.add_argument("--root")
-    args = ap.parse_args(argv)
-    target = Path(args.target).resolve()
-    root = Path(args.root).resolve() if args.root else bl.find_root()
-    index = bl.read_index(root)
+def propose_config(target: Path, root: Path) -> Dict[str, Any]:
+    """The canonical configuration proposal for a target.
 
+    One builder, so a proposed config never depends on which script asked for it: the
+    detect CLI prints it, and the shared scope writes the same shape for a collection.
+    """
+    index = bl.read_index(root)
     stacks = expand_requires(detect_stacks(target, index), index)
     # keep only stacks the framework actually knows about
     known = set(index.get("stacks", {}).keys())
     stacks = [s for s in stacks if s in known] or stacks
-
-    proposed = {
+    return {
         "$schema": "./schemas/config.schema.json",
         "frameworkVersion": index["frameworkVersion"],
         "project": {"name": target.name, "summary": "", "domain": ""},
@@ -402,6 +398,18 @@ def main(argv=None) -> int:
         "codexScope": "project",
         "docs": {},
     }
+
+
+def main(argv=None) -> int:
+    """CLI entry point: emit a proposed config.json for `--target` to stdout."""
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--target", default=".")
+    ap.add_argument("--root")
+    args = ap.parse_args(argv)
+    target = Path(args.target).resolve()
+    root = Path(args.root).resolve() if args.root else bl.find_root()
+
+    proposed = propose_config(target, root)
     print(json.dumps(proposed, indent=2, ensure_ascii=False))
     return 0
 

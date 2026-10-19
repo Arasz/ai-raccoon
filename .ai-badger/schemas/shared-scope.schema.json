@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Arasz/ai-badger/schemas/shared-scope.schema.json",
+  "title": "Shared scope descriptor",
+  "description": "The private .ai-badger/shared-scope.json of one repository in a shared collection: either the collection parent's member list, or a child's authored settings (its original local stacks and its overrides of the parent's defaults). Closed shapes: an unknown field is a mistake, not an extension.",
+  "type": "object",
+  "oneOf": [
+    {
+      "title": "collection parent",
+      "type": "object",
+      "required": ["mode", "members"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "const": "collection" },
+        "members": {
+          "type": "array",
+          "description": "The explicitly selected member repositories, relative to the collection root.",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "title": "child",
+      "type": "object",
+      "required": ["mode", "localStacks", "overrides"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["inherit", "sync"] },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The parent scope this child reads, relative to the child root. Absent until the child is enrolled."
+        },
+        "localStacks": {
+          "type": "array",
+          "description": "The child's own stacks, kept apart from the parent's effective union.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "parentId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The project id of the collection this child is enrolled in. It is what tells one collection's member from another's."
+        },
+        "overrides": {
+          "type": "object",
+          "description": "The child's authored settings, merged over the parent's defaults."
+        }
+      }
+    }
+  ]
+}
