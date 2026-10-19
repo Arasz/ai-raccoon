@@ -787,7 +787,7 @@ loads the embedding engine.
 
 | Kind | stdout |
 |---|---|
-| `counters` | `dotnet-counters monitor -p <pid>` — `System.Runtime` only (GC, CPU, working set, thread pool); append `--counters AiRaccoon.MemoryTools` for the tool metrics, broken out by `project_id` on the invocation counter |
+| `counters` | `dotnet-counters monitor -p <pid> --counters AiRaccoon.MemoryTools,AiRaccoon.PromotionQueue,AiRaccoon.Background,System.Runtime,System.Net.Http` — the full meter list; the CLI now appends it, so the ready command covers the server's instruments directly (the previous form, bare `dotnet-counters monitor -p <pid>`, only showed `System.Runtime` and missed the AiRaccoon meters; appending by hand is no longer required) |
 | `trace` | `dotnet-trace collect -p <pid> --providers AiRaccoon.MemoryTools,AiRaccoon.Background,Microsoft.AspNetCore,System.Net.Http` |
 | `otlp` | the OTLP endpoint the server exports to; the protocol goes to stderr |
 | `pid` | the bare process id, for composing with other tools |
