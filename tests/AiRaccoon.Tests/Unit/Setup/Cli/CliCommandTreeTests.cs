@@ -141,6 +141,35 @@ public class CliCommandTreeTests
         observability.Children.OfType<Option>().ShouldContain(CliCommandTree.ObservabilityPortOption);
     }
 
+    /// <summary>
+    ///     The help entry has to say what each kind prints: the verb is the only place a user
+    ///     learns that `counters` names the server's own instruments and `pid` prints a bare id.
+    /// </summary>
+    [Fact]
+    public void ObservabilityCommand_HelpNamesWhatEachKindPrints()
+    {
+        var root = CliCommandTree.BuildFullRootCommand();
+        var serve = root.Children.OfType<Command>().Single(c => c.Name == "serve");
+        var observability = serve.Children.OfType<Command>().Single(c => c.Name == "observability");
+
+        var description = observability.Description.ShouldNotBeNull();
+        foreach (var kind in new[] { "counters", "trace", "otlp", "pid" })
+        {
+            description.ShouldContain(kind);
+        }
+
+        description.ShouldContain("dotnet-counters");
+        description.ShouldContain("dotnet-trace");
+        description.Length.ShouldBeLessThan(220);
+
+        var kindArgument = observability.Arguments.OfType<Argument<string>>().Single();
+        var kindDescription = kindArgument.Description.ShouldNotBeNull();
+        foreach (var kind in new[] { "counters", "trace", "otlp", "pid" })
+        {
+            kindDescription.ShouldContain(kind);
+        }
+    }
+
     [Fact]
     public void ServeCommand_DeclaresAnAction_SoBareServeParses()
     {
