@@ -156,27 +156,27 @@ hook reads: the nearest `.ai-badger/project-id`, with `AI_BADGER_PROJECT_ID` fir
 raccoon-side override is retired (see ADR-0036 in the ai-badger repository), so the denial and
 the search it demands cannot point at two different projects.
 
-**Repo text search: memory first, then `# memory-checked`.** The gate keys on the search
-pattern. A grep/egrep/fgrep/rg/find anywhere in a shell command (every segment of `a; b | c`
-counts, a piped grep included), or a Grep/Glob/search_files call, passes only when:
+**Repo text search: memory first.** The gate keys on the search pattern. A grep/egrep/fgrep/
+rg/find anywhere in a shell command (every segment of `a; b | c` counts, a piped search
+included), or a Grep/Glob/search_files call, passes only when every pattern was already
+memory-searched for this project. This includes `rg` and `rtk rg`.
 
-1. every pattern it searches for was already memory-searched for this project, and
-2. a shell command ends its last line with the trailing comment `# memory-checked`, for
-   example `grep -n "def merge_hooks" hook_wiring.py  # memory-checked`. Grep/Glob/
-   search_files have no command string, so step 1 is enough for them.
-
-The first time a pattern is seen, the call is denied and the hook runs one `memory_search` for
-it itself; the hits come back in the deny reason and the pattern is recorded. Read them, then
-re-issue the call with the marker if you still need the grep. When the hook could not search
-(no `ai-raccoon`, timeout), it records nothing and asks you to run `memory_search` with that
+On a pattern's first sighting, the call is denied and the hook runs one `memory_search`; the
+hits return in the deny reason and the pattern is recorded. For shell grep-family commands,
+the hook also starts the original command asynchronously and saves its raw output in the
+ai-badger audit database for about two minutes. The deny reason includes a `pattern-hash`.
+When the raw output is needed, use the `get-raw-grep-result` skill or run its script with
+`--pattern-hash <hash>`; a known pattern can also be fetched with `--pattern <pattern>`. The
+result is JSON and may be `pending` if capture has not finished yet. After reading the memory
+hits, re-issue the search only if it is still needed. When the hook could not search (no
+`ai-raccoon`, timeout), it records nothing and asks you to run `memory_search` with that
 pattern as the query; your search's query is recorded, and a pattern that is a whole-word run
 of it counts as searched (comparison ignores case, `^ $ \b`, grouping parentheses and regex
-escapes such as `\.`). Searched patterns persist per project and are never reset. A marker the
-shell reads as part of a word (quoted, or after an escaped blank) does not count.
+escapes such as `\.`). Searched patterns persist per project and are never reset.
 
 **Excluded list.** A grep/egrep/fgrep/rg reading a pipe from git, gh, ps, ls, env, printenv,
 history, docker, kubectl, pip, npm, lsof, brew, dotnet is not repo search:
-`git log | grep fix` passes with no search and no marker, through `rtk`/`sudo` wrappers too.
+`git log | grep fix` is excluded from repo search, including through `rtk`/`sudo` wrappers.
 Only the program immediately before the grep counts (`git log | head -50 | grep fix` is gated:
 `head` is not listed). A grep with a file operand, `-r`/`-R`/`-d recurse`, `rg --files`, an
 input redirect, or run by `xargs` stays gated, as does any file grep elsewhere in the command.

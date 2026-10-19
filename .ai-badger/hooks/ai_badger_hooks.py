@@ -369,8 +369,8 @@ def _maybe_record_memory_consult(tool_name: str, args: Dict[str, Any], cwd: str,
 
 def pre_tool_call_memory_gate(tool_name: str = "", args: Optional[Dict[str, Any]] = None,
                               task_id: Optional[str] = None, **_kwargs: Any) -> Optional[Dict[str, str]]:
-    """Block a text-search call until its patterns were memory-searched (and, for a
-    terminal command, it ends with `# memory-checked`); the first sighting searches.
+    """Block a text-search call until its patterns were memory-searched; a first sighting
+    searches and captures shell grep output for short-lived retrieval.
 
     Returns a block decision, or None to allow; None when the gate module is missing.
     """

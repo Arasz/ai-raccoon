@@ -2,8 +2,8 @@
 """PreToolUse hook for the memory-first gate.
 
 Deny a text-search call until every pattern it searches for was memory-searched for the
-project, and, for a shell command, until it ends with the `# memory-checked` marker. The
-first sighting of a pattern runs one memory search and returns its hits in the deny reason.
+project. The first sighting of a pattern runs one memory search, captures shell grep-family
+output asynchronously, and returns the retrieval hash in the deny reason.
 Searched queries of the agent's own memory_search are recorded by
 memory_first_gate_post_hook.py. Exit 0 on every path — Copilot's command preToolUse hooks
 are fail-closed, so a crash here would deny the very tool call the gate only meant to gate.
