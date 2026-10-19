@@ -81,6 +81,14 @@ public sealed class McpToolInventoryGeneratorTests
                     [ModelContextProtocol.Server.McpServerTool(Name = "abstract_tool")]
                     public void Abstract() { }
                 }
+
+                public sealed class ConcreteTools : AbstractTools { }
+
+                public abstract class UnusedAbstractTools
+                {
+                    [ModelContextProtocol.Server.McpServerTool(Name = "unused_abstract_tool")]
+                    public void Unused() { }
+                }
             }
 
             namespace OutsideTools
@@ -100,7 +108,8 @@ public sealed class McpToolInventoryGeneratorTests
         generated.ShouldContain("included_tool");
         generated.ShouldNotContain("private_tool");
         generated.ShouldNotContain("static_tool");
-        generated.ShouldNotContain("abstract_tool");
+        generated.ShouldContain("abstract_tool");
+        generated.ShouldNotContain("unused_abstract_tool");
         generated.ShouldNotContain("outside_tool");
     }
 

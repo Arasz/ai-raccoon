@@ -31,15 +31,26 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
             .Where(static tool => tool is not null)
             .Select(static (tool, _) => tool!);
 
-        context.RegisterSourceOutput(tools.Collect(), static (productionContext, candidates) =>
-            Generate(productionContext, candidates));
+        var toolTypes = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                static (node, _) => node is TypeDeclarationSyntax,
+                static (syntaxContext, _) =>
+                    (INamedTypeSymbol?)syntaxContext.SemanticModel.GetDeclaredSymbol(
+                        (TypeDeclarationSyntax)syntaxContext.Node))
+            .Where(static type => type is { TypeKind: TypeKind.Class } &&
+                                  type.ContainingNamespace.ToDisplayString() == ToolNamespace)
+            .Select(static (type, _) => type!)
+            .Collect();
+
+        context.RegisterSourceOutput(
+            tools.Collect().Combine(toolTypes),
+            static (productionContext, input) => Generate(productionContext, input.Left, input.Right));
     }
 
     private static ToolCandidate? CreateTool(GeneratorAttributeSyntaxContext context)
     {
         if (context.TargetSymbol is not IMethodSymbol method ||
             method.ContainingType.TypeKind != TypeKind.Class ||
-            method.ContainingType.IsAbstract ||
             method.ContainingNamespace.ToDisplayString() != ToolNamespace ||
             method.DeclaredAccessibility != Accessibility.Public ||
             method.IsStatic)
@@ -50,12 +61,13 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
         var nameArgument = context.Attributes[0].NamedArguments
             .FirstOrDefault(argument => argument.Key == "Name");
         var name = nameArgument.Value.Value as string;
-        return new ToolCandidate(method.Name, name, method.Locations.FirstOrDefault());
+        return new ToolCandidate(method.Name, method.ContainingType, name, method.Locations.FirstOrDefault());
     }
 
     private static void Generate(
         SourceProductionContext context,
-        ImmutableArray<ToolCandidate> candidates)
+        ImmutableArray<ToolCandidate> candidates,
+        ImmutableArray<INamedTypeSymbol> toolTypes)
     {
         var names = new List<string>(candidates.Length);
         foreach (var candidate in candidates)
@@ -69,7 +81,14 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
                 continue;
             }
 
-            names.Add(candidate.Name!);
+            var useCount = toolTypes
+                .Where(type => !type.IsAbstract && IsOrInheritsFrom(type, candidate.ContainingType))
+                .Distinct(SymbolEqualityComparer.Default)
+                .Count();
+            for (var index = 0; index < useCount; index++)
+            {
+                names.Add(candidate.Name!);
+            }
         }
 
         names.Sort(StringComparer.Ordinal);
@@ -93,9 +112,28 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
         context.AddSource("McpToolInventory.g.cs", SourceText.From(source.ToString(), Encoding.UTF8));
     }
 
-    private sealed class ToolCandidate(string methodName, string? name, Location? location)
+    private static bool IsOrInheritsFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, baseType.OriginalDefinition))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private sealed class ToolCandidate(
+        string methodName,
+        INamedTypeSymbol containingType,
+        string? name,
+        Location? location)
     {
         public string MethodName { get; } = methodName;
+
+        public INamedTypeSymbol ContainingType { get; } = containingType;
 
         public string? Name { get; } = name;
 
