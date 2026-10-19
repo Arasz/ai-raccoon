@@ -2,8 +2,7 @@
 
 A repo text-search call (grep/egrep/fgrep/rg/find in any segment of a shell command, or a
 Grep/Glob/search_files tool) passes only when every pattern it searches for was already
-memory-searched for the project AND, for a call whose input carries a `command` string, the
-command's last line ends with the `# memory-checked` marker. The first sighting of a pattern
+memory-searched for the project. The first sighting of a pattern
 is denied: the gate runs one memory search for it and records it as searched when the bank
 answered. An agent's own memory_search records its query too (the PostToolUse hook).
 
@@ -13,12 +12,14 @@ telemetry row. A hook must never raise: Copilot's preToolUse is fail-closed, so 
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
 import re
 import shlex
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
@@ -31,8 +32,6 @@ except ImportError:  # a deployment without the store keeps the file surfaces
 MARKER_DIR = Path.home() / ".ai-badger" / "memory-first"
 SEARCHED_DIR = Path.home() / ".ai-badger" / "memory-first-searched"
 
-MARKER = "# memory-checked"
-_MARKER_LINE = re.compile(r"(?:^|\s)#\s*memory-checked\s*$")
 
 # Wall clock for the gate's own memory search, from hook start: hook timeouts are 10 s and
 # Hermes abandons a callback at 30 s.
@@ -149,8 +148,7 @@ def is_memory_search(tool_name: Any) -> bool:
 
 _REASON = (
     "Memory-first gate: run memory_search (projectId={project_id}) with the search pattern "
-    "before repo text search, then re-issue the call; a shell command must end with a "
-    "trailing `" + MARKER + "` comment."
+    "before repo text search, then re-issue the call."
 )
 
 
@@ -333,20 +331,69 @@ def is_text_search(tool_name: Any, tool_input: Any) -> bool:
     return search_patterns(tool_name, tool_input) is not None
 
 
-def has_marker(tool_input: Any) -> bool:
-    """True when the call needs no marker (no `command` string) or its last line ends in one.
+RAW_GREP_SCRIPT = (Path(__file__).resolve().parents[2] / "get-raw-grep-result" /
+                   "scripts" / "get_raw_grep_result.py")
 
-    The marker is read from the raw text and accepted only when removing it leaves the parse
-    unchanged, so a quoted or escaped `# memory-checked` (a word, not a comment) cannot spoof it.
-    """
+
+def pattern_hash(pattern: str) -> str:
+    """Return the stable SHA-256 handle for one exact grep pattern."""
+    return hashlib.sha256(pattern.encode("utf-8")).hexdigest()
+
+
+def _capture_scope(cwd: str = "") -> str:
+    """Namespace raw results by the real working directory to isolate repositories."""
+    return hashlib.sha256(os.path.realpath(cwd or os.getcwd()).encode("utf-8")).hexdigest()
+
+
+def _capture_segment(parsed: Any, program: str, args: Tuple[str, ...]) -> str:
+    """Rebuild a grep command with its input pipeline and without adjacent commands."""
+    if parsed is None or not getattr(parsed, "upstream", None):
+        return shlex.join((program, *args))
+    pipeline = []
+    current = parsed
+    while current is not None:
+        words = shlex.join(current.words)
+        redirects = " ".join(
+            operator + (" " + shlex.quote(target) if target else "")
+            for operator, target in current.redirects)
+        pipeline.append((words + (" " + redirects if redirects else "")).strip())
+        current = current.upstream
+    return " | ".join(reversed(pipeline))
+
+
+def capture_greps(tool_name: Any, tool_input: Any, cwd: str = "",
+                  selected: Optional[Set[str]] = None) -> List[Tuple[str, str]]:
+    """Launch each relevant shell grep/rg segment once; return (pattern, hash) handles."""
+    if not isinstance(tool_name, str) or tool_name.lower() not in _SHELL_TOOLS:
+        return []
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if not isinstance(command, str):
-        return True
-    text = command.rstrip()
-    match = _MARKER_LINE.search(text)
-    if match is None:
-        return False
-    return _commands(text) == _commands(text[:match.start()])
+        return []
+    launched: List[Tuple[str, str]] = []
+    captured: Set[str] = set()
+    for program, args, _words, parsed in _commands(command):
+        if program not in _GREP_PROGRAMS + ("rg", "rg.exe"):
+            continue
+        patterns, files, walks = _grep_parse(program, args)
+        if _reads_excluded_pipe(parsed, files, walks):
+            continue
+        patterns = [pattern for pattern in patterns
+                    if (selected is None or pattern in selected) and pattern not in captured]
+        if not patterns:
+            continue
+        segment = _capture_segment(parsed, program, args)
+        keys = [pattern_hash(pattern) for pattern in patterns]
+        try:
+            subprocess.Popen(
+                [sys.executable, str(RAW_GREP_SCRIPT), "--capture",
+                 _capture_scope(cwd) + ":" + ",".join(keys), segment],
+                cwd=cwd or os.getcwd(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+            launched.extend(zip(patterns, keys))
+            captured.update(patterns)
+        except OSError:
+            continue
+    return launched
 
 
 # ------------------------------------------------------------------ the searched-pattern store
@@ -602,21 +649,24 @@ def search_query(patterns: Iterable[str]) -> Tuple[str, List[str]]:
     return " ".join(included), included
 
 
-def deny_reason(project: str, unseen: List[str], hits: Optional[str]) -> str:
-    """Why the call is denied and how to get it through; always names the marker."""
-    retry = (f"re-issue the call; a shell command must end with a trailing `{MARKER}` "
-             f"comment (e.g. `grep -n foo f.py {MARKER}`).")
+def deny_reason(project: str, unseen: List[str], hits: Optional[str],
+                captures: Optional[List[Tuple[str, str]]] = None) -> str:
+    """Why the call is denied, including any raw-result retrieval handles."""
+    retry = "re-issue the call."
+    handles = captures or []
+    raw = (" Raw output can be fetched with `get-raw-grep-result` using "
+           + ", ".join(f"pattern-hash={key}" for _pattern, key in handles) + ".") if handles else ""
     if not unseen:
         return ("Memory-first gate: every pattern here was already memory-searched "
-                f"(projectId={project}); {retry}")
+                f"(projectId={project}); {retry}{raw}")
     listed = ", ".join(repr(p) for p in unseen)
     if hits is None:
         return (f"Memory-first gate: first sighting of {listed}. Run memory_search "
-                f"(projectId={project}) with that pattern as the query, then {retry}")
+                f"(projectId={project}) with that pattern as the query, then {retry}{raw}")
     found = hits.strip()[:HITS_MAX_CHARS] or "(no hits)"
     return (f"Memory-first gate: first sighting of {listed}; memory_search "
             f"(projectId={project}) ran for you:\n{found}\nIf that answers it, skip the "
-            f"search; otherwise {retry}")
+            f"search; otherwise {retry}{raw}")
 
 
 def decide(host: str, tool_name: Any, tool_input: Any, session_id: Optional[str],
@@ -634,8 +684,9 @@ def decide(host: str, tool_name: Any, tool_input: Any, session_id: Optional[str]
     if not _persistable(project):
         return {}
     unseen = unsearched(project, patterns)
-    if not unseen and has_marker(tool_input):
+    if not unseen:
         return {}
+    captures = capture_greps(tool_name, tool_input, cwd, set(unseen))
     hits = None
     if unseen:
         query, queried = search_query(unseen)
@@ -647,7 +698,7 @@ def decide(host: str, tool_name: Any, tool_input: Any, session_id: Optional[str]
         if hits is not None and queried and not remember(project, queried):
             return {}
     return build_decision(host, tool_name, tool_input, session_id, cwd,
-                          reason=deny_reason(project, unseen, hits))
+                          reason=deny_reason(project, unseen, hits, captures))
 
 
 def build_decision(host: str, tool_name: str, tool_input: Any,  # pylint: disable=unused-argument
