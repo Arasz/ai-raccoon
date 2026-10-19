@@ -399,6 +399,7 @@ def main(argv=None) -> int:
         "commands": detect_commands(target, stacks),
         "personaRouting": [],
         "skillScope": "default",
+        "codexScope": "project",
         "docs": {},
     }
     print(json.dumps(proposed, indent=2, ensure_ascii=False))

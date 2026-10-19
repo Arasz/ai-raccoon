@@ -160,6 +160,11 @@
       "default": "default",
       "description": "default = honor each skill entry's declared scope; local = force all installs to project scope. Renamed from pluginScope in v0.7.0."
     },
+    "codexScope": {
+      "enum": ["project", "user"],
+      "default": "project",
+      "description": "project = publish Codex skills and hooks through repository discovery; user = use the ai-badger Codex plugin installed from its marketplace, and remove project copies to prevent duplicate discovery."
+    },
     "docs": {
       "type": "object",
       "additionalProperties": {

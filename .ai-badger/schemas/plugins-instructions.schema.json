@@ -38,6 +38,10 @@
           "description": {
             "type": "string"
           },
+          "scopeFlag": {
+            "type": "boolean",
+            "description": "Whether install_plugins.py should append a host scope flag when a command template does not include {scope}."
+          },
           "commands": {
             "type": "array",
             "items": {
