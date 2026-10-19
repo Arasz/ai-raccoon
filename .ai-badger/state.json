@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-10-19",
+  "lastUpdated": "2026-10-20",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-fix-repair-open-workspaces-census",
+      "title": "The project-ids repair counts open workspaces, not workspace rows",
+      "summary": "The census counted workspace rows, so an alias id whose workspaces had all closed was pinned forever (\"owns 14 open workspace(s)\") and its 90 committed rows stayed under a spelling the read path folds away. A workspace is now open unless its status is terminal (Closed/Discarded); the census reports the open count and the live scratch rows next to the totals, and the fold plan blocks on those (ADR-0135). VERSION 1.60.1 with a changelog entry. On the live bank the repair then moved 90 rows from 'job-search-ai-assistant' to 'jsaa' (the 8 shared rows stay by design), and memory_get under 'jsaa' finds them. PR #889 merged as 7d6bf07b.",
+      "pr": 889,
+      "merged": true,
+      "mergeCommit": "7d6bf07bcb8c50c3474312252b6fb08afb5ccfca",
+      "date": "2026-10-20",
+      "hasNotes": false
+    },
     {
       "id": "air-adopt-structured-content-for-mcp-tools",
       "title": "Evaluate structured MCP tool output for AiRaccoon clients",
@@ -169,7 +179,7 @@
       "summary": "Live dry run proposed 23,459 rows to -1: pre-granite (#687) and August chunkings of unchanged files, not corruption (tokenizer switch explains ~5k, #775 ~30). #794 keeps a partition's stored order when positions are 0..n-1 and reproduced rows are in document order; #795 (from two parallel reviews) locates every row's text in one SearchValues pass and keeps the heaviest stored-order chain (reproduced rows outweigh), adds duplicate/lone-CR/moved/out-of-place tests, fixes how-to drift, bumps 1.53.9. Snapshot: 742 to -1, 21 moved."
     }
   ],
-  "next": "Post-merge follow-ups for air-config-d-memory-1022-chunks: (1) the 254-vs-1022 retrieval measurement as its own task (incl. WebGPU footprint + re-chunk phase wall-clock) — owner waived pre-adoption measurement; (2) [DONE 2026-09-30, #809 eval-reanchor] the eval-set corpus is re-anchored to the 1022 copy d23ee28e52d181a65786e41f7e2d39f3aa7fc67dd17a8202e2675026c076b4eb and the refresh gate's reproduction branch now runs for eval-set-100 (project-corpus-100 stays on cb99fe6e by design); (3) test_corpus_config's MEASURED_BYTES band needs a deliberate re-measure (main was already over it). Then: rule on #706 (pin A9 + close, or ADR-0078 telemetry).",
+  "next": "Post-merge follow-ups for air-fix-repair-open-workspaces-census: publish 1.60.1 to NuGet (the installed tool is a local build of the same commit) so `dotnet tool update -g ai-raccoon` moves off the local package; the delegated review of PR #889 never ran (openrouter balance exhausted, free tier capped) and was done in-session, so give the diff a human read if you want the second pair of eyes. Then: the 254-vs-1022 retrieval measurement, and a rule on #706.",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
