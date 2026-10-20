@@ -4,6 +4,7 @@ Task-oriented recipes: the reader has a goal (configure server, switch embedding
 
 ## Contents
 
+- [Change the embed drain's rows-per-run](change-the-embed-rows-per-run.md) — set the number of pending rows one drain pass takes, with the settings key it writes, the range it accepts, and what a bigger pass costs in memory.
 - [Configure and run the AiRaccoon server](configure-ai-raccoon-server.md) — launch flags, environment variables, SQLite passphrase encryption (including keying the bank from 1Password), serve mode lifecycle, idle watchdog, and zero-downtime updates with `serve --restart`.
 - [Configure embedding engines](configure-embedding-engines.md): switch between the bundled local ONNX model (`granite-embedding-small-english-r2`) and remote OpenAI-compatible backends (Ollama, LM Studio, OpenAI) with `ai-raccoon model`.
 - [Configure Rider AI completion with a local Qwen3.5-9B](configure-rider-local-autocompletion.md) — point a Rider AI-completion plugin at a local Qwen3.5-9B endpoint and paste a system prompt that matches the repo's C# conventions.

@@ -129,7 +129,7 @@ retired id exits 18 and writes nothing. An alias writes its winner's settings, a
 | `settings extract list` (alias `show`) | Extraction configuration: enabled, mode, interval |
 | `settings maintenance interval {minutes}` | WAL checkpoint interval, default `60` |
 | `settings maintenance vacuum-interval {days}` | VACUUM + ANALYZE interval, default `7` |
-| `settings maintenance embed-rows-per-run {n}` | Embed drain rows per signal, both corpora, default `128`, range `64`–`4096` |
+| `settings maintenance embed-rows-per-run {n}` | Embed drain rows per signal, both corpora, default `128`, range `64`–`4096`. Writes `maintenance.embed-rows-per-run.global`; [how-to](how-to/change-the-embed-rows-per-run.md) |
 | `settings maintenance list` (alias `show`) | Bank maintenance configuration |
 | `settings performance buffer-capacity {n}` | Measurement buffer capacity; takes effect on next restart |
 | `settings performance flush-interval {seconds}` | Metrics flush interval; takes effect on next flush tick |
