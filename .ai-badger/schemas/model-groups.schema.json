@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Arasz/ai-badger/schemas/model-groups.schema.json",
-  "title": "ai-badger model groups registry",
-  "description": "Level (low|medium|high) to ordered OpenRouter model list. Canonical source is features/common/data/model-groups.json, delivered to .ai-badger/model-groups.json. Index 0 of each group is the preferred pin. Structural shape only: preferred-first, lexicographic price order (with the demoted-tail exemption), per-group id uniqueness, tail position and the weights-identity evidence rule are enforced by the model_groups validator, which draft 2020-12 cannot express.",
+  "title": "ai-badger model map",
+  "description": "Four cost-tier groups (low, medium, high, top), each naming one anchor per declared family, the primary anchor whose model leads the group, and the concrete provider-qualified ids in that tier. Canonical source is features/common/data/model-groups.json, delivered to .ai-badger/model-groups.json. Structural shape only: the anchor coverage rule, the primary anchor's member, the open-weight price rule, the one-preferred-member rule, the price order and the per-group id uniqueness are enforced by the model_groups validator, which draft 2020-12 cannot express.",
   "type": "object",
-  "required": ["frameworkVersion", "registryVersion", "measuredAt", "groups"],
+  "required": ["frameworkVersion", "registryVersion", "measuredAt", "families", "groups"],
   "additionalProperties": false,
   "properties": {
     "$schema": { "type": "string" },
@@ -15,30 +15,53 @@
       "format": "date",
       "description": "YYYY-MM-DD pricing/evidence date for the whole file. Date-shaped values are enforced by the model_groups validator; a bare format keyword is advisory under this repo's validator."
     },
-    "source": {
-      "type": "string",
-      "description": "Provenance pointer, e.g. the brief or memory context the seed was verified against."
+    "families": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "The families the map declares. Every group anchors each of them."
     },
+    "source": { "$ref": "#/$defs/source" },
     "groups": {
       "type": "object",
-      "required": ["low", "medium", "high"],
+      "required": ["low", "medium", "high", "top"],
       "additionalProperties": false,
       "properties": {
         "low": { "$ref": "#/$defs/group" },
         "medium": { "$ref": "#/$defs/group" },
-        "high": { "$ref": "#/$defs/group" }
+        "high": { "$ref": "#/$defs/group" },
+        "top": { "$ref": "#/$defs/group" }
       }
     }
   },
   "$defs": {
     "group": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/member" }
+      "type": "object",
+      "required": ["anchors", "primary", "models"],
+      "additionalProperties": false,
+      "properties": {
+        "anchors": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string", "minLength": 1 },
+          "description": "Declared family to the version-less family name that anchors this group."
+        },
+        "primary": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The anchor key whose model leads the group. It names one of the declared families, and its anchor's family is the family of the group's preferred member. The membership rule and the member behind it are enforced by the model_groups validator."
+        },
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/member" }
+        }
+      }
     },
     "member": {
       "type": "object",
-      "required": ["id", "preferred", "pricing", "evidence"],
+      "required": ["id", "family", "preferred", "pricing", "license", "score", "evidence"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -46,37 +69,26 @@
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9~@][A-Za-z0-9._~@:+-]*)+$(?![\\s\\S])",
           "description": "Fully-qualified <provider>/<model> id. Bare aliases never appear here."
         },
+        "family": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The model family the member belongs to: the version-less line word for the anchored families (opus, sonnet, haiku, fable, luna, sol, astra) and the product name for the rest (muse, glm, deepseek, mimo, gemini, step, dots3-note)."
+        },
         "preferred": { "type": "boolean" },
         "pricing": { "$ref": "#/$defs/pricing" },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The release's license, as the pricing source names it (Proprietary, Open Weight)."
+        },
+        "score": {
+          "type": "number",
+          "description": "The overall score the pricing source measured for this model."
+        },
         "evidence": {
           "type": "string",
           "minLength": 1,
-          "description": "One line saying why this member sits here. Entries sharing a weightsId state the relationship."
-        },
-        "aliases": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "description": "Always-latest pointers. Documentary; the resolver never follows them."
-        },
-        "weightsId": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Capability-identity key: entries sharing one are the same weights."
-        },
-        "status": {
-          "enum": ["active", "demoted", "deprecated"],
-          "default": "active",
-          "description": "Demoted entries are display-only tail: skipped for price order, pinned last with revisionWatch."
-        },
-        "revisionWatch": {
-          "type": "boolean",
-          "default": false,
-          "description": "True flags an evidence-demoted entry needing revisit before any other refresh work."
-        },
-        "measuredAt": {
-          "type": "string",
-          "format": "date",
-          "description": "Per-entry override; defaults to the top-level measuredAt."
+          "description": "One line saying where this member's price and score came from."
         }
       }
     },
@@ -85,9 +97,69 @@
       "required": ["inputPerM", "outputPerM"],
       "additionalProperties": false,
       "properties": {
-        "inputPerM": { "type": "number", "exclusiveMinimum": 0 },
-        "outputPerM": { "type": "number", "exclusiveMinimum": 0 },
+        "inputPerM": { "type": "number", "minimum": 0 },
+        "outputPerM": { "type": "number", "minimum": 0 },
         "currency": { "type": "string", "const": "USD", "default": "USD" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["leaderboard"],
+      "properties": {
+        "leaderboard": {
+          "type": "object",
+          "required": ["path", "rows", "sha256"],
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "rows": { "type": "integer", "minimum": 1 },
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        },
+        "modelStore": {
+          "type": "object",
+          "required": ["path", "provider"],
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "provider": { "type": "string", "minLength": 1 }
+          }
+        },
+        "generator": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The script that re-renders this map from the sources above."
+        },
+        "openrouterCatalogue": {
+          "type": "object",
+          "required": ["path", "checkedAt", "models", "sha256"],
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "checkedAt": { "type": "string", "minLength": 1 },
+            "models": { "type": "integer", "minimum": 1 },
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        },
+        "unpriced": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "The leaderboard rows it leaves unpriced: a gap in the leaderboard, not in the map."
+        },
+        "excluded": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["model", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "model": { "type": "string", "minLength": 1 },
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          },
+          "description": "The leaderboard rows the map leaves out, each with its reason."
+        },
+        "note": { "type": "string" }
       }
     }
   }

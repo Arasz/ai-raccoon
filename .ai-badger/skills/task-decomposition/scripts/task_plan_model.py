@@ -55,6 +55,7 @@ class Level(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+    TOP = "top"
 
 
 class StepStatus(str, Enum):

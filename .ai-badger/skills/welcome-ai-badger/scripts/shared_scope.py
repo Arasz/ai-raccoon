@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect explicitly selected repositories into a shared ai-badger scope."""
+"""Share one ai-badger scope across repositories: from the parent side, or explicitly."""
 from __future__ import annotations
 
 import argparse
@@ -68,6 +68,54 @@ def descriptor(child: Path, root: Path) -> dict[str, Any]:
                                root)
 
 
+def without_empty_values(settings: dict[str, Any]) -> dict[str, Any]:
+    """The settings a detection contributes, without the empty values it always produces.
+
+    A detection has no summary, no domain and no persona routing, and a list replaces an
+    inherited list — so keeping the empty values would wipe what the parent authored.
+    """
+    result: dict[str, Any] = {}
+    for key, value in settings.items():
+        if isinstance(value, dict):
+            nested = without_empty_values(value)
+            if nested:
+                result[key] = nested
+        elif isinstance(value, list):
+            if value:
+                result[key] = value
+        elif value is None or value == "":
+            continue
+        else:
+            result[key] = value
+    return result
+
+
+def detected_descriptor(child: Path, root: Path) -> dict[str, Any]:
+    """The authored inputs of a child that has none yet: a detection of the child."""
+    proposed = propose_config(child, root)
+    return validate_descriptor({"mode": "inherit", "localStacks": proposed["stacks"],
+                                 "overrides": without_empty_values(
+                                     {key: value for key, value in proposed.items()
+                                      if key not in {"stacks", "frameworkVersion", "$schema"}})},
+                                root)
+
+
+def child_inputs(child: Path, root: Path) -> dict[str, Any]:
+    """The child's own settings: its descriptor, its own config, or a fresh detection.
+
+    A child that is already a member carries its own descriptor, so its authored stacks
+    and overrides survive every refresh. A child that is only scaffolded carries its own
+    config: its stacks are its own, and its other settings are its overrides. A child that
+    has neither is new, and a detection describes it.
+    """
+    path = child / ".ai-badger" / "shared-scope.json"
+    if path.exists():
+        return descriptor(child, root)
+    if (child / ".ai-badger" / "config.json").exists():
+        return descriptor(child, root)
+    return detected_descriptor(child, root)
+
+
 def validate_descriptor(value: dict[str, Any], root: Path) -> dict[str, Any]:
     """The descriptor is a closed shape: an unknown field is a mistake, not an extension."""
     errors = bl.validate(value, bl.load_json(root / "schemas" / "shared-scope.schema.json"))
@@ -83,13 +131,18 @@ def validate_config(config: dict[str, Any], root: Path) -> None:
         raise ValueError("invalid shared config: " + "; ".join(errors))
 
 
-def plan_identity(child: Path) -> tuple[str, str]:
+def plan_identity(child: Path, *, mint_without_bank: bool = False) -> tuple[str, str]:
     """Decide the child's own identity without writing anything.
 
     One decision, made once: the write path never re-decides, so a lookup that comes
     back ambiguous or unavailable cannot turn into a minted id on the way in. `keep` is
     the child's own id, `reuse` the bank's id for that name, `mint` a fresh local one
     for a name the bank does not know.
+
+    `mint_without_bank` covers a machine with no ai-raccoon at all, or one whose bank
+    access is switched off: there is no answer to wait for, so the parent-side bootstrap
+    mints a local id instead of refusing every child. An answer the bank gave and cannot
+    be trusted on still refuses.
     """
     aib = child / ".ai-badger"
     try:
@@ -102,10 +155,27 @@ def plan_identity(child: Path) -> tuple[str, str]:
     result = project_id.lookup_project_id(name)
     if result.kind == "hit" and result.id:
         return ("reuse", result.id)
-    if result.kind != "not-found":
-        detail = result.note or "the canonical lookup did not answer"
-        raise ValueError(f"refusing to enroll {child}: it has no identity of its own and "
-                         f"{detail}. Give the child its own identity first, then enroll it.")
+    if result.kind == "not-found" or (mint_without_bank and result.kind in {"missing", "off"}):
+        return ("mint", str(uuid.uuid4()))
+    detail = result.note or "the canonical lookup did not answer"
+    raise ValueError(f"refusing to enroll {child}: it has no identity of its own and "
+                     f"{detail}. Give the child its own identity first, then enroll it.")
+
+
+def plan_parent_identity(parent: Path) -> tuple[str, str]:
+    """Decide the collection's own identity without writing anything.
+
+    The collection is a scope, not a project: the bank holds projects, and the parent's
+    id only has to be stable, so that a child can name the collection it belongs to. It
+    is therefore kept when the parent has one and minted locally otherwise — the parent
+    never asks the bank for a name it does not own.
+    """
+    try:
+        current = (parent / ".ai-badger" / "project-id").read_text(encoding="utf-8").strip()
+    except OSError:
+        current = ""
+    if current:
+        return ("keep", current)
     return ("mint", str(uuid.uuid4()))
 
 
@@ -242,12 +312,22 @@ def link_instructions(child: Path, source: Path, mode: str) -> None:
     bl.dump_json(manifest_path, manifest)
 
 
-def materialize(child: Path, source: Path, authored: dict[str, Any],
-                parent: dict[str, Any], root: Path, mode: str) -> None:
-    """Render a private child scaffold through the existing scaffolder."""
+def plan_config(authored: dict[str, Any], parent: dict[str, Any], root: Path,
+                mode: str) -> dict[str, Any]:
+    """The effective config of one child, validated before anything is written.
+
+    The parent's defaults, the child's own overrides, and the stacks the mode decides:
+    an inherited child carries the parent's union, a synced child carries its own.
+    """
     config = merge(parent, authored["overrides"])
     config["stacks"] = parent["stacks"] if mode == "inherit" else authored["localStacks"]
     validate_config(config, root)
+    return config
+
+
+def materialize(child: Path, source: Path, authored: dict[str, Any],
+                config: dict[str, Any], root: Path, mode: str) -> None:
+    """Render a private child scaffold from its planned effective config."""
     detach_links(child, source)
     Scaffolder(root, child, config, DEFAULT_SKILLS, install=False).run(
         allow_shared_scope=True)
@@ -257,6 +337,46 @@ def materialize(child: Path, source: Path, authored: dict[str, Any],
         authored["parentId"] = parent_id
     bl.dump_json(child / ".ai-badger" / "shared-scope.json", authored)
     link_instructions(child, source, mode)
+
+
+def is_collection_parent(child: Path) -> bool:
+    """True when the child is a collection of its own, with members of its own."""
+    path = child / ".ai-badger" / "shared-scope.json"
+    if not path.exists():
+        return False
+    return read_object(path).get("mode") == "collection"
+
+
+def discover_children(target: Path) -> tuple[list[Path], list[tuple[str, str]]]:
+    """The direct child repositories of a collection, and the ones that cannot be enrolled.
+
+    Discovery is one level deep: a directory that is not a direct child is not a member,
+    whatever it contains. A child is a direct subdirectory that carries a `.git` entry —
+    a directory or a file, so a linked worktree counts. A symlinked directory and a
+    directory that is a collection of its own are reported, not enrolled: neither can
+    become a member without a decision this discovery does not make.
+    """
+    if not target.is_dir():
+        raise ValueError(f"not a directory: {target}")
+    children: list[Path] = []
+    skipped: list[tuple[str, str]] = []
+    for entry in sorted(target.iterdir()):
+        if not entry.is_dir() or not (entry / ".git").exists():
+            continue
+        if entry.is_symlink():
+            skipped.append((entry.name, "a symlinked directory is not enrolled"))
+            continue
+        if is_collection_parent(entry):
+            skipped.append((entry.name, "it is a collection parent itself"))
+            continue
+        children.append(entry)
+    return children, skipped
+
+
+def stack_index(names: list[str], inputs: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """The dir:stacks index of a collection: each member and the stacks it was found with."""
+    return {name: list(child_input["localStacks"])
+            for name, child_input in zip(names, inputs)}
 
 
 def collect(target: Path, names: list[str], root: Path, config_path: Path | None,
@@ -285,9 +405,12 @@ def collect(target: Path, names: list[str], root: Path, config_path: Path | None
         commit_identity(child, plan, register)
     Scaffolder(root, target, config, DEFAULT_SKILLS, install=False).run()
     bl.dump_json(source / "shared-scope.json", {
-        "mode": "collection", "members": [str(child.relative_to(target)) for child in selected]})
+        "mode": "collection", "members": [str(child.relative_to(target)) for child in selected],
+        "memberStacks": stack_index([str(child.relative_to(target)) for child in selected],
+                                    authored)})
     for child, inputs in zip(selected, authored):
-        materialize(child, source, inputs, config, root, "inherit")
+        materialize(child, source, inputs, plan_config(inputs, config, root, "inherit"),
+                    root, "inherit")
 
 
 def prune(target: Path, name: str, root: Path, register: bool = False) -> None:
@@ -324,7 +447,95 @@ def sync(child: Path, source: Path, root: Path, register: bool = False) -> None:
     commit_identity(child, plan, register)
     inputs = descriptor(child, root)
     parent = read_object(source / "config.json")
-    materialize(child, source, inputs, parent, root, "sync")
+    materialize(child, source, inputs, plan_config(inputs, parent, root, "sync"), root, "sync")
+
+
+def _identity_word(plan: tuple[str, str]) -> str:
+    """The report's word for an identity decision: kept, reused from the bank, or minted."""
+    return {"keep": "kept", "reuse": "reused from the bank",
+            "mint": "minted locally"}[plan[0]]
+
+
+def discover(target: Path, root: Path) -> None:
+    """Report the direct child repositories, their stacks and the union. Writes nothing."""
+    children, skipped = discover_children(target)
+    if not children:
+        raise ValueError(f"no repository found in {target}: a child is a direct subdirectory "
+                         f"that carries a .git entry")
+    inputs = [child_inputs(child, root) for child in children]
+    for child, child_input in zip(children, inputs):
+        print(f"member {child.name}:{','.join(child_input['localStacks'])}")
+    for name, reason in skipped:
+        print(f"skipped {name}: {reason}")
+    union = list(dict.fromkeys(stack for child_input in inputs
+                               for stack in child_input["localStacks"]))
+    print(f"union {','.join(union)}")
+
+
+def init(target: Path, root: Path, config_path: Path | None, register: bool = False,
+         dry_run: bool = False) -> None:
+    """Initialize a collection from the parent side: discover, decide, then write.
+
+    Every decision is made before the first write, so a refusal leaves the directory
+    exactly as it was. The parent is scaffolded with the union of the members' stacks
+    and every member is materialized from it, whether it was already a scaffolded
+    repository or a fresh one.
+    """
+    children, skipped = discover_children(target)
+    if not children:
+        raise ValueError(f"no repository found in {target}: a child is a direct subdirectory "
+                         f"that carries a .git entry")
+    refusal = bl.shared_scope_refusal(target)
+    if refusal:
+        raise ValueError(refusal)
+    source = target / ".ai-badger"
+    # Nothing is written until every member is decided: a child whose identity the
+    # canonical lookup cannot resolve, or a child already enrolled in another
+    # collection, stops the whole run before the first write.
+    for child in children:
+        other = enrolled_elsewhere(child, source)
+        if other is not None:
+            raise ValueError(f"{child} is already enrolled in {other}; prune it there first")
+    inputs = [child_inputs(child, root) for child in children]
+    plans = [plan_identity(child, mint_without_bank=True) for child in children]
+    parent_plan = plan_parent_identity(target)
+    parent_path = config_path or target / ".ai-badger" / "config.json"
+    if parent_path.exists():
+        config = copy.deepcopy(read_object(parent_path))
+    else:
+        config = propose_config(target, root)
+    config["stacks"] = list(dict.fromkeys(stack for child_input in inputs
+                                         for stack in child_input["localStacks"]))
+    validate_config(config, root)
+    names = [child.name for child in children]
+    # Every child's effective config is planned and validated before the first write, so
+    # a member whose own settings cannot be rendered stops the run with the collection
+    # exactly as it was.
+    plans_config = [plan_config(child_input, config, root, child_input["mode"])
+                    for child_input in inputs]
+    report = [f"member {name}:{','.join(child_input['localStacks'])}"
+              for name, child_input in zip(names, inputs)]
+    report += [f"skipped {name}: {reason}" for name, reason in skipped]
+    report.append(f"union {','.join(config['stacks'])}")
+    report.append(f"parent identity: {_identity_word(parent_plan)}")
+    report += [f"identity {name}: {_identity_word(plan)}"
+               for name, plan in zip(names, plans)]
+    if dry_run:
+        for line in report:
+            print(f"plan {line}")
+        return
+    # The collection is a scope, not a bank project: its identity is local, and only the
+    # members' identities reach the bank.
+    commit_identity(target, parent_plan, register=False)
+    for child, plan in zip(children, plans):
+        commit_identity(child, plan, register)
+    Scaffolder(root, target, config, DEFAULT_SKILLS, install=False).run()
+    bl.dump_json(source / "shared-scope.json", {
+        "mode": "collection", "members": names, "memberStacks": stack_index(names, inputs)})
+    for child, child_input, child_config in zip(children, inputs, plans_config):
+        materialize(child, source, child_input, child_config, root, child_input["mode"])
+    for line in report:
+        print(line)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -350,6 +561,17 @@ def main(argv: list[str] | None = None) -> int:
     prune_parser.add_argument("--root")
     prune_parser.add_argument("--register", action="store_true",
                                help="register a newly minted child id with ai-raccoon")
+    discover_parser = commands.add_parser("discover")
+    discover_parser.add_argument("--target", required=True)
+    discover_parser.add_argument("--root")
+    init_parser = commands.add_parser("init")
+    init_parser.add_argument("--target", required=True)
+    init_parser.add_argument("--config")
+    init_parser.add_argument("--root")
+    init_parser.add_argument("--register", action="store_true",
+                              help="register a newly minted id with ai-raccoon")
+    init_parser.add_argument("--dry-run", action="store_true",
+                              help="report the members, the union and the identities; write nothing")
     args = parser.parse_args(argv)
     try:
         root = Path(args.root).resolve() if args.root else FRAMEWORK_ROOT
@@ -359,6 +581,11 @@ def main(argv: list[str] | None = None) -> int:
                     Path(args.config).resolve() if args.config else None, args.register)
         elif args.command == "prune":
             prune(target, args.repo, root, args.register)
+        elif args.command == "discover":
+            discover(target, root)
+        elif args.command == "init":
+            init(target, root, Path(args.config).resolve() if args.config else None,
+                 args.register, args.dry_run)
         else:
             sync(target, Path(args.source).resolve(), root, args.register)
     except (OSError, ValueError, KeyError) as exc:

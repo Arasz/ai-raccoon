@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Capture text-search output asynchronously or retrieve a recent result as JSON."""
+"""Capture text-search output asynchronously or retrieve a recent result as JSON.
+
+The capture worker and the retrieval share one scope: the repository the worker
+searched. A capture made in a subdirectory is retrievable from the repository root, a
+capture in another repository stays invisible, and the search tool never reads the
+worker's stdin.
+"""
 from __future__ import annotations
 
 import argparse
@@ -25,9 +31,31 @@ def digest(pattern: str) -> str:
     return hashlib.sha256(pattern.encode("utf-8")).hexdigest()
 
 
-def _scope_hash(cwd: Optional[str] = None) -> str:
-    """Scope a retrieval to the current checkout/worktree."""
+def _repo_root(cwd: str) -> str:
+    """Return the repository root that owns *cwd*, or *cwd* itself when it owns none."""
+    path = os.path.realpath(cwd)
+    current = path
+    while True:
+        if os.path.exists(os.path.join(current, ".git")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return path
+        current = parent
+
+
+def _cwd_scope_hash(cwd: Optional[str] = None) -> str:
+    """Scope a retrieval to one working directory (the pre-0.208 key layout)."""
     return hashlib.sha256(os.path.realpath(cwd or os.getcwd()).encode("utf-8")).hexdigest()
+
+
+def _scope_hash(cwd: Optional[str] = None) -> str:
+    """Scope a capture or a retrieval to the repository that owns the working directory.
+
+    One repository is one scope: a capture made in a subdirectory is retrievable from
+    the repository root, and a capture in another repository stays invisible.
+    """
+    return hashlib.sha256(_repo_root(cwd or os.getcwd()).encode("utf-8")).hexdigest()
 
 
 def _storage_key(scope: str, pattern_hash: str) -> str:
@@ -54,23 +82,29 @@ def _read_bounded(stream: Any) -> tuple[bytes, bool]:
 
 
 def capture(capture_key: str, command: list[str]) -> None:
-    """Run one executable directly and persist bounded output for no more than 120 seconds."""
+    """Run one executable directly and persist bounded output for no more than 120 seconds.
+
+    *capture_key* names the patterns to store; the legacy "<scope>:<hashes>" key is
+    accepted and its scope ignored, because the worker keys the capture by the
+    repository it searched.
+    """
     if not command or any(not isinstance(part, str) for part in command):
         return
     program = command[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
     if program not in ("grep", "egrep", "fgrep", "rg", "rg.exe"):
         return
-    scope, separator, encoded_hashes = capture_key.partition(":")
-    if not separator or len(scope) != 64 or any(c not in "0123456789abcdef" for c in scope):
-        return
+    encoded_hashes = capture_key.partition(":")[2] if ":" in capture_key else capture_key
     hashes = list(dict.fromkeys(encoded_hashes.split(",")))
     if not hashes or any(len(key) != 64 or any(c not in "0123456789abcdef" for c in key)
                          for key in hashes):
         return
+    # The key the caller passes names the pattern; the scope is the repository this
+    # worker searched, so a capture and its retrieval always land on the same key.
+    scope = _scope_hash()
     now = time.time()
     record: Dict[str, Any] = {
         "status": "pending", "created_at": now, "expires_at": now + TTL_SECONDS,
-        "stdout": "", "stderr": "", "returncode": None,
+        "stdout": "", "stderr": "", "returncode": None, "cwd": os.getcwd(),
     }
     store = _store()
     try:
@@ -83,10 +117,10 @@ def capture(capture_key: str, command: list[str]) -> None:
             key = _storage_key(scope, key_hash)
 
             def claim(existing):
-                if not isinstance(existing, dict) or float(existing.get("expires_at", 0)) <= now:
-                    claimed_keys.append(key)
-                    return record
-                return existing
+                if isinstance(existing, dict) and float(existing.get("created_at", 0)) > now:
+                    return existing  # a newer capture owns this key
+                claimed_keys.append(key)
+                return record
 
             store.kv_update("hook_state", key, claim, None)
         if not claimed_keys:
@@ -99,7 +133,7 @@ def capture(capture_key: str, command: list[str]) -> None:
             options["start_new_session"] = True
         elif hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
             options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-        process = subprocess.Popen(command, shell=False,
+        process = subprocess.Popen(command, shell=False, stdin=subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, **options)
         out_result: list[tuple[bytes, bool]] = []
         err_result: list[tuple[bytes, bool]] = []
@@ -135,7 +169,12 @@ def capture(capture_key: str, command: list[str]) -> None:
     store = _store()
     try:
         for key in claimed_keys:
-            store.kv_set("hook_state", key, record)
+            def finish(existing, key=key):
+                if isinstance(existing, dict) and float(existing.get("created_at", 0)) > record["created_at"]:
+                    return existing  # a newer capture owns this key
+                return record
+
+            store.kv_update("hook_state", key, finish, None)
     finally:
         store.close()
 
@@ -151,13 +190,20 @@ def get_result(pattern: Optional[str] = None,
     try:
         store = _store()
         try:
-            record = store.kv_get("hook_state", _storage_key(_scope_hash(), key_hash))
-            if not isinstance(record, dict):
-                return {"status": "pending", "hash": key_hash}
-            if float(record.get("expires_at", 0)) <= time.time():
-                store.kv_delete("hook_state", _storage_key(_scope_hash(), key_hash))
+            expired = False
+            for key in (_storage_key(_scope_hash(), key_hash),
+                        _storage_key(_cwd_scope_hash(), key_hash)):
+                record = store.kv_get("hook_state", key)
+                if not isinstance(record, dict):
+                    continue
+                if float(record.get("expires_at", 0)) <= time.time():
+                    store.kv_delete("hook_state", key)
+                    expired = True
+                    continue
+                return {"hash": key_hash, **record}
+            if expired:
                 return {"status": "expired", "hash": key_hash}
-            return {"hash": key_hash, **record}
+            return {"status": "pending", "hash": key_hash}
         finally:
             store.close()
     except Exception as error:  # pylint: disable=broad-exception-caught  # retrieval always emits JSON

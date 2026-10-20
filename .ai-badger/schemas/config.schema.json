@@ -242,6 +242,14 @@
             "minLength": 1
           },
           "description": "Server names whose tools this project refuses, by name, whatever route the server arrived by \u2014 catalog declaration, plugin, user-global config or CLI. A declined server is not declared at all, and comes back out of .mcp.json and .github/mcp.json if an earlier run wrote it; on Claude it also lands as disabledMcpjsonServers plus a permissions.deny rule, and deny beats allow. This is the decline route config.externalTools' silence used to carry (issue #186)."
+        },
+        "scope": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": ["project", "user"],
+            "description": "Where this project keeps the server's launch config."
+          },
+          "description": "This project's own scope decision per server name, overriding the catalog's default scope in either direction (ADR-0044). \"user\" means the server is registered by the operator in a user-global config, once: ai-badger writes it into no project file (.mcp.json, .github/mcp.json, .pi/mcp.json) and removes an entry an earlier run wrote, and it proposes the registration instead. \"project\" means ai-badger writes the launch config into this project's files as usual. A declined server is refused outright and is in neither scope. A name that matches no declared server is reported, never silently ignored."
         }
       }
     },

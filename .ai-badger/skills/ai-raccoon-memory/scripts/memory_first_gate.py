@@ -367,11 +367,6 @@ def _glob_expands(arg: str, cwd: str) -> bool:
     return bool(glob.glob(pattern))
 
 
-def _capture_scope(cwd: str = "") -> str:
-    """Namespace raw results by the real working directory to isolate repositories."""
-    return hashlib.sha256(os.path.realpath(cwd or os.getcwd()).encode("utf-8")).hexdigest()
-
-
 def _capture_argv(parsed: Any, program: str, args: Tuple[str, ...],
                   command_count: int, cwd: str) -> Optional[List[str]]:
     """Return argv only for one literal standalone grep/rg invocation."""
@@ -422,7 +417,7 @@ def capture_greps(tool_name: Any, tool_input: Any, cwd: str = "",
         try:
             subprocess.Popen(
                 [sys.executable, str(RAW_TEXT_SEARCH_SCRIPT), "--capture",
-                 _capture_scope(cwd) + ":" + ",".join(keys), json.dumps(argv)],
+                 ",".join(keys), json.dumps(argv)],
                 cwd=cwd or os.getcwd(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
             launched.extend(zip(patterns, keys))

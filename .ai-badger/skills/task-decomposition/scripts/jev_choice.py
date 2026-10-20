@@ -92,6 +92,7 @@ TIER_CRITERIA = {
     "low": "Mechanical, single-file or rename-level change",
     "medium": "Multi-file change needing judgement",
     "high": "Design, debugging, architecture",
+    "top": "Frontier judgement: novel architecture, or a high-stakes irreversible call",
 }
 WAVE_INSTRUCTIONS = ("Both steps are ready (their dependencies are done). May they run as "
                      "concurrent lanes in this wave, each in its own worktree?")
@@ -527,14 +528,19 @@ class TierProposal(NamedTuple):
 
 
 def propose_tier(step: Mapping, answer: Optional[ChoiceAnswer]) -> Optional[TierProposal]:
-    """`high` at/above the gate, unless `level`/`model` is declared; never a demotion."""
-    if not isinstance(answer, ChoiceAnswer) or answer.choice != "high":
+    """`high` or `top` at/above the gate, unless `level`/`model` is declared; never a demotion.
+
+    The four model groups (ADR-0043) are the answer set, and the two upper ones are
+    upgrades. `low` and `medium` are still proposals of nothing: the advice never demotes
+    a step's group.
+    """
+    if not isinstance(answer, ChoiceAnswer) or answer.choice not in ("high", "top"):
         return None
     if not isinstance(step, Mapping) or step.get("level") or step.get("model"):
         return None
     if not answer.confidence >= TIER_UPGRADE_GATE:  # negated form so NaN fails closed
         return None
-    return TierProposal("high", answer.confidence)
+    return TierProposal(answer.choice, answer.confidence)
 
 
 def pair_decision(answer: Optional[ChoiceAnswer]) -> str:

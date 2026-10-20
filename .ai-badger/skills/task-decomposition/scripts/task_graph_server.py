@@ -174,7 +174,7 @@ class StepDraft(ToolInput):
     goal: str = Field(min_length=1)
     instructions: str = Field(min_length=1)
     effort: Literal["low", "medium", "high"]
-    level: Optional[Literal["low", "medium", "high"]] = None
+    level: Optional[Literal["low", "medium", "high", "top"]] = None
     model: Optional[str] = None
     persona: Optional[str] = None
     depends_on: List[str] = Field(default_factory=list)
