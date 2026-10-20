@@ -172,9 +172,32 @@ public class CliCommandTreeTests
             kindDescription.ShouldContain(kind);
         }
 
-        // Each kind says what it prints, not only which kind it is.
+        // Each kind says what it prints, not only which kind it is, and the pairing is what
+        // makes the help usable: a reader must be able to see which tool each kind names.
         kindDescription.ShouldContain("endpoint");
         kindDescription.ShouldContain("process id");
+        foreach (var pair in new[]
+                 {
+                     "counters (a dotnet-counters",
+                     "trace (a dotnet-trace",
+                     "otlp (the OTLP endpoint",
+                     "pid (the server's process id"
+                 })
+        {
+            kindDescription.ShouldContain(pair);
+        }
+
+        // The parent's summary is shorter, but it must pair each kind with the same yield.
+        foreach (var pair in new[]
+                 {
+                     "counters (dotnet-counters)",
+                     "trace (dotnet-trace)",
+                     "otlp (the OTLP endpoint)",
+                     "pid (the process id)"
+                 })
+        {
+            description.ShouldContain(pair);
+        }
     }
 
     [Fact]

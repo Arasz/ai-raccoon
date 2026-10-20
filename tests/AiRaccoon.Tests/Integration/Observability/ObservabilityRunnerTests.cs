@@ -1,5 +1,6 @@
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
@@ -257,6 +258,40 @@ public sealed class ObservabilityRunnerTests : IDisposable
         }
     }
 
+    /// <summary>
+    ///     The verb answers without touching the bank it was pointed at: the data root holds no
+    ///     bank, and the run leaves none behind. This is the promise the reference documents
+    ///     ("the verb never opens the bank, resolves the encryption key, or loads the embedding
+    ///     engine") and nothing else pinned it.
+    /// </summary>
+    [RetryFact]
+    public async Task LiveServer_AnswersWithoutOpeningTheBank()
+    {
+        await using var env = await AcquireCleanEnvAsync();
+        using var lease = LoopbackPort.Reserve();
+        var port = lease.Port;
+        var host = McpServerSetup.CreateServerHost(Config(port));
+        lease.ReleaseForBind();
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            var ownRoot = TestData.CreateTempRoot("ai-raccoon-observability-own-bank");
+            var bank = SqliteConnectionFactory.BankPathFor(
+                new InfrastructureOptions { DataRoot = ownRoot, Scope = InstallScope.User });
+            File.Exists(bank).ShouldBeFalse();
+
+            var run = await RunObservabilityAsync("counters", port, ownRoot);
+
+            run.Exit.ShouldBe(ErrorCode.Ok.Success);
+            run.Stdout.ShouldBe($"{MonitoringCommandRenderer.RenderCounters(Environment.ProcessId)}{Environment.NewLine}");
+            File.Exists(bank).ShouldBeFalse("the verb must not open, create or migrate the bank");
+        }
+        finally
+        {
+            await host.StopAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
     private ServerConfig Config(int port) => new(port, McpTransport.Http, new InfrastructureOptions { DataRoot = _dataRoot, Scope = InstallScope.User }, TimeSpan.Zero);
 
     /// <summary>Ctrl-C is not "nothing listening": it propagates, and the dispatcher exits 130.</summary>
@@ -272,9 +307,12 @@ public sealed class ObservabilityRunnerTests : IDisposable
             .RunAsync(parsed!, new StandardStreams(TextReader.Null, TextWriter.Null, TextWriter.Null), cts.Token));
     }
 
-    private static async Task<ObservabilityRun> RunObservabilityAsync(string kind, int port)
+    private static async Task<ObservabilityRun> RunObservabilityAsync(string kind, int port, string? dataRoot = null)
     {
-        CliArgs.TryParse(["serve", "observability", kind, "--port", port.ToString()], out var parsed);
+        var argv = dataRoot is null
+            ? new[] { "serve", "observability", kind, "--port", port.ToString() }
+            : new[] { "--data-root", dataRoot, "serve", "observability", kind, "--port", port.ToString() };
+        CliArgs.TryParse(argv, out var parsed);
         parsed!.Errors.ShouldBeEmpty();
         var stdout = new StringWriter();
         var stderr = new StringWriter();

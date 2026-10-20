@@ -151,7 +151,7 @@ retired id exits 18 and writes nothing. An alias writes its winner's settings, a
 
 | Kind | What it prints |
 |---|---|
-| `counters` | `dotnet-counters monitor -p <pid> --counters AiRaccoon.MemoryTools,AiRaccoon.PromotionQueue,AiRaccoon.Background,System.Runtime,System.Net.Http` (every meter the server registers) |
+| `counters` | `dotnet-counters monitor -p <pid> --counters AiRaccoon.MemoryTools,AiRaccoon.PromotionQueue,AiRaccoon.Background,System.Runtime,System.Net.Http` (every meter in the server's metric registry) |
 | `trace` | `dotnet-trace collect -p <pid> --providers AiRaccoon.MemoryTools,AiRaccoon.Background,Microsoft.AspNetCore,System.Net.Http` (every activity source the server registers) |
 | `otlp` | The OTLP endpoint (`stdout`); the protocol (`grpc`/`http/protobuf`) goes to `stderr` |
 | `pid` | The bare process id (`<pid>`), for composing with other tools |
