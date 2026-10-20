@@ -65,6 +65,12 @@ ai-raccoon serve observability otlp
 | `trace` | Spans for every tool call with `tool`, `project_id`, `result`, and `error_type` |
 | `otlp` | Full batch export of metrics and trace spans to an OpenTelemetry collector |
 
+`dotnet-counters` reports only the measurements that happen while its session
+is attached, so the tool-call rows appear once a call runs. Against an idle
+server the table stays empty: that is the window, not a missing counter. A
+meter with no traffic at all (the promotion queue on a quiet bank) simply
+shows no rows, and no error.
+
 ---
 
 ## Configure OTLP export

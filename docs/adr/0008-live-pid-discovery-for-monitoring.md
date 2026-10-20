@@ -145,3 +145,21 @@ channel, which is a new NuGet dependency to discover something AiRaccoon
 already knows how to reach directly: the one process listening on the port
 the caller is asking about. Pulling in a diagnostics-tooling library to solve
 a problem an HTTP round-trip already solves is a cost with no buyer.
+
+## Amendment (2026-10-20) — the illustrative command names every meter
+
+The two command lines in the Context section illustrate the placeholder
+problem; they are not part of the decision. Release 1.60.2 changed what
+`serve observability counters` prints: it now carries `--counters` with every
+meter the server registers (`AiRaccoon.MemoryTools`, `AiRaccoon.PromotionQueue`,
+`AiRaccoon.Background`, `System.Runtime`, `System.Net.Http`), derived from
+`OtlpNames.Meters`. An unspecified `--counters` makes dotnet-counters default
+to `System.Runtime`, so the pasted command showed none of the server's own
+instruments. The trace line was refreshed in the same pass, to the providers
+the tool already printed.
+
+The decision is unchanged: the live `/observability` endpoint still answers
+with the owning process's id, no PID file is still written, and the verb
+still dials the server rather than remembering anything. The measured
+evidence and the rendered command are in
+[docs/work/2026-10-19-observability-counters-cli-coverage.md](../work/2026-10-19-observability-counters-cli-coverage.md).
