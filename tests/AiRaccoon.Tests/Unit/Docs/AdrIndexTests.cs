@@ -91,6 +91,151 @@ public class AdrIndexTests
             $"the index records {string.Join(", ", lying.Select(n => n.ToString("D4")))} as superseded or reversed, but the ADR's own Status line still reads Accepted — a reader who opens the file directly sees a live decision. Follow ADR-0002's pattern and say so in the Status line");
     }
 
+    /// <summary>
+    ///     An ADR is frozen once accepted, so the index is the only place an amendment can be
+    ///     published — and the index is a hand-maintained table, the shape that drifts. The
+    ///     `Amended` column is therefore *derived*: it lists the dates of the record's own
+    ///     amendment markers, and it must carry every one of them and no other. The two-sided
+    ///     check is what makes the column trustworthy: an amendment cannot be invisible in the
+    ///     index, and the index cannot claim an amendment a record never had.
+    ///     <para>
+    ///         A marker is a line-anchored shape, not prose: an `## Amendment …` heading, or a
+    ///         line that opens with `Amended &lt;date&gt;`. Those are the two forms this repo
+    ///         writes, so the column is mechanically derivable. A supersession or a reversal is
+    ///         recorded in the summary cell and mirrored in the record's Status line, and
+    ///         <see cref="SupersededAdrs_DoNotStillCallThemselvesAccepted" /> is what guards
+    ///         that pair.
+    ///     </para>
+    /// </summary>
+    [Fact]
+    public void AmendedColumn_IsDerivedFromTheRecordItSummarises()
+    {
+        var (header, rows) = ReadRows();
+
+        header.ShouldContain("Amended",
+            "the ADR index needs an `Amended` column: a frozen ADR can only be amended in the index");
+
+        var wrongWidth = rows.Where(row => row.Cells.Count != header.Count).ToList();
+        wrongWidth.ShouldBeEmpty(
+            $"ADR index rows must match the header's {header.Count} columns; wrong: {string.Join(", ", wrongWidth.Select(r => r.Number.ToString("D4")))}");
+
+        var directory = Path.GetDirectoryName(TestData.RepoFile("docs/adr/README.md"))!;
+        var column = header.IndexOf("Amended");
+        var problems = new List<string>();
+
+        foreach (var row in rows)
+        {
+            var file = row.Cells[0].Split('(').Last().TrimEnd(')');
+            var path = Path.Combine(directory, file);
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            var dates = AmendmentDates(File.ReadAllText(path));
+            var cell = row.Cells[column];
+
+            if (dates.Count == 0)
+            {
+                if (cell != "—")
+                {
+                    problems.Add($"{row.Number:D4}: the cell says '{cell}' but the record shows no amendment");
+                }
+
+                continue;
+            }
+
+            if (cell == "—")
+            {
+                problems.Add($"{row.Number:D4}: the record shows an amendment ({string.Join(", ", dates)}) and the cell is empty");
+                continue;
+            }
+
+            var missing = dates.Where(date => !cell.Contains(date, StringComparison.Ordinal)).ToList();
+            if (missing.Count > 0)
+            {
+                problems.Add($"{row.Number:D4}: the cell omits {string.Join(", ", missing)}");
+            }
+
+            var invented = cell.Split(',').Select(part => part.Trim())
+                .Where(part => part.Length > 0 && part != "—")
+                .Where(date => !dates.Contains(date))
+                .ToList();
+            if (invented.Count > 0)
+            {
+                problems.Add($"{row.Number:D4}: the cell names {string.Join(", ", invented)}, which the record does not show");
+            }
+        }
+
+        problems.ShouldBeEmpty($"the `Amended` column drifted from the records:\n  {string.Join("\n  ", problems)}");
+    }
+
+    /// <summary>An `## Amendment …` heading, or a line that opens with `Amended &lt;date&gt;`.</summary>
+    private static readonly Regex AmendmentHeading = new(@"^#{2,}\s*Amendment\b", RegexOptions.Multiline);
+
+    private static readonly Regex AmendmentLine = new(@"^\s*Amended (\d{4}-\d{2}-\d{2})\b", RegexOptions.Multiline);
+
+    private static readonly Regex DateToken = new(@"\b\d{4}-\d{2}-\d{2}\b");
+
+    /// <summary>The dates the record's own amendment markers carry, in the order they appear.</summary>
+    private static List<string> AmendmentDates(string text)
+    {
+        var dates = new List<string>();
+
+        foreach (Match heading in AmendmentHeading.Matches(text))
+        {
+            foreach (Match date in DateToken.Matches(heading.Value))
+            {
+                if (!dates.Contains(date.Value))
+                {
+                    dates.Add(date.Value);
+                }
+            }
+        }
+
+        foreach (Match line in AmendmentLine.Matches(text))
+        {
+            if (!dates.Contains(line.Groups[1].Value))
+            {
+                dates.Add(line.Groups[1].Value);
+            }
+        }
+
+        return dates;
+    }
+
+    private sealed record IndexRow(int Number, List<string> Cells);
+
+    private static (List<string> Header, List<IndexRow> Rows) ReadRows()
+    {
+        var header = new List<string>();
+        var rows = new List<IndexRow>();
+
+        foreach (var line in File.ReadAllLines(TestData.RepoFile("docs/adr/README.md")))
+        {
+            if (line.StartsWith("| ADR ", StringComparison.Ordinal))
+            {
+                header = Cells(line);
+                continue;
+            }
+
+            if (!line.StartsWith("| [", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var cells = Cells(line);
+            var link = Regex.Match(cells[0], @"\((?<file>\d{4}-[^)]*\.md)\)");
+            rows.Add(new IndexRow(int.Parse(link.Groups["file"].Value[..4]), cells));
+        }
+
+        return (header, rows);
+    }
+
+    /// <summary>Splits a table row on unescaped pipes only (`\|` is content, not a column break).</summary>
+    private static List<string> Cells(string line) =>
+        [.. Regex.Split(line.Trim().Trim('|'), @"(?<!\\)\|").Select(cell => cell.Trim())];
+
     /// <summary>ADRs whose own index row says they were superseded or reversed *by* something else.</summary>
     private static HashSet<int> SupersededByIndex() =>
     [
