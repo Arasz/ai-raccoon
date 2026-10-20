@@ -43,6 +43,20 @@ on the next repair run and are reachable again.
 `idx_entries_workspace`.
 **Neutral:** An open workspace blocks the fold exactly as before, and workspace rows still never
 move across projects.
+**Neutral:** The plan that runs is the server's. `ProjectIdsRepairJob` derives it from a census it
+takes itself, in the same process, and applies that plan; the CLI derives a local plan from the
+census JSON only to print its report and decide whether a request is worth committing. A CLI and
+a server of different versions can therefore print different verdicts for the same bank, but the
+plan that moves rows is always the one the running server derived from its own census, so an old
+server still pins what it believes is live scratch.
+
+## Verification
+
+The definition is load-bearing, not a comment: the census test seeds `Active`, `open`, `active`,
+an unknown status, `CLOSED`, `Closed` and `Discarded`, and asserts that four of the seven are
+open. Narrowing the filter to `status = 'Active'` — the alternative this ADR rejected — turns that
+test red, as does inverting it. The pre-fix code fails the closed-workspace fold tests with
+"plan.Folds is empty", so the change is what makes those rows move.
 
 ## Alternatives considered
 

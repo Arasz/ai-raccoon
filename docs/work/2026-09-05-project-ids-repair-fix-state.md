@@ -118,3 +118,35 @@ Decision per operator: option 1 only. `ToolTelemetry.RecordAsync` gained an opti
 ### F18 — Shipped as PR #624 with VERSION 1.41.2 [MEASURED]
 
 Branch `fix/tool-telemetry-bank-fold` (fix commit + `chore(release): bump to 1.41.2` via `scripts/version-bump.py patch`), pushed, PR #624 opened against `main` for owner merge. Post-bump verification: version gate `FullyQualifiedName~VersionContractTests` with `--no-build` — 7/7 including the `dotnet pack` proof (note: FQN filters resolve to zero without `--no-build` in this setup; with it they work). Fast suite re-verified green post-bump. One unnamed transient failure on the first post-bump run (name not captured — grep targeted the follow-up green run); green 3x consecutively since, 1 failure in ~15k executions — reported as-is, not chased. No README What's-new entry (internal fix, per whats-new-update).
+
+## Follow-up findings, round 3 (2026-10-20)
+
+### F19 — F8's third pin was a count, not a block: the census had no open/closed notion [MEASURED]
+
+F8 read the third pin as "14 open workspaces whose live scratch never moves across projects".
+The workspaces were all closed (11 `Closed`, 3 `Discarded`): the census counted workspace ROWS
+(`SELECT project_id, COUNT(*) FROM workspaces GROUP BY project_id`, no status filter) and
+`HasOpenWorkspaces` tested `row.Workspaces > 0`, so a dead workspace looked like live scratch and
+the id could never fold. Its 25 project-scope and 65 custom-scope rows stayed under an alias
+spelling the read path folds away, so `memory_get` returned unknown-hash under either spelling.
+ADR-0135 fixes it: a workspace is open unless its status is terminal.
+
+**Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/ProjectIdCensus.cs` (the unfiltered count) and
+`src/AiRaccoon.Core/Projects/ProjectIdsFoldPlan.cs` (`HasOpenWorkspaces`); the live dry run before
+the fix: "pinned-open-workspaces: 'job-search-ai-assistant' — owns 14 open workspace(s) with 0
+scratch row(s)"; `sqlite3 ~/.ai-raccoon/memory.db "SELECT status, COUNT(*) FROM workspaces GROUP BY
+project_id, status"` — 11 Closed, 3 Discarded, 0 Active for that id.
+
+### F20 — The repair then moved the stranded rows, and the pin became what it should have been [MEASURED]
+
+With the fixed census, the dry run planned the fold and `--apply` moved 90 rows (25 project-scope,
+65 custom-scope) plus 83 promotion-queue rows from `job-search-ai-assistant` to `jsaa`; census
+totals were flat (25049 → 25049), a re-key and not a delete. The 8 shared-scope rows stayed under
+the alias id by design (shared rows never fold; they are reachable through the shared tier), and
+the id now pins `pinned-shared-only` instead of `pinned-open-workspaces`. `memory_get(projectId:
+jsaa, hash: 292a825e…)` returns the formerly stranded row. PR #889, VERSION 1.60.1.
+
+**Evidence:** the repair receipt ("pass 1/10 — reaped: moved 90 row(s); census totals 25049 →
+25049 entries") and the closing verdict ("pinned-only: 0 fold, 0 drop, 0 retire, 0 unresolved, 3
+pinned"); `sqlite3 ~/.ai-raccoon/memory.db "SELECT project_id, scope, COUNT(*) FROM entries WHERE
+project_id IN ('job-search-ai-assistant','jsaa') GROUP BY 1,2"`.

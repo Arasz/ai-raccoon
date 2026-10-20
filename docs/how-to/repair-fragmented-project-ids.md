@@ -106,8 +106,16 @@ scopes ([ADR-0100](../adr/0100-repair-folds-all-committed-scopes.md)). The
 `shared` tier is untouched, and workspace rows are per-agent scratch space that
 this repair never reaches at all.
 
+An open workspace holds live scratch, so it holds an id back: the id is pinned
+`pinned-open-workspaces` until its workspaces close. A workspace that is
+`Closed` or `Discarded` holds nothing live, so it no longer blocks the fold
+([ADR-0135](../adr/0135-a-workspace-is-open-until-it-is-closed-or-discarded.md)).
+The pin reason names the open workspaces and the live scratch rows, so a
+`pinned-open-workspaces` line always counts workspaces that are still open.
+
 ## See also
 
 - [ADR-0099: the public binary ships an empty project-id alias map](../adr/0099-empty-default-alias-map.md)
 - [ADR-0100: the project-ids repair folds every committed scope](../adr/0100-repair-folds-all-committed-scopes.md)
+- [ADR-0135: a workspace is open until it is closed or discarded](../adr/0135-a-workspace-is-open-until-it-is-closed-or-discarded.md)
 - [`repair` command reference](../reference/cli-reference.md)

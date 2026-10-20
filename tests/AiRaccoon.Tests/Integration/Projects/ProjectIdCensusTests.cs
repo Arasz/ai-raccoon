@@ -330,6 +330,35 @@ public sealed class ProjectIdCensusTests
         loser.OpenWorkspaceEntries.ShouldBe(0);
     }
 
+    /// <summary>
+    ///     Openness is the absence of a terminal status, not the presence of 'Active': the
+    ///     production writer stores 'Active'/'Closed'/'Discarded', older rows and test seeds carry
+    ///     other spellings, and a status the census cannot read must not be assumed terminal.
+    ///     Ledger — open-status-definition : --filter Collect_CountsEveryNonTerminalStatusAsOpen :
+    ///     Active + open + active + unknown against CLOSED + Closed + Discarded.
+    /// </summary>
+    [RetryFact]
+    public async Task Collect_CountsEveryNonTerminalStatusAsOpen()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await OpenAsync(ct);
+        await MemorySchema.EnsureAsync(connection, ct);
+        await WorkspaceAsync(connection, "ws-active", "jsaa", "Active", ct);
+        await WorkspaceAsync(connection, "ws-open", "jsaa", "open", ct);
+        await WorkspaceAsync(connection, "ws-lower-active", "jsaa", "active", ct);
+        await WorkspaceAsync(connection, "ws-unknown", "jsaa", "weird", ct);
+        await WorkspaceAsync(connection, "ws-closed-upper", "jsaa", "CLOSED", ct);
+        await WorkspaceAsync(connection, "ws-closed", "jsaa", "Closed", ct);
+        await WorkspaceAsync(connection, "ws-discarded", "jsaa", "Discarded", ct);
+
+        var report = await ProjectIdCensus.CollectAsync(connection, ct);
+
+        var jsaa = report.Row("jsaa");
+        jsaa.Workspaces.ShouldBe(7, "every workspace row is counted whatever its status");
+        jsaa.OpenWorkspaces.ShouldBe(4,
+            "every status but the terminal ones is open — 'Active' is not the only open spelling, an unknown status is open, and the terminal names are matched case-insensitively");
+    }
+
     private static async Task<SqliteConnection> OpenSeededAsync(CancellationToken ct)
     {
         var connection = await OpenAsync(ct);
