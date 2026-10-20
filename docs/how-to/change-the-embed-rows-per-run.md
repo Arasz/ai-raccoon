@@ -70,7 +70,13 @@ The same message comes back for `63`, for `4097`, and for a value that is not a 
 The rest of the settings channel's exit codes (the server being unreachable, the token being
 refused, the write not landing) are listed once, under
 [Who writes to the bank](configure-ai-raccoon-server.md#who-writes-to-the-bank), and they apply
-here unchanged.
+here unchanged. The [CLI reference](../reference/cli-reference.md#exit-codes) carries every code
+the tool can exit with, in one table.
+
+The numbers are the categorised ones from [ADR-0107](../adr/0107-categorized-two-digit-exit-codes.md):
+`ErrorCode.Bank.NoBank` is 31 today. Older plans and review records quote the flat `ExitCode`
+class that ADR-0107 replaced, where the same conditions had other numbers (`NoBank` was 22), so
+a number in an old record is not necessarily the number you get now.
 
 ## Read the value back
 
