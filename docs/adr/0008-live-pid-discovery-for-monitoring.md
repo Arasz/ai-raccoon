@@ -12,8 +12,8 @@ server's OS process id, and the README has always made the user find and
 substitute that id by hand:
 
 ```bash
-dotnet-counters monitor -p <server-pid> --counters AiRaccoon.MemoryTools
-dotnet-trace collect -p <server-pid> --providers AiRaccoon.MemoryTools
+dotnet-counters monitor -p <server-pid> --counters AiRaccoon.MemoryTools,AiRaccoon.PromotionQueue,AiRaccoon.Background,System.Runtime,System.Net.Http
+dotnet-trace collect -p <server-pid> --providers AiRaccoon.MemoryTools,AiRaccoon.Background,Microsoft.AspNetCore,System.Net.Http
 ```
 
 Task `add-pid-to-serve` adds `ai-raccoon serve observability

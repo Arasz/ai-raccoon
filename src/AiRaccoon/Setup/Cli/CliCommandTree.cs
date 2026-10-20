@@ -674,7 +674,11 @@ internal static class CliCommandTree
 
     private static Command ObservabilityCommand()
     {
-        var kind = new Argument<string>("kind") { HelpName = "counters|trace|otlp|pid" };
+        var kind = new Argument<string>("kind")
+        {
+            HelpName = "counters|trace|otlp|pid",
+            Description = "What to print: counters (a dotnet-counters command naming every exported counter), trace (a dotnet-trace command naming every activity source), otlp (the OTLP endpoint the server exports to), pid (the server's process id)"
+        };
         kind.Validators.Add(result =>
         {
             var value = result.GetValueOrDefault<string>();
@@ -684,7 +688,8 @@ internal static class CliCommandTree
             }
         });
 
-        return new Command("observability", "Prints a ready-to-run monitoring command for the live server, with its PID filled in")
+        return new Command("observability",
+            "Prints a ready-to-run monitoring command for the live server, with its PID filled in: counters (dotnet-counters), trace (dotnet-trace), otlp (the OTLP endpoint), pid (the process id)")
         {
             kind,
             ObservabilityPortOption

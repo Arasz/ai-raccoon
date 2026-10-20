@@ -147,6 +147,17 @@ retired id exits 18 and writes nothing. An alias writes its winner's settings, a
 | `--restart` | Stops the ai-raccoon server already on the port and serves in its place |
 | `serve observability {counters\|trace\|otlp\|pid} [--port <n>]` | Prints a ready-to-run monitoring command for the live server |
 
+`serve observability` has four kinds. The CLI asks the running server's `/observability` endpoint for its PID (not a remembered file), so the value stays live.
+
+| Kind | What it prints |
+|---|---|
+| `counters` | `dotnet-counters monitor -p <pid> --counters AiRaccoon.MemoryTools,AiRaccoon.PromotionQueue,AiRaccoon.Background,System.Runtime,System.Net.Http` (every meter the server registers) |
+| `trace` | `dotnet-trace collect -p <pid> --providers AiRaccoon.MemoryTools,AiRaccoon.Background,Microsoft.AspNetCore,System.Net.Http` (every activity source the server registers) |
+| `otlp` | The OTLP endpoint (`stdout`); the protocol (`grpc`/`http/protobuf`) goes to `stderr` |
+| `pid` | The bare process id (`<pid>`), for composing with other tools |
+
+Exit codes: `0` success; `61` nothing listening (`Reach.NothingListening`); `56` the server predates `/observability`; `41` a foreign process holds the port; `58` `otlp` asked but OTLP is off. `--port 0` is a parse error — unlike `serve --port 0` there is no "any free port" to dial. On failure nothing is written to `stdout`, so command substitution yields an empty string rather than an error message. The command opens no bank and resolves no encryption key.
+
 ## Exit codes
 
 Two digits, `{category}{case}`: the tens digit is one of nine categories, the ones digit
