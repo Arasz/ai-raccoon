@@ -314,7 +314,7 @@
             "observed-result": "Round trip correct; all three invalid inputs rejected with the exact positive/at-most-4096 message and confirmed no write occurred (re-read shows the value unchanged).",
             "status": "pass",
             "accepted": true,
-            "acceptance-reason": "Note: the exit code for a rejected value is 15 (this build's ExitCode.InvalidArgument), not the literal '1' named in the item's phrasing -- the item's own template sibling ('cli-exit-codes-nobank-and-settings-error') documents 15 as the usage-error code family, so this is consistent internal behavior, not a discrepancy worth flagging as a defect; recorded here for precision."
+            "acceptance-reason": "Note: the exit code for a rejected value is 15 (this build's ExitCode.InvalidArgument), not the literal '1' named in the item's phrasing -- the item's own template sibling ('cli-exit-codes-nobank-and-settings-error') documents 15 as the usage-error code family, so this is consistent internal behavior, not a discrepancy worth flagging as a defect; recorded here for precision. Later note (1.61.0): the message changed -- the range is now 64..4096, so the refusal reads 'ai-raccoon: embed rows per run must be an integer between 64 and 4096'; the message recorded here is historical."
         },
         {
             "item": "embed-drain-proof-mixed-corpus-with-code-model-active",

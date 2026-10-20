@@ -242,7 +242,7 @@
    "observed-result": "Every setter stores valid values, rejects abc/0/-1 with its own noun/unit message and exit code 10, writes nothing on reject. Side note: embed-rows-per-run is not an IntSetting (own parser in MaintenanceCommands.cs) but behaves the same. Valid-value runs also emit an info line on stderr (CliSettingsBackend[687], 'the backend on port N keeps running after this command exits') because the CLI auto-attached to my server.",
    "status": "pass",
    "accepted": null,
-   "acceptance-reason": "Exact stdout/stderr/exit/stored value captured for all 8 setters x 4 inputs with before/after table snapshots proving no write on reject.",
+   "acceptance-reason": "Exact stdout/stderr/exit/stored value captured for all 8 setters x 4 inputs with before/after table snapshots proving no write on reject. Later note (1.61.0): the message changed -- the range is now 64..4096, so the refusal reads 'ai-raccoon: embed rows per run must be an integer between 64 and 4096'; the message recorded here is historical.",
    "lane": "c-settings"
   },
   {

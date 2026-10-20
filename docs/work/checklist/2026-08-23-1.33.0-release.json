@@ -341,7 +341,7 @@
       "observed-result": "Round trip correct; all three invalid inputs rejected with the exact positive/at-most-4096 message and confirmed no write occurred (re-read shows the value unchanged). Matches the prior run's own result for this item exactly.",
       "status": "pass",
       "accepted": true,
-      "acceptance-reason": "ADR-0091; #517. Re-derived fresh against this 1.33.0 binary (BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun / MaxEmbedRowsPerRun confirmed in source first), not inherited from the prior run's evidence. Exit code is 15 (this build's ExitCode.InvalidArgument), not the literal '1' named in the item's phrasing -- internally consistent with the threads item's sibling exit code, not a discrepancy worth flagging as a defect.",
+      "acceptance-reason": "ADR-0091; #517. Re-derived fresh against this 1.33.0 binary (BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun / MaxEmbedRowsPerRun confirmed in source first), not inherited from the prior run's evidence. Exit code is 15 (this build's ExitCode.InvalidArgument), not the literal '1' named in the item's phrasing -- internally consistent with the threads item's sibling exit code, not a discrepancy worth flagging as a defect. Later note (1.61.0): the message changed -- the range is now 64..4096, so the refusal reads 'ai-raccoon: embed rows per run must be an integer between 64 and 4096'; the message recorded here is historical.",
       "anchor": "ADR-0091; #517"
     },
     {
