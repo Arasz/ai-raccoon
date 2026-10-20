@@ -57,7 +57,11 @@ public static class OtlpNames
     /// <summary>WP11: a pass's row count, recorded only when the pass has a natural one (e.g. an embed-drain pass) via IOperationScope.RecordRows.</summary>
     public const string BackgroundPassRows = "ai_raccoon.background.pass.rows";
 
-    /// <summary>Every meter the process registers for OTLP export.</summary>
+    /// <summary>
+    ///     Every meter the process registers: the OTLP exporter subscribes to this list, and the
+    ///     `serve observability counters` command renders it as its <c>--counters</c> value. Narrowing
+    ///     the export narrows the counters command with it, so the two move together deliberately.
+    /// </summary>
     public static readonly IReadOnlyList<string> Meters =
         [MemoryToolsScope, PromotionQueueScope, BackgroundScope, RuntimeScope, HttpScope];
 
