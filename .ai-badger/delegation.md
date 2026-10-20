@@ -1,6 +1,6 @@
 # Delegation map — AiRaccoon
 
-> Scaffolded by ai-badger 0.207.3. Regenerated on every scaffold; do not edit.
+> Scaffolded by ai-badger 0.209.0. Regenerated on every scaffold; do not edit.
 
 ## Stacks
 
@@ -74,7 +74,6 @@ prescriptive persona descriptions are appropriate.
 
 ## MCP servers reachable here
 
-- `ai-raccoon` — AiRaccoon is the project memory server
 - `code-review-graph` — This project has a knowledge graph
 - `playwright` — Browser automation over accessibility snapshots: browser_navigate, then browser_snapshot for element refs, then browser_click/browser_type on those refs
 - `semantica` — Semantica is the project knowledge graph

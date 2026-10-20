@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 import config_guard as cg
+import mcp_scope
 from scaffold_context import ScaffoldContext
 
 # Directories user-level package managers install executables into that a non-login
@@ -178,6 +179,8 @@ class McpTools:
         # The trust-gate note is per-collaborator state: once per scaffold run, however many
         # times the destination is rendered.
         self._pi_trust_noted = False
+        # The unknown-``config.mcp.scope``-name note, once per run for the same reason.
+        self._scope_overrides_noted = False
 
     # -- the mcp catalog ---------------------------------------------------------------
 
@@ -349,6 +352,30 @@ class McpTools:
         mcp = self.ctx.config.get("mcp") or {}
         return [name for name in (mcp.get("decline") or []) if name]
 
+    def scope_overrides(self) -> Dict[str, str]:
+        """The project's own scope decision per server name (``config.mcp.scope``).
+
+        The catalog's per-server ``scope`` is the framework's default; this block is the
+        project's decision about its own repository, and it wins in either direction
+        (ADR-0044). An absent block means the catalog decides.
+        """
+        return mcp_scope.scope_overrides(self.ctx.config)
+
+    def _note_unknown_scope_overrides(self, declared: Sequence[str]) -> None:
+        """Report a ``config.mcp.scope`` name that matches no declared server, once a run.
+
+        A typo must not read as a server that is simply not there.
+        """
+        if self._scope_overrides_noted:
+            return
+        self._scope_overrides_noted = True
+        unknown = sorted(set(self.scope_overrides()) - set(declared))
+        if unknown:
+            self.ctx.notes.append(
+                f"config.mcp.scope names {', '.join(unknown)}, which no declared MCP server "
+                f"matches — their scope is unchanged"
+            )
+
     def declared_servers(self) -> Dict[str, Dict[str, Any]]:
         """Every server whose launch config ai-badger writes, keyed by name.
 
@@ -359,10 +386,21 @@ class McpTools:
         the same run is a contradiction the generated files should not carry (#186).
         """
         self.note_retired_declaration_files()
-        declared = {srv["name"]: dict(srv) for srv in self.collect_catalog_mcp_servers()
+        catalog = self.collect_catalog_mcp_servers()
+        declared_names = [srv["name"] for srv in catalog if srv.get("declare")]
+        declared = {srv["name"]: dict(srv) for srv in catalog
                     if srv.get("declare") and self._server_available(srv)}
+        # Checked against the declared names, before the decline removes one (a declined
+        # server is refused, not unknown) and before the availability gate (a server whose
+        # binary is missing is still a declared server — it just cannot be launched here).
+        self._note_unknown_scope_overrides(declared_names)
         for name in self.declined_servers():
             declared.pop(name, None)
+        # The project's scope decision lands on the declaration itself, so every consumer
+        # reads one scope: the three project files and the per-agent adjustments alike.
+        overrides = self.scope_overrides()
+        for name, srv in declared.items():
+            srv["scope"] = mcp_scope.effective_scope(name, srv, overrides)
         self.note_declared_prerequisites(declared)
         return declared
 
@@ -371,7 +409,9 @@ class McpTools:
 
         What an adjustment is handed: it is loaded by path and cannot resolve
         ``stack-mcp.json`` itself. Scope does not filter — the two hosts that only ever
-        receive a *proposal* have no project route for scope to select between.
+        receive a *proposal* have no project route for scope to select between — but the
+        scope each declaration carries is the project's effective one, so an adjustment that
+        reads it (Copilot, Codex) sees the same decision the scaffold does (ADR-0044).
         """
         return {name: self._resolve_server_for_agent(srv, agent)
                 for name, srv in self.declared_servers().items()}
@@ -386,16 +426,11 @@ class McpTools:
     ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
         """Split merged servers into (project_servers, user_servers).
 
-        Default scope is ``"project"``.
+        Default scope is ``"project"``. A server's scope is the project's effective one:
+        the catalog's default, overridden by ``config.mcp.scope`` where the project says so
+        (ADR-0044).
         """
-        project = {}  # type: Dict[str, Dict[str, Any]]
-        user = {}  # type: Dict[str, Dict[str, Any]]
-        for name, srv in servers.items():
-            if srv.get("scope", "project") == "user":
-                user[name] = srv
-            else:
-                project[name] = srv
-        return project, user
+        return mcp_scope.split_by_scope(servers, self.scope_overrides())
 
     def _destination_applies(
         self, dest: McpDestination, servers: Dict[str, Dict[str, Any]],
@@ -575,13 +610,16 @@ class McpTools:
         declined: Sequence[str] = (),
         elsewhere: Sequence[str] = (),
         unavailable: Sequence[str] = (),
+        user_scoped: Sequence[str] = (),
     ) -> bool:
         """Merge rendered *entries* into the ``mcpServers`` object of the JSON file at *path*.
 
         *declined* names come back out of the section, so a decline reaches a file an earlier
         run already wrote; so do *elsewhere* names, the servers another file declares
-        differently (#193).  Returns False without writing when the existing file is not a
-        readable mapping, or when there is neither an entry to add nor a file to clean.
+        differently (#193), and *user_scoped* names, whose registration belongs to the
+        operator's user-global config (ADR-0044).  Returns False without writing when the
+        existing file is not a readable mapping, or when there is neither an entry to add
+        nor a file to clean.
         """
         if not entries and not path.exists():
             return False
@@ -600,6 +638,7 @@ class McpTools:
         self._drop_declined(section, declined, dest)
         self._drop_declared_elsewhere(section, elsewhere, dest)
         self._drop_unavailable(section, unavailable, dest)
+        self._drop_user_scoped(section, user_scoped, dest)
         cg.write_json_with_backup(path, existing)
         self.ctx.record_generated_config(path, dest.label)
         return True
@@ -611,6 +650,7 @@ class McpTools:
         dest: McpDestination,
         declined: Sequence[str] = (),
         unavailable: Sequence[str] = (),
+        user_scoped: Sequence[str] = (),
     ) -> bool:
         """Union-merge rendered *entries* into ``.pi/mcp.json`` under F10/F11/F11a.
 
@@ -642,6 +682,7 @@ class McpTools:
                     f"never rewritten). Delete the entry to adopt the template")
         self._drop_declined(section, declined, dest)
         self._drop_pi_unavailable(section, unavailable, entries, dest)
+        self._drop_user_scoped(section, user_scoped, dest)
         cg.write_json_with_backup(path, existing)
         self.ctx.record_generated_config(path, dest.label)
         return True
@@ -673,6 +714,21 @@ class McpTools:
             self.ctx.notes.append(
                 f"{dest.label}: removed MCP server(s) {', '.join(removed)} that an earlier run "
                 f"declared here as well as in {MCP_JSON.label} — one server, one declaration")
+
+    def _drop_user_scoped(
+        self, section: Dict[str, Any], names: Sequence[str], dest: McpDestination
+    ) -> None:
+        """Remove every user-scoped server from *section*, reporting what left (ADR-0044).
+
+        The operator registers such a server in a user-global config, once; a project-scoped
+        entry of the same server is the collision this scope ends.
+        """
+        removed = self._drop_servers(section, names)
+        if removed:
+            self.ctx.notes.append(
+                f"{dest.label}: removed MCP server(s) {', '.join(removed)} — they are "
+                f"user-scoped, so they belong in the operator's user-global config, not in a "
+                f"project file")
 
     @staticmethod
     def _template_candidates(
@@ -799,8 +855,11 @@ class McpTools:
         self._retire_copilot_mcp_config()
         declined = self.declined_servers()
         unavailable = self._unavailable_servers()
+        _, user_servers = self.split_servers_by_scope(self.declared_servers())
+        user_scoped = sorted(user_servers)
         wanted = {name: srv for name, srv in servers.items() if name not in declined}
-        if not self._destination_applies(COPILOT_MCP_JSON, wanted, declined + unavailable):
+        if not self._destination_applies(COPILOT_MCP_JSON, wanted,
+                                        declined + unavailable + user_scoped):
             return
 
         entries = self._render_entries(wanted, COPILOT_MCP_JSON)
@@ -814,6 +873,7 @@ class McpTools:
             declined,
             elsewhere,
             unavailable,
+            user_scoped=user_scoped,
         )
 
     def _declared_differently_in_mcp_json(
@@ -875,17 +935,19 @@ class McpTools:
         Commands stay portable — no absolute paths; a bare executable found in a user tool
         directory is emitted ``${HOME}``-relative.  Only project-scoped servers are written.
         """
-        project_servers, _ = self.split_servers_by_scope(self.declared_servers())
+        project_servers, user_servers = self.split_servers_by_scope(self.declared_servers())
         declined = self.declined_servers()
         unavailable = self._unavailable_servers()
+        user_scoped = sorted(user_servers)
 
-        if not self._destination_applies(MCP_JSON, project_servers, declined + unavailable):
+        if not self._destination_applies(MCP_JSON, project_servers,
+                                        declined + unavailable + user_scoped):
             return
 
         mcp_servers = self._render_entries(project_servers, MCP_JSON)
         written = self._merge_mcp_servers_json(
             self.ctx.target / ".mcp.json", mcp_servers, MCP_JSON, declined,
-            unavailable=unavailable
+            unavailable=unavailable, user_scoped=user_scoped,
         )
         if written:
             self.ctx.notes.append(
@@ -900,16 +962,20 @@ class McpTools:
         :meth:`_merge_pi_mcp_json` — so this refresh never flattens hand-tuned exposure or
         drops a user's own servers.
         """
-        project_servers, _ = self.split_servers_by_scope(self.declared_servers())
+        project_servers, user_servers = self.split_servers_by_scope(self.declared_servers())
         declined = self.declined_servers()
         unavailable = self._unavailable_servers()
+        user_scoped = sorted(user_servers)
 
-        if not self._destination_applies(PI_MCP_JSON, project_servers, declined + unavailable):
+        if not self._destination_applies(PI_MCP_JSON, project_servers,
+                                        declined + unavailable + user_scoped):
             return
 
         entries = self._render_entries(project_servers, PI_MCP_JSON)
         written = self._merge_pi_mcp_json(
-            self.ctx.target / ".pi" / "mcp.json", entries, PI_MCP_JSON, declined, unavailable)
+            self.ctx.target / ".pi" / "mcp.json", entries, PI_MCP_JSON, declined, unavailable,
+            user_scoped=user_scoped,
+        )
         if written and not self._pi_trust_noted:
             self._pi_trust_noted = True
             self.ctx.notes.append(

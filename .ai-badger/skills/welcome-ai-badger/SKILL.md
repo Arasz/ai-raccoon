@@ -42,6 +42,19 @@ If `index.json` is missing or stale, run `python3 "$AI_BADGER/tooling/index_buil
 
 ## Flow
 
+0. **Is this a collection?** Look at the target's direct subdirectories: a directory that
+   carries a `.git` entry is a repository. When the target holds more than one of them, the
+   operator may want one shared scope over all of them — run the discovery command and ask:
+   ```bash
+   python3 "$AI_BADGER/features/common/skills/welcome-ai-badger/scripts/shared_scope.py" discover \
+     --target . --root "$AI_BADGER"
+   ```
+   It prints one `dir:stacks` line per repository and the union of their stacks, and writes
+   nothing. With the operator's go-ahead, the parent-side path takes over: run
+   `shared_scope.py init --target . --root "$AI_BADGER"` (add `--dry-run` first to show the
+   members, the union and every identity decision without writing) and skip the steps below.
+   With one repository — or when the operator wants them separate — continue as usual.
+
 1. **Detect.** From the target repo root:
    ```bash
    python3 "$AI_BADGER/features/common/skills/welcome-ai-badger/scripts/detect.py" --target . --root "$AI_BADGER" > /tmp/proposed-config.json
@@ -212,6 +225,24 @@ For a collection with explicit child repositories, use the existing renderer thr
 python3 "$AI_BADGER/features/common/skills/welcome-ai-badger/scripts/shared_scope.py" collect \
   --target /path/to/collection --repo python-app --repo dotnet-app --root "$AI_BADGER"
 ```
+
+To start from the parent instead — a directory of repositories you did not pick by hand —
+use the discovery and initialization commands:
+
+```bash
+python3 "$AI_BADGER/features/common/skills/welcome-ai-badger/scripts/shared_scope.py" discover \
+  --target /path/to/source --root "$AI_BADGER"
+python3 "$AI_BADGER/features/common/skills/welcome-ai-badger/scripts/shared_scope.py" init \
+  --target /path/to/source --root "$AI_BADGER"
+```
+
+`discover` is read-only: it lists the direct subdirectories that carry a `.git` entry, one
+`dir:stacks` line each, plus the union of their stacks. `init` enrolls every repository it
+finds, one level deep: it decides every identity and every member's own settings before it
+writes anything, scaffolds the parent with the union of the stacks, and materializes every
+member from it. A member with no ai-badger yet is scaffolded; a member that already has one
+is converted, keeping its own project id, its own stacks and its own settings. `--dry-run`
+reports the plan and writes nothing.
 
 Supply `--config /path/to/parent-config.json` to author parent defaults. Collect uses only
 these members, computes their stack union, and materializes every selected child with that

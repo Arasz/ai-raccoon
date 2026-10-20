@@ -16,6 +16,14 @@
           "type": "array",
           "description": "The explicitly selected member repositories, relative to the collection root.",
           "items": { "type": "string", "minLength": 1 }
+        },
+        "memberStacks": {
+          "type": "object",
+          "description": "The dir:stacks index of the collection: each member and the stacks it was found with.",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
         }
       }
     },
