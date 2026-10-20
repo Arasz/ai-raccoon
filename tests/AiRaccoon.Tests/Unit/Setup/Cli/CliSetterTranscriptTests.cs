@@ -46,7 +46,7 @@ public sealed class CliSetterTranscriptTests
         { ["settings", "maintenance", "embed-rows-per-run", "512"], 0, "embed rows per run: 512\n", "", BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal, "512" },
         { ["settings", "maintenance", "embed-rows-per-run", "0"], ErrorCode.Usage.InvalidValue, "", $"ai-raccoon: embed rows per run must be an integer between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}\n", null, null },
         { ["settings", "maintenance", "embed-rows-per-run", "63"], ErrorCode.Usage.InvalidValue, "", $"ai-raccoon: embed rows per run must be an integer between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}\n", null, null },
-        { ["settings", "maintenance", "embed-rows-per-run", "2049"], ErrorCode.Usage.InvalidValue, "", $"ai-raccoon: embed rows per run must be an integer between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}\n", null, null }
+        { ["settings", "maintenance", "embed-rows-per-run", "4097"], ErrorCode.Usage.InvalidValue, "", $"ai-raccoon: embed rows per run must be an integer between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}\n", null, null }
     };
 
     [Theory]

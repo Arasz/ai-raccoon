@@ -108,12 +108,12 @@ public sealed class BankMaintenanceConfigKeysTests
         rows.ShouldBe(512);
     }
 
-    /// <summary>The configurable range: 64 (two full embedder sub-batches) to 2048, default 128.</summary>
+    /// <summary>The configurable range: 64 (two full embedder sub-batches) to 4096, default 128.</summary>
     [Fact]
-    public void EmbedRowsPerRun_Range_Is64To2048_WithTheDefaultInsideIt()
+    public void EmbedRowsPerRun_Range_Is64To4096_WithTheDefaultInsideIt()
     {
         BankMaintenanceConfigKeys.MinEmbedRowsPerRun.ShouldBe(64);
-        BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ShouldBe(2048);
+        BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ShouldBe(4096);
         BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun.ShouldBeInRange(
             BankMaintenanceConfigKeys.MinEmbedRowsPerRun,
             BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
@@ -157,11 +157,11 @@ public sealed class BankMaintenanceConfigKeysTests
         BankMaintenanceConfigKeys.ParseEmbedRowsPerRun(null).ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
     }
 
-    /// <summary>The ceiling bounds the drain's one-shot `SELECT ... LIMIT` materialisation: 2048 = 64 * EntryEmbedder/CodeEmbedder.BatchSize (32) — 64 full sub-batches of rows held in one List at a time.</summary>
+    /// <summary>The ceiling bounds the drain's one-shot `SELECT ... LIMIT` materialisation: 4096 = 128 * EntryEmbedder/CodeEmbedder.BatchSize (32) — 128 full sub-batches of rows held in one List at a time.</summary>
     [Fact]
     public void MaxEmbedRowsPerRun_IsTheDocumentedCeiling()
     {
-        BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ShouldBe(2048);
+        BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ShouldBe(4096);
     }
 
     /// <summary>Review finding 1: clamp at the parse layer (mirrors ParseVacuumIntervalDays_ClampsAbsurdValues_ToTheTimeSpanSafeCeiling above) — and, unlike vacuum, this is also the CLI's one shared validity rule (finding 4), so an over-ceiling value is invalid, not silently accepted.</summary>

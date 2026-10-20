@@ -11,7 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
-- [1.61.0 — the embed drain's rows-per-run is configurable from 64 to 2048](1.61.0-embed-rows-per-run-range.md)
+- [1.61.0 — the embed drain's rows-per-run runs from 64 to 4096, and what that value costs](1.61.0-embed-rows-per-run-range.md)
 - [1.60.3 — the root help points at the monitoring command](1.60.3-observability-help-names-the-monitoring-verb.md)
 - [1.60.2 — `serve observability counters` names every registered meter](1.60.2-observability-counters-flag.md)
 - [1.60.1 — the project id repair counts open workspaces](1.60.1-repair-counts-open-workspaces.md)

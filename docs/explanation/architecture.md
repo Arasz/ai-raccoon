@@ -246,7 +246,7 @@ on-demand shape as `PendingEmbedJob`: `HasWorkAsync` reads `code_entries.embed_s
 directly, so a bank with no code engine configured is never "due") signals the embed topic's
 single consumer (`EmbedDrainService`, ADR-0091) rather than draining inline itself; each
 signal drains up to `maintenance.embed-rows-per-run.global` pending rows (default 128, range
-64–2048) — no relay wait, no gate, memory tools stay fully available the whole time. A re-ingested
+64–4096) — no relay wait, no gate, memory tools stay fully available the whole time. A re-ingested
 code file also prunes `code_entries` rows its new chunk set no longer covers (#481). While rows
 drain, `kind=code` search naturally degrades to FTS5-only for them (`code_fts` is populated at
 ingest time, independent of `embed_state`).
@@ -254,6 +254,29 @@ ingest time, independent of `embed_state`).
 > **Evidence:** `docs/work/2026-08-21-code-search-implementation-plan.md` §3.1/§3.2/§3.3/§3.8,
 > `src/AiRaccoon.Infrastructure/Maintenance/CodeReindexJob.cs`,
 > `src/AiRaccoon.Infrastructure/Embedding/EmbedDrainService.cs`
+
+#### How the rows-per-run moves performance and memory
+
+`maintenance.embed-rows-per-run.global` is a **pass-size** knob, not a throughput knob
+(ADR-0136). One pass = one signal: read the setting, open the bank, `SELECT … LIMIT
+<rows-per-run>` over the pending rows, **materialise the whole result as one list**,
+sub-batch it at 32 (one transaction per sub-batch, one ONNX session call per row), then
+re-signal itself if it drained a full budget.
+
+| rows-per-run | passes for a 4 914-row backlog | transactions per pass (÷32) | managed memory held at once (memory corpus) |
+|---|---|---|---|
+| 64 (floor) | 77 | 2 | ~0.3 MB |
+| **128 (default)** | **39** | **4** | **~0.6 MB** |
+| 512 | 10 | 16 | ~2.4 MB |
+| 4096 (ceiling) | 2 | 128 | ~19 MB |
+
+The per-row figures are measured from the live bank (25 190 `entries` rows, mean 2 325.6 UTF-8
+bytes each; .NET strings are UTF-16, so ~4 673 B per materialised row). What the value does
+**not** change: the per-row embedding cost, the native ONNX peak (the session shape is one
+padded row, not N), and the transaction scope per row. Raising it buys fewer passes — less
+per-pass overhead, less waiting on the 15 s poll — at the price of a proportionally larger
+resident set; lowering it towards the floor buys a smaller resident set at the price of more
+passes. The throughput curve is flat between them, because the row is the unit of work.
 
 ### Schema versioning
 

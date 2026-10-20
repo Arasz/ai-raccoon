@@ -59,27 +59,52 @@ fixed per-pass cost is not amortised over the work.
 **Evidence:** `src/AiRaccoon.Infrastructure/Embedding/EmbedDrainService.cs:128` (the re-signal
 rule) and `:112-135` (what a pass does before it embeds).
 
-### F6 — 64…2048 is a coherent bracket of the 32-row sub-batch [INFERRED]
+### F6 — 64…4096 is a coherent bracket of the 32-row sub-batch [INFERRED]
 
-Reasoning from F1, F4 and F5: the floor of 64 is two full sub-batches, the ceiling of 2048 is
-64 sub-batches — exactly half the old 128-sub-batch burst, with the 128 default still inside the
-range so an unset bank behaves exactly as before. This is a shape argument, not a measurement:
-nothing here shows that 2048 rows is a comfortable materialisation on a small machine, or that
-64 is where the per-pass overhead stops dominating.
+Reasoning from F1, F4 and F5: the floor of 64 is two full sub-batches, the ceiling of 4096 is
+128 sub-batches — the WP11-C burst, unchanged — with the 128 default still inside the range so
+an unset bank behaves exactly as before. This is a shape argument, not a measurement: it says
+the two ends of the range are multiples of the embedder's sub-batch, not that either end is the
+right number for a given host. The owner ruled the ceiling back to 4096 ("if it was 4096 as max
+before - lets keep it that"), so the ceiling is a decision, not a derivation.
 
 ### F7 — the new range is covered by tests that go red without it [MEASURED]
 
 The four touched test classes pass with the range in place and fail when the range is mutated
-away (floor 64 → 1, ceiling 2048 → 4096), so the checks are real rather than vacuous.
+away (floor 64 → 1, ceiling 4096 → 8192), so the checks are real rather than vacuous.
 
 **Evidence:** `dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter
 "FullyQualifiedName~BankMaintenanceConfigKeysTests|FullyQualifiedName~RowBudgetTests|FullyQualifiedName~ConfigCommandsMaintenanceTests|FullyQualifiedName~CliSetterTranscriptTests"`
 on this machine (macOS 27.0.1, arm64, 10 cores, 24 GB, .NET SDK 10.0.402): 91 tests, 0 failed,
-2.2 s. The same command with `MinEmbedRowsPerRun` mutated to 1 and `MaxEmbedRowsPerRun` to 4096:
+2.2 s. The same command with `MinEmbedRowsPerRun` mutated to 1 and `MaxEmbedRowsPerRun` to 8192:
 91 tests, **6 failed** (the floor, the ceiling, the CLI's range message and the drain's floor
 clamp). The mutation was reverted before the run above was repeated green.
 
-### F8 — the real-CPU effect of the floor is unmeasured [UNVERIFIED]
+### F8 — a pending row costs about 4.7 KB of managed memory once materialised [MEASURED]
+
+The live bank's rows are the real input to the materialisation, so their size decides what the
+ceiling costs. A .NET `string` is UTF-16, so a row of 2 325.6 UTF-8 bytes occupies roughly
+2 × 2 325.6 + 22 ≈ 4 673 bytes once the drain holds it — 0.3 MB at 64 rows, 0.6 MB at 128,
+19 MB at 4096 (memory corpus; the code corpus's rows are about half the size).
+
+**Evidence:** `sqlite3 "file:/Users/arasz/.ai-raccoon/memory.db?mode=ro"` on this machine
+(macOS 27.0.1): `entries` 25 190 rows, mean `length(cast(value as blob))` 2 325.6 bytes, p95
+3 814, max 11 945; `code_entries` 72 129 rows, mean 1 297.5 bytes, max 4 657. The bank had
+**0 pending rows** at the time of reading, so these are the sizes of the rows a pass would
+materialise, not of rows in flight.
+
+### F9 — the range, its cost and the ceiling are written down in ADR-0136 [READ]
+
+The decision is recorded as an architecture record, with the pass mechanics (read the setting,
+open the bank, one `SELECT … LIMIT`, materialise the list, sub-batch at 32, one transaction per
+sub-batch, one ONNX session call per row, re-signal on a full budget) and the table of passes,
+transactions and held memory at each end of the range.
+
+**Evidence:** `docs/adr/0136-the-embed-drain-rows-per-run-runs-from-64-to-4096.md`; the
+explanation the ADR points at is also in `docs/explanation/architecture.md` ("How the
+rows-per-run moves performance and memory") and in the README's What's new list.
+
+### F10 — the real-CPU effect of the floor is unmeasured [UNVERIFIED]
 
 No run with the bundled ONNX model compared a 64-row pass against a 128-row pass on a real
 backlog, so the claim "below 64 the per-pass overhead outweighs the work" rests on the shape of
@@ -88,12 +113,16 @@ bundled model, measuring pass duration and CPU across the range.
 
 ## Still open
 
-- The memory cost of the one-shot materialisation at the new ceiling (2048 pending rows of text
-  held in one List) was not measured; 4096 was the previous bound and 2048 halves it, but the
-  per-row size depends on the corpus.
-- An operator who set a value outside the new range before this release (e.g. 4096, or 7) keeps
-  that raw value in the settings table: the drain clamps it and warns once per distinct bad
-  value, but nothing rewrites the stored value. Whether a migration should rewrite those rows
-  was not decided here.
-- The floor's real-CPU effect (F8) needs a measurement with the bundled model before the floor
+- An operator who set a value below the new floor before this release (e.g. 7) keeps that raw
+  value in the settings table: the drain clamps it to 64 and warns once per distinct bad value,
+  but nothing rewrites the stored value. Whether a migration should rewrite those rows was not
+  decided here.
+- The floor's real-CPU effect (F10) needs a measurement with the bundled model before the floor
   can be called measured rather than reasoned.
+- The materialisation cost was measured on the *rows* (F8), not on a pass in flight: the live
+  bank had no pending rows at the time of reading, so the figure is the per-row cost times the
+  budget, not an observed pass's resident set. A drain of a real backlog with the setting at
+  4096 would settle it.
+- The throughput anchor (4 914 chunks in 33–70 s on an M4) comes from the shipped device
+  benchmark, which drives the product on the default WebGPU engine; the per-pass overhead the
+  floor argues about was not isolated from the per-row cost in that run.

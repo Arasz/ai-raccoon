@@ -44,7 +44,7 @@ registered in every mode (stdio and HTTP/S):
   ceiling (36500 days) clamp rather than reject at the parse layer (the CLI rejects them
   outright before they reach the settings table). WP11-C (2026-08-22) added a third key
   on the same channel, `maintenance.embed-rows-per-run.global` (default 128, range
-  64–2048) — same clamp-at-parse/reject-at-CLI shape.
+  64–4096) — same clamp-at-parse/reject-at-CLI shape.
 - **CLI:** `ai-raccoon maintenance interval <minutes>` / `maintenance vacuum-interval
   <days>` / `maintenance embed-rows-per-run <rows>` / `maintenance list`, same
   settings-table channel every other config family uses.
@@ -68,22 +68,24 @@ registered in every mode (stdio and HTTP/S):
 WAL/freelist numbers this decision responds to); `docs/work/archive/2026-08-07-bank-maintenance-design.md`
 (full design record, archived here since its content is now this ADR).
 
-## Amendment (2026-10-20) — the rows-per-run range is 64–2048
+## Amendment (2026-10-20) — the rows-per-run range is 64–4096
 
 The key itself is unchanged: `maintenance.embed-rows-per-run.global`, default 128, read by
 the embed drain (ADR-0091's single consumer) on every pass, applied live without a restart.
-What changed is the accepted range — a floor of 64 and a ceiling of 2048, where the original
-WP11-C shape was "any positive integer, at most 4096".
+What changed is the accepted range — a **new floor of 64**, and the ceiling stays where
+WP11-C put it, 4096 (the original shape was "any positive integer, at most 4096").
 
 - **The floor (64 = 2 × the embedder's 32-row sub-batch)** exists because a drain pass that
   reaches its budget re-signals itself: below 64 a pass does at most one generator call, and
-  the per-pass overhead (open the bank, read the setting, telemetry) stops being amortised
-  over the work.
-- **The ceiling (2048 = 64 × the 32-row sub-batch)** keeps the original reason — the drain
-  materialises its whole `SELECT ... LIMIT` result as one List before sub-batching — and
-  halves the worst-case one-shot burst from 4096 rows to 2048.
+  the per-pass overhead (open the bank, read the setting, telemetry) is not amortised over
+  the work.
+- **The ceiling (4096 = 128 × the 32-row sub-batch)** is unchanged and still bounds the
+  drain's one-shot materialisation of its `SELECT … LIMIT` result — about 19 MB of managed
+  memory for the memory corpus at the measured row size.
 
 A value outside the range is invalid: the parse layer clamps to the nearest bound and warns
 once per distinct bad value; the CLI rejects it outright rather than writing it to the
 settings table. The default (128) stays inside the range, so an unset bank behaves exactly
-as before. Record: `docs/work/2026-10-20-embed-rows-per-run-range.md`.
+as before. The mechanics — what a pass costs, and what the value does and does not change —
+are recorded in [ADR-0136](0136-the-embed-drain-rows-per-run-runs-from-64-to-4096.md);
+the provenance of the 128 is in `docs/work/2026-10-20-embed-rows-per-run-range.md`.
