@@ -20,8 +20,10 @@ public class MonitoringCommandRendererTests
         // The value is the meter registry itself, not a second copy of it: every meter the
         // server registers is named, and nothing else is. This proves the printed value
         // matches the registry; OtlpNamesRegistryTests is what proves the registry holds
-        // every meter the container creates.
-        var countersValue = result.Split("--counters ")[1];
+        // every meter the container creates. The value is everything after the flag, so a
+        // duplicated "--counters " cannot hide: the limit keeps the remainder whole, and the
+        // equality then fails.
+        var countersValue = result.Split("--counters ", 2, StringSplitOptions.None)[1];
         countersValue.ShouldBe(string.Join(',', OtlpNames.Meters));
     }
 
