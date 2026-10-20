@@ -172,9 +172,48 @@ public class CliCommandTreeTests
             kindDescription.ShouldContain(kind);
         }
 
-        // Each kind says what it prints, not only which kind it is.
+        // Each kind says what it prints, not only which kind it is, and the pairing is what
+        // makes the help usable: a reader must be able to see which tool each kind names.
         kindDescription.ShouldContain("endpoint");
         kindDescription.ShouldContain("process id");
+        foreach (var pair in new[]
+                 {
+                     "counters (a dotnet-counters",
+                     "trace (a dotnet-trace",
+                     "otlp (the OTLP endpoint",
+                     "pid (the server's process id"
+                 })
+        {
+            kindDescription.ShouldContain(pair);
+        }
+
+        // The parent's summary is shorter, but it must pair each kind with the same yield.
+        foreach (var pair in new[]
+                 {
+                     "counters (dotnet-counters)",
+                     "trace (dotnet-trace)",
+                     "otlp (the OTLP endpoint)",
+                     "pid (the process id)"
+                 })
+        {
+            description.ShouldContain(pair);
+        }
+    }
+
+    /// <summary>
+    ///     The root help is where a user looks first: the `serve` entry has to name the monitoring
+    ///     verb, or `ai-raccoon serve observability --help` is a command nobody finds.
+    /// </summary>
+    [Fact]
+    public void ServeEntryInTheRootHelp_NamesTheMonitoringVerb()
+    {
+        var root = CliCommandTree.BuildFullRootCommand();
+        var serve = root.Children.OfType<Command>().Single(c => c.Name == "serve");
+
+        var description = serve.Description.ShouldNotBeNull();
+        description.ShouldContain("observability");
+        description.ShouldContain("monitoring");
+        description.Length.ShouldBeLessThan(220);
     }
 
     [Fact]
