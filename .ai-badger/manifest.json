@@ -8,11 +8,12 @@
   "agents": [
     "claude",
     "copilot",
-    "pi"
+    "pi",
+    "codex"
   ],
   "skillScope": "default",
   "pluginScope": "default",
-  "configHash": "61c2f611088c1a469e4065684a493b3230fe04ff8d5da854c6c37b472ee8f829",
+  "configHash": "023dbbab64f614034fd3c944c3db31fe92d65bec9f11b1ce72a0413ca2d753eb",
   "generatedConfig": [
     {
       "path": ".claude/settings.json",
@@ -1445,6 +1446,24 @@
     {
       "feature": "skills",
       "stack": "common",
+      "name": "task/extensions/codex/extension.json",
+      "source": "features/common/skills/task/extensions/codex/extension.json",
+      "target": ".ai-badger/skills/task/extensions/codex/extension.json",
+      "frameworkVersion": "0.210.1",
+      "hash": "81e7abcd207f740c23af9248d56e4755109646c28d25ab64218f8c2a7d20dae6"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
+      "name": "task/extensions/codex/extension.md",
+      "source": "features/common/skills/task/extensions/codex/extension.md",
+      "target": ".ai-badger/skills/task/extensions/codex/extension.md",
+      "frameworkVersion": "0.210.1",
+      "hash": "8f66f7590d94b58e57124b874ef3d949a2dda6e880c6bdcd027551e2cbcad6ce"
+    },
+    {
+      "feature": "skills",
+      "stack": "common",
       "name": "task/extensions/copilot/extension.json",
       "source": "features/common/skills/task/extensions/copilot/extension.json",
       "target": ".ai-badger/skills/task/extensions/copilot/extension.json",
@@ -1813,6 +1832,17 @@
       "frameworkVersion": "0.210.1",
       "hash": "371d107d906553aecb682a4882d08fc9f9942bec62909443a5345692ef303a14",
       "outputHash": "75afadce4c5898066340a00fbb5b663661f01df187064935a4ac776cb50ebb5f",
+      "seedOnce": false
+    },
+    {
+      "feature": "templates",
+      "stack": "codex",
+      "name": "AGENTS.md.tmpl",
+      "source": "features/codex/templates/AGENTS.md.tmpl",
+      "target": "AGENTS.md",
+      "frameworkVersion": "0.210.1",
+      "hash": "121ca4fb7fe205d9a0bb7c054d9ccb4ef51144ff4cf5b84c4a2dbfcadd0f6021",
+      "outputHash": "bcb4b8553b168ac8677fa2a1d4d9b4501e89123d4937d57df3afebed5c9e6c0b",
       "seedOnce": false
     },
     {
@@ -3088,6 +3118,483 @@
       "frameworkVersion": "0.210.1",
       "hash": "3f2edfc2086bc2cc944790211911f5d15623786d28511160e405c5d39511a4ec",
       "outputHash": "409aa0be002e6910c133fafd1740ae7f759cc6e6ce3eb6c42d2948a179af299a"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/ai-raccoon-memory",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/ai-raccoon-memory",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/archify",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/archify",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/artifact-verification",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/artifact-verification",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/browser-usage",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/browser-usage",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/call-behaviorist",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/call-behaviorist",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/code-review-checklist",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/code-review-checklist",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/code-review-evidence",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/code-review-evidence",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/commit-reminder",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/commit-reminder",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/complete-project-scope-code-review",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/complete-project-scope-code-review",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/create-task-spec",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/create-task-spec",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/debug-issue",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/debug-issue",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/den-refresh",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/den-refresh",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/design-gate-audit",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/design-gate-audit",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/design-tests",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/design-tests",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/differential-feature-refactor",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/differential-feature-refactor",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/documentation",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/documentation",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/documentation-drift-audit",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/documentation-drift-audit",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/evidence-first-research",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/evidence-first-research",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/explore-codebase",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/explore-codebase",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/feed-badger",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/feed-badger",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/git-work",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/git-work",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/humanizer",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/humanizer",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/maintain-agent-instructions",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/maintain-agent-instructions",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/mcp-index",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/mcp-index",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/multi-agent-communication",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/multi-agent-communication",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/multi-lane-report-assembly",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/multi-lane-report-assembly",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/owner-gate-review",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/owner-gate-review",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/pre-push-gate-debugging",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/pre-push-gate-debugging",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/prompt-markers",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/prompt-markers",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/qa",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/qa",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/quick-task",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/quick-task",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/refactor-safely",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/refactor-safely",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/research-record-audit",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/research-record-audit",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/review-changes",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/review-changes",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/review-gate-diff-verification",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/review-gate-diff-verification",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/review-tests",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/review-tests",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/scripts-tooling-refactor",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/scripts-tooling-refactor",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/semantica-knowledge-graph",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/semantica-knowledge-graph",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/send-message",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/send-message",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/spec-driven-refactoring",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/spec-driven-refactoring",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/status-report",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/status-report",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/task",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/task",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/task-decomposition",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/task-decomposition",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/test-economy",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/test-economy",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/welcome-ai-badger",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/welcome-ai-badger",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/worktree-agent-isolation",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/worktree-agent-isolation",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/sqlite-bank-space-diagnosis",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/sqlite-bank-space-diagnosis",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/sqlite-schema-review",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/sqlite-schema-review",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/dotnet-workload",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/dotnet-workload",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/mcp-tool-surface-testing",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/mcp-tool-surface-testing",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/code-review",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/code-review",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/ai-raccoon-manual-checklist",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/ai-raccoon-manual-checklist",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
+    },
+    {
+      "feature": "adjustments",
+      "stack": "codex",
+      "name": "adjustments/.agents/skills/get-raw-text-search",
+      "source": "features/codex/adjustments/adjust_skills.py",
+      "target": ".agents/skills/get-raw-text-search",
+      "frameworkVersion": "0.210.1",
+      "hash": "269368e4f52d090e125a4497617862695aa726203dc23ad736860b7333cddbdd"
     },
     {
       "feature": "skills",

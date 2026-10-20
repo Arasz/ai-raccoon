@@ -17,7 +17,8 @@
   "agents": [
     "claude",
     "copilot",
-    "pi"
+    "pi",
+    "codex"
   ],
   "sourceControl": {
     "platform": "github",

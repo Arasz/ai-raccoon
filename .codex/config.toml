@@ -1,2 +1,20 @@
 [mcp_servers.rider]
 url = "http://127.0.0.1:64482/stream"
+# ai-badger:mcp-start
+[mcp_servers."code-review-graph"]
+command = "code-review-graph"
+args = ["serve"]
+
+[mcp_servers."playwright"]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest"]
+
+[mcp_servers."semantica"]
+command = "semantica-mcp"
+args = []
+env = {"SEMANTICA_DISABLE_PROGRESS" = "1"}
+
+[mcp_servers."task-graph"]
+command = "uv"
+args = ["run", "--no-project", "--python", "3", "python", "-c", "import os,sys,shutil,signal,subprocess;from pathlib import Path;r='.ai-badger/skills/task-decomposition/scripts/task_graph_server.py';c=Path.cwd();f=next((d/r for d in (c,*c.parents) if (d/r).is_file()),None);f or sys.exit('task-graph: '+r+' not found at or above '+str(c));u=os.environ.get('UV') or shutil.which('uv') or sys.exit('task-graph: uv not found: UV is unset and uv is not on PATH');p=subprocess.Popen([u,'run','--script',str(f)]);signal.signal(signal.SIGTERM,lambda *a:p.terminate());sys.exit(p.wait())"]
+# ai-badger:mcp-end
