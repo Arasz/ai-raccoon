@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.60.3 — the root help points at the monitoring command](1.60.3-observability-help-names-the-monitoring-verb.md)
 - [1.60.2 — `serve observability counters` names every registered meter](1.60.2-observability-counters-flag.md)
 - [1.60.1 — the project id repair counts open workspaces](1.60.1-repair-counts-open-workspaces.md)
 - [1.60.0 — project id repair uses the default alias map](1.60.0-project-id-repair-default-map.md)
