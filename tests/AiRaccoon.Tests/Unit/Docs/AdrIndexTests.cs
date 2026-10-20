@@ -92,19 +92,12 @@ public class AdrIndexTests
     }
 
     /// <summary>
-    ///     An ADR is frozen once accepted, so the index is the only place an amendment can be
-    ///     published — and the index is a hand-maintained table, the shape that drifts. The
-    ///     `Amended` column is therefore *derived*: it lists the dates of the record's own
-    ///     amendment markers, and it must carry every one of them and no other. The two-sided
-    ///     check is what makes the column trustworthy: an amendment cannot be invisible in the
-    ///     index, and the index cannot claim an amendment a record never had.
-    ///     <para>
-    ///         A marker is a line-anchored shape, not prose: an `## Amendment …` heading, or a
-    ///         line that opens with `Amended &lt;date&gt;`. Those are the two forms this repo
-    ///         writes, so the column is mechanically derivable. A supersession or a reversal is
-    ///         recorded in the summary cell and mirrored in the record's Status line, and
-    ///         <see cref="SupersededAdrs_DoNotStillCallThemselvesAccepted" /> is what guards
-    ///         that pair.
+    ///     An `## Amendment …` / `## Amendments …` section, or a line that opens with
+    ///     `Amended &lt;date&gt;`. Those are the two forms this repo writes, so the column is
+    ///     mechanically derivable. A supersession or a reversal is recorded in the summary cell
+    ///     and mirrored in the record's Status line, and
+    ///     <see cref="SupersededAdrs_DoNotStillCallThemselvesAccepted" /> is what guards that
+    ///     pair.
     ///     </para>
     /// </summary>
     [Fact]
@@ -170,35 +163,59 @@ public class AdrIndexTests
         problems.ShouldBeEmpty($"the `Amended` column drifted from the records:\n  {string.Join("\n  ", problems)}");
     }
 
-    /// <summary>An `## Amendment …` heading, or a line that opens with `Amended &lt;date&gt;`.</summary>
-    private static readonly Regex AmendmentHeading = new(@"^#{2,}\s*Amendment\b", RegexOptions.Multiline);
+    /// <summary>An `## Amendment …` / `## Amendments …` section heading (the whole line, so a date on it counts), or a line that opens with `Amended &lt;date&gt;`.</summary>
+    private static readonly Regex AmendmentHeading = new(@"^##\s+Amendments?\b.*$", RegexOptions.Multiline);
+
+    /// <summary>A sub-heading inside an amendment section — one entry per amendment.</summary>
+    private static readonly Regex AmendmentSubHeading = new(@"^#{3,6}\s+.*$", RegexOptions.Multiline);
+
+    /// <summary>The next `## ` heading — the end of an amendment section.</summary>
+    private static readonly Regex SectionEnd = new(@"^## ", RegexOptions.Multiline);
 
     private static readonly Regex AmendmentLine = new(@"^\s*Amended (\d{4}-\d{2}-\d{2})\b", RegexOptions.Multiline);
 
     private static readonly Regex DateToken = new(@"\b\d{4}-\d{2}-\d{2}\b");
 
-    /// <summary>The dates the record's own amendment markers carry, in the order they appear.</summary>
+    /// <summary>
+    ///     The dates the record's own amendment markers carry: the heading of an
+    ///     `## Amendment(s)` section and the sub-headings inside it (one entry per amendment),
+    ///     plus every `Amended &lt;date&gt;` line. The section's prose is not read — a date
+    ///     mentioned in passing is not an amendment.
+    /// </summary>
     private static List<string> AmendmentDates(string text)
     {
         var dates = new List<string>();
+
+        void Add(string date)
+        {
+            if (!dates.Contains(date))
+            {
+                dates.Add(date);
+            }
+        }
 
         foreach (Match heading in AmendmentHeading.Matches(text))
         {
             foreach (Match date in DateToken.Matches(heading.Value))
             {
-                if (!dates.Contains(date.Value))
+                Add(date.Value);
+            }
+
+            var body = text[(heading.Index + heading.Length)..];
+            var end = SectionEnd.Match(body);
+            var section = end.Success ? body[..end.Index] : body;
+            foreach (Match sub in AmendmentSubHeading.Matches(section))
+            {
+                foreach (Match date in DateToken.Matches(sub.Value))
                 {
-                    dates.Add(date.Value);
+                    Add(date.Value);
                 }
             }
         }
 
         foreach (Match line in AmendmentLine.Matches(text))
         {
-            if (!dates.Contains(line.Groups[1].Value))
-            {
-                dates.Add(line.Groups[1].Value);
-            }
+            Add(line.Groups[1].Value);
         }
 
         return dates;
