@@ -42,9 +42,13 @@ ai-raccoon: no bank exists at '/tmp/demo/memory.db' — create it with
 'ai-raccoon --data-root /tmp/demo serve', or check --data-root for a typo
 ```
 
-And the write is routed through the server that owns the data root, so when the CLI starts a
-backend for you it tells you that the backend keeps running afterwards, under its own idle
-timeout. Stop it with `ai-raccoon serve --restart --port <port>`.
+And the write is routed through the server that owns the data root. The CLI will not fall back to
+writing the bank itself, because the server is the only process that writes to it
+([ADR-0075](../adr/0075-only-the-server-writes-to-the-bank.md)), so before it writes anything the
+CLI has to *prove* the listener on the port serves this data root. When the proof fails, the
+command refuses (exit 50) and starts nothing. When the CLI does start a backend for you, it
+tells you that the backend keeps running afterwards, under its own idle timeout; stop it with
+`ai-raccoon serve --restart --port <port>`.
 
 A value outside the range is refused, and nothing is written:
 
