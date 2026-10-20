@@ -617,14 +617,14 @@ internal static class CliCommandTree
     private static Command MaintenanceCommand()
     {
         var maintenance = new Command("maintenance",
-            "Bank maintenance configuration (CLI-only channel): the checkpoint interval bounds the WAL — every process runs wal_checkpoint(TRUNCATE) at startup and shutdown, and the periodic timer on this cadence — and the vacuum interval sets how often VACUUM + ANALYZE run (per-process clock; short-lived processes never vacuum).")
+            "Bank maintenance configuration (CLI-only channel): the checkpoint interval bounds the WAL — every process runs wal_checkpoint(TRUNCATE) at startup and shutdown, and the periodic timer on this cadence — the vacuum interval sets how often VACUUM + ANALYZE run (per-process clock; short-lived processes never vacuum) — and the embed rows-per-run cap bounds how many pending rows one embed-drain pass takes, for both corpora. Each verb's help names the settings key it writes.")
         {
             new Command("interval", "Sets the WAL checkpoint interval in minutes (positive integer; default 60)")
                 { new Argument<string>("minutes") { HelpName = "minutes" } },
             new Command("vacuum-interval", "Sets the VACUUM + ANALYZE interval in days (positive integer; default 7)")
                 { new Argument<string>("days") { HelpName = "days" } },
             new Command("embed-rows-per-run",
-                    $"Sets the embed drain's rows-per-signal, for both corpora (integer between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}; default {BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun}) — takes effect on the drain's next pass, no restart")
+                    $"Sets the embed drain's rows-per-signal, for both corpora (integer between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}; default {BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun}) — writes the settings key {BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal}, read the value back with 'settings maintenance list' — takes effect on the drain's next pass, no restart")
                 { new Argument<string>("rows") { HelpName = "rows" } }
         };
         var list = new Command("list", "Shows the bank maintenance configuration (checkpoint interval, vacuum interval, embed rows per run)");

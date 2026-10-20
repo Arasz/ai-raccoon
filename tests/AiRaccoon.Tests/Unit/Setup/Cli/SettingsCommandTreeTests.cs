@@ -240,6 +240,23 @@ public class SettingsCommandTreeTests
         }
     }
 
+    /// <summary>
+    ///     The whole path of the embed-rows-per-run setting is in the help: the settings key it
+    ///     writes, and the leaf that reads the value back. An operator who has only the help text
+    ///     can find the setting in the bank and read it back without guessing.
+    /// </summary>
+    [Fact]
+    public void EmbedRowsPerRun_HelpNamesTheSettingsKeyAndTheReadBack()
+    {
+        var maintenance = CliCommandTree.BuildFullRootCommand().Subcommands.Single(c => c.Name == "settings")
+            .Subcommands.Single(c => c.Name == "maintenance");
+        var command = maintenance.Subcommands.Single(c => c.Name == "embed-rows-per-run");
+
+        command.Description.ShouldNotBeNull().ShouldContain(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+        command.Description.ShouldNotBeNull().ShouldContain("settings maintenance list");
+        maintenance.Subcommands.Select(c => c.Name).ShouldContain("list");
+    }
+
     [Theory]
     [MemberData(nameof(RemovedArgv))]
     public void OldTopLevelConfigPath_NoLongerParses(string[] argv)
