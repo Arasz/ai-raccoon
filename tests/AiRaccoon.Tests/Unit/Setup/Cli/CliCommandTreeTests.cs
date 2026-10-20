@@ -160,6 +160,9 @@ public class CliCommandTreeTests
 
         description.ShouldContain("dotnet-counters");
         description.ShouldContain("dotnet-trace");
+        // A keyword soup would satisfy the checks above, so the text has to describe the
+        // verb, not only name its kinds.
+        description.ShouldContain("ready-to-run");
         description.Length.ShouldBeLessThan(220);
 
         var kindArgument = observability.Arguments.OfType<Argument<string>>().Single();
@@ -168,6 +171,10 @@ public class CliCommandTreeTests
         {
             kindDescription.ShouldContain(kind);
         }
+
+        // Each kind says what it prints, not only which kind it is.
+        kindDescription.ShouldContain("endpoint");
+        kindDescription.ShouldContain("process id");
     }
 
     [Fact]
