@@ -163,6 +163,31 @@ public class AdrIndexTests
         problems.ShouldBeEmpty($"the `Amended` column drifted from the records:\n  {string.Join("\n  ", problems)}");
     }
 
+    /// <summary>
+    ///     A record may file its amendments under a plural heading, one entry per sub-heading.
+    ///     The dates on the sub-headings are the amendment dates; a date mentioned in the
+    ///     section's prose is not, and neither is the record's own acceptance date.
+    /// </summary>
+    [Fact]
+    public void AmendmentDates_ReadsAnAmendmentsSectionAndItsSubheadings()
+    {
+        const string text = """
+            # 0001 — Example
+            Date: 2026-01-01
+            Status: Accepted
+            ## Amendments
+
+            ### 2026-02-03 — the first change
+
+            prose that mentions 2026-04-05 in passing
+
+            ### 2026-06-07 — the second change
+            """;
+
+        AmendmentDates(text).ShouldBe(["2026-02-03", "2026-06-07"],
+            "the sub-headings of an `## Amendments` section are the amendment entries; a date in the prose is not");
+    }
+
     /// <summary>An `## Amendment …` / `## Amendments …` section heading (the whole line, so a date on it counts), or a line that opens with `Amended &lt;date&gt;`.</summary>
     private static readonly Regex AmendmentHeading = new(@"^##\s+Amendments?\b.*$", RegexOptions.Multiline);
 
