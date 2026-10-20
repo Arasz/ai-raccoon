@@ -9,12 +9,6 @@
         "*"
       ]
     },
-    "ai-raccoon": {
-      "command": "${HOME}/.dotnet/tools/ai-raccoon",
-      "tools": [
-        "*"
-      ]
-    },
     "semantica": {
       "command": "${HOME}/.local/bin/semantica-mcp",
       "env": {

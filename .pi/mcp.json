@@ -7,10 +7,6 @@
       ],
       "exposure": "direct"
     },
-    "ai-raccoon": {
-      "command": "~/.dotnet/tools/ai-raccoon",
-      "exposure": "direct"
-    },
     "semantica": {
       "command": "~/.local/bin/semantica-mcp",
       "env": {
