@@ -102,13 +102,18 @@ stored value turns out to be invalid, which is how you find the row when somethi
 
 ## Put it back
 
-There is no unset verb for this setting, and that is deliberate. A value of 128 is exactly what
-an absent key means, so writing 128 restores the default behaviour, and the stored value becomes
-indistinguishable from the default the drain would have used anyway:
+Writing 128 restores the default behaviour: a value of 128 is exactly what an absent key means,
+so the stored value becomes indistinguishable from the default the drain would have used anyway.
 
 ```bash
 ai-raccoon settings maintenance embed-rows-per-run 128
 ```
+
+No verb removes the row, and that follows from the shape of the settings tree. Each subsystem's
+verbs are specific to it, so `settings access unset` removes an access key and
+`settings extract exclude remove` removes an exclude prefix, but nothing removes a maintenance
+key. The server does have the route (`DELETE /settings?key=…`, where an absent key and a
+removed row mean the same thing), it is simply not exposed for this one.
 
 ## What the number buys, and what it costs
 
