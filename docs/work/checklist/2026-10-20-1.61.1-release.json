@@ -1,0 +1,218 @@
+{
+  "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+  "run": {
+    "date": "2026-10-20",
+    "branch": "main",
+    "commit": "95df1943 (tree for derived facts and the local 1.61.1 pack)",
+    "data-root": "per lane under ~/.cache/ai-raccoon-checklist/2026-10-20-1.61.1/ck (main, watch, poison, livecopy, evalcopy, evalcopy1560, prec1560); ~/.ai-raccoon read only (sqlite3 -readonly VACUUM INTO), port 7721 never bound by this run",
+    "note": "Full run on the tree's 1.61.1, which is NOT on nuget.org (the published latest is 1.61.0). 1.61.1 is a docs-only release on top of 1.61.0 (#905, the embed drain's rows-per-run how-to); the code change it carries is #901 (rows-per-run 64 -> 4096). The tree was built, packed for osx-arm64 and installed into a scratch --tool-path; the user's global tool was left at the published 1.61.0. Every lane ran its own --data-root and its own --port 0 server. The live bank was read, never written: one VACUUM INTO copy for the real-scale long-query measurement, and the eval copy (~/ai-raccoon-eval/copies/cb99fe6ecbe0.db) for the pre-cap control."
+  },
+  "derived": {
+    "version": "1.61.1",
+    "mcp-tool-count": 30,
+    "mcp-prompt-count": 2,
+    "source": "python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . at 95df1943 (exit 0)"
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "docs/work/checklist/2026-10-18-1.59.0-release.json, item long-query-keyword-terms-capped",
+      "prior-claim": "status substituted, accepted: 'bank source was the owner's eval copy ~/ai-raccoon-eval/copies/cb99fe6ecbe0.db (live bank read denied by auto-mode classifier); same schema/content class'.",
+      "what-is-actually-true": "The verdict stands, but the two banks are not interchangeable and the run's own numbers must not be compared across them. This run measured the live-bank copy (25,243 entries, schema v19): CLAUDE.md paste 1.84 s, stopword paste 0.56 s. The eval copy (70,763 entries, schema v17): 11.6 s and 10.6 s. The 1.59.0 run's 12.0 s cold / 1.2 s warm was the eval copy too, so it reproduces here (11.6 s) and the live-bank figures are simply a smaller bank.",
+      "evidence": "live copy (1.07 GB, 25,243 entries): 1.84 s / 0.56 s. eval copy (809 MB, 70,763 entries): 11.6 s / 10.6 s. Pre-cap 1.56.0 on its own copy of the same eval bank: 22.2 s / 28.2 s.",
+      "so-what": "'Returns in seconds' is true of the live bank's size and not of the eval copy's; the item's own acceptance depends on which bank it names, so the bank has to be named in the evidence every time."
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-10-18-1.59.0-release.json, item long-query-keyword-terms-capped, negative control",
+      "prior-claim": "'1.56.0 in lane-a/tool-1560 on its own copy and fresh bank' -- the reason for 'its own copy' is not stated.",
+      "what-is-actually-true": "The separate copy is mandatory, not tidiness: 1.61.1 migrates a v17 bank to v19 when it opens it, and a v19 bank is then unopenable by 1.56.0 ('bank schema v19 is newer than this binary supports (v17)'). Serving the eval copy with 1.61.1 first cost the pre-cap control its bank until a second copy was taken from the still-v17 original.",
+      "evidence": "1.56.0 on the copy 1.61.1 had already served: 'ai-raccoon: could not open the bank at .../ck/evalcopy/memory.db: bank schema v19 is newer than this binary supports (v17)'. A fresh copy of the original (PRAGMA user_version = 17) serves under 1.56.0 without complaint.",
+      "so-what": "Run the pre-cap control against its own copy, and take that copy BEFORE the current build touches the bank."
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-10-18-1.59.2-fixes.json, item full-mcp-surface",
+      "prior-claim": "status skipped -- 'Listing matches derived; calling every tool is out of scope here.'",
+      "what-is-actually-true": "The listing claim was right, but the item had not been driven, and driving it shows a constraint the listing cannot show: three tools (memory_set_ttl, memory_delete, memory_delete_context) refuse in the default rw access mode and need 'settings access set <projectId> full' first. Calling all 30 on 1.61.1: all answered with their documented success or typed refusal once the mode was raised.",
+      "evidence": "memory_set_ttl in rw mode: 'access-denied: memory_set_ttl requires mode full (current rw)'. After 'access set to full for project 01a15a2d-...': memory_set_ttl ok (ttlDays 30, canEverExpire false), memory_delete ok (deleted 1), memory_delete_context ok (deleted 0).",
+      "so-what": "A listing-only check cannot tell a reachable tool from a permanently refused one; the refusal names its own remedy, so the follow-up is one command."
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-10-18-1.59.0-release.json, item full-mcp-surface",
+      "prior-claim": "'code_get/memory_sync success paths not exercised (no code index / sync target).'",
+      "what-is-actually-true": "Still true for memory_sync (no cloud target is configured in a scratch bank; it answers sync-not-configured, which is the documented refusal). The code_get success path IS reachable: ingesting a .cs file into a scoped corpus and searching kind=code returns a code hash that code_get then returns in full.",
+      "evidence": "code search (kind=code) on the scratch corpus: code[0].hash 9eec89ac...; code_get on it returns the full 'namespace AiRaccoon.Sample; ... Greet() ...' source.",
+      "so-what": "The gap was the absence of a code index, not a defect; the item is closable by ingesting a file first."
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "dotnet build -c Release; python3 scripts/download-mlx-runtime.py; dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=osx-arm64 -o $SCRATCH/artifacts; dotnet tool install ai-raccoon --version 1.61.1 --add-source $SCRATCH/artifacts --tool-path $SCRATCH/tool; $SCRATCH/tool/ai-raccoon --version; curl the nuget flat-container index for ai-raccoon and ai-raccoon.osx-arm64; ai-raccoon --version (the global tool)",
+      "evidence": "First pack failed: 'The MLX plugin runtime (mlx-runtime/*.dylib, mlx-runtime/mlx.metallib) is missing for an osx-arm64 pack ... Run python3 scripts/download-mlx-runtime.py first.' After the runtime download: 'Successfully created package .../ai-raccoon.osx-arm64.1.61.1.nupkg' and 'ai-raccoon.1.61.1.nupkg'. Install: 'Tool ai-raccoon (version 1.61.1) was successfully installed.' --version: 1.61.1+95df1943084029bef446d6c177cfe9f524136bfe. nuget versions end at 1.61.0 for both ai-raccoon and ai-raccoon.osx-arm64. The global tool still reports 1.61.0+db6d20446c354469e97b31ac0706b280a11ec3f6.",
+      "observed-result": "The tree's 1.61.1 builds, packs and installs, and the running binary reports the derived version with the tree's commit. The global tool was NOT updated: 1.61.1 is not published, and force-updating the user's global tool to an unpublished local pack is a change to their environment, not a verification of it. The pack's own gate (the MLX runtime for an osx-arm64 pack) caught a missing runtime and the documented command fixed it.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Substituted: a scratch --tool-path install of a local pack instead of a global force-update from nuget. The instrument still compares the running binary with the tree (same version, same commit), which is the point of the item. Publishing 1.61.1 needs the owner's publish.yml dispatch; the global tool stays on the published 1.61.0."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "serve --port 0 --idle-timeout 0 on each lane (port read back from the server's own 'serving on port N' line); lsof on the listener pid before and after 'serve --port 62535 --restart --idle-timeout 0'",
+      "evidence": "Ports bound by --port 0: 62535 (main), 63016/63052/63086/63134/63159 (watch lane restarts), 63200 (poison), 62965 (live copy), 63627 (eval copy), 63686 (pre-cap lane). --restart on 62535: pid on 62535 before 76204, after 82201; the log reads 'asking the server on port 62535 to stop (pid 76204, 1.61.1+95df1943...)', 'the server on port 62535 (pid 76204) stopped and the port is free', 'Now listening on: http://127.0.0.1:62535'. pid on 7721 before 39649, after 39649 (unchanged). memory_stats after the restart: entries 15, pending 0, contexts [shared, project:01a15a2d-...].",
+      "observed-result": "--port 0 binds an ephemeral port and the server names it; --restart cycled the server it found (new pid, same port) instead of attaching, and the user's own server on 7721 kept its pid throughout. A CLI command run without --port against the occupied 7721 refused to touch it: 'the listener at http://127.0.0.1:7721/mcp is unproven (it serves another data root); no extra backend was started'.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The restart cycled rather than attached, the port was reported by the server itself, and 7721 was never bound or stopped."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "memory_write with a parish-minutes note (sourceFile notes/minutes.md, section decision); three writes with machine-notification shapes; one near-miss write that quotes 'received signal 15' inside a sentence",
+      "evidence": "Stored write: {hash 9ee08c69ce0bc3b3a86c9f9711496b1b3a94fd7476b7e11b9c0eaa9a1e55dad8, path 145b91bd...md, context project:01a15a2d-..., stored true}. Three rejected writes, each: {hash '', path '', context '', stored false, reason \"rejected by noise policy 'HermesBackgroundProcessLog'\"}. Negative control (the notification text quoted inside a sentence): {hash 6da766cf888e1b2d3ef27c892acc5cd55d5e4deb82d28eeba0d97cb8e7074381, stored true}.",
+      "observed-result": "A stored write reports its hash; a refused write reports stored false, a named reason and empty hash/path fields, and the near-miss control is stored. The write-path policy is one policy, HermesBackgroundProcessLog, and it fires on the three shapes it claims.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The stored and the refused branches both behaved as specified, and the control proves the policy is not simply rejecting everything."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "memory_write 'A brass astrolabe catches the lamplight inside the observatory dome, ...'; memory_search 'an antique navigation instrument reflecting evening light inside a stargazing room' {kind: memory, minRelativeScore: 0, limit: 5}",
+      "evidence": "First search (before an embedding engine was configured): warning 'memory engine not configured -- the memory section is FTS5-only; run ai-raccoon model embedding set local ...', evidenceByHash legs fts only, participatingLegs [fts], unranked true. After 'model embedding set local' and the migration: the astrolabe note ranks 1 with legs [{fts, rank 2}, {vector, rank 1}], fusionStrength 0.9919, cosine 0.847; the other two notes carry vector legs at ranks 2 and 3. First memory_embed_pending after the migration: {processed: 0, pending: 0}.",
+      "observed-result": "The vector leg is live only after the embedding engine is set, and with it the semantically-related note (no substantive word overlap with the query) ranks first on a vector leg. The FTS5-only degradation is announced in the response rather than passed off as a full answer.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both legs fired and the semantic hit rode the vector leg; the degradation path announces itself."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "memory_get on the hash a prior search returned; memory_get on a 64-zero hash",
+      "evidence": "Known hash: {hash 9ee08c69..., value 'The parish minutes record that the village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition. The treasurer reported hall repairs, roof slates and the organ fund.', path 145b91bd...md, context project:01a15a2d-..., createdAt 1792514336}. Unknown hash: 'unknown-hash: No entry with hash 0000...0000 in project 01a15a2d-f841-7be6-abfa-a75bd6275d1d.'",
+      "observed-result": "A reachable hash returns the full stored text; an unknown hash refuses with a named reason instead of an empty success.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both branches behaved as specified."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "memory_search 'notes/minutes.md#decision' {kind: memory, minRelativeScore: 0, limit: 5}",
+      "evidence": "Rank 1: {hash 9ee08c69..., sourceFile notes/minutes.md, chunkIndex 0, totalChunks 1, snippet 'The parish minutes record that the village fete committee met in the...'}; evidenceByHash legs [{fts, rank 1}, {vector, rank 1}], cosine 0.7646, fusionStrength 1.",
+      "observed-result": "The anchored file#section query led the result window with the exact chunk (the note's own section), not merely a file that mentions it.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The anchor led with its own chunk and both legs agree."
+    },
+    {
+      "item": "keyword-search-across-a-chunk-boundary",
+      "expected-result": "a note made of the parish sentence x45 then 'Invoice reference vk83jq ...' yields more than one entries row, and a search for vk83jq returns the note with an `fts` leg and a row holding vk83jq whole; the same for one whitespace-free term of about 2,500 characters (ADR-0120)",
+      "command": "memory_write of the 45x space-joined sentence plus the invoice sentence (sourceFile notes/fete.txt); memory_write of a note holding 40 concatenated SHA-256 hex digests (2,560 chars, sourceFile notes/longterm.txt); sqlite3 -readonly counts and instr() checks; memory_search 'vk83jq' and memory_search of the whole 2,560-char term, both {kind: memory, minRelativeScore: 0}",
+      "evidence": "Rows per note path: fete 2, longterm 3. instr(value,'vk83jq')>0: 1 row. instr(value,'<the 2560-char term>')>0: 0 rows. Search 'vk83jq': rank 1 = {sourceFile notes/fete.txt, chunkIndex 1, totalChunks 2}, legs [{fts, rank 1}] (the note's other chunk carries a vector leg only). Search of the whole long term: rank 1 = {sourceFile notes/longterm.txt, chunkIndex 1, totalChunks 3}, legs [{fts, rank 1}].",
+      "observed-result": "Both identifiers were found by the keyword leg on the chunk that holds them whole, and the long term -- which no row holds whole -- was still found, so the prefix match carried it. The vector leg alone would have satisfied neither check, and the evidence shows which leg answered.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The premises held (more than one row per path; the long term in no row whole) and both searches returned an fts leg."
+    },
+    {
+      "item": "note-opening-chunk-reports-index-zero",
+      "expected-result": "a 62-paragraph note whose first paragraph opens with 'Opening marker zq71' reports chunkIndex 0 for that chunk, and sqlite gives chunk_index 0 for the row holding zq71 (ADR-0122)",
+      "command": "memory_write of 62 blank-line-separated paragraphs, the first 'Opening marker zq71 records the first entry of the parish minutes.' (sourceFile notes/minutes62.md); sqlite3 -readonly on chunk_index for the row holding zq71; memory_search 'zq71' {kind: memory, minRelativeScore: 0}",
+      "evidence": "Rows for the note's path: 2 (chunk_index 0 and 1). The row holding zq71: chunk_index 0, total_chunks 2. Search 'zq71': rank 1 = {hash 988d5020..., sourceFile notes/minutes62.md, chunkIndex 0, totalChunks 2}, legs [{fts, rank 1}, {vector, rank 1}].",
+      "observed-result": "The opening paragraph sits at chunk index 0 in the bank and is reported at chunkIndex 0 by the search -- the note opens where it was written, not at the end.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The chunk order in the store and the chunk index in the result agree, and both are 0."
+    },
+    {
+      "item": "poison-memory-row-isolated-and-abandoned",
+      "expected-result": "a row the engine refuses is split from its batch and abandoned after three attempts; the other rows embed; the poison line count stops growing (ADR-0119)",
+      "command": "fresh lane bank with no engine set; 4 ordinary writes + 1 write containing POISON-7Q; python3 .ai-badger/skills/ai-raccoon-manual-checklist/scripts/poison-embedding-stub.py --port 0 --log stub.log; 'model embedding set openai stub-embed <printed base URL> --api-key stub-key'; memory_embed_pending x4; sqlite3 -readonly on embed_state/embed_attempts",
+      "evidence": "Before: memory_stats {entries 5, pending 5}; sqlite 'pending|0|5'. The first 'model embedding set' attempt was refused for a malformed URL ('is not a usable absolute http(s) URL ... Nothing has been changed', exit 78) because the stub's first stdout line carries the 'listening on ' prefix; with the URL alone the engine was set. After the first memory_embed_pending: {processed 4, pending 1}; sqlite 'embedded|0|4' and 'pending|3|1'; the poison row itself 'pending|3'. stub.log: 'ok 1', 'poison 5', 'ok 1' x4, 'poison 1' x3, 'ok 1', 'poison 1' x2, 'ok 1'. Three further calls: {processed 0, pending 1} each, stub.log still 13 lines with 6 poison lines. memory_stats {entries 5, pending 1}.",
+      "observed-result": "The five-row batch was refused as a batch (the 'poison 5' line) and the four ordinary rows were then answered one by one ('ok 1' x4); the poison row was isolated, retried on its own three times ('poison 1' x3) and abandoned at embed_attempts 3, and the next three calls neither processed it nor added a line to the log.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The batch was split, the poison row stopped at three attempts, the other four rows embedded, and the log stopped growing."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "the three rejected writes above; 'ai-raccoon --data-root $SCRATCH/ck/main --port 62535 noise entries'; 'settings noise list'",
+      "evidence": "'total: 3' and 'HermesBackgroundProcessLog: 3' from noise entries (exactly the three rejected writes; the near-miss control is not among them). 'settings noise list': enabled: True. The write responses each carried reason \"rejected by noise policy 'HermesBackgroundProcessLog'\".",
+      "observed-result": "One policy is registered, it rejects the three shapes it claims, the write says which policy refused it, and the rejected content is recoverable from the noise store.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Rejection, reporting and the noise store all agree, and the count matches the negative control exactly."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "'settings queryguard list'; memory_search with a full Hermes notification ('[IMPORTANT: Background process 4d2 completed normally. Command: dotnet build') and with an async batch ('[ASYNC DELEGATION BATCH COMPLETE: the task dispatched earlier has finished'); memory_search 'info: build started' and 'at AiRaccoon.Core.Memory.Store.SearchAsync()'; a control query mentioning the marker in a sentence; 'settings queryguard structural enable' then the same refuse query, then 'structural disable'",
+      "evidence": "settings: enabled: True  shadow: False  structural: False  threshold: 0.98939822280316. Refuse: 'invalid-params: This looks like tool output rather than a question ... Refused query: [ASYNC DELEGATION BATCH COMPLETE: the task dispatched earlier has finished' (the Hermes notification refused the same way once it carried 'Command:'). Control (prefix + 'completed normally' but no 'Command:'): no refusal. Annotate: both the log-level prefix and the stack-frame line returned results plus warning 'This query contains what looks like log or stack-trace output. Memory search matches meaning, not literal text ...'. With the structural detector armed (structural: True) the refuse tier still refused the same query, and a clean query was not annotated. Restored to structural: False.",
+      "observed-result": "Both refuse shapes refuse with invalid-params before any work, the annotate tier runs the search and adds guidance, the near-miss control is not refused, and the structural detector ships disabled, only ever annotates, and leaves the refuse tier intact.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Every tier behaved as ADR-0040/0041 describe, with a control for the refuse shape's near-miss."
+    },
+    {
+      "item": "long-query-keyword-terms-capped",
+      "expected-result": "on a bank of real scale a ~7,000-character paste returns in seconds at vectorWeight 0 and data.warning names the 64-distinct-word cap; a marker past 70 distinct filler words gets no hit, the same marker first gets an fts leg, repeats do not use up the cap, a 6-token query keeps the stopword 'the' and a 71-token query drops it (ADR-0126)",
+      "command": "sqlite3 -readonly ~/.ai-raccoon/memory.db 'VACUUM INTO $SCRATCH/ck/livecopy/memory.db' (25,243 entries), watches deleted, served on port 62965; memory_search of CLAUDE.md[:7000] and of 7,000 stopword chars + 2 content words, both {vectorWeight: 0, minRelativeScore: 0, limit: 8}; cap probes on the fresh scratch bank at vectorWeight 0; pre-cap control: ai-raccoon 1.56.0 from nuget into a scratch --tool-path, serving its own copy of the eval bank (70,763 entries, schema v17) and the same two pastes; and the term-set probes on a 1.56.0 fresh bank",
+      "evidence": "Live-bank copy (25,243 entries): CLAUDE.md paste 1.84 s, stopword paste 0.56 s; warning 'This query is over 4,024 characters ... Keyword (FTS) matching is capped too: it searches only the first 64 distinct words of a query this long.' with no 'in full' clause. Probes on the fresh bank: marker first -> 1 hit, legs [fts]; marker last (71 tokens) -> 0 hits; marker after 80 repeats of two words -> 1 hit, legs [fts]; a 6-token query -> the 'the'-only note found, legs [fts]; a 71-token query -> 0 results, the 'the'-only note not found. Pre-cap 1.56.0 on its own copy of the eval bank (70,763 entries): CLAUDE.md paste 22.2 s, stopword paste 28.2 s. 1.56.0 on a fresh bank: the trailing marker IS found (legs [fts]) and the 71-token query DOES find the 'the'-only note. 1.61.1 on the same eval bank: 11.6 s and 10.6 s.",
+      "observed-result": "The cap is real and observable in both directions: 1.61.1 drops the trailing marker and the 71-token stopword that 1.56.0 finds, and it answers the same real-scale pastes in roughly half the time of the pre-cap build. The eval-bank timings (11.6 s / 10.6 s) reproduce the 1.59.0 run's 12.0 s cold on the same bank; the live-bank copy is smaller (25,243 entries) and answers in 1.84 s / 0.56 s.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Every clause of the item was exercised, including the negative control on the same bank with the pre-cap build, and both versions carry the same vectorWeight parameter, so the comparison is like-for-like. The cost figures depend on the bank's size, which the evidence names."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "watch lane: settings ingest scope add, settings watch enable, memory_watch_add on a scratch directory holding x.md, w.md, y.md, node_modules/pkg/index.md and .git/notes.md; memory_watch_status; 'ai-raccoon watch status <projectId>'",
+      "evidence": "memory_watch_status: {watches: [{projectId 01a15a32-..., path .../ck/watchdir, state Healthy, lastSync 2026-10-20T16:43:32.399487+00:00, skippedCount 0, skipped []}]}. CLI 'watch status': 'state: healthy', 'lastSync: 2026-10-20T16:43:32Z'. watch_files rows: exactly x.md, w.md and y.md -- node_modules/pkg/index.md and .git/notes.md are not watched.",
+      "observed-result": "The live registration is listed with its state and last sync, from both the MCP tool and the CLI, and the excluded directories never appear.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The status reflects the live registration and the skipped/excluded files are absent from the rows."
+    },
+    {
+      "item": "watch-catch-up-heals-a-missed-change",
+      "expected-result": "a file changed while the watcher was down (mtime inside the window) and a file changed to a different size with an older mtime are both re-queued on restart; the excluded terms are never found (ADR-0121)",
+      "command": "watch lane: wait for three watch_files rows; edit y.md so watches.last_change_ts moves past x.md's watch_files.updated_at; read both values while the server runs; stop the server; replace one word of x.md with a same-byte-length new term and touch it to a time between updated_at and last_change_ts; rewrite w.md at a different size with a new term and touch it before its own updated_at; restart on the same data root; search for both new terms and for the excluded terms",
+      "evidence": "Before the stop: last_change_ts 1792514626, x.md updated_at 1792514623, w.md updated_at 1792514623; x.md touched to 202610201844.08 (between the two), w.md to 202610201744.07 (an hour before its own updated_at). After the restart: search 'zxreplacem' -> (watchdir/x.md, 'alpha the parish hall roof slates and the organ fund zxrepla...'); search 'wyreplaced' -> (watchdir/w.md, 'beta the tombola stall bunting and the cake competition wyre...'); search 'nmoduleterm' -> []; search 'gitterm' -> []. watch_files: x.md|1792514655|64, w.md|1792514655|83, y.md|1792514655|69. memory_watch_status: state Healthy.",
+      "observed-result": "Both missed changes were re-queued on restart -- the same-size word swap and the different-size rewrite with an older mtime -- and both new terms are searchable within seconds. The node_modules and .git terms were never found.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both re-queue legs fired, the excluded terms stayed out, and the status returned to Healthy. The 5-minute heal pass (event 322 at Debug) was not exercised: it needs a server left up for over five minutes."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "memory_share_extract {projectIds: [P], mode: 'propose', limit: 5}; memory_promotion_list {projectId: P}; memory_promotion_discard {projectId}",
+      "evidence": "propose returned candidates with score 2.47, rating 1.1999621342236837, accessCount 14, reasons ['organic-note'], sourceFile notes/fete.txt and notes/minutes62.md. memory_promotion_list returned the same rows (hash, path, value, sourceFile, score 2.47, reasons, createdAt 1792514706, updatedAt 1792514706) plus the queued chunk rows of the same note. memory_promotion_discard cleared the queue: discarded 7.",
+      "observed-result": "The propose tier persists the candidates and the list reports them with their score and reasons; the discard verb empties the queue and reports the count.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Propose, list and discard agree, and the queue state is reported with the numbers behind it."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "tools/list and prompts/list; prompts/get for both prompts; then a call to each of the 30 tools (after 'settings access set <projectId> full', 'settings ingest scope add <projectId> <corpus>' and 'settings watch enable <projectId> true', which three tools require); the list of names diffed against the names called",
+      "evidence": "tools/list 30 (derived 30), prompts/list ['workspace-consolidation-guide', 'memory-usage-guide'] (derived 2); both prompts/get returned their messages. All 30 called: memory_write, memory_search, memory_get, memory_list, memory_stats, memory_performance, memory_set_ttl (ttlDays 30, canEverExpire false), memory_sweep (dry_run candidates []), memory_record_grade (recorded true), memory_record_followthrough (recorded true), memory_share_extract, memory_promotion_list, memory_promotion_discard (discarded 7), memory_share (shared true, context shared), memory_embed_pending, memory_ingest_file (indexed 0), memory_ingest_directory (scanned 2 then 0), code_get (the full Greeter source), memory_watch_add, memory_watch_status, memory_watch_remove (removed true), project_id_get, project_id_token_get, memory_workspace_status, memory_workspace_consolidate (promoted 0), memory_workspace_begin, memory_workspace_discard, memory_delete (deleted 1), memory_delete_context (deleted 0), memory_sync (sync-not-configured, the documented refusal for a bank with no cloud target). Names never called: []. Called but not listed: [].",
+      "observed-result": "Every registered tool and both prompts are reachable and answer with their documented success or their documented typed refusal. The first pass showed three refusals that the mode raises (memory_set_ttl, memory_delete, memory_delete_context want mode full) and two that need data (code_get needs a code index, memory_watch_add needs watching enabled); after arming those, all 30 returned success. memory_sync has no success path in a scratch bank because no cloud target is configured.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The listed count equals the derived count, the name-by-name diff is empty in both directions, and every tool answered. memory_sync's success path is out of reach without a configured cloud target, and its refusal names the remedy."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "extract every '[NNNN]' event id from this run's serve logs (5 lane logs, 6,972 lines of ids), split AiRaccoon's own ids from the framework's, and check each against the reference with its ranges and lists expanded",
+      "evidence": "The reference covers 264 ids. AiRaccoon's own ids emitted in this run (24, each resolving): 426, 428, 436, 437, 443, 444, 446, 447, 448, 510, 525, 601, 660, 672, 673, 674, 692, 703, 899, 910, 911, 1003, 1005, 1008. Framework ids also emitted: 0 and 14 (Microsoft.Hosting). Unresolved AiRaccoon ids: none.",
+      "observed-result": "Every AiRaccoon event id this run emitted resolves against the reference, including the ones that appear only inside a range (651 and 703 under 650-657 and 700/702-704, 1003 and 1005 under 1002-1013). The two ids that do not resolve are the framework's own.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "No unresolved AiRaccoon id, and the check expands the reference's ranges rather than matching them literally."
+    }
+  ]
+}
