@@ -42,6 +42,7 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 
 ## What's new
 
+- **The embed drain's rows-per-run is configurable from 64 to 4096, and what that value costs is written down (1.61.0).** [ADR-0136](docs/adr/0136-the-embed-drain-rows-per-run-runs-from-64-to-4096.md)
 - `ai-raccoon watch add|remove|status` register and inspect watches from a terminal; the watcher indexes Jupyter notebooks (`.ipynb`) by cell and reports the files it skipped, with the reason. (1.59.0) [CLI reference](docs/reference/cli-reference.md)
 - `ai-raccoon encryption 1password` keys the bank from an SSH Key item in 1Password, read through the `op` CLI. (1.58.0) [ADR-0132](docs/adr/0132-1password-cli-as-a-second-bank-key-source.md) · [how-to](docs/how-to/configure-ai-raccoon-server.md#key-the-bank-from-1password)
 - `ai-raccoon project id register | get | check` and the MCP tool `project_id_get` find or register the id a project already uses, before a new one is minted. (1.57.0) [ADR-0127](docs/adr/0127-reads-need-a-registered-project-id.md)

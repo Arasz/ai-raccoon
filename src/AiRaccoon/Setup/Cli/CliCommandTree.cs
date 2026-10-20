@@ -624,7 +624,7 @@ internal static class CliCommandTree
             new Command("vacuum-interval", "Sets the VACUUM + ANALYZE interval in days (positive integer; default 7)")
                 { new Argument<string>("days") { HelpName = "days" } },
             new Command("embed-rows-per-run",
-                    $"Sets the embed drain's rows-per-signal, for both corpora (positive integer; default {BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun}) — takes effect on the drain's next pass, no restart")
+                    $"Sets the embed drain's rows-per-signal, for both corpora (integer between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}; default {BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun}) — takes effect on the drain's next pass, no restart")
                 { new Argument<string>("rows") { HelpName = "rows" } }
         };
         var list = new Command("list", "Shows the bank maintenance configuration (checkpoint interval, vacuum interval, embed rows per run)");

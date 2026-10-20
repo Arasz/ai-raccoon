@@ -49,19 +49,27 @@ public static class BankMaintenanceConfigKeys
     public const int DefaultEmbedRowsPerRun = 128;
 
     /// <summary>
+    ///     Floor for embed-rows-per-run: two full embedder sub-batches (2 * BatchSize = 64). Below
+    ///     it a drain pass does at most one generator call, and a pass that reaches its budget
+    ///     re-signals itself immediately — the per-pass overhead (open the bank, read the setting,
+    ///     telemetry) would then outweigh the work the pass does. ADR-0136.
+    /// </summary>
+    public const int MinEmbedRowsPerRun = 64;
+
+    /// <summary>
     ///     Ceiling for embed-rows-per-run: the drain's one `SELECT ... LIMIT` materialises the whole
     ///     result as a single List before sub-batching at BatchSize (32) — 4096 = 128 * BatchSize
     ///     bounds that one-shot list to a modest burst while leaving generous headroom above the
-    ///     128 default.
+    ///     128 default. ADR-0136.
     /// </summary>
     public const int MaxEmbedRowsPerRun = 4096;
 
     /// <summary>
-    ///     True when <paramref name="value" /> is empty (unset) or a positive integer at most
-    ///     <see cref="MaxEmbedRowsPerRun" />; false for a present value that failed to parse, was not
-    ///     positive, or exceeded the ceiling — the caller's cue to warn (and, at the CLI, to reject).
-    ///     <paramref name="rows" /> is always usable either way: the default for unset/unparseable,
-    ///     the ceiling for an over-ceiling value.
+    ///     True when <paramref name="value" /> is empty (unset) or an integer inside
+    ///     [<see cref="MinEmbedRowsPerRun" />, <see cref="MaxEmbedRowsPerRun" />]; false for a present
+    ///     value that failed to parse, was not positive, or fell outside the range — the caller's
+    ///     cue to warn (and, at the CLI, to reject). <paramref name="rows" /> is always usable either
+    ///     way: the default for unset/unparseable, the nearest bound for a value outside the range.
     /// </summary>
     public static bool TryParseEmbedRowsPerRun(string? value, out int rows)
     {
@@ -71,20 +79,26 @@ public static class BankMaintenanceConfigKeys
             return true;
         }
 
-        if (int.TryParse(value, out var parsed) && parsed > 0)
+        if (!int.TryParse(value, out var parsed) || parsed <= 0)
         {
-            if (parsed > MaxEmbedRowsPerRun)
-            {
-                rows = MaxEmbedRowsPerRun;
-                return false;
-            }
-
-            rows = parsed;
-            return true;
+            rows = DefaultEmbedRowsPerRun;
+            return false;
         }
 
-        rows = DefaultEmbedRowsPerRun;
-        return false;
+        if (parsed < MinEmbedRowsPerRun)
+        {
+            rows = MinEmbedRowsPerRun;
+            return false;
+        }
+
+        if (parsed > MaxEmbedRowsPerRun)
+        {
+            rows = MaxEmbedRowsPerRun;
+            return false;
+        }
+
+        rows = parsed;
+        return true;
     }
 
     public static int ParseEmbedRowsPerRun(string? value)

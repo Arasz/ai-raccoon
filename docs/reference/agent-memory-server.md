@@ -916,7 +916,8 @@ ai-raccoon extract prune [--apply]
 # and shutdown; the periodic timer runs on serve hosts,
 # default 60 min — and VACUUM + ANALYZE on the vacuum cadence, default 7 days;
 # embed-rows-per-run bounds the embed topic's single consumer's rows per drain
-# pass, for both corpora, default 128; config changes apply live, no server restart needed)
+# pass, for both corpora, default 128, range 64-4096; config changes apply live,
+# no server restart needed)
 ai-raccoon settings maintenance interval {minutes}
 ai-raccoon settings maintenance vacuum-interval {days}
 ai-raccoon settings maintenance embed-rows-per-run {rows}

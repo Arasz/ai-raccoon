@@ -38,8 +38,8 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
 
     public void SkippedCoalesced(ILogger logger) => Log.DrainSkippedCoalesced(logger);
 
-    public void InvalidRowsPerRunSetting(ILogger logger, string value, int max) =>
-        Log.InvalidRowsPerRunSetting(logger, value, max);
+    public void InvalidRowsPerRunSetting(ILogger logger, string value, int min, int max) =>
+        Log.InvalidRowsPerRunSetting(logger, value, min, max);
 
     public void SelfReSignalNotQueued(ILogger logger, EmbedCorpus corpus) =>
         Log.SelfReSignalNotQueued(logger, corpus);
@@ -94,8 +94,8 @@ public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements
         public static partial void DrainFailed(ILogger logger, EmbedCorpus corpus, Exception exception);
 
         [LoggerMessage(EventId = 1006, Level = LogLevel.Warning,
-            Message = "Invalid maintenance.embed-rows-per-run.global setting '{Value}': expected a positive integer, at most {Max}. Falling back to the default or clamped value.")]
-        public static partial void InvalidRowsPerRunSetting(ILogger logger, string value, int max);
+            Message = "Invalid maintenance.embed-rows-per-run.global setting '{Value}': expected an integer between {Min} and {Max}. Falling back to the default or clamped value.")]
+        public static partial void InvalidRowsPerRunSetting(ILogger logger, string value, int min, int max);
 
         [LoggerMessage(EventId = 1007, Level = LogLevel.Debug,
             Message = "Embed drain's self re-signal for {Corpus} did not enqueue (already queued, or the pump is full); the next poll recovers it")]
