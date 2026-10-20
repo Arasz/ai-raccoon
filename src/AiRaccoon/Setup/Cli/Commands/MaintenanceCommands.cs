@@ -37,7 +37,7 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
     /// <summary>
     ///     Sets the embed rows-per-run cap; takes effect on the drain's next pass, no restart.
     ///     Validity is Core's one rule (<see cref="BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun" />);
-    ///     an empty or invalid value is rejected here, never clamped or defaulted (ADR-0010).
+    ///     an empty or out-of-range value is rejected here, never clamped or defaulted (ADR-0010).
     /// </summary>
     public async Task<int> SetEmbedRowsPerRunAsync(ParseResult parseResult, IMemoryStore store,
         StandardStreams streams, CancellationToken cancellationToken)
@@ -46,7 +46,7 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
         if (string.IsNullOrWhiteSpace(raw) || !BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(raw, out var parsed))
         {
             await streams.WriteErrorLineAsync(
-                $"ai-raccoon: embed rows per run must be a positive integer, at most {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}");
+                $"ai-raccoon: embed rows per run must be an integer between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}");
             return ErrorCode.Usage.InvalidValue;
         }
 

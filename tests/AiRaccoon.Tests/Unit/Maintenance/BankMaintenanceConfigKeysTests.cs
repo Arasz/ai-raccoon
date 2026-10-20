@@ -98,10 +98,45 @@ public sealed class BankMaintenanceConfigKeysTests
     }
 
     [Fact]
-    public void TryParseEmbedRowsPerRun_Positive_Parses()
+    public void TryParseEmbedRowsPerRun_InsideTheRange_Parses()
     {
-        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun("7", out var rows).ShouldBeTrue();
-        rows.ShouldBe(7);
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(
+            BankMaintenanceConfigKeys.MinEmbedRowsPerRun.ToString(), out var floor).ShouldBeTrue();
+        floor.ShouldBe(BankMaintenanceConfigKeys.MinEmbedRowsPerRun);
+
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun("512", out var rows).ShouldBeTrue();
+        rows.ShouldBe(512);
+    }
+
+    /// <summary>The configurable range: 64 (two full embedder sub-batches) to 2048, default 128.</summary>
+    [Fact]
+    public void EmbedRowsPerRun_Range_Is64To2048_WithTheDefaultInsideIt()
+    {
+        BankMaintenanceConfigKeys.MinEmbedRowsPerRun.ShouldBe(64);
+        BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ShouldBe(2048);
+        BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun.ShouldBeInRange(
+            BankMaintenanceConfigKeys.MinEmbedRowsPerRun,
+            BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
+    }
+
+    /// <summary>A positive value below the floor is out of range: clamped to the floor and flagged invalid, so the drain warns and the CLI rejects.</summary>
+    [Fact]
+    public void TryParseEmbedRowsPerRun_BelowTheFloor_ClampsToTheFloor_AndIsInvalid()
+    {
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(
+            (BankMaintenanceConfigKeys.MinEmbedRowsPerRun - 1).ToString(), out var justUnder).ShouldBeFalse();
+        justUnder.ShouldBe(BankMaintenanceConfigKeys.MinEmbedRowsPerRun);
+
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun("1", out var one).ShouldBeFalse();
+        one.ShouldBe(BankMaintenanceConfigKeys.MinEmbedRowsPerRun);
+    }
+
+    [Fact]
+    public void TryParseEmbedRowsPerRun_AtTheFloor_IsValid()
+    {
+        BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(
+            BankMaintenanceConfigKeys.MinEmbedRowsPerRun.ToString(), out var rows).ShouldBeTrue();
+        rows.ShouldBe(BankMaintenanceConfigKeys.MinEmbedRowsPerRun);
     }
 
     [Theory]
@@ -117,16 +152,16 @@ public sealed class BankMaintenanceConfigKeysTests
     [Fact]
     public void ParseEmbedRowsPerRun_MirrorsTryParse_WithoutTheValidityFlag()
     {
-        BankMaintenanceConfigKeys.ParseEmbedRowsPerRun("7").ShouldBe(7);
+        BankMaintenanceConfigKeys.ParseEmbedRowsPerRun("512").ShouldBe(512);
         BankMaintenanceConfigKeys.ParseEmbedRowsPerRun("garbage").ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
         BankMaintenanceConfigKeys.ParseEmbedRowsPerRun(null).ShouldBe(BankMaintenanceConfigKeys.DefaultEmbedRowsPerRun);
     }
 
-    /// <summary>Review finding 1 (#517): 4096 = 128 * EntryEmbedder/CodeEmbedder.BatchSize (32) — generous headroom above the 128 default while still bounding the drain's one-shot `SELECT ... LIMIT` materialisation to a modest burst.</summary>
+    /// <summary>The ceiling bounds the drain's one-shot `SELECT ... LIMIT` materialisation: 2048 = 64 * EntryEmbedder/CodeEmbedder.BatchSize (32) — 64 full sub-batches of rows held in one List at a time.</summary>
     [Fact]
     public void MaxEmbedRowsPerRun_IsTheDocumentedCeiling()
     {
-        BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ShouldBe(4096);
+        BankMaintenanceConfigKeys.MaxEmbedRowsPerRun.ShouldBe(2048);
     }
 
     /// <summary>Review finding 1: clamp at the parse layer (mirrors ParseVacuumIntervalDays_ClampsAbsurdValues_ToTheTimeSpanSafeCeiling above) — and, unlike vacuum, this is also the CLI's one shared validity rule (finding 4), so an over-ceiling value is invalid, not silently accepted.</summary>

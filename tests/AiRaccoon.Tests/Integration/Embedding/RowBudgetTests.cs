@@ -40,16 +40,16 @@ public sealed class RowBudgetTests : IDisposable
     public async Task RowsPerRun_ComesFromTheBankSetting()
     {
         await ConfigureMemoryProviderAsync();
-        await SeedPendingMemoryRowsAsync(20);
-        await SetRowsPerRunAsync("7");
+        await SeedPendingMemoryRowsAsync(100);
+        await SetRowsPerRunAsync(BankMaintenanceConfigKeys.MinEmbedRowsPerRun.ToString());
         var pump = TestData.NewEmbedDrainPump();
         var service = NewService(pump);
 
         pump.TryEnqueue(new EmbedDrainRequest(EmbedCorpus.Memory));
         await service.DrainOnceAsync(new EmbedDrainRequest(EmbedCorpus.Memory), TestContext.Current.CancellationToken);
 
-        (await EmbeddedMemoryCountAsync()).ShouldBe(7);
-        (await PendingMemoryCountAsync()).ShouldBe(13);
+        (await EmbeddedMemoryCountAsync()).ShouldBe(BankMaintenanceConfigKeys.MinEmbedRowsPerRun);
+        (await PendingMemoryCountAsync()).ShouldBe(100 - BankMaintenanceConfigKeys.MinEmbedRowsPerRun);
     }
 
     /// <summary>C2: the same setting, and the same consumer, also bounds a code-corpus drain pass.</summary>
@@ -57,15 +57,15 @@ public sealed class RowBudgetTests : IDisposable
     public async Task CodeReindex_HonoursTheSameSetting()
     {
         await ActivateCodeEngineAsync();
-        await SeedPendingCodeRowsAsync(20);
-        await SetRowsPerRunAsync("7");
+        await SeedPendingCodeRowsAsync(100);
+        await SetRowsPerRunAsync(BankMaintenanceConfigKeys.MinEmbedRowsPerRun.ToString());
         var pump = TestData.NewEmbedDrainPump();
         var service = NewService(pump);
 
         await service.DrainOnceAsync(new EmbedDrainRequest(EmbedCorpus.Code), TestContext.Current.CancellationToken);
 
-        (await EmbeddedCodeCountAsync()).ShouldBe(7);
-        (await PendingCodeCountAsync()).ShouldBe(13);
+        (await EmbeddedCodeCountAsync()).ShouldBe(BankMaintenanceConfigKeys.MinEmbedRowsPerRun);
+        (await PendingCodeCountAsync()).ShouldBe(100 - BankMaintenanceConfigKeys.MinEmbedRowsPerRun);
     }
 
     [RetryFact]
@@ -130,6 +130,19 @@ public sealed class RowBudgetTests : IDisposable
         var service = NewService(TestData.NewEmbedDrainPump(), logger: logger);
 
         service.ResolveRowsPerRun("2000000000").ShouldBe(BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
+
+        logger.Collector.GetSnapshot().Count(r => r.Level == LogLevel.Warning).ShouldBe(1);
+    }
+
+    /// <summary>A value below the floor is out of range too: clamped to the floor, and warned about like any other bad value.</summary>
+    [RetryFact]
+    public void ResolveRowsPerRun_BelowTheFloor_ClampsToTheFloor_AndWarns()
+    {
+        var logger = new FakeLogger<EmbedDrainService>();
+        var service = NewService(TestData.NewEmbedDrainPump(), logger: logger);
+
+        service.ResolveRowsPerRun((BankMaintenanceConfigKeys.MinEmbedRowsPerRun - 1).ToString())
+            .ShouldBe(BankMaintenanceConfigKeys.MinEmbedRowsPerRun);
 
         logger.Collector.GetSnapshot().Count(r => r.Level == LogLevel.Warning).ShouldBe(1);
     }

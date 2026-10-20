@@ -245,8 +245,8 @@ fits a second, independent corpus. Instead, a standing `code-reindex` maintenanc
 on-demand shape as `PendingEmbedJob`: `HasWorkAsync` reads `code_entries.embed_state`
 directly, so a bank with no code engine configured is never "due") signals the embed topic's
 single consumer (`EmbedDrainService`, ADR-0091) rather than draining inline itself; each
-signal drains up to `maintenance.embed-rows-per-run.global` pending rows (default 128, ceiling
-4096) — no relay wait, no gate, memory tools stay fully available the whole time. A re-ingested
+signal drains up to `maintenance.embed-rows-per-run.global` pending rows (default 128, range
+64–2048) — no relay wait, no gate, memory tools stay fully available the whole time. A re-ingested
 code file also prunes `code_entries` rows its new chunk set no longer covers (#481). While rows
 drain, `kind=code` search naturally degrades to FTS5-only for them (`code_fts` is populated at
 ingest time, independent of `embed_state`).

@@ -236,7 +236,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "0"], store);
 
         exit.ShouldBe(ErrorCode.Usage.InvalidValue);
-        err.ShouldContain("positive");
+        err.ShouldContain($"between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }
 
@@ -248,7 +248,7 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", "many"], store);
 
         exit.ShouldBe(ErrorCode.Usage.InvalidValue);
-        err.ShouldContain("positive");
+        err.ShouldContain($"between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
     }
 
@@ -260,8 +260,35 @@ public class ConfigCommandsMaintenanceTests : IDisposable
         var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", ""], store);
 
         exit.ShouldBe(ErrorCode.Usage.InvalidValue);
-        err.ShouldContain("positive");
+        err.ShouldContain($"between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}");
         store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+    }
+
+    /// <summary>The floor is part of the range, not a lower bound the CLI merely tolerates: one row per pass would drain the backlog a row at a time.</summary>
+    [RetryFact]
+    public async Task MaintenanceEmbedRowsPerRunBelowTheFloor_Returns1_AndWritesError()
+    {
+        var store = new FakeConfigStore();
+        var belowFloor = (BankMaintenanceConfigKeys.MinEmbedRowsPerRun - 1).ToString();
+
+        var (exit, _, err) = await Run(["settings", "maintenance", "embed-rows-per-run", belowFloor], store);
+
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue);
+        err.ShouldContain($"between {BankMaintenanceConfigKeys.MinEmbedRowsPerRun} and {BankMaintenanceConfigKeys.MaxEmbedRowsPerRun}");
+        store.Settings.ShouldNotContainKey(BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal);
+    }
+
+    [RetryFact]
+    public async Task MaintenanceEmbedRowsPerRunAtTheFloor_WritesGlobalRow()
+    {
+        var store = new FakeConfigStore();
+        var floor = BankMaintenanceConfigKeys.MinEmbedRowsPerRun.ToString();
+
+        var (exit, outp, _) = await Run(["settings", "maintenance", "embed-rows-per-run", floor], store);
+
+        exit.ShouldBe(0);
+        store.Settings[BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal].ShouldBe(floor);
+        outp.ShouldContain($"embed rows per run: {floor}");
     }
 
     /// <summary>

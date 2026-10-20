@@ -19,7 +19,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///         Loop: wait for a signal, take exactly one queued request (releasing its coalesce key so a
 ///         signal arriving mid-drain queues its own fresh pass), open a connection, drain up to the
 ///         bank's <see cref="BankMaintenanceConfigKeys.EmbedRowsPerRunGlobal" /> rows for that
-///         corpus (WP11-C; default 128, re-read on every pass). A pass that consumes the full row
+///         corpus (WP11-C; default 128, range 64..2048, re-read on every pass). A pass that consumes the full row
 ///         budget re-signals its own corpus (WP1, docs/work/2026-08-23-post-delta-4-plan.md) so the
 ///         next pass runs immediately instead of waiting out the 15s on-demand poll — a full budget
 ///         is real progress (<c>EmbedPendingBatchAsync</c> counts only rows whose UPDATE landed), so
@@ -154,14 +154,14 @@ public sealed partial class EmbedDrainService(
     /// <summary>The most recently warned-about invalid raw value, or null once a valid one is seen — this pass runs every drain, so warning on every pass for a persistent bad value would never stop (review finding 2, #517).</summary>
     private string? _lastWarnedRowsPerRun;
 
-    /// <summary>Unset defaults to 128; a present-but-invalid value (unparseable, non-positive, or over the ceiling) also falls back, warning once per DISTINCT bad value — not every pass. Test seam.</summary>
+    /// <summary>Unset defaults to 128; a present-but-invalid value (unparseable, non-positive, or outside the 64..2048 range) also falls back, warning once per DISTINCT bad value — not every pass. Test seam.</summary>
     internal int ResolveRowsPerRun(string? raw)
     {
         if (!BankMaintenanceConfigKeys.TryParseEmbedRowsPerRun(raw, out var rows))
         {
             if (raw != _lastWarnedRowsPerRun)
             {
-                reporter.InvalidRowsPerRunSetting(logger, raw!, BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
+                reporter.InvalidRowsPerRunSetting(logger, raw!, BankMaintenanceConfigKeys.MinEmbedRowsPerRun, BankMaintenanceConfigKeys.MaxEmbedRowsPerRun);
                 _lastWarnedRowsPerRun = raw;
             }
         }
