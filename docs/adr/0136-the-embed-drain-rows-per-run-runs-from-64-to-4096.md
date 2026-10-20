@@ -48,9 +48,9 @@ Throughput, from the shipped device benchmark (README, Apple M4, the same 4 914-
 
 ### What the value does *not* change
 
-- **Per-row embedding cost.** The session call is one row either way; the padded sequence length
-  is `LengthBuckets.PaddedLength` (a multiple of 64, never past the window). A bigger pass does
-  not embed a row faster.
+- **Per-row embedding cost.** The session call is one row either way; its sequence length is that
+  row's own token count capped at the window (a `LengthBuckets` multiple of 64 on the MLX path,
+  where `_bucketRows` pads rows up to a bucket). A bigger pass does not embed a row faster.
 - **The native ONNX peak.** The session shape is 1 × padded length, not N × padded length; the
   5.9–9.5 GB figure in `docs/work/2026-09-23-server-memory-usage.md` is a property of the
   32-row DB batch and the model weights, not of the rows-per-run. ADR-0110/0118's memory work
