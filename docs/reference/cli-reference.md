@@ -51,7 +51,7 @@ proxy; full servers come only from `serve`).
 | `project id register <id> [--name <name>]` | Registers a project id. Prints `registered <id>`, or `already registered <id>` for a registered id or an alias of one (the id it resolves to). A name fills an unset one and never overwrites it. Exits 10 for raw text that no project is registered or holds rows under, 18 for a retired id |
 | `project id get --name <name>` | Prints the one id registered under an exact, case-sensitive name, with no prefix. Exits 18 when none matches and 19 when several do, listing each id on stderr with stdout empty |
 | `project id check <id>` | Prints `known <id>` (the id it resolves to) and exits 0, or prints `unknown <id>` / `retired <id>` and exits 18. Accepts any non-blank id, guid or raw text |
-| `serve [options]` | Runs the HTTP MCP endpoint in the foreground; see [serve](#serve) below |
+| `serve [options]` | Runs the HTTP MCP endpoint in the foreground; see [serve](#serve) below. `serve observability` prints a ready-to-run monitoring command for the running server |
 | `doctor` | Shows bank schema/version, code engine state and embedding settings, without changing the bank |
 
 The three `project id` verbs are built for scripts. They never read stdin or prompt, and on

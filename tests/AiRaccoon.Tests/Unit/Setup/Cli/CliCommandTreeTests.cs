@@ -200,6 +200,22 @@ public class CliCommandTreeTests
         }
     }
 
+    /// <summary>
+    ///     The root help is where a user looks first: the `serve` entry has to name the monitoring
+    ///     verb, or `ai-raccoon serve observability --help` is a command nobody finds.
+    /// </summary>
+    [Fact]
+    public void ServeEntryInTheRootHelp_NamesTheMonitoringVerb()
+    {
+        var root = CliCommandTree.BuildFullRootCommand();
+        var serve = root.Children.OfType<Command>().Single(c => c.Name == "serve");
+
+        var description = serve.Description.ShouldNotBeNull();
+        description.ShouldContain("observability");
+        description.ShouldContain("monitoring");
+        description.Length.ShouldBeLessThan(220);
+    }
+
     [Fact]
     public void ServeCommand_DeclaresAnAction_SoBareServeParses()
     {

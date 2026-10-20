@@ -657,7 +657,7 @@ internal static class CliCommandTree
     private static Command ServeCommand()
     {
         var serve = new Command("serve",
-            "Serves the MCP endpoint over HTTP (always HTTP). Background it: ai-raccoon serve > serve.log 2>&1 &")
+            "Serves the MCP endpoint over HTTP (always HTTP). Background it: ai-raccoon serve > serve.log 2>&1 &. The `serve observability` verb prints a ready-to-run monitoring command for the running server")
         {
             ServePortOption,
             ServeIdleTimeoutOption,
