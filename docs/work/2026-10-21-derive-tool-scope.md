@@ -219,6 +219,24 @@ them became the `AIRGEN002` assertion instead of an empty-diagnostics assertion.
 That last row is the point of the cut: the mechanism lands without the behaviour changing, so
 the red-to-green for the behaviour is one step, not thirty files.
 
+### The behaviour (s3)
+
+One file, one behaviour, one red-to-green: `src/AiRaccoon/Tools/ToolNameScope.cs` keeps the class
+and loses the list. It now asks the generated map, and a name that is not a declared tool is
+**refused** — the map knows every tool, so a name outside it names no tool at all. That is the
+default-deny flip, and it is the only behaviour change beyond `memory_delete` moving across.
+
+`IToolNameScope`, `ScopeCheck`, `IScopeCheck`, `ScopeCheckResult`, the `ToolGate` check order, the
+refusal message and the DI registration are all unchanged — the class survives, so nothing that
+named it has to be renamed.
+
+| Gate | Result |
+|---|---|
+| The scope test | 6 tests, **0 failed** (was 4 failed) |
+| The reserved target's delete | 1 test, **0 failed** (was 1 failed) |
+| The whole Unit surface | 4302 tests, 0 failed, 1 skipped, 10.0 s |
+| The shared-project integration surface | 19 tests, 0 failed, 5.8 s |
+
 ### The gates
 
 | Gate | Result |
