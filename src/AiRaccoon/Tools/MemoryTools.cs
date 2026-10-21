@@ -50,6 +50,7 @@ public sealed partial class MemoryTools(
     private static readonly MemoryWriteRequest.Validator MemoryWriteRequestValidator = new();
 
     [McpServerTool(Name = TnMemoryWrite)]
+    [McpToolScope(RequiresOrdinaryProject: true)]
     [Description(
         "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace, and workspace_id wins over context when both are supplied (the sandbox has priority). A write may be refused (e.g. it matched a noise policy) — check stored: a refused write has stored=false and a reason naming what rejected it, and hash is empty.")]
     public async Task<ApiEnvelope<WriteResult>> Write(
@@ -82,6 +83,7 @@ public sealed partial class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryGet)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description(
         "Reads one entry's full content by its content hash, as returned by memory_write or memory_search. An unknown hash is refused as unknown-hash.")]
     public async Task<ApiEnvelope<GetResult>> Get(
@@ -102,6 +104,7 @@ public sealed partial class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemorySearch)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description(
         "Hybrid semantic search over the bank. projectId=shared directly reads shared documents and promoted knowledge (scope all/shared only, without labels/workspaces). scope=all (default) searches shared + project (+ workspace when named); "
         + "scope=project searches the project only; scope=shared searches shared documents and promoted knowledge. A project scope "
@@ -441,6 +444,7 @@ public sealed partial class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryList)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description("Lists the bank's indexed files as a JSON tree (memory_list_files).")]
     public async Task<ApiEnvelope<ListResult>> List(
         [Description("The project id.")] string? projectId = null,
@@ -454,6 +458,7 @@ public sealed partial class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryStats)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description("Reports entry count, pending (deferred-embedding) count, and the bank's committed contexts.")]
     public async Task<ApiEnvelope<StatsResult>> Stats(
         [Description("The project id.")] string? projectId = null,
@@ -467,6 +472,7 @@ public sealed partial class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryDelete)]
+    [McpToolScope(RequiresOrdinaryProject: true)]
     [Description(
         "Deletes the whole memory behind a content hash: a multi-chunk memory_write's chunks share one write, so any of its chunk hashes deletes all of them, not just one. Idempotent: an unknown hash is not an error — it reports the true row count, 0 for an unknown hash.")]
     public async Task<ApiEnvelope<DeletedResult>> Delete(
@@ -485,6 +491,7 @@ public sealed partial class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryDeleteContext)]
+    [McpToolScope(RequiresOrdinaryProject: true)]
     [Description(
         "Deletes every entry stored under a context label (e.g. a project or workspace context). Idempotent: an unknown context is not an error — it reports deleted=0.")]
     public async Task<ApiEnvelope<DeletedContextResult>> DeleteContext(
@@ -503,6 +510,7 @@ public sealed partial class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryIngestFile)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description("Indexes one file from disk into memory. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<IngestResult>> IngestFile(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
@@ -522,6 +530,7 @@ public sealed partial class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryIngestDirectory)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description(
         "Recursively indexes a directory tree into memory, skipping unchanged files. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<ScannedResult>> IngestDirectory(
@@ -542,6 +551,7 @@ public sealed partial class MemoryTools(
     }
 
     [McpServerTool(Name = TnMemoryEmbedPending)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description("Embeds deferred entries in batches (used when no model was configured at write time).")]
     public async Task<ApiEnvelope<EmbedResult>> EmbedPending(
         [Description("The project id.")] string? projectId = null,

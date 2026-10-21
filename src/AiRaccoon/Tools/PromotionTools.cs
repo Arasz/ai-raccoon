@@ -18,6 +18,7 @@ public sealed class PromotionTools(
     private const string TnMemoryPromotionDiscard = "memory_promotion_discard";
 
     [McpServerTool(Name = TnMemoryPromotionList)]
+    [McpToolScope(RequiresOrdinaryProject: true)]
     [Description(
         "Lists the propose tier — candidates waiting for promotion review, ranked by score. Propose with memory_share_extract to fill it; promote the keepers with memory_share_extract (mode=promote) or drop them with memory_promotion_discard. Values are previews by default; pass includeFullValue=true for the full text. Omitting projectId requires allProjects=true.")]
     public async Task<ApiEnvelope<PromotionListResult>> List(
@@ -69,6 +70,7 @@ public sealed class PromotionTools(
             : value[..(SharedExtractionService.PreviewLength - 1)] + "…";
 
     [McpServerTool(Name = TnMemoryPromotionDiscard)]
+    [McpToolScope(RequiresOrdinaryProject: true)]
     [Description(
         "Removes a candidate from the propose tier without promoting it (the agent's 'no'). Omit the hash to clear the whole project's queue. Idempotent: an unknown hash is not an error — it reports discarded=0.")]
     public async Task<ApiEnvelope<PromotionDiscardResult>> Discard(

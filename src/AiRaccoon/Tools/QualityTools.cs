@@ -15,6 +15,7 @@ public sealed class QualityTools(
     private const string TnRecordGrade = "memory_record_grade";
 
     [McpServerTool(Name = TnRecordFollowThrough)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description(
         "Records that the agent read a file that appeared in a prior memory_search result. " +
         "Updates the existing quality record keyed by correlationId; the record must belong to this project, " +
@@ -41,6 +42,7 @@ public sealed class QualityTools(
     }
 
     [McpServerTool(Name = TnRecordGrade)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description(
         "Records a human usefulness grade (1-5) for a prior memory_search call. " +
         "Updates the existing quality record keyed by correlationId; the record must belong to this project, " +

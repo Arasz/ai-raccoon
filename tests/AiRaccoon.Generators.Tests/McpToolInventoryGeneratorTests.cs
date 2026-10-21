@@ -24,6 +24,12 @@ public sealed class McpToolInventoryGeneratorTests
 
             namespace AiRaccoon.Tools
             {
+                [System.AttributeUsage(System.AttributeTargets.Method)]
+                public sealed class McpToolScopeAttribute : System.Attribute
+                {
+                    public McpToolScopeAttribute(bool requiresOrdinaryProject) { }
+                }
+
                 internal static class ToolNames
                 {
                     public const string Zebra = "zebra_tool";
@@ -33,9 +39,11 @@ public sealed class McpToolInventoryGeneratorTests
                 public sealed class ToolGroup
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = ToolNames.Zebra)]
+                    [McpToolScope(false)]
                     public void Zebra() { }
 
                     [ModelContextProtocol.Server.McpServerTool(Name = ToolNames.Alpha)]
+                    [McpToolScope(false)]
                     public void Alpha() { }
                 }
             }
@@ -44,7 +52,8 @@ public sealed class McpToolInventoryGeneratorTests
         var result = Run(source);
 
         result.Diagnostics.ShouldBeEmpty();
-        var generated = result.GeneratedTrees.Single().GetText(TestContext.Current.CancellationToken).ToString();
+        var generated = result.GeneratedTrees.Single(tree => tree.FilePath.EndsWith("McpToolInventory.g.cs", StringComparison.Ordinal))
+            .GetText(TestContext.Current.CancellationToken).ToString();
         generated.IndexOf("alpha_tool", StringComparison.Ordinal).ShouldBeLessThan(
             generated.IndexOf("zebra_tool", StringComparison.Ordinal));
     }
@@ -64,21 +73,31 @@ public sealed class McpToolInventoryGeneratorTests
 
             namespace AiRaccoon.Tools
             {
+                [System.AttributeUsage(System.AttributeTargets.Method)]
+                public sealed class McpToolScopeAttribute : System.Attribute
+                {
+                    public McpToolScopeAttribute(bool requiresOrdinaryProject) { }
+                }
+
                 public sealed class IncludedTools
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = "included_tool")]
+                    [McpToolScope(false)]
                     public void Included() { }
 
                     [ModelContextProtocol.Server.McpServerTool(Name = "private_tool")]
+                    [McpToolScope(false)]
                     private void Private() { }
 
                     [ModelContextProtocol.Server.McpServerTool(Name = "static_tool")]
+                    [McpToolScope(false)]
                     public static void Static() { }
                 }
 
                 public abstract class AbstractTools
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = "abstract_tool")]
+                    [McpToolScope(false)]
                     public void Abstract() { }
                 }
 
@@ -87,6 +106,7 @@ public sealed class McpToolInventoryGeneratorTests
                 public abstract class UnusedAbstractTools
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = "unused_abstract_tool")]
+                    [McpToolScope(false)]
                     public void Unused() { }
                 }
             }
@@ -96,6 +116,7 @@ public sealed class McpToolInventoryGeneratorTests
                 public sealed class OtherTools
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = "outside_tool")]
+                    [McpToolScope(false)]
                     public void Outside() { }
                 }
             }
@@ -104,7 +125,8 @@ public sealed class McpToolInventoryGeneratorTests
         var result = Run(source);
 
         result.Diagnostics.ShouldBeEmpty();
-        var generated = result.GeneratedTrees.Single().GetText(TestContext.Current.CancellationToken).ToString();
+        var generated = result.GeneratedTrees.Single(tree => tree.FilePath.EndsWith("McpToolInventory.g.cs", StringComparison.Ordinal))
+            .GetText(TestContext.Current.CancellationToken).ToString();
         generated.ShouldContain("included_tool");
         generated.ShouldNotContain("private_tool");
         generated.ShouldNotContain("static_tool");

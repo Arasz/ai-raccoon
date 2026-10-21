@@ -45,6 +45,48 @@ public sealed class McpToolScopeGeneratorTests
         diagnostic.GetMessage().ShouldContain("Scopeless");
     }
 
+    [Fact]
+    public void Generate_EmitsTheScopeAsDataOnly()
+    {
+        const string source = """
+            namespace ModelContextProtocol.Server
+            {
+                [System.AttributeUsage(System.AttributeTargets.Method)]
+                public sealed class McpServerToolAttribute : System.Attribute
+                {
+                    public string? Name { get; set; }
+                }
+            }
+
+            namespace AiRaccoon.Tools
+            {
+                [System.AttributeUsage(System.AttributeTargets.Method)]
+                public sealed class McpToolScopeAttribute : System.Attribute
+                {
+                    public McpToolScopeAttribute(bool requiresOrdinaryProject) { }
+                }
+
+                public sealed class ToolGroup
+                {
+                    [ModelContextProtocol.Server.McpServerTool(Name = "scoped_tool")]
+                    [McpToolScope(true)]
+                    public void Scoped() { }
+                }
+            }
+            """;
+
+        var result = Run(source);
+
+        result.Diagnostics.ShouldBeEmpty();
+        var generated = result.GeneratedTrees
+            .Single(tree => tree.FilePath.EndsWith("McpToolScope.g.cs", StringComparison.Ordinal))
+            .GetText(TestContext.Current.CancellationToken).ToString();
+        generated.ShouldContain("McpToolScopeGenerated");
+        generated.ShouldContain("\"scoped_tool\", true");
+        // Data only: the interface it feeds stays a hand-written adapter (ADR-0139).
+        generated.ShouldNotContain("IToolNameScope");
+    }
+
     private static GeneratorDriverRunResult Run(string source)
     {
         var syntaxTree = CSharpSyntaxTree.ParseText(SourceText.From(source));

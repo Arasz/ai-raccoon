@@ -24,6 +24,7 @@ public sealed class ProjectTools(
         + "means the project's memory becomes unreachable, not deleted.";
 
     [McpServerTool(Name = TnProjectIdTokenGet)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description(
         "Call project_id_get first; mint only when it finds nothing. Mints a new project id: a guidv7, registered so it is a real project from this call on. Call this once per project and keep the returned id — every other tool's projectId parameter takes it.")]
     public async Task<ApiEnvelope<ProjectIdTokenResult>> Get(
@@ -41,6 +42,7 @@ public sealed class ProjectTools(
     }
 
     [McpServerTool(Name = TnProjectIdGet)]
+    [McpToolScope(RequiresOrdinaryProject: false)]
     [Description(
         "Returns the project id registered under an exact, case-sensitive name, as stored. Call this before project_id_token_get. No match refuses with project-not-found (then mint one with project_id_token_get); several matches refuse with project-name-ambiguous, listing every id, so ask the user which one. Never registers anything.")]
     public async Task<ApiEnvelope<ProjectIdGetResult>> FindByName(

@@ -176,6 +176,49 @@ case); the union assertion passes today because the split does not change which 
 classified. The plan's acceptance criteria said "failed: 1" — the intent (a real failure, not a
 filter that matched nothing and exited 8) holds, the count did not.
 
+### The mechanism (s2)
+
+The scope is now declared on the tool and compiled:
+
+- `src/AiRaccoon/Tools/McpToolScopeAttribute.cs` — the declaration. Its constructor argument is
+  required, so `[McpToolScope]` without a value does not compile: the compiler, not the
+  generator, enforces that a tool states its scope.
+- `src/AiRaccoon.Generators/McpToolInventoryGenerator.cs` — the scope is read off the method
+  symbol in the *same* candidate pass that finds the tool, and a method that declares none is
+  reported as `AIRGEN002` (an error, at the method's declaration). The generator emits a second
+  file, `McpToolScope.g.cs`, with the classification as **data only**; the interface it feeds
+  stays a hand-written adapter.
+- All thirty tool methods declare their scope, in the eleven tool files. The per-file counts of
+  `[McpServerTool(` and `[McpToolScope(` are equal in every file:
+
+```
+CodeTools.cs: tools=1 scopes=1
+MemoryTools.cs: tools=10 scopes=10
+PerformanceTools.cs: tools=1 scopes=1
+ProjectTools.cs: tools=2 scopes=2
+PromotionTools.cs: tools=2 scopes=2
+QualityTools.cs: tools=2 scopes=2
+ShareTools.cs: tools=2 scopes=2
+SweepTools.cs: tools=2 scopes=2
+SyncTools.cs: tools=1 scopes=1
+WatchTools.cs: tools=3 scopes=3
+WorkspaceTools.cs: tools=4 scopes=4
+```
+
+The generator's own test snippets declare a fake `AiRaccoon.Tools.McpToolScopeAttribute` — the
+generator matches by full name, so a snippet without that type would not compile — and one of
+them became the `AIRGEN002` assertion instead of an empty-diagnostics assertion.
+
+| Gate | Result |
+|---|---|
+| `dotnet build src/AiRaccoon/AiRaccoon.csproj -c Debug` | clean, 0 warnings, 0 errors |
+| `dotnet test tests/AiRaccoon.Generators.Tests` | 5 tests, 0 failed (the `AIRGEN002` test is green; it was red in s1) |
+| The generator has no product reference | `grep -c ProjectReference src/AiRaccoon.Generators/AiRaccoon.Generators.csproj` → 0 |
+| The scope test is **still red** | 6 tests, 4 failed — this step changes no behaviour, so the s1 reds stay red |
+
+That last row is the point of the cut: the mechanism lands without the behaviour changing, so
+the red-to-green for the behaviour is one step, not thirty files.
+
 ### The gates
 
 | Gate | Result |
