@@ -38,11 +38,13 @@ The target is never selected implicitly from cwd. Code is skipped; supported doc
 remain `.md`, `.markdown`, `.txt`, `.json` and `.ipynb`.
 
 Which tools the reserved target accepts is declared on the tools themselves: every MCP tool
-carries `[McpToolScope(RequiresOrdinaryProject: ...)]`, and the build fails if a tool declares
-no scope, so a new tool cannot reach the reserved target by omission. The target's content is
-owned by its watch and its file — `memory_delete` is refused there, because a delete would
-remove one chunk of a document, advance no watch fingerprint, and leave the watch claiming a
-file that the bank no longer holds. Delete the file, or remove the watch.
+carries `[McpToolScope(ToolScope.All)]`, `[McpToolScope(ToolScope.Shared)]` or
+`[McpToolScope(ToolScope.Project)]` — the scope names the targets a tool may run against — and
+the build fails if a tool declares no scope, so a new tool cannot reach the reserved target by
+omission. The target's content is owned by its watch and its file — `memory_delete` is refused
+there, because a delete would remove one chunk of a document, advance no watch fingerprint, and
+leave the watch claiming a file that the bank no longer holds. Delete the file, or remove the
+watch.
 
 Watch removal retains indexed documents. File changes and deletions update only the shared
 watch's owned rows. A legacy private owner or old unactivated watch named `shared` causes a

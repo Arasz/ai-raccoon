@@ -39,7 +39,9 @@ two weaknesses this task fixes:
 1. **Attribute plus source generator** (the owner's call, option A). Every `[McpServerTool]`
    method declares its scope; the generator collects the tool surface and the scope in one pass
    and emits the classification; a missing declaration is a compile error (`AIRGEN002`). The
-   hand-written list and both prefix families go away.
+   hand-written list and both prefix families go away. The scope is an **enum** — `All`,
+   `Shared`, `Project` — and the rule is symmetric: a tool's scope must cover the target's
+   scope (the correction below).
 2. **`memory_delete` is refused on the reserved target**, and the refusal is written down in
    ADR-0137 and in the operator reference.
 3. A name that is not a declared tool is **refused** on the reserved target. The generated map is
@@ -52,8 +54,10 @@ two weaknesses this task fixes:
 
 ## The plan
 
-Eight steps, twenty-seven acceptance criteria, recorded in the task graph
-(`.ai-badger/task-tracking/plans/2026-10-21-air-derive-tool-scope-from-declarations.md`).
+Eight steps, twenty-seven acceptance criteria for the first delivery, recorded in the task
+graph (`.ai-badger/task-tracking/plans/2026-10-21-air-derive-tool-scope-from-declarations.md`),
+and four steps, sixteen criteria for the correction
+(`.ai-badger/task-tracking/plans/2026-10-21-air-tool-scope-enum-and-analyzer.md`).
 Serial: one implementer, and the steps share the tool files and the test project.
 
 | Step | What it does |
@@ -66,6 +70,10 @@ Serial: one implementer, and the steps share the tool files and the test project
 | s6 | ADR-0139, ADR-0137 amended, the operator reference, this record |
 | s7 | VERSION 1.63.0 and its changelog entry |
 | s8 | The touched surface run once; the rest to CI |
+| c1 | The scope is an enum, and the rule is symmetric (the owner's correction) |
+| c2 | A real Roslyn analyzer owns the "a tool declares no scope" error |
+| c3 | The decision records follow the enum and the analyzer |
+| c4 | The touched surface once, then CI |
 
 ## Evidence
 
@@ -308,6 +316,66 @@ exactly one caller (`ScopeCheck.Check`, `src/AiRaccoon/Tools/ScopeCheck.cs:10`) 
 `ScopeCheck.Check` has exactly one caller (`ToolGate.RequireAsync`,
 `src/AiRaccoon/Tools/ToolGate.cs:60`), where the tool name is the tool's own constant. No other
 caller can be surprised by the flip.
+
+## The correction
+
+The owner reviewed the change and asked for one thing (`f:`): `RequiresOrdinaryProject` becomes
+a **scope definition by enum**, and the "a tool with no scope" error becomes a **Roslyn
+analyzer** rather than a source generator's diagnostic.
+
+### The enum and the rule
+
+`ToolScope` has three values, and they name the targets a tool may run against:
+
+| Scope | The tool may run against | Tools |
+|---|---|---|
+| `All` | any target: an ordinary project or the reserved shared target | the 16 that may use the reserved target |
+| `Shared` | the reserved shared target only | none today |
+| `Project` | an ordinary project only | the 14 ordinary-only tools, `memory_delete` among them |
+
+The rule is **symmetric**: a tool's scope must cover the target's scope. The reserved target's
+scope is `Shared`, an ordinary project's is `Project`, and a tool runs when its scope is `All`
+or equal to the target's scope.
+
+The one-sided rule that preceded it could not express `ToolScope.Shared` at all — it read "may
+not be the reserved target" and nothing more, so a shared-only tool was refused on the reserved
+target too. That is the red the symmetric rule answers: with the old rule in place, the new
+test fails on the reserved-target assertion, and the failure names `ToolScope.Shared`.
+
+An undeclared tool name is `Project`: the map knows every tool, so a name outside it names no
+tool at all, and the default is deny. The classification did not move — the same fourteen
+tools are ordinary-only and the same sixteen may use the reserved target — so no caller's
+behaviour changed.
+
+### The analyzer
+
+`ToolScopeAnalyzer`, a `DiagnosticAnalyzer` in the same project, owns `AIRGEN002` and reports
+it at the tool's own declaration. The generator now emits only the classification, so the build
+names the error once. The two share one definition of what a tool is — `ToolScopeFacts` — so
+they cannot disagree; the build enforces the sharing too, because one diagnostic id cannot be
+declared twice (`RS1019`).
+
+### The evidence
+
+| Gate | Result |
+|---|---|
+| The shape change (the enum) kept the suite green | the scope test 7/0, the split unchanged |
+| The symmetric rule, RED first | 7 tests, 1 failed — "a tool declared ToolScope.Shared runs against the reserved shared target" |
+| The symmetric rule, green | 7/0 |
+| The generator must not own the error | RECONSTRUCTED red: with the generator reporting again, the generator's test reports failed: 1 — "should be empty but had [(15,21): error ...: MCP tool method 'Scopeless' must declare its scope]" |
+| The analyzer's test is not vacuous | with the analyzer's report disabled, the filter reports 3/1 failed; restored, 3/0 |
+| The analyzer fires in the product's own build | removing the declaration from `code_get` gives exactly one `AIRGEN002`, at `CodeTools.cs(21,51)` — one distinct location, the method's declaration |
+| The whole Unit surface | 4303 tests, 0 failed, 1 skipped |
+| The generator project | 7 tests, 0 failed |
+| The solution build | 0 warnings, 0 errors |
+
+**One thing this correction caught that would have shipped broken.** The diagnostic message
+written in the enum step ended the attribute with an ellipsis after a dotted name
+(`[McpToolScope(ToolScope. ...)]`). The analyzer's own rules read the ". " as two sentences and
+failed the build with `RS1032` — and a *solution* build is what CI runs, so the enum step on
+its own was not mergeable. The message now names the three values instead, and the solution
+build is clean. The first attempt at the analyzer's red was masked by that same error, so the
+red was reconstructed and recorded as such rather than claimed.
 
 ## The documentation
 
