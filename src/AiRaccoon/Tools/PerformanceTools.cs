@@ -11,9 +11,9 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tool over MetricsReportService — no business logic here (ADR-0065, mcp-thin).</summary>
 public sealed class PerformanceTools(IMetricsReportService reportService, IToolGate gate)
 {
-    private const string TnMemoryPerformance = "get_engine_statistics";
+    private const string TnGetEngineStatistics = "get_engine_statistics";
 
-    [McpServerTool(Name = TnMemoryPerformance)]
+    [McpServerTool(Name = TnGetEngineStatistics)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Reports this project's self-instrumentation: one series per tool on the server's tool inventory, plus one series per memory_search phase (search.fts, search.vector, search.fusion, search.affinity, search.snippets, search.bump), each with count/p50/p95/p99/min/max plus a bucketed time series. Defaults to the last 3 hours in 1-minute buckets (180 points); a bucket wider than the window clamps to a single averaged point, and a window that would need more than a couple thousand buckets widens the bucket instead of being shortened — the window is always honoured in full, and the response's bucket/bucketCount always reflect the bucket actually used. A tool or phase never recorded still appears, at count 0. A quiet window is an empty series, never an error.")]
@@ -30,11 +30,11 @@ public sealed class PerformanceTools(IMetricsReportService reportService, IToolG
         {
             // The server's own metrics sentinel is no registered project; it still meets the
             // migration lock (ADR-0076).
-            await gate.RequireBankAvailableAsync(TnMemoryPerformance, cancellationToken);
+            await gate.RequireBankAvailableAsync(TnGetEngineStatistics, cancellationToken);
         }
         else
         {
-            canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryPerformance, cancellationToken);
+            canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetEngineStatistics, cancellationToken);
         }
 
         var report = await reportService.GetReportAsync(canonical, McpToolInventory.Names(),

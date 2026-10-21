@@ -17,10 +17,10 @@ public sealed class SweepTools(
     IForgettingPolicyService knobs,
     IToolGate gate)
 {
-    private const string TnMemorySweep = "trigger_memory_cleanup";
-    private const string TnMemorySetTtl = "set_memory_ttl";
+    private const string TnTriggerMemoryCleanup = "trigger_memory_cleanup";
+    private const string TnSetMemoryTtl = "set_memory_ttl";
 
-    [McpServerTool(Name = TnMemorySweep)]
+    [McpServerTool(Name = TnTriggerMemoryCleanup)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Runs memory degradation: lists (dry_run, default) or deletes entries whose rating is below the threshold and older than their per-entry TTL. Shared entries are never swept.")]
@@ -30,7 +30,7 @@ public sealed class SweepTools(
         bool dryRun = true,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TnMemorySweep, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, dryRun ? AccessRequirement.Read : AccessRequirement.Destructive, TnTriggerMemoryCleanup, cancellationToken);
 
         var threshold = await knobs.GetSweepThresholdAsync(cancellationToken);
         var outcome = await sweeper.SweepAsync(canonical, threshold, dryRun, cancellationToken);
@@ -39,7 +39,7 @@ public sealed class SweepTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemorySetTtl)]
+    [McpServerTool(Name = TnSetMemoryTtl)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Sets or clears one entry's per-entry TTL — the age half of the trigger_memory_cleanup rule, and the only way an entry becomes sweepable at all. "
@@ -57,7 +57,7 @@ public sealed class SweepTools(
         int? ttlDays = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemorySetTtl, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnSetMemoryTtl, cancellationToken);
 
         var result = await knobs.SetEntryTtlAsync(canonical, hash, ttlDays, cancellationToken);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
