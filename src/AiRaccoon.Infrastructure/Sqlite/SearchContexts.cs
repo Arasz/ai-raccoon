@@ -37,7 +37,7 @@ internal static class SearchContexts
         sharedScope.RequireSearch(query);
         if (sharedScope.IsReserved(query.ProjectId))
         {
-            return [ContextNaming.SharedContext];
+            return [sharedScope.ContextFor(query.ProjectId)];
         }
 
         var contexts = new List<string>();

@@ -413,7 +413,7 @@ public sealed class FileIngestor(
             throw new ArgumentException("shared-project-unsupported: document ingestion into shared accepts only the default or shared context.");
         }
 
-        return ContextNaming.SharedContext;
+        return _scope.ContextFor(projectId);
     }
 
     /// <summary>The rows of a file's position partition that are not its own: notes citing it.</summary>
