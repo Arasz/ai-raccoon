@@ -71,10 +71,19 @@ assistant turn and ended it with an empty message — zero tokens, no error, exi
 not the model id. The child argv carried a valid `--model` in every case
 (`openrouter/anthropic/claude-opus-5.5`, `openrouter/openai/gpt-5.6-sol`, `openai/gpt-6.1-sol`),
 and the *models* endpoint answered 200. A **chat completion** answered `HTTP 402 — Insufficient
-credits`: the OpenRouter account has no credits, and the child dies on the 402 before emitting any
-JSON, which is why the harness saw a silent-JSON child. The `openai` provider has no key in the
-environment at all. The repository's own `claude-review` workflow skipped for the same reason
-class — "set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY", no credential configured for the repo.
+credits`: the OpenRouter account has no credits, so the child's model call fails and the turn ends
+empty. The `openai` provider has no key in the environment at all. The repository's own
+`claude-review` workflow skipped for the same reason class — "set CLAUDE_CODE_OAUTH_TOKEN or
+ANTHROPIC_API_KEY", no credential configured for the repo.
+
+Two details worth keeping, because both look like the cause and are not:
+
+- **The child's raw stdout is empty in every run, including the successful one.** The harness
+  rebuilds the transcript from the child's own session record, so an empty stdout is normal here.
+  The failure signal is the *empty assistant message*, not the empty stdout.
+- **The bare `opus` alias fails the model-id regex**, so the harness refuses to emit it and falls
+  back to the resolved full id — visible in the argv of the failing runs. That refusal is a
+  separate harness-side wart, not what killed the child: the emitted id was valid every time.
 
 Pinning the child to the **radius** provider (`radius/claude-opus-5-5`) fixed it: the review ran
 and returned a verdict. A repository whose review gate depends on a model call needs a credential
