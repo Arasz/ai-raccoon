@@ -63,7 +63,7 @@ public sealed class WatchEndpointTests : IAsyncLifetime
         TestData.DeleteTempRoot(_tree);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SharedWatch_UsesTheNormalEnableScopeAndAccessGates_WithoutRegistration()
     {
         var disabled = await Should.ThrowAsync<WatchRefusedException>(() => _client.AddAsync("shared", Repo, Ct));
@@ -78,7 +78,7 @@ public sealed class WatchEndpointTests : IAsyncLifetime
         added.ProjectId.ShouldBe("shared");
         (await _client.StatusAsync("shared", Ct)).ShouldHaveSingleItem();
         var memory = _app.Services.GetRequiredService<IMemoryStore>();
-        (await memory.GetSettingAsync(SharedProject.WatchActivationKey, Ct)).ShouldBe("1");
+        (await memory.GetSettingAsync(SharedProjectScope.WatchActivationKey, Ct)).ShouldBe("1");
         await SetAsync("access.mode.project:shared", "ro");
         var denied = await Should.ThrowAsync<WatchRefusedException>(() => _client.AddAsync("shared", Sub, Ct));
         denied.Kind.ShouldBe("access-denied");

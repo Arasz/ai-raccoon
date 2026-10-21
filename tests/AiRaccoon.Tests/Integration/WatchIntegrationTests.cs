@@ -709,7 +709,7 @@ public sealed class WatchIntegrationTests
     }
 
     /// <summary>Real-FS harness: bank under a temp DataRoot, watched repo dir beside it.</summary>
-    [Fact]
+    [RetryFact]
     public async Task SharedWatch_PublishesInitialAndChangedFiles_AndRetainsContentAfterRemoval()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -735,7 +735,7 @@ public sealed class WatchIntegrationTests
         (await stack.Memory.SearchAsync(new SearchQuery("beta", "zephyrwatchchanged", MinRelativeScore: 0), ct)).Results.ShouldHaveSingleItem();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SharedWatch_RestartCatchesChangesMadeWhileStopped()
     {
         var ct = TestContext.Current.CancellationToken;

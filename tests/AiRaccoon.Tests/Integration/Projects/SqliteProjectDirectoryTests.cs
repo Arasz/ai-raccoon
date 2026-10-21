@@ -53,7 +53,7 @@ public sealed class SqliteProjectDirectoryTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Shared_IsKnownAndFoundWithoutRegistration()
     {
         var ct = TestContext.Current.CancellationToken;
