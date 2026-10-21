@@ -64,17 +64,34 @@ Two decisions inside that seam are worth keeping:
 | The retry-surface gate | green (it was the red build-fast on the first push) |
 | Mutation: the reserved id routes to its own project context | 6 tests red, then green again |
 
-The review round did not run in this environment, and that is a fact of the environment rather
-than of the diff. The delegated `code-reviewer` and `architect` subagents returned empty
-completions with zero tokens on **every** attempt — four dispatches across two personas and two
-providers (`openrouter/anthropic/claude-opus-5.5` and `openai/gpt-6.1-sol`, both passed correctly
-in the child's `--model` argv): the child receives the prompt, starts an assistant turn and ends it
-with an empty message, no error, exit 0. The repository's own `claude-review` workflow skipped the
-review for the same reason class — "set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY", no
-credential configured for the repository. The child process cannot call a model here, so no
-delegated or workflow review can produce a verdict.
+### The review round, and why the first four attempts were empty
 
-The review was therefore done in-session: the shared target's
+Four delegated reviews came back with no answer at all: the child received the prompt, started an
+assistant turn and ended it with an empty message — zero tokens, no error, exit 0. The cause is
+not the model id. The child argv carried a valid `--model` in every case
+(`openrouter/anthropic/claude-opus-5.5`, `openrouter/openai/gpt-5.6-sol`, `openai/gpt-6.1-sol`),
+and the *models* endpoint answered 200. A **chat completion** answered `HTTP 402 — Insufficient
+credits`: the OpenRouter account has no credits, and the child dies on the 402 before emitting any
+JSON, which is why the harness saw a silent-JSON child. The `openai` provider has no key in the
+environment at all. The repository's own `claude-review` workflow skipped for the same reason
+class — "set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY", no credential configured for the repo.
+
+Pinning the child to the **radius** provider (`radius/claude-opus-5-5`) fixed it: the review ran
+and returned a verdict. A repository whose review gate depends on a model call needs a credential
+that a child process can actually use — that is the operational finding, and it is worth fixing
+before the next PR blocks on it.
+
+### What the review said
+
+The independent reviewer read the branch and returned **no blocker — safe to merge**. It found
+the routing sound (`ContextFor` called from the ingestor, the store and the search-context
+resolver; `IsReservedId` at the routing points; no bypass; no private-row leakage), the layer
+clean (Core depends only on `AiRaccoon.Core.Memory`), and no false-pass test in the shared suite.
+One minor finding: the refusal test asserted the exception *type* but not the refusal *message*.
+That is now fixed — `SharedProjectScopeAndWorkspaceSearch_AreExplicitlyUnsupported` asserts
+`shared-project-unsupported` in both refusals.
+
+The in-session review covered the same ground: the shared target's
 routing, refusals, delete scoping (`project_id`-scoped, so a shared watch never removes another
 owner's rows), the DI seam and the layering were each checked against the source, and the
 mutation check above stands in for the "watch the gate go red" discipline.
