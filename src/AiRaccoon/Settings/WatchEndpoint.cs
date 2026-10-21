@@ -20,7 +20,7 @@ internal static class WatchEndpoint
             webApplication.MapPost(WatchProtocol.Path,
                 (WatchAddRequest request, IToolGate gate, IWatchService watch, CancellationToken ctx) => RefusingAsync(async () =>
                 {
-                    var canonical = await gate.RequireAsync(request.ProjectId, AccessRequirement.Write, WatchTools.TnWatchAdd, ctx);
+                    var canonical = await gate.RequireAsync(request.ProjectId, AccessRequirement.Write, WatchTools.TnAddWatch, ctx);
                     var outcome = await watch.AddAsync(canonical, request.Path, ctx);
                     return Results.Ok(new WatchAddResponse(canonical, request.Path, outcome.Pruned, outcome.AbsorbedBy));
                 }));
@@ -29,7 +29,7 @@ internal static class WatchEndpoint
                 ([FromQuery] string projectId, [FromQuery] string path, IToolGate gate, IWatchService watch, CancellationToken ctx) =>
                     RefusingAsync(async () =>
                     {
-                        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, WatchTools.TnWatchRemove, ctx);
+                        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, WatchTools.TnRemoveWatch, ctx);
                         var removed = await watch.RemoveAsync(canonical, path, ctx);
                         return Results.Ok(new WatchRemoveResponse(canonical, path, removed));
                     }));
@@ -43,7 +43,7 @@ internal static class WatchEndpoint
                         return Results.Ok(new WatchStatusResponse(await AllStatusesAsync(watch, registered, ctx)));
                     }
 
-                    var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, WatchTools.TnWatchStatus, ctx);
+                    var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, WatchTools.TnGetWatchStatus, ctx);
                     return Results.Ok(new WatchStatusResponse(await watch.StatusAsync(canonical, ctx)));
                 }));
         }
