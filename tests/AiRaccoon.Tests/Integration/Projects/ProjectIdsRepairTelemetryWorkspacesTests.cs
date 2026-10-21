@@ -101,7 +101,7 @@ public sealed class ProjectIdsRepairTelemetryWorkspacesTests
     private static async Task<ProjectIdsRepairResult> ApplyAsync(SqliteConnection connection, CancellationToken ct)
     {
         var plan = new ProjectIdsFoldPlan([new ProjectIdFold(Loser, Winner)], [], [], []);
-        return await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection, plan, ct);
+        return await new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope).ApplyAsync(connection, plan, ct);
     }
 
     private static async Task<SqliteConnection> OpenAsync(CancellationToken ct)

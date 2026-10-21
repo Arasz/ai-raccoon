@@ -16,6 +16,34 @@ watches, watch_files, FTS5, vec0, sync_meta, and sync_tombstones — live in
 starts clean with the new native schema. A re-hash + re-embed migration path is
 deferred to a deployment that needs it (D11).
 
+## Documents shared across projects
+
+Use the exact built-in `projectId="shared"` for supported documents outside a repository.
+It needs no minted ID or registration. Configure and register its path:
+
+```sh
+ai-raccoon settings ingest scope add shared /absolute/documents
+ai-raccoon settings watch enable shared true
+ai-raccoon watch add shared /absolute/documents
+ai-raccoon watch status shared
+```
+
+`memory_watch_add` and `memory_ingest_file`/`memory_ingest_directory` accept the same explicit
+ID. Default searches from every project in this bank include those documents. Search directly
+with `projectId="shared"` and `scope="all"` (default) or `scope="shared"`; get/list/stats also
+accept the reserved ID. Ordinary `scope="project"` searches omit shared content. Reserved-target
+project-only searches, custom labels, workspaces, notes, promotion operations, TTL changes, sweeps,
+code retrieval and context deletion are refused.
+The target is never selected implicitly from cwd. Code is skipped; supported document formats
+remain `.md`, `.markdown`, `.txt`, `.json` and `.ipynb`.
+
+Watch removal retains indexed documents. File changes and deletions update only the shared
+watch's owned rows. A legacy private owner or old unactivated watch named `shared` causes a
+`shared-project-conflict` message and no publication. A foreign shared row with the same source
+path and chunk hash also causes a refusal; use a different source path or resolve it with that
+row's owner. The prior document/fingerprint survives and normal watch retries apply. See
+[ADR-0137](../adr/0137-shared-target-for-document-watches.md) for ownership and migration details.
+
 ## Tools (30)
 
 Every tool takes `projectId` (camelCase — all parameters are camelCase), and it is

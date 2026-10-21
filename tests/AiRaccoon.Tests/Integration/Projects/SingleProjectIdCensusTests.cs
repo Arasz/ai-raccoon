@@ -286,7 +286,7 @@ public sealed class SingleProjectIdCensusTests : IDisposable
             new { kind = RepairKinds.ProjectIds, requestedAt = FixedNow.ToUnixTimeSeconds(), mapJson = FixtureMapJson() }, cancellationToken: ct));
         var job = new ProjectIdsRepairJob(
             new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
-            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow));
+            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow), TestData.SharedScope);
         (await job.RunAsync(connection, ct)).ShouldBeTrue("the seeded bank owns loser rows on moveable surfaces");
     }
 

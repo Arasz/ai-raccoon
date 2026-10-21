@@ -1,17 +1,22 @@
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.SearchQuality;
+using AiRaccoon.Core.Projects;
 
 namespace AiRaccoon.Core.Memory;
 
 /// <inheritdoc cref="ISearchDispatcher" />
-public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService codeSearch, ISearchQualityService qualityService)
+public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService codeSearch, ISearchQualityService qualityService,
+    ISharedProjectScope scope)
     : ISearchDispatcher
 {
+    private readonly ISharedProjectScope _scope = scope;
+
     public async Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, SearchKind kind, string rawScope,
         string correlationId, string sessionId, int? codeLimit = null, double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
+        _scope.EnsureCanExecuteInSharedScope(searchQuery);
         SearchResults? memorySearchResults = null;
         IReadOnlyList<MemorySearchResult> results = [];
         if (kind != SearchKind.Code)
@@ -24,9 +29,8 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         string? codeWarning = null;
         if (kind != SearchKind.Memory)
         {
-            // Code is project-scoped only (§3.1): an explicit scope=shared request never
-            // contributes code rows, even under kind=code/both.
-            if (searchQuery.Scope == SearchScope.Shared)
+            // Code is project-scoped only (§3.1): a shared-only request has no code rows.
+            if (searchQuery.Scope is SearchScope.Shared)
             {
                 codeResults = [];
             }

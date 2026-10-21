@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -13,7 +14,7 @@ internal static class SearchContexts
     ///     skipped otherwise.
     /// </summary>
     public static async Task<IReadOnlyList<string>> ResolveAsync(SqliteConnection connection,
-        SearchQuery query, CancellationToken cancellationToken)
+        SearchQuery query, ISharedProjectScope scope, CancellationToken cancellationToken)
     {
         var needsLabels = query.Scope is SearchScope.All or SearchScope.Project
                           && string.IsNullOrWhiteSpace(query.ContextLabel);
@@ -21,7 +22,7 @@ internal static class SearchContexts
             ? (await connection.QueryAsync<string>(new CommandDefinition(MemorySql.CustomContextLabels,
                     new { projectId = query.ProjectId }, cancellationToken: cancellationToken))).ToList()
             : [];
-        return For(query, labels);
+        return For(query, scope, labels);
     }
 
     /// <param name="customLabels">
@@ -29,8 +30,15 @@ internal static class SearchContexts
     ///     a label inside it, not a second boundary. No <see cref="SearchQuery.ContextLabel" />
     ///     means every context in the project; one means that context only (docs/adr/0045).
     /// </param>
-    public static IReadOnlyList<string> For(SearchQuery query, IReadOnlyList<string>? customLabels = null)
+    public static IReadOnlyList<string> For(SearchQuery query, ISharedProjectScope scope,
+        IReadOnlyList<string>? customLabels = null)
     {
+        scope.EnsureCanExecuteInSharedScope(query);
+        if (scope.IsReserved(query.ProjectId))
+        {
+            return [scope.ContextFor(query.ProjectId)];
+        }
+
         var contexts = new List<string>();
 
         if (query.Scope is SearchScope.All or SearchScope.Shared)

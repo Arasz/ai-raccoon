@@ -11,6 +11,16 @@
 > - [vectors.space](https://vectors.space) — free remote embedding API (OpenAI-compatible endpoint, `POST /v1/embeddings`), used when no local GGUF model is configured
 > - SQLite Cloud — free managed SQLite instance for sync (dashboard project already created: `memory.sqlite`)
 
+## Shared document target (1.62.0)
+
+The reserved ID `shared` adds documents outside repositories to the existing shared memory tier
+without minting a project identity. It supports document ingestion and watches, default/all/shared
+retrieval, get/list/stats and owner-scoped file lifecycle cleanup. It is always explicit. Ordinary
+project-only search remains private; reserved-target project-only search, labels, workspace and
+note writes are refused. The complete current contract is in
+[ADR-0137](../../adr/0137-shared-target-for-document-watches.md) and the
+[server reference](../../reference/agent-memory-server.md#documents-shared-across-projects).
+
 ## 1. Scope
 
 ### In scope

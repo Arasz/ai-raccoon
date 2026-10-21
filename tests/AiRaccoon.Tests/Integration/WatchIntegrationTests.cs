@@ -709,17 +709,68 @@ public sealed class WatchIntegrationTests
     }
 
     /// <summary>Real-FS harness: bank under a temp DataRoot, watched repo dir beside it.</summary>
+    [RetryFact]
+    public async Task SharedWatch_PublishesInitialAndChangedFiles_AndRetainsContentAfterRemoval()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var stack = new Stack(projectId: "shared");
+        stack.Write("guide.md", "zephyrwatchinitial document");
+        await stack.StartWatchingAsync(ct);
+        (await stack.StepUntilAsync(async () =>
+            (await stack.Memory.SearchAsync(new SearchQuery("alpha", "zephyrwatchinitial", MinRelativeScore: 0), ct)).Results.Any(), ct))
+            .ShouldBeTrue();
+
+        stack.Write("guide.md", "zephyrwatchchanged document");
+        (await stack.StepUntilAsync(async () =>
+            (await stack.Memory.SearchAsync(new SearchQuery("beta", "zephyrwatchchanged", MinRelativeScore: 0), ct)).Results.Any(), ct))
+            .ShouldBeTrue();
+        (await stack.Memory.SearchAsync(new SearchQuery("beta", "zephyrwatchinitial", MinRelativeScore: 0), ct)).Results.ShouldBeEmpty();
+
+        System.IO.File.Move(stack.File("guide.md"), stack.File("renamed.md"));
+        (await stack.StepUntilAsync(async () =>
+            (await stack.Memory.SearchAsync(new SearchQuery("beta", "zephyrwatchchanged", MinRelativeScore: 0), ct))
+                .Results.Any(r => r.SourceFile == stack.File("renamed.md")), ct)).ShouldBeTrue();
+        await stack.Service.RemoveAsync("shared", stack.WatchDir, ct);
+        (await stack.Service.StatusAsync("shared", ct)).ShouldBeEmpty();
+        (await stack.Memory.SearchAsync(new SearchQuery("beta", "zephyrwatchchanged", MinRelativeScore: 0), ct)).Results.ShouldHaveSingleItem();
+    }
+
+    [RetryFact]
+    public async Task SharedWatch_RestartCatchesChangesMadeWhileStopped()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var name = Guid.NewGuid().ToString("N");
+        using (var first = new Stack(name, deleteDataRoot: false, projectId: "shared"))
+        {
+            first.Write("guide.md", "zephyrrestartold document");
+            await first.StartWatchingAsync(ct);
+            (await first.StepUntilAsync(async () =>
+                (await first.SearchAsync("zephyrrestartold", ct)).Any(), ct)).ShouldBeTrue();
+            first.EventSource.StopAll();
+            first.Time.Advance(TimeSpan.FromMinutes(5));
+            first.Write("guide.md", "zephyrrestartnew document");
+        }
+
+        using var second = new Stack(name, now: FixedNow.AddHours(1), projectId: "shared");
+        await second.StartWatchingAsync(ct);
+        (await second.StepUntilAsync(async () =>
+            (await second.Memory.SearchAsync(new SearchQuery("beta", "zephyrrestartnew", MinRelativeScore: 0), ct)).Results.Any(), ct)).ShouldBeTrue();
+        (await second.Memory.SearchAsync(new SearchQuery("beta", "zephyrrestartold", MinRelativeScore: 0), ct)).Results.ShouldBeEmpty();
+    }
+
     private sealed class Stack : IDisposable
     {
         private readonly bool _deleteDataRoot;
+        private readonly string _project;
         private readonly SqliteConnectionFactory _factory;
         private readonly FakeClockPoller _poller;
         private readonly FakeLogCollector _logs = new();
 
         public Stack(string? name = null, DateTimeOffset? now = null, bool deleteDataRoot = true,
-            ICodeChunker? codeChunker = null)
+            ICodeChunker? codeChunker = null, string projectId = "acme")
         {
             _deleteDataRoot = deleteDataRoot;
+            _project = projectId;
             Time = new FakeTimeProvider(now ?? FixedNow);
             _poller = new FakeClockPoller(Time);
             DataRoot = Path.Combine(Path.GetTempPath(), "ai-raccoon-watch-integration",
@@ -732,14 +783,14 @@ public sealed class WatchIntegrationTests
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
             Memory = TestData.CreateMemoryStore(_factory, new FakeLogger<SqliteMemoryStore>(_logs), new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time,
                 TestData.CreateEmbeddingService(), codeChunker: codeChunker, modelMigrationLease: null, jsonChunker: null, noisePolicies: null, settings: null, ignoreRulesProvider: null, measurements: null);
-            WatchStore = new WatchStore(_factory);
+            WatchStore = new WatchStore(_factory, TestData.SharedScope);
             ScanGuard = new WatchScanGuard();
             EmbedDrainPump = TestData.NewEmbedDrainPump();
             WatchCatchUp? catchUp = null;
             Pipeline = new WatchPipeline(new WatchScheduler(),
                 new WatchDigestExecutor(Memory, WatchStore, Time,
                     new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
-                    new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher()),
+                    new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope),
                 new WatchRetryPolicy(),
                 ScanGuard, Memory, Time, new FakeLogger<WatchPipeline>(_logs));
             EventSource = new WatchEventSource(evt =>
@@ -801,13 +852,13 @@ public sealed class WatchIntegrationTests
 
         public string File(string name) => Path.Combine(WatchDir, name);
 
-        public Task EnableAsync(CancellationToken cancellationToken) => Memory.SetSettingAsync(WatchConfigKeys.EnabledProject(Project), "true", cancellationToken);
+        public Task EnableAsync(CancellationToken cancellationToken) => Memory.SetSettingAsync(WatchConfigKeys.EnabledProject(_project), "true", cancellationToken);
 
         public Task AllowScopeAsync(CancellationToken cancellationToken) =>
-            Memory.SetSettingAsync(IngestScopeKeys.ScopeProject(Project),
+            Memory.SetSettingAsync(IngestScopeKeys.ScopeProject(_project),
                 IngestScopeKeys.Serialize([WatchDir]), cancellationToken);
 
-        public Task AddWatchAsync(CancellationToken cancellationToken) => Service.AddAsync(Project, WatchDir, cancellationToken);
+        public Task AddWatchAsync(CancellationToken cancellationToken) => Service.AddAsync(_project, WatchDir, cancellationToken);
 
         /// <summary>The setup every watch test shares and must change together: enable the tier, allow the scope,
         /// add the watch dir, reconcile, then let the initial catch-up scan finish.</summary>
@@ -849,7 +900,7 @@ public sealed class WatchIntegrationTests
         }
 
         public async Task<IReadOnlyList<MemorySearchResult>> SearchAsync(string query, CancellationToken cancellationToken) =>
-            (await Memory.SearchAsync(new SearchQuery(Project, query), cancellationToken)).Results;
+            (await Memory.SearchAsync(new SearchQuery(_project, query), cancellationToken)).Results;
 
         public async Task<int> CountEntriesAsync(string path, string? valueContains,
             CancellationToken cancellationToken)
@@ -859,8 +910,8 @@ public sealed class WatchIntegrationTests
                 ? "SELECT count(*) FROM entries WHERE project_id = @p AND source_file = @path"
                 : "SELECT count(*) FROM entries WHERE project_id = @p AND source_file = @path AND value LIKE @value";
             object parameters = valueContains is null
-                ? new { p = Project, path }
-                : new { p = Project, path, value = $"%{valueContains}%" };
+                ? new { p = _project, path }
+                : new { p = _project, path, value = $"%{valueContains}%" };
             return await connection.ExecuteScalarAsync<int>(
                 new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
         }
@@ -871,10 +922,10 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             var states = await connection.QueryAsync<(string SourceFile, string State, int Count)>(new CommandDefinition(
                 "SELECT source_file AS SourceFile, embed_state AS State, count(*) AS Count FROM entries WHERE project_id = @p GROUP BY source_file, embed_state",
-                new { p = Project }, cancellationToken: cancellationToken));
+                new { p = _project }, cancellationToken: cancellationToken));
             var fingerprints = await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT path FROM watch_files WHERE project_id = @p", new { p = Project }, cancellationToken: cancellationToken));
-            var statuses = Pipeline.GetStatuses(Project).Select(st => $"{st.Path}:{st.State}");
+                "SELECT path FROM watch_files WHERE project_id = @p", new { p = _project }, cancellationToken: cancellationToken));
+            var statuses = Pipeline.GetStatuses(_project).Select(st => $"{st.Path}:{st.State}");
             return
                 $"entries=[{string.Join(", ", states.Select(x => $"{Path.GetFileName(x.SourceFile)}:{x.State}x{x.Count}"))}] fingerprints=[{string.Join(", ", fingerprints.Select(Path.GetFileName))}] watches=[{string.Join(", ", statuses)}] errors=[{string.Join(" | ", Errors.Select(e => e.ToString()))}] fsEvents=[{string.Join(", ", FsEvents.ToArray().Select(e => $"{e.Kind}:{Path.GetFileName(e.Path)}{(e.OldPath is null ? "" : $"<-{Path.GetFileName(e.OldPath)}")}"))}] scans started={ScanGuard.StartedScans} skipped={ScanGuard.SkippedScans} lastScanDone={CatchUp.LastScan?.IsCompleted} fakeNow={Time.GetUtcNow():O} log=[{string.Join(" | ", _logs.GetSnapshot().Select(r => $"[{r.Id.Id}] {r.Message}{(r.Exception is null ? "" : $" :: {r.Exception.GetType().Name}: {r.Exception.Message}")}"))}]";
         }
@@ -884,7 +935,7 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM entries WHERE project_id = @p AND source_file LIKE @prefix",
-                new { p = Project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
+                new { p = _project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
         }
 
         public async Task<int> CountCodeEntriesUnderAsync(string dirPrefix, CancellationToken cancellationToken)
@@ -892,7 +943,7 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM code_entries WHERE project_id = @p AND path LIKE @prefix",
-                new { p = Project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
+                new { p = _project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
         }
 
         /// <summary>Every `code_entries` row's line range for one exact path, ordered by chunk_index.</summary>
@@ -904,7 +955,7 @@ public sealed class WatchIntegrationTests
                 new CommandDefinition(
                     "SELECT chunk_index AS ChunkIndex, total_chunks AS TotalChunks, line_start AS LineStart, "
                     + "line_end AS LineEnd FROM code_entries WHERE project_id = @p AND path = @path ORDER BY chunk_index",
-                    new { p = Project, path }, cancellationToken: cancellationToken));
+                    new { p = _project, path }, cancellationToken: cancellationToken));
             return rows.ToList();
         }
 
@@ -914,7 +965,7 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             var count = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM code_entries WHERE project_id = @p AND path = @path AND value LIKE @marker",
-                new { p = Project, path, marker = $"%{marker}%" }, cancellationToken: cancellationToken));
+                new { p = _project, path, marker = $"%{marker}%" }, cancellationToken: cancellationToken));
             return count > 0;
         }
 
@@ -923,7 +974,7 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM watch_files WHERE project_id = @p AND path LIKE @prefix",
-                new { p = Project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
+                new { p = _project, prefix = $"{dirPrefix}%" }, cancellationToken: cancellationToken));
         }
 
         public async Task<int> CountEntriesWithNullSourceIdAsync(CancellationToken cancellationToken)
@@ -931,7 +982,7 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM entries WHERE project_id = @p AND source_id IS NULL",
-                new { p = Project }, cancellationToken: cancellationToken));
+                new { p = _project }, cancellationToken: cancellationToken));
         }
 
         public async Task<int> CountEntriesWithValidSourceIdAsync(string sourceFile, CancellationToken cancellationToken)
@@ -939,7 +990,7 @@ public sealed class WatchIntegrationTests
             await using var connection = await _factory.OpenBankAsync(cancellationToken);
             return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "SELECT count(*) FROM entries WHERE project_id = @p AND source_file = @sf AND source_id IS NOT NULL",
-                new { p = Project, sf = sourceFile }, cancellationToken: cancellationToken));
+                new { p = _project, sf = sourceFile }, cancellationToken: cancellationToken));
         }
 
         /// <summary>

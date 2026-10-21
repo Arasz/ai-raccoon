@@ -165,6 +165,8 @@ cell and mirrored in the record's Status line.
 
 | [0136 — The embed drain's rows-per-run runs from 64 to 4096](0136-the-embed-drain-rows-per-run-runs-from-64-to-4096.md) | `maintenance.embed-rows-per-run.global` (default 128) now has a floor of 64 and keeps WP11-C's ceiling of 4096. The value is a pass-size knob, not a throughput knob: one pass materialises its `SELECT … LIMIT` result as a single list (~4 673 B of managed memory per memory-corpus row, measured on the live bank), sub-batches it at 32 (one transaction per sub-batch, one ONNX session call per row), and re-signals itself when it reaches its budget. 64 = two sub-batches, below which the per-pass cost is not amortised; 4096 = 128 sub-batches, ~19 MB held at once. Per-row embedding cost, the native ONNX peak and the transaction scope per row are unchanged by the value | — |
 
+| [0137 — A reserved shared target for document watches](0137-shared-target-for-document-watches.md) | The exact id `shared` is a built-in document target in one bank: it needs no minted id or registration, its documents land in the existing shared tier and every project's default search reads them, and its watches keep the normal enablement, path-scope and access checks. Project-only search, custom contexts, workspaces, note writes and promotion or sweep operations are refused for it; code files are skipped. A legacy private owner or an unactivated watch named `shared` blocks the target instead of publishing, and the scope rules live behind one contract, `ISharedProjectScope`, the components that route writes and reads depend on. | — |
+
 ## Numbers never used
 
 | Number | Why |

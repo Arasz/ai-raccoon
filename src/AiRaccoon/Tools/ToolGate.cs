@@ -18,6 +18,7 @@ public sealed class ToolGate(
     IPromotionQueue queue,
     IModelMigrationStore migrations,
     IProjectRegistrationGuard registration,
+    IScopeCheck scope,
     IProjectIdResolver? resolver = null) : IToolGate
 {
     /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
@@ -56,6 +57,12 @@ public sealed class ToolGate(
         }
 
         await registration.EnsureAsync(canonical, requirement, cancellationToken);
+        var scopeResult = scope.Check(canonical, toolName);
+        if (!scopeResult.IsAllowed)
+        {
+            throw new ArgumentException(SharedProjectScopeExtensions.OrdinaryProjectRequiredMessage(toolName));
+        }
+
         return canonical;
     }
 

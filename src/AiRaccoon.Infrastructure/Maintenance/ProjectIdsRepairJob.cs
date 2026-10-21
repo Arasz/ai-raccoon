@@ -33,6 +33,7 @@ public sealed partial class ProjectIdsRepairJob(
     IFileTypeMatcher fileTypeMatcher,
     IEmbeddingService embeddingService,
     TimeProvider timeProvider,
+    ISharedProjectScope scope,
     ILogger<ProjectIdsRepairJob>? logger = null)
     : IMaintenanceJob
 {
@@ -87,7 +88,7 @@ public sealed partial class ProjectIdsRepairJob(
         var moved = 0;
         if (!plan.IsEmpty)
         {
-            var result = await new ProjectIdsRepair(timeProvider)
+            var result = await new ProjectIdsRepair(timeProvider, scope)
                 .ApplyAsync(connection, plan, cancellationToken);
             moved = result.TotalChanges;
             createdWork = moved > 0;

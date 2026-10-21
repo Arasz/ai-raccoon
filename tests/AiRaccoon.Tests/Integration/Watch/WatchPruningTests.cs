@@ -44,7 +44,7 @@ public sealed class WatchPruningTests : IDisposable
         var link = Path.Combine(linkParent, "link-to-repo");
         CreateSymlinkOrSkip(() => Directory.CreateSymbolicLink(link, real));
 
-        var store = new WatchStore(_factory);
+        var store = new WatchStore(_factory, TestData.SharedScope);
         var resolver = new WatchOverlapResolver();
 
         // Register the shorter literal path first (real), then the longer symlink spelling
@@ -82,7 +82,7 @@ public sealed class WatchPruningTests : IDisposable
         var outer = Path.Combine(_dataRoot, "repo");
         var inner = Path.Combine(outer, "src");
         Directory.CreateDirectory(inner);
-        var store = new WatchStore(_factory);
+        var store = new WatchStore(_factory, TestData.SharedScope);
         var resolver = new WatchOverlapResolver();
         await store.AddWatchAsync(Project, inner, 1, 0, TestContext.Current.CancellationToken);
         await store.UpsertFileHashAsync(Project, Path.Combine(inner, "a.md"), "hash-a", 1,
@@ -126,7 +126,7 @@ public sealed class WatchPruningTests : IDisposable
         var outer = Path.Combine(_dataRoot, "repo-commit");
         var inner = Path.Combine(outer, "src");
         Directory.CreateDirectory(inner);
-        var store = new WatchStore(_factory);
+        var store = new WatchStore(_factory, TestData.SharedScope);
         var resolver = new WatchOverlapResolver();
         await store.AddWatchAsync(Project, inner, 1, 0, TestContext.Current.CancellationToken);
 
@@ -157,7 +157,7 @@ public sealed class WatchPruningTests : IDisposable
         var outer = Path.Combine(_dataRoot, "concurrency-outer");
         var inner = Path.Combine(outer, "src");
         Directory.CreateDirectory(inner);
-        var store = new WatchStore(_factory);
+        var store = new WatchStore(_factory, TestData.SharedScope);
         var resolver = new WatchOverlapResolver();
         // Prime the bank's schema (factory.OpenBankAsync's EnsureAsync) before opening a raw
         // second connection directly — nothing else in this test goes through the store first.
@@ -212,7 +212,7 @@ public sealed class WatchPruningTests : IDisposable
         var outer = Path.Combine(_dataRoot, "race-outer");
         var inner = Path.Combine(outer, "src");
         Directory.CreateDirectory(inner);
-        var store = new WatchStore(_factory);
+        var store = new WatchStore(_factory, TestData.SharedScope);
         var resolver = new WatchOverlapResolver();
         await store.ListWatchesAsync(TestContext.Current.CancellationToken);
 

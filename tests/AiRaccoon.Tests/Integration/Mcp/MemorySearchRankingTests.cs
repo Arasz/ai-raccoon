@@ -51,10 +51,10 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
 
         var settings = new SqliteSettingsStore(factory);
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(),
-            new AllowingRegistrationGuard());
+            new AllowingRegistrationGuard(), TestData.ScopeCheck);
         _tools = new MemoryTools(_store, gate,
-            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
-            new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue()),
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
+            new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope),
             new NoOpMeasurementRecorder(), settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
     }
 

@@ -46,11 +46,11 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
         var fileIngestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(_factory),
             new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService(),
             NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
         return new SqliteMemoryStore(_factory, new SqliteMemorySourceStore(_factory), fileIngestor,
             embedder, new FakeTimeProvider(FixedNow), NullLogger<SqliteMemoryStore>.Instance,
             new NoiseFilteringService([]), new SqliteSettingsStore(_factory), NullEmbedDrainPump.Instance,
-            NoOpMeasurementRecorder.Instance);
+            NoOpMeasurementRecorder.Instance, TestData.SharedScope);
     }
 
     [RetryFact]

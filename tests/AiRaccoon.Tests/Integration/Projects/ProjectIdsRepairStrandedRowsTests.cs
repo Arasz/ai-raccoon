@@ -57,7 +57,7 @@ public sealed class ProjectIdsRepairStrandedRowsTests : IDisposable
             "closed workspaces hold no live scratch — the alias id folds instead of pinning");
         plan.Pinned.ShouldBeEmpty();
 
-        var result = await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection, plan, ct);
+        var result = await new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope).ApplyAsync(connection, plan, ct);
 
         result.EntriesMoved.ShouldBe(2, "the project-scope and custom-scope rows move to the canonical id");
         (await CountAsync(connection,

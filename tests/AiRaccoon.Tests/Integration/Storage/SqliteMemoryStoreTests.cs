@@ -48,7 +48,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
     private async Task EnsureWorkspaceAsync(string workspaceId, string projectId = "acme")
     {
-        var workspaceStore = new SqliteWorkspaceStore(_factory);
+        var workspaceStore = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
         await workspaceStore.BeginAsync(new Workspace(workspaceId, projectId), FixedNow, TestContext.Current.CancellationToken);
     }
 
@@ -136,7 +136,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         // A stale workspaceId (post-close) must fail an active-status check, not merely a
         // row-existence check — the workspaces row survives close (see IWorkspaceStore).
         await EnsureWorkspaceAsync("ws-1");
-        var workspaceStore = new SqliteWorkspaceStore(_factory);
+        var workspaceStore = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
         await workspaceStore.CloseAsync("acme", "ws-1", WorkspaceStatus.Closed, FixedNow,
             TestContext.Current.CancellationToken);
 
@@ -698,7 +698,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var query = new SearchQuery("acme", "q", SearchScope.All, "ws-1");
 
-        SearchContexts.For(query).ShouldBe(
+        SearchContexts.For(query, TestData.SharedScope).ShouldBe(
         [
             ContextNaming.SharedContext, ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1")
         ]);
@@ -709,7 +709,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var query = new SearchQuery("acme", "q");
 
-        SearchContexts.For(query).ShouldBe(
+        SearchContexts.For(query, TestData.SharedScope).ShouldBe(
             [ContextNaming.SharedContext, ContextNaming.ProjectContext("acme")]);
     }
 
@@ -718,7 +718,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var query = new SearchQuery("acme", "q", SearchScope.Project, "ws-1");
 
-        SearchContexts.For(query).ShouldBe(
+        SearchContexts.For(query, TestData.SharedScope).ShouldBe(
             [ContextNaming.ProjectContext("acme"), ContextNaming.WorkspaceContext("ws-1")]);
     }
 
@@ -727,7 +727,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var query = new SearchQuery("acme", "q", SearchScope.Project);
 
-        SearchContexts.For(query).ShouldBe([ContextNaming.ProjectContext("acme")]);
+        SearchContexts.For(query, TestData.SharedScope).ShouldBe([ContextNaming.ProjectContext("acme")]);
     }
 
     [RetryFact]
@@ -735,7 +735,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var query = new SearchQuery("acme", "q", SearchScope.Shared, "ws-1");
 
-        SearchContexts.For(query).ShouldBe([ContextNaming.SharedContext]);
+        SearchContexts.For(query, TestData.SharedScope).ShouldBe([ContextNaming.SharedContext]);
     }
 
     /// <summary>A named context narrows to that context; it does not add to the unlabelled rows (ADR-0045).</summary>
@@ -744,7 +744,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var query = new SearchQuery("acme", "q", SearchScope.Project, ContextLabel: "docs:adr");
 
-        SearchContexts.For(query, ["other"]).ShouldBe([ContextNaming.LabelContext("acme", "docs:adr")]);
+        SearchContexts.For(query, TestData.SharedScope, ["other"]).ShouldBe([ContextNaming.LabelContext("acme", "docs:adr")]);
     }
 
     /// <summary>No context named means every context in the project, not just the unlabelled ones.</summary>
@@ -753,7 +753,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     {
         var query = new SearchQuery("acme", "q", SearchScope.Project);
 
-        SearchContexts.For(query, ["adr", "notes"]).ShouldBe([
+        SearchContexts.For(query, TestData.SharedScope, ["adr", "notes"]).ShouldBe([
             ContextNaming.ProjectContext("acme"),
             ContextNaming.LabelContext("acme", "adr"),
             ContextNaming.LabelContext("acme", "notes")

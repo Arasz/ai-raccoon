@@ -247,7 +247,8 @@ public sealed class ProjectIdsRepairCommands
         // Template-only runs always plan with the empty map, so no fold/drop can exist here:
         // registered non-retired ids are exactly the canonical-branch rows worth seeding.
         var canonicalSeed = report.Rows
-            .Where(row => row.Registered && !plan.RetiredProjects.Contains(row.ProjectId, StringComparer.Ordinal))
+            .Where(row => row.Registered && !SharedProjectScope.IsReservedId(row.ProjectId)
+                && !plan.RetiredProjects.Contains(row.ProjectId, StringComparer.Ordinal))
             .Select(row => row.ProjectId)
             .Distinct(StringComparer.Ordinal)
             .ToList();

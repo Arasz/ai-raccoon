@@ -57,7 +57,7 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new SingleChunkChunker(), _time,
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
-        _watchStore = new WatchStore(_factory);
+        _watchStore = new WatchStore(_factory, TestData.SharedScope);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -196,7 +196,7 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
         await _watchStore.AddWatchAsync(Project, watchDir, 0, 0, ct);
         var executor = new WatchDigestExecutor(_store, _watchStore, _time, new IgnoreRulesProvider(),
             new Lazy<IWatchScanInitiator>(() => new NoOpWatchScanInitiator()), TestData.NewEmbedDrainPump(),
-            new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher());
+            new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope);
         await executor.DigestAsync(Project, watchDir, file, WatchEventKind.Changed, null, ct);
 
         var hash = await HashForContentAsync(_factory, ct);
@@ -351,7 +351,7 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
             new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
 
     private static async Task BeginWorkspaceAsync(SqliteConnectionFactory factory, string workspaceId) =>
-        await new SqliteWorkspaceStore(factory).BeginAsync(new Workspace(workspaceId, Project), FixedNow,
+        await new SqliteWorkspaceStore(factory, TestData.SharedScope).BeginAsync(new Workspace(workspaceId, Project), FixedNow,
             TestContext.Current.CancellationToken);
 
     private static async Task<int> CountEntriesAsync(SqliteConnectionFactory factory, string hash,

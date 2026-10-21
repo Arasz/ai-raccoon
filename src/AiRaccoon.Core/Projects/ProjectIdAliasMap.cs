@@ -87,6 +87,12 @@ public sealed class ProjectIdAliasMap
         _aliases = aliases.ToDictionary(e => e.Alias, e => e.Canonical, StringComparer.Ordinal);
         _canonicals = new HashSet<string>(canonicals, StringComparer.Ordinal);
         _dropped = new HashSet<string>(dropped, StringComparer.Ordinal);
+        if (_aliases.Any(pair => SharedProjectScope.IsReservedId(pair.Key) || SharedProjectScope.IsReservedId(pair.Value))
+            || _dropped.Contains(SharedProjectScope.Id) || _canonicals.Contains(SharedProjectScope.Id))
+        {
+            throw new ArgumentException("shared-project-reserved: shared cannot be aliased, folded into, or retired.");
+        }
+
     }
 
     public IReadOnlyList<ProjectIdAliasEntry> Aliases =>

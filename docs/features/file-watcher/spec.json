@@ -1,6 +1,6 @@
 {
     "name": "file-watcher",
-    "title": "File watcher — part 2 of native-memory: watch a path and mirror the filesystem into memory",
+    "title": "File watcher \u2014 part 2 of native-memory: watch a path and mirror the filesystem into memory",
     "status": "agreed",
     "specFile": "docs/features/file-watcher/file-watcher.feature",
     "gate": {
@@ -13,16 +13,56 @@
         }
     },
     "cards": [
-        { "id": "D1", "card": "Missed events while the server is down", "ruling": "Each watch keeps a last-change timestamp; on restart, targets changed since it are re-ingested (catch-up). No stale state — goes straight to processing." },
-        { "id": "D2", "card": "Rename onto an existing path", "ruling": "Overwrite — the incoming content wins; the target's previous chunks are replaced." },
-        { "id": "D3", "card": "Path normalization for watch identity", "ruling": "OS-agnostic: Path.GetFullPath (absolute, separators and '..' resolved, trailing separator stripped); case comparison follows the host OS filesystem." },
-        { "id": "D4", "card": "Status states", "ruling": "scanning / healthy / retrying / stopped." },
-        { "id": "D5", "card": "Unit-level scenarios (concurrency, watcher-loop containment, hash-skip internals)", "ruling": "Keep as implementation tests." },
-        { "id": "D6", "card": "Watch scope", "ruling": "Project-scoped only; no global/workspace-scoped watches; all three tools take projectId." },
-        { "id": "D7", "card": "Access tiers", "ruling": "memory_watch_add/remove require rw+; memory_watch_status open to every tier; background mirroring runs regardless of tier (tiers gate direct agent operations only)." },
-        { "id": "D8", "card": "Are watches 'settings that affect other agents'?", "ruling": "No — rw may add/remove watches; the ro tier may not." },
-        { "id": "D9", "card": "Watch path boundary", "ruling": "Opt-in: watching disabled until explicitly enabled; watch paths must be inside a scope allowlist entry (absolute path covers the directory and all subdirectories; no '*' needed)." },
-        { "id": "D10", "card": "Config channel for watch enable/scope/concurrency", "ruling": "CLI-only, user-facing (no MCP tools, no env/args, no config-file edits; no access-tier checks). Format: watch enable|disable {project-id|*} {true|false}, watch scope add|remove|list {project-id|*} {path}, watch concurrency {project-id|*} {1..16} (default 4); '*' matches all projects, more specific entry wins. Single-channel principle (f:): added CLI options remove other config channels." }
+        {
+            "id": "D1",
+            "card": "Missed events while the server is down",
+            "ruling": "Each watch keeps a last-change timestamp; on restart, targets changed since it are re-ingested (catch-up). No stale state \u2014 goes straight to processing."
+        },
+        {
+            "id": "D2",
+            "card": "Rename onto an existing path",
+            "ruling": "Overwrite \u2014 the incoming content wins; the target's previous chunks are replaced."
+        },
+        {
+            "id": "D3",
+            "card": "Path normalization for watch identity",
+            "ruling": "OS-agnostic: Path.GetFullPath (absolute, separators and '..' resolved, trailing separator stripped); case comparison follows the host OS filesystem."
+        },
+        {
+            "id": "D4",
+            "card": "Status states",
+            "ruling": "scanning / healthy / retrying / stopped."
+        },
+        {
+            "id": "D5",
+            "card": "Unit-level scenarios (concurrency, watcher-loop containment, hash-skip internals)",
+            "ruling": "Keep as implementation tests."
+        },
+        {
+            "id": "D6",
+            "card": "Watch scope",
+            "ruling": "Watches require an explicit projectId owner; the reserved shared owner gives supported documents bank-wide visibility. No implicit global or workspace-scoped watches."
+        },
+        {
+            "id": "D7",
+            "card": "Access tiers",
+            "ruling": "memory_watch_add/remove require rw+; memory_watch_status open to every tier; background mirroring runs regardless of tier (tiers gate direct agent operations only)."
+        },
+        {
+            "id": "D8",
+            "card": "Are watches 'settings that affect other agents'?",
+            "ruling": "No \u2014 rw may add/remove watches; the ro tier may not."
+        },
+        {
+            "id": "D9",
+            "card": "Watch path boundary",
+            "ruling": "Opt-in: watching disabled until explicitly enabled; watch paths must be inside a scope allowlist entry (absolute path covers the directory and all subdirectories; no '*' needed)."
+        },
+        {
+            "id": "D10",
+            "card": "Config channel for watch enable/scope/concurrency",
+            "ruling": "CLI-only, user-facing (no MCP tools, no env/args, no config-file edits; no access-tier checks). Format: watch enable|disable {project-id|*} {true|false}, watch scope add|remove|list {project-id|*} {path}, watch concurrency {project-id|*} {1..16} (default 4); '*' matches all projects, more specific entry wins. Single-channel principle (f:): added CLI options remove other config channels."
+        }
     ],
     "scope": {
         "in": [
@@ -41,16 +81,17 @@
             "Idempotency: add on an already-watched (projectId, path) is a no-op; remove on a non-existent watch is a no-op",
             "Access tiers: add/remove require rw+; status open to every tier; background mirroring runs regardless of tier",
             "Status states: scanning / healthy / retrying / stopped; status returns watch states, last error, last sync",
-            "Skipped files: a file no corpus can index (unsupported-type, binary, unparseable) is listed in status with its reason (skippedCount exact, first 20 by path) and never fingerprinted, so catch-up retries it; it leaves the list once indexed, deleted, renamed away or excluded (2026-10-18)"
+            "Skipped files: a file no corpus can index (unsupported-type, binary, unparseable) is listed in status with its reason (skippedCount exact, first 20 by path) and never fingerprinted, so catch-up retries it; it leaves the list once indexed, deleted, renamed away or excluded (2026-10-18)",
+            "Reserved shared project ID watches supported documents outside repositories into the existing shared tier; every default project search includes them. The shared target is explicit, built-in, and subject to normal access, enablement and path scopes."
         ],
         "out": [
             "MCP-tool-based watch configuration (enable/scope are CLI-only, not agent tools)",
-            "Global or workspace-scoped watches",
+            "Workspace-scoped watches (bank-wide document visibility uses the reserved shared target)",
             "Wildcard path scopes ('*' at the end of a path)",
             "Stale status state (removed; catch-up replaces it)",
-            "env/args config channels for watch settings (--watch-enable / --watch-scope) — converted by the CLI-config task (f: single channel)",
+            "env/args config channels for watch settings (--watch-enable / --watch-scope) \u2014 converted by the CLI-config task (f: single channel)",
             "memory_inspect introspection tool and metrics/tracing (part-2 siblings, already deferred in part-1)",
-            "Full CLI config surface for all server options — separate task (design subagent 2026-08-04, docs/work/archive/2026-08-04-cli-config-findings.md)"
+            "Full CLI config surface for all server options \u2014 separate task (design subagent 2026-08-04, docs/work/archive/2026-08-04-cli-config-findings.md)"
         ]
     },
     "nonFunctional": [
@@ -72,9 +113,9 @@
             "tests": "tests/AiRaccoon.Tests (scenario + unit)"
         },
         "risks": [
-            "Delete/rename propagation is destructive and irreversible — mirror removal is the highest-risk merge surface; dedicated scenario tests required",
-            "Filesystem event loss/coalescing differs per OS (FileSystemWatcher semantics) — catch-up timestamp is the safety net; verify on linux/macOS/windows",
-            "Initial scan of a large directory is unbounded work — async by contract; status must report scanning and errors",
+            "Delete/rename propagation is destructive and irreversible \u2014 mirror removal is the highest-risk merge surface; dedicated scenario tests required",
+            "Filesystem event loss/coalescing differs per OS (FileSystemWatcher semantics) \u2014 catch-up timestamp is the safety net; verify on linux/macOS/windows",
+            "Initial scan of a large directory is unbounded work \u2014 async by contract; status must report scanning and errors",
             "Hash-skip correctness: a real content change must never be skipped (path+content SHA-256 per D8 identity)",
             "Concurrency limit + round-robin fairness need unit-level verification (not black-box observable)"
         ]

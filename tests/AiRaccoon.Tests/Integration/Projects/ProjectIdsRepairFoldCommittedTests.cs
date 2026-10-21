@@ -53,7 +53,7 @@ public sealed class ProjectIdsRepairFoldCommittedTests : IDisposable
             }
         }
 
-        await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection,
+        await new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope).ApplyAsync(connection,
             new ProjectIdsFoldPlan([new ProjectIdFold(loser, winner)], [], [], []), ct);
 
         foreach (var prefix in ProjectSettingsKeys.Prefixes)
@@ -84,7 +84,7 @@ public sealed class ProjectIdsRepairFoldCommittedTests : IDisposable
                 new { key = prefix.Prefix + "global" });
         }
 
-        await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection,
+        await new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope).ApplyAsync(connection,
             new ProjectIdsFoldPlan([], ["global"], [], []), ct);
 
         (await connection.QueryAsync<string>("SELECT key FROM settings WHERE key LIKE '%global' ORDER BY key"))
@@ -321,7 +321,7 @@ public sealed class ProjectIdsRepairFoldCommittedTests : IDisposable
         await EntryAsync(connection, "move-labeled", "project", Loser, "ctx-a", "loser labeled", ct);
         await EntryAsync(connection, "move-bulk", "project", Loser, null, "loser bulk", ct);
         var plan = new ProjectIdsFoldPlan([new ProjectIdFold(Loser, Winner)], [], [], []);
-        var repair = new ProjectIdsRepair(new FakeTimeProvider(FixedNow));
+        var repair = new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope);
 
         var first = await repair.ApplyAsync(connection, plan, ct);
         var second = await repair.ApplyAsync(connection, plan, ct);
@@ -333,7 +333,7 @@ public sealed class ProjectIdsRepairFoldCommittedTests : IDisposable
     private static async Task<ProjectIdsRepairResult> ApplyAsync(SqliteConnection connection, CancellationToken ct)
     {
         var plan = new ProjectIdsFoldPlan([new ProjectIdFold(Loser, Winner)], [], [], []);
-        return await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection, plan, ct);
+        return await new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope).ApplyAsync(connection, plan, ct);
     }
 
     private static async Task EntryAsync(SqliteConnection connection, string hash, string scope, string projectId,

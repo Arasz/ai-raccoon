@@ -61,8 +61,11 @@ public sealed record WatchFileStamp(long UpdatedAt, long? Size);
 /// <summary>Dapper impl of IWatchStore over the watches/watch_files tables (MemorySql consts); also
 /// the server-side default for <see cref="IWatchRegisteredStore" /> (ADR-0075 amendment) —
 /// overridden by LazyServerSettingsStore for the CLI graph, same shape as SqliteMaintenanceStatsStore.</summary>
-public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, IWatchRegisteredStore
+public sealed class WatchStore(ISqliteConnectionFactory factory, ISharedProjectScope scope)
+    : IWatchStore, IWatchRegisteredStore
 {
+    private readonly ISharedProjectScope _scope = scope;
+
     public async Task AddWatchAsync(string projectId, string path, long createdAt, long lastChangeTs,
         CancellationToken cancellationToken = default)
     {
@@ -98,6 +101,8 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
 
         return await connection.InWriteTransactionAsync(async () =>
         {
+            await connection.RequireSharedAvailableAsync(projectId, _scope, cancellationToken);
+
             // S4 TOCTOU close: read the project's CURRENT watches and resolve the candidate against
             // them from INSIDE the same write-locked transaction that then commits the outcome — a
             // concurrent writer either already committed before this BEGIN IMMEDIATE succeeded (so
@@ -133,6 +138,11 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
                                 createdAt = candidate.CreatedAt,
                                 lastChangeTs = 0L
                             }, cancellationToken: cancellationToken));
+            }
+
+            if (_scope.IsReserved(projectId) && decision.Outcome == WatchOverlapOutcome.Accepted)
+            {
+                await connection.MarkSharedActiveAsync(cancellationToken);
             }
 
             return decision;

@@ -94,7 +94,7 @@ public sealed class MemoryScopeSiblingTtlTests : IDisposable
 
     private async Task EnsureWorkspaceAsync(string workspaceId)
     {
-        var workspaceStore = new SqliteWorkspaceStore(_factory);
+        var workspaceStore = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
         await workspaceStore.BeginAsync(new Workspace(workspaceId, ProjectId), FixedNow,
             TestContext.Current.CancellationToken);
     }

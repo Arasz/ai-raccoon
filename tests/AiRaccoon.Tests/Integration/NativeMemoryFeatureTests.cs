@@ -42,7 +42,7 @@ public sealed class NativeMemoryFeatureTests : IDisposable
         }
 
         // A workspace lifecycle write must also stay inside memory.db.
-        await new SqliteWorkspaceStore(_factory).BeginAsync(
+        await new SqliteWorkspaceStore(_factory, TestData.SharedScope).BeginAsync(
             new Workspace("ws-1", "acme"), new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero),
             TestContext.Current.CancellationToken);
 
@@ -94,7 +94,7 @@ public sealed class NativeMemoryFeatureTests : IDisposable
     [RetryFact]
     public async Task WorkspaceBegin_CreatesActiveRowInMemoryDb()
     {
-        var workspaceStore = new SqliteWorkspaceStore(_factory);
+        var workspaceStore = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
         var startedAt = new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.Zero);
 
         await workspaceStore.BeginAsync(new Workspace("ws-1", "acme"), startedAt, TestContext.Current.CancellationToken);

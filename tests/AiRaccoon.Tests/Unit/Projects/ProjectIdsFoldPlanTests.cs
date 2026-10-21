@@ -16,6 +16,31 @@ namespace AiRaccoon.Tests.Unit.Projects;
 [Collection(ProjectIdAliasDefaultCollection.Name)]
 public sealed class ProjectIdsFoldPlanTests
 {
+    [Theory]
+    [InlineData("shared", "other", false)]
+    [InlineData("other", "shared", false)]
+    [InlineData("shared", "other", true)]
+    public void Shared_CannotBeAliasedOrDropped(string loser, string winner, bool drop)
+    {
+        Should.Throw<ArgumentException>(() => new ProjectIdAliasMap(
+            drop ? [] : [new ProjectIdAliasEntry(loser, winner)], [], drop ? [loser] : []));
+    }
+
+    [Fact]
+    public void Shared_CannotBeACanonicalMapTarget()
+    {
+        Should.Throw<ArgumentException>(() => new ProjectIdAliasMap([], ["shared"], []));
+    }
+
+    [Fact]
+    public void Shared_IsNeverRetiredOrUnresolved()
+    {
+        var plan = ProjectIdsFoldPlan.FromCensus(Report(Row("shared", registered: true)), ProjectIdAliasMap.Empty);
+
+        plan.RetiredProjects.ShouldBeEmpty();
+        plan.Unresolved.ShouldBeEmpty();
+    }
+
     // Key-mapping row, not a fold row: pins the outbox kind string the CLI and the job agree on.
     // Ledger — kind-key-drifts : --filter ProjectIds_RepairKind_MapsToTheProjectIdsOutboxKey : enum, no fixture.
     [Fact]

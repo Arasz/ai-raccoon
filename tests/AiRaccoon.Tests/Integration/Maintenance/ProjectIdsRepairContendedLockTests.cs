@@ -113,7 +113,7 @@ public sealed class ProjectIdsRepairContendedLockTests : IDisposable
 
         var job = new ProjectIdsRepairJob(
             new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
-            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow));
+            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow), TestData.SharedScope);
         var repair = Task.Run(() => job.RunAsync(jobConnection, ct).AsTask(), ct);
         await Task.Delay(Grace, ct);
 

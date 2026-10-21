@@ -65,7 +65,7 @@ public sealed class ProjectIdAliasCacheReloadTests : IDisposable
         var job = new ProjectIdsRepairJob(
             new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
             TestData.CreateEmbeddingService(),
-            new FakeTimeProvider(FixedNow));
+            new FakeTimeProvider(FixedNow), TestData.SharedScope);
 
         ProjectIdAliasMap.Default.Fold(Loser).ShouldBe(Loser,
             "arrange proof: the process-static cache starts at the empty steady state");

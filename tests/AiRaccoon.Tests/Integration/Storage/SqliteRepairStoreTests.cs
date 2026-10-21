@@ -191,7 +191,7 @@ public sealed class SqliteRepairStoreTests : IDisposable
             {
                 try
                 {
-                    new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(writer, plan, ct).GetAwaiter().GetResult();
+                    new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope).ApplyAsync(writer, plan, ct).GetAwaiter().GetResult();
                     writer.Execute(MemorySql.FinishRepairRequest,
                         new { finishedAt = FixedNow.ToUnixTimeSeconds(), kind = RepairKind.ProjectIds.ToKey() });
                     committed = true;

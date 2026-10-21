@@ -40,7 +40,7 @@ public sealed class WatchToolsRetiredIdTests
     private static WatchTools WiredTools(RecordingWatchService watch) =>
         new(watch,
             new ToolGate(new AllowAllGuard(), new FakePromotionQueue(),
-                new NeverMigratingStore(), new AllowingRegistrationGuard()));
+                new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck));
 
     [Fact]
     public async Task Add_UnderDroppedId_RefusesBeforeTheServiceIsTouched()

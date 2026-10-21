@@ -23,8 +23,11 @@ namespace AiRaccoon.Projects;
 public sealed class CwdProjectIdResolver(
     ISettingsStore settings,
     IWatchRegisteredStore watches,
-    ICwdProbe cwdProbe) : IProjectIdResolver
+    ICwdProbe cwdProbe,
+    ISharedProjectScope scope) : IProjectIdResolver
 {
+    private readonly ISharedProjectScope _scope = scope;
+
     private static readonly string ScopePrefix = IngestScopeKeys.ScopeProject(string.Empty);
 
     public async Task<ProjectIdResolution> ResolveAsync(CancellationToken cancellationToken = default)
@@ -35,7 +38,7 @@ public sealed class CwdProjectIdResolver(
         var scopes = await settings.GetSettingsByPrefixAsync(ScopePrefix, cancellationToken);
         foreach (var (key, value) in scopes)
         {
-            if (key == IngestScopeKeys.ScopeGlobal)
+            if (key == IngestScopeKeys.ScopeGlobal || key == IngestScopeKeys.ScopeProject(SharedProjectScope.Id))
             {
                 continue;
             }
@@ -56,7 +59,7 @@ public sealed class CwdProjectIdResolver(
 
         foreach (var watch in await watches.ListWatchesAsync(cancellationToken))
         {
-            if (IngestPath.IsWithinScope(cwd, watch.Path))
+            if (!_scope.IsReserved(watch.ProjectId) && IngestPath.IsWithinScope(cwd, watch.Path))
             {
                 AddCandidate(candidates, watch.ProjectId);
             }

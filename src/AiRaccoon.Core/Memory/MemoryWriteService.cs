@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Projects;
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>The promotion reason tags and the refusal text a `shared` write reports — one place, so the wire strings agree.</summary>
@@ -39,8 +40,11 @@ public interface IMemoryWriteService
 }
 
 /// <inheritdoc cref="IMemoryWriteService" />
-public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue) : IMemoryWriteService
+public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue,
+    ISharedProjectScope scope) : IMemoryWriteService
 {
+    private readonly ISharedProjectScope _scope = scope;
+
     /// <summary>
     ///     Derived from <see cref="PromotionScorer.MaxScore" /> — the scorer's declared output
     ///     ceiling — plus a full point, so an explicit request outranks every inference even if that
@@ -54,10 +58,11 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        _scope.EnsureCanExecuteInSharedScope(request);
 
         // The workspace wins over the shared request (owner ruling K5): a scratch write is not a
         // promotion request, so it never reaches the queue and never gets the shared rewrite.
-        if (request.Context != ContextNaming.SharedContext || !string.IsNullOrWhiteSpace(request.WorkspaceId))
+        if (request.Scope != MemoryWriteScope.Shared)
         {
             return await store.WriteAsync(request, cancellationToken);
         }

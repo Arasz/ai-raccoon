@@ -13,9 +13,12 @@ namespace AiRaccoon.Projects;
 public sealed partial class ProjectRegistrationGuard(
     IProjectRegistry registry,
     ILogger<ProjectRegistrationGuard> logger,
-    IProjectIdsMigrationGate migrationGate)
+    IProjectIdsMigrationGate migrationGate,
+    ISharedProjectScope scope)
     : IProjectRegistrationGuard
 {
+    private readonly ISharedProjectScope _scope = scope;
+
     // One warning per legacy id per process; the guard is a singleton and tool calls run concurrently.
     private readonly Lock warnedGate = new();
     private readonly HashSet<string> warnedLegacyIds = [];
@@ -25,6 +28,13 @@ public sealed partial class ProjectRegistrationGuard(
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(projectId);
+
+        if (_scope.IsReserved(projectId))
+        {
+            // The real registry checks for an incompatible legacy owner before allowing the target.
+            await registry.IsRegisteredAsync(projectId, cancellationToken);
+            return;
+        }
 
         if (await registry.IsRegisteredAsync(projectId, cancellationToken))
         {

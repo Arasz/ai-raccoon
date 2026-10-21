@@ -34,7 +34,7 @@ public sealed class SearchDispatcherEvidenceTests
                 ["unserved"] = new RetrievalEvidence("unserved", 0.1, [new LegRank("fts", 9)], null),
             });
         var quality = new CapturingQualityService();
-        var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality);
+        var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(
             new SearchQuery("acme", "widgets"),
@@ -76,7 +76,7 @@ public sealed class SearchDispatcherEvidenceTests
         sidecar.Keys.Take(2).ShouldNotBe(["h2", "h1"],
             "served order must genuinely differ from sidecar insertion order, or this test proves nothing");
         var quality = new CapturingQualityService();
-        var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality);
+        var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(
             new SearchQuery("acme", "widgets"),
@@ -107,7 +107,7 @@ public sealed class SearchDispatcherEvidenceTests
         };
         var store = new EvidenceStore([second, first], evidenceByHash: sidecar);
         var quality = new CapturingQualityService();
-        var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality);
+        var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(
             new SearchQuery("acme", "widgets"),
@@ -142,7 +142,7 @@ public sealed class SearchDispatcherEvidenceTests
         var first = new MemorySearchResult("h1", 1.0, "a.md", "snippet a", SourceFile: "a.md");
         var store = new EvidenceStore([first], evidenceByHash: null);
         var quality = new CapturingQualityService();
-        var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality);
+        var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality, TestData.SharedScope);
 
         var result = await dispatcher.DispatchAsync(
             new SearchQuery("acme", "widgets"),
@@ -164,7 +164,7 @@ public sealed class SearchDispatcherEvidenceTests
         var store = new EvidenceStore([], evidenceByHash: null);
         var quality = new CapturingQualityService();
         var codeSearch = new StubCodeSearchService([new CodeSearchResult("c1", 1.0, "Foo.cs", "class Foo", 1, 10)]);
-        var dispatcher = new SearchDispatcher(store, codeSearch, quality);
+        var dispatcher = new SearchDispatcher(store, codeSearch, quality, TestData.SharedScope);
 
         var result = await dispatcher.DispatchAsync(
             new SearchQuery("acme", "widgets"),

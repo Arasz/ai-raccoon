@@ -82,7 +82,7 @@ public sealed class SingleProjectIdSteps(ScenarioContext scenarioContext)
             cancellationToken: ct));
         var job = new ProjectIdsRepairJob(
             new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
-            TestData.CreateEmbeddingService(), _ctx.TimeProvider);
+            TestData.CreateEmbeddingService(), _ctx.TimeProvider, TestData.SharedScope);
         (await job.RunAsync(connection, ct)).ShouldBeTrue("the split-cluster bank must fold");
         // FileWatcherSteps precedent: model elapsed time after the repair — a same-fake-second
         // post-repair edit could tie the pre-repair watermark and be skipped as not-due.

@@ -42,7 +42,7 @@ public sealed class SqliteProjectDirectoryTests : IAsyncLifetime
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new StubChunker(), TimeProvider.System,
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
-        _directory = new SqliteProjectDirectory(_factory, _store, _logger);
+        _directory = new SqliteProjectDirectory(_factory, _store, _logger, TestData.SharedScope);
         return ValueTask.CompletedTask;
     }
 
@@ -51,6 +51,16 @@ public sealed class SqliteProjectDirectoryTests : IAsyncLifetime
         ProjectIdAliasMap.ResetDefault();
         TestData.DeleteTempRoot(_dataRoot);
         return ValueTask.CompletedTask;
+    }
+
+    [RetryFact]
+    public async Task Shared_IsKnownAndFoundWithoutRegistration()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        (await _directory.CheckAsync("shared", ct)).Status.ShouldBe(ProjectIdStatus.Known);
+        (await _directory.FindByNameAsync("shared", ct)).ShouldBe(["shared"]);
+        (await _directory.RegisterAsync("shared", null, ct)).Outcome.ShouldBe(ProjectRegistrationOutcome.AlreadyRegistered);
     }
 
     [RetryFact]
@@ -71,10 +81,10 @@ public sealed class SqliteProjectDirectoryTests : IAsyncLifetime
     public async Task FindByName_SeveralMatches_ReturnsEveryIdInOrder()
     {
         var ct = TestContext.Current.CancellationToken;
-        await Registry.RegisterAsync("b-project", "shared", ct);
-        await Registry.RegisterAsync("a-project", "shared", ct);
+        await Registry.RegisterAsync("b-project", "shared-name", ct);
+        await Registry.RegisterAsync("a-project", "shared-name", ct);
 
-        (await _directory.FindByNameAsync("shared", ct)).ShouldBe(["a-project", "b-project"]);
+        (await _directory.FindByNameAsync("shared-name", ct)).ShouldBe(["a-project", "b-project"]);
     }
 
     [RetryFact]

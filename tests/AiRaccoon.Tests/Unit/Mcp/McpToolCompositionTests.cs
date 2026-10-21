@@ -1,5 +1,10 @@
 using System.Reflection;
 using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Core.Access;
+using AiRaccoon.Access;
+using AiRaccoon.Projects;
+using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Setup;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,6 +42,32 @@ public sealed class McpToolCompositionTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task CompositionRoot_ToolGateUsesTheRegisteredScopePolicy()
+    {
+        using var provider = BuildCompositionRoot(services =>
+        {
+            services.AddSingleton<IMemoryAccessGuard, AllowingGuard>();
+            services.AddSingleton<IProjectRegistrationGuard, AllowingRegistrationGuard>();
+            services.AddSingleton<IModelMigrationStore, NeverMigratingStore>();
+        });
+        var gate = provider.GetRequiredService<IToolGate>();
+        var error = await Should.ThrowAsync<ArgumentException>(() =>
+            gate.RequireAsync("shared", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+        error.Message.ShouldBe("shared-project-unsupported: memory_write requires an ordinary project; shared supports document ingestion and watches.");
+        (await gate.RequireAsync("shared", AccessRequirement.Read, "memory_search", TestContext.Current.CancellationToken))
+            .ShouldBe("shared");
+    }
+
+    private sealed class AllowingGuard : IMemoryAccessGuard
+    {
+        public Task<AccessMode> ResolveAsync(string projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(AccessMode.Full);
+
+        public Task EnsureAsync(string projectId, AccessRequirement requirement, string toolName,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
     private static List<Type> ToolClasses() =>
     [
         .. typeof(MemoryTools).Assembly.GetTypes()
@@ -46,7 +77,7 @@ public sealed class McpToolCompositionTests : IDisposable
             .OrderBy(t => t.Name, StringComparer.Ordinal)
     ];
 
-    private ServiceProvider BuildCompositionRoot()
+    private ServiceProvider BuildCompositionRoot(Action<ServiceCollection>? configure = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -55,6 +86,7 @@ public sealed class McpToolCompositionTests : IDisposable
             DataRoot = _dataRoot,
             Scope = InstallScope.User
         });
+        configure?.Invoke(services);
         return services.BuildServiceProvider();
     }
 }

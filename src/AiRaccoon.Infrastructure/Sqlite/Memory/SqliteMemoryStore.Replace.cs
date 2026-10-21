@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
@@ -228,6 +229,8 @@ public sealed partial class SqliteMemoryStore
         CancellationToken cancellationToken)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
+
+        await connection.ActivateSharedAsync(projectId, _scope, cancellationToken);
 
         // Unlocked pre-check: the common case (an unrelated concurrent replace never raced this
         // path) declines here without ever touching the write lock.

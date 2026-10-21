@@ -18,7 +18,22 @@ namespace AiRaccoon.Tests.Unit.Projects;
 public sealed class ProjectRegistrationGuardTests
 {
     private static ProjectRegistrationGuard NewGuard(FakeProjectRegistry registry, bool migrated = false) =>
-        new(registry, NullLogger<ProjectRegistrationGuard>.Instance, new StubMigrationGate(migrated));
+        new(registry, NullLogger<ProjectRegistrationGuard>.Instance, new StubMigrationGate(migrated), TestData.SharedScope);
+
+    [Theory]
+    [InlineData(false, AccessRequirement.Read)]
+    [InlineData(true, AccessRequirement.Read)]
+    [InlineData(false, AccessRequirement.Write)]
+    [InlineData(true, AccessRequirement.Write)]
+    public async Task Shared_IsBuiltInWithoutRegistering(bool migrated, AccessRequirement requirement)
+    {
+        var registry = new FakeProjectRegistry();
+        var guard = NewGuard(registry, migrated);
+
+        await guard.EnsureAsync("shared", requirement, TestContext.Current.CancellationToken);
+
+        registry.Registered.ShouldBeEmpty();
+    }
 
     [Fact]
     public async Task AnUnregisteredGuidV7_IsRefused()
@@ -77,7 +92,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true));
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true), TestData.SharedScope);
 
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
 
@@ -133,7 +148,7 @@ public sealed class ProjectRegistrationGuardTests
         var canonical = Guid.CreateVersion7().ToString("D");
         var registry = new FakeProjectRegistry { Registered = { canonical } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true));
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true), TestData.SharedScope);
 
         await guard.EnsureAsync(canonical, AccessRequirement.Read, TestContext.Current.CancellationToken);
 
@@ -146,7 +161,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true));
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true), TestData.SharedScope);
 
         await guard.EnsureAsync("jsaa", AccessRequirement.Read, TestContext.Current.CancellationToken);
         await guard.EnsureAsync("jsaa", AccessRequirement.Read, TestContext.Current.CancellationToken);
@@ -161,7 +176,7 @@ public sealed class ProjectRegistrationGuardTests
         var id = Guid.CreateVersion7().ToString("D");
         var registry = new FakeProjectRegistry { RowsFor = { id } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true));
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true), TestData.SharedScope);
 
         await guard.EnsureAsync(id, AccessRequirement.Read, TestContext.Current.CancellationToken);
 
@@ -176,7 +191,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true));
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(true), TestData.SharedScope);
 
         await guard.EnsureAsync("jsaa", AccessRequirement.Read, TestContext.Current.CancellationToken);
 
@@ -203,7 +218,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false));
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false), TestData.SharedScope);
 
         // Does not throw — a raw-text id the bank already holds rows for keeps working.
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
@@ -220,7 +235,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "jsaa" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false));
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false), TestData.SharedScope);
 
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
@@ -236,7 +251,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "jsaa", "other-legacy" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false));
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false), TestData.SharedScope);
 
         await guard.EnsureAsync("jsaa", AccessRequirement.Write, TestContext.Current.CancellationToken);
         await guard.EnsureAsync("other-legacy", AccessRequirement.Write, TestContext.Current.CancellationToken);
@@ -254,7 +269,7 @@ public sealed class ProjectRegistrationGuardTests
     {
         var registry = new FakeProjectRegistry { RowsFor = { "code-only-legacy" } };
         var logger = new FakeLogger<ProjectRegistrationGuard>();
-        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false));
+        var guard = new ProjectRegistrationGuard(registry, logger, new StubMigrationGate(false), TestData.SharedScope);
 
         await guard.EnsureAsync("code-only-legacy", AccessRequirement.Write, TestContext.Current.CancellationToken);
 

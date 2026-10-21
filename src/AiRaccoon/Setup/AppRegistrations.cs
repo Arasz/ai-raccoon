@@ -74,6 +74,11 @@ public static partial class AppRegistrations
             services.AddSingleton<IOperationTelemetry, BackgroundTelemetry>();
             services.RegisterEmbeddingServices();
             services.RegisterFileIngestionServices();
+            // The reserved shared document target's scope rules (ADR-0137): one implementation,
+            // resolved by the composition root, so the components that route writes and reads
+            // depend on the contract and not on a static helper. Registered in the core graph —
+            // the CLI graph builds the same stores.
+            services.AddRequiredSingleton<ISharedProjectScope, SharedProjectScope>();
             services.RegisterStores();
         }
 
@@ -168,6 +173,8 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IProjectRegistrationGuard, ProjectRegistrationGuard>();
             services.AddRequiredSingleton<ICwdProbe, CurrentDirectoryCwdProbe>();
             services.AddRequiredSingleton<IProjectIdResolver, CwdProjectIdResolver>();
+            services.AddRequiredSingleton<IToolNameScope, ToolNameScope>();
+            services.AddRequiredSingleton<IScopeCheck, ScopeCheck>();
             services.AddRequiredSingleton<IToolGate, ToolGate>();
         }
 
@@ -219,6 +226,7 @@ public static partial class AppRegistrations
                 // with the other two repair relays, ahead of PendingEmbedJob.
                 new ProjectIdsRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<TimeProvider>(),
+                    sp.GetRequiredService<ISharedProjectScope>(),
                     sp.GetRequiredService<ILogger<ProjectIdsRepairJob>>()),
                 // ADR-0075 amendment: on-demand, same shape as the two repair jobs above —
                 // HasWorkAsync reads the promotion_queue_prune_requests row `extract prune --apply`

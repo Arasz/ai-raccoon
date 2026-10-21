@@ -758,7 +758,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     private async Task<string> IngestIntoWorkspaceAsync(string name, string text)
     {
         var ct = TestContext.Current.CancellationToken;
-        var workspace = await new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow))
+        var workspace = await new WorkspaceService(_store, new SqliteWorkspaceStore(_factory, TestData.SharedScope), new FakeTimeProvider(FixedNow), TestData.SharedScope)
             .BeginAsync(ProjectId, cancellationToken: ct);
         var file = Path.Combine(_dataRoot, name);
         await File.WriteAllTextAsync(file, text, ct);

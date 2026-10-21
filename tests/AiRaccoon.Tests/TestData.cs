@@ -10,6 +10,7 @@ using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Metrics;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
@@ -38,6 +39,11 @@ namespace AiRaccoon.Tests;
 public static class TestData
 {
     private const int DeleteTempRootMaxAttempts = 5;
+
+    /// <summary>The reserved shared target's scope, for the components a test builds by hand. One
+    /// instance for the whole suite: the scope holds no state.</summary>
+    public static readonly ISharedProjectScope SharedScope = new SharedProjectScope();
+    public static readonly AiRaccoon.Tools.IScopeCheck ScopeCheck = new AiRaccoon.Tools.ScopeCheck(new AiRaccoon.Tools.ToolNameScope(), SharedScope);
 
     /// <summary>Serializes tests that mutate the process-global AIRACCOON_DB_PASSPHRASE (shared by CliCommandRunnerTests and ConfigCommandsEncryptionTests).</summary>
     public static readonly SemaphoreSlim EnvVarGate = new(1, 1);
@@ -89,13 +95,13 @@ public static class TestData
         var fileIngestor = codeChunker is null
             ? new FileIngestor(matcher, sourceStore, timeProvider, embeddings,
                 ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
-                NullCodeIngestor.Instance, NullWatchStore.Instance, pump, new IndexableFileWalk())
+                NullCodeIngestor.Instance, NullWatchStore.Instance, pump, new IndexableFileWalk(), SharedScope)
             : new FileIngestor(matcher, sourceStore, timeProvider, embeddings,
                 ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(),
-                new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider), NullWatchStore.Instance, pump, new IndexableFileWalk());
+                new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider), NullWatchStore.Instance, pump, new IndexableFileWalk(), SharedScope);
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
-            settings ?? new SqliteSettingsStore(factory), pump, measurements ?? NoOpMeasurementRecorder.Instance);
+            settings ?? new SqliteSettingsStore(factory), pump, measurements ?? NoOpMeasurementRecorder.Instance, SharedScope);
     }
 
     /// <summary>

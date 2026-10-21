@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Isolation;
 using CommunityToolkit.Diagnostics;
 using Dapper;
@@ -6,12 +7,16 @@ using WorkspaceRecord = AiRaccoon.Core.Isolation.Workspace;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>Workspace lifecycle rows in the memory.db workspaces table; never synced.</summary>
-public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory) : IWorkspaceStore
+public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory, ISharedProjectScope scope)
+    : IWorkspaceStore
 {
+    private readonly ISharedProjectScope _scope = scope;
+
     public async Task BeginAsync(WorkspaceRecord workspace, DateTimeOffset startedAt,
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNull(workspace);
+        _scope.EnsureCanExecuteInSharedScope(workspace.ProjectId, "workspaces");
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         await connection.ExecuteAsync(

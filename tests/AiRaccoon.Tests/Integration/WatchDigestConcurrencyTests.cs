@@ -160,8 +160,8 @@ public sealed class WatchDigestConcurrencyTests
         // The transient blank-id Ambiguous window, NAMED: scopes still name the loser while
         // watches already moved — fail-closed by design, never resolved across fragments.
         var resolution = await new CwdProjectIdResolver(
-                new SqliteSettingsStore(one.Factory), new WatchStore(one.Factory),
-                new PinnedProbe(watchDir))
+                new SqliteSettingsStore(one.Factory), new WatchStore(one.Factory, TestData.SharedScope),
+                new PinnedProbe(watchDir), TestData.SharedScope)
             .ResolveAsync(token);
         var ambiguous = resolution.ShouldBeOfType<ProjectIdResolution.Ambiguous>();
         ambiguous.SortedIds.ShouldBe([loser, winner]);
@@ -185,7 +185,7 @@ public sealed class WatchDigestConcurrencyTests
                 [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
                 ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
                 ["qa-noise-project", "manual-sweep"]));
-            await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection, plan, token);
+            await new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope).ApplyAsync(connection, plan, token);
         }
 
         await using (var after = await one.Factory.OpenBankAsync(token))
@@ -230,7 +230,7 @@ public sealed class WatchDigestConcurrencyTests
                 [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
                 ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
                 ["qa-noise-project", "manual-sweep"]));
-            await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(redrive, plan, token);
+            await new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope).ApplyAsync(redrive, plan, token);
             (await redrive.ExecuteScalarAsync<long>(new CommandDefinition(
                     "SELECT count(*) FROM watch_files WHERE project_id = @l",
                     new { l = loser }, cancellationToken: token)))
@@ -444,10 +444,10 @@ public sealed class WatchDigestConcurrencyTests
             var time = new FakeTimeProvider(FixedNow);
             Memory = TestData.CreateMemoryStore(Factory,
                 NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(Factory), Gate, time, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
-            WatchStore = new WatchStore(Factory);
+            WatchStore = new WatchStore(Factory, TestData.SharedScope);
             Executor = new WatchDigestExecutor(Memory, WatchStore, time, new IgnoreRulesProvider(),
                 new Lazy<IWatchScanInitiator>(() => new NoOpWatchScanInitiator()), TestData.NewEmbedDrainPump(),
-                new SqliteProjectIdsMigrationGate(Factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher());
+                new SqliteProjectIdsMigrationGate(Factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope);
         }
 
         public SqliteConnectionFactory Factory { get; }

@@ -66,7 +66,7 @@ public sealed class ProjectIdsRepairJobTests : IDisposable
 
     private ProjectIdsRepairJob NewJob(Microsoft.Extensions.Logging.ILogger<ProjectIdsRepairJob>? logger = null) =>
         new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
-            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow), logger);
+            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow), TestData.SharedScope, logger);
 
     /// <summary>
     ///     Package F result-reporting hunk: a requested run logs a per-pass receipt naming the

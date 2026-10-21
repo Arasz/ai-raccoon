@@ -62,14 +62,21 @@ public sealed record ProjectIdsRepairResult(
 ///         existing PendingEmbedJob/CodeReindexJob drain the rows this invalidates.
 ///     </para>
 /// </summary>
-public sealed class ProjectIdsRepair(TimeProvider timeProvider)
+public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectScope scope)
 {
+    private readonly ISharedProjectScope _scope = scope;
     /// <summary>Applies the whole plan, step by step; returns the per-surface counts.</summary>
     public async Task<ProjectIdsRepairResult> ApplyAsync(SqliteConnection connection, ProjectIdsFoldPlan plan,
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNull(connection);
         Guard.IsNotNull(plan);
+        if (plan.Folds.Any(fold => _scope.IsReserved(fold.Loser) || _scope.IsReserved(fold.Winner))
+            || plan.Dropped.Any(_scope.IsReserved) || plan.RetiredProjects.Any(_scope.IsReserved))
+        {
+            throw new ArgumentException("shared-project-reserved: repair cannot move or delete the shared target.");
+        }
+
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var vecInvalidated = await InvalidateVecAsync(connection, plan, cancellationToken);
         var codeVecInvalidated = await InvalidateCodeVecAsync(connection, plan, cancellationToken);

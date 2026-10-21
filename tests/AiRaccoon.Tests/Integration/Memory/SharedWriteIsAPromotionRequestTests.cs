@@ -42,7 +42,7 @@ public sealed class SharedWriteIsAPromotionRequestTests : IDisposable
             new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         // A recording queue, not the real graph: this gate is about what the WRITE path decides.
         // That a proposed candidate persists is PromotionQueueService's own contract and its tests.
-        _writes = new MemoryWriteService(_store, _queue);
+        _writes = new MemoryWriteService(_store, _queue, TestData.SharedScope);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -145,7 +145,7 @@ public sealed class SharedWriteIsAPromotionRequestTests : IDisposable
 
     private async Task<Workspace> BeginWorkspaceAsync(CancellationToken cancellationToken)
     {
-        var workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow));
+        var workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory, TestData.SharedScope), new FakeTimeProvider(FixedNow), TestData.SharedScope);
         return await workspaces.BeginAsync(ProjectId, cancellationToken: cancellationToken);
     }
 }

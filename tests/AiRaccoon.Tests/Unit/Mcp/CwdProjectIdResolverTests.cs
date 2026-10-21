@@ -31,11 +31,22 @@ public sealed class CwdProjectIdResolverTests : IDisposable
         return path;
     }
 
-    private CwdProjectIdResolver NewResolver(string cwd) => new(_settings, _settings, new PinnedCwdProbe(cwd));
+    private CwdProjectIdResolver NewResolver(string cwd) => new(_settings, _settings, new PinnedCwdProbe(cwd), TestData.SharedScope);
 
     private sealed class PinnedCwdProbe(string cwd) : ICwdProbe
     {
         public string CurrentDirectory => cwd;
+    }
+
+    [Fact]
+    public async Task SharedScopesAndWatches_NeverSelectAnImplicitPublicationTarget()
+    {
+        var cwd = Dir("documents");
+        _settings.Values[IngestScopeKeys.ScopeProject("shared")] = IngestScopeKeys.Serialize([cwd]);
+        _settings.Watches = [new WatchRegistration("shared", cwd, 0, 0)];
+
+        (await NewResolver(cwd).ResolveAsync(TestContext.Current.CancellationToken))
+            .ShouldBeOfType<ProjectIdResolution.None>();
     }
 
     [Fact]
