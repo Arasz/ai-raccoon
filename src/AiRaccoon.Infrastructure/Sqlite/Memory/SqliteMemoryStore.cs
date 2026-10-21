@@ -64,7 +64,7 @@ public sealed partial class SqliteMemoryStore(
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        _scope.RequireOrdinary(request.ProjectId, "note writes");
+        _scope.EnsureCanExecuteInSharedScope(request);
 
         // Canonical-only (air-merge P3, review S1): the ToolGate choke canonicalizes every id
         // before it reaches storage, so a re-spelled id here means a caller bypassed the gate —
@@ -167,7 +167,7 @@ public sealed partial class SqliteMemoryStore(
 
     public async Task<Core.Memory.SearchResults> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
     {
-        _scope.RequireSearch(query);
+        _scope.EnsureCanExecuteInSharedScope(query);
         var searchTimingsCollector = new SearchTimingsCollector(timeProvider.GetTimestamp());
 
         var openStart = timeProvider.GetTimestamp();
@@ -356,7 +356,7 @@ public sealed partial class SqliteMemoryStore(
         string projectId, string path, string content, string? context, string? sourceFile = null,
         string? section = null, CancellationToken cancellationToken = default)
     {
-        _scope.RequireOrdinary(projectId, "direct content writes");
+        _scope.EnsureCanExecuteInSharedScope(projectId, "direct content writes");
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentException.ThrowIfNullOrWhiteSpace(content);

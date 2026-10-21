@@ -55,18 +55,28 @@ lives in the backend; the MCP tools and CLI retain their existing API shapes. A 
 shared query, shared workspace workflow or document extraction format requires a separate contract.
 
 The backend's reserved-id, context routing and operation rules belong to `ISharedProjectScope`,
-implemented by `SharedProjectScope`. `CheckOrdinary` returns refusal text or null; the existing
-`RequireOrdinary` guard throws that refusal for backend callers. This keeps the refusal text and
-reserved-id decision in one place.
+implemented by `SharedProjectScope`. Its `CanExecuteInSharedScope` overloads return booleans
+for typed `MemoryWriteRequest` and `SearchQuery` inputs. `CanSearchCode(SearchQuery)` separately
+checks code routing, so an ordinary all-scope search keeps its code leg. The service owns policy
+decisions only.
+`EnsureCanExecuteInSharedScope` extensions translate those decisions into the existing exceptions;
+their pure operation-message function also supplies the tool gate.
 
 At the MCP boundary, `IScopeCheck` exposes `Check(canonicalProjectId, toolName)`. Its `ScopeCheck`
-facade returns the host-owned `AiRaccoon.Tools.ScopeCheckResult` and composes `IToolNameScope`
+facade returns the host-owned `AiRaccoon.Tools.ScopeCheckResult(bool IsAllowed)` and composes `IToolNameScope`
 with `ISharedProjectScope`: the first classifies exact tool names
 and ordinal workspace/promotion prefixes; the second checks the project. `ToolGate` evaluates
 the result after access, retired-id and registration checks and translates a refusal to the
 existing `ArgumentException`. The composition root supplies all three required dependencies.
 This explicit two-part composition needs no generic rule pipeline or per-client registry.
 Backend guards remain in place for CLI and API calls that do not pass through `ToolGate`.
+
+`MemoryWriteRequest.Scope` derives `MemoryWriteScope` from the existing context and workspace
+fields: a nonblank workspace selects `Workspace`, otherwise an exact shared context selects
+`Shared`, and every other context selects `Project`. Custom labels remain project-owned.
+`Shared` requests promotion; its staged row remains project-owned. The property adds no writable
+or serialized input. `MemoryWriteService` consumes this enum
+when deciding whether a write asks for promotion, preserving workspace precedence.
 
 An incompatible legacy owner requires operator migration before this reserved target can be used.
 The new repair path deliberately refuses automatic reassignment: preserve the bank and move the

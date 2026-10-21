@@ -15,12 +15,12 @@ public interface ISharedProjectScope
     /// <summary>The context the id's rows live in: the shared context, or the id's own project context.</summary>
     string ContextFor(string projectId);
 
-    /// <summary>Refuses the search shapes the reserved target does not support.</summary>
-    void RequireSearch(SearchQuery query);
+    /// <summary>True when the search shape is supported, including ordinary projects.</summary>
+    bool CanExecuteInSharedScope(SearchQuery query);
 
-    /// <summary>Returns a refusal for the reserved target, or null for an ordinary project.</summary>
-    string? CheckOrdinary(string projectId, string operation);
+    /// <summary>True when an ordinary-only operation is allowed; false for the reserved shared target.</summary>
+    bool CanExecuteInSharedScope(MemoryWriteRequest request);
 
-    /// <summary>Refuses the operations the reserved target does not support.</summary>
-    void RequireOrdinary(string projectId, string operation);
+    /// <summary>True when the search can include private project code rows.</summary>
+    bool CanSearchCode(SearchQuery query);
 }

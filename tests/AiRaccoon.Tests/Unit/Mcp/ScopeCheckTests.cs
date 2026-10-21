@@ -27,7 +27,6 @@ public sealed class ScopeCheckTests
     {
         var result = _scope.Check("shared", toolName);
         result.IsAllowed.ShouldBeFalse();
-        result.Error.ShouldBe($"shared-project-unsupported: {toolName} requires an ordinary project; shared supports document ingestion and watches.");
         _scope.Check("acme", toolName).IsAllowed.ShouldBeTrue();
         _scope.Check("Shared", toolName).IsAllowed.ShouldBeTrue();
     }
@@ -52,6 +51,5 @@ public sealed class ScopeCheckTests
     {
         var result = _scope.Check("shared", toolName);
         result.IsAllowed.ShouldBeTrue();
-        result.Error.ShouldBeNull();
     }
 }

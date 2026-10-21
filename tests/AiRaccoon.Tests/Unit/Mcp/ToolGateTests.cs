@@ -220,7 +220,7 @@ public sealed class ToolGateTests
     [Fact]
     public async Task RequireAsync_UsesTheScopeResultAndForwardsTheCanonicalProjectId()
     {
-        var scope = new RecordingScope { Result = new ScopeCheckResult("scope refused") };
+        var scope = new RecordingScope { Result = new ScopeCheckResult(false) };
         var gate = new ToolGate(new RecordingGuard(), new FakePromotionQueue(), new NeverMigratingStore(),
             new RecordingRegistrationGuard(), scope);
         try
@@ -229,7 +229,7 @@ public sealed class ToolGateTests
                 [new ProjectIdAliasEntry("old-project", "winner")], ["winner"], []));
             var error = await Should.ThrowAsync<ArgumentException>(() =>
                 gate.RequireAsync("old-project", AccessRequirement.Read, "memory_search", TestContext.Current.CancellationToken));
-            error.Message.ShouldBe("scope refused");
+            error.Message.ShouldBe("shared-project-unsupported: memory_search requires an ordinary project; shared supports document ingestion and watches.");
             scope.Calls.ShouldBe([("winner", "memory_search")]);
         }
         finally
@@ -263,7 +263,7 @@ public sealed class ToolGateTests
 
     private sealed class RecordingScope : IScopeCheck
     {
-        public ScopeCheckResult Result { get; init; } = new(null);
+        public ScopeCheckResult Result { get; init; } = new(true);
         public List<(string ProjectId, string ToolName)> Calls { get; } = [];
 
         public ScopeCheckResult Check(string canonicalProjectId, string toolName)

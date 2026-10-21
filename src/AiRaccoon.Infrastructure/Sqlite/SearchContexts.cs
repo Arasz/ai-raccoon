@@ -33,7 +33,7 @@ internal static class SearchContexts
     public static IReadOnlyList<string> For(SearchQuery query, ISharedProjectScope scope,
         IReadOnlyList<string>? customLabels = null)
     {
-        scope.RequireSearch(query);
+        scope.EnsureCanExecuteInSharedScope(query);
         if (scope.IsReserved(query.ProjectId))
         {
             return [scope.ContextFor(query.ProjectId)];

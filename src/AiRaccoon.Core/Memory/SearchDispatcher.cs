@@ -16,7 +16,7 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         string correlationId, string sessionId, int? codeLimit = null, double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
-        _scope.RequireSearch(searchQuery);
+        _scope.EnsureCanExecuteInSharedScope(searchQuery);
         SearchResults? memorySearchResults = null;
         IReadOnlyList<MemorySearchResult> results = [];
         if (kind != SearchKind.Code)
@@ -31,7 +31,7 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         {
             // Code is project-scoped only (§3.1): an explicit scope=shared request never
             // contributes code rows, even under kind=code/both.
-            if (searchQuery.Scope == SearchScope.Shared || _scope.IsReserved(searchQuery.ProjectId))
+            if (!_scope.CanSearchCode(searchQuery))
             {
                 codeResults = [];
             }

@@ -32,6 +32,20 @@ public class MemoryWriteRequestTests
     }
 
     [Theory]
+    [InlineData(null, null, MemoryWriteScope.Project)]
+    [InlineData("", null, MemoryWriteScope.Project)]
+    [InlineData("docs:api", null, MemoryWriteScope.Project)]
+    [InlineData("Shared", null, MemoryWriteScope.Project)]
+    [InlineData("shared", null, MemoryWriteScope.Shared)]
+    [InlineData("shared", "scratch", MemoryWriteScope.Workspace)]
+    [InlineData("docs:api", "scratch", MemoryWriteScope.Workspace)]
+    [InlineData("shared", " ", MemoryWriteScope.Shared)]
+    public void Scope_DerivesRequestedScopeWithWorkspacePrecedence(string? context, string? workspaceId,
+        MemoryWriteScope expected) =>
+        new MemoryWriteRequest("acme", "note", Context: context, WorkspaceId: workspaceId)
+            .Scope.ShouldBe(expected);
+
+    [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]

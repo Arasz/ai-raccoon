@@ -7,7 +7,5 @@ public sealed class ScopeCheck(IToolNameScope tools, ISharedProjectScope project
 {
     /// <inheritdoc />
     public ScopeCheckResult Check(string canonicalProjectId, string toolName) =>
-        new(tools.RequiresOrdinaryProject(toolName)
-            ? projects.CheckOrdinary(canonicalProjectId, toolName)
-            : null);
+        new(!tools.RequiresOrdinaryProject(toolName) || !projects.IsReserved(canonicalProjectId));
 }

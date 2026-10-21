@@ -39,56 +39,80 @@ public sealed class SharedProjectScopeTests
     }
 
     [Fact]
-    public void RequireSearch_AllowsTheReservedId_AllAndSharedScopes()
+    public void EnsureCanExecuteInSharedScope_AllowsTheReservedId_AllAndSharedScopes()
     {
-        Should.NotThrow(() => _scope.RequireSearch(new SearchQuery("shared", "example", Scope: SearchScope.All)));
-        Should.NotThrow(() => _scope.RequireSearch(new SearchQuery("shared", "example", Scope: SearchScope.Shared)));
+        Should.NotThrow(() => _scope.EnsureCanExecuteInSharedScope(new SearchQuery("shared", "example", Scope: SearchScope.All)));
+        Should.NotThrow(() => _scope.EnsureCanExecuteInSharedScope(new SearchQuery("shared", "example", Scope: SearchScope.Shared)));
     }
 
     [Fact]
-    public void RequireSearch_RefusesTheReservedIdWithAProjectScope() =>
+    public void EnsureCanExecuteInSharedScope_RefusesTheReservedIdWithAProjectScope() =>
         Should.Throw<ArgumentException>(() =>
-            _scope.RequireSearch(new SearchQuery("shared", "example", Scope: SearchScope.Project)));
+            _scope.EnsureCanExecuteInSharedScope(new SearchQuery("shared", "example", Scope: SearchScope.Project)));
 
     [Fact]
-    public void RequireSearch_RefusesTheReservedIdWithAWorkspaceOrALabel()
+    public void EnsureCanExecuteInSharedScope_RefusesTheReservedIdWithAWorkspaceOrALabel()
     {
         Should.Throw<ArgumentException>(() =>
-            _scope.RequireSearch(new SearchQuery("shared", "example", WorkspaceId: "scratch")));
+            _scope.EnsureCanExecuteInSharedScope(new SearchQuery("shared", "example", WorkspaceId: "scratch")));
         Should.Throw<ArgumentException>(() =>
-            _scope.RequireSearch(new SearchQuery("shared", "example", ContextLabel: "docs")));
+            _scope.EnsureCanExecuteInSharedScope(new SearchQuery("shared", "example", ContextLabel: "docs")));
     }
 
     [Fact]
-    public void RequireSearch_LeavesOrdinaryProjectsAlone()
+    public void EnsureCanExecuteInSharedScope_SearchLeavesOrdinaryProjectsAlone()
     {
-        Should.NotThrow(() => _scope.RequireSearch(new SearchQuery("acme", "example", Scope: SearchScope.Project)));
+        Should.NotThrow(() => _scope.EnsureCanExecuteInSharedScope(new SearchQuery("acme", "example", Scope: SearchScope.Project)));
         Should.NotThrow(() =>
-            _scope.RequireSearch(new SearchQuery("acme", "example", WorkspaceId: "scratch", ContextLabel: "docs")));
+            _scope.EnsureCanExecuteInSharedScope(new SearchQuery("acme", "example", WorkspaceId: "scratch", ContextLabel: "docs")));
     }
 
     [Fact]
-    public void RequireOrdinary_RefusesTheReservedId_AndNamesTheOperation()
+    public void EnsureCanExecuteInSharedScope_RefusesTheReservedId_AndNamesTheOperation()
     {
-        var error = Record.Exception(() => _scope.RequireOrdinary("shared", "note writes"));
+        var error = Record.Exception(() => _scope.EnsureCanExecuteInSharedScope("shared", "note writes"));
         error.ShouldNotBeNull();
         error!.Message.ShouldContain("shared-project-unsupported");
         error.Message.ShouldContain("note writes");
     }
 
+    [Theory]
+    [InlineData("shared", false)]
+    [InlineData("Shared", true)]
+    [InlineData("acme", true)]
+    public void CanExecuteInSharedScope_OrdinaryOnlyOperation_ReturnsDecision(string projectId, bool allowed) =>
+        _scope.CanExecuteInSharedScope(new MemoryWriteRequest(projectId, "note")).ShouldBe(allowed);
+
+    [Theory]
+    [InlineData("shared", SearchScope.All, null, null, true)]
+    [InlineData("shared", SearchScope.Shared, null, null, true)]
+    [InlineData("shared", SearchScope.Project, null, null, false)]
+    [InlineData("shared", SearchScope.All, "scratch", null, false)]
+    [InlineData("shared", SearchScope.All, null, "docs", false)]
+    [InlineData("shared", SearchScope.Shared, " ", " ", true)]
+    [InlineData("acme", SearchScope.Project, "scratch", "docs", true)]
+    public void CanExecuteInSharedScope_Search_ReturnsDecision(string projectId, SearchScope searchScope,
+        string? workspaceId, string? contextLabel, bool allowed) =>
+        _scope.CanExecuteInSharedScope(new SearchQuery(projectId, "example", Scope: searchScope,
+            WorkspaceId: workspaceId, ContextLabel: contextLabel)).ShouldBe(allowed);
+
     [Fact]
-    public void CheckOrdinary_ReturnsTheSameRefusalAsTheBackendGuard()
+    public void EnsureCanExecuteInSharedScope_PreservesOperationAndSearchMessages()
     {
-        var error = _scope.CheckOrdinary("shared", "memory_write");
-        error.ShouldBe("shared-project-unsupported: memory_write requires an ordinary project; shared supports document ingestion and watches.");
-        Should.Throw<ArgumentException>(() => _scope.RequireOrdinary("shared", "memory_write"))
-            .Message.ShouldBe(error);
-        _scope.CheckOrdinary("acme", "memory_write").ShouldBeNull();
+        Should.Throw<ArgumentException>(() => _scope.EnsureCanExecuteInSharedScope(
+            new MemoryWriteRequest("shared", "note")))
+            .Message.ShouldBe("shared-project-unsupported: note writes requires an ordinary project; shared supports document ingestion and watches.");
+        Should.NotThrow(() => _scope.EnsureCanExecuteInSharedScope(new MemoryWriteRequest("acme", "note")));
+        Should.Throw<ArgumentException>(() => _scope.EnsureCanExecuteInSharedScope("shared", "memory_write"))
+            .Message.ShouldBe("shared-project-unsupported: memory_write requires an ordinary project; shared supports document ingestion and watches.");
+        Should.Throw<ArgumentException>(() => _scope.EnsureCanExecuteInSharedScope(
+            new SearchQuery("shared", "example", Scope: SearchScope.Project)))
+            .Message.ShouldBe("shared-project-unsupported: search shared with scope all or shared, without a workspace or label.");
     }
 
     [Fact]
-    public void RequireOrdinary_LeavesOrdinaryProjectsAlone() =>
-        Should.NotThrow(() => _scope.RequireOrdinary("acme", "note writes"));
+    public void EnsureCanExecuteInSharedScope_LeavesOrdinaryProjectsAlone() =>
+        Should.NotThrow(() => _scope.EnsureCanExecuteInSharedScope("acme", "note writes"));
 
     [Fact]
     public void TheCompositionRoot_ResolvesTheScopeContract()

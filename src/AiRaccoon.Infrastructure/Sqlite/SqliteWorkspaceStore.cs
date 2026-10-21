@@ -16,7 +16,7 @@ public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory, IShar
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNull(workspace);
-        _scope.RequireOrdinary(workspace.ProjectId, "workspaces");
+        _scope.EnsureCanExecuteInSharedScope(workspace.ProjectId, "workspaces");
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         await connection.ExecuteAsync(

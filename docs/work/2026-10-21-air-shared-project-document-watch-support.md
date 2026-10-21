@@ -123,8 +123,15 @@ The follow-up adds real gate coverage, the shared operation matrix, and refusal-
 
 The reviewed design introduces a host `IScopeCheck` facade returning `ScopeCheckResult`.
 It composes `IToolNameScope` operation classification with `ISharedProjectScope` domain
-policy. The shared policy returns the ordinary-project check result; its throwing adapter
-continues to protect backend callers. The gate keeps migration, resolution, alias folding,
+policy. Both `CanExecuteInSharedScope` overloads return booleans; the service carries no error
+text. They take `MemoryWriteRequest` and `SearchQuery`; `CanSearchCode(SearchQuery)` separately
+owns code-leg routing. `EnsureCanExecuteInSharedScope` extensions protect backend operation and
+search callers.
+The host result is `ScopeCheckResult(bool IsAllowed)` and the gate uses the same pure operation
+message function as the throwing extension. `MemoryWriteRequest.Scope` derives the Project,
+Workspace or Shared enum from existing fields; the promotion service consumes it, with workspace
+scope taking precedence and custom contexts remaining within Project. Shared requests promotion;
+the staged row remains project-owned. The gate keeps migration, resolution, alias folding,
 access, retired-id refusal and registration ahead of scope validation. Tool names stay in
 the host, with the original seven exact names and two ordinal prefix families.
 

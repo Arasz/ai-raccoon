@@ -144,6 +144,40 @@ public sealed class SearchDispatcherTests
         quality.LastKind.ShouldBe(expected);
     }
 
+    [Theory]
+    [InlineData("acme", SearchScope.Project, true)]
+    [InlineData("acme", SearchScope.All, true)]
+    [InlineData("Shared", SearchScope.All, true)]
+    [InlineData("acme", SearchScope.Shared, false)]
+    [InlineData("shared", SearchScope.All, false)]
+    [InlineData("shared", SearchScope.Shared, false)]
+    public async Task DispatchAsync_CodeSearchRespectsProjectAndSharedRouting(string projectId,
+        SearchScope scope, bool callsCode)
+    {
+        var codeSearch = new SpyCodeSearchService();
+        var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), codeSearch,
+            new NoOpSearchQualityService(), TestData.SharedScope);
+
+        await dispatcher.DispatchAsync(new SearchQuery(projectId, "widget", Scope: scope), SearchKind.Both,
+            "all", "correlation", "session", cancellationToken: TestContext.Current.CancellationToken);
+
+        codeSearch.WasCalled.ShouldBe(callsCode);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_InvalidSharedSearchRefusesBeforeCallingCode()
+    {
+        var codeSearch = new SpyCodeSearchService();
+        var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), codeSearch,
+            new NoOpSearchQualityService(), TestData.SharedScope);
+
+        await Should.ThrowAsync<ArgumentException>(() => dispatcher.DispatchAsync(
+            new SearchQuery("shared", "widget", Scope: SearchScope.Project), SearchKind.Both,
+            "project", "correlation", "session", cancellationToken: TestContext.Current.CancellationToken));
+
+        codeSearch.WasCalled.ShouldBeFalse();
+    }
+
     private sealed class SpyCodeSearchService : ICodeSearchService
     {
         public CodeSearchQuery? LastQuery { get; private set; }

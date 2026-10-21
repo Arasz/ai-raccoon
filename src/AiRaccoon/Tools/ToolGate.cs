@@ -60,7 +60,7 @@ public sealed class ToolGate(
         var scopeResult = scope.Check(canonical, toolName);
         if (!scopeResult.IsAllowed)
         {
-            throw new ArgumentException(scopeResult.Error);
+            throw new ArgumentException(SharedProjectScopeExtensions.OrdinaryProjectRequiredMessage(toolName));
         }
 
         return canonical;

@@ -23,27 +23,13 @@ public sealed class SharedProjectScope : ISharedProjectScope
         : ContextNaming.ProjectContext(projectId);
 
     /// <inheritdoc />
-    public void RequireSearch(SearchQuery query)
-    {
-        if (IsReserved(query.ProjectId) && (query.Scope == SearchScope.Project
-            || !string.IsNullOrWhiteSpace(query.WorkspaceId) || !string.IsNullOrWhiteSpace(query.ContextLabel)))
-        {
-            throw new ArgumentException("shared-project-unsupported: search shared with scope all or shared, without a workspace or label.");
-        }
-    }
+    public bool CanExecuteInSharedScope(SearchQuery query) =>
+        !IsReserved(query.ProjectId) || (query.Scope != SearchScope.Project
+            && string.IsNullOrWhiteSpace(query.WorkspaceId) && string.IsNullOrWhiteSpace(query.ContextLabel));
 
     /// <inheritdoc />
-    public string? CheckOrdinary(string projectId, string operation) => IsReserved(projectId)
-        ? $"shared-project-unsupported: {operation} requires an ordinary project; shared supports document ingestion and watches."
-        : null;
+    public bool CanExecuteInSharedScope(MemoryWriteRequest request) => !IsReserved(request.ProjectId);
 
     /// <inheritdoc />
-    public void RequireOrdinary(string projectId, string operation)
-    {
-        var error = CheckOrdinary(projectId, operation);
-        if (error is not null)
-        {
-            throw new ArgumentException(error);
-        }
-    }
+    public bool CanSearchCode(SearchQuery query) => query.Scope != SearchScope.Shared && !IsReserved(query.ProjectId);
 }

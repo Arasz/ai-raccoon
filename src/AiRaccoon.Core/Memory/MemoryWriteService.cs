@@ -58,11 +58,11 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        _scope.RequireOrdinary(request.ProjectId, "note writes");
+        _scope.EnsureCanExecuteInSharedScope(request);
 
         // The workspace wins over the shared request (owner ruling K5): a scratch write is not a
         // promotion request, so it never reaches the queue and never gets the shared rewrite.
-        if (request.Context != ContextNaming.SharedContext || !string.IsNullOrWhiteSpace(request.WorkspaceId))
+        if (request.Scope != MemoryWriteScope.Shared)
         {
             return await store.WriteAsync(request, cancellationToken);
         }
