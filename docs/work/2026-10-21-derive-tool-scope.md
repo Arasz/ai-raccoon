@@ -237,6 +237,35 @@ named it has to be renamed.
 | The whole Unit surface | 4302 tests, 0 failed, 1 skipped, 10.0 s |
 | The shared-project integration surface | 19 tests, 0 failed, 5.8 s |
 
+### The two mutations (s4)
+
+Both were seen red and then green. The tree is back to its committed state.
+
+**Mutation 1 — a tool that declares no scope fails the build.** A fake tool method was added to
+`CodeTools` with `[McpServerTool(Name = "mutation_probe_tool")]` and no scope. The build failed
+with **exactly one** AIRGEN002, at the method's declaration:
+
+```
+/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-derive-tool-scope-from-declarations/src/AiRaccoon/Tools/CodeTools.cs(19,17): error AIRGEN002: MCP tool method 'MutationProbe' must declare its scope with [McpToolScope(RequiresOrdinaryProject: …)] [/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-derive-tool-scope-from-declarations/src/AiRaccoon/AiRaccoon.csproj]
+```
+
+**Mutation 2 — a tool that declares a scope the test does not know fails the test.** The same
+probe method, now with `[McpToolScope(RequiresOrdinaryProject: false)]`. The build is clean, and
+the scope test fails — the exhaustive assertion sees a tool the pin does not list:
+
+```
+"memory_embed_pending, memory_get, memory_ingest_directory, memory_ingest_file, memory_list,
+ memory_performance, memory_record_followthrough, memory_record_grade, memory_search, memory_stats,
+ memory_sync, memory_watch_add, memory_watch_remove, memory_watch_status, mutation_probe_tool,
+ project_id_get, project_id_token_get"
+```
+
+**After both were reverted:** the scope test is 6 tests, 0 failed, and the product build is clean.
+
+A detail worth keeping: the mutation's test run needs the *test* project rebuilt, not only the
+product — the test assembly loads the product DLL from its own output, so a product-only rebuild
+leaves the test running against the previous assembly and the mutation appears to pass.
+
 ### The gates
 
 | Gate | Result |
