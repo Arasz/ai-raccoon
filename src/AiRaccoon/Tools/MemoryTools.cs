@@ -35,16 +35,16 @@ public sealed partial class MemoryTools(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
 
-    private const string TnMemoryWrite = "memory_write";
+    private const string TnMemoryWrite = "add_memory";
     private const string TnGetEntry = "get_entry";
     private const string TnQuery = "query";
     private const string TnGetIndex = "get_index";
     private const string TnGetStoreStatistics = "get_store_statistics";
-    private const string TnMemoryDelete = "memory_delete";
-    private const string TnMemoryDeleteContext = "memory_delete_context";
-    private const string TnMemoryIngestFile = "memory_ingest_file";
-    private const string TnMemoryIngestDirectory = "memory_ingest_directory";
-    private const string TnMemoryEmbedPending = "memory_embed_pending";
+    private const string TnMemoryDelete = "delete_entry";
+    private const string TnMemoryDeleteContext = "delete_context";
+    private const string TnMemoryIngestFile = "ingest_file";
+    private const string TnMemoryIngestDirectory = "ingest_directory";
+    private const string TnMemoryEmbedPending = "embed_deferred_entries";
 
     private static readonly SearchQuery.Validator SearchQueryValidator = new();
     private static readonly MemoryWriteRequest.Validator MemoryWriteRequestValidator = new();
@@ -474,7 +474,7 @@ public sealed partial class MemoryTools(
     [McpServerTool(Name = TnMemoryDelete)]
     [McpToolScope(ToolScope.Project)]
     [Description(
-        "Deletes the whole memory behind a content hash: a multi-chunk memory_write's chunks share one write, so any of its chunk hashes deletes all of them, not just one. Idempotent: an unknown hash is not an error — it reports the true row count, 0 for an unknown hash.")]
+        "Deletes the whole memory behind a content hash: a multi-chunk add_memory's chunks share one write, so any of its chunk hashes deletes all of them, not just one. Idempotent: an unknown hash is not an error — it reports the true row count, 0 for an unknown hash.")]
     public async Task<ApiEnvelope<DeletedResult>> Delete(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The content hash to delete — any chunk of a multi-chunk write reaches the whole write.")]
