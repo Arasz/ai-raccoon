@@ -33,7 +33,7 @@ into a read tool and one write tool.
 | `memory_set_ttl` | `set_memory_ttl` | sets one memory's TTL — TTL is a memory-only property (see the note below) |
 | `memory_workspace_begin` | `initialize_workspace` | starts a sandbox |
 | `memory_workspace_status` | `get_workspace_status` | lists a workspace's outbox |
-| `memory_workspace_consolidate` | `close_workspace` | closes a sandbox, promoting the kept hashes into the project |
+| `memory_workspace_consolidate` | `close_workspace` | closes a sandbox, promoting the kept hashes into the project. Promote-on-close is intended (owner, 2026-10-21), so the tool's contract text must say that closing promotes |
 | `memory_workspace_discard` | `discard_workspace` | drops a sandbox and everything in it |
 | `memory_watch_add` | `add_watch` | registers a path watch |
 | `memory_watch_status` | `get_watch_status` | the watch's live state |
@@ -80,10 +80,22 @@ agent's own account of a session. The write path classifies them by the `hermes/
 
 So: structurally a transcript is a file's chunks and lands in the File population under the
 denormalised signature; semantically it is agent-authored memory whose locator happens to be a
-session. **Recommended: transcript → Memory**, and that forces the discriminator to be
-`memory_source.source_type` (`manual` | `transcript` → Memory, `file` → File) rather than the
-denormalised `source_file IS NULL AND total_chunks = 0` signature, which puts transcripts on the
-wrong side.
+session.
+
+**Settled by the owner on 2026-10-21: transcript → Memory.** And it must be *fixed*, not merely
+classified: today a transcript falls on the File side of the cheap signature, and it has to be
+moved. That fixes three things at once:
+
+1. **The discriminator.** `memory_source.source_type` decides: `manual` | `transcript` → Memory,
+   `file` → File. The denormalised `source_file IS NULL AND total_chunks = 0` signature is
+   ruled out — it cannot express the transcript case at all.
+2. **The historical rows.** The fix has to reach the rows already in the bank, not only the ones
+   written after it. On this bank that is **1,496 transcript rows** (all in project
+   `hermes-default`, all chunked, all carrying `source_file = hermes/<timestamp>_<id>`). If the
+   implementation denormalises the type onto `entries`, the backfill must classify those rows as
+   Memory — a backfill that reads the signature would put them back on the wrong side.
+3. **The TTL rule's reach.** A transcript is Memory, so it may carry a TTL; a File entry (an
+   ingested document) may not. The two rules now agree on one classifier.
 
 ## The entry type
 
@@ -149,8 +161,8 @@ indexable.
 - **(a) Follow-through** — settled by the owner on 2026-10-21: the writes split. `set_query_result_grade`
   records the 1–5 usefulness grade; `set_memory_usage_record` records the follow-through (the
   file the agent opened out of the served set).
-- **(b) Transcripts** — the owner's question, answered above: a transcript is a file by structure
-  and memory by origin. The recommendation is Memory, and it decides the discriminator (the
-  `source_type` join, not the denormalised signature). Awaiting the nod.
+- **(b) Transcripts** — settled by the owner on 2026-10-21: transcript → Memory, and the existing
+  transcript rows must be moved onto that side (the `source_type` join, plus a backfill that
+  reaches the 1,496 historical rows if the type is denormalised). See the section above.
 - **(c) The two placeholder names** — settled by the owner on 2026-10-21
   (`trigger_memory_sharing`, `get_memories_sharing_ranking`).
