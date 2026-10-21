@@ -14,7 +14,7 @@ internal static class SearchContexts
     ///     skipped otherwise.
     /// </summary>
     public static async Task<IReadOnlyList<string>> ResolveAsync(SqliteConnection connection,
-        SearchQuery query, CancellationToken cancellationToken)
+        SearchQuery query, CancellationToken cancellationToken, ISharedProjectScope? scope = null)
     {
         var needsLabels = query.Scope is SearchScope.All or SearchScope.Project
                           && string.IsNullOrWhiteSpace(query.ContextLabel);
@@ -22,7 +22,7 @@ internal static class SearchContexts
             ? (await connection.QueryAsync<string>(new CommandDefinition(MemorySql.CustomContextLabels,
                     new { projectId = query.ProjectId }, cancellationToken: cancellationToken))).ToList()
             : [];
-        return For(query, labels);
+        return For(query, labels, scope);
     }
 
     /// <param name="customLabels">
@@ -30,10 +30,12 @@ internal static class SearchContexts
     ///     a label inside it, not a second boundary. No <see cref="SearchQuery.ContextLabel" />
     ///     means every context in the project; one means that context only (docs/adr/0045).
     /// </param>
-    public static IReadOnlyList<string> For(SearchQuery query, IReadOnlyList<string>? customLabels = null)
+    public static IReadOnlyList<string> For(SearchQuery query, IReadOnlyList<string>? customLabels = null,
+        ISharedProjectScope? scope = null)
     {
-        SharedProject.RequireSearch(query);
-        if (SharedProject.Is(query.ProjectId))
+        var sharedScope = scope ?? SharedProjectScope.Default;
+        sharedScope.RequireSearch(query);
+        if (sharedScope.IsReserved(query.ProjectId))
         {
             return [ContextNaming.SharedContext];
         }

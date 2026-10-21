@@ -9,13 +9,16 @@ namespace AiRaccoon.Infrastructure.Workspace;
 ///     Workspace lifecycle orchestration over IMemoryStore: begin, status, consolidate (outbox → project inbox),
 ///     discard (see docs/work/features-agent-memory/spec-issue-1.md §3.2).
 /// </summary>
-public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspaceStore, TimeProvider timeProvider) : IWorkspaceService
+public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspaceStore, TimeProvider timeProvider,
+    ISharedProjectScope? scope = null) : IWorkspaceService
 {
+    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+
     public async Task<WorkspaceRecord> BeginAsync(string projectId, string? agentId = null, string? name = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        SharedProject.RequireOrdinary(projectId, "workspaces");
+        _scope.RequireOrdinary(projectId, "workspaces");
 
         // v7 (sortable, time-ordered) ids make workspace lists deterministic by creation order.
         var id = Guid.CreateVersion7().ToString("N");
@@ -28,7 +31,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        SharedProject.RequireOrdinary(projectId, "workspaces");
+        _scope.RequireOrdinary(projectId, "workspaces");
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         var workspace = await workspaceStore.RequireActiveAsync(projectId, workspaceId, cancellationToken);
 
@@ -41,7 +44,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         string projectId, string workspaceId, IReadOnlyList<string> keep, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        SharedProject.RequireOrdinary(projectId, "workspaces");
+        _scope.RequireOrdinary(projectId, "workspaces");
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
 
@@ -78,7 +81,7 @@ public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspa
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        SharedProject.RequireOrdinary(projectId, "workspaces");
+        _scope.RequireOrdinary(projectId, "workspaces");
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         await ClaimAsync(projectId, workspaceId, false, cancellationToken);

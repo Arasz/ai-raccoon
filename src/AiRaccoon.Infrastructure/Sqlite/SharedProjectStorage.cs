@@ -8,13 +8,13 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 internal static class SharedProjectStorage
 {
     public static async Task ActivateSharedAsync(this SqliteConnection connection, string projectId,
-        CancellationToken cancellationToken)
+        ISharedProjectScope scope, CancellationToken cancellationToken)
     {
-        if (SharedProject.Is(projectId))
+        if (scope.IsReserved(projectId))
         {
             await connection.InWriteTransactionAsync(async () =>
             {
-                await connection.RequireSharedAvailableAsync(projectId, cancellationToken);
+                await connection.RequireSharedAvailableAsync(projectId, scope, cancellationToken);
                 await connection.MarkSharedActiveAsync(cancellationToken);
             }, cancellationToken);
         }
@@ -22,12 +22,12 @@ internal static class SharedProjectStorage
 
     public static Task MarkSharedActiveAsync(this SqliteConnection connection, CancellationToken cancellationToken) =>
         connection.ExecuteAsync(Sql.Def("INSERT INTO settings(key, value) VALUES (@key, '1') ON CONFLICT(key) DO UPDATE SET value = '1'",
-            new { key = SharedProject.WatchActivationKey }, cancellationToken));
+            new { key = SharedProjectScope.WatchActivationKey }, cancellationToken));
 
     public static async Task RequireSharedAvailableAsync(this SqliteConnection connection,
-        string projectId, CancellationToken cancellationToken)
+        string projectId, ISharedProjectScope scope, CancellationToken cancellationToken)
     {
-        if (!SharedProject.Is(projectId))
+        if (!scope.IsReserved(projectId))
         {
             return;
         }
@@ -40,7 +40,7 @@ internal static class SharedProjectStorage
                 OR ((EXISTS(SELECT 1 FROM watches WHERE project_id = @projectId)
                     OR EXISTS(SELECT 1 FROM watch_files WHERE project_id = @projectId))
                     AND NOT EXISTS(SELECT 1 FROM settings WHERE key = @activationKey AND value = '1'))
-            """, new { projectId, activationKey = SharedProject.WatchActivationKey }, cancellationToken));
+            """, new { projectId, activationKey = SharedProjectScope.WatchActivationKey }, cancellationToken));
         if (conflict)
         {
             throw new ArgumentException("shared-project-conflict: legacy private data or registration uses 'shared'; repair that owner before using the reserved target. No data was published.");

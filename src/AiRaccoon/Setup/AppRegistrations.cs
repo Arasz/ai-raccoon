@@ -74,6 +74,11 @@ public static partial class AppRegistrations
             services.AddSingleton<IOperationTelemetry, BackgroundTelemetry>();
             services.RegisterEmbeddingServices();
             services.RegisterFileIngestionServices();
+            // The reserved shared document target's scope rules (ADR-0137): one implementation,
+            // resolved by the composition root, so the components that route writes and reads
+            // depend on the contract and not on a static helper. Registered in the core graph —
+            // the CLI graph builds the same stores.
+            services.AddRequiredSingleton<ISharedProjectScope, SharedProjectScope>();
             services.RegisterStores();
         }
 

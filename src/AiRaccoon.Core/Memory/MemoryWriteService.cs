@@ -40,8 +40,11 @@ public interface IMemoryWriteService
 }
 
 /// <inheritdoc cref="IMemoryWriteService" />
-public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue) : IMemoryWriteService
+public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue,
+    ISharedProjectScope? scope = null) : IMemoryWriteService
 {
+    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+
     /// <summary>
     ///     Derived from <see cref="PromotionScorer.MaxScore" /> — the scorer's declared output
     ///     ceiling — plus a full point, so an explicit request outranks every inference even if that
@@ -55,7 +58,7 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        SharedProject.RequireOrdinary(request.ProjectId, "note writes");
+        _scope.RequireOrdinary(request.ProjectId, "note writes");
 
         // The workspace wins over the shared request (owner ruling K5): a scratch write is not a
         // promotion request, so it never reaches the queue and never gets the shared rewrite.

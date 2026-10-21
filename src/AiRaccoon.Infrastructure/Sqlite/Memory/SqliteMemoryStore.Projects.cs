@@ -13,10 +13,10 @@ public sealed partial class SqliteMemoryStore : IProjectRegistry
         var canonical = ProjectId.Canonicalize(projectId);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
-        if (SharedProject.Is(canonical))
+        if (_scope.IsReserved(canonical))
         {
-            await connection.RequireSharedAvailableAsync(canonical, cancellationToken);
-            if (name is not null && name != SharedProject.Id)
+            await connection.RequireSharedAvailableAsync(canonical, _scope, cancellationToken);
+            if (name is not null && name != SharedProjectScope.Id)
             {
                 throw new ArgumentException("shared-project-reserved: the shared target cannot be renamed.");
             }
@@ -37,9 +37,9 @@ public sealed partial class SqliteMemoryStore : IProjectRegistry
 
         await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
         await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
-        if (SharedProject.Is(canonical))
+        if (_scope.IsReserved(canonical))
         {
-            await connection.RequireSharedAvailableAsync(canonical, cancellationToken);
+            await connection.RequireSharedAvailableAsync(canonical, _scope, cancellationToken);
             return true;
         }
 

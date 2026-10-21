@@ -29,9 +29,12 @@ public sealed class FileIngestor(
     ICodeIngestor codeIngestor,
     IWatchStore watchStore,
     IEventPump<EmbedDrainRequest> embedDrainPump,
-    IndexableFileWalk walk) : IFileIngestor
+    IndexableFileWalk walk,
+    ISharedProjectScope? scope = null) : IFileIngestor
 {
     private static readonly FileSniffer Sniffer = new();
+
+    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
 
     /// <summary>
     ///     Ignore rules apply ahead of routing, for both the memory and code pipelines —
@@ -86,7 +89,7 @@ public sealed class FileIngestor(
     private async Task<FileIngestResult> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
     {
-        if (SharedProject.Is(projectId))
+        if (_scope.IsReserved(projectId))
         {
             return new FileIngestResult(0, false, Skipped: SkipReason.UnsupportedType);
         }
@@ -198,7 +201,7 @@ public sealed class FileIngestor(
             cancellationToken.ThrowIfCancellationRequested();
             if (!fileTypeMatcher.TryGetHandler(file, out var handler))
             {
-                if (!SharedProject.Is(projectId) && codeFileTypeMatcher.IsCodeFile(file))
+                if (!_scope.IsReserved(projectId) && codeFileTypeMatcher.IsCodeFile(file))
                 {
                     CodeIngestResult codeResult;
                     try
@@ -271,7 +274,7 @@ public sealed class FileIngestor(
     /// the corpus's drain once it is safe to (see <see cref="IngestDirectoryAsync" />).</summary>
     private Task<InsertedChunks> InsertChunksAsync(SqliteConnection connection,
         string projectId, string path, string content, IFileTypeHandler handler, string? context,
-        CancellationToken cancellationToken) => SharedProject.Is(projectId)
+        CancellationToken cancellationToken) => _scope.IsReserved(projectId)
         ? connection.InWriteTransactionAsync(() => InsertChunksCoreAsync(connection, projectId, path, content,
             handler, context, cancellationToken), cancellationToken)
         : InsertChunksCoreAsync(connection, projectId, path, content, handler, context, cancellationToken);
@@ -368,7 +371,7 @@ public sealed class FileIngestor(
                     inserted++;
                 }
 
-                if (SharedProject.Is(projectId) && affected == 0)
+                if (_scope.IsReserved(projectId) && affected == 0)
                 {
                     var owner = await connection.ExecuteScalarAsync<string?>(Def(
                         "SELECT project_id FROM entries WHERE scope = 'shared' AND path = @path AND hash = @hash",
@@ -399,12 +402,12 @@ public sealed class FileIngestor(
     private async Task<string?> ResolveContextAsync(SqliteConnection connection, string projectId,
         string? context, CancellationToken cancellationToken)
     {
-        if (!SharedProject.Is(projectId))
+        if (!_scope.IsReserved(projectId))
         {
             return context;
         }
 
-        await connection.RequireSharedAvailableAsync(projectId, cancellationToken);
+        await connection.RequireSharedAvailableAsync(projectId, _scope, cancellationToken);
         if (context is not null && context != ContextNaming.SharedContext)
         {
             throw new ArgumentException("shared-project-unsupported: document ingestion into shared accepts only the default or shared context.");

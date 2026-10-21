@@ -9,13 +9,16 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 public sealed partial class SqliteProjectDirectory(
     ISqliteConnectionFactory factory,
     IProjectRegistry registry,
-    ILogger<SqliteProjectDirectory> logger) : IProjectDirectory
+    ILogger<SqliteProjectDirectory> logger,
+    ISharedProjectScope? scope = null) : IProjectDirectory
 {
+    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+
     /// <inheritdoc />
     public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(projectId);
-        if (SharedProject.Is(projectId))
+        if (_scope.IsReserved(projectId))
         {
             await registry.RegisterAsync(projectId, name, cancellationToken);
             return new ProjectRegistration(projectId, ProjectRegistrationOutcome.AlreadyRegistered);
@@ -58,10 +61,10 @@ public sealed partial class SqliteProjectDirectory(
     public async Task<IReadOnlyList<string>> FindByNameAsync(string name, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(name);
-        if (name == SharedProject.Id)
+        if (name == SharedProjectScope.Id)
         {
-            await registry.IsRegisteredAsync(SharedProject.Id, cancellationToken);
-            return [SharedProject.Id];
+            await registry.IsRegisteredAsync(SharedProjectScope.Id, cancellationToken);
+            return [SharedProjectScope.Id];
         }
 
         await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
