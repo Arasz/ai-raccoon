@@ -114,3 +114,30 @@ mutation check above stands in for the "watch the gate go red" discipline.
 - The reserved target is deliberately narrow in this delivery: no owned-only shared query, no
   shared workspace, no document formats beyond Markdown, plain text, JSON and notebooks, and no
   implicit selection from the working directory. Each of those is a separate contract.
+
+## Scope-check follow-up review
+
+The PR takeover reviewed `main...beba423e` independently in an isolated worktree. No
+production correctness defect was confirmed. The composition test used a test-only
+consumer, so it did not establish that the real tool gate consumes the registered policy.
+The follow-up adds real gate coverage, the shared operation matrix, and refusal-order checks.
+
+The reviewed design introduces a host `IScopeCheck` facade returning `ScopeCheckResult`.
+It composes `IToolNameScope` operation classification with `ISharedProjectScope` domain
+policy. The shared policy returns the ordinary-project check result; its throwing adapter
+continues to protect backend callers. The gate keeps migration, resolution, alias folding,
+access, retired-id refusal and registration ahead of scope validation. Tool names stay in
+the host, with the original seven exact names and two ordinal prefix families.
+
+An explicit two-dependency facade is sufficient for the current client. A configurable
+pipeline or separate compositions per client would add configuration without a current
+behavioral difference. Follow-up execution is recorded as
+`air-compose-tool-and-project-scopes`; the original completed plan remains intact.
+
+The implementation build passed with zero warnings and errors. The selected MCP and shared
+scope unit tests passed (362 cases), and all 18 shared-project integration cases passed.
+Ten integration cases initially failed because the isolated output lacked
+`model_fp16.onnx_data`; copying the existing asset into that output resolved those failures.
+The policy mutation removing `memory_write` produced one failure among 26 policy cases;
+restoring it returned the scope tests to green. These are follow-up results, separate from
+the broader original feature results above.
