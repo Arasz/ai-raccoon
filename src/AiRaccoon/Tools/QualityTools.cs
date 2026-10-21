@@ -11,6 +11,7 @@ public sealed class QualityTools(
     ISearchQualityService qualityService,
     IToolGate gate)
 {
+    private const string TnGetQualityReport = "get_quality_report";
     private const string TnSetMemoryUsageRecord = "set_memory_usage_record";
     private const string TnSetQueryResultGrade = "set_query_result_grade";
 
@@ -63,6 +64,20 @@ public sealed class QualityTools(
         var envelope = await gate.WrapAsync(canonical, new GradeResult(recorded), cancellationToken);
 
         return envelope;
+    }
+
+    [McpServerTool(Name = TnGetQualityReport)]
+    [McpToolScope(ToolScope.All)]
+    [Description("Returns aggregated search-quality metrics for a project over a time window (from absolute DateTimeOffset).")]
+    public async Task<ApiEnvelope<SearchQualityMetrics>> GetQualityReport(
+        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("Window start as absolute instant.")]
+        DateTimeOffset? from = null,
+        CancellationToken ct = default)
+    {
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetQualityReport, ct);
+        var metrics = await qualityService.GetMetricsAsync(canonical, from ?? DateTimeOffset.UtcNow.AddDays(-7), ct);
+        return await gate.WrapAsync(canonical, metrics, ct);
     }
 
     public sealed record FollowThroughResult(bool Recorded);
