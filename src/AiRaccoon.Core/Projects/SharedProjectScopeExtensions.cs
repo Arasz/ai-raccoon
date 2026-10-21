@@ -10,8 +10,7 @@ public static class SharedProjectScopeExtensions
         /// <summary>Throws when the search shape is unsupported for the reserved shared target.</summary>
         public void EnsureCanExecuteInSharedScope(SearchQuery query)
         {
-            var isProjectOnlySearch = query.Scope is SearchScope.Project && !scope.IsReserved(query.ProjectId);
-            if (!scope.CanExecuteInSharedScope(query) && !isProjectOnlySearch)
+            if (!scope.CanExecuteInSharedScope(query))
             {
                 throw new ArgumentException("shared-project-unsupported: search shared with scope all or shared, without a workspace or label.");
             }

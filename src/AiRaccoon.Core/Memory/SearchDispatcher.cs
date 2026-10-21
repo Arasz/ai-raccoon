@@ -29,9 +29,8 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         string? codeWarning = null;
         if (kind != SearchKind.Memory)
         {
-            // Code is project-scoped only (§3.1): an explicit scope=shared request never
-            // contributes code rows, even under kind=code/both.
-            if (!_scope.CanSearchCode(searchQuery))
+            // Code is project-scoped only (§3.1): a shared-only request has no code rows.
+            if (searchQuery.Scope is SearchScope.Shared)
             {
                 codeResults = [];
             }

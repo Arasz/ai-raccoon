@@ -149,7 +149,7 @@ public sealed class SearchDispatcherTests
     [InlineData("acme", SearchScope.All, true)]
     [InlineData("Shared", SearchScope.All, true)]
     [InlineData("acme", SearchScope.Shared, false)]
-    [InlineData("shared", SearchScope.All, false)]
+    [InlineData("shared", SearchScope.All, true)]
     [InlineData("shared", SearchScope.Shared, false)]
     public async Task DispatchAsync_CodeSearchRespectsProjectAndSharedRouting(string projectId,
         SearchScope scope, bool callsCode)
