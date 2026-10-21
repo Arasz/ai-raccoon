@@ -1,6 +1,7 @@
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.SearchQuality;
+using AiRaccoon.Core.Projects;
 
 namespace AiRaccoon.Core.Memory;
 
@@ -12,6 +13,7 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         string correlationId, string sessionId, int? codeLimit = null, double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
+        SharedProject.RequireSearch(searchQuery);
         SearchResults? memorySearchResults = null;
         IReadOnlyList<MemorySearchResult> results = [];
         if (kind != SearchKind.Code)
@@ -26,7 +28,7 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         {
             // Code is project-scoped only (§3.1): an explicit scope=shared request never
             // contributes code rows, even under kind=code/both.
-            if (searchQuery.Scope == SearchScope.Shared)
+            if (searchQuery.Scope == SearchScope.Shared || SharedProject.Is(searchQuery.ProjectId))
             {
                 codeResults = [];
             }

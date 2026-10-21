@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -31,6 +32,12 @@ internal static class SearchContexts
     /// </param>
     public static IReadOnlyList<string> For(SearchQuery query, IReadOnlyList<string>? customLabels = null)
     {
+        SharedProject.RequireSearch(query);
+        if (SharedProject.Is(query.ProjectId))
+        {
+            return [ContextNaming.SharedContext];
+        }
+
         var contexts = new List<string>();
 
         if (query.Scope is SearchScope.All or SearchScope.Shared)

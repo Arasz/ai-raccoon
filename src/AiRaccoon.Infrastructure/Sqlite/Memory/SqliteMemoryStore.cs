@@ -61,6 +61,7 @@ public sealed partial class SqliteMemoryStore(
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        SharedProject.RequireOrdinary(request.ProjectId, "note writes");
 
         // Canonical-only (air-merge P3, review S1): the ToolGate choke canonicalizes every id
         // before it reaches storage, so a re-spelled id here means a caller bypassed the gate —
@@ -163,10 +164,12 @@ public sealed partial class SqliteMemoryStore(
 
     public async Task<Core.Memory.SearchResults> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
     {
+        SharedProject.RequireSearch(query);
         var searchTimingsCollector = new SearchTimingsCollector(timeProvider.GetTimestamp());
 
         var openStart = timeProvider.GetTimestamp();
         await using var connection = await factory.OpenBankAsync(cancellationToken);
+        await connection.RequireSharedAvailableAsync(query.ProjectId, cancellationToken);
         searchTimingsCollector.Open = timeProvider.GetElapsedTime(openStart);
 
         // Resolve the full parameter set on the search's own connection: the query's values
@@ -191,6 +194,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
+        await connection.RequireSharedAvailableAsync(projectId, cancellationToken);
         var row = await connection.QueryFirstOrDefaultAsync<EntryRow>(
                 Def(MemorySql.SelectEntryByHashForRead, new { hash, projectId }, cancellationToken));
         return row is null ? null : ToEntry(row);
@@ -257,6 +261,14 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
+        await connection.RequireSharedAvailableAsync(projectId, cancellationToken);
+
+        if (SharedProject.Is(projectId))
+        {
+            var count = await connection.ExecuteScalarAsync<int>(Def("SELECT count(*) FROM entries WHERE scope = 'shared'", cancellationToken));
+            var pending = await connection.ExecuteScalarAsync<int>(Def("SELECT count(*) FROM entries WHERE scope = 'shared' AND embed_state = 'pending'", cancellationToken));
+            return new MemoryStats(count, pending, count == 0 ? [] : [ContextNaming.SharedContext]);
+        }
 
         var entries = await connection.ExecuteScalarAsync<int>(
             Def(MemorySql.CountProjectEntries, new { projectId }, cancellationToken));
@@ -273,6 +285,7 @@ public sealed partial class SqliteMemoryStore(
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
+        await connection.RequireSharedAvailableAsync(projectId, cancellationToken);
 
         var paths = await connection.QueryAsync<string>(
                 Def(MemorySql.DistinctFilePaths, new { projectId }, cancellationToken));
@@ -340,6 +353,7 @@ public sealed partial class SqliteMemoryStore(
         string projectId, string path, string content, string? context, string? sourceFile = null,
         string? section = null, CancellationToken cancellationToken = default)
     {
+        SharedProject.RequireOrdinary(projectId, "direct content writes");
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentException.ThrowIfNullOrWhiteSpace(content);

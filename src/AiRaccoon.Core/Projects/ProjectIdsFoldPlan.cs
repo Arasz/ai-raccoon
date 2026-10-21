@@ -68,6 +68,11 @@ public sealed class ProjectIdsFoldPlan(
         var pinned = new List<ProjectIdPin>();
         foreach (var row in report.Rows)
         {
+            if (SharedProject.Is(row.ProjectId))
+            {
+                continue;
+            }
+
             if (map.IsDropped(row.ProjectId))
             {
                 if (OwnsDeletableContent(row) || row.Registered)

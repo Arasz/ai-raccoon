@@ -26,6 +26,13 @@ public sealed partial class ProjectRegistrationGuard(
     {
         Guard.IsNotNullOrWhiteSpace(projectId);
 
+        if (SharedProject.Is(projectId))
+        {
+            // The real registry checks for an incompatible legacy owner before allowing the target.
+            await registry.IsRegisteredAsync(projectId, cancellationToken);
+            return;
+        }
+
         if (await registry.IsRegisteredAsync(projectId, cancellationToken))
         {
             return;

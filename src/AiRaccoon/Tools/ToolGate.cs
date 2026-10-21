@@ -56,6 +56,13 @@ public sealed class ToolGate(
         }
 
         await registration.EnsureAsync(canonical, requirement, cancellationToken);
+        if (SharedProject.Is(canonical) && (toolName.StartsWith("memory_workspace_", StringComparison.Ordinal)
+            || toolName.StartsWith("memory_promotion_", StringComparison.Ordinal)
+            || toolName is "memory_write" or "memory_share" or "memory_share_extract" or "memory_sweep" or "memory_set_ttl" or "code_get" or "memory_delete_context"))
+        {
+            SharedProject.RequireOrdinary(canonical, toolName);
+        }
+
         return canonical;
     }
 

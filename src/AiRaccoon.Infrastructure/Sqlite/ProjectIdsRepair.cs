@@ -70,6 +70,12 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider)
     {
         Guard.IsNotNull(connection);
         Guard.IsNotNull(plan);
+        if (plan.Folds.Any(fold => SharedProject.Is(fold.Loser) || SharedProject.Is(fold.Winner))
+            || plan.Dropped.Any(SharedProject.Is) || plan.RetiredProjects.Any(SharedProject.Is))
+        {
+            throw new ArgumentException("shared-project-reserved: repair cannot move or delete the shared target.");
+        }
+
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var vecInvalidated = await InvalidateVecAsync(connection, plan, cancellationToken);
         var codeVecInvalidated = await InvalidateCodeVecAsync(connection, plan, cancellationToken);

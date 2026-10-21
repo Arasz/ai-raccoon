@@ -35,7 +35,7 @@ public sealed class CwdProjectIdResolver(
         var scopes = await settings.GetSettingsByPrefixAsync(ScopePrefix, cancellationToken);
         foreach (var (key, value) in scopes)
         {
-            if (key == IngestScopeKeys.ScopeGlobal)
+            if (key == IngestScopeKeys.ScopeGlobal || key == IngestScopeKeys.ScopeProject(SharedProject.Id))
             {
                 continue;
             }
@@ -56,7 +56,7 @@ public sealed class CwdProjectIdResolver(
 
         foreach (var watch in await watches.ListWatchesAsync(cancellationToken))
         {
-            if (IngestPath.IsWithinScope(cwd, watch.Path))
+            if (!SharedProject.Is(watch.ProjectId) && IngestPath.IsWithinScope(cwd, watch.Path))
             {
                 AddCandidate(candidates, watch.ProjectId);
             }

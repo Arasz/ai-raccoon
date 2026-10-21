@@ -15,6 +15,12 @@ public sealed partial class SqliteProjectDirectory(
     public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(projectId);
+        if (SharedProject.Is(projectId))
+        {
+            await registry.RegisterAsync(projectId, name, cancellationToken);
+            return new ProjectRegistration(projectId, ProjectRegistrationOutcome.AlreadyRegistered);
+        }
+
         var folded = ProjectIdAliasMap.Default.Apply(projectId);
         var id = folded.ProjectId;
         if (folded.Dropped)
@@ -52,6 +58,12 @@ public sealed partial class SqliteProjectDirectory(
     public async Task<IReadOnlyList<string>> FindByNameAsync(string name, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(name);
+        if (name == SharedProject.Id)
+        {
+            await registry.IsRegisteredAsync(SharedProject.Id, cancellationToken);
+            return [SharedProject.Id];
+        }
+
         await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
         await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
         var ids = await connection.QueryAsync<string>(Sql.Def(MemorySql.SelectProjectIdsByName, new { name }, cancellationToken));

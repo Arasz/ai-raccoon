@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Isolation;
 using CommunityToolkit.Diagnostics;
 using Dapper;
@@ -12,6 +13,7 @@ public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory) : IWo
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNull(workspace);
+        SharedProject.RequireOrdinary(workspace.ProjectId, "workspaces");
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         await connection.ExecuteAsync(

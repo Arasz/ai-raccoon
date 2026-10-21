@@ -3,6 +3,7 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -40,6 +41,7 @@ public sealed class FileIngestor(
     public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken)
     {
+        context = await ResolveContextAsync(connection, projectId, context, cancellationToken);
         await RequireInScopeAsync(connection, projectId, path, cancellationToken);
 
         if (IsHidden(path))
@@ -84,6 +86,11 @@ public sealed class FileIngestor(
     private async Task<FileIngestResult> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
     {
+        if (SharedProject.Is(projectId))
+        {
+            return new FileIngestResult(0, false, Skipped: SkipReason.UnsupportedType);
+        }
+
         if (!codeFileTypeMatcher.IsCodeFile(path))
         {
             return await SkipUnroutedAsync(path, cancellationToken);
@@ -166,6 +173,7 @@ public sealed class FileIngestor(
     public async Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId,
         string path, string? context, CancellationToken cancellationToken)
     {
+        context = await ResolveContextAsync(connection, projectId, context, cancellationToken);
         var scope = await ReadScopeAsync(connection, projectId, cancellationToken);
         RequireInScope(scope, path);
 
@@ -190,7 +198,7 @@ public sealed class FileIngestor(
             cancellationToken.ThrowIfCancellationRequested();
             if (!fileTypeMatcher.TryGetHandler(file, out var handler))
             {
-                if (codeFileTypeMatcher.IsCodeFile(file))
+                if (!SharedProject.Is(projectId) && codeFileTypeMatcher.IsCodeFile(file))
                 {
                     CodeIngestResult codeResult;
                     try
@@ -261,7 +269,14 @@ public sealed class FileIngestor(
 
     /// <summary>Leaves every freshly inserted row `embed_state = 'pending'` — the caller enqueues
     /// the corpus's drain once it is safe to (see <see cref="IngestDirectoryAsync" />).</summary>
-    private async Task<InsertedChunks> InsertChunksAsync(SqliteConnection connection,
+    private Task<InsertedChunks> InsertChunksAsync(SqliteConnection connection,
+        string projectId, string path, string content, IFileTypeHandler handler, string? context,
+        CancellationToken cancellationToken) => SharedProject.Is(projectId)
+        ? connection.InWriteTransactionAsync(() => InsertChunksCoreAsync(connection, projectId, path, content,
+            handler, context, cancellationToken), cancellationToken)
+        : InsertChunksCoreAsync(connection, projectId, path, content, handler, context, cancellationToken);
+
+    private async Task<InsertedChunks> InsertChunksCoreAsync(SqliteConnection connection,
         string projectId, string path, string content, IFileTypeHandler handler, string? context,
         CancellationToken cancellationToken)
     {
@@ -353,6 +368,17 @@ public sealed class FileIngestor(
                     inserted++;
                 }
 
+                if (SharedProject.Is(projectId) && affected == 0)
+                {
+                    var owner = await connection.ExecuteScalarAsync<string?>(Def(
+                        "SELECT project_id FROM entries WHERE scope = 'shared' AND path = @path AND hash = @hash",
+                        new { path, hash }, cancellationToken));
+                    if (owner != projectId)
+                    {
+                        throw new ArgumentException($"shared-project-conflict: '{path}' already has a shared chunk owned by another project; the watch cannot take ownership.");
+                    }
+                }
+
                 continue;
             }
 
@@ -368,6 +394,23 @@ public sealed class FileIngestor(
         }
 
         return new InsertedChunks(inserted > 0 ? 1 : 0, hashes);
+    }
+
+    private async Task<string?> ResolveContextAsync(SqliteConnection connection, string projectId,
+        string? context, CancellationToken cancellationToken)
+    {
+        if (!SharedProject.Is(projectId))
+        {
+            return context;
+        }
+
+        await connection.RequireSharedAvailableAsync(projectId, cancellationToken);
+        if (context is not null && context != ContextNaming.SharedContext)
+        {
+            throw new ArgumentException("shared-project-unsupported: document ingestion into shared accepts only the default or shared context.");
+        }
+
+        return ContextNaming.SharedContext;
     }
 
     /// <summary>The rows of a file's position partition that are not its own: notes citing it.</summary>

@@ -20,6 +20,21 @@ public sealed class ProjectRegistrationGuardTests
     private static ProjectRegistrationGuard NewGuard(FakeProjectRegistry registry, bool migrated = false) =>
         new(registry, NullLogger<ProjectRegistrationGuard>.Instance, new StubMigrationGate(migrated));
 
+    [Theory]
+    [InlineData(false, AccessRequirement.Read)]
+    [InlineData(true, AccessRequirement.Read)]
+    [InlineData(false, AccessRequirement.Write)]
+    [InlineData(true, AccessRequirement.Write)]
+    public async Task Shared_IsBuiltInWithoutRegistering(bool migrated, AccessRequirement requirement)
+    {
+        var registry = new FakeProjectRegistry();
+        var guard = NewGuard(registry, migrated);
+
+        await guard.EnsureAsync("shared", requirement, TestContext.Current.CancellationToken);
+
+        registry.Registered.ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task AnUnregisteredGuidV7_IsRefused()
     {

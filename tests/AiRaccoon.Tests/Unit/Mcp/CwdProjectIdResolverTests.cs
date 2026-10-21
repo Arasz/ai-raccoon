@@ -39,6 +39,17 @@ public sealed class CwdProjectIdResolverTests : IDisposable
     }
 
     [Fact]
+    public async Task SharedScopesAndWatches_NeverSelectAnImplicitPublicationTarget()
+    {
+        var cwd = Dir("documents");
+        _settings.Values[IngestScopeKeys.ScopeProject("shared")] = IngestScopeKeys.Serialize([cwd]);
+        _settings.Watches = [new WatchRegistration("shared", cwd, 0, 0)];
+
+        (await NewResolver(cwd).ResolveAsync(TestContext.Current.CancellationToken))
+            .ShouldBeOfType<ProjectIdResolution.None>();
+    }
+
+    [Fact]
     public async Task ExactMatch_ResolvesProject()
     {
         var cwd = Dir("repo-a");

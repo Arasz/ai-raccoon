@@ -98,6 +98,8 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
 
         return await connection.InWriteTransactionAsync(async () =>
         {
+            await connection.RequireSharedAvailableAsync(projectId, cancellationToken);
+
             // S4 TOCTOU close: read the project's CURRENT watches and resolve the candidate against
             // them from INSIDE the same write-locked transaction that then commits the outcome — a
             // concurrent writer either already committed before this BEGIN IMMEDIATE succeeded (so
@@ -133,6 +135,11 @@ public sealed class WatchStore(ISqliteConnectionFactory factory) : IWatchStore, 
                                 createdAt = candidate.CreatedAt,
                                 lastChangeTs = 0L
                             }, cancellationToken: cancellationToken));
+            }
+
+            if (SharedProject.Is(projectId) && decision.Outcome == WatchOverlapOutcome.Accepted)
+            {
+                await connection.MarkSharedActiveAsync(cancellationToken);
             }
 
             return decision;

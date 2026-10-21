@@ -53,6 +53,16 @@ public sealed class SqliteProjectDirectoryTests : IAsyncLifetime
         return ValueTask.CompletedTask;
     }
 
+    [Fact]
+    public async Task Shared_IsKnownAndFoundWithoutRegistration()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        (await _directory.CheckAsync("shared", ct)).Status.ShouldBe(ProjectIdStatus.Known);
+        (await _directory.FindByNameAsync("shared", ct)).ShouldBe(["shared"]);
+        (await _directory.RegisterAsync("shared", null, ct)).Outcome.ShouldBe(ProjectRegistrationOutcome.AlreadyRegistered);
+    }
+
     [RetryFact]
     public async Task FindByName_IsExactCaseSensitiveAndTreatsPercentLiterally()
     {
@@ -71,10 +81,10 @@ public sealed class SqliteProjectDirectoryTests : IAsyncLifetime
     public async Task FindByName_SeveralMatches_ReturnsEveryIdInOrder()
     {
         var ct = TestContext.Current.CancellationToken;
-        await Registry.RegisterAsync("b-project", "shared", ct);
-        await Registry.RegisterAsync("a-project", "shared", ct);
+        await Registry.RegisterAsync("b-project", "shared-name", ct);
+        await Registry.RegisterAsync("a-project", "shared-name", ct);
 
-        (await _directory.FindByNameAsync("shared", ct)).ShouldBe(["a-project", "b-project"]);
+        (await _directory.FindByNameAsync("shared-name", ct)).ShouldBe(["a-project", "b-project"]);
     }
 
     [RetryFact]
