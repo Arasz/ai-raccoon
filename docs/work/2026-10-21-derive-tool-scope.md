@@ -281,7 +281,7 @@ leaves the test running against the previous assembly and the mutation appears t
 | The shared-project integration surface | 19 tests, 0 failed |
 | The ADR index gate (`AdrIndexTests`) | 7 tests, 0 failed |
 | The two mutations | seen red, then green — the evidence is above |
-| CI (`build-fast` / `build-bdd` / `build-slow`) | pending — CI is the pass condition |
+| CI on the head | green: `build-fast` 2m49s, `build-bdd` 2m27s, `build-slow` 13m10s, `review`, `changes`, `scripts-harness` — run 39662564389 |
 
 ### The implementation review
 
