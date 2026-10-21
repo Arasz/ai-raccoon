@@ -11,9 +11,9 @@ public sealed class WatchTools(
     IWatchService watch,
     IToolGate gate)
 {
-    internal const string TnWatchAdd = "memory_watch_add";
-    internal const string TnWatchStatus = "memory_watch_status";
-    internal const string TnWatchRemove = "memory_watch_remove";
+    internal const string TnWatchAdd = "add_watch";
+    internal const string TnWatchStatus = "get_watch_status";
+    internal const string TnWatchRemove = "remove_watch";
 
     [McpServerTool(Name = TnWatchAdd)]
     [McpToolScope(ToolScope.All)]

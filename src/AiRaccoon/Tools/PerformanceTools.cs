@@ -11,7 +11,7 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tool over MetricsReportService — no business logic here (ADR-0065, mcp-thin).</summary>
 public sealed class PerformanceTools(IMetricsReportService reportService, IToolGate gate)
 {
-    private const string TnMemoryPerformance = "memory_performance";
+    private const string TnMemoryPerformance = "get_engine_statistics";
 
     [McpServerTool(Name = TnMemoryPerformance)]
     [McpToolScope(ToolScope.All)]

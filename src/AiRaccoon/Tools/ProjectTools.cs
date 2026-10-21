@@ -14,8 +14,8 @@ public sealed class ProjectTools(
     IProjectDirectory directory,
     IToolGate gate)
 {
-    private const string TnProjectIdTokenGet = "project_id_token_get";
-    private const string TnProjectIdGet = "project_id_get";
+    private const string TnProjectIdTokenGet = "save_project_id_token";
+    private const string TnProjectIdGet = "get_project_id";
 
     private const string Instructions =
         "This id is where the project's memory lives from now on — not a secret and not access "
@@ -26,7 +26,7 @@ public sealed class ProjectTools(
     [McpServerTool(Name = TnProjectIdTokenGet)]
     [McpToolScope(ToolScope.All)]
     [Description(
-        "Call project_id_get first; mint only when it finds nothing. Mints a new project id: a guidv7, registered so it is a real project from this call on. Call this once per project and keep the returned id — every other tool's projectId parameter takes it.")]
+        "Call get_project_id first; mint only when it finds nothing. Mints a new project id: a guidv7, registered so it is a real project from this call on. Call this once per project and keep the returned id — every other tool's projectId parameter takes it.")]
     public async Task<ApiEnvelope<ProjectIdTokenResult>> Get(
         [Description("Optional human-facing label for the new project. Not unique, and never accepted where a project id is expected.")]
         string? name = null,
@@ -44,7 +44,7 @@ public sealed class ProjectTools(
     [McpServerTool(Name = TnProjectIdGet)]
     [McpToolScope(ToolScope.All)]
     [Description(
-        "Returns the project id registered under an exact, case-sensitive name, as stored. Call this before project_id_token_get. No match refuses with project-not-found (then mint one with project_id_token_get); several matches refuse with project-name-ambiguous, listing every id, so ask the user which one. Never registers anything.")]
+        "Returns the project id registered under an exact, case-sensitive name, as stored. Call this before save_project_id_token. No match refuses with project-not-found (then mint one with save_project_id_token); several matches refuse with project-name-ambiguous, listing every id, so ask the user which one. Never registers anything.")]
     public async Task<ApiEnvelope<ProjectIdGetResult>> FindByName(
         [Description("The project's name, matched exactly and case-sensitively.")]
         string name,

@@ -17,8 +17,8 @@ public sealed class SweepTools(
     IForgettingPolicyService knobs,
     IToolGate gate)
 {
-    private const string TnMemorySweep = "memory_sweep";
-    private const string TnMemorySetTtl = "memory_set_ttl";
+    private const string TnMemorySweep = "trigger_memory_cleanup";
+    private const string TnMemorySetTtl = "set_memory_ttl";
 
     [McpServerTool(Name = TnMemorySweep)]
     [McpToolScope(ToolScope.Project)]
@@ -42,12 +42,12 @@ public sealed class SweepTools(
     [McpServerTool(Name = TnMemorySetTtl)]
     [McpToolScope(ToolScope.Project)]
     [Description(
-        "Sets or clears one entry's per-entry TTL — the age half of the memory_sweep rule, and the only way an entry becomes sweepable at all. "
-        + "A TTL is necessary but NOT sufficient: memory_sweep deletes an entry only when its rating is ALSO below the sweep threshold. "
+        "Sets or clears one entry's per-entry TTL — the age half of the trigger_memory_cleanup rule, and the only way an entry becomes sweepable at all. "
+        + "A TTL is necessary but NOT sufficient: trigger_memory_cleanup deletes an entry only when its rating is ALSO below the sweep threshold. "
         + "Fresh entries start at rating 0.5 against a default threshold of 0.3, so ttlDays=7 does not expire an entry at age 30 — "
         + "its rating must decay under the threshold first. The returned canEverExpire says whether that rating gate is already met; "
         + "when it is false, no amount of age will expire this entry as things stand. "
-        + "Side effect: an entry carrying a TTL drops out of memory_share_extract's promotion candidates unless that call passes includeTtlRows. "
+        + "Side effect: an entry carrying a TTL drops out of trigger_memory_sharing's promotion candidates unless that call passes includeTtlRows. "
         + "Requires full access mode.")]
     public async Task<ApiEnvelope<TtlResult>> SetTtl(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,

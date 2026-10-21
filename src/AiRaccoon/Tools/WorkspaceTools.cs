@@ -19,10 +19,10 @@ public sealed class WorkspaceTools(
     IWorkspaceService workspaces,
     IToolGate gate)
 {
-    private const string TnMemoryWorkspaceBegin = "memory_workspace_begin";
-    private const string TnMemoryWorkspaceStatus = "memory_workspace_status";
-    private const string TnMemoryWorkspaceConsolidate = "memory_workspace_consolidate";
-    private const string TnMemoryWorkspaceDiscard = "memory_workspace_discard";
+    private const string TnMemoryWorkspaceBegin = "initialize_workspace";
+    private const string TnMemoryWorkspaceStatus = "get_workspace_status";
+    private const string TnMemoryWorkspaceConsolidate = "close_workspace";
+    private const string TnMemoryWorkspaceDiscard = "discard_workspace";
 
     [McpServerTool(Name = TnMemoryWorkspaceBegin)]
     [McpToolScope(ToolScope.Project)]

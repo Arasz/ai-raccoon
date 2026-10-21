@@ -11,8 +11,8 @@ public sealed class QualityTools(
     ISearchQualityService qualityService,
     IToolGate gate)
 {
-    private const string TnRecordFollowThrough = "memory_record_followthrough";
-    private const string TnRecordGrade = "memory_record_grade";
+    private const string TnRecordFollowThrough = "set_memory_usage_record";
+    private const string TnRecordGrade = "set_query_result_grade";
 
     [McpServerTool(Name = TnRecordFollowThrough)]
     [McpToolScope(ToolScope.All)]

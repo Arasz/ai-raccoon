@@ -16,8 +16,8 @@ public sealed class ShareTools(
     IToolGate gate,
     IShareExtractService shareExtract)
 {
-    private const string TnMemoryShare = "memory_share";
-    private const string TnMemoryShareExtract = "memory_share_extract";
+    private const string TnMemoryShare = "share_memory";
+    private const string TnMemoryShareExtract = "share_memory_extract";
 
     [McpServerTool(Name = TnMemoryShare)]
     [McpToolScope(ToolScope.Project)]
@@ -41,7 +41,7 @@ public sealed class ShareTools(
     [McpServerTool(Name = TnMemoryShareExtract)]
     [McpToolScope(ToolScope.Project)]
     [Description(
-        "Checks committed project memories and extracts the ones worth sharing. propose (default) ranks candidates and PERSISTS them into the propose tier — the waiting queue the agent reviews with memory_promotion_list. promote shares the top queued candidates into the curated, sweep-exempt shared tier and drains them. autoPromote (disabled by default) promotes the top queued candidates in the same call — it shares data BETWEEN PROJECTS, so it requires confirm=true as an explicit enable gate. Sharing stays explicit: propose first, review, then promote.")]
+        "Checks committed project memories and extracts the ones worth sharing. propose (default) ranks candidates and PERSISTS them into the propose tier — the waiting queue the agent reviews with get_memories_sharing_ranking. promote shares the top queued candidates into the curated, sweep-exempt shared tier and drains them. autoPromote (disabled by default) promotes the top queued candidates in the same call — it shares data BETWEEN PROJECTS, so it requires confirm=true as an explicit enable gate. Sharing stays explicit: propose first, review, then promote.")]
     public async Task<ApiEnvelope<ShareExtractResult>> ShareExtract(
         [Description("Project ids to scan (1..8).")]
         string[] projectIds,

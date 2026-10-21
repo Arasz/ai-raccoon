@@ -14,7 +14,7 @@ public sealed class SyncTools(
     ISyncCloudStoreFactory syncFactory,
     IToolGate gate)
 {
-    private const string TnMemorySync = "memory_sync";
+    private const string TnMemorySync = "sync_to_cloud";
 
     [McpServerTool(Name = TnMemorySync)]
     [McpToolScope(ToolScope.All)]
