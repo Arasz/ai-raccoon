@@ -68,10 +68,10 @@ public sealed class QualityTools(
 
     [McpServerTool(Name = TnGetQualityReport)]
     [McpToolScope(ToolScope.All)]
-    [Description("Returns aggregated search-quality metrics for a project over a time window (from absolute DateTimeOffset).")]
+    [Description("Aggregated search-quality metrics: total searches, follow-through searches, graded searches, average grade, coverage rate, searches/day. Window defaults to last 7 days (absolute DateTimeOffset). Project id defaults to working-directory project. Aggregate — no per-row grades included.")]
     public async Task<ApiEnvelope<SearchQualityMetrics>> GetQualityReport(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
-        [Description("Window start as absolute instant.")]
+        [Description("Window start as absolute DateTimeOffset; defaults to 7 days before now.")]
         DateTimeOffset? from = null,
         CancellationToken ct = default)
     {
