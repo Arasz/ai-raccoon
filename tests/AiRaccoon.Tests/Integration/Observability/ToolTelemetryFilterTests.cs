@@ -39,7 +39,7 @@ public sealed class ToolTelemetryFilterTests : IAsyncLifetime
         try
         {
             await using var client = await TelemetryServerHost.ConnectAsync(port, cancellationToken);
-            var result = await client.CallToolAsync("memory_write",
+            var result = await client.CallToolAsync("add_memory",
                 new Dictionary<string, object?> { ["projectId"] = ReadOnlyProject, ["content"] = "x" },
                 cancellationToken: cancellationToken);
 
@@ -68,7 +68,7 @@ public sealed class ToolTelemetryFilterTests : IAsyncLifetime
     [RetryFact]
     public void RefusedCall_RecordsTheExceptionType()
     {
-        _refused.Tags["tool"].ShouldBe("memory_write");
+        _refused.Tags["tool"].ShouldBe("add_memory");
         _refused.Tags["result"].ShouldBe("error");
         _refused.Tags["error.type"].ShouldBe("AccessDeniedException");
     }

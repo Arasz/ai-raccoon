@@ -11,7 +11,7 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Integration.Memory;
 
 /// <summary>
-///     A memory_write note that cites a source file carries chunk positions. Those positions must follow the
+///     A add_memory note that cites a source file carries chunk positions. Those positions must follow the
 ///     note's text: the row at chunk_index 0 holds its opening, the last position holds its close.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -68,7 +68,7 @@ public sealed class SourceCitingNoteChunkOrderTests : IAsyncLifetime
         starts.ShouldBe([.. starts.Order()], "each position starts later in the text than the one before it");
     }
 
-    /// <summary>memory_search reports each hit's chunkIndex; the hit on the note's opening must say 0.</summary>
+    /// <summary>query reports each hit's chunkIndex; the hit on the note's opening must say 0.</summary>
     [RetryFact]
     public async Task Search_HitOnTheNotesOpening_ReportsChunkIndexZero()
     {

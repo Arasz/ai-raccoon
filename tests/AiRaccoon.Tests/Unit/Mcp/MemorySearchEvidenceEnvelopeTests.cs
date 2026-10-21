@@ -19,7 +19,7 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
 ///     P5 (Stage 1): MCP envelope S3 join. The P4 sidecar (EvidenceByHash + Stats on Core
-///     SearchResults) joins the memory_search response by hash as additive fields; Ranking
+///     SearchResults) joins the query response by hash as additive fields; Ranking
 ///     keeps its name, position, and semantics. Owns G4 (envelope compat) + G7 (docs).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]

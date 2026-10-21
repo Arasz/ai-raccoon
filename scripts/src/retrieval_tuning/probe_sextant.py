@@ -324,14 +324,14 @@ class McpClient:
         text = next(item["text"] for item in result["result"]["content"] if item.get("type") == "text")
         return json.loads(text)
 
-    def memory_search(self, project_id: str, query: str, limit: int) -> list[dict]:
-        data = self.call("memory_search", {
+    def query(self, project_id: str, query: str, limit: int) -> list[dict]:
+        data = self.call("query", {
             "projectId": project_id, "query": query, "limit": limit, "minRelativeScore": 0.0,
         })
         return data["data"]["results"]
 
-    def memory_stats(self, project_id: str) -> dict:
-        return self.call("memory_stats", {"projectId": project_id})["data"]
+    def get_store_statistics(self, project_id: str) -> dict:
+        return self.call("get_store_statistics", {"projectId": project_id})["data"]
 
 
 def wait_for_embed_ready(client: McpClient, project_id: str, timeout_s: float = 90.0) -> dict:
@@ -340,7 +340,7 @@ def wait_for_embed_ready(client: McpClient, project_id: str, timeout_s: float = 
     last: dict = {}
     while time.monotonic() < deadline:
         try:
-            last = client.memory_stats(project_id)
+            last = client.get_store_statistics(project_id)
         except RuntimeError:
             time.sleep(2)  # server blocks tool calls while re-embedding
             continue
@@ -403,7 +403,7 @@ def main(argv: list[str] | None = None) -> int:
         run_cli(args.binary, bank_copy, port, "model", "embedding", "set", "local")
         stats = wait_for_embed_ready(client, args.project_id)
         entry_count = stats.get("entries")
-        print(f"memory_stats: entries={entry_count} pending={stats.get('pending')}")
+        print(f"get_store_statistics: entries={entry_count} pending={stats.get('pending')}")
         if entry_count != EXPECTED_ENTRY_COUNT:
             print(f"CORPUS DRIFT: expected {EXPECTED_ENTRY_COUNT} entries, got {entry_count}")
             return 1
@@ -413,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
 
         all_mismatches: list[dict] = []
         for qid, query in PROBE_QUERIES:
-            results = client.memory_search(args.project_id, query, args.limit)
+            results = client.query(args.project_id, query, args.limit)
             observed = [h["hash"][:8] for h in results[:5]]
             _print_results(qid, results)
             mismatches = match_top5(observed, EXPECTATIONS[qid])

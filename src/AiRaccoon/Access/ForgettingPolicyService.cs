@@ -34,7 +34,7 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
     public async Task SetSweepThresholdAsync(string projectId, double threshold,
         CancellationToken cancellationToken = default)
     {
-        await access.EnsureAsync(projectId, AccessRequirement.Destructive, "memory_sweep_threshold",
+        await access.EnsureAsync(projectId, AccessRequirement.Destructive, "trigger_memory_cleanup_threshold",
                 cancellationToken);
         await store.SetSettingAsync(SweepThresholdSettingKey,
                 SweepThreshold.Format(threshold), cancellationToken);
@@ -44,7 +44,7 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
     public async Task<TtlResult> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default)
     {
-        await access.EnsureAsync(projectId, AccessRequirement.Destructive, "memory_set_ttl",
+        await access.EnsureAsync(projectId, AccessRequirement.Destructive, "set_memory_ttl",
                 cancellationToken);
         EntryTtl.EnsureValid(ttlDays);
 

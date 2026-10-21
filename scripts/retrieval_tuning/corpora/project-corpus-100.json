@@ -1548,7 +1548,7 @@
       "targetScope": "project"
     },
     {
-      "answerSpan": "Auto-grading memory_search usefulness (2026-08-11): measured coverage is worse than the 12% figure — 20/438 hermes searches graded (4.6%); grade log captures on",
+      "answerSpan": "Auto-grading query usefulness (2026-08-11): measured coverage is worse than the 12% figure — 20/438 hermes searches graded (4.6%); grade log captures on",
       "category": "file-targeted",
       "contentMarker": null,
       "expectedHash": "6f79a3eed975d0d3e9c565d3217100339158ad20d01669df0fa7367d31447a0a",

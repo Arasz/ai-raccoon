@@ -15,7 +15,7 @@ Feature: File watcher
     #    after it was added.
 
     # Baseline (confirmed in restatement, 2026-08-04):
-    # - Three MCP tools: memory_watch_add / memory_watch_status / memory_watch_remove.
+    # - Three MCP tools: add_watch / get_watch_status / remove_watch.
     # - Backed by a persisted watches table; registrations survive restart
     #   (a restart re-watches what was registered).
     # - Re-digest calls the existing ingest path.
@@ -27,19 +27,19 @@ Feature: File watcher
         # directory and all subdirectories (no "*" needed).
         Scenario: Watching is disabled until explicitly enabled
             Given the server with watching disabled
-            When I call memory_watch_add for "proj-a" on path "/repo"
+            When I call add_watch for "proj-a" on path "/repo"
             Then the tool errors with watching-disabled
 
         Scenario: A watch inside an allowed scope is created
             Given a scope allowlist containing "/repo"
             And watching enabled
-            When I call memory_watch_add for "proj-a" on path "/repo/docs"
+            When I call add_watch for "proj-a" on path "/repo/docs"
             Then a watch exists for "proj-a" at "/repo/docs"
 
         Scenario: A watch outside the allowed scopes is rejected
             Given a scope allowlist containing "/repo"
             And watching enabled
-            When I call memory_watch_add for "proj-a" on path "/other"
+            When I call add_watch for "proj-a" on path "/other"
             Then the tool errors with path-outside-scope
 
     Rule: Watch configuration is CLI-only and user-facing
@@ -76,7 +76,7 @@ Feature: File watcher
             When the server restarts
             Then watching is still enabled with scope "/repo"
 
-        Scenario: watch registered lists the registrations made by memory_watch_add
+        Scenario: watch registered lists the registrations made by add_watch
             Given a watch for "proj-a" on path "/repo"
             When the user runs watch registered
             Then the CLI output lists the registered watch for "proj-a" at "/repo"
@@ -88,37 +88,37 @@ Feature: File watcher
         Scenario: A watch created for a project digests into that project's bank
             Given a project "proj-a" and a project "proj-b"
             And a file "notes.md" under the watched path
-            When I call memory_watch_add for "proj-a" on path "/repo"
+            When I call add_watch for "proj-a" on path "/repo"
             Then a watch exists for "proj-a" at "/repo"
-            And memory_search for "proj-a" returns the file's content
-            And memory_search for "proj-b" returns nothing for it
+            And query for "proj-a" returns the file's content
+            And query for "proj-b" returns nothing for it
 
         Scenario: Two projects watch the same path without interference
             Given a watch for "proj-a" on path "/repo"
-            When I call memory_watch_add for "proj-b" on path "/repo"
+            When I call add_watch for "proj-b" on path "/repo"
             Then both watches exist
             And a change to "/repo/file.md" is searchable in both projects' banks
 
         Scenario: A watch cannot be created without a project
-            When I call memory_watch_add without a project on path "/repo"
+            When I call add_watch without a project on path "/repo"
             Then the tool errors with missing-project
 
     Rule: Watches support both files and directories
-        # 2026-08-04: memory_watch_add accepts a single file or a directory.
+        # 2026-08-04: add_watch accepts a single file or a directory.
         Scenario: A single file path registers a watch
             Given a file "/repo/readme.md"
-            When I call memory_watch_add for "proj-a" on path "/repo/readme.md"
+            When I call add_watch for "proj-a" on path "/repo/readme.md"
             Then a watch exists for "proj-a" at "/repo/readme.md"
             And editing the file makes the new content searchable
 
         Scenario: A directory path registers a watch covering its subtree
             Given a directory "/repo" containing "a/b.md"
-            When I call memory_watch_add for "proj-a" on path "/repo"
+            When I call add_watch for "proj-a" on path "/repo"
             Then a watch exists for "proj-a" at "/repo"
             And editing "/repo/a/b.md" makes the new content searchable
 
         Scenario: A non-existent path is rejected with an error
-            When I call memory_watch_add for "proj-a" on path "/missing"
+            When I call add_watch for "proj-a" on path "/missing"
             Then the tool errors with path-not-found
 
     Rule: The initial scan is asynchronous
@@ -126,27 +126,27 @@ Feature: File watcher
         # background and status reports scanning until it completes.
         Scenario: add returns before the seed digest completes
             Given a directory "/repo" with files
-            When I call memory_watch_add for "proj-a" on path "/repo"
+            When I call add_watch for "proj-a" on path "/repo"
             Then the call returns with the watch registered
-            And memory_watch_status for "proj-a" shows the watch scanning
+            And get_watch_status for "proj-a" shows the watch scanning
 
         Scenario: A large directory still returns add immediately
             Given a directory "/repo" with many files
-            When I call memory_watch_add for "proj-a" on path "/repo"
+            When I call add_watch for "proj-a" on path "/repo"
             Then the call returns without waiting for the scan to finish
 
         Scenario: A scan error surfaces in status after add already returned
             Given a directory "/repo" containing an unreadable file
-            When I call memory_watch_add for "proj-a" on path "/repo"
+            When I call add_watch for "proj-a" on path "/repo"
             Then the call still returns
-            And memory_watch_status for "proj-a" shows the scan error
+            And get_watch_status for "proj-a" shows the scan error
 
     Rule: All four filesystem event types trigger processing
         # 2026-08-04: created, changed, renamed, deleted all enter the pipeline.
         Scenario: A created file is digested
             Given a watch for "proj-a" on path "/repo"
             When a new file "/repo/new.md" is created
-            Then memory_search for "proj-a" returns its content
+            Then query for "proj-a" returns its content
 
         Scenario: A burst of mixed events collapses into one tick of processing
             Given a watch for "proj-a" on path "/repo"
@@ -156,13 +156,13 @@ Feature: File watcher
         Scenario: An event outside the watch scope is ignored
             Given a watch for "proj-a" on path "/repo"
             When a file outside "/repo" changes
-            Then memory_search for "proj-a" returns nothing for it
+            Then query for "proj-a" returns nothing for it
 
     Rule: A watch mirrors the filesystem into memory 1:1
         # 2026-08-04: watch reflects ALL filesystem changes to memory — a delete
         # removes the file's chunks, a rename moves its identity. If mirroring is
-        # not wanted, use the standard ingestion tools (memory_ingest_file /
-        # memory_ingest_directory) instead of a watch.
+        # not wanted, use the standard ingestion tools (ingest_file /
+        # ingest_directory) instead of a watch.
         Scenario: A new file is searchable after the next tick
             Given a watch for "proj-a" on path "/repo"
             When a file is created in "/repo"
@@ -191,7 +191,7 @@ Feature: File watcher
         Scenario: Deleting a file removes its chunks from search
             Given a watch for "proj-a" on path "/repo" with "file.md" ingested
             When "file.md" is deleted
-            Then memory_search for "proj-a" no longer returns its content
+            Then query for "proj-a" no longer returns its content
 
         Scenario: Deleting a file while its digest is in flight resolves deterministically
             Given a watch for "proj-a" on path "/repo"
@@ -202,7 +202,7 @@ Feature: File watcher
         Scenario: Deleting a never-ingested file is a silent no-op
             Given a watch for "proj-a" on path "/repo"
             When a file that was never ingested is deleted
-            Then memory_watch_status for "proj-a" stays healthy
+            Then get_watch_status for "proj-a" stays healthy
 
     Rule: A rename event moves the file's memory to the new path
         # 2026-08-04: old path's chunks are removed, content is re-digested under
@@ -210,7 +210,7 @@ Feature: File watcher
         Scenario: Renaming a file moves its memory to the new path
             Given a watch for "proj-a" on path "/repo" with "old.md" ingested
             When "old.md" is renamed to "new.md"
-            Then memory_search for "proj-a" returns the content under "new.md"
+            Then query for "proj-a" returns the content under "new.md"
             And nothing is returned under "old.md"
 
         Scenario: Renaming before the initial scan finishes resolves deterministically
@@ -241,7 +241,7 @@ Feature: File watcher
         Scenario: An idle tick processes nothing
             Given a watch for "proj-a" on path "/repo" with no pending changes
             When a tick runs
-            Then memory_search for "proj-a" returns the same results as before
+            Then query for "proj-a" returns the same results as before
 
     Rule: Per-path digests run concurrently with a configured limit, 4 by default, round-robin across watches
         # 2026-08-04: concurrent per path; global concurrency limit (default 4);
@@ -288,22 +288,22 @@ Feature: File watcher
         Scenario: An ingest failure for one file leaves other tools serving
             Given a watch for "proj-a" on path "/repo" where one file's digest fails
             When the tick processes it
-            Then memory_search for "proj-a" still answers
-            And memory_watch_add for "proj-b" on another path still works
+            Then query for "proj-a" still answers
+            And add_watch for "proj-b" on another path still works
 
         Scenario: A watcher loop exception is contained and logged
             Given a watch for "proj-a" on path "/repo"
             When the watcher loop hits an exception
             Then the MCP server keeps serving
-            And memory_watch_status for "proj-a" still answers
+            And get_watch_status for "proj-a" still answers
 
         Scenario: A watch on an inaccessible path errors without crashing the server
             Given a watch for "proj-a" on a path that becomes unreadable
             When the next tick runs
             Then the MCP server keeps serving
-            And memory_watch_status for "proj-a" shows the error
+            And get_watch_status for "proj-a" shows the error
 
-    Rule: Watch errors are reported through memory_watch_status
+    Rule: Watch errors are reported through get_watch_status
         # 2026-08-04: when something fails, status returns the error.
         # Status states (card 4, confirmed; f: "stale" removed — a missed event
         # goes straight to catch-up processing on restart): scanning / healthy /
@@ -311,16 +311,16 @@ Feature: File watcher
         Scenario: A failed digest shows the error in status
             Given a watch for "proj-a" whose file fails to ingest
             When the failure occurs
-            Then memory_watch_status for "proj-a" shows the error for that watch
+            Then get_watch_status for "proj-a" shows the error for that watch
 
         Scenario: A transient error clears when the next digest succeeds
             Given a watch for "proj-a" with a failed digest
             When the next digest succeeds
-            Then memory_watch_status for "proj-a" no longer shows the error
+            Then get_watch_status for "proj-a" no longer shows the error
 
         Scenario: Status still answers while a watch is erroring
             Given a watch for "proj-a" with an error
-            When memory_watch_status for "proj-a" is called
+            When get_watch_status for "proj-a" is called
             Then it returns the watch states including the error
 
     Rule: A failing watch retries, then stops checking but keeps its status
@@ -329,31 +329,31 @@ Feature: File watcher
         Scenario: Five consecutive failures stop checking but keep status
             Given a watch for "proj-a" whose digests fail
             When five consecutive digests fail
-            Then memory_watch_status for "proj-a" reports the watch as stopped
+            Then get_watch_status for "proj-a" reports the watch as stopped
             And the watch remains registered
 
         Scenario: A fourth failure is still retried with backoff
             Given a watch for "proj-a" with four failed digests
             When a change arrives
             Then the digest is attempted again
-            And memory_watch_status for "proj-a" reports the watch as retrying
+            And get_watch_status for "proj-a" reports the watch as retrying
 
         Scenario: A success on retry resets the counter and checking continues
             Given a watch for "proj-a" with a failed digest
             When the next digest succeeds
-            Then memory_watch_status for "proj-a" reports the watch healthy
+            Then get_watch_status for "proj-a" reports the watch healthy
             And later failures do not stop it prematurely
 
-    Rule: memory_watch_remove on a non-existent watch is a no-op
+    Rule: remove_watch on a non-existent watch is a no-op
         # 2026-08-04: removing a watch that is not registered does nothing (no error).
         Scenario: Removing a never-registered path returns success without effect
-            When I call memory_watch_remove for "proj-a" on path "/never-registered"
+            When I call remove_watch for "proj-a" on path "/never-registered"
             Then the tool returns success
-            And memory_watch_status for "proj-a" shows no watch for it
+            And get_watch_status for "proj-a" shows no watch for it
 
         Scenario: Removing an already-removed path is still a no-op
             Given a watch for "proj-a" that was already removed
-            When I call memory_watch_remove for "proj-a" on the same path
+            When I call remove_watch for "proj-a" on the same path
             Then the tool returns success
             And no watch exists for the path
 
@@ -363,16 +363,16 @@ Feature: File watcher
             Then no digest happens for that path
             And the watch stays removed
 
-    Rule: memory_watch_add on an already-watched path is a no-op
+    Rule: add_watch on an already-watched path is a no-op
         # 2026-08-04: adding a watch for a path already registered does nothing (no
         # error, no duplicate watch). Scope: per (projectId, path).
         Scenario: Adding the same path twice in one project yields one watch
-            When I call memory_watch_add for "proj-a" on path "/repo" twice
+            When I call add_watch for "proj-a" on path "/repo" twice
             Then exactly one watch exists for "proj-a" at "/repo"
 
         Scenario: Re-adding with different path normalization is still a no-op
             Given a watch for "proj-a" on path "/repo"
-            When I call memory_watch_add for "proj-a" on path "/repo/"
+            When I call add_watch for "proj-a" on path "/repo/"
             Then exactly one watch exists for "proj-a" at "/repo"
         # 2026-08-04 (card 3): OS-agnostic normalization — Path.GetFullPath
         # (absolute; separators and ".." resolved; trailing separator stripped);
@@ -380,7 +380,7 @@ Feature: File watcher
 
         Scenario: The same path in a second project creates a separate watch
             Given a watch for "proj-a" on path "/repo"
-            When I call memory_watch_add for "proj-b" on path "/repo"
+            When I call add_watch for "proj-b" on path "/repo"
             Then a second watch exists for "proj-b" at "/repo"
             And each project digests into its own bank
 
@@ -392,49 +392,49 @@ Feature: File watcher
             Given a project "proj-a" with access tier ro
             And a watch for "proj-a" on path "/repo" with "file.md" ingested
             When "file.md" is deleted
-            Then memory_search for "proj-a" no longer returns its content
+            Then query for "proj-a" no longer returns its content
 
         Scenario: A delete mirror-removes chunks in a rw project
             Given a project "proj-a" with access tier rw
             And a watch for "proj-a" on path "/repo" with "file.md" ingested
             When "file.md" is deleted
-            Then memory_search for "proj-a" no longer returns its content
+            Then query for "proj-a" no longer returns its content
 
         Scenario: No tier denies or blocks the background mirror
             Given a project "proj-a" with access tier ro
             When the mirror removes chunks for a deleted file
             Then the removal succeeds without tier denial
 
-    Rule: memory_watch_add and memory_watch_remove require read-write access
+    Rule: add_watch and remove_watch require read-write access
         # 2026-08-04: ro cannot add or remove watches; rw and full may. (f: correction
         # — watches are not in the "settings that affect other agents" category.)
         Scenario: A rw agent adds and removes watches
             Given a project "proj-a" with access tier rw
-            When I call memory_watch_add for "proj-a" on path "/repo"
+            When I call add_watch for "proj-a" on path "/repo"
             Then the watch is created
-            And memory_watch_remove for "proj-a" on path "/repo" removes it
+            And remove_watch for "proj-a" on path "/repo" removes it
 
         Scenario: A ro agent's add is rejected with an access error
             Given a project "proj-a" with access tier ro
-            When I call memory_watch_add for "proj-a" on path "/repo"
+            When I call add_watch for "proj-a" on path "/repo"
             Then the tool errors with access-denied
 
-    Rule: memory_watch_status is available to every access tier
+    Rule: get_watch_status is available to every access tier
         # 2026-08-04: status is a read-only inspection; ro may call it. (Confirmed.)
         Scenario: A ro agent reads watch status
             Given a project "proj-a" with access tier ro
             And a watch for "proj-a" on path "/repo"
-            When memory_watch_status for "proj-a" is called
+            When get_watch_status for "proj-a" is called
             Then the watch states are returned
 
         Scenario: Status during an in-flight scan reports scanning
             Given a watch for "proj-a" on path "/repo" that is scanning
-            When memory_watch_status for "proj-a" is called
+            When get_watch_status for "proj-a" is called
             Then the watch state is scanning
 
         Scenario: Status with no watches returns an empty list without error
             Given a project "proj-a" with no watches
-            When memory_watch_status for "proj-a" is called
+            When get_watch_status for "proj-a" is called
             Then an empty list is returned without error
 
     Rule: A project-ids repair folds watch registrations without resurrecting the loser
@@ -456,7 +456,7 @@ Feature: File watcher
             And the "jsaa" watch keeps scan owner "scanner-1" with its lease
             And the "ai-raccoon" watch still owns "c.md"
             When "a.md" and "b.md" change
-            Then memory_search for "jsaa" returns both new contents
+            Then query for "jsaa" returns both new contents
             # g.md's NULL-context rows fold byte-identical under the winner with the repair
             # itself (D1) — and stay searchable after a post-repair change like a.md/b.md.
             When "/repo/g/g.md" content changes
@@ -465,24 +465,24 @@ Feature: File watcher
 
     Rule: Files a watch cannot index are reported as skipped, never hidden
         # 2026-10-18: a file neither corpus can take (unsupported type, binary content, or a
-        # memory file that parses to nothing) is listed in memory_watch_status with its reason,
+        # memory file that parses to nothing) is listed in get_watch_status with its reason,
         # and is never fingerprinted — so every catch-up retries it, and a file that becomes
         # ingestable indexes without a content change.
         Scenario: a watched directory with an unsupported and a binary file reports them as skipped
             Given a watch for "proj-a" on path "/repo" with an unsupported file "tool.xyz" and a binary file "image.dat"
-            Then memory_watch_status for "proj-a" reports the watch healthy with 2 skipped files
+            Then get_watch_status for "proj-a" reports the watch healthy with 2 skipped files
             And the skipped files are "image.dat" as "binary" and "tool.xyz" as "unsupported-type"
             And no skipped file has a fingerprint
 
         Scenario: skipped files are reported again after a restart catch-up
             Given a watch for "proj-a" on path "/repo" with an unsupported file "tool.xyz" and a binary file "image.dat"
-            And memory_watch_status for "proj-a" reports the watch healthy with 2 skipped files
+            And get_watch_status for "proj-a" reports the watch healthy with 2 skipped files
             When the server restarts and re-watches
-            Then memory_watch_status for "proj-a" reports the watch healthy with 2 skipped files
+            Then get_watch_status for "proj-a" reports the watch healthy with 2 skipped files
 
         Scenario: a skipped file that becomes supported is indexed and leaves the skip list
             Given a watch for "proj-a" on path "/repo" with a malformed notebook "analysis.ipynb"
-            And memory_watch_status for "proj-a" reports the watch healthy with 1 skipped files
+            And get_watch_status for "proj-a" reports the watch healthy with 1 skipped files
             When "analysis.ipynb" is rewritten as a valid notebook
             Then the notebook's content is searchable for "proj-a"
-            And memory_watch_status for "proj-a" reports the watch healthy with 0 skipped files
+            And get_watch_status for "proj-a" reports the watch healthy with 0 skipped files

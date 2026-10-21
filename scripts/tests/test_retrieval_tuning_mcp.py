@@ -146,13 +146,13 @@ class TestMemorySearch:
         try:
             client = make_client(stub)
             client.initialize()
-            results = client.memory_search(
+            results = client.query(
                 project_id="ai-raccoon", query="hello", scope="project", limit=5, min_relative_score=0.0
             )
             assert results == [{"hash": "abc123", "ranking": 1.0, "sourceFile": "docs/adr/0042-widget.md"}]
             call = stub.requests[2]["body"]
             assert call["method"] == "tools/call"
-            assert call["params"]["name"] == "memory_search"
+            assert call["params"]["name"] == "query"
             args = call["params"]["arguments"]
             assert args == {
                 "projectId": "ai-raccoon",
@@ -180,13 +180,13 @@ class TestToolErrorText:
             client = make_client(stub)
             client.initialize()
             with pytest.raises(McpError, match="sessionId"):
-                client.memory_search(project_id="p", query="q")
+                client.query(project_id="p", query="q")
         finally:
             stub.close()
 
 
 class TestIngestDirectory:
-    """memory_ingest_directory's wire shape, pinned to MemoryTools.IngestDirectory's parameters."""
+    """ingest_directory's wire shape, pinned to MemoryTools.IngestDirectory's parameters."""
 
     def _stub(self):
         return StubMcpServer(
@@ -204,7 +204,7 @@ class TestIngestDirectory:
             client.initialize()
             client.ingest_directory(project_id="code-eval", path="/corpus")
             call = stub.requests[2]["body"]
-            assert call["params"]["name"] == "memory_ingest_directory"
+            assert call["params"]["name"] == "ingest_directory"
             assert call["params"]["arguments"] == {"projectId": "code-eval", "path": "/corpus"}
         finally:
             stub.close()
@@ -222,7 +222,7 @@ class TestIngestDirectory:
 
 
 class TestMemorySearchKind:
-    """H8 (plan §12.2): kind plumbing so a code eval can drive memory_search kind=code."""
+    """H8 (plan §12.2): kind plumbing so a code eval can drive query kind=code."""
 
     def test_kind_omitted_by_default_regression(self):
         """No kind arg is sent when the caller passes none — today's memory-only wire shape."""
@@ -237,7 +237,7 @@ class TestMemorySearchKind:
         try:
             client = make_client(stub)
             client.initialize()
-            client.memory_search(project_id="ai-raccoon", query="hello")
+            client.query(project_id="ai-raccoon", query="hello")
             args = stub.requests[2]["body"]["params"]["arguments"]
             assert "kind" not in args
         finally:
@@ -260,7 +260,7 @@ class TestMemorySearchKind:
         try:
             client = make_client(stub)
             client.initialize()
-            results = client.memory_search(project_id="ai-raccoon", query="widget", kind="code")
+            results = client.query(project_id="ai-raccoon", query="widget", kind="code")
             args = stub.requests[2]["body"]["params"]["arguments"]
             assert args["kind"] == "code"
             assert results == [{"hash": "def456", "sourceFile": "src/Widget.cs", "lineStart": 10, "lineEnd": 24}]
@@ -285,7 +285,7 @@ class TestMemorySearchKind:
         try:
             client = make_client(stub)
             client.initialize()
-            results = client.memory_search(project_id="ai-raccoon", query="widget", kind="both")
+            results = client.query(project_id="ai-raccoon", query="widget", kind="both")
             assert results == [{"hash": "mem1"}]
         finally:
             stub.close()
@@ -303,7 +303,7 @@ class TestToolsList:
                     sse_frame(
                         rpc_result(
                             3,
-                            {"tools": [{"name": "memory_search"}, {"name": "memory_stats"}]},
+                            {"tools": [{"name": "query"}, {"name": "get_store_statistics"}]},
                         )
                     ),
                 ),
@@ -313,7 +313,7 @@ class TestToolsList:
             client = make_client(stub)
             client.initialize()
             tools = client.tools_list()
-            assert [t["name"] for t in tools] == ["memory_search", "memory_stats"]
+            assert [t["name"] for t in tools] == ["query", "get_store_statistics"]
         finally:
             stub.close()
 

@@ -6,7 +6,7 @@ constants (ADR-0083, docs/adr/0083-search-parameters-unified-source.md).
 
 ## Precedence
 
-1. `memory_search` arguments (per call)
+1. `query` arguments (per call)
 2. settings table (`settings retrieval …`, bank-wide)
 3. canonical constants (ADR-0006's chosen values)
 

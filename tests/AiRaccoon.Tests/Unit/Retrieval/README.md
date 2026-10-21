@@ -16,7 +16,7 @@ can remove the runtime extension without losing the oracle.
   `~/.ai-raccoon/extensions/osx-arm64/` + `~/.ai-raccoon/models/` first, pinned GitHub / HuggingFace download otherwise.
   The gate test **fails** (never skips) when an asset is missing or mismatched.
 - `Reference/` — `ReferenceRunner`: self-contained inline SQL against the extension's
-  `memory_add_content` / `memory_set_model` / `memory_embed_pending` / `memory_search` surface (deferral default on,
+  `memory_add_content` / `memory_set_model` / `embed_deferred_entries` / `query` surface (deferral default on,
   explicit embed, `ORDER BY ranking DESC, seq ASC` for determinism). It does **not** depend on
   `src/AiRaccoon.Infrastructure/Sqlite`, which P1 rewrites.
   `assets/reference-topk.json` is the committed golden output. **The freshness gate

@@ -8,7 +8,7 @@ public interface IMemoryStore : IModelMigrationStore
     Task<SearchResults> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default);
 
     /// <summary>
-    ///     Reads one entry's full content by hash (memory_get; ADR-0035) — a hash addressable in
+    ///     Reads one entry's full content by hash (get_entry; ADR-0035) — a hash addressable in
     ///     the caller's own scopes plus the cross-project shared tier, the same reach BumpAccess
     ///     already uses for search hits. Null when the project owns no such hash. Abstract on
     ///     purpose: a default of "not found" is a wrong answer, not a safe one (ADR-0054).
@@ -48,18 +48,18 @@ public interface IMemoryStore : IModelMigrationStore
     /// <summary>Every project id with committed project-scoped rows (the extraction sweep's universe).</summary>
     Task<IReadOnlyList<string>> GetProjectIdsAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>The bank's file tree as returned by memory_list_files (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_list).</summary>
+    /// <summary>The bank's file tree as returned by get_index (see docs/work/features-agent-memory/spec-issue-1.md §4.1).</summary>
     Task<string> ListFilesAsync(string projectId, CancellationToken cancellationToken = default);
 
-    /// <summary>Indexes one file into the given context (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_ingest_file).</summary>
+    /// <summary>Indexes one file into the given context (see docs/work/features-agent-memory/spec-issue-1.md §4.1 ingest_file).</summary>
     Task<int> IngestFileAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Indexes a directory tree into the given context (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_ingest_directory).</summary>
+    /// <summary>Indexes a directory tree into the given context (see docs/work/features-agent-memory/spec-issue-1.md §4.1 ingest_directory).</summary>
     Task<int> IngestDirectoryAsync(string projectId, string path, string? context,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Embeds pending deferred rows in batches (see docs/work/features-agent-memory/spec-issue-1.md §4.1 memory_embed_pending).</summary>
+    /// <summary>Embeds pending deferred rows in batches (see docs/work/features-agent-memory/spec-issue-1.md §4.1 embed_deferred_entries).</summary>
     Task<EmbedPendingResult> EmbedPendingAsync(string projectId, int? limit,
         CancellationToken cancellationToken = default);
 

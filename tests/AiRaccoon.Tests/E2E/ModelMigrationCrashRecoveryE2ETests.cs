@@ -188,7 +188,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         await WaitForStartupCheckpointAsync();
 
         (await RunCliAsync("model", "embedding", "set", "local")).ExitCode.ShouldBe(0);
-        // Seeded directly (not through memory_write): this test's subject is the relay's drain, not
+        // Seeded directly (not through add_memory): this test's subject is the relay's drain, not
         // the write path, and MidDrainRowCount real embeds must happen twice over (seed, then
         // migrate) if seeded through MCP — this way only the migration itself pays for real inference,
         // which is what needs to take long enough to interrupt mid-way.
@@ -452,14 +452,14 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
         var token = new McpTokenFile(_dataRoot).Read()!;
         for (var i = 0; i < count; i++)
         {
-            var result = await CallToolAsync(token, "memory_write",
+            var result = await CallToolAsync(token, "add_memory",
                 new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = $"embedded row number {i}" });
-            result.ShouldBe(false, "memory_write must not error while seeding");
+            result.ShouldBe(false, "add_memory must not error while seeding");
         }
     }
 
     /// <summary>
-    ///     Writes rows directly as already-embedded, bypassing memory_write and the running server
+    ///     Writes rows directly as already-embedded, bypassing add_memory and the running server
     ///     entirely — legitimate test setup (mirrors CliBankWriteTests' direct bank creation), since
     ///     this test's subject is the relay's drain, not the write path. The vec0 population trigger
     ///     only fires on UPDATE, not INSERT, so these rows never reach vec_entries at seed time — fine,
@@ -510,7 +510,7 @@ public sealed class ModelMigrationCrashRecoveryE2ETests : IAsyncLifetime
             Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
             true);
         await using var client = await McpClient.CreateAsync(transport, cancellationToken: TestContext.Current.CancellationToken);
-        var result = await client.CallToolAsync("memory_search",
+        var result = await client.CallToolAsync("query",
             new Dictionary<string, object?> { ["projectId"] = "acme", ["query"] = query, ["sessionId"] = "sess-e2e-test" },
             cancellationToken: TestContext.Current.CancellationToken);
         result.IsError.ShouldNotBe(true);

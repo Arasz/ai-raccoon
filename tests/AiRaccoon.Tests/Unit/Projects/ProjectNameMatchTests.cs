@@ -21,7 +21,7 @@ public sealed class ProjectNameMatchTests
         var refusal = Should.Throw<ProjectNotFoundException>(() => ProjectNameMatch.Single("acme", []));
 
         refusal.Message.ShouldContain("'acme'");
-        refusal.Message.ShouldContain("project_id_token_get");
+        refusal.Message.ShouldContain("save_project_id_token");
     }
 
     [Fact]

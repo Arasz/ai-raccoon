@@ -443,7 +443,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
         (await MetaFor("acme")).Capacity.ShouldBeNull();
     }
 
-    /// <summary>memory_promotion_list may name no project; its meta is the bank-wide count — still a scalar.</summary>
+    /// <summary>get_memories_sharing_ranking may name no project; its meta is the bank-wide count — still a scalar.</summary>
     [RetryFact]
     public async Task GetMeta_Unscoped_CountsTheWholeBank_WithoutNamingProjects()
     {

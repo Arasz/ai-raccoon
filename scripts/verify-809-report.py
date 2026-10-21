@@ -53,7 +53,7 @@ REBUDGET_RE = re.compile(
     r"(?P<unprovable>\d+) unprovable, (?P<terminal>\d+) terminal in "
     r"(?P<elapsed>\d+:\d\d:\d\d\.\d+)"
 )
-REFUSAL_RE = re.compile(r'ToolRefusals: "memory_search" refused: model-migration-in-progress')
+REFUSAL_RE = re.compile(r'ToolRefusals: "query" refused: model-migration-in-progress')
 
 
 def hms_to_ms(elapsed: str) -> float:

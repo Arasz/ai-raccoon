@@ -1,6 +1,6 @@
 """Ingestion pipeline orchestration (moved verbatim from scripts/ingest-jsaa-docs.py).
 
-Chunking is the production FileIngestor's job (via the memory_ingest_file MCP
+Chunking is the production FileIngestor's job (via the ingest_file MCP
 tool), not this script's — see ADR-0042. This module only curates *which*
 files to feed it and drives the batched writes/embeds/spot-checks.
 
@@ -39,7 +39,7 @@ async def ingest_files_batched(
     files: list[tuple[Path, str, str]],
     dry_run: bool = False,
 ) -> int:
-    """Ingest files in batches of BATCH_SIZE via memory_ingest_file, embed after each batch.
+    """Ingest files in batches of BATCH_SIZE via ingest_file, embed after each batch.
 
     Returns number of files ingested (0-chunk files, e.g. binary/unsupported
     extensions, still count as attempted but contribute nothing).
@@ -58,7 +58,7 @@ async def ingest_files_batched(
 
         for abs_path, rel, _type_key in batch:
             _, context = classify_file(rel)
-            await client.memory_ingest_file(
+            await client.ingest_file(
                 http,
                 project_id=PROJECT_ID,
                 path=str(abs_path),
@@ -66,7 +66,7 @@ async def ingest_files_batched(
             )
             ingested += 1
 
-        embed_result = await client.memory_embed_pending(http, project_id=PROJECT_ID)
+        embed_result = await client.embed_deferred_entries(http, project_id=PROJECT_ID)
         processed = embed_result.get("processed", 0) if isinstance(embed_result, dict) else "?"
         log.info(
             "[batch %d/%d] ingested %d files, %s/%d embedded",
@@ -84,7 +84,7 @@ async def ingest_files_batched(
             )
 
     if not dry_run:
-        final = await client.memory_embed_pending(http, project_id=PROJECT_ID)
+        final = await client.embed_deferred_entries(http, project_id=PROJECT_ID)
         log.info("Final embed: %s", final)
 
     return ingested
@@ -94,7 +94,7 @@ async def run_spot_checks(client: AiRaccoonClient, http: httpx.AsyncClient) -> N
     """Run verification spot-checks and log results."""
     log.info("━━━ SPOT-CHECKS ━━━")
     for query, expected in SPOT_CHECKS:
-        result = await client.memory_search(http, PROJECT_ID, query, scope="project", limit=5, min_score=0.0)
+        result = await client.query(http, PROJECT_ID, query, scope="project", limit=5, min_score=0.0)
         if isinstance(result, dict) and "results" in result:
             top3_paths = [r.get("path", "?") for r in result["results"][:3]]
             top3_snips = [(r.get("snippet", "") or "") for r in result["results"][:3]]
@@ -119,7 +119,7 @@ async def reset_contexts(client: AiRaccoonClient, http: httpx.AsyncClient) -> No
     """Delete the project's committed rows (project:<id> scope). Requires full access mode."""
     for ctx in CONTEXTS_TO_DELETE:
         try:
-            result = await client.memory_delete_context(http, PROJECT_ID, ctx)
+            result = await client.delete_context(http, PROJECT_ID, ctx)
             log.info("Deleted context %s: %s", ctx, result)
         except httpx.HTTPStatusError:
             log.warning("Failed to delete context %s (may not exist)", ctx)
@@ -184,10 +184,10 @@ async def run_pipeline(
         log.info("  %s: %d", tk, type_counts[tk])
 
     # chunk_only has no local meaning post-ADR-0042 (chunking moved server-side
-    # into memory_ingest_file) — it now behaves like --dry-run: enumerate and stop.
+    # into ingest_file) — it now behaves like --dry-run: enumerate and stop.
     if dry_run or chunk_only:
         log.info("Enumeration complete: %d files. No local chunking to preview — "
-                 "the production chunker runs server-side inside memory_ingest_file.", len(files))
+                 "the production chunker runs server-side inside ingest_file.", len(files))
         return
 
     # ── 2. MCP ingest ──
@@ -204,8 +204,8 @@ async def run_pipeline(
         ingested = await ingest_files_batched(client, http, files, dry_run=False)
         log.info("Ingested %d files total", ingested)
 
-        stats = await client.memory_stats(http, PROJECT_ID)
-        log.info("memory_stats → %s", stats)
+        stats = await client.get_store_statistics(http, PROJECT_ID)
+        log.info("get_store_statistics → %s", stats)
 
         if verify:
             log.info("━━━ PHASE 3: Spot-checks ━━━")

@@ -747,7 +747,7 @@ def test_chain_corpus_to_report_numbers(tmp_path):
     assert [q.id for q in queries] == ["C001", "C002", "C003"]
     calls = p3.build_search_calls(queries)
     assert [c["arguments"]["projectId"] for c in calls] == ["proj-a", "proj-b", "proj-a"]
-    assert all(c["name"] == "memory_search" and c["arguments"]["limit"] == SEARCH_LIMIT
+    assert all(c["name"] == "query" and c["arguments"]["limit"] == SEARCH_LIMIT
                for c in calls)
     assert len({c["arguments"]["sessionId"] for c in calls}) == 1
 

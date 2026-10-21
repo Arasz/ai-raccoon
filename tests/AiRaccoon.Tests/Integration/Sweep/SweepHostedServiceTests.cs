@@ -77,7 +77,7 @@ public sealed class SweepHostedServiceTests : IDisposable
     ///     Writes one entry, gives it a 1-day TTL, and raises the threshold above the stored
     ///     rating: ratings only move on a search hit, so an unsearched entry sits at 0.5 forever.
     ///     Also opts the project into full access mode (H6): the reaper now honours the same
-    ///     Destructive requirement memory_sweep enforces at the MCP boundary, so a project that
+    ///     Destructive requirement trigger_memory_cleanup enforces at the MCP boundary, so a project that
     ///     has not consented no longer gets swept just because the caller is a timer.
     /// </summary>
     private async Task<string> SeedExpiringEntryAsync()

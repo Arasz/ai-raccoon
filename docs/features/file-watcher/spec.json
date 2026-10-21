@@ -46,7 +46,7 @@
         {
             "id": "D7",
             "card": "Access tiers",
-            "ruling": "memory_watch_add/remove require rw+; memory_watch_status open to every tier; background mirroring runs regardless of tier (tiers gate direct agent operations only)."
+            "ruling": "add_watch/remove require rw+; get_watch_status open to every tier; background mirroring runs regardless of tier (tiers gate direct agent operations only)."
         },
         {
             "id": "D8",
@@ -66,7 +66,7 @@
     ],
     "scope": {
         "in": [
-            "Three MCP tools: memory_watch_add / memory_watch_status / memory_watch_remove, all project-scoped (projectId), identified per (projectId, path)",
+            "Three MCP tools: add_watch / get_watch_status / remove_watch, all project-scoped (projectId), identified per (projectId, path)",
             "Watches are project-scoped only; no global or workspace-scoped watches",
             "Watching is opt-in: disabled until explicitly enabled; watch paths must be inside a scope allowlist entry (absolute path, covers directory + all subdirectories)",
             "Watch configuration is CLI-only and user-facing: watch enable|disable {project-id|*} {true|false}, watch scope add|remove|list {project-id|*} {path}, watch concurrency {project-id|*} {1..16} (default 4); '*' matches all projects, more specific entry wins; no access-tier checks; persisted across restarts",
@@ -77,7 +77,7 @@
             "SmartRAG-inspired mechanics: debounce (1s tick), hash-skip (path+content SHA-256), initial scan, retry (exponential backoff; after 5 failures stop checking but keep registration/status)",
             "Pipeline: single channel of events -> per-path pending aggregation -> 1s tick -> per-path digests with configured concurrency limit (default 4), round-robin across watches",
             "Missed-event catch-up: per-watch last-change timestamp; on restart, targets changed since it are re-ingested",
-            "Containment: watch failures never fail the MCP server; errors surface through memory_watch_status",
+            "Containment: watch failures never fail the MCP server; errors surface through get_watch_status",
             "Idempotency: add on an already-watched (projectId, path) is a no-op; remove on a non-existent watch is a no-op",
             "Access tiers: add/remove require rw+; status open to every tier; background mirroring runs regardless of tier",
             "Status states: scanning / healthy / retrying / stopped; status returns watch states, last error, last sync",

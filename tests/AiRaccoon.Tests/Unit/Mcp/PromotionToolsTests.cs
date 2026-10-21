@@ -9,7 +9,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Mcp;
 
-/// <summary>The propose-tier review surface: memory_promotion_list must not crowd out an agent's
+/// <summary>The propose-tier review surface: get_memories_sharing_ranking must not crowd out an agent's
 /// context with the full stored value of every queued row.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]

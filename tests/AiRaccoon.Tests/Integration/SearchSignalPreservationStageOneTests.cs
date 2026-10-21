@@ -66,7 +66,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
 
     /// <summary>
     ///     (1) End-to-end evidence flow: a seeded bank, leg ranks observed from single-leg
-    ///     runs, then a live both-leg memory_search whose strengths/legs/margins must equal
+    ///     runs, then a live both-leg query whose strengths/legs/margins must equal
     ///     the §3 hand computation (test-owned arithmetic over the observed ranks — never
     ///     FusionEvidence.FromRaws, per S4). sourceLambda 0 keeps the merger a monotone
     ///     re-normalization so single-leg served order IS leg-rank order.

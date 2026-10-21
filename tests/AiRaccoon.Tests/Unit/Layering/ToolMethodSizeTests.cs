@@ -6,7 +6,7 @@ namespace AiRaccoon.Tests.Unit.Layering;
 
 /// <summary>
 ///     "MCP stays thin" (.ai-badger/invariants/mcp-thin.md) had no mechanical check, so
-///     `memory_share_extract` grew to 62 body lines against a median of 9 — a consent gate, a mode
+///     `trigger_memory_sharing` grew to 62 body lines against a median of 9 — a consent gate, a mode
 ///     decision and two orchestration pipelines that exist nowhere else, unreachable from the CLI and
 ///     the background loop and impossible to unit-test (WP8, docs/adr/0065).
 /// </summary>

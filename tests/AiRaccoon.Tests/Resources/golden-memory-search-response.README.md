@@ -1,7 +1,7 @@
 # golden-memory-search-response.json
 
 Captured pre-feature (WP1, `docs/work/2026-08-21-code-search-implementation-plan.md` §3.6):
-the exact `memory_search` response BEFORE the `kind` parameter or the `code` envelope key
+the exact `query` response BEFORE the `kind` parameter or the `code` envelope key
 exist. Produced by `GoldenMemorySearchResponseTests.Search_TodaysPreKindEnvelope_MatchesTheCommittedGoldenFile`
 (`tests/AiRaccoon.Tests/Integration/GoldenMemorySearchResponseTests.cs`) against a small,
 deterministic two-entry fixture bank (fixed content, fixed embedding endpoint, fixed clock).

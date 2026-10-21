@@ -7,9 +7,9 @@ under a single id instead of splitting across two.
 ## When you need this
 
 You will see fragmented ids if you renamed a project directory, moved a repo, or
-ever called `memory_write`/`memory_search` with an inconsistent id for the same
+ever called `add_memory`/`query` with an inconsistent id for the same
 project. Each variant is a separate committed context (`project:<id>`), so
-`memory_search` against the "wrong" one silently misses the entries filed under
+`query` against the "wrong" one silently misses the entries filed under
 the other. The public binary ships with no built-in id folds
 ([ADR-0099](../adr/0099-empty-default-alias-map.md)); every fold has to be
 declared on purpose, so it never merges two ids that only look alike.

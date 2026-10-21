@@ -62,24 +62,24 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
     [RetryFact]
     public async Task UncoveredTools_RoundTripOverTheWire()
     {
-        var list = await CallAsync("memory_list", ("projectId", ProjectId));
+        var list = await CallAsync("get_index", ("projectId", ProjectId));
         Text(list).ShouldNotBeNullOrWhiteSpace();
 
-        var write = await CallAsync("memory_write", ("projectId", ProjectId), ("content", "surface parity fact"));
+        var write = await CallAsync("add_memory", ("projectId", ProjectId), ("content", "surface parity fact"));
         var hash = JsonDocument.Parse(Text(write)).RootElement.GetProperty("data").GetProperty("hash").GetString();
         hash.ShouldNotBeNullOrWhiteSpace();
-        var delete = await CallAsync("memory_delete", ("projectId", ProjectId), ("hash", hash));
+        var delete = await CallAsync("delete_entry", ("projectId", ProjectId), ("hash", hash));
         JsonDocument.Parse(Text(delete)).RootElement.GetProperty("data").GetProperty("deleted").GetInt32().ShouldBe(1);
 
-        await CallAsync("memory_write", ("projectId", ProjectId), ("content", "context purge me"));
-        var deleteContext = await CallAsync("memory_delete_context", ("projectId", ProjectId), ("context", $"project:{ProjectId}"));
+        await CallAsync("add_memory", ("projectId", ProjectId), ("content", "context purge me"));
+        var deleteContext = await CallAsync("delete_context", ("projectId", ProjectId), ("context", $"project:{ProjectId}"));
         JsonDocument.Parse(Text(deleteContext)).RootElement.GetProperty("data").GetProperty("deleted").GetInt32().ShouldBe(1);
 
         var file = Path.Combine(Path.GetTempPath(), $"ai-raccoon-surface-{Guid.NewGuid():N}.txt");
         await File.WriteAllTextAsync(file, "ingested surface fact", TestContext.Current.CancellationToken);
         try
         {
-            var ingest = await CallAsync("memory_ingest_file", ("projectId", ProjectId), ("path", file));
+            var ingest = await CallAsync("ingest_file", ("projectId", ProjectId), ("path", file));
             JsonDocument.Parse(Text(ingest)).RootElement.GetProperty("data").GetProperty("indexed").GetInt32().ShouldBe(1);
         }
         finally
@@ -91,7 +91,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         await File.WriteAllTextAsync(Path.Combine(dir.FullName, "note.md"), "directory surface fact", TestContext.Current.CancellationToken);
         try
         {
-            var scanned = await CallAsync("memory_ingest_directory", ("projectId", ProjectId), ("path", dir.FullName));
+            var scanned = await CallAsync("ingest_directory", ("projectId", ProjectId), ("path", dir.FullName));
             JsonDocument.Parse(Text(scanned)).RootElement.GetProperty("data").GetProperty("scanned").GetInt32().ShouldBe(1);
         }
         finally
@@ -99,24 +99,24 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
             dir.Delete(true);
         }
 
-        // memory_sweep: dry-run (default) reports the {candidates, deleted} shape.
-        var sweep = await CallAsync("memory_sweep", ("projectId", ProjectId));
+        // trigger_memory_cleanup: dry-run (default) reports the {candidates, deleted} shape.
+        var sweep = await CallAsync("trigger_memory_cleanup", ("projectId", ProjectId));
         using var sweepDoc = JsonDocument.Parse(Text(sweep));
         sweepDoc.RootElement.GetProperty("data").GetProperty("candidates").ValueKind.ShouldBe(JsonValueKind.Array);
         sweepDoc.RootElement.GetProperty("data").GetProperty("deleted").ValueKind.ShouldBe(JsonValueKind.Array);
 
-        // memory_share_extract: propose mode returns {candidates, promotedHashes} without sharing.
-        var extract = await CallAsync("memory_share_extract",
+        // trigger_memory_sharing: propose mode returns {candidates, promotedHashes} without sharing.
+        var extract = await CallAsync("trigger_memory_sharing",
             ("projectIds", new[] { ProjectId }), ("mode", "propose"));
         using var extractDoc = JsonDocument.Parse(Text(extract));
         extractDoc.RootElement.GetProperty("data").GetProperty("candidates").ValueKind.ShouldBe(JsonValueKind.Array);
         extractDoc.RootElement.GetProperty("data").GetProperty("promotedHashes").ValueKind.ShouldBe(JsonValueKind.Array);
 
-        // memory_promotion_list/discard: the propose tier on a fresh project is empty.
-        var promotionList = await CallAsync("memory_promotion_list", ("projectId", ProjectId));
+        // get_memories_sharing_ranking/discard: the propose tier on a fresh project is empty.
+        var promotionList = await CallAsync("get_memories_sharing_ranking", ("projectId", ProjectId));
         using var promotionDoc = JsonDocument.Parse(Text(promotionList));
         promotionDoc.RootElement.GetProperty("data").GetProperty("rows").ValueKind.ShouldBe(JsonValueKind.Array);
-        var promotionDiscard = await CallAsync("memory_promotion_discard", ("projectId", ProjectId));
+        var promotionDiscard = await CallAsync("delete_memory_from_ranking", ("projectId", ProjectId));
         JsonDocument.Parse(Text(promotionDiscard)).RootElement.GetProperty("data").GetProperty("discarded").GetInt32()
             .ShouldBe(0);
 
@@ -125,11 +125,11 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
         {
             await SeedWatchConfigAsync(watchDir.FullName);
 
-            var add = await CallAsync("memory_watch_add", ("projectId", ProjectId), ("path", watchDir.FullName));
+            var add = await CallAsync("add_watch", ("projectId", ProjectId), ("path", watchDir.FullName));
             var addText = Text(add);
             addText.ShouldContain($"\"path\":\"{watchDir.FullName}\"");
 
-            var status = await CallAsync("memory_watch_status", ("projectId", ProjectId));
+            var status = await CallAsync("get_watch_status", ("projectId", ProjectId));
             using var statusDoc = JsonDocument.Parse(Text(status));
             var watches = statusDoc.RootElement.GetProperty("data").GetProperty("watches");
             var watch = watches.EnumerateArray()
@@ -137,7 +137,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
             var state = watch.GetProperty("state").GetString()?.ToLowerInvariant();
             state.ShouldBeOneOf("scanning", "healthy");
 
-            var remove = await CallAsync("memory_watch_remove", ("projectId", ProjectId), ("path", watchDir.FullName));
+            var remove = await CallAsync("remove_watch", ("projectId", ProjectId), ("path", watchDir.FullName));
             Text(remove).ShouldContain($"\"path\":\"{watchDir.FullName}\"");
         }
         finally
@@ -152,7 +152,7 @@ public class McpServerToolSurfaceE2ETests : IAsyncLifetime
             }
         }
 
-        await CallAsync("memory_delete_context", ("projectId", ProjectId), ("context", $"project:{ProjectId}"));
+        await CallAsync("delete_context", ("projectId", ProjectId), ("context", $"project:{ProjectId}"));
     }
 
     private async Task SeedWatchConfigAsync(string tempDir)

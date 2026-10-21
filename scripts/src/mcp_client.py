@@ -69,7 +69,7 @@ class AiRaccoonClient:
             log.exception("MCP %s → error (%.2fs)", method, elapsed)
             raise
 
-    async def memory_ingest_file(
+    async def ingest_file(
         self,
         client: httpx.AsyncClient,
         project_id: str,
@@ -86,30 +86,30 @@ class AiRaccoonClient:
         if context:
             args["context"] = context
         result = await self._call(
-            client, "tools/call", {"name": "memory_ingest_file", "arguments": args}
+            client, "tools/call", {"name": "ingest_file", "arguments": args}
         )
         return _unwrap(result)
 
-    async def memory_embed_pending(
+    async def embed_deferred_entries(
         self, client: httpx.AsyncClient, project_id: str, limit: Optional[int] = None
     ) -> dict:
         args: dict = {"projectId": project_id}
         if limit is not None:
             args["limit"] = limit
         result = await self._call(
-            client, "tools/call", {"name": "memory_embed_pending", "arguments": args}
+            client, "tools/call", {"name": "embed_deferred_entries", "arguments": args}
         )
         return _unwrap(result)
 
-    async def memory_stats(self, client: httpx.AsyncClient, project_id: str) -> dict:
+    async def get_store_statistics(self, client: httpx.AsyncClient, project_id: str) -> dict:
         result = await self._call(
             client,
             "tools/call",
-            {"name": "memory_stats", "arguments": {"projectId": project_id}},
+            {"name": "get_store_statistics", "arguments": {"projectId": project_id}},
         )
         return _unwrap(result)
 
-    async def memory_search(
+    async def query(
         self,
         client: httpx.AsyncClient,
         project_id: str,
@@ -122,7 +122,7 @@ class AiRaccoonClient:
             client,
             "tools/call",
             {
-                "name": "memory_search",
+                "name": "query",
                 "arguments": {
                     "projectId": project_id,
                     "query": query,
@@ -134,14 +134,14 @@ class AiRaccoonClient:
         )
         return _unwrap(result)
 
-    async def memory_delete_context(
+    async def delete_context(
         self, client: httpx.AsyncClient, project_id: str, context: str
     ) -> dict:
         result = await self._call(
             client,
             "tools/call",
             {
-                "name": "memory_delete_context",
+                "name": "delete_context",
                 "arguments": {"projectId": project_id, "context": context},
             },
         )

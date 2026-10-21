@@ -11,7 +11,7 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
-///     WP3 step 4. Rows written before <c>memory_write</c> chunked, or ingested while the budget was
+///     WP3 step 4. Rows written before <c>add_memory</c> chunked, or ingested while the budget was
 ///     not engine-aware, hold more text than the embedding window — 6,240 of 17,219 on the live bank,
 ///     worst at 7,376 tokens against a 254-token window. <see cref="ChunkBackfill" /> splits each such
 ///     row's own stored value into in-budget pieces.

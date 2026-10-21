@@ -71,7 +71,7 @@ public sealed class UnmappedExceptionDiagnosticsTests : IAsyncLifetime
         await using var server = await RealMcpServerFixture.StartAsync(_dataRoot, TestContext.Current.CancellationToken, fakeLogs);
         var client = await server.ConnectAsync("unmapped-exception-test", TestContext.Current.CancellationToken);
 
-        var result = await client.CallToolAsync("memory_stats",
+        var result = await client.CallToolAsync("get_store_statistics",
             new Dictionary<string, object?> { ["projectId"] = "anything" },
             cancellationToken: TestContext.Current.CancellationToken);
 

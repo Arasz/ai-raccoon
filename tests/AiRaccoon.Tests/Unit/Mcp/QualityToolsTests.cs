@@ -54,7 +54,7 @@ public sealed class QualityToolsTests
 
         _gate.LastProjectId.ShouldBe("acme");
         _gate.LastRequirement.ShouldBe(AccessRequirement.Write);
-        _gate.LastToolName.ShouldBe("memory_record_followthrough");
+        _gate.LastToolName.ShouldBe("set_memory_usage_record");
     }
 
     [Fact]

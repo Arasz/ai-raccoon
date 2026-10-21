@@ -14,7 +14,7 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
-///     Banks written before memory_write stored a note's chunks in text order hold source-citing notes whose opening
+///     Banks written before add_memory stored a note's chunks in text order hold source-citing notes whose opening
 ///     sits at the last chunk_index. <see cref="NoteChunkOrderRepair" /> puts those positions in text order.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -221,7 +221,7 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
                ?? throw new InvalidOperationException("the note stored no row");
     }
 
-    /// <summary>Re-stores a note's rows the way memory_write used to: continuation rows first, the opening last.
+    /// <summary>Re-stores a note's rows the way add_memory used to: continuation rows first, the opening last.
     /// With <paramref name="fillPositions" /> true (the default) positions are then filled in id order, the shape a
     /// bank held before ADR-0122; false leaves every row at the -1 sentinel, the shape a merge or an unrepaired
     /// old-writer note leaves rows in.</summary>

@@ -536,7 +536,7 @@ def build_airaccoon_fn(server, session_id: str) -> object:
 
     def fn(entry: dict) -> dict:
         try:
-            parsed = client._call_tool("memory_search", {
+            parsed = client._call_tool("query", {
                 "projectId": entry.get("targetProjectId") or "ai-raccoon",
                 "query": entry["query"],
                 # Corpus custom -> bank project (SearchContexts.cs: project

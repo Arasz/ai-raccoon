@@ -15,7 +15,7 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 ///     <para>
 ///         Scoped to what a replace can actually touch: mirror rows only (path = source_file, per
 ///         <see cref="MemorySql.DeleteBySourcePath" />'s own predicate) whose file still exists.
-///         A <c>memory_write</c> row that merely cites the path, and any row whose source_file no
+///         A <c>add_memory</c> row that merely cites the path, and any row whose source_file no
 ///         longer exists, are never candidates and never touched.
 ///     </para>
 ///     <para>
@@ -51,7 +51,7 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
 
         // workspace_id IS NULL and path = source_file: exactly the rows ReplaceAsync's own
         // DeleteBySourcePath predicate would touch — the digest owns mirror rows, never workspace
-        // scratch and never a memory_write row that merely cites the path (MemorySql.cs:188-190).
+        // scratch and never a add_memory row that merely cites the path (MemorySql.cs:188-190).
         var groups = (await connection.QueryAsync<GroupKey>(new CommandDefinition(
                 """
                 SELECT DISTINCT project_id AS ProjectId, source_file AS SourceFile

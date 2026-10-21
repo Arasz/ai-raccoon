@@ -4,7 +4,7 @@ Inspect live server metrics, capture diagnostic traces, and export OpenTelemetry
 
 > This page covers the Meter/ActivitySource/OTLP path below — unchanged by AiRaccoon's
 > self-instrumentation. For what the server can tell you about its own performance **without** a
-> collector — a persisted `metrics` table, read back with the `memory_performance` MCP tool — see
+> collector — a persisted `metrics` table, read back with the `get_engine_statistics` MCP tool — see
 > [Read back performance metrics](read-performance-metrics.md). The two are complementary, not
 > alternatives: this page's Meter keeps exporting the same counters and spans either way.
 

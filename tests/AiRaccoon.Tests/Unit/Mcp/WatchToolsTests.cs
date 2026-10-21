@@ -11,7 +11,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
-///     memory_watch_add/status/remove behavior over a fake IWatchService: param validation,
+///     add_watch/status/remove behavior over a fake IWatchService: param validation,
 ///     error-code mapping, result shapes, and the no-op idempotency contracts.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]

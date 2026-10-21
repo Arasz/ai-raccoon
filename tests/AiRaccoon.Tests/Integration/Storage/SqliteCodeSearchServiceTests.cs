@@ -16,7 +16,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 /// <summary>
 ///     WP5/WP6 — SqliteCodeSearchService: FTS5 + vec0 + RRF hybrid fusion, project scoping, ranking
 ///     normalization (hybrid-score-relative, mirroring memory's RRF), minRelativeScore, empty-corpus,
-///     code_get's hash round-trip, and the degraded modes (unconfigured/unloadable engine). Rows are
+///     get_entry's hash round-trip, and the degraded modes (unconfigured/unloadable engine). Rows are
 ///     seeded directly by SQL (no CodeIngestor in this file — WP3).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]

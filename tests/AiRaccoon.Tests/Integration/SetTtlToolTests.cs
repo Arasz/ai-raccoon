@@ -16,7 +16,7 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 
 namespace AiRaccoon.Tests.Integration;
 
-/// <summary>memory_set_ttl over a real bank: the TTL an entry carries, and what a sweep then does with it.</summary>
+/// <summary>set_memory_ttl over a real bank: the TTL an entry carries, and what a sweep then does with it.</summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SetTtlToolTests : IDisposable

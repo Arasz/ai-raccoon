@@ -20,7 +20,7 @@ public sealed record ChunkBackfillReport(
 /// <summary>
 ///     WP3 step 4: splits rows holding more text than the embedding window into in-budget pieces.
 ///     Chunker follows the row's own source_file: a file row's own handler, plain text when no
-///     handler owns its extension, markdown for a memory_write note. Never reads the source file
+///     handler owns its extension, markdown for a add_memory note. Never reads the source file
 ///     itself (docs/adr/0069); budget AND counter resolve through <see cref="IEmbeddingService" />
 ///     (D9/ADR-0036).
 /// </summary>
@@ -149,7 +149,7 @@ public sealed class ChunkBackfill(
     internal Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         connection.ReadChunkBudgetAsync(embeddingService, cancellationToken);
 
-    /// <summary>A memory_write note — no source_file, or a citation that does not name this row's
+    /// <summary>A add_memory note — no source_file, or a citation that does not name this row's
     /// own path — chunks as markdown; a file row chunks with its extension's own handler, or the
     /// plain-text fallback when no handler owns it.</summary>
     private IChunker ResolveChunker(Row row)

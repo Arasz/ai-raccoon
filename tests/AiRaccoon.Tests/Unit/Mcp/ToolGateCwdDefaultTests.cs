@@ -38,7 +38,7 @@ public sealed class ToolGateCwdDefaultTests
         _resolver.Result = new ProjectIdResolution.Resolved($"{{{guid.ToString("D").ToUpperInvariant()}}}");
         var gate = NewGate();
 
-        var canonical = await gate.RequireAsync("", AccessRequirement.Write, "memory_write",
+        var canonical = await gate.RequireAsync("", AccessRequirement.Write, "add_memory",
             TestContext.Current.CancellationToken);
 
         canonical.ShouldBe(guid.ToString("D"));
@@ -54,13 +54,13 @@ public sealed class ToolGateCwdDefaultTests
         var gate = NewGate();
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            gate.RequireAsync("", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+            gate.RequireAsync("", AccessRequirement.Write, "add_memory", TestContext.Current.CancellationToken));
 
         // Cwd-tolerant: the stable prefix + tail around the probed working directory.
         ex.Message.ShouldStartWith(
             "invalid-params: projectId is required (no registered project's scope contains cwd ");
         ex.Message.ShouldContain(
-            "; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)");
+            "; pass projectId explicitly, or register this directory with add_watch / settings ingest scope add)");
         _guard.Calls.ShouldBeEmpty();
         _registration.Calls.ShouldBeEmpty();
     }
@@ -72,7 +72,7 @@ public sealed class ToolGateCwdDefaultTests
         var gate = NewGate();
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            gate.RequireAsync("", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+            gate.RequireAsync("", AccessRequirement.Write, "add_memory", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith("invalid-params: projectId is ambiguous from cwd ");
         ex.Message.ShouldContain(": candidates p1, p2");
@@ -93,7 +93,7 @@ public sealed class ToolGateCwdDefaultTests
         var gate = NewGate();
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            gate.RequireAsync("", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+            gate.RequireAsync("", AccessRequirement.Write, "add_memory", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith("invalid-params: projectId is ambiguous from cwd ");
         ex.Message.ShouldContain(": candidates job-search-ai-assistant, jsaa");
@@ -108,11 +108,11 @@ public sealed class ToolGateCwdDefaultTests
         // consulted on an explicit id — consulted-and-ignored cannot hide from it.
         var gate = new ToolGate(_guard, _queue, _migrations, _registration, TestData.ScopeCheck, new ThrowingResolver());
 
-        var canonical = await gate.RequireAsync("{ACME}", AccessRequirement.Write, "memory_write",
+        var canonical = await gate.RequireAsync("{ACME}", AccessRequirement.Write, "add_memory",
             TestContext.Current.CancellationToken);
 
         canonical.ShouldBe("{ACME}");
-        _guard.Calls.ShouldBe([("{ACME}", AccessRequirement.Write, "memory_write")]);
+        _guard.Calls.ShouldBe([("{ACME}", AccessRequirement.Write, "add_memory")]);
     }
 
     [Fact]
@@ -122,12 +122,12 @@ public sealed class ToolGateCwdDefaultTests
         var gate = new ToolGate(_guard, _queue, _migrations, _registration, TestData.ScopeCheck);
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            gate.RequireAsync(null, AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+            gate.RequireAsync(null, AccessRequirement.Write, "add_memory", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith(
             "invalid-params: projectId is required (no registered project's scope contains cwd ");
         ex.Message.ShouldContain(
-            "; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)");
+            "; pass projectId explicitly, or register this directory with add_watch / settings ingest scope add)");
         _guard.Calls.ShouldBeEmpty();
         _registration.Calls.ShouldBeEmpty();
     }

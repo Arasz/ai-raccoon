@@ -20,7 +20,7 @@ public sealed class ChunkReassemblyTests
 
     private static readonly string NotePath = $"{ContentHash.OfValue(Note)}.md";
 
-    /// <summary>The note as memory_write stores it: chunked with an overlay, so neighbouring rows repeat text.</summary>
+    /// <summary>The note as add_memory stores it: chunked with an overlay, so neighbouring rows repeat text.</summary>
     private static List<NoteRow> ChunkedRows(string body, int maxTokens = 96, int overlayTokens = 24,
         IReadOnlyList<int>? idOrder = null)
     {

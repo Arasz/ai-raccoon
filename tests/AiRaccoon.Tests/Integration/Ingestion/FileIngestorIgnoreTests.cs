@@ -12,7 +12,7 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
 /// <summary>
-///     `ai-raccoon.ignore` honored by `memory_ingest_directory` (docs/work/2026-08-21-code-search-implementation-plan.md
+///     `ai-raccoon.ignore` honored by `ingest_directory` (docs/work/2026-08-21-code-search-implementation-plan.md
 ///     §2.1/§5.2): ignored files are never ingested, and the ignore file itself never produces a row.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -111,7 +111,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
     /// <summary>
     ///     WP2 (docs/work/2026-08-23-post-delta-4-plan.md §WP2): the walk root's ignore file is
     ///     loaded at the walk root itself, so an ancestor's `ai-raccoon.ignore` — the one covering a
-    ///     registered watch — has no effect when `memory_ingest_directory` targets a nested
+    ///     registered watch — has no effect when `ingest_directory` targets a nested
     ///     subdirectory. `IngestFileAsync` already resolves this ancestor via
     ///     `ResolveIgnoreRootAsync`; the directory walk must do the same.
     /// </summary>

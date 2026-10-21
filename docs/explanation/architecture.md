@@ -150,7 +150,7 @@ the schema level.
 ### Propose tier (`promotion_queue`)
 
 Candidates waiting for promotion review live in their own table, deliberately outside
-`entries`: they are not searchable, not counted by `memory_stats`, and never swept.
+`entries`: they are not searchable, not counted by `get_store_statistics`, and never swept.
 `UNIQUE(project_id, hash)` makes re-propose an upsert (first `created_at` survives);
 `idx_promotion_queue_project` / `idx_promotion_queue_score` serve the review order
 (score DESC, created_at ASC) and the per-project eviction query (lowest score, oldest
@@ -162,7 +162,7 @@ Two invariants (docs/adr/0026) keep the queue honest: the upsert refuses rows wh
 was discarded (`promotion_discards`) or whose exact value is already in the shared tier,
 and every propose/promote pass starts by pruning such residue. Discards are the agent's
 permanent, per-project "no" — never synced, never swept, written only by the
-`memory_promotion_discard` path (promote claims and evictions never write them).
+`delete_memory_from_ranking` path (promote claims and evictions never write them).
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:146-172`
 
@@ -334,7 +334,7 @@ sequenceDiagram
     participant E as EmbeddingService
     participant D as SQLite (memory.db)
 
-    C->>M: memory_write(projectId, content)
+    C->>M: add_memory(projectId, content)
     M->>S: WriteAsync(request)
     S->>S: Resolve context (project/shared/workspace/custom)
     S->>H: Of(path, value) -> SHA-256 hash
@@ -359,13 +359,13 @@ sequenceDiagram
     end
 ```
 
-For file ingestion (`memory_ingest_file`, `memory_ingest_directory`), `SqliteMemoryStore`
+For file ingestion (`ingest_file`, `ingest_directory`), `SqliteMemoryStore`
 opens the bank once for the whole call and hands the open connection to `FileIngestor`
 (`src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs`, extracted from the store in WI-8/PR
 #161) — the compiler enforces one bank-open per ingest. `FileIngestor` first checks the path
 against the project's declared ingest scope (`ingest.scope.<project>`, falling back to
 `ingest.scope.global`) and refuses with `PathOutsideScopeException` when it falls outside — the
-same rule and primitive `memory_watch_add` uses. An unscoped project refuses every ingest. Past
+same rule and primitive `add_watch` uses. An unscoped project refuses every ingest. Past
 the scope check, a memory-indexable file (`.md`/`.markdown`/`.txt`/`.json`/`.ipynb`) is split into
 **token-aware chunks** before hashing and insertion; a recognized code extension (`.cs`, `.py`,
 `.ts`, `.go`, `.rs`, … — the v1 list, `CodeExtensions`) routes instead to `CodeIngestor` and the
@@ -373,7 +373,7 @@ code corpus (`code_entries`) — memory extensions always win on overlap, so a `
 code directory still lands in `entries`. A hidden or ignored file is skipped silently. A file
 neither pipeline claims, a binary file, or a claimed file that yields no chunks is skipped with a
 `SkipReason` (`unsupported-type`, `binary`, `unparseable`): it is never fingerprinted, so it is
-retried on the next catch-up, and the watcher lists it in `memory_watch_status` and
+retried on the next catch-up, and the watcher lists it in `get_watch_status` and
 `ai-raccoon watch status`. Every new memory or code chunk lands `embed_state = 'pending'` — no chunk is
 embedded inline as part of ingest, whether or not an engine is configured (`FileIngestor` does
 not hold an embedder reference at all). The caller enqueues the corpus's `EmbedDrainRequest` on
@@ -381,7 +381,7 @@ the shared embed topic once it is safe to (after any wrapping transaction commit
 `EmbedDrainService`'s single background reader drains it (ADR-0076's outbox, ADR-0091's pump). A
 write is searchable via FTS5 immediately; the vector modality follows once that drain pass runs
 — no extension-host hook sits on this path either (that pipeline was removed entirely, ADR-0016).
-`memory_embed_pending` remains the operator-initiated direct drain for whatever a passive poll
+`embed_deferred_entries` remains the operator-initiated direct drain for whatever a passive poll
 has not yet reached. The chunker uses the o200k_base tokenizer with code-fence-aware splitting
 and an overlay window for context continuity between chunks.
 
@@ -398,7 +398,7 @@ matches a query term longer than 64 characters by its first 64 as an FTS5 prefix
 the row holding the term's start always contains (ADR-0120).
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:36-113`
-> (`memory_write`), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:27-61`
+> (`add_memory`), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:27-61`
 > (ingest entry points, single open), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:175-191`
 > (scope check), `src/AiRaccoon.Infrastructure/Ingestion/FileIngestor.cs:64-144`
 > (chunk insertion), `src/AiRaccoon.Infrastructure/Embedding/EntryEmbedder.cs:53-69`
@@ -420,7 +420,7 @@ sequenceDiagram
     participant R as ReciprocalRankFusion
     participant D as SQLite
 
-    C->>M: memory_search(projectId, query, scope, workspaceId)
+    C->>M: query(projectId, query, scope, workspaceId)
     M->>S: SearchAsync(query)
     S->>D: Read embedding settings
     alt engine configured
@@ -492,7 +492,7 @@ delete, sync merge) rather than per query
 unknown-position row never reads as adjacent to chunk 0). This supersedes ADR-0003's
 `0`/`0`, which held when chunk identity was a per-query window function.
 
-`memory_search` also accepts `contextLabel`: when set, the project scope additionally
+`query` also accepts `contextLabel`: when set, the project scope additionally
 searches the project's `scope='custom'` rows under that label (plan C §3 Wave 2e).
 
 > **Evidence:** `src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore.cs:115-217`
@@ -505,8 +505,8 @@ searches the project's `scope='custom'` rows under that label (plan C §3 Wave 2
 
 ## Performance metrics
 
-AiRaccoon measures itself: every tool call and every `memory_search` phase (`search.open`, `search.embed`, `search.fts`, `search.vector`, `search.fusion`, `search.affinity`, `search.adjustment`, `search.snippets`, `search.bump`) plus measured `search.total` is recorded off the hot path into the `metrics` table
-above, and read back through the `memory_performance` tool — without an OTLP collector. See
+AiRaccoon measures itself: every tool call and every `query` phase (`search.open`, `search.embed`, `search.fts`, `search.vector`, `search.fusion`, `search.affinity`, `search.adjustment`, `search.snippets`, `search.bump`) plus measured `search.total` is recorded off the hot path into the `metrics` table
+above, and read back through the `get_engine_statistics` tool — without an OTLP collector. See
 [Monitor and export server telemetry](../how-to/monitor-and-export-telemetry.md) for the
 unchanged Meter/OTLP path and
 [Read back performance metrics](../how-to/read-performance-metrics.md) for using this one.
@@ -525,7 +525,7 @@ flowchart LR
     Flusher -.->|"self-metrics (flush duration,<br/>batch size, drop count) —<br/>written directly, never enqueued"| Metrics
     Reaper["MetricsRetentionJob<br/>(BankMaintenanceHostedService, every 2h)"] -->|"DELETE past<br/>the retention window"| Metrics
     Metrics --> ReportSvc["MetricsReportService<br/>(window/bucket aggregation)"]
-    ReportSvc --> PerfTool["memory_performance"]
+    ReportSvc --> PerfTool["get_engine_statistics"]
 ```
 
 **Recording is best-effort and never on the caller's thread.** `MetricsRecorder.Record` swallows
@@ -547,21 +547,21 @@ run from (ADR-0070) — every 2 hours it deletes `metrics` rows older than
 `metrics.retention-days.global` (default 28). Retention is best-effort: holding more than the
 window is within contract, not a defect (docs/work/specs/PerformanceMetrics.feature).
 
-**`memory_performance`** derives its series list from the server's own tool inventory
+**`get_engine_statistics`** derives its series list from the server's own tool inventory
 (`McpToolInventory.Names()`) plus `SearchTimings.SeriesNames` — the nine `search.*` phase names
 (`SearchTimings.PhaseNames`) plus the measured `search.total` — never from
 `SELECT DISTINCT name FROM metrics`, so a tool or phase nothing has called yet still appears, at
 count zero, rather than being silently omitted (derive-or-delete-the-list). `search.total` is a
 measured total, not a phase, and is deliberately excluded from `PhaseNames` so a caller that sums
 the phase series cannot silently double-count it; the phases close against `search.total`, never
-against `memory_search`'s own reported duration — see
+against `query`'s own reported duration — see
 [ADR-0080](../adr/0080-the-phases-close-against-search-total-not-the-tool-total.md) for why a gate
-against `memory_search` cannot be built at all. The report is project-scoped only; the whole-bank
+against `query` cannot be built at all. The report is project-scoped only; the whole-bank
 scope is deferred (D6, docs/plans/2026-08-15-performance-metrics-implementation.md §5).
 
-**Buffer pressure moves with phase count.** Phase rows per search go 6 → 10: each `memory_search`
+**Buffer pressure moves with phase count.** Phase rows per search go 6 → 10: each `query`
 call now enqueues nine phase measurements (`search.adjustment` added, #483) plus `search.total`,
-alongside the one tool-level `memory_search` duration `ToolExecutionActivity` already records.
+alongside the one tool-level `query` duration `ToolExecutionActivity` already records.
 Against `DefaultBufferCapacity` (1000, `MetricsConfigKeys.cs:8`) and the default 30 s flush
 (`DefaultFlushIntervalSeconds`, `MetricsConfigKeys.cs:18`), the searches-per-flush-window before
 the buffer starts dropping moves from roughly 142 to roughly 91. Not a risk at any realistic search
@@ -593,7 +593,7 @@ sequenceDiagram
     participant L as Local SQLite
     participant R as Cloud Store
 
-    C->>T: memory_sync(projectId)
+    C->>T: sync_to_cloud(projectId)
     T->>S: MemorySyncAsync(projectId, objectKey)
     Note right of S: acquire gate (SemaphoreSlim)
 
@@ -696,16 +696,16 @@ service re-pulls, re-merges, and re-pushes up to 3 times before surfacing a
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Active: memory_workspace_begin
+    [*] --> Active: initialize_workspace
     state Active {
         [*] --> Writing
-        Writing --> Writing: memory_write(workspaceId)
-        Writing --> Reviewing: memory_workspace_status
+        Writing --> Writing: add_memory(workspaceId)
+        Writing --> Reviewing: get_workspace_status
         Reviewing --> Writing: more writes
     }
-    Active --> Closed: memory_workspace_consolidate
-    Active --> Closed: memory_workspace_discard
-    Closed --> Closed: memory_write(workspaceId) → refused (unknown-workspace:)
+    Active --> Closed: close_workspace
+    Active --> Closed: discard_workspace
+    Closed --> Closed: add_memory(workspaceId) → refused (unknown-workspace:)
     Closed --> [*]
     note right of Closed
         A write against a Closed or never-registered workspaceId
@@ -713,18 +713,18 @@ stateDiagram-v2
     end note
 ```
 
-`memory_workspace_begin` inserts an `Active` row into the `workspaces` table and
+`initialize_workspace` inserts an `Active` row into the `workspaces` table and
 returns a **v7 (time-sortable) UUID** as the workspace id. The agent writes into
-the workspace by passing that id to `memory_write`; the write lands in
+the workspace by passing that id to `add_memory`; the write lands in
 `workspace:<id>`, fully isolated from the project's committed memory.
 
-**Consolidate:** `memory_workspace_consolidate(keep=["all"])` promotes every
+**Consolidate:** `close_workspace(keep=["all"])` promotes every
 entry from the workspace outbox into `project:<id>`. Passing specific hashes
 promotes only those; everything else in the workspace context is deleted. The
 workspace row is marked `Closed` with `closed_at` set — traceable after a
 crash.
 
-**Discard:** `memory_workspace_discard` deletes the entire workspace context
+**Discard:** `discard_workspace` deletes the entire workspace context
 and marks the workspace `Closed` — nothing promoted, nothing kept.
 
 **Guard:** a write naming a `workspaceId` that is `Closed` or was never registered is refused
@@ -794,7 +794,7 @@ with **no separator** between path and value bytes. This means identical content
 under different paths yields different hashes — the logical path is part of the
 identity. The result is lowercase hex.
 
-For `memory_write` (which has no caller-supplied path), a stable path is derived
+For `add_memory` (which has no caller-supplied path), a stable path is derived
 from the content itself: `SHA-256(UTF8(content)).md`. This keeps the slot
 stable — identical content written twice maps to the same logical path.
 
@@ -840,7 +840,7 @@ people, so they are worth stating plainly:
   year old it would take tens of thousands of accesses to climb back over `0.3`.
 
 `rating` also does not take part in retrieval ranking. It is read in exactly two places:
-the degradation gate below, and `memory_set_ttl`'s `canEverExpire` response.
+the degradation gate below, and `set_memory_ttl`'s `canEverExpire` response.
 
 > This is a known gap rather than a design position: the intended model is that disuse
 > should decay a memory and use should protect it. See
@@ -848,7 +848,7 @@ the degradation gate below, and `memory_set_ttl`'s `canEverExpire` response.
 > staged plan. **Nothing in that plan is implemented yet** — this section describes what
 > the code does today.
 
-**Degradation** (`memory_sweep`) evaluates each entry against its per-entry TTL
+**Degradation** (`trigger_memory_cleanup`) evaluates each entry against its per-entry TTL
 and the sweep threshold:
 
 ```
@@ -856,13 +856,13 @@ ShouldDegrade = ttlDays IS SET AND rating < threshold AND ageDays > ttlDays
 ```
 
 There is no global TTL knob: an entry without a `ttl_days` value set by
-`memory_set_ttl` is never a candidate — so a bank that has never called that tool has
+`set_memory_ttl` is never a candidate — so a bank that has never called that tool has
 nothing to sweep. `shared` entries are never swept.
 
 The sweep deletes only within the scope it enumerated (`project`), so a same-hash sibling
 in an active workspace or a custom context is left alone; `hash` does not encode scope, so
 `(project_id, hash)` is not a row identity. The background reaper additionally honours the
-per-project access mode that `memory_sweep` enforces at the tool boundary: a project not
+per-project access mode that `trigger_memory_cleanup` enforces at the tool boundary: a project not
 in `full` mode is skipped rather than reaped ([ADR-0025](../adr/0025-the-sweep-reaper.md)).
 
 > **Evidence:** `src/AiRaccoon.Core/Rating/RatingPolicy.cs:12-24` (rating),
@@ -1027,7 +1027,7 @@ src/AiRaccoon.Infrastructure/   Adapters — Dapper over SQLite, sync, embedding
                             they only ever signal, never drain inline)
   Metrics/                  MeasurementBuffer (thin adapter over EventPump<Measurement>, ADR-0091), MetricsFlusher (fixed-interval
                             BackgroundService), SqliteMetricsStore, MetricsRecorder,
-                            MetricsReportService (window/bucket aggregation for memory_performance)
+                            MetricsReportService (window/bucket aggregation for get_engine_statistics)
   Encryption/               CliSecretManager + CliSecretTool (runs `bws` for the Bitwarden key source and `op` for the 1Password one, ADR-0132)
   Degradation/              SweepService
   Options/                  SyncOptions, InfrastructureOptions

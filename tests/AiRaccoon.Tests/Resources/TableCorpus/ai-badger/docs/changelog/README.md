@@ -94,7 +94,7 @@ re-scaffold.
 | 0.81.0 | [Project-local invariants](0.81.0-project-local-invariants.md) |
 | 0.80.0 | [Hermes hooks ship as a real directory plugin](0.80.0-hermes-plugin-fix.md) |
 | 0.79.1 | [catalog intents reworded for the retrieval instrument](0.79.1-catalog-intents-reworded-for-retrieval.md) |
-| 0.79.0 | [memory-grade hook grades every memory_search](0.79.0-memory-grade-hook.md) |
+| 0.79.0 | [memory-grade hook grades every query](0.79.0-memory-grade-hook.md) |
 | 0.78.0 | [AiRaccoon becomes an optional common memory server](0.78.0-ai-raccoon-memory-store.md) |
 | 0.77.3 | [Hermes task tracking actually lands on main](0.77.3-hermes-task-tracking-lands.md) |
 | 0.77.2 | [freshness guard's `=all` override is host-independent](0.77.2-freshness-guard-host-independent.md) |

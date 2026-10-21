@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>The bank contexts a search query reads, per scope (see docs/work/features-agent-memory/spec-issue-1.md §4.1): one memory_search query per in-scope context.</summary>
+/// <summary>The bank contexts a search query reads, per scope (see docs/work/features-agent-memory/spec-issue-1.md §4.1): one query query per in-scope context.</summary>
 internal static class SearchContexts
 {
     /// <summary>

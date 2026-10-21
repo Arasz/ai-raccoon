@@ -4,7 +4,7 @@ namespace AiRaccoon.Core.Memory;
 
 /// <summary>
 ///     Combines the tiered read-path guard's verdict (docs/adr/0040) with the always-on query-length
-///     verdict (docs/adr/0071) and each corpus's engine-degradation note into memory_search's one
+///     verdict (docs/adr/0071) and each corpus's engine-degradation note into query's one
 ///     caller-visible warning string.
 /// </summary>
 public static class SearchWarnings

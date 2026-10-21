@@ -293,7 +293,7 @@ public class McpServerSetupHostTests : IAsyncLifetime
                 true);
             await using var client = await McpClient.CreateAsync(transport,
                 cancellationToken: TestContext.Current.CancellationToken);
-            await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+            await client.CallToolAsync("get_store_statistics", new Dictionary<string, object?> { ["projectId"] = "acme" },
                 cancellationToken: TestContext.Current.CancellationToken);
 
             // The /mcp traffic reset the deadline to t0+1s: the original deadline (t0+2s)

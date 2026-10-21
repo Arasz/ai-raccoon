@@ -63,7 +63,7 @@ public class QueryGuardPolicyTests
         "watch replace by path digest scan lease",
         "workspace sandbox consolidate discard isolation",
         "shared tier promotion criteria durable facts sweep exempt",
-        "memory_share idempotent value-addressed per-chunk sharing",
+        "share_memory idempotent value-addressed per-chunk sharing",
         "search quality table correlation follow-through grading",
         "ai-badger scaffold welcome den-refresh plugin",
         "hermes cron job scheduled watchdog",

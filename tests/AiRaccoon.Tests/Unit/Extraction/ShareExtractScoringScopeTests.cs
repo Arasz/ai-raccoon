@@ -10,7 +10,7 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Extraction;
 
-/// <summary>memory_share_extract must score candidates against every known project — the same
+/// <summary>trigger_memory_sharing must score candidates against every known project — the same
 /// scope the background loop uses — not just the caller's requested subset.</summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
@@ -45,7 +45,7 @@ public sealed class ShareExtractScoringScopeTests
         var scoreViaLoop = queue.LastCandidates!.Single(c => c.Hash == "h1").Score;
 
         scoreViaTool.ShouldBe(scoreViaLoop,
-            $"memory_share_extract scored h1 at {scoreViaTool}, the background loop scored it at {scoreViaLoop} — same candidate, same bank, different scoring scope");
+            $"trigger_memory_sharing scored h1 at {scoreViaTool}, the background loop scored it at {scoreViaLoop} — same candidate, same bank, different scoring scope");
     }
 
     [Fact]

@@ -103,8 +103,8 @@
           "E029"
         ],
         "kind": "merged-sections",
-        "reason": "0035-memory-get-and-query-relevant-snippets.md: the context, decision sections share one chunk at this budget ('0035. `memory_get`, plus query-relevant snippets and content-keyed dedup | Status | Context | Decision'); each family's first chunk is it",
-        "section": "0035. `memory_get`, plus query-relevant snippets and content-keyed dedup | Status | Context | Decision"
+        "reason": "0035-memory-get-and-query-relevant-snippets.md: the context, decision sections share one chunk at this budget ('0035. `get_entry`, plus query-relevant snippets and content-keyed dedup | Status | Context | Decision'); each family's first chunk is it",
+        "section": "0035. `get_entry`, plus query-relevant snippets and content-keyed dedup | Status | Context | Decision"
       },
       {
         "expectedHash": "1f88bb753be8560c86c618a61c9ba42a4a0692dec0fd9bfaad3920b71ced80f0",
@@ -177,8 +177,8 @@
           "E054"
         ],
         "kind": "merged-sections",
-        "reason": "0064-memory-write-chunks-like-everything-else.md: the context, decision, consequences sections share one chunk at this budget ('0064. `memory_write` chunks like everything else | Context | Decision | Consequences'); each family's first chunk is it",
-        "section": "0064. `memory_write` chunks like everything else | Context | Decision | Consequences"
+        "reason": "0064-memory-write-chunks-like-everything-else.md: the context, decision, consequences sections share one chunk at this budget ('0064. `add_memory` chunks like everything else | Context | Decision | Consequences'); each family's first chunk is it",
+        "section": "0064. `add_memory` chunks like everything else | Context | Decision | Consequences"
       },
       {
         "expectedHash": "5606a01217be04b483da39a92238ebefba4e3ea45264a5712323da8222636af7",
@@ -642,7 +642,7 @@
       "targetScope": "project"
     },
     {
-      "answerSpan": "`memory_workspace_consolidate` and `memory_share` can report a false negative for work that happened — rather than addin",
+      "answerSpan": "`close_workspace` and `share_memory` can report a false negative for work that happened — rather than addin",
       "category": "ADR (Consequences)",
       "difficulty": "hard",
       "expectedHash": "205bf58725eaf08c0f98191053a8a6da2ad67ca316d3ca72c637e15dcd271f8e",
@@ -702,7 +702,7 @@
       "targetScope": "project"
     },
     {
-      "answerSpan": "# 0035. `memory_get`, plus query-relevant snippets and content-keyed dedup Date: 2026-08-14 ## Status Accepted ## Contex",
+      "answerSpan": "# 0035. `get_entry`, plus query-relevant snippets and content-keyed dedup Date: 2026-08-14 ## Status Accepted ## Contex",
       "category": "ADR (Context)",
       "difficulty": "easy",
       "expectedHash": "100b5f09678214f2f8b14cda8881328dba6d8aa008765e10bd42d3ecac852e20",
@@ -717,7 +717,7 @@
       "targetScope": "project"
     },
     {
-      "answerSpan": "# 0035. `memory_get`, plus query-relevant snippets and content-keyed dedup Date: 2026-08-14 ## Status Accepted ## Contex",
+      "answerSpan": "# 0035. `get_entry`, plus query-relevant snippets and content-keyed dedup Date: 2026-08-14 ## Status Accepted ## Contex",
       "category": "ADR (Decision)",
       "difficulty": "hard",
       "expectedHash": "100b5f09678214f2f8b14cda8881328dba6d8aa008765e10bd42d3ecac852e20",
@@ -890,7 +890,7 @@
       "id": "E040",
       "negativeTest": false,
       "nonFileTarget": false,
-      "query": "Why did memory_set_ttl and memory_share answer unknown-hash for context-labelled entries?",
+      "query": "Why did set_memory_ttl and share_memory answer unknown-hash for context-labelled entries?",
       "relevanceGrade": 5,
       "searchLimit": 5,
       "targetProjectId": "ai-raccoon",
@@ -1062,7 +1062,7 @@
       "targetScope": "project"
     },
     {
-      "answerSpan": "# 0064. `memory_write` chunks like everything else Date: 2026-08-15 Status: Accepted ## Context WP3 step 1, the second o",
+      "answerSpan": "# 0064. `add_memory` chunks like everything else Date: 2026-08-15 Status: Accepted ## Context WP3 step 1, the second o",
       "category": "ADR (Context)",
       "difficulty": "easy",
       "expectedHash": "e48bd59f91cbcaa21c7067fd43120064c1307997b891f725b9ceefe9a40d9341",
@@ -1070,14 +1070,14 @@
       "id": "E052",
       "negativeTest": false,
       "nonFileTarget": false,
-      "query": "Why were long memory_write bodies stored as one row with most of the tokens never embedded?",
+      "query": "Why were long add_memory bodies stored as one row with most of the tokens never embedded?",
       "relevanceGrade": 5,
       "searchLimit": 5,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
     },
     {
-      "answerSpan": "# 0064. `memory_write` chunks like everything else Date: 2026-08-15 Status: Accepted ## Context WP3 step 1, the second o",
+      "answerSpan": "# 0064. `add_memory` chunks like everything else Date: 2026-08-15 Status: Accepted ## Context WP3 step 1, the second o",
       "category": "ADR (Decision)",
       "difficulty": "medium",
       "expectedHash": "e48bd59f91cbcaa21c7067fd43120064c1307997b891f725b9ceefe9a40d9341",
@@ -1085,14 +1085,14 @@
       "id": "E053",
       "negativeTest": false,
       "nonFileTarget": false,
-      "query": "Does memory_write now route through the same chunker and budget resolution as file ingest?",
+      "query": "Does add_memory now route through the same chunker and budget resolution as file ingest?",
       "relevanceGrade": 5,
       "searchLimit": 5,
       "targetProjectId": "ai-raccoon",
       "targetScope": "project"
     },
     {
-      "answerSpan": "# 0064. `memory_write` chunks like everything else Date: 2026-08-15 Status: Accepted ## Context WP3 step 1, the second o",
+      "answerSpan": "# 0064. `add_memory` chunks like everything else Date: 2026-08-15 Status: Accepted ## Context WP3 step 1, the second o",
       "category": "ADR (Consequences)",
       "difficulty": "hard",
       "expectedHash": "e48bd59f91cbcaa21c7067fd43120064c1307997b891f725b9ceefe9a40d9341",
@@ -1130,7 +1130,7 @@
       "id": "E056",
       "negativeTest": false,
       "nonFileTarget": false,
-      "query": "What does memory_write(context: shared) do now — write to the project scope and queue a promotion request?",
+      "query": "What does add_memory(context: shared) do now — write to the project scope and queue a promotion request?",
       "relevanceGrade": 5,
       "searchLimit": 5,
       "targetProjectId": "ai-raccoon",
@@ -1340,7 +1340,7 @@
       "id": "E070",
       "negativeTest": false,
       "nonFileTarget": false,
-      "query": "Why can the six search phases never be made to sum to the memory_search tool total?",
+      "query": "Why can the six search phases never be made to sum to the query tool total?",
       "relevanceGrade": 5,
       "searchLimit": 5,
       "targetProjectId": "ai-raccoon",

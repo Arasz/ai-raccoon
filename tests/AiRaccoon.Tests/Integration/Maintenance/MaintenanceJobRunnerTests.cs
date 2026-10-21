@@ -315,7 +315,7 @@ public sealed class MaintenanceJobRunnerTests : IDisposable
     /// <summary>
     ///     WP3 (#477): a completed run records `job.&lt;name&gt;.duration_ms`; the duration the runner
     ///     already computes at :71/:94 for the log line goes to the measurement recorder too, under
-    ///     the self-metrics project id so `memory_performance` can find it (route (a) — no change to
+    ///     the self-metrics project id so `get_engine_statistics` can find it (route (a) — no change to
     ///     <see cref="IMaintenanceJob" />).
     /// </summary>
     [RetryFact]

@@ -72,7 +72,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         var client = await _factory.CreateClientAsync();
         try
         {
-            await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+            await client.CallToolAsync("get_store_statistics", new Dictionary<string, object?> { ["projectId"] = "acme" },
                 null, null, TestContext.Current.CancellationToken);
 
             _factory.Services.GetRequiredService<TracerProvider>().ForceFlush();
@@ -99,7 +99,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         var client = await factory.CreateClientAsync();
         try
         {
-            await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+            await client.CallToolAsync("get_store_statistics", new Dictionary<string, object?> { ["projectId"] = "acme" },
                 null, null, TestContext.Current.CancellationToken);
 
             // The listener appends under a lock on another thread: snapshot under the same lock
@@ -109,7 +109,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
             var settled = await WaitByPolling.WaitForAsync(async () =>
             {
                 var ended = listener.Snapshot();
-                toolSpan = ended.SingleOrDefault(a => a.OperationName == "tools/call memory_stats");
+                toolSpan = ended.SingleOrDefault(a => a.OperationName == "tools/call get_store_statistics");
                 requestSpan = toolSpan is null
                     ? null
                     : ended.SingleOrDefault(a => a.Source.Name == OtlpNames.AspNetCoreScope && a.SpanId == toolSpan.ParentSpanId);
@@ -138,7 +138,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
         var client = await factory.CreateClientAsync();
         try
         {
-            await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+            await client.CallToolAsync("get_store_statistics", new Dictionary<string, object?> { ["projectId"] = "acme" },
                 null, null, TestContext.Current.CancellationToken);
 
             Activity? settledRequestSpan = null;
@@ -180,7 +180,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
             var client = await factory.CreateClientAsync();
             try
             {
-                await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+                await client.CallToolAsync("get_store_statistics", new Dictionary<string, object?> { ["projectId"] = "acme" },
                     null, null, TestContext.Current.CancellationToken);
 
                 using var probe = new ActivitySource(SamplerProbeSource).StartActivity("sampler-probe");

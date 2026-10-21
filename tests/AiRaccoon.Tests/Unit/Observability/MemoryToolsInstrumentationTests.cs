@@ -53,15 +53,15 @@ public class MemoryToolsInstrumentationTests
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
         invocations[0].Value.ShouldBe(1);
-        invocations[0].Tags["tool"].ShouldBe("memory_write");
+        invocations[0].Tags["tool"].ShouldBe("add_memory");
         invocations[0].Tags["result"].ShouldBe("success");
 
         var durations = durationCollector.GetMeasurementSnapshot();
         durations.Count.ShouldBe(1);
-        durations[0].Tags["tool"].ShouldBe("memory_write");
+        durations[0].Tags["tool"].ShouldBe("add_memory");
 
         startedActivities.Count.ShouldBeGreaterThanOrEqualTo(1);
-        startedActivities.ShouldContain(a => a.OperationName == "tools/call memory_write");
+        startedActivities.ShouldContain(a => a.OperationName == "tools/call add_memory");
     }
 
     [Fact]
@@ -146,14 +146,14 @@ public class MemoryToolsInstrumentationTests
             new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck));
 
         var ex = await Should.ThrowAsync<SyncNotConfiguredException>(() =>
-            ThroughFilterAsync(metrics, "memory_sync", token => tools.Sync("acme", token)));
+            ThroughFilterAsync(metrics, "sync_to_cloud", token => tools.Sync("acme", token)));
 
         ex.Message.ShouldContain("not configured");
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
         invocations[0].Tags["result"].ShouldBe("error");
-        invocations[0].Tags["tool"].ShouldBe("memory_sync");
+        invocations[0].Tags["tool"].ShouldBe("sync_to_cloud");
         invocations[0].Tags["error.type"].ShouldNotBeNull();
     }
 
@@ -166,12 +166,12 @@ public class MemoryToolsInstrumentationTests
         var store = new SimpleFakeStore();
         var tools = CreateTools(store);
 
-        await ThroughFilterAsync(metrics, "memory_search",
+        await ThroughFilterAsync(metrics, "query",
             token => tools.Search("acme", "query", sessionId: "sess-test", cancellationToken: token));
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
-        invocations[0].Tags["tool"].ShouldBe("memory_search");
+        invocations[0].Tags["tool"].ShouldBe("query");
         invocations[0].Tags["result"].ShouldBe("success");
     }
 
@@ -184,11 +184,11 @@ public class MemoryToolsInstrumentationTests
         var store = new SimpleFakeStore();
         var tools = CreateTools(store);
 
-        await ThroughFilterAsync(metrics, "memory_stats", token => tools.Stats("acme", token));
+        await ThroughFilterAsync(metrics, "get_store_statistics", token => tools.Stats("acme", token));
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
-        invocations[0].Tags["tool"].ShouldBe("memory_stats");
+        invocations[0].Tags["tool"].ShouldBe("get_store_statistics");
         invocations[0].Tags["result"].ShouldBe("success");
     }
 
@@ -196,7 +196,7 @@ public class MemoryToolsInstrumentationTests
         new(store, new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck), new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope), new QueryGuardService(new InMemorySettings()), new MemoryWriteService(store, new FakePromotionQueue(), TestData.SharedScope), new NoOpMeasurementRecorder(), new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
     private static Task WriteThroughFilterAsync(ToolCallMetrics metrics, MemoryTools tools) =>
-        ThroughFilterAsync(metrics, "memory_write", token => tools.Write("acme", "content", cancellationToken: token));
+        ThroughFilterAsync(metrics, "add_memory", token => tools.Write("acme", "content", cancellationToken: token));
 
     private static Task ThroughFilterAsync(ToolCallMetrics metrics, string toolName, Func<CancellationToken, Task> call) =>
         ToolCallRecorder.ThroughFilterAsync(metrics, toolName, ToolCallRecorder.Arguments(("projectId", "acme")),

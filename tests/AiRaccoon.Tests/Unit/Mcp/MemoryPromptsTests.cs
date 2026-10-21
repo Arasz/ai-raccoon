@@ -17,7 +17,7 @@ public class MemoryPromptsTests
 
         guide.ShouldContain("project_id");
         guide.ShouldContain("workspace");
-        guide.ShouldContain("memory_share");
+        guide.ShouldContain("share_memory");
         guide.ShouldContain("scope=all");
     }
 
@@ -45,10 +45,10 @@ public class MemoryPromptsTests
     {
         var guide = _prompts.MemoryUsageGuide();
 
-        guide.ShouldContain("memory_watch_add");
+        guide.ShouldContain("add_watch");
         guide.ShouldContain("settings ingest scope add");
-        guide.ShouldContain("memory_watch_status");
-        guide.ShouldContain("memory_watch_remove");
+        guide.ShouldContain("get_watch_status");
+        guide.ShouldContain("remove_watch");
     }
 
     [Fact]
@@ -57,8 +57,8 @@ public class MemoryPromptsTests
         var guide = _prompts.WorkspaceConsolidationGuide("ws-1", "acme");
 
         guide.ShouldContain("ws-1");
-        guide.ShouldContain("memory_workspace_status");
-        guide.ShouldContain("memory_workspace_consolidate");
-        guide.ShouldContain("memory_share");
+        guide.ShouldContain("get_workspace_status");
+        guide.ShouldContain("close_workspace");
+        guide.ShouldContain("share_memory");
     }
 }

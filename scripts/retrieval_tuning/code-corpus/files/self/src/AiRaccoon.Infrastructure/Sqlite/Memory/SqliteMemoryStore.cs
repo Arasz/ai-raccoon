@@ -194,7 +194,7 @@ public sealed partial class SqliteMemoryStore(
         return await ExecuteSearchPipeline(connection, query, parameters, plan, queryVector, searchTimingsCollector, cancellationToken);
     }
 
-    /// <summary>memory_get (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>
+    /// <summary>get_entry (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>
     public async Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -874,7 +874,7 @@ public sealed partial class SqliteMemoryStore(
         };
     }
 
-    /// <summary>memory_write has no caller path; a content-derived name keeps the slot stable (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).</summary>
+    /// <summary>add_memory has no caller path; a content-derived name keeps the slot stable (FR-NM-7; see docs/work/features-native-memory/native-memory.feature).</summary>
     private static string WritePathFor(string value) => $"{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)))}.md";
 
     /// <summary>Resolves the memory source for a write, creating the source row if needed.</summary>

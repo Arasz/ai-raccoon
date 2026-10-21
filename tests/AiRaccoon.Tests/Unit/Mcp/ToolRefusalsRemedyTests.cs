@@ -30,7 +30,7 @@ public sealed class ToolRefusalsRemedyTests
     public async Task PathOutsideScope_Refusal_NamesTheIngestScopeRemedy()
     {
         var result = await ToolRefusals.Filter(Throwing(new PathOutsideScopeException("/etc/passwd")))(
-            Request("memory_ingest_file"), CancellationToken.None);
+            Request("ingest_file"), CancellationToken.None);
 
         result.IsError.ShouldBe(true);
         TextOf(result).ShouldBe(
@@ -41,7 +41,7 @@ public sealed class ToolRefusalsRemedyTests
     public async Task WatchDisabled_Refusal_NamesTheWatchEnableRemedy()
     {
         var result = await ToolRefusals.Filter(Throwing(new WatchDisabledException("acme")))(
-            Request("memory_watch_add"), CancellationToken.None);
+            Request("add_watch"), CancellationToken.None);
 
         result.IsError.ShouldBe(true);
         TextOf(result).ShouldBe(
@@ -53,7 +53,7 @@ public sealed class ToolRefusalsRemedyTests
     public async Task RefusalWithoutARemediedPrefix_StaysUnchanged()
     {
         var result = await ToolRefusals.Filter(Throwing(new PathNotFoundException("/missing")))(
-            Request("memory_ingest_file"), CancellationToken.None);
+            Request("ingest_file"), CancellationToken.None);
 
         TextOf(result).ShouldBe("path-not-found: Path '/missing' does not exist.");
     }
@@ -102,7 +102,7 @@ public sealed class ToolRefusalsRemedyTests
         var guard = new MemoryAccessGuard(new EmptySettingsStore());
 
         var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
-            guard.EnsureAsync("acme", AccessRequirement.Destructive, "memory_delete", CancellationToken.None));
+            guard.EnsureAsync("acme", AccessRequirement.Destructive, "delete_entry", CancellationToken.None));
 
         var commands = ExtractCliCommands(ex.Message).ToArray();
         commands.ShouldNotBeEmpty("the access-denied message should quote at least one remedy command");

@@ -35,7 +35,7 @@ flowchart TD
 
 ## Hybrid search pipeline (FTS5 + vec0 + RRF)
 
-When an agent calls `memory_search`, AiRaccoon combines keyword BM25 matches and vector distances using Reciprocal Rank Fusion (RRF):
+When an agent calls `query`, AiRaccoon combines keyword BM25 matches and vector distances using Reciprocal Rank Fusion (RRF):
 
 ```mermaid
 flowchart TD
@@ -66,23 +66,23 @@ Workspace sandboxes let agents test multi-step edits in isolation without touchi
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Active: memory_workspace_begin
+    [*] --> Active: initialize_workspace
     
     state Active {
-        [*] --> Outbox: memory_write(workspaceId)
+        [*] --> Outbox: add_memory(workspaceId)
         Outbox --> Outbox: Additional Writes
     }
     
-    Active --> Committed: memory_workspace_consolidate
-    Active --> Discarded: memory_workspace_discard
+    Active --> Committed: close_workspace
+    Active --> Discarded: discard_workspace
     
     Committed --> [*]: Promoted to project context
     Discarded --> [*]: Outbox deleted
 ```
 
 - **Isolated outbox:** Writes with `workspaceId` land in `workspace:<id>`.
-- **Consolidation:** `memory_workspace_consolidate` moves selected or all outbox entries into the project context.
-- **Discard:** `memory_workspace_discard` deletes the outbox.
+- **Consolidation:** `close_workspace` moves selected or all outbox entries into the project context.
+- **Discard:** `discard_workspace` deletes the outbox.
 
 ---
 
@@ -92,14 +92,14 @@ Memories can move from project notes into cross-project shared facts:
 
 ```mermaid
 flowchart LR
-    ProjMem["Project Context (project:<id>)"] -->|memory_share| SharedMem["Shared Context (shared)"]
-    ProjMem -->|memory_share_extract| ProposeQueue["Propose Queue"]
+    ProjMem["Project Context (project:<id>)"] -->|share_memory| SharedMem["Shared Context (shared)"]
+    ProjMem -->|trigger_memory_sharing| ProposeQueue["Propose Queue"]
     ProposeQueue -->|Accepted| SharedMem
     ProposeQueue -->|Discarded| DiscardStore["Persistent Discard Filter"]
 ```
 
-- **`memory_share`:** Immediately promotes an entry hash to `shared`. Shared entries are visible across projects and exempt from degradation sweeps.
-- **Propose queue:** `memory_share_extract` finds candidate memories worth sharing.
+- **`share_memory`:** Immediately promotes an entry hash to `shared`. Shared entries are visible across projects and exempt from degradation sweeps.
+- **Propose queue:** `trigger_memory_sharing` finds candidate memories worth sharing.
 - **Persistent discards:** Rejected candidates are recorded permanently so the background extractor never re-proposes them ([ADR-0026](../adr/0026-persistent-discards-and-shared-exclusion.md)).
 
 ---
@@ -111,7 +111,7 @@ To stop unused notes from accumulating, project entries decay over time unless f
 ```mermaid
 stateDiagram-v2
     [*] --> Fresh: Memory Entry Created
-    Fresh --> Rated: Retrieved via memory_search
+    Fresh --> Rated: Retrieved via query
     Rated --> Rated: Retrieval Rating Incremented
     
     state "Degradation Sweep" as Sweep {
@@ -123,8 +123,8 @@ stateDiagram-v2
     Purged --> [*]: Deleted from DB
 ```
 
-- **Retrieval boost:** Hits in `memory_search` raise an entry's rating.
-- **TTL expiration:** Entries given a TTL via `memory_set_ttl` become eligible for sweeps once aged.
+- **Retrieval boost:** Hits in `query` raise an entry's rating.
+- **TTL expiration:** Entries given a TTL via `set_memory_ttl` become eligible for sweeps once aged.
 - **Sweep reaper:** The background reaper (`ai-raccoon settings sweep`) periodically purges low-rated, aged project entries. Shared entries are protected.
 
 ---

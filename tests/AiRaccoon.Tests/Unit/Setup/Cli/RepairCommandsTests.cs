@@ -46,7 +46,7 @@ public sealed class RepairCommandsTests
 
     /// <summary>
     ///     The three-string fix this task exists for: the old text claimed "with no server running,
-    ///     nothing drains it — run memory_embed_pending by hand", which enshrined the CLI-writes-the-
+    ///     nothing drains it — run embed_deferred_entries by hand", which enshrined the CLI-writes-the-
     ///     bank defect as expected behaviour. The server now applies AND drains — there is no manual
     ///     path in the normal case, and the CLI must not advertise one.
     /// </summary>
@@ -57,7 +57,7 @@ public sealed class RepairCommandsTests
 
         stdout.ShouldContain("server applies");
         stdout.ShouldContain("maintenance poll");
-        stdout.ShouldNotContain("memory_embed_pending");
+        stdout.ShouldNotContain("embed_deferred_entries");
         stdout.ShouldNotContain("no server running");
     }
 

@@ -16,9 +16,9 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Mcp;
 
 /// <summary>
-///     WP6-T08/T09/T07 — code_get mirrors memory_get: known-hash round-trip, unknown-hash refusal
+///     WP6-T08/T09/T07 — get_entry mirrors get_entry: known-hash round-trip, unknown-hash refusal
 ///     (the same UnknownHashException family, so ToolRefusals' type-based mapping already covers
-///     it), and the access gate (Read -- allowed in every mode, exactly like memory_get).
+///     it), and the access gate (Read -- allowed in every mode, exactly like get_entry).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

@@ -15,7 +15,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
 ///     Ingest reads whatever path it is handed, so it is contained by the project's declared
-///     scope exactly as memory_watch_add is — deny by default, enforced in the store so every
+///     scope exactly as add_watch is — deny by default, enforced in the store so every
 ///     client is bound, not just the MCP tool.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]

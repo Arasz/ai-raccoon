@@ -73,7 +73,7 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
     /// <summary>
     ///     The composite of up to 8 project ids is unbounded cardinality on the counter, so it gets
     ///     the "multi" sentinel while the span keeps the full comma-joined composite. Both of
-    ///     memory_share_extract's success exits are exercised, and each records exactly once.
+    ///     trigger_memory_sharing's success exits are exercised, and each records exactly once.
     /// </summary>
     [RetryFact]
     public async Task ShareExtract_BoundsTheCounter_KeepsTheCompositeOnTheSpan_AndRecordsEachExitOnce()
@@ -101,7 +101,7 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
         {
             await using var client = await TelemetryServerHost.ConnectAsync(port, cancellationToken);
 
-            // memory_share_extract is a write-path call (promote writes under each named id), so
+            // trigger_memory_sharing is a write-path call (promote writes under each named id), so
             // both ids must be registered or the new project-not-registered refusal shadows the
             // telemetry behavior this test pins.
             foreach (var projectId in new[] { "acme", "widget" })
@@ -111,7 +111,7 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
 
             foreach (var mode in new[] { "propose", "promote" })
             {
-                var result = await client.CallToolAsync("memory_share_extract",
+                var result = await client.CallToolAsync("trigger_memory_sharing",
                     new Dictionary<string, object?> { ["projectIds"] = new[] { "acme", "widget" }, ["mode"] = mode },
                     cancellationToken: cancellationToken);
                 result.IsError.ShouldNotBe(true);
@@ -127,8 +127,8 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
         measurements.ShouldAllBe(m => m.Tags["result"]!.Equals("success"));
         measurements.ShouldAllBe(m => m.Tags["project_id"]!.Equals(ToolTelemetry.MultiProjectId));
 
-        started.Count(a => a.OperationName == "tools/call memory_share_extract").ShouldBe(2);
-        started.Where(a => a.OperationName == "tools/call memory_share_extract")
+        started.Count(a => a.OperationName == "tools/call trigger_memory_sharing").ShouldBe(2);
+        started.Where(a => a.OperationName == "tools/call trigger_memory_sharing")
             .ShouldAllBe(a => a.Tags.Any(kv => kv.Key == "project_id" && kv.Value == "acme,widget"));
     }
 
@@ -136,10 +136,10 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
     [RetryFact]
     public void PromotionList_WithoutAProjectId_ProjectsAll()
     {
-        ToolTelemetry.ProjectFor("memory_promotion_list", null)
+        ToolTelemetry.ProjectFor("get_memories_sharing_ranking", null)
             .ShouldBe(new ToolTelemetry.ToolProject(ToolTelemetry.AllProjectsId, null));
 
-        ToolTelemetry.ProjectFor("memory_promotion_list", ToolCallRecorder.Arguments(("projectId", "acme")))
+        ToolTelemetry.ProjectFor("get_memories_sharing_ranking", ToolCallRecorder.Arguments(("projectId", "acme")))
             .ShouldBe(new ToolTelemetry.ToolProject("acme", null));
     }
 
@@ -149,13 +149,13 @@ public sealed class ToolTelemetryProjectionTests : IAsyncLifetime
     /// </summary>
     [RetryFact]
     public void ProjectIdTokenGet_ProjectsUnderTheNoneSentinel() =>
-        ToolTelemetry.Projections["project_id_token_get"](null)
+        ToolTelemetry.Projections["save_project_id_token"](null)
             .ShouldBe(new ToolTelemetry.ToolProject(ToolTelemetry.NoProjectId, null));
 
     /// <summary>The name lookup has no caller project either; it never projects under the looked-up id.</summary>
     [RetryFact]
     public void ProjectIdGet_ProjectsUnderTheNoneSentinel() =>
-        ToolTelemetry.Projections["project_id_get"](ToolCallRecorder.Arguments(("name", "acme")))
+        ToolTelemetry.Projections["get_project_id"](ToolCallRecorder.Arguments(("name", "acme")))
             .ShouldBe(new ToolTelemetry.ToolProject(ToolTelemetry.NoProjectId, null));
 
     private static bool DeclaresProjectId(JsonElement inputSchema) =>

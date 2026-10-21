@@ -66,7 +66,7 @@ public interface IFileIngestor
 
     /// <summary>
     ///     Splits free-form content to the budget of the engine that will embed it, using the same
-    ///     chunker and the same budget resolution as file ingest (docs/adr/0064). `memory_write` had
+    ///     chunker and the same budget resolution as file ingest (docs/adr/0064). `add_memory` had
     ///     no chunking of its own, so a long body stored whole and embedded only its first window.
     ///     Returns one chunk for content that already fits.
     /// </summary>

@@ -12,7 +12,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
 ///     P1 (owner gate): the chunker a backfilled row gets follows its own <c>source_file</c>, not a
-///     single fixed chunker. A memory_write note (missing source_file, or a citation whose path does
+///     single fixed chunker. A add_memory note (missing source_file, or a citation whose path does
 ///     not name this row's own file — <c>source_file</c> is only a citation there) chunks as
 ///     markdown; a file row (<c>path == source_file</c>) chunks with the handler its extension owns,
 ///     or the plain-text fallback when no handler owns it.
@@ -103,7 +103,7 @@ public sealed class ChunkBackfillChunkerRoutingTests : IDisposable
         (await StoredPiecesAsync(connection, Path)).ShouldBe(plainOutput);
     }
 
-    /// <summary>A memory_write row whose citation names a real file's path (here a <c>.cs</c> no
+    /// <summary>A add_memory row whose citation names a real file's path (here a <c>.cs</c> no
     /// handler owns) must still chunk as a note — routing by <c>source_file</c>'s extension alone,
     /// ignoring that <c>path != source_file</c>, would pick the plain-text fallback instead.</summary>
     [RetryFact]
@@ -166,7 +166,7 @@ public sealed class ChunkBackfillChunkerRoutingTests : IDisposable
             "SELECT value FROM entries WHERE path = @path ORDER BY id", new { path })).ToList();
 
     /// <summary>Seeds one row the way the defect made it: a single over-window row, <paramref name="sourceFile"/>
-    /// left null for a memory_write-shaped row.</summary>
+    /// left null for an add_memory-shaped row.</summary>
     private async Task<SqliteConnection> OpenSeededAsync(string path, string? sourceFile, string value)
     {
         var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

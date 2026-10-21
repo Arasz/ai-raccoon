@@ -14,7 +14,7 @@ namespace AiRaccoon.Tests.Integration.Ingestion;
 
 /// <summary>
 ///     WP3-T10/OQ4 (docs/work/2026-08-21-code-search-implementation-plan.md §12.4): one
-///     `memory_ingest_directory`/`memory_ingest_file` pass routes each file to its own corpus by
+///     `ingest_directory`/`ingest_file` pass routes each file to its own corpus by
 ///     extension — `.md` to `entries`, code extensions to `code_entries`, unsupported to neither.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]

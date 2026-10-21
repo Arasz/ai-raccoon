@@ -11,7 +11,7 @@ Feature: Code corpus
     # Baseline (plan §1, §3.1): a second, code-only corpus in the SAME memory.db
     # (code_entries + code_fts + vec_code, float[768] fresh-bank default, reconciled to
     # the active engine's dimension per ADR-0093), fed by the existing watch/ingest
-    # machinery, reachable through memory_search kind=memory|code|both and code_get.
+    # machinery, reachable through query kind=memory|code|both and get_entry.
     # Model at authoring: faxenoff/code-daemon-embed-v1, 768-dim, chunk budget 510
     # (min(510, ctx-2)). ADR-0108 (2026-09-23) replaced it: `model code set default` now
     # activates the bundled granite-embedding-small-english-r2 (fp16, 384-dim, nothing
@@ -24,7 +24,7 @@ Feature: Code corpus
     #   — deferred pending owner approval of the repos (OQ5); scripts/.../eval-sets/
     #   code-smoke.json is a small sanity fixture only, not that eval set.
 
-    Rule: memory_search's kind parameter selects and shapes the response envelope
+    Rule: query's kind parameter selects and shapes the response envelope
         # Plan §3.6: keys are "results" (existing) and "code" (new); kind=memory
         # serializes the exact legacy shape (no "code" key at all, via
         # [JsonIgnore(Condition = WhenWritingNull)]); kind=code/both always carry both
@@ -32,75 +32,75 @@ Feature: Code corpus
         # runs both corpora's hybrids independently, no cross-corpus fusion.
         Scenario: The default kind searches both corpora
             Given a project with memory entries and code chunks
-            When I call memory_search for the project without a kind
+            When I call query for the project without a kind
             Then the response contains a "results" key with the memory hits
             And the response contains a "code" key with the code hits
 
         Scenario: kind=memory keeps the legacy envelope with no code key
             Given a project with memory entries and code chunks
-            When I call memory_search for the project with kind "memory"
+            When I call query for the project with kind "memory"
             Then the response contains a "results" key with the memory hits
             And the response contains no "code" key
 
         Scenario: kind=code returns only the code section
             Given a project with memory entries and code chunks
-            When I call memory_search for the project with kind "code"
+            When I call query for the project with kind "code"
             Then the response contains an empty "results" key
             And the response contains a "code" key with the code hits
 
         Scenario: kind=both returns both sections
             Given a project with memory entries and code chunks
-            When I call memory_search for the project with kind "both"
+            When I call query for the project with kind "both"
             Then the response contains a "results" key with the memory hits
             And the response contains a "code" key with the code hits
 
         Scenario: An invalid kind is refused
-            When I call memory_search for the project with kind "docs"
+            When I call query for the project with kind "docs"
             Then the tool errors with invalid-params naming the allowed kinds
 
         Scenario: Code hits carry line ranges instead of chunk position
             Given a project with a code chunk spanning lines 10 to 24
-            When I call memory_search for the project with kind "code"
+            When I call query for the project with kind "code"
             Then the code hit carries lineStart 10 and lineEnd 24
 
         Scenario: kind=code with a shared or workspace scope returns an empty code section
             Given a project with code chunks
-            When I call memory_search for the project with kind "code" and scope "shared"
+            When I call query for the project with kind "code" and scope "shared"
             Then the code section is empty
             # code is always project-scoped (plan §3.6); this is documented, not an error.
 
-    Rule: code_get reads one code chunk's full source by content hash
-        # Mirrors memory_get (plan §3.6).
-        Scenario: code_get returns the chunk addressed by its hash
+    Rule: get_entry reads one code chunk's full source by content hash
+        # Mirrors get_entry (plan §3.6).
+        Scenario: get_entry returns the chunk addressed by its hash
             Given a code chunk ingested with a known content hash
-            When I call code_get for the project on that hash
+            When I call get_entry for the project on that hash
             Then the response contains the chunk's value, path, and line range
 
-        Scenario: code_get on an unknown hash is refused
-            When I call code_get for the project on a hash nothing was ingested under
+        Scenario: get_entry on an unknown hash is refused
+            When I call get_entry for the project on a hash nothing was ingested under
             Then the tool errors with unknown-hash
 
     Rule: ai-raccoon.ignore filters both ingestion pipelines the same way
         # Owner requirement (plan §2.1): one file per watch/tree root, gitignore-subset
         # syntax, no "!" negation in v1, any-match-wins. Ignored files are never
         # fingerprinted, never chunked, in EITHER corpus. Applies identically to a
-        # directory watch's catch-up scan and to memory_ingest_directory.
+        # directory watch's catch-up scan and to ingest_directory.
         Scenario: A watched directory skips files matched by ai-raccoon.ignore
             Given a directory "/repo" with an "ai-raccoon.ignore" listing "*.generated.cs"
             And a file "widget.generated.cs" under "/repo"
-            When I call memory_watch_add for the project on path "/repo"
+            When I call add_watch for the project on path "/repo"
             Then "widget.generated.cs" is ingested into neither corpus
 
-        Scenario: memory_ingest_directory skips files matched by ai-raccoon.ignore
+        Scenario: ingest_directory skips files matched by ai-raccoon.ignore
             Given a directory "/repo" with an "ai-raccoon.ignore" listing "*.generated.cs"
             And a file "widget.generated.cs" under "/repo"
-            When I call memory_ingest_directory for the project on path "/repo"
+            When I call ingest_directory for the project on path "/repo"
             Then "widget.generated.cs" is ingested into neither corpus
 
         Scenario: A trailing-slash pattern ignores an entire subtree
             Given a directory "/repo" with an "ai-raccoon.ignore" listing "bin/"
             And a file "bin/Debug/app.dll" under "/repo"
-            When I call memory_watch_add for the project on path "/repo"
+            When I call add_watch for the project on path "/repo"
             Then every file under "bin/" is ingested into neither corpus
 
         Scenario: A file ingested before the ignore line was added is cleaned up
@@ -109,9 +109,9 @@ Feature: Code corpus
             Then the stale chunks for "widget.generated.cs" are deleted from the code corpus
             And its last-change timestamp is updated without a new fingerprint
 
-        Scenario: Explicit memory_ingest_file on an ignored path returns zero chunks
+        Scenario: Explicit ingest_file on an ignored path returns zero chunks
             Given a directory "/repo" with an "ai-raccoon.ignore" listing "*.generated.cs"
-            When I call memory_ingest_file for the project on path "/repo/widget.generated.cs"
+            When I call ingest_file for the project on path "/repo/widget.generated.cs"
             Then the call returns zero chunks
             # Ignore wins even for an explicit single-file ingest — consistent with
             # "never fingerprinted" (plan §2.1).
@@ -125,24 +125,24 @@ Feature: Code corpus
         # Owner requirement (plan §2.2): containment = real-path prefix, separator-aware.
         Scenario: Adding a watch on a repo root prunes a watch already inside it
             Given a watch for the project on path "/repo/docs"
-            When I call memory_watch_add for the project on path "/repo"
+            When I call add_watch for the project on path "/repo"
             Then the watch on "/repo/docs" is pruned
             And a single watch exists at "/repo" covering both corpora
 
         Scenario: Adding a watch inside an existing broader watch is rejected
             Given a watch for the project on path "/repo"
-            When I call memory_watch_add for the project on path "/repo/docs"
+            When I call add_watch for the project on path "/repo/docs"
             Then the tool errors naming "/repo" as the covering watch
             And no new watch is written
 
         Scenario: Re-adding the identical path is an idempotent no-op
             Given a watch for the project on path "/repo"
-            When I call memory_watch_add for the project on path "/repo" again
+            When I call add_watch for the project on path "/repo" again
             Then exactly one watch exists at "/repo"
 
         Scenario: A sibling path is never pruned
             Given a watch for the project on path "/repo"
-            When I call memory_watch_add for the project on path "/repo2"
+            When I call add_watch for the project on path "/repo2"
             Then both watches exist independently
 
     Rule: Code files are always ingested, even with no code engine configured
@@ -157,7 +157,7 @@ Feature: Code corpus
         Scenario: kind=code search degrades to FTS5-only with a warning when unconfigured
             Given a project with no code embedding engine configured
             And code chunks stored pending
-            When I call memory_search for the project with kind "code"
+            When I call query for the project with kind "code"
             Then the code section is served from full-text search only
             And the response carries a warning that vector search is unavailable
 
@@ -165,16 +165,16 @@ Feature: Code corpus
             Given a project with no code embedding engine configured
             And code chunks stored pending
             And a memory entry matching the same query
-            When I call memory_search for the project without a kind
+            When I call query for the project without a kind
             Then the memory results are present and unaffected
             And the code section is served from full-text search only
             And the response carries a warning that vector search is unavailable
 
         Scenario: A configured-but-unloadable code engine refuses code search only
             Given a project whose code embedding engine manifest cannot be loaded
-            When I call memory_search for the project with kind "code"
+            When I call query for the project with kind "code"
             Then the tool errors with an actionable message naming the engine problem
-            And memory_search with kind "memory" for the same project still succeeds
+            And query with kind "memory" for the same project still succeeds
 
     Rule: The code corpus's vector index accepts any-dimension manifests and reconciles vec_code
         # Plan §3.3 (vec-code-unfix-dim): vec_code is a vec0 table like the memory bank's —
@@ -226,7 +226,7 @@ Feature: Code corpus
 
         Scenario: Memory tools are never blocked while code rows drain
             Given a code engine change with pending rows still draining
-            When memory_search is called for the project with kind "memory"
+            When query is called for the project with kind "memory"
             Then the call succeeds without a migration-in-progress refusal
             # No ToolGate interaction for the code drain — memory tools are never
             # closed the way a memory model migration closes them (plan §3.3).
@@ -243,32 +243,32 @@ Feature: Code corpus
         # before, both records the memory leg, code records its code count with an empty file
         # list. search_quality rows ride the sync snapshot, so code paths stay out (ADR-0085).
         Scenario: A kind=code search writes a search_quality row
-            When I call memory_search for the project with kind "code"
+            When I call query for the project with kind "code"
             Then a search_quality row is written for that call
             And no code paths are stored in search_quality
 
         Scenario: A kind=both search writes a search_quality row
-            When I call memory_search for the project with kind "both"
+            When I call query for the project with kind "both"
             Then a search_quality row is written for that call
             And no code paths are stored in search_quality
 
         Scenario: A kind=memory search still records exactly as today
-            When I call memory_search for the project with kind "memory"
+            When I call query for the project with kind "memory"
             Then a search_quality row is written for that call
 
         # P1 (owner gate 2026-09-03, D1 CHANGE): sessionId is required at every layer —
         # every agent has a session. The row for THIS call (correlation-filtered) carries the
         # passed session verbatim; pre-P1 the Safe path hardcoded null, so this read back NULL.
         Scenario: A session-attributed search stores its session id verbatim
-            When I call memory_search for the project with kind "memory" with session "sess-bdd-1"
+            When I call query for the project with kind "memory" with session "sess-bdd-1"
             Then the search_quality row for that call carries session "sess-bdd-1"
 
         # P3 (ADR-0097): kind is required on the write path — the row for THIS call
         # (correlation-filtered) carries the requested kind verbatim.
         Scenario: A kind=code search stores its kind verbatim
-            When I call memory_search for the project with kind "code"
+            When I call query for the project with kind "code"
             Then the search_quality row for that call carries kind "code"
 
         Scenario: A kind=both search stores its kind verbatim
-            When I call memory_search for the project with kind "both"
+            When I call query for the project with kind "both"
             Then the search_quality row for that call carries kind "both"

@@ -34,9 +34,9 @@ public sealed class WatchToolsInventoryTests : IDisposable
             .ToList();
 
         tools.Count.ShouldBe(3);
-        tools.ShouldContain("memory_watch_add");
-        tools.ShouldContain("memory_watch_status");
-        tools.ShouldContain("memory_watch_remove");
+        tools.ShouldContain("add_watch");
+        tools.ShouldContain("get_watch_status");
+        tools.ShouldContain("remove_watch");
     }
 
     [Fact]

@@ -15,10 +15,10 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Integration.Memory;
 
 /// <summary>
-///     WP3 step 1 (docs/adr/0064): `memory_write` did not chunk at all. The only budget-aware
+///     WP3 step 1 (docs/adr/0064): `add_memory` did not chunk at all. The only budget-aware
 ///     chunking in the codebase lived in `FileIngestor`, so a long body stored as ONE row, marked
 ///     `embed_state='embedded'`, with only its first ~254 WordPiece tokens in the vector. Measured on
-///     the live bank: 555 `memory_write` rows, 320 of them over-window, 114,883 tokens never embedded.
+///     the live bank: 555 `add_memory` rows, 320 of them over-window, 114,883 tokens never embedded.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

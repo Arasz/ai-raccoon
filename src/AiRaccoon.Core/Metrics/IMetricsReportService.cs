@@ -1,6 +1,6 @@
 namespace AiRaccoon.Core.Metrics;
 
-/// <summary>Produces the `memory_performance` report for one project (WP6, project-scoped only per ruling 1).</summary>
+/// <summary>Produces the `get_engine_statistics` report for one project (WP6, project-scoped only per ruling 1).</summary>
 public interface IMetricsReportService
 {
     /// <summary>

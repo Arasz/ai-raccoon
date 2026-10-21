@@ -15,11 +15,11 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Unit.Storage;
 
 /// <summary>
-///     memory_write's `context` argument lands a row in the custom scope, which memory_search only
+///     add_memory's `context` argument lands a row in the custom scope, which query only
 ///     reads when the caller passes the same label back (SearchContexts.For — scope `all` is shared
 ///     + project, by design). That is workable only if the label can be recovered; measured against
 ///     a live server, it could not be. A written entry was in the bank, in the FTS index and
-///     retrievable by memory_get, while memory_search found nothing at any scope and memory_stats
+///     retrievable by get_entry, while query found nothing at any scope and get_store_statistics
 ///     reported `contexts: []` — the label existed nowhere a caller could read it.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -66,7 +66,7 @@ public sealed class CustomContextDiscoverabilityTests : IDisposable
 
         stats.Contexts.ShouldContain(c => c.Contains("adr", StringComparison.Ordinal),
             "a custom context must appear in the bank's committed contexts, or its label — the only " +
-            "key that reaches its rows through memory_search — cannot be recovered by any caller");
+            "key that reaches its rows through query — cannot be recovered by any caller");
     }
 
     /// <summary>

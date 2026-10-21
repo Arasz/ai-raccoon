@@ -116,7 +116,7 @@ def test_airaccoon_fn_sends_session_id_and_extracts_hashes():
               "targetScope": "project", "expectedHash": "abc123"})
     assert out == {"hashes": ["abc123"], "error": None}
     name, args = client.calls[0]
-    assert name == "memory_search"
+    assert name == "query"
     assert args["sessionId"] == "sess-1"
     assert args["limit"] == 8 and args["kind"] == "memory"
     # Prod leg serves the same post-floor shape as the harness leg (floor 0.6).

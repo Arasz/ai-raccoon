@@ -23,7 +23,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Observability;
 
 /// <summary>
-///     A refused memory_search query is the caller's own text and nothing else's: the log line and
+///     A refused query query is the caller's own text and nothing else's: the log line and
 ///     the OTLP span carry policy, length and hash instead (SECURITY.md's "no search queries"), and
 ///     suppression alone cannot pass — the replacement diagnostic must be there.
 /// </summary>
@@ -54,12 +54,12 @@ public sealed class RefusedQueryRedactionTests
         var tools = CreateTools(new FakeStore());
 
         await Should.ThrowAsync<McpException>(() =>
-            ToolCallRecorder.ThroughFilterAsync(metrics, "memory_search",
+            ToolCallRecorder.ThroughFilterAsync(metrics, "query",
                 ToolCallRecorder.Arguments(("projectId", "acme")),
                 token => tools.Search("acme", Canary, sessionId: "sess-test", cancellationToken: token),
                 TestContext.Current.CancellationToken));
 
-        var activity = stopped.Single(a => a.OperationName == "tools/call memory_search");
+        var activity = stopped.Single(a => a.OperationName == "tools/call query");
         var spanText = SpanText(activity);
         spanText.ShouldNotContain(CanarySecret);
         spanText.ShouldNotContain("LANEJ-SECRET-ARG");
@@ -85,7 +85,7 @@ public sealed class RefusedQueryRedactionTests
             return new CallToolResult();
         };
 
-        var result = await ToolRefusals.Filter(next)(Request("memory_search", services), CancellationToken.None);
+        var result = await ToolRefusals.Filter(next)(Request("query", services), CancellationToken.None);
 
         // The text stays in the caller's error result: it only ever travels back to its sender.
         TextOf(result).ShouldContain("Refused query:");

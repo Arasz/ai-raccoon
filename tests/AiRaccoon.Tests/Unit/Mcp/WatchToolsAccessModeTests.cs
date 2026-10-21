@@ -48,7 +48,7 @@ public sealed class WatchToolsAccessModeTests
         var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Add("acme-web", "/repo", TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("memory_watch_add requires mode rw (current ro)");
+        ex.Message.ShouldContain("add_watch requires mode rw (current ro)");
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public sealed class WatchToolsAccessModeTests
         var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Remove("acme-web", "/repo", TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("memory_watch_remove requires mode rw (current ro)");
+        ex.Message.ShouldContain("remove_watch requires mode rw (current ro)");
     }
 
     [Fact]

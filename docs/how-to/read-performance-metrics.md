@@ -6,11 +6,11 @@ Ask the running server how it is performing — no OpenTelemetry collector requi
 
 ## What this is, and what it is not
 
-AiRaccoon records a measurement for every MCP tool call, every `memory_search` phase
+AiRaccoon records a measurement for every MCP tool call, every `query` phase
 (`search.open`, `search.embed`, `search.fts`, `search.vector`, `search.fusion`, `search.affinity`,
 `search.adjustment`, `search.snippets`, `search.bump`), and one measured total per search (`search.total` — not itself
 a phase; see [Reading `search.*` series](#reading-search-series) below), persists them in a
-`metrics` table inside `memory.db`, and reads them back through the `memory_performance` MCP tool.
+`metrics` table inside `memory.db`, and reads them back through the `get_engine_statistics` MCP tool.
 This is diagnostics for **you**, the person running or
 developing AiRaccoon — not a replacement for
 [the Meter/OTLP export path](monitor-and-export-telemetry.md), which is unchanged and keeps
@@ -18,10 +18,10 @@ exporting the same counters and spans to a collector when one is configured. Use
 there is no collector, or when you want a quick answer from inside an agent conversation instead
 of standing one up.
 
-## Call `memory_performance`
+## Call `get_engine_statistics`
 
 ```json
-{"tool": "memory_performance", "arguments": {"projectId": "acme"}}
+{"tool": "get_engine_statistics", "arguments": {"projectId": "acme"}}
 ```
 
 `projectId` is the only required argument. With no other arguments the report covers the last 3
@@ -35,7 +35,7 @@ hours in 1-minute buckets (180 points):
   "bucketCount": 180,
   "series": [
     {
-      "tool": "memory_search",
+      "tool": "query",
       "count": 42,
       "p50": 18.4,
       "p95": 61.2,
@@ -54,7 +54,7 @@ hours in 1-minute buckets (180 points):
       "max": 15.0,
       "buckets": ["..."]
     },
-    {"tool": "memory_write", "count": 0, "p50": null, "p95": null, "p99": null, "min": null, "max": null, "buckets": []}
+    {"tool": "add_memory", "count": 0, "p50": null, "p95": null, "p99": null, "min": null, "max": null, "buckets": []}
   ]
 }
 ```
@@ -62,11 +62,11 @@ hours in 1-minute buckets (180 points):
 A few things worth knowing before reading a report:
 
 - **The tool/phase series list is fixed, not discovered.** It is every tool on the server's own
-  tool inventory plus `SearchTimings.SeriesNames` — the nine `memory_search` phases and the
+  tool inventory plus `SearchTimings.SeriesNames` — the nine `query` phases and the
   measured `search.total` — so a tool or phase nothing has called yet still appears, at
   `count: 0`, rather than being silently omitted.
 - **Four series families are discovered by prefix, scoped to whatever project id you ask
-  `memory_performance` for** (`MetricsConfigKeys.InternalSeriesPrefixes`: `job.`, `drain.`,
+  `get_engine_statistics` for** (`MetricsConfigKeys.InternalSeriesPrefixes`: `job.`, `drain.`,
   `write.`, `search.query.`) — no `count: 0` placeholder if nothing in that family was recorded
   for that project in the window, unlike the fixed tool/phase list above.
   - `job.<name>.duration_ms` on every completed maintenance-job run, `job.<name>.rows` for a job
@@ -119,13 +119,13 @@ looks like something it is not:
    `search.total`) is only valid where `search.total`'s count in the window equals `search.fts`'s;
    a count mismatch is the honest signal that the window straddles the change, not a defect in
    either series.
-2. **`search.total` is not `memory_search`.** `search.total` brackets only
-   `SqliteMemoryStore.SearchAsync`; `memory_search`'s own reported duration additionally covers the
+2. **`search.total` is not `query`.** `search.total` brackets only
+   `SqliteMemoryStore.SearchAsync`; `query`'s own reported duration additionally covers the
    access gate, the query guard, the post-search `search_quality` write, envelope shaping and MCP
    SDK dispatch. The two will not agree, and that gap is expected — see
    [ADR-0080](../adr/0080-the-phases-close-against-search-total-not-the-tool-total.md) for why it
    cannot be closed from inside `SearchAsync`. Sum the phases against `search.total`, never against
-   `memory_search`.
+   `query`.
 3. **`search.open` covers only `SearchAsync`'s own bank open**, not the query guard's separate one
    (a single settings-prefix read, evaluated before `SearchAsync` is even called). Connection
    dispose / return-to-pool happens at method exit, after the `search.total` bracket has already
@@ -143,7 +143,7 @@ Some of what the owner-elicited spec describes is deferred past this first phase
 [the implementation plan](../plans/2026-08-15-performance-metrics-implementation.md) §5 for the
 full list and why each is safe to defer:
 
-- No `ai-raccoon performance` CLI verb — `memory_performance` (the MCP tool) is the only read
+- No `ai-raccoon performance` CLI verb — `get_engine_statistics` (the MCP tool) is the only read
   surface today.
 - No checkpoint rollups — the `metrics` table holds a rolling window (default 28 days,
   best-effort), not a year of summarized history pinned to a release commit/version/timestamp.
@@ -164,6 +164,6 @@ for the keys and how (not yet) to change them.
 - [ADR-0074](../adr/0074-a-capped-buffer-satisfies-the-channel-rule-and-reshapes-g4.md) — why the
   writer is a capped buffer, not a channel
 - [ADR-0080](../adr/0080-the-phases-close-against-search-total-not-the-tool-total.md) — why the
-  phases close against `search.total`, not `memory_search`
+  phases close against `search.total`, not `query`
 - [docs/reference/agent-memory-server.md](../reference/agent-memory-server.md#tools-29) — the full
-  `memory_performance` tool contract
+  `get_engine_statistics` tool contract

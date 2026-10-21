@@ -31,8 +31,8 @@ namespace AiRaccoon.Tests.BDD;
 ///     Deliberately does NOT reuse <see cref="MemoryFeatureContext" />/<see cref="FileWatcherFeatureContext" />:
 ///     those build their Store's FileIngestor without an <see cref="IIgnoreRulesProvider" /> or
 ///     <see cref="IWatchStore" /> wired in (TestData.CreateMemoryStore does not expose those
-///     parameters), which several code-corpus scenarios need for direct memory_ingest_file/
-///     memory_ingest_directory calls to honor ai-raccoon.ignore. Composes the same real stack
+///     parameters), which several code-corpus scenarios need for direct ingest_file/
+///     ingest_directory calls to honor ai-raccoon.ignore. Composes the same real stack
 ///     (SqliteMemoryStore, the watch pipeline, MemoryTools/CodeTools/WatchTools) by hand instead,
 ///     with a StubCodeChunker (real line ranges, no token-budget/brace logic — WP2 concern, not
 ///     this feature's) and a real CodeEmbedder over a FakeCodeEmbeddingService (deterministic

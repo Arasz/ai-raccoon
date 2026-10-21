@@ -19,7 +19,7 @@ namespace AiRaccoon.Tests.Integration;
 ///     columns {source_file section}. FileIngestor wrote section as null for every chunk, so that
 ///     documented behaviour could not work for any ingested document — the bulk of every bank.
 ///     Measured on the live bank before the fix: section populated on 517 of 15,325 rows (all from
-///     memory_write's explicit section argument) against heading_path on 5,604.
+///     add_memory's explicit section argument) against heading_path on 5,604.
 ///     The old retrieval fixture hid this because it was built by scripts/src/chunking.py, a
 ///     pipeline that does populate section and that the product does not ship.
 /// </summary>

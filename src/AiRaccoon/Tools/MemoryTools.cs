@@ -257,8 +257,8 @@ public sealed partial class MemoryTools(
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
 
         // ADR-0094: SearchDispatcher records a search_quality row for every kind, so every
-        // envelope carries a backed correlation id -- a later memory_record_grade /
-        // memory_record_followthrough call always has a row to key on. This supersedes the
+        // envelope carries a backed correlation id -- a later set_query_result_grade /
+        // set_memory_usage_record call always has a row to key on. This supersedes the
         // integration-review S6 withholding rule (which held only while code/both wrote no row).
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
     }

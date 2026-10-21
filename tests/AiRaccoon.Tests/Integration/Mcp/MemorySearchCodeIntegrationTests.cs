@@ -19,7 +19,7 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Mcp;
 
 /// <summary>
-///     WP6 end-to-end: memory_search kind=code/both against the REAL SqliteCodeSearchService over
+///     WP6 end-to-end: query kind=code/both against the REAL SqliteCodeSearchService over
 ///     a real bank, seeded by SQL (no CodeIngestor yet -- WP3). Proves the FTS5-only-mode warning
 ///     and the real hits arrive together, and that scope=shared empties the code section through
 ///     the real service too (not just a unit-level spy).

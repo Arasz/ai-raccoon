@@ -22,7 +22,7 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     // conscious decision to accept more growth, never to make a failing build pass.
     // RAISE HISTORY -- read this before adding a third entry.
     //   1245 / 25  original pin, 2026-08-14, measured after Wave 1's deletions.
-    //   1276 / 26  memory_get (ADR-0035) -- closed blocker B2, an agent could find a memory and
+    //   1276 / 26  get_entry (ADR-0035) -- closed blocker B2, an agent could find a memory and
     //              had no call returning its content.
     //   1308 / 27  noise shadow-observer wiring (ADR-0039).
     //   1291 / 27  ADR-0046 threaded the project's context labels into SearchAsync; the lookup
@@ -38,7 +38,7 @@ public sealed class SqliteMemoryStoreSizeRatchetTests
     //              out instead of a raise -- FilterFor moved to ContextFilter.cs, next to its
     //              write-path twin EntryBucket, which is also where the review said the mapping
     //              belonged (the two halves of one rule sat 1,000 lines apart in different files).
-    //   1238 / 27  LOWERED again: WP3 step 1 routed memory_write through the budgeted chunker and
+    //   1238 / 27  LOWERED again: WP3 step 1 routed add_memory through the budgeted chunker and
     //               put the per-chunk insert in WriteChunks.cs beside EntryBucket/ContextFilter
     //               rather than in the store, so the chunking landed net -5 (docs/adr/0064).
     //   1243 / 27  LOWERED again: WP6 folded the rating computation into the BumpAccess statement,

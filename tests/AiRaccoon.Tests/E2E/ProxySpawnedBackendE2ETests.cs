@@ -101,7 +101,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
         tools.ShouldNotBeEmpty();
 
-        var stats = await client.CallToolAsync("memory_stats",
+        var stats = await client.CallToolAsync("get_store_statistics",
             new Dictionary<string, object?> { ["projectId"] = "acme" },
             cancellationToken: TestContext.Current.CancellationToken);
         stats.IsError.ShouldNotBe(true);
@@ -124,7 +124,7 @@ public sealed class ProxySpawnedBackendE2ETests : IAsyncLifetime
         await using var client = await AiRaccoonProcess.ConnectAsync(
             ["--data-root", _dataRoot, "--port", _port.ToString()], TestContext.Current.CancellationToken);
 
-        var result = await client.CallToolAsync("memory_stats",
+        var result = await client.CallToolAsync("get_store_statistics",
             new Dictionary<string, object?> { ["projectId"] = "acme" },
             cancellationToken: TestContext.Current.CancellationToken);
 

@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Integration.Projects;
 /// <summary>
 ///     The reported defect, end to end: an alias id whose workspace rows have all closed held its
 ///     committed rows hostage, because the census counted workspace ROWS and the repair pinned any
-///     id that owned one. The rows were in the bank and unreachable — memory_get folds the caller's
+///     id that owned one. The rows were in the bank and unreachable — get_entry folds the caller's
 ///     id to the canonical one, so a row keyed under the alias matched nothing.
 ///     Ledger — stranded-rows-unblocked : --filter StrandedRows_UnderAClosedWorkspaceAlias_FoldToTheCanonicalId :
 ///     alias loser, 25 project + 65 custom + 8 shared rows, 14 closed workspace rows.
@@ -79,7 +79,7 @@ public sealed class ProjectIdsRepairStrandedRowsTests : IDisposable
 
         // The read path the tool runs: hash + the caller's (folded) project id.
         (await ReadAsync(connection, "stranded-project", Winner, ct))
-            .ShouldBe(1, "memory_get under the canonical id finds the formerly stranded row");
+            .ShouldBe(1, "get_entry under the canonical id finds the formerly stranded row");
         (await ReadAsync(connection, "stranded-custom", Winner, ct))
             .ShouldBe(1, "the custom-scope row is reachable too");
     }
@@ -87,7 +87,7 @@ public sealed class ProjectIdsRepairStrandedRowsTests : IDisposable
     private static ProjectIdAliasMap FixtureMap() => new(
         [new ProjectIdAliasEntry(Loser, Winner)], [Winner], []);
 
-    /// <summary>Runs the statement <c>memory_get</c> runs, so the reachability claim is the product's own.</summary>
+    /// <summary>Runs the statement <c>get_entry</c> runs, so the reachability claim is the product's own.</summary>
     private static async Task<long> ReadAsync(SqliteConnection connection, string hash, string projectId,
         CancellationToken ct) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(

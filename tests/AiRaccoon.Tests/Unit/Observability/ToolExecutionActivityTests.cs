@@ -25,11 +25,11 @@ public class ToolExecutionActivityTests
         listener.ActivityStopped = _ => { };
         ActivitySource.AddActivityListener(listener);
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme");
+        using var activity = new ToolExecutionActivity(metrics, "add_memory", "acme");
 
         var started = startedActivities.ShouldHaveSingleItem();
-        started.OperationName.ShouldBe("tools/call memory_write");
-        started.Tags.Any(kv => kv.Key == "tool" && kv.Value?.ToString() == "memory_write").ShouldBeTrue();
+        started.OperationName.ShouldBe("tools/call add_memory");
+        started.Tags.Any(kv => kv.Key == "tool" && kv.Value?.ToString() == "add_memory").ShouldBeTrue();
         started.Tags.Any(kv => kv.Key == "project_id" && kv.Value?.ToString() == "acme").ShouldBeTrue();
     }
 
@@ -45,11 +45,11 @@ public class ToolExecutionActivityTests
         listener.ActivityStopped = _ => { };
         ActivitySource.AddActivityListener(listener);
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_search", "acme");
+        using var activity = new ToolExecutionActivity(metrics, "query", "acme");
 
         var started = startedActivities.ShouldHaveSingleItem();
         started.Tags.Any(kv => kv.Key == "mcp.method.name" && kv.Value == "tools/call").ShouldBeTrue();
-        started.Tags.Any(kv => kv.Key == "gen_ai.tool.name" && kv.Value == "memory_search").ShouldBeTrue();
+        started.Tags.Any(kv => kv.Key == "gen_ai.tool.name" && kv.Value == "query").ShouldBeTrue();
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_write", "jsaa");
+        using var activity = new ToolExecutionActivity(metrics, "add_memory", "jsaa");
         activity.RecordInvocation();
 
         var measurements = collector.GetMeasurementSnapshot();
@@ -80,13 +80,13 @@ public class ToolExecutionActivityTests
         listener.ActivityStopped = _ => { };
         ActivitySource.AddActivityListener(listener);
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_stats", "acme");
+        using var activity = new ToolExecutionActivity(metrics, "get_store_statistics", "acme");
 
         activity.RecordInvocation();
 
         var invocations = invocationCollector.GetMeasurementSnapshot();
         invocations.Count.ShouldBe(1);
-        invocations[0].Tags["tool"].ShouldBe("memory_stats");
+        invocations[0].Tags["tool"].ShouldBe("get_store_statistics");
         invocations[0].Tags["result"].ShouldBe("success");
         durationCollector.GetMeasurementSnapshot().Count.ShouldBe(1);
 
@@ -109,7 +109,7 @@ public class ToolExecutionActivityTests
         ActivitySource.AddActivityListener(listener);
 
         var ex = new InvalidOperationException("boom");
-        using (var activity = new ToolExecutionActivity(metrics, "memory_search", "acme"))
+        using (var activity = new ToolExecutionActivity(metrics, "query", "acme"))
         {
             activity.RecordError(ex);
         }
@@ -148,7 +148,7 @@ public class ToolExecutionActivityTests
             thrown = caught;
         }
 
-        using (var activity = new ToolExecutionActivity(metrics, "memory_search", "acme"))
+        using (var activity = new ToolExecutionActivity(metrics, "query", "acme"))
         {
             activity.RecordError(thrown);
         }
@@ -173,7 +173,7 @@ public class ToolExecutionActivityTests
         listener.ActivityStopped = _ => { };
         ActivitySource.AddActivityListener(listener);
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme");
+        using var activity = new ToolExecutionActivity(metrics, "add_memory", "acme");
         activity.RecordInvocation();
 
         var started = startedActivities.ShouldHaveSingleItem();
@@ -193,7 +193,7 @@ public class ToolExecutionActivityTests
         listener.ActivityStopped = stoppedActivities.Add;
         ActivitySource.AddActivityListener(listener);
 
-        using (var activity = new ToolExecutionActivity(metrics, "memory_search", "acme"))
+        using (var activity = new ToolExecutionActivity(metrics, "query", "acme"))
         {
             activity.RecordError(new InvalidOperationException("boom"));
         }
@@ -214,7 +214,7 @@ public class ToolExecutionActivityTests
         listener.ActivityStopped = stoppedActivities.Add;
         ActivitySource.AddActivityListener(listener);
 
-        using (new ToolExecutionActivity(metrics, "memory_sync", "acme"))
+        using (new ToolExecutionActivity(metrics, "sync_to_cloud", "acme"))
         {
             stoppedActivities.Count.ShouldBe(0);
         }
@@ -229,11 +229,11 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         var recorder = new RecordingRecorder();
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme", recorder: recorder);
+        using var activity = new ToolExecutionActivity(metrics, "add_memory", "acme", recorder: recorder);
         activity.RecordInvocation();
 
         var measurement = recorder.Recorded.ShouldHaveSingleItem();
-        measurement.Name.ShouldBe("memory_write");
+        measurement.Name.ShouldBe("add_memory");
         measurement.ProjectId.ShouldBe("acme");
     }
 
@@ -250,7 +250,7 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         var recorder = new RecordingRecorder();
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme", recorder: recorder, timeProvider: time);
+        using var activity = new ToolExecutionActivity(metrics, "add_memory", "acme", recorder: recorder, timeProvider: time);
         activity.RecordInvocation();
 
         recorder.Recorded.ShouldHaveSingleItem().RecordedAt.ShouldBe(fixedNow);
@@ -268,7 +268,7 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         var recorder = new RecordingRecorder();
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_stats", "acme", recorder: recorder);
+        using var activity = new ToolExecutionActivity(metrics, "get_store_statistics", "acme", recorder: recorder);
         Thread.Sleep(5);
         activity.RecordInvocation();
 
@@ -285,11 +285,11 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         var recorder = new RecordingRecorder();
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme", recorder: recorder);
+        using var activity = new ToolExecutionActivity(metrics, "add_memory", "acme", recorder: recorder);
         activity.RecordError(new InvalidOperationException("boom"), ToolTelemetry.RefusedProjectId);
 
         var measurement = recorder.Recorded.ShouldHaveSingleItem();
-        measurement.Name.ShouldBe("memory_write");
+        measurement.Name.ShouldBe("add_memory");
         measurement.ProjectId.ShouldBe(ToolTelemetry.RefusedProjectId);
         measurement.ProjectId.ShouldNotBe("acme");
     }
@@ -302,7 +302,7 @@ public class ToolExecutionActivityTests
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         var recorder = new RecordingRecorder();
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_search", "old-slug", recorder: recorder, bankProjectId: "new-slug");
+        using var activity = new ToolExecutionActivity(metrics, "query", "old-slug", recorder: recorder, bankProjectId: "new-slug");
         activity.RecordInvocation();
 
         recorder.Recorded.ShouldHaveSingleItem().ProjectId.ShouldBe("new-slug");
@@ -316,7 +316,7 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         var recorder = new RecordingRecorder();
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_search", "old-slug", "metric-slug", recorder: recorder);
+        using var activity = new ToolExecutionActivity(metrics, "query", "old-slug", "metric-slug", recorder: recorder);
         activity.RecordInvocation();
 
         recorder.Recorded.ShouldHaveSingleItem().ProjectId.ShouldBe("metric-slug");
@@ -330,7 +330,7 @@ public class ToolExecutionActivityTests
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         var recorder = new RecordingRecorder();
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_search", "old-slug", recorder: recorder, bankProjectId: "new-slug");
+        using var activity = new ToolExecutionActivity(metrics, "query", "old-slug", recorder: recorder, bankProjectId: "new-slug");
         activity.RecordError(new InvalidOperationException("boom"));
 
         recorder.Recorded.ShouldHaveSingleItem().ProjectId.ShouldBe("new-slug");
@@ -344,7 +344,7 @@ public class ToolExecutionActivityTests
         var metrics = new ToolCallMetrics();
         var recorder = new RecordingRecorder();
 
-        using var activity = new ToolExecutionActivity(metrics, "memory_search", "old-slug", recorder: recorder, bankProjectId: "new-slug");
+        using var activity = new ToolExecutionActivity(metrics, "query", "old-slug", recorder: recorder, bankProjectId: "new-slug");
         activity.RecordError(new InvalidOperationException("boom"), ToolTelemetry.RefusedProjectId);
 
         recorder.Recorded.ShouldHaveSingleItem().ProjectId.ShouldBe(ToolTelemetry.RefusedProjectId);
@@ -355,7 +355,7 @@ public class ToolExecutionActivityTests
     public void RecordInvocation_DoesNotThrow_WhenNoRecorderGiven()
     {
         var metrics = new ToolCallMetrics();
-        using var activity = new ToolExecutionActivity(metrics, "memory_write", "acme");
+        using var activity = new ToolExecutionActivity(metrics, "add_memory", "acme");
 
         Should.NotThrow(() => activity.RecordInvocation());
     }

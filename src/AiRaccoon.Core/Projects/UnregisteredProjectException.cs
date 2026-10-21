@@ -10,7 +10,7 @@ public sealed class UnregisteredProjectException(string projectId)
         var remedy = ProjectId.TryCanonicalize(projectId, out var canonical)
             ? $"or register it with 'ai-raccoon project id register {canonical}'."
             : "or fold it into a registered project with 'ai-raccoon repair project-ids --map <file> --apply'.";
-        return $"Project '{shown}' is not registered. Look up this repository's id with project_id_get, " +
-               $"mint a new one with project_id_token_get, {remedy}";
+        return $"Project '{shown}' is not registered. Look up this repository's id with get_project_id, " +
+               $"mint a new one with save_project_id_token, {remedy}";
     }
 }

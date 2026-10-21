@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Auto-grade memory_search results using Prometheus 7B via LM Studio.
+"""Auto-grade query results using Prometheus 7B via LM Studio.
 
 Reads ungraded rows from the search_quality table, sends each to Prometheus
 with a rubric-based prompt, parses the 1-5 grade, and writes it back.
@@ -197,7 +197,7 @@ def _write_grade(db_path: Path, correlation_id: str, grade: int, explanation: st
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Auto-grade memory_search results with Prometheus")
+    parser = argparse.ArgumentParser(description="Auto-grade query results with Prometheus")
     parser.add_argument("--limit", type=int, default=10, help="Max rows to grade per run")
     parser.add_argument("--dry-run", action="store_true", help="Print prompts without grading")
     parser.add_argument("--db", type=str, default=None, help="Path to memory.db")

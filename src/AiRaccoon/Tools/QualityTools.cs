@@ -18,15 +18,15 @@ public sealed class QualityTools(
     [McpServerTool(Name = TnSetMemoryUsageRecord)]
     [McpToolScope(ToolScope.All)]
     [Description(
-        "Records that the agent read a file that appeared in a prior memory_search result. " +
+        "Records that the agent read a file that appeared in a prior query result. " +
         "Updates the existing quality record keyed by correlationId; the record must belong to this project, " +
         "and recorded is false when none does. " +
-        "Call this when the agent opens a file that was returned by memory_search. " +
+        "Call this when the agent opens a file that was returned by query. " +
         "servedRank is the 1-based rank the file was served at, when known; rank-only telemetry " +
         "is section-ambiguous under kind=both by design.")]
     public async Task<ApiEnvelope<FollowThroughResult>> RecordFollowThrough(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
-        [Description("The correlationId returned by the preceding memory_search call.")]
+        [Description("The correlationId returned by the preceding query call.")]
         string correlationId,
         [Description("Absolute path of the file the agent read.")]
         string filePath,
@@ -45,12 +45,12 @@ public sealed class QualityTools(
     [McpServerTool(Name = TnSetQueryResultGrade)]
     [McpToolScope(ToolScope.All)]
     [Description(
-        "Records a human usefulness grade (1-5) for a prior memory_search call. " +
+        "Records a human usefulness grade (1-5) for a prior query call. " +
         "Updates the existing quality record keyed by correlationId; the record must belong to this project, " +
         "and recorded is false when none does.")]
     public async Task<ApiEnvelope<GradeResult>> RecordGrade(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
-        [Description("The correlationId returned by the preceding memory_search call.")]
+        [Description("The correlationId returned by the preceding query call.")]
         string correlationId,
         [Description("Usefulness grade 1-5 (5=best).")]
         int grade,

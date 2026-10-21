@@ -34,7 +34,7 @@ public sealed class PerformanceToolsTests
 
         _gate.LastProjectId.ShouldBe("acme");
         _gate.LastRequirement.ShouldBe(AccessRequirement.Read);
-        _gate.LastToolName.ShouldBe("memory_performance");
+        _gate.LastToolName.ShouldBe("get_engine_statistics");
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public sealed class PerformanceToolsTests
     }
 
     /// <summary>
-    ///     AC1: an agent calling memory_performance gets JSON, not prose. A report with an empty
+    ///     AC1: an agent calling get_engine_statistics gets JSON, not prose. A report with an empty
     ///     Series list would make this assertion pass vacuously (0 == 0) regardless of whether the
     ///     tool actually serialised anything, so the fake here returns a non-empty series.
     /// </summary>
@@ -81,7 +81,7 @@ public sealed class PerformanceToolsTests
     public async Task Performance_ResponseParsesAsJson_AndCarriesASeriesPerTool()
     {
         _reportService.ReportToReturn = new PerformanceReport(DateTimeOffset.UtcNow, TimeSpan.FromHours(3),
-            TimeSpan.FromMinutes(1), 180, [new ToolPerformanceSeries("memory_write", 0, null, null, null, null, null, [])]);
+            TimeSpan.FromMinutes(1), 180, [new ToolPerformanceSeries("add_memory", 0, null, null, null, null, null, [])]);
 
         var result = await _tools.Performance("acme", cancellationToken: TestContext.Current.CancellationToken);
 
@@ -93,7 +93,7 @@ public sealed class PerformanceToolsTests
         parsed.RootElement.GetProperty("Data").GetProperty("Series").GetArrayLength()
             .ShouldBe(_reportService.ReportToReturn.Series.Count);
         parsed.RootElement.GetProperty("Data").GetProperty("Series")[0].GetProperty("Tool").GetString()
-            .ShouldBe("memory_write");
+            .ShouldBe("add_memory");
     }
 
     private sealed class FakeToolGate : IToolGate

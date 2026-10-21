@@ -7,7 +7,7 @@ plus one proxy child per arm (the build apphost as both: `<build>/AiRaccoon --da
 --port <lease>` for the JSON-RPC pipes — the proxy child must be packaged, a muxer
 `dotnet <dll>` proxy exits 6 without probing), newline-delimited JSON-RPC, the backend's stderr redirected to
 `arm-<name>.stderr`, arms strictly
-sequential (off first, then threshold — never concurrent). Every `memory_search`
+sequential (off first, then threshold — never concurrent). Every `query`
 call passes the query's own `projectId` (per-project scoping is load-bearing:
 cross-project queries silently serve 0/8 overlap), and holdout / fold-divergent
 entries from P2's corpus are refused at load.
@@ -230,9 +230,9 @@ def load_arms_spec(path: Path) -> list[ArmSpec]:
 
 def build_search_calls(queries: Sequence[EvalQuery], limit: int = SEARCH_LIMIT,
                        session_id: str = SESSION_ID) -> list[dict[str, Any]]:
-    """The single place `memory_search` calls are shaped: every call carries the
+    """The single place `query` calls are shaped: every call carries the
     query's own projectId (per-project scoping is load-bearing)."""
-    return [{"name": "memory_search",
+    return [{"name": "query",
              "arguments": {"projectId": query.project_id, "query": query.query,
                            "limit": limit, "sessionId": session_id}}
             for query in queries]
@@ -423,16 +423,16 @@ def extract_results(response: Mapping[str, Any]) -> dict[str, list[dict[str, Any
     fields (timings stripped by construction); snippets capped at SNIPPET_MAX."""
     error = response.get("error")
     if error:
-        raise RuntimeError(f"memory_search JSON-RPC error: {json.dumps(error)[:300]}")
+        raise RuntimeError(f"query JSON-RPC error: {json.dumps(error)[:300]}")
     try:
         text = response["result"]["content"][0]["text"]
     except (KeyError, IndexError, TypeError) as exc:
         raise RuntimeError(
-            f"unexpected memory_search response shape: {str(dict(response))[:200]}") from exc
+            f"unexpected query response shape: {str(dict(response))[:200]}") from exc
     try:
         data = json.loads(text)["data"]
     except (json.JSONDecodeError, KeyError) as exc:
-        raise RuntimeError(f"unexpected memory_search payload: {text[:200]}") from exc
+        raise RuntimeError(f"unexpected query payload: {text[:200]}") from exc
     out: dict[str, list[dict[str, Any]]] = {"memory": [], "code": []}
     for section, key in (("results", "memory"), ("code", "code")):
         for hit in data.get(section) or []:
@@ -666,7 +666,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="artifact directory (default: docs/work/threshold-committee-eval)")
     parser.add_argument("--limit", type=int, default=SEARCH_LIMIT,
-                        help="memory_search limit (default: 8)")
+                        help="query limit (default: 8)")
     args = parser.parse_args(argv)
     arms = load_arms_spec(args.arms_spec) if args.arms_spec else None
     if arms is None and args.dll is None:

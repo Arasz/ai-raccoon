@@ -24,34 +24,34 @@ public sealed class UnregisteredIdRefusalTests(UnregisteredIdRefusalTests.Server
     /// <summary>The smallest valid arguments per tool, besides the project id, so the gate is what refuses.</summary>
     private static readonly Dictionary<string, Dictionary<string, object?>> MinimalArgs = new(StringComparer.Ordinal)
     {
-        ["code_get"] = new() { ["hash"] = new string('a', 64) },
-        ["memory_write"] = new() { ["content"] = "x" },
-        ["memory_get"] = new() { ["hash"] = new string('a', 64) },
-        ["memory_search"] = new() { ["query"] = "x", ["sessionId"] = "sess-refusal" },
-        ["memory_list"] = new(),
-        ["memory_stats"] = new(),
-        ["memory_delete"] = new() { ["hash"] = new string('a', 64) },
-        ["memory_delete_context"] = new() { ["context"] = "ctx" },
-        ["memory_ingest_file"] = new() { ["path"] = Path.Combine(Path.GetTempPath(), "refusal.md") },
-        ["memory_ingest_directory"] = new() { ["path"] = Path.GetTempPath() },
-        ["memory_embed_pending"] = new(),
-        ["memory_performance"] = new(),
-        ["memory_promotion_list"] = new(),
-        ["memory_promotion_discard"] = new(),
-        ["memory_record_followthrough"] = new() { ["correlationId"] = "corr", ["filePath"] = "a.md" },
-        ["memory_record_grade"] = new() { ["correlationId"] = "corr", ["grade"] = 1 },
-        ["memory_share"] = new() { ["hash"] = new string('a', 64) },
-        ["memory_share_extract"] = new(),
-        ["memory_sweep"] = new(),
-        ["memory_set_ttl"] = new() { ["hash"] = new string('a', 64), ["ttlDays"] = 1 },
-        ["memory_sync"] = new(),
-        ["memory_watch_add"] = new() { ["path"] = Path.GetTempPath() },
-        ["memory_watch_status"] = new(),
-        ["memory_watch_remove"] = new() { ["path"] = Path.GetTempPath() },
-        ["memory_workspace_begin"] = new(),
-        ["memory_workspace_status"] = new() { ["workspaceId"] = "ws-1" },
-        ["memory_workspace_consolidate"] = new() { ["workspaceId"] = "ws-1", ["keep"] = Array.Empty<string>() },
-        ["memory_workspace_discard"] = new() { ["workspaceId"] = "ws-1" }
+        ["get_entry"] = new() { ["hash"] = new string('a', 64) },
+        ["add_memory"] = new() { ["content"] = "x" },
+        ["get_entry"] = new() { ["hash"] = new string('a', 64) },
+        ["query"] = new() { ["query"] = "x", ["sessionId"] = "sess-refusal" },
+        ["get_index"] = new(),
+        ["get_store_statistics"] = new(),
+        ["delete_entry"] = new() { ["hash"] = new string('a', 64) },
+        ["delete_context"] = new() { ["context"] = "ctx" },
+        ["ingest_file"] = new() { ["path"] = Path.Combine(Path.GetTempPath(), "refusal.md") },
+        ["ingest_directory"] = new() { ["path"] = Path.GetTempPath() },
+        ["embed_deferred_entries"] = new(),
+        ["get_engine_statistics"] = new(),
+        ["get_memories_sharing_ranking"] = new(),
+        ["delete_memory_from_ranking"] = new(),
+        ["set_memory_usage_record"] = new() { ["correlationId"] = "corr", ["filePath"] = "a.md" },
+        ["set_query_result_grade"] = new() { ["correlationId"] = "corr", ["grade"] = 1 },
+        ["share_memory"] = new() { ["hash"] = new string('a', 64) },
+        ["trigger_memory_sharing"] = new(),
+        ["trigger_memory_cleanup"] = new(),
+        ["set_memory_ttl"] = new() { ["hash"] = new string('a', 64), ["ttlDays"] = 1 },
+        ["sync_to_cloud"] = new(),
+        ["add_watch"] = new() { ["path"] = Path.GetTempPath() },
+        ["get_watch_status"] = new(),
+        ["remove_watch"] = new() { ["path"] = Path.GetTempPath() },
+        ["initialize_workspace"] = new(),
+        ["get_workspace_status"] = new() { ["workspaceId"] = "ws-1" },
+        ["close_workspace"] = new() { ["workspaceId"] = "ws-1", ["keep"] = Array.Empty<string>() },
+        ["discard_workspace"] = new() { ["workspaceId"] = "ws-1" }
     };
 
     private static IReadOnlyList<string> ProjectIdTools() =>
@@ -84,7 +84,7 @@ public sealed class UnregisteredIdRefusalTests(UnregisteredIdRefusalTests.Server
     public async Task EveryProjectIdTool_RefusesAnUnregisteredGuid(string toolName)
     {
         var arguments = new Dictionary<string, object?>(MinimalArgs[toolName]);
-        if (toolName == "memory_share_extract")
+        if (toolName == "trigger_memory_sharing")
         {
             arguments["projectIds"] = new[] { Unregistered };
         }

@@ -16,7 +16,7 @@ namespace AiRaccoon.Tests.Integration.Ingestion;
 
 /// <summary>
 ///     Defect B (docs/work/2026-08-21-restart-probe-and-reingest-stale-chunks-plan.md): re-ingesting
-///     a file through `memory_ingest_file` left its previous chunk set behind, so a file that
+///     a file through `ingest_file` left its previous chunk set behind, so a file that
 ///     re-chunks to a different count kept every index the new set did not overwrite and search
 ///     returned content the file no longer contains. The watch-digest path already
 ///     deleted-then-ingested; the direct path did not.
@@ -153,7 +153,7 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
     }
 
     /// <summary>
-    ///     B6 — `memory_ingest_directory` walks per file and must replace each walked file's chunk
+    ///     B6 — `ingest_directory` walks per file and must replace each walked file's chunk
     ///     set for the same reason the single-file path does; otherwise the defect just moves.
     /// </summary>
     [RetryFact]
@@ -181,7 +181,7 @@ public sealed class DirectIngestReplacesStaleChunksTests : IDisposable
     /// <summary>
     ///     #485 (docs/work/2026-08-23-post-delta-4-plan.md §WP2): the directory walk passed
     ///     `keepCode: null` for every walked file, so a code file that re-chunks to fewer blocks
-    ///     through `memory_ingest_directory` stranded its old `code_entries` rows — the same defect
+    ///     through `ingest_directory` stranded its old `code_entries` rows — the same defect
     ///     B6 fixed for the memory corpus, left open for code (single-file leg fixed by #481).
     /// </summary>
     [RetryFact]

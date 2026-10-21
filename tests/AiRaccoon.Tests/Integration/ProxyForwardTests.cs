@@ -180,12 +180,12 @@ public sealed class ProxyForwardTests : IAsyncLifetime
     public async Task WhenTheBackendDies_TheNextCallReacquiresAndSucceeds()
     {
         using var cts = Deadline();
-        (await CallAsync("memory_list", cts.Token)).IsError.ShouldNotBe(true);
+        (await CallAsync("get_index", cts.Token)).IsError.ShouldNotBe(true);
 
         // What IdleWatchdog does after four idle hours; the proxy never pings to prevent it.
         await _factory.DisposeAsync();
 
-        (await CallAsync("memory_list", cts.Token)).IsError.ShouldNotBe(true);
+        (await CallAsync("get_index", cts.Token)).IsError.ShouldNotBe(true);
         _reacquireCount.ShouldBe(1);
     }
 
@@ -196,7 +196,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         _failReacquire = true;
         await _factory.DisposeAsync();
 
-        await Should.ThrowAsync<McpException>(async () => await CallAsync("memory_list", cts.Token));
+        await Should.ThrowAsync<McpException>(async () => await CallAsync("get_index", cts.Token));
 
         // Exactly once: not a loop, not a backoff ladder.
         _reacquireCount.ShouldBe(1);

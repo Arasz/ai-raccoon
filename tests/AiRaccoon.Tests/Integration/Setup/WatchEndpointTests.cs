@@ -20,7 +20,7 @@ namespace AiRaccoon.Tests.Integration.Setup;
 
 /// <summary>
 ///     ADR-0075 amendment: `watch add|remove|status` reach the server's watch service through the
-///     same gate as memory_watch_add/remove/status, driven here through the CLI's own client.
+///     same gate as add_watch/remove/status, driven here through the CLI's own client.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

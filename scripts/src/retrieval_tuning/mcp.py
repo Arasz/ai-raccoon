@@ -18,7 +18,7 @@ PROTOCOL_VERSION = "2025-06-18"
 CLIENT_INFO = {"name": "retrieval-tuning-harness", "version": "0.1.0"}
 
 
-# memory_search requires a sessionId; the harness attributes every search_quality row to this one.
+# query requires a sessionId; the harness attributes every search_quality row to this one.
 HARNESS_SESSION_ID = "retrieval-tuning-harness"
 
 
@@ -141,9 +141,9 @@ class MCPClient:
                     return fallback
                 if isinstance(fallback, dict) and isinstance(fallback.get(key), list):
                     return fallback[key]
-        raise McpError(f"memory_search response carries no '{key}' list: {str(parsed)[:300]}")
+        raise McpError(f"query response carries no '{key}' list: {str(parsed)[:300]}")
 
-    def memory_search(
+    def query(
         self,
         project_id: str,
         query: str,
@@ -169,18 +169,18 @@ class MCPClient:
         }
         if kind is not None:
             arguments["kind"] = kind
-        return self._extract_results(self._call_tool("memory_search", arguments), kind=kind)
+        return self._extract_results(self._call_tool("query", arguments), kind=kind)
 
     def ingest_directory(self, project_id: str, path: str, context: Optional[str] = None) -> dict:
-        """memory_ingest_directory: recursively indexes `path` (must be inside the
+        """ingest_directory: recursively indexes `path` (must be inside the
         project's configured ingest scope — settings ingest scope add) into memory
         and the code corpus. Returns the raw tool payload (ScannedResult)."""
         arguments = {"projectId": project_id, "path": path}
         if context is not None:
             arguments["context"] = context
-        return self._call_tool("memory_ingest_directory", arguments)
+        return self._call_tool("ingest_directory", arguments)
 
-    def memory_search_with_knobs(
+    def query_with_knobs(
         self,
         project_id: str,
         query: str,
@@ -213,4 +213,4 @@ class MCPClient:
             "candidateWindow": candidate_window,
         }
         arguments.update({key: value for key, value in per_call.items() if value is not None})
-        return self._extract_results(self._call_tool("memory_search", arguments))
+        return self._extract_results(self._call_tool("query", arguments))

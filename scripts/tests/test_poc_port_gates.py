@@ -137,7 +137,7 @@ def _wait_for_port(port: int, timeout_s: float = 120.0) -> None:
 def _run_session(dll: Path, data_root: Path, env: dict[str, str], calls: list[dict],
                  stderr_path: Path) -> tuple[dict[int, dict], str]:
     """One serve backend plus one proxy child, batched calls: initialize -> notifications/initialized ->
-    tools/call memory_search per call. Composition since the stdio full-server removal
+    tools/call query per call. Composition since the stdio full-server removal
     (ADR-0104): `serve --port <lease>` owns the bank with its stderr captured to
     `stderr_path` (so `[mmr-poc]` marker gates keep reading the process that prints
     them — a proxy child would NOT carry them, its launcher captures the backend's
@@ -247,8 +247,8 @@ def _run_session(dll: Path, data_root: Path, env: dict[str, str], calls: list[di
     return responses, stderr_path.read_text(encoding="utf-8", errors="replace")
 
 
-def _memory_search_call(project: str, query: str, limit: int) -> dict:
-    return {"name": "memory_search",
+def _query_call(project: str, query: str, limit: int) -> dict:
+    return {"name": "query",
             "arguments": {"projectId": project, "query": query, "limit": limit,
                           "sessionId": SESSION_ID}}
 
@@ -274,7 +274,7 @@ def _extract_results(response: dict) -> dict:
 
 def _run_queries(dll: Path, data_root: Path, env: dict[str, str], stderr_path: Path,
                  queries: list[dict]) -> tuple[dict[str, dict], str]:
-    calls = [_memory_search_call(q["project"], q["query"], q["limit"]) for q in queries]
+    calls = [_query_call(q["project"], q["query"], q["limit"]) for q in queries]
     responses, stderr = _run_session(dll, data_root, env, calls, stderr_path)
     results: dict[str, dict] = {}
     for i, q in enumerate(queries, start=2):

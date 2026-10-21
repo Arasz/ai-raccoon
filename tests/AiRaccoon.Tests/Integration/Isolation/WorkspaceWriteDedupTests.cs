@@ -14,9 +14,9 @@ namespace AiRaccoon.Tests.Integration.Isolation;
 
 /// <summary>
 ///     H3: SqliteMemoryStore.WriteAsync's committed-value dedup lookup ran before the workspace
-///     branch, so a memory_write naming a workspace could be silently swallowed by an
+///     branch, so a add_memory naming a workspace could be silently swallowed by an
 ///     already-committed row holding identical content — the write landed in project scope
-///     instead, and memory_workspace_discard had nothing to take back.
+///     instead, and discard_workspace had nothing to take back.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -54,7 +54,7 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
             "the caller named a workspace; a pre-existing committed row must not redirect the write");
         var status = await _store.ListContextAsync(ProjectId, ContextNaming.WorkspaceContext("ws-1"),
             TestContext.Current.CancellationToken);
-        status.Count.ShouldBe(1, "memory_workspace_status must report the entry the caller just wrote");
+        status.Count.ShouldBe(1, "get_workspace_status must report the entry the caller just wrote");
 
         var rowCount = await CountRowsAsync(result.Hash);
         rowCount.ShouldBe(2, "both the pre-existing committed row and the new workspace row must exist");
@@ -91,7 +91,7 @@ public sealed class WorkspaceWriteDedupTests : IDisposable
         var discarded = await _store.DeleteContextAsync(ProjectId, ContextNaming.WorkspaceContext("ws-1"),
             TestContext.Current.CancellationToken);
 
-        discarded.ShouldBe(1, "memory_workspace_discard must find exactly the workspace's own row to take back");
+        discarded.ShouldBe(1, "discard_workspace must find exactly the workspace's own row to take back");
         var rowCount = await CountRowsAsync(result.Hash);
         rowCount.ShouldBe(1, "the committed project row must survive the workspace discard");
         var committedStats = await _store.GetStatsAsync(ProjectId, TestContext.Current.CancellationToken);

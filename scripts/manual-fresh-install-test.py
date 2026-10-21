@@ -20,9 +20,9 @@ Protocol (revised per architect plan review deleg_98028a5e):
   4. --help -> 2>&1, verb tree renders
   5. model embedding set local (documented setup verb; bundled engine, no download)
   6. MCP round trip over the proxy child: initialize (<10s) -> serverInfo; notifications/initialized
-  7. tools/call memory_write {projectId, content} unique string -> no error
-  8. tools/call memory_search {projectId, query} -> written entry returns by hash (real vec0 path)
-  9. tools/call memory_stats -> entries>=1 AND pending==0
+  7. tools/call add_memory {projectId, content} unique string -> no error
+  8. tools/call query {projectId, query} -> written entry returns by hash (real vec0 path)
+  9. tools/call get_store_statistics -> entries>=1 AND pending==0
  10. stderr assertions: no "Bundled embedding model unavailable", no "Downloading bundled model asset"
  11. dual-instance: 2nd proxy child, fresh DATAROOT + leased port, concurrent initialize (5000-bind regression)
  12. graceful shutdown: close stdin -> proxy child exits 0 (its serve backend idles out on its own watchdog)
@@ -229,23 +229,23 @@ check(f"serverInfo.version starts {VERSION}", str(si.get("version", "")).startsw
 
 mcp.send("notifications/initialized")
 
-wid = mcp.send("tools/call", {"name": "memory_write", "arguments": {"projectId": PROJECT, "content": CONTENT}})
+wid = mcp.send("tools/call", {"name": "add_memory", "arguments": {"projectId": PROJECT, "content": CONTENT}})
 wres = mcp.read_response(wid, timeout=20)
-check("memory_write no error", "error" not in wres, json.dumps(wres.get("error")) if "error" in wres else "")
+check("add_memory no error", "error" not in wres, json.dumps(wres.get("error")) if "error" in wres else "")
 wresult = unwrap(wres.get("result", {}))
-check("memory_write returns entry (hash+context)", bool(wresult.get("hash")) and bool(wresult.get("context")), str(wresult)[:200])
+check("add_memory returns entry (hash+context)", bool(wresult.get("hash")) and bool(wresult.get("context")), str(wresult)[:200])
 
-sid = mcp.send("tools/call", {"name": "memory_search", "arguments": {"projectId": PROJECT, "query": "quick brown raccoon vaults lazy badger"}})
+sid = mcp.send("tools/call", {"name": "query", "arguments": {"projectId": PROJECT, "query": "quick brown raccoon vaults lazy badger"}})
 sres = mcp.read_response(sid, timeout=20)
-check("memory_search no error", "error" not in sres, json.dumps(sres.get("error")) if "error" in sres else "")
+check("query no error", "error" not in sres, json.dumps(sres.get("error")) if "error" in sres else "")
 search_text = json.dumps(unwrap(sres.get("result", {})))
 # Identity check: the search result must carry the exact hash the write returned (ranking 1).
 w_hash = wresult.get("hash", "")
-check("memory_search returns the written entry (hash match)", w_hash and w_hash in search_text, search_text[:200])
+check("query returns the written entry (hash match)", w_hash and w_hash in search_text, search_text[:200])
 
-stid = mcp.send("tools/call", {"name": "memory_stats", "arguments": {"projectId": PROJECT}})
+stid = mcp.send("tools/call", {"name": "get_store_statistics", "arguments": {"projectId": PROJECT}})
 stres = mcp.read_response(stid, timeout=15)
-check("memory_stats no error", "error" not in stres)
+check("get_store_statistics no error", "error" not in stres)
 stats = json.dumps(unwrap(stres.get("result", {})))
 check("stats entries >= 1", re.search(r'"entries"\s*:\s*[1-9]', stats) is not None, stats[:200])
 check("stats pending == 0", re.search(r'"pending"\s*:\s*0', stats) is not None, stats[:200])
@@ -279,12 +279,12 @@ print("== step 13: zero-config probe (informational) ==")
 mcp0 = MCP(os.path.join(TOOLPATH, "ai-raccoon"), DATAROOT0, _lease_port())
 i0 = mcp0.send("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "probe", "version": "1.0"}})
 mcp0.read_response(i0, timeout=15)
-w0 = mcp0.send("tools/call", {"name": "memory_write", "arguments": {"projectId": PROJECT, "content": "zero-config probe content unique-xyz-9911"}})
+w0 = mcp0.send("tools/call", {"name": "add_memory", "arguments": {"projectId": PROJECT, "content": "zero-config probe content unique-xyz-9911"}})
 mcp0.read_response(w0, timeout=15)
-s0 = mcp0.send("tools/call", {"name": "memory_search", "arguments": {"projectId": PROJECT, "query": "unique-xyz-9911"}})
+s0 = mcp0.send("tools/call", {"name": "query", "arguments": {"projectId": PROJECT, "query": "unique-xyz-9911"}})
 sr0 = mcp0.read_response(s0, timeout=15)
 probe_hit = "zero-config probe content" in json.dumps(sr0.get("result", {}))
-st0 = mcp0.send("tools/call", {"name": "memory_stats", "arguments": {"projectId": PROJECT}})
+st0 = mcp0.send("tools/call", {"name": "get_store_statistics", "arguments": {"projectId": PROJECT}})
 str0 = mcp0.read_response(st0, timeout=15)
 probe_stats = json.dumps(str0.get("result", {}))
 print(f"    zero-config: search hit={probe_hit}, stats={probe_stats[:160]}")

@@ -56,7 +56,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
     public async Task InstallScope_ProjectFlag_BankLivesUnderDataRootAiRaccoonDir()
     {
         // Any tool call opens the bank; stats is the lightest.
-        await _client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+        await _client.CallToolAsync("get_store_statistics", new Dictionary<string, object?> { ["projectId"] = "acme" },
             null, null, CancellationToken.None);
 
         File.Exists(Path.Combine(_factory.DataRoot, ".ai-raccoon", "memory.db")).ShouldBeTrue();
@@ -123,7 +123,7 @@ public class McpServerLaunchArgsE2ETests : IAsyncLifetime
                 TestContext.Current.CancellationToken);
 
             var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
-            var result = await client.CallToolAsync("memory_stats",
+            var result = await client.CallToolAsync("get_store_statistics",
                 new Dictionary<string, object?> { ["projectId"] = "acme" },
                 cancellationToken: TestContext.Current.CancellationToken);
 

@@ -137,10 +137,10 @@ public sealed class ReadRegistrationTests
         var id = Guid.CreateVersion7().ToString("D");
 
         var ex = await Should.ThrowAsync<UnregisteredProjectException>(() =>
-            _gate.RequireAsync(id, AccessRequirement.Read, "memory_search", Ct));
+            _gate.RequireAsync(id, AccessRequirement.Read, "query", Ct));
 
-        ex.Message.ShouldContain("project_id_get");
-        ex.Message.ShouldContain("project_id_token_get");
+        ex.Message.ShouldContain("get_project_id");
+        ex.Message.ShouldContain("save_project_id_token");
         ex.Message.ShouldContain($"'ai-raccoon project id register {id}'");
         ex.Message.ShouldNotContain("before writing");
     }
@@ -152,7 +152,7 @@ public sealed class ReadRegistrationTests
         _resolver.ResolveAsync(Arg.Any<CancellationToken>()).Returns(new ProjectIdResolution.Resolved(id));
 
         await Should.ThrowAsync<UnregisteredProjectException>(() =>
-            _gate.RequireAsync(null, AccessRequirement.Read, "memory_search", Ct));
+            _gate.RequireAsync(null, AccessRequirement.Read, "query", Ct));
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public sealed class ReadRegistrationTests
         _resolver.ResolveAsync(Arg.Any<CancellationToken>()).Returns(new ProjectIdResolution.Resolved(id));
         _registry.IsRegisteredAsync(id, Arg.Any<CancellationToken>()).Returns(true);
 
-        var canonical = await _gate.RequireAsync(null, AccessRequirement.Read, "memory_search", Ct);
+        var canonical = await _gate.RequireAsync(null, AccessRequirement.Read, "query", Ct);
 
         canonical.ShouldBe(id);
     }

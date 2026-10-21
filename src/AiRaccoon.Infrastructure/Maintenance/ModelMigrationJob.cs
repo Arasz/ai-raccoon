@@ -40,7 +40,7 @@ public sealed class ModelMigrationJob(IEntryEmbedder embedder) : IMaintenanceJob
         await embedder.DrainMigrationAsync(connection, cancellationToken);
 
         // Draining re-embeds everything itself; nothing is left pending for the general
-        // memory_embed_pending sweep to pick up, so this never asks the pass to sweep again.
+        // embed_deferred_entries sweep to pick up, so this never asks the pass to sweep again.
         return false;
     }
 }

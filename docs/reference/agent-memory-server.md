@@ -28,7 +28,7 @@ ai-raccoon watch add shared /absolute/documents
 ai-raccoon watch status shared
 ```
 
-`memory_watch_add` and `memory_ingest_file`/`memory_ingest_directory` accept the same explicit
+`add_watch` and `ingest_file`/`ingest_directory` accept the same explicit
 ID. Default searches from every project in this bank include those documents. Search directly
 with `projectId="shared"` and `scope="all"` (default) or `scope="shared"`; get/list/stats also
 accept the reserved ID. Ordinary `scope="project"` searches omit shared content. Reserved-target
@@ -41,7 +41,7 @@ Which tools the reserved target accepts is declared on the tools themselves: eve
 carries `[McpToolScope(ToolScope.All)]`, `[McpToolScope(ToolScope.Shared)]` or
 `[McpToolScope(ToolScope.Project)]` — the scope names the targets a tool may run against — and
 the build fails if a tool declares no scope, so a new tool cannot reach the reserved target by
-omission. The target's content is owned by its watch and its file — `memory_delete` is refused
+omission. The target's content is owned by its watch and its file — `delete_entry` is refused
 there, because a delete would remove one chunk of a document, advance no watch fingerprint, and
 leave the watch claiming a file that the bank no longer holds. Delete the file, or remove the
 watch.
@@ -61,56 +61,56 @@ whose ingest-scope or watch surface contains the server process's working direct
 one distinct project resolves (guid spellings canonicalize at the gate), several refuse
 as ambiguous with the sorted candidate list, none refuses with `projectId is required`
 naming the probed directory. An explicit id always wins and never consults the resolver.
-The exceptions: `memory_promotion_list`, whose omitted id means all-projects (its
-cross-project feature) and never cwd-defaults, `project_id_get`, which looks an id up by
-name and so takes none, and `project_id_token_get`, which mints one and so takes none.
+The exceptions: `get_memories_sharing_ranking`, whose omitted id means all-projects (its
+cross-project feature) and never cwd-defaults, `get_project_id`, which looks an id up by
+name and so takes none, and `save_project_id_token`, which mints one and so takes none.
 Writes land in `project:<id>` by default; naming a `workspaceId` routes them into that
 workspace's isolated context, and it wins over `context` when both
 are supplied (the sandbox has priority, so a workspace write never lands project-wide).
 
-10 memory tools (including `memory_get`, ADR-0035), 4 workspace tools, 3 watch tools,
-2 promotion tools, 2 share tools, 2 sweep tools (`memory_sweep`, `memory_set_ttl`),
-2 search-feedback tools (`memory_record_followthrough`, `memory_record_grade`),
-1 sync tool, 1 performance tool (`memory_performance`), 1 code tool (`code_get`),
-2 project tools (`project_id_get`, which returns the id registered under an exact name, and
-`project_id_token_get`, ADR-0089, which mints and registers a new project id; call
-`project_id_get` first).
+10 memory tools (including `get_entry`, ADR-0035), 4 workspace tools, 3 watch tools,
+2 promotion tools, 2 share tools, 2 sweep tools (`trigger_memory_cleanup`, `set_memory_ttl`),
+2 search-feedback tools (`set_memory_usage_record`, `set_query_result_grade`),
+1 sync tool, 1 performance tool (`get_engine_statistics`), 1 code tool (`get_entry`),
+2 project tools (`get_project_id`, which returns the id registered under an exact name, and
+`save_project_id_token`, ADR-0089, which mints and registers a new project id; call
+`get_project_id` first).
 `memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config
 refactor: configuration is no longer an MCP tool — the CLI verbs are the single
 config channel (see [Command-line options](#command-line-options)).
 
 | Tool                           | Parameters                                                                                                                                                  | Returns                                                                                            |
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
-| `memory_write`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt, stored=true, reason?}`                                           |
-| `memory_get`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
-| `memory_search`                | `projectId`, `query`, `sessionId!`, `scope=all\|project\|shared`, `workspaceId?`, `limit=8`, `minRelativeScore=0.6`, `rrfK?` (else 60), `ftsWeight?` (else 1), `vectorWeight?` (else 1), `sourceLambda?` (else 0.1), `consolidationThreshold?` (else 0.1), `docScoreFormula?` ("max"\|"sum", else "max"), `candidateWindow?` ("max3x100"\|"max5x50", else "max3x100"), `contextLabel?`, `kind=memory\|code\|both` (default `both`), `codeLimit?`, `codeMinRelativeScore?` | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], evidenceByHash?:{<hash>:{hash, fusionStrength, legs:[{legName, rank}], cosine?}}, fusionStats?:{topMargin?, topVsMedian?, maxPossible, participatingLegs}, unranked?:true, truncation?:[{floor, threshold, dropped}], warning?}` |
-| `memory_record_followthrough`  | `projectId`, `correlationId`, `filePath`, `servedRank?`                                                                                                                    | `{recorded: bool}`                                                                                 |
-| `memory_record_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: bool}`                                                                                 |
-| `memory_list`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
-| `memory_stats`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
-| `memory_share`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
-| `memory_share_extract`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...], absorbed, skippedDuplicates, failures: [...]}`         |
-| `memory_delete`                | `projectId`, `hash`                                                                                                                                         | `{deleted: n}`                                                                                     |
-| `memory_delete_context`        | `projectId`, `context`                                                                                                                                      | `{deleted: n}`                                                                                     |
-| `memory_ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
-| `memory_ingest_directory`      | `projectId`, `path`, `context?`                                                                                                                             | `{scanned: n}`                                                                                     |
-| `memory_embed_pending`         | `projectId`, `limit?`                                                                                                                                       | `{processed, pending}`                                                                             |
-| `memory_watch_add`             | `projectId`, `path`                                                                                                                                         | `{projectId, path, pruned: [], absorbedBy?}`                                                       |
-| `memory_watch_status`          | `projectId`                                                                                                                                                 | `{watches: [{projectId, path, state, lastError?, lastSync?, skippedCount, skipped: [{path, reason}]}]}` |
-| `memory_watch_remove`          | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
-| `memory_workspace_begin`       | `projectId`, `agentId?`, `name?`                                                                                                                            | `{workspaceId, context}`                                                                           |
-| `memory_workspace_status`      | `projectId`, `workspaceId`                                                                                                                                  | `{entries, count, agentId, name}`                                                                  |
-| `memory_workspace_consolidate` | `projectId`, `workspaceId`, `keep`                                                                                                                          | `{promoted, discarded}`                                                                            |
-| `memory_workspace_discard`     | `projectId`, `workspaceId`                                                                                                                                  | `{discarded}`                                                                                      |
-| `memory_sweep`                 | `projectId`, `dryRun=true`                                                                                                                                  | `{candidates, deleted}`                                                                            |
-| `memory_set_ttl`               | `projectId`, `hash`, `ttlDays?`                                                                                                                             | `{hash, ttlDays, rating, threshold, canEverExpire}`                                                |
-| `memory_sync`                  | `projectId`                                                                                                                                                 | `{sent, received, reindexed}`                                                                      |
-| `memory_promotion_list`        | `projectId?`, `limit=50`, `includeFullValue=false`, `allProjects=false`                                                                                                             | `{rows: [PromotionQueueRow]}`                                                                       |
-| `memory_promotion_discard`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
-| `memory_performance`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
-| `code_get`                     | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, lineStart, lineEnd}`                                                          |
-| `project_id_get`               | `name`                                                                                                                                                      | `{projectId}`                                                                                      |
-| `project_id_token_get`         | `name?`                                                                                                                                                     | `{projectId, instructions}`                                                                        |
+| `add_memory`                 | `projectId`, `content`, `workspaceId?`, `agentId?`, `context?`, `sourceFile?`, `section?`                                                                   | `{hash, path, context, createdAt, stored=true, reason?}`                                           |
+| `get_entry`                   | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, context, createdAt}`                                                          |
+| `query`                | `projectId`, `query`, `sessionId!`, `scope=all\|project\|shared`, `workspaceId?`, `limit=8`, `minRelativeScore=0.6`, `rrfK?` (else 60), `ftsWeight?` (else 1), `vectorWeight?` (else 1), `sourceLambda?` (else 0.1), `consolidationThreshold?` (else 0.1), `docScoreFormula?` ("max"\|"sum", else "max"), `candidateWindow?` ("max3x100"\|"max5x50", else "max3x100"), `contextLabel?`, `kind=memory\|code\|both` (default `both`), `codeLimit?`, `codeMinRelativeScore?` | `{results:[{hash, ranking, path, snippet, sourceFile?, chunkIndex, totalChunks}], code?:[{hash, ranking, path, snippet, lineStart, lineEnd}], evidenceByHash?:{<hash>:{hash, fusionStrength, legs:[{legName, rank}], cosine?}}, fusionStats?:{topMargin?, topVsMedian?, maxPossible, participatingLegs}, unranked?:true, truncation?:[{floor, threshold, dropped}], warning?}` |
+| `set_memory_usage_record`  | `projectId`, `correlationId`, `filePath`, `servedRank?`                                                                                                                    | `{recorded: bool}`                                                                                 |
+| `set_query_result_grade`          | `projectId`, `correlationId`, `grade`, `note?`                                                                                                              | `{recorded: bool}`                                                                                 |
+| `get_index`                  | `projectId`                                                                                                                                                 | `{files: <json tree>}`                                                                             |
+| `get_store_statistics`                 | `projectId`                                                                                                                                                 | `{entries, pending, contexts}`                                                                     |
+| `share_memory`                 | `projectId`, `hash`                                                                                                                                         | `{shared: true, context: "shared"}`                                                                |
+| `trigger_memory_sharing`         | `projectIds[]`, `mode=propose\|promote`, `limit=20`, `includeTtlRows=false`, `autoPromote=false`, `confirm=false`                                            | `{candidates: [...], promotedHashes: [...], absorbed, skippedDuplicates, failures: [...]}`         |
+| `delete_entry`                | `projectId`, `hash`                                                                                                                                         | `{deleted: n}`                                                                                     |
+| `delete_context`        | `projectId`, `context`                                                                                                                                      | `{deleted: n}`                                                                                     |
+| `ingest_file`           | `projectId`, `path`, `context?`                                                                                                                             | `{indexed: 0\|1}`                                                                                  |
+| `ingest_directory`      | `projectId`, `path`, `context?`                                                                                                                             | `{scanned: n}`                                                                                     |
+| `embed_deferred_entries`         | `projectId`, `limit?`                                                                                                                                       | `{processed, pending}`                                                                             |
+| `add_watch`             | `projectId`, `path`                                                                                                                                         | `{projectId, path, pruned: [], absorbedBy?}`                                                       |
+| `get_watch_status`          | `projectId`                                                                                                                                                 | `{watches: [{projectId, path, state, lastError?, lastSync?, skippedCount, skipped: [{path, reason}]}]}` |
+| `remove_watch`          | `projectId`, `path`                                                                                                                                         | `{projectId, path}`                                                                                |
+| `initialize_workspace`       | `projectId`, `agentId?`, `name?`                                                                                                                            | `{workspaceId, context}`                                                                           |
+| `get_workspace_status`      | `projectId`, `workspaceId`                                                                                                                                  | `{entries, count, agentId, name}`                                                                  |
+| `close_workspace` | `projectId`, `workspaceId`, `keep`                                                                                                                          | `{promoted, discarded}`                                                                            |
+| `discard_workspace`     | `projectId`, `workspaceId`                                                                                                                                  | `{discarded}`                                                                                      |
+| `trigger_memory_cleanup`                 | `projectId`, `dryRun=true`                                                                                                                                  | `{candidates, deleted}`                                                                            |
+| `set_memory_ttl`               | `projectId`, `hash`, `ttlDays?`                                                                                                                             | `{hash, ttlDays, rating, threshold, canEverExpire}`                                                |
+| `sync_to_cloud`                  | `projectId`                                                                                                                                                 | `{sent, received, reindexed}`                                                                      |
+| `get_memories_sharing_ranking`        | `projectId?`, `limit=50`, `includeFullValue=false`, `allProjects=false`                                                                                                             | `{rows: [PromotionQueueRow]}`                                                                       |
+| `delete_memory_from_ranking`     | `projectId`, `hash?`                                                                                                                                        | `{discarded: n}`                                                                                   |
+| `get_engine_statistics`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
+| `get_entry`                     | `projectId`, `hash`                                                                                                                                         | `{hash, value, path, lineStart, lineEnd}`                                                          |
+| `get_project_id`               | `name`                                                                                                                                                      | `{projectId}`                                                                                      |
+| `save_project_id_token`         | `name?`                                                                                                                                                     | `{projectId, instructions}`                                                                        |
 
 ### Notes on the less obvious tools
 
@@ -118,12 +118,12 @@ config channel (see [Command-line options](#command-line-options)).
   when named); `scope=project` searches `project:<id>` only; `scope=shared` searches the
   `shared` promotion tier only. Workspace scratch is never included in `scope=all` — it is
   only visible to a search that names that `workspaceId`.
-- **`memory_search` relevance floors:** `minRelativeScore` is relative to the response's own
+- **`query` relevance floors:** `minRelativeScore` is relative to the response's own
   top hit (rank 1 always scores 1.0), so an absolute relevance floor sits on top of it: rows
   whose fused content cosine is below 0.35 are dropped, and a query nothing answers comes back
   empty instead of a confident top hit. A row whose text contains every query term (the keyword
   leg's conjunctive match: all content terms for a query of up to four, or every part of a
-  `file#section` anchor) is kept whatever its cosine, so `memory_search "AIR-4471"` finds the
+  `file#section` anchor) is kept whatever its cosine, so `query "AIR-4471"` finds the
   entry that says AIR-4471; a long query's OR match and a stop-word-only match get no such
   exemption. `minRelativeScore=0` is full recall and turns off every score floor. Rows that
   survive with no absolute backing at all (a flat top margin, one participating leg, no row over
@@ -133,7 +133,7 @@ config channel (see [Command-line options](#command-line-options)).
   candidates (`minRelativeScore` and/or `absoluteRelevance`). A response that fills `limit`
   carries no `truncation`, and neither does one that is short because the bank simply ends:
   the marker distinguishes "the floor cut this" from "this is all there is".
-- **`memory_search` `kind` values:** `kind=both` (default since 1.34.0) runs both hybrids
+- **`query` `kind` values:** `kind=both` (default since 1.34.0) runs both hybrids
   independently and returns both sections (no cross-corpus fusion — each section is ranked by
   its own FTS5+vec0 hybrid). `kind=memory` is the pre-1.34 default behavior, unchanged — no
   `code` key in the response at all. `kind=code` searches the code corpus only (`results`
@@ -160,15 +160,15 @@ config channel (see [Command-line options](#command-line-options)).
   `relativeScore` is hybrid-score-relative like memory's (the top hit is always 1.0, others
   proportional to their fused score) — not the positional, rank-derived placeholder of an earlier
   wave. Code hits carry `lineStart`/`lineEnd` (1-based) instead of `chunkIndex`/`totalChunks`;
-  read the full chunk with `code_get`. Every `memory_search` writes a `search_quality` row
+  read the full chunk with `get_entry`. Every `query` writes a `search_quality` row
   (ADR-0094): `kind=memory` records the memory hit count and files as always, `kind=both`
   records the memory leg the same way, and `kind=code` records the code hit count with an empty
   file list. Code paths never enter the table — neither the code corpus nor the telemetry
   tables ever leave the machine (code per ADR-0085, telemetry stripped from every pushed
   snapshot per ADR-0098). `meta.correlationId` is present on all three kinds
-  (the id `memory_record_grade`/`memory_record_followthrough` key off), since every search now
-  has a row behind it. `sessionId` is required on every search. Pass your session id. Blank fails fast. The server stores the value verbatim on the row. When you open a file the search returned, call `memory_record_followthrough` with that id, the file path, and `servedRank` when you saw one. Rank is 1-based. Under `kind=both` a bare rank cannot name its section, and that ambiguity is intentional. Grade with `memory_record_grade` (1-5, 5 is best, plus an optional note) on the same id when you have a judgment. Both calls touch only a search record that belongs to the caller's `projectId`. `recorded` is true only when that record was updated; an unknown correlationId, or one from another project, changes nothing and returns `recorded: false`.
-- **`memory_ingest_file`/`memory_ingest_directory` feed the code corpus too:** a file is routed
+  (the id `set_query_result_grade`/`set_memory_usage_record` key off), since every search now
+  has a row behind it. `sessionId` is required on every search. Pass your session id. Blank fails fast. The server stores the value verbatim on the row. When you open a file the search returned, call `set_memory_usage_record` with that id, the file path, and `servedRank` when you saw one. Rank is 1-based. Under `kind=both` a bare rank cannot name its section, and that ambiguity is intentional. Grade with `set_query_result_grade` (1-5, 5 is best, plus an optional note) on the same id when you have a judgment. Both calls touch only a search record that belongs to the caller's `projectId`. `recorded` is true only when that record was updated; an unknown correlationId, or one from another project, changes nothing and returns `recorded: false`.
+- **`ingest_file`/`ingest_directory` feed the code corpus too:** a file is routed
   by extension — the memory-owned extensions (`.md`/`.markdown`/`.txt`/`.json`/`.ipynb`) always win on
   overlap; a recognized code extension (`.cs`, `.py`, `.ts`, `.go`, `.rs`, … — the v1 list is
   owner-adjustable) goes to the code corpus instead; anything else is skipped in both. A `.md`
@@ -179,15 +179,15 @@ config channel (see [Command-line options](#command-line-options)).
   configuration; each row lands `embed_state = 'pending'` until a code embedding engine is
   configured (`model code set local`, below) — until then the rows are FTS5-searchable only
   (see `kind=code` above). Memory ingest is unaffected.
-- **`memory_share`:** promotes the entry whose `hash` you pass (from a `memory_write`
-  or `memory_search` result) into `shared`. It is additive — the source project row
-  stays. There is no un-share; `memory_delete` on the shared row's hash removes it from
+- **`share_memory`:** promotes the entry whose `hash` you pass (from a `add_memory`
+  or `query` result) into `shared`. It is additive — the source project row
+  stays. There is no un-share; `delete_entry` on the shared row's hash removes it from
   `shared`.
-- **`memory_promotion_list` / `memory_promotion_discard`:** the propose tier
-  (ADR-0007) — `memory_share_extract` in `mode=propose` fills a persisted
-  per-project queue (`promotion_queue`) ranked by score; `memory_promotion_list`
+- **`get_memories_sharing_ranking` / `delete_memory_from_ranking`:** the propose tier
+  (ADR-0007) — `trigger_memory_sharing` in `mode=propose` fills a persisted
+  per-project queue (`promotion_queue`) ranked by score; `get_memories_sharing_ranking`
   reads it (omitting `projectId` requires `allProjects=true` — explicit consent
-  to see every project's queue); `memory_promotion_discard`
+  to see every project's queue); `delete_memory_from_ranking`
   drops one row (`hash`) or, with `hash` omitted, the whole project's queue.
   **A discard is permanent** (ADR-0026): the rejected hash is recorded in
   `promotion_discards`, and propose will never re-queue it — not on the next pass, not
@@ -197,7 +197,7 @@ config channel (see [Command-line options](#command-line-options)).
   is no un-discard; changed content produces a new hash and is re-eligible. The propose
   upsert also refuses rows whose exact value is already in the shared tier, so the
   queue never holds shared content.
-  `memory_share_extract` in `mode=promote` drains the top queued candidates into
+  `trigger_memory_sharing` in `mode=promote` drains the top queued candidates into
   `shared`. Operators who never review the queue can set `settings extract
   auto-promote-threshold` to a score (0..4, e.g. 3.5; `off` by default). On a background
   pass in `promote` mode, the loop ranks fresh candidates, queues only rows at or above
@@ -205,16 +205,16 @@ config channel (see [Command-line options](#command-line-options)).
   so no backlog piles up waiting for a review that never happens. Propose mode ignores
   the threshold and keeps queuing the full ranked set, and the manual MCP promote path
   stays unfiltered: an explicit promote call shares what it names. Rows queued before
-  the threshold was set stay queued; clear them once with `memory_promotion_discard`
+  the threshold was set stay queued; clear them once with `delete_memory_from_ranking`
   after enabling. Every response carries `waitingPromotionsCount`/`promotionsWaitTimeSeconds`
   in `meta`, scoped to the project the call named; once that project holds queued rows,
   `meta.capacity` also carries its `reserved`/`used`/`borrowing` share of the cap
   (ADR-0007's fair-share promise, made observable) — see [`capacity`
   semantics](#capacity-semantics) below for what `reserved` and `borrowing`
-  actually mean. The two tools that do not name a single project — `memory_promotion_list`
-  with `projectId` omitted, and `memory_share_extract` over several ids — report a
+  actually mean. The two tools that do not name a single project — `get_memories_sharing_ranking`
+  with `projectId` omitted, and `trigger_memory_sharing` over several ids — report a
   bank-wide count with `capacity` absent. No response names another project.
-- **`memory_share_extract(mode=promote)` result shape:** `candidates` is always `[]` in promote
+- **`trigger_memory_sharing(mode=promote)` result shape:** `candidates` is always `[]` in promote
   mode (it is only populated by `propose`). `promotedHashes` are the hashes whose share actually
   CREATED a shared row — never a claim for a row that already existed. Every promoted chunk gets
   its own shared row under a value-addressed path (`shared/<sha256(value)>.md`): one file may
@@ -278,7 +278,7 @@ config channel (see [Command-line options](#command-line-options)).
   model — the same files memory uses — for the code corpus; nothing is downloaded (ADR-0108,
   replacing the earlier default of downloading `faxenoff/code-daemon-embed-v1`)
   (`CodeEngineSetup.DefaultModelCommand`, the exact string the search warning, `doctor`, and the
-  `memory_search` tool description all quote). For a non-default model, the manual two-step still
+  `query` tool description all quote). For a non-default model, the manual two-step still
   applies: `ai-raccoon model download {repo-id}` then `ai-raccoon model code
   set local <dir>`. `ai-raccoon settings model
   show` includes the `codeModel`/`codeEngine` rows when set; `ai-raccoon settings model reset`
@@ -288,7 +288,7 @@ config channel (see [Command-line options](#command-line-options)).
   writes the dual-vector fusion alpha (`retrieval.structureAlpha`, 0..1; default 0.5)
   used by search as `score = alpha × content + (1 − alpha) × heading-path structure`.
   Applies to subsequent searches, no re-embedding.
-- **`memory_search`:** hybrid fusion from two modalities: FTS5 (keyword) and vec0
+- **`query`:** hybrid fusion from two modalities: FTS5 (keyword) and vec0
   (semantic, when an embedding engine is configured). The two ranked lists are fused
   with Reciprocal Rank Fusion (RRF): each result's score = Σ weight / (k + rank) per
   modality, then normalized so the top result is 1.0 (range 0..1). `rrfK=60` (default),
@@ -310,15 +310,15 @@ config channel (see [Command-line options](#command-line-options)).
   and `notes.txt#install` is searched as ordinary text. The rows an anchor matched lead the response ahead of
   anything the vector leg found for the path string. A row that both legs rank first stays first: the `sourceLambda` sibling boost
   reorders the rows below it and never lifts a neighbour above it.
-- **`memory_workspace_consolidate`:** `keep` is an array of hashes to promote, or
+- **`close_workspace`:** `keep` is an array of hashes to promote, or
   `["all"]` to promote every entry in the workspace. It then deletes the workspace
   context entirely — entries not kept are gone.
-- **Workspace lifecycle record:** `memory_workspace_begin` inserts an `Active` row into
+- **Workspace lifecycle record:** `initialize_workspace` inserts an `Active` row into
   the `workspaces` table inside `memory.db` (no separate meta DB), carrying the `agentId`
   and `name` it was given as provenance; consolidate marks it `Closed` and discard marks
   it `Discarded`, both with `closed_at`, so the record says which trigger ended it. A
   workspace begun but never finished stays traceable after a crash.
-- **`memory_sweep`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
+- **`trigger_memory_cleanup`:** `dryRun=true` (default) only lists candidates; pass `dryRun=false`
   to delete. An entry is a candidate only when it carries a per-entry TTL, its rating is
   below the sweep threshold (default 0.3) *and* its age exceeds that TTL. `shared` entries
   are never swept, and the delete stays inside the `project` scope it enumerated — a
@@ -335,18 +335,18 @@ config channel (see [Command-line options](#command-line-options)).
   retunes the cadence live, no server restart needed. The kill switch fails safe: any
   casing of `false` in `sweep.enabled.global` disarms it, and only an explicit `false`
   does — an absent or unreadable row leaves the reaper armed. Nothing without a per-entry
-  TTL is ever a candidate, so a bank that has never called `memory_set_ttl` has nothing
-  to lose. It honours the same per-project access mode `memory_sweep` enforces at the
+  TTL is ever a candidate, so a bank that has never called `set_memory_ttl` has nothing
+  to lose. It honours the same per-project access mode `trigger_memory_cleanup` enforces at the
   tool boundary: a project not in `full` mode is skipped, not reaped, even while the
   reaper is armed and the pass is running against every other project (see
   [ADR-0025](../adr/0025-the-sweep-reaper.md)).
-- **`memory_set_ttl`:** the only way to give an entry a TTL — without one it can never be
+- **`set_memory_ttl`:** the only way to give an entry a TTL — without one it can never be
   swept. `ttlDays` is 1..36500, or `null` to clear it; `0` is rejected. A TTL is necessary
   but not sufficient: fresh entries start at rating 0.5 against a 0.3 threshold, so
   `ttlDays=7` does not expire an entry at age 30. The returned `canEverExpire` reports
   whether the rating gate is already met. An unknown hash — or one owned by another
   project — is refused as `unknown-hash`. Side effect: an entry carrying a TTL leaves
-  `memory_share_extract`'s candidate set unless that call passes `includeTtlRows`.
+  `trigger_memory_sharing`'s candidate set unless that call passes `includeTtlRows`.
 - **File watching:** watching is enabled per project (or `*`) with
   `ai-raccoon settings watch enable|disable {project-id|*} {true|false}`, restricted to a scope
   allowlist (`settings ingest scope add|remove|list`) and a concurrency cap (`settings watch
@@ -354,14 +354,14 @@ config channel (see [Command-line options](#command-line-options)).
   which stays top-level. Quote the `*` wildcard in the
   shell (`'*'`); an unquoted `*` expands into the current directory's files and the CLI
   reports each as an unrecognized argument. The `settings watch` family CONFIGURES watching —
-  registrations are created by agents via `memory_watch_add`; `settings watch list` prints the
+  registrations are created by agents via `add_watch`; `settings watch list` prints the
   config per target in block format (`target: <id>  enabled: ..  concurrency: ..  scope:`,
   one path per line, `(none)` when empty — `enabled: true` means watching is enabled for
   that target, not that a watch is registered), `watch registered [{project-id}]` lists
   the persisted registrations (project, path, registered, lastChange; live state stays on
-  `memory_watch_status`), and `settings watch remove {project-id|*}` deletes a target's config rows
+  `get_watch_status`), and `settings watch remove {project-id|*}` deletes a target's config rows
   (`'*'` clears only the global config; a file-name ghost row — written by an unquoted `*` —
-  is removed individually, e.g. `settings watch remove CLAUDE.md`). `memory_watch_add` registers a
+  is removed individually, e.g. `settings watch remove CLAUDE.md`). `add_watch` registers a
   file or directory and returns immediately (the initial scan runs in the background —
   status reports `scanning`); an exact re-add of an already-watched path is a no-op
   (`absorbedBy` in the result names it). **No overlapping watches**
@@ -370,12 +370,12 @@ config channel (see [Command-line options](#command-line-options)).
   written); registering a broader watch instead prunes every watch it contains (registration
   row + fingerprints removed, listed in the result's `pruned`) — already-ingested entries are
   kept, and the broader watch's catch-up scan re-covers them (idempotent, hash-skip cheap).
-  `memory_watch_status` lists every registered watch with live state
+  `get_watch_status` lists every registered watch with live state
   (`scanning`/`healthy`/`retrying`/`stopped`), last error and last sync, and the files its
   digests could not index: `skippedCount` is exact, `skipped` lists the first 20 by path with a
   reason (`unsupported-type`, `binary`, `unparseable`). A skipped file is never fingerprinted, so
   every catch-up retries it, and it leaves the list once it indexes, is deleted, or is excluded. It
-  is available in every access tier. `memory_watch_remove` stops and unregisters; a non-existent watch is a
+  is available in every access tier. `remove_watch` stops and unregisters; a non-existent watch is a
   no-op, and the result's `removed` says which happened. Registration failures surface as `watching-disabled:` / `path-outside-scope:` /
   `path-not-found:` / `watch-overlap:` tool errors; watch failures never fail the server.
 - **Healing a missed change:** a watch's catch-up scan re-queues a file whose mtime or size no
@@ -385,10 +385,10 @@ config channel (see [Command-line options](#command-line-options)).
   minutes for every watch that has not stopped, and right away when a watch's first digest
   succeeds after a failure ([ADR-0121](../adr/0121-restart-catch-up-compares-each-file-with-its-own-fingerprint.md)).
 - **`ai-raccoon.ignore`:** an optional gitignore-subset exclude file at the root of a watched
-  directory (or a `memory_ingest_directory` call's root) — `<root>/ai-raccoon.ignore`, one file
-  per root, never discovered in subdirectories; a `memory_ingest_directory` root without its own
+  directory (or a `ingest_directory` call's root) — `<root>/ai-raccoon.ignore`, one file
+  per root, never discovered in subdirectories; a `ingest_directory` root without its own
   file falls back to the same ancestor resolution as a single-file ingest. An explicit
-  `memory_ingest_file` call has no walk root of its own, so it resolves one: the containing registered watch if the path falls under
+  `ingest_file` call has no walk root of its own, so it resolves one: the containing registered watch if the path falls under
   one, else the ingest-scope allowlist entry that admits it, else the file's own parent directory
   as a last resort — and the same rule applies whether the file routes to memory or to the code
   corpus. Syntax: `*` (one path segment), `**` (zero or
@@ -405,19 +405,19 @@ config channel (see [Command-line options](#command-line-options)).
   copy it to a new watched root and delete what does not apply, rather than extending
   the built-in deny set, which would silently change ingest for every project.
 - **Deferred writes:** until an engine is configured, writes are stored deferred
-  (`memory_stats.pending > 0`) and only become searchable after `memory_embed_pending`.
+  (`get_store_statistics.pending > 0`) and only become searchable after `embed_deferred_entries`.
 - **A row that cannot embed** is retried on its own, not with its batch, and after three failed
-  attempts it is abandoned: no drain, `memory_embed_pending` call or migration selects it again,
-  and event 444 names it. It still counts in `memory_stats.pending`, because it is not embedded.
+  attempts it is abandoned: no drain, `embed_deferred_entries` call or migration selects it again,
+  and event 444 names it. It still counts in `get_store_statistics.pending`, because it is not embedded.
   Rewriting or re-ingesting it gives it a fresh row; switching the embedding model resets every
   row's attempts. An engine that cannot answer at all fails the pass instead and charges no row
   ([ADR-0119](../adr/0119-poison-memory-rows-are-isolated-and-abandoned.md)).
-- **`memory_performance`:** project-scoped, except the reserved `__self_metrics__` project id (an
+- **`get_engine_statistics`:** project-scoped, except the reserved `__self_metrics__` project id (an
   exact, case-sensitive match), which returns the bank-wide series instead and needs no
   registration; any other unregistered id, `__SELF_METRICS__` included, is refused with
   `project-not-registered` (a per-tenant whole-bank scope is still deferred). The
   `series` list is derived from the server's tool inventory plus the nine
-  `memory_search` phases (`search.open`, `search.embed`, `search.fts`, `search.vector`,
+  `query` phases (`search.open`, `search.embed`, `search.fts`, `search.vector`,
   `search.fusion`, `search.affinity`, `search.adjustment`, `search.snippets`,
   `search.bump`) — not from what happens to be
   in the metrics table — so a tool or phase that has never been recorded still appears,
@@ -452,22 +452,22 @@ An id that a tool cannot act on is handled one of two ways, and which way depend
 tool it is (see [ADR-0024](../adr/0024-unknown-id-contract.md)):
 
 - **A removal verb is idempotent and reports a count.** An unknown id is a no-op, not an error —
-  `memory_delete`, `memory_delete_context`, and `memory_promotion_discard` return `0` for the
-  count they would otherwise report; `memory_watch_remove` treats a non-existent watch the same
+  `delete_entry`, `delete_context`, and `delete_memory_from_ranking` return `0` for the
+  count they would otherwise report; `remove_watch` treats a non-existent watch the same
   way. Calling a removal verb twice on the same id is safe by construction.
-- **A state transition refuses an id it cannot act on.** `memory_share` and the workspace family
-  (`memory_write` with `workspaceId`, `memory_workspace_status`, `memory_workspace_consolidate`,
-  `memory_workspace_discard`) return a typed refusal (`unknown-hash` / `unknown-workspace`, see
+- **A state transition refuses an id it cannot act on.** `share_memory` and the workspace family
+  (`add_memory` with `workspaceId`, `get_workspace_status`, `close_workspace`,
+  `discard_workspace`) return a typed refusal (`unknown-hash` / `unknown-workspace`, see
   [Error shapes](#error-shapes)) instead of silently doing nothing — there is no well-defined
   "already done" state for promoting a hash that was never written or writing into a workspace
   that was never begun.
 - **An unregistered `projectId` is refused on every call, reads included, not silently founded.**
   ADR-0089 decision 3, amended by ADR-0127: a call is refused (`project-not-registered`, see
-  [Error shapes](#error-shapes)) unless the id is registered (`project_id_token_get` or `ai-raccoon project id register <id>`) or the bank already holds rows
+  [Error shapes](#error-shapes)) unless the id is registered (`save_project_id_token` or `ai-raccoon project id register <id>`) or the bank already holds rows
   for it (a legacy id, which keeps working with a one-time warning, EventId 433). Reads never
   register an id; until a project-ids repair finishes, a write under an unregistered raw-text id
-  still registers it. The only calls that pass without a registered id are `project_id_token_get`,
-  `project_id_get`, `memory_promotion_list` with `allProjects=true`, and `memory_performance` under
+  still registers it. The only calls that pass without a registered id are `save_project_id_token`,
+  `get_project_id`, `get_memories_sharing_ranking` with `allProjects=true`, and `get_engine_statistics` under
   `__self_metrics__`.
 
 ### `capacity` semantics
@@ -506,14 +506,14 @@ nobody pushes the total over cap.
 
 | Prompt | Purpose |
 |---|---|
-| `memory-usage-guide` | Protocol: always pass `project_id`; **search memory first** (2-3 query formulations) and escalate to web/code search only by result, writing findings back; watch setup (`ai-raccoon settings ingest scope add` + `settings watch enable`, then `memory_watch_add`/`status`/`remove`); workspace isolation, promotion via `memory_share`, search scopes, degradation, bulk ingest. |
+| `memory-usage-guide` | Protocol: always pass `project_id`; **search memory first** (2-3 query formulations) and escalate to web/code search only by result, writing findings back; watch setup (`ai-raccoon settings ingest scope add` + `settings watch enable`, then `add_watch`/`status`/`remove`); workspace isolation, promotion via `share_memory`, search scopes, degradation, bulk ingest. |
 | `workspace-consolidation-guide` | Ritual: list the outbox, promote durable facts, drop noise. |
 
 ## Contexts
 
 | Context | Meaning | Synced? | Swept? |
 |---|---|---|---|
-| `shared` | curated cross-project knowledge — only via `memory_share` | yes | exempt |
+| `shared` | curated cross-project knowledge — only via `share_memory` | yes | exempt |
 | `project:<project-id>` | committed, durable project memory | yes | yes |
 | `workspace:<workspace-id>` | sandboxed workspace scratch (outbox) | never | no |
 | custom | user-defined labels (`docs:api`, …) | yes | project sweep only |
@@ -912,7 +912,7 @@ ai-raccoon settings sync add azure {container} [--object-key {key}] [--cli --acc
 ai-raccoon settings sync remove
 ai-raccoon settings sync show
 
-# watch: file-watcher configuration (registers happen via memory_watch_add).
+# watch: file-watcher configuration (registers happen via add_watch).
 # 'watch registered' stays top-level — it reads the watches table, not settings.
 ai-raccoon settings watch enable {project-id|*} {true|false}
 ai-raccoon settings watch disable {project-id|*} {true|false}
@@ -1175,10 +1175,10 @@ source of truth; a test cross-checks this table against it.
 | `path-outside-scope` | Ingest/watch path falls outside the project's declared ingest scope | `path-outside-scope: Path '<path>' is outside the ingest scope. Run 'ai-raccoon settings ingest scope add <projectId|*> <path>' to allow it.` |
 | `path-not-found` | Ingest/watch path does not exist | `path-not-found: Path '<path>' does not exist.` |
 | `unknown-workspace` | `workspaceId` does not exist, or is not active, for the project | `unknown-workspace: Workspace '<id>' does not exist for project '<project>'.` |
-| `unknown-hash` | `hash` (e.g. passed to `memory_share`) does not exist in the project's scope | `unknown-hash: No entry with hash '<hash>' in project '<project>'.` |
+| `unknown-hash` | `hash` (e.g. passed to `share_memory`) does not exist in the project's scope | `unknown-hash: No entry with hash '<hash>' in project '<project>'.` |
 | `schema-version-unsupported` | The bank's stored schema version is newer than this binary supports (issue #200) | `schema-version-unsupported: bank schema v<n> is newer than this binary supports (v<m>); update ai-raccoon` |
 | `watching-disabled` | Watching is disabled for the project | `watching-disabled: Watching is disabled for project '<project>'. Run 'ai-raccoon settings watch enable <projectId|*> true' to enable it.` |
-| `watch-overlap` | `memory_watch_add`'s path is already covered by an existing watch (no overlapping watches — the broader watch wins; adding a broader watch instead prunes the narrower ones rather than refusing) | `watch-overlap: Path '<path>' is already covered by watch '<covering-path>'.` |
+| `watch-overlap` | `add_watch`'s path is already covered by an existing watch (no overlapping watches — the broader watch wins; adding a broader watch instead prunes the narrower ones rather than refusing) | `watch-overlap: Path '<path>' is already covered by watch '<covering-path>'.` |
 | `sync-not-configured` | No sync credentials configured | `sync-not-configured: Memory sync is not configured or its connection string is invalid. Run 'ai-raccoon sync add s3 <url> --bucket <name>' or 'ai-raccoon sync add azure <container>' and enter the credentials when prompted.` |
 | `sync-auth-failed` | Sync credentials missing/invalid, or a 401/403 from the cloud provider | `sync-auth-failed: Azure auth failed — run 'az login' (or set AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET for headless use).` (Azure) / `sync-auth-failed: AWS auth failed — run 'aws configure' or 'aws sso login', or verify the keys with 'ai-raccoon sync show'.` (S3) |
 | `sync-conflict` | Remote snapshot kept changing mid-merge, past the 3 re-pull/re-merge/re-push retries | `sync-conflict: <detail>` |
@@ -1187,19 +1187,19 @@ source of truth; a test cross-checks this table against it.
 | `sync-corrupt-file` | `PRAGMA quick_check` failed on the pulled remote snapshot — the local DB is not replaced | `sync-corrupt-file: <detail>` |
 | `sync-tampered-remote` | The pulled remote snapshot's embedded HMAC authenticity tag does not match its bytes, **or** the blob has no tag at all for an objectKey this bank has previously verified one for (checked before `PRAGMA quick_check` and before `ATTACH`) — the local DB is not replaced. An encrypted bank keys the tag from its own passphrase via `HKDF`; a headerless remote is accepted with a logged warning only the first time this objectKey is ever seen (trust-on-first-use). An encrypted bank synced by ≥1.31 cannot be pulled by <1.31 — upgrade both ends of an encrypted sync pair together | `sync-tampered-remote: <detail>` |
 | `access-denied` | The resolved access mode (`ro`/`rw`/`full`) does not permit the attempted operation; the refusal names the `settings access` remedy | `access-denied: <tool> requires mode <required> (current <mode>); run 'ai-raccoon settings access set <project> <required>' to raise this project's mode, or 'ai-raccoon settings access default set <required>' for all projects` |
-| `project-not-registered` | A call, read or write, named a `projectId` with no registry row and no existing rows either (ADR-0089, ADR-0127). A legacy id the bank already holds rows for keeps working, with a one-time warning, instead of this refusal | `project-not-registered: Project '<id>' is not registered. Look up this repository's id with project_id_get, mint a new one with project_id_token_get, or register an id you already use with 'ai-raccoon project id register <id>'.` |
+| `project-not-registered` | A call, read or write, named a `projectId` with no registry row and no existing rows either (ADR-0089, ADR-0127). A legacy id the bank already holds rows for keeps working, with a one-time warning, instead of this refusal | `project-not-registered: Project '<id>' is not registered. Look up this repository's id with get_project_id, mint a new one with save_project_id_token, or register an id you already use with 'ai-raccoon project id register <id>'.` |
 | `project-retired` | A call, read or write, named a `projectId` the project-ids repair dropped with a tombstone; it is refused with the repair attribution, also while a repair request is open. An alias loser folds to its winner instead of refusing | `project-retired: Project '<id>' is retired: the project-ids repair attributed it as dropped test residue and deleted its rows with a tombstone. Calls under a retired id are refused — use the canonical project id instead.` |
-| `project-not-found` | `project_id_get` found no project registered under that exact, case-sensitive name. Nothing is registered; mint one with `project_id_token_get` | `project-not-found: No project is registered under the name '<name>'. Call project_id_token_get with this name to mint and register one.` |
-| `project-name-ambiguous` | `project_id_get` found several projects registered under that exact name; the message lists every id so a human can pick one | `project-name-ambiguous: 2 projects are registered under the name '<name>': <id1>, <id2>. Ask the user which one to use and pass that id as projectId.` |
+| `project-not-found` | `get_project_id` found no project registered under that exact, case-sensitive name. Nothing is registered; mint one with `save_project_id_token` | `project-not-found: No project is registered under the name '<name>'. Call save_project_id_token with this name to mint and register one.` |
+| `project-name-ambiguous` | `get_project_id` found several projects registered under that exact name; the message lists every id so a human can pick one | `project-name-ambiguous: 2 projects are registered under the name '<name>': <id1>, <id2>. Ask the user which one to use and pass that id as projectId.` |
 | `context-outside-project` | A write's `context` names a project other than the request's `project_id` | `context-outside-project: Context '<context>' writes into a project other than '<project_id>'. A write may only target its own project.` |
-| `invalid-params` | FluentValidation rejected the request (invalid `scope`, out-of-range `limit`, etc.), or the call named no `projectId` and cwd-default resolution found no candidate — the refusal names the probed working directory. When resolution finds two or more candidates the message is `invalid-params: projectId is ambiguous from cwd <cwd>: candidates <ids>`. The one exception is `memory_promotion_list`, whose omitted projectId means all-projects (that tool's cross-project feature) and never cwd-defaults. | `invalid-params: projectId is required (no registered project's scope contains cwd <cwd>; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)` |
+| `invalid-params` | FluentValidation rejected the request (invalid `scope`, out-of-range `limit`, etc.), or the call named no `projectId` and cwd-default resolution found no candidate — the refusal names the probed working directory. When resolution finds two or more candidates the message is `invalid-params: projectId is ambiguous from cwd <cwd>: candidates <ids>`. The one exception is `get_memories_sharing_ranking`, whose omitted projectId means all-projects (that tool's cross-project feature) and never cwd-defaults. | `invalid-params: projectId is required (no registered project's scope contains cwd <cwd>; pass projectId explicitly, or register this directory with add_watch / settings ingest scope add)` |
 | `invalid-argument` | A call's JSON argument shape doesn't match the tool's declared parameter type (e.g. a scalar where an array is declared), a required parameter is missing, or a present-but-blank value fails a guard clause — caught at argument-binding time or by a guard clause at the top of the tool method, before its logic runs. Mapped from `JsonException`, `ArgumentException` and `ArgumentNullException`. `ArgumentOutOfRangeException` is deliberately **not** mapped: it is how .NET reports the server's own index arithmetic going wrong, so refusing it would mute Error-level alerting and tell the caller to retry an argument that was never at fault | `invalid-argument: The JSON value could not be converted to System.String[]. Path: $ \| LineNumber: 0 \| BytePositionInLine: 5.` |
-| `confirm-required` | `memory_share_extract` called with `autoPromote=true` but `confirm` not set to `true` — an explicit enable gate for a promotion that shares data across all listed projects | `confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable` |
-| `cancelled` | The tool's work was cancelled while the request connection was still live (a client abort racing completion, or a downstream timeout) — answered as a normal tool error instead of escaping to the SDK's warn-level "request handler failed" | `cancelled: tool 'memory_search' request was cancelled` |
-| `bank-busy` | A transient write-lock loss: SQLITE_BUSY (5) / SQLITE_LOCKED (6) anywhere in the exception chain (WP12's write-lock convoy — another writer holds the bank's write lock past the busy timeout). Special-cased in `ToolRefusals.Filter` rather than tabled by exception type, because the same `SqliteException` also carries non-transient faults (26, `file is not a database`) that stay unmapped. The call did not happen; retry it. The search's access-rating bump is best-effort on top of this: `memory_search` returns its results and logs one Warning instead (EventId 897) when only that bookkeeping write loses the race | `bank-busy: the bank is busy (another writer holds the lock); retry the call` |
-| `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model embedding set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes (memory_write)` |
+| `confirm-required` | `trigger_memory_sharing` called with `autoPromote=true` but `confirm` not set to `true` — an explicit enable gate for a promotion that shares data across all listed projects | `confirm-required: autoPromote shares candidates with ALL projects — pass confirm=true to enable` |
+| `cancelled` | The tool's work was cancelled while the request connection was still live (a client abort racing completion, or a downstream timeout) — answered as a normal tool error instead of escaping to the SDK's warn-level "request handler failed" | `cancelled: tool 'query' request was cancelled` |
+| `bank-busy` | A transient write-lock loss: SQLITE_BUSY (5) / SQLITE_LOCKED (6) anywhere in the exception chain (WP12's write-lock convoy — another writer holds the bank's write lock past the busy timeout). Special-cased in `ToolRefusals.Filter` rather than tabled by exception type, because the same `SqliteException` also carries non-transient faults (26, `file is not a database`) that stay unmapped. The call did not happen; retry it. The search's access-rating bump is best-effort on top of this: `query` returns its results and logs one Warning instead (EventId 897) when only that bookkeeping write loses the race | `bank-busy: the bank is busy (another writer holds the lock); retry the call` |
+| `model-migration-in-progress` | Every bank operation is refused for the duration of an embedding-model migration (`model embedding set`, ADR-0076) — a bank whose rows are half old-model and half new-model vectors is not detectably broken, it just retrieves worse, so the migration locks the bank rather than serving through it | `model-migration-in-progress: ai-raccoon: a model migration is in progress; try again once it finishes (add_memory)` |
 | `embedding-install-replaced` | The bundled embedding model/vocab could not be resolved because the install this server process started from (`AppContext.BaseDirectory`) no longer exists on disk — replaced or removed out from under a still-running server (e.g. `dotnet tool update` moving the outgoing version into `.store/.stage` and deleting it; already-mapped assemblies keep the process serving MCP calls even though its own install root is gone). A plain `InvalidOperationException` from the same lookup still means the asset is genuinely missing next to a live install and stays unmapped — only this replaced-install case is refused. As of 1.52.1 (ADR-0116) a restart is no longer a manual step: `InstallWatchdog` notices the same missing directory within 20 seconds and shuts the server down on its own, so the next MCP call's proxy forward starts the new install | `embedding-install-replaced: Bundled embedding model 'model_fp16.onnx' could not be resolved: the install this server started from ('<dir>') no longer exists, likely replaced by a tool update (e.g. 'dotnet tool update'). Restart the MCP server (or its host) to pick up the new install.` |
-| `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only with a section warning, no refusal). Affects `memory_search kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model code set local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
+| `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only with a section warning, no refusal). Affects `query kind=code/both` only; `kind=memory` is unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model code set local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
 a key, or any other unmapped exception — is a genuine failure, not a refusal, and its message
@@ -1210,8 +1210,8 @@ live server; see `docs/adr/0019-forward-version-write-guard.md`). So a call that
 embeddings service's plain `InvalidOperationException`
 (`src/AiRaccoon.Infrastructure/Embedding/EmbeddingService.cs` —
 `"OpenAI-compatible embeddings require an API key: run 'ai-raccoon model embedding set openai <model>
---api-key <key>'."`, thrown from whichever tool needed the embedding engine — `memory_write`,
-`memory_search`, `memory_ingest_file/directory`, `memory_embed_pending`) does not get that text on
+--api-key <key>'."`, thrown from whichever tool needed the embedding engine — `add_memory`,
+`query`, `ingest_file/directory`, `embed_deferred_entries`) does not get that text on
 the wire at all: the caller sees only `"An error occurred invoking '<tool>'."`, logged at `Error`,
 with no indication of what to fix. This is precisely why the `ArgumentException` family is mapped
 to `invalid-argument` above instead of being left unmapped — an unmapped exception type's message
@@ -1233,39 +1233,39 @@ the passphrase the bank is plaintext (backward compatible).
 ## Deletion and sync semantics
 
 - Deletes are permanent — there is no trash or recovery.
-- `memory_delete` targets the whole write behind one hash, wherever it lives, including a
-  `shared` row: a multi-chunk `memory_write` produces N rows under one content-addressed path,
+- `delete_entry` targets the whole write behind one hash, wherever it lives, including a
+  `shared` row: a multi-chunk `add_memory` produces N rows under one content-addressed path,
   and any of their hashes deletes all of them, not just the chunk it names. The response's
   `deleted` count is the true number of rows removed (N7). An ingested/watched file keeps its
   own narrower reach — deleting one of its chunks by hash removes only that chunk (its siblings
   share the real file path with `source_file`, which excludes them from the whole-write match);
-  `memory_delete_context` deletes every entry under a context label. Nothing forbids
+  `delete_context` deletes every entry under a context label. Nothing forbids
   targeting `shared` — use it deliberately.
 - Deleting a synced context (`shared`, `project:<id>`, custom) removes rows locally;
-  the deletion is pushed as a tombstone on the next `memory_sync`, so the removal
+  the deletion is pushed as a tombstone on the next `sync_to_cloud`, so the removal
   propagates to the cloud copy.
 - Tombstones are label-aware: each deletion carries its context label, so a
-  label-scoped delete (`memory_delete_context` on one label, or `memory_delete` of
+  label-scoped delete (`delete_context` on one label, or `delete_entry` of
   a row that lived under a label) removes only that label's rows on other replicas —
   a peer's same-hash row under a different label survives and keeps syncing.
   Label-less tombstones (a whole `shared` or `project:<id>` context delete, or a
   tombstone written before labels were tracked) keep their reach over every label.
-- Workspace contexts are never synced, so `memory_workspace_discard` and consolidation's
+- Workspace contexts are never synced, so `discard_workspace` and consolidation's
   discard have no cloud counterpart.
 
 ## Known limitations
 
-- There is no tool to list active workspaces: `memory_workspace_status` needs a
-  `workspaceId` you must already hold (keep the value returned by `memory_workspace_begin`).
-- No un-share tool exists; see `memory_share` notes above.
+- There is no tool to list active workspaces: `get_workspace_status` needs a
+  `workspaceId` you must already hold (keep the value returned by `initialize_workspace`).
+- No un-share tool exists; see `share_memory` notes above.
 - No existing-bank migration (P11): a fresh bank is created; migrating an older
   sqlite-memory format bank is deferred (D11).
 - **Ranking is not identical across CPU architectures.** The bundled model is u8s8-quantized, and
   ONNX Runtime evaluates that with different instructions on AVX512-VNNI hosts, on other x64 hosts,
   and on arm64 — different arithmetic, not different rounding. Query embeddings differ in the third
-  decimal place, so `memory_search` can order results differently on different machines. A bank
+  decimal place, so `query` can order results differently on different machines. A bank
   embedded and queried on one machine is self-consistent; the case to know about is a bank moved
-  between machines by `memory_sync`, where stored vectors and query vectors come from two
+  between machines by `sync_to_cloud`, where stored vectors and query vectors come from two
   implementations of the same model. Content remains reachable — the keyword leg is unaffected and
   hybrid fusion usually rescues a reordering — but exact rank is not portable. Measured and
   accepted, with the rejected remedies costed, in

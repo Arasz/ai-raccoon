@@ -51,7 +51,7 @@
       "id": "0b419ec600ed74",
       "family": "sig_real_query",
       "cls": 0,
-      "text": "memory_share idempotent value-addressed per-chunk sharing"
+      "text": "share_memory idempotent value-addressed per-chunk sharing"
     },
     {
       "id": "8cdfa0d51f079e",

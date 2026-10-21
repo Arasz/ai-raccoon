@@ -42,10 +42,10 @@ public sealed class RetiredIdReadRefusalTests : IAsyncLifetime
         await SeedDroppedAsync(openRepairRequest: false);
         await using var client = await _factory.CreateClientAsync();
 
-        (await RefusalAsync(client, "memory_search",
+        (await RefusalAsync(client, "query",
                 new() { ["projectId"] = Dropped, ["query"] = "x", ["sessionId"] = "sess-retired" }))
             .ShouldStartWith("project-retired:");
-        (await RefusalAsync(client, "memory_stats", new() { ["projectId"] = Dropped }))
+        (await RefusalAsync(client, "get_store_statistics", new() { ["projectId"] = Dropped }))
             .ShouldStartWith("project-retired:");
     }
 
@@ -55,7 +55,7 @@ public sealed class RetiredIdReadRefusalTests : IAsyncLifetime
         await SeedDroppedAsync(openRepairRequest: true);
         await using var client = await _factory.CreateClientAsync();
 
-        (await RefusalAsync(client, "memory_search",
+        (await RefusalAsync(client, "query",
                 new() { ["projectId"] = Dropped, ["query"] = "x", ["sessionId"] = "sess-retired" }))
             .ShouldStartWith("project-retired:");
     }

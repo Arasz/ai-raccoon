@@ -21,7 +21,7 @@ namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
 ///     WP1 golden capture (docs/work/2026-08-21-code-search-implementation-plan.md §3.6): the
-///     exact <c>memory_search</c> response BEFORE the `kind` parameter exists, committed as
+///     exact <c>query</c> response BEFORE the `kind` parameter exists, committed as
 ///     <c>Resources/golden-memory-search-response.json</c> — see the sibling README. WP6-T01
 ///     regenerates this same response after the envelope change and diffs it against the
 ///     committed file modulo <c>Meta.CorrelationId</c>; this test is the regression guard that
@@ -107,7 +107,7 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
             TestContext.Current.CancellationToken))!.AsObject());
 
         captured.ToJsonString(JsonOptions).ShouldBe(golden.ToJsonString(JsonOptions),
-            "the pre-kind memory_search envelope must still match the committed golden file (modulo Meta.CorrelationId) — " +
+            "the pre-kind query envelope must still match the committed golden file (modulo Meta.CorrelationId) — " +
             "WP6-T01 compares its post-envelope-change capture against this same file");
     }
 

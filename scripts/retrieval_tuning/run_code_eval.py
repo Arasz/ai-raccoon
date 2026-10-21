@@ -4,7 +4,7 @@
 fresh scratch data root (or a copy of --reuse-bank with its watches rows
 deleted, no re-ingest/drain) -> `serve --port 0 --idle-timeout 0` -> `model
 code set default` -> `settings ingest scope add '*' <corpus-root>` -> MCP
-`memory_ingest_directory` -> poll `code_entries.embed_state='pending'` until 0
+`ingest_directory` -> poll `code_entries.embed_state='pending'` until 0
 -> run every query (kind=code, limit 10) -> write results-<arm>.json/.md.
 
 Usage:
@@ -213,7 +213,7 @@ def set_code_engine_default(binary: str, data_root, port: int) -> None:
 
 
 def add_ingest_scope(binary: str, data_root, port: int, corpus_root, target: str = "*") -> None:
-    """`settings ingest scope add <target> <path>` — the allowlist memory_ingest_directory needs."""
+    """`settings ingest scope add <target> <path>` — the allowlist ingest_directory needs."""
     _run_cli(
         [binary, "--data-root", str(data_root), "--port", str(port),
          "settings", "ingest", "scope", "add", target, str(corpus_root)]
@@ -423,7 +423,7 @@ def run(args) -> dict:
         query_scores = []
         hits: list[dict] = []
         for entry in queries:
-            results = server.client.memory_search(
+            results = server.client.query(
                 project_id=entry.get("targetProjectId") or DEFAULT_PROJECT_ID,
                 query=entry["query"],
                 scope=entry.get("targetScope") or "all",

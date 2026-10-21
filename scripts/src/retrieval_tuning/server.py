@@ -89,7 +89,7 @@ class ScratchServer:
         return f"http://127.0.0.1:{self.port}/mcp"
 
     def search(self, corpus_entry: dict) -> list[dict]:
-        """One memory_search for a corpus entry — settings-driven (no tuning args).
+        """One query for a corpus entry — settings-driven (no tuning args).
 
         `kind` (plan §12.2 H8) is read from the entry and forwarded only when
         present; entries with no 'kind' key pass no kind kwarg at all, so an
@@ -104,7 +104,7 @@ class ScratchServer:
         }
         if corpus_entry.get("kind") is not None:
             kwargs["kind"] = corpus_entry["kind"]
-        return self.client.memory_search(**kwargs)
+        return self.client.query(**kwargs)
 
     def stop(self) -> None:
         if self.proc is None or self.proc.poll() is not None:

@@ -301,7 +301,7 @@ internal static class CliCommandTree
     private static Command SweepCommand()
     {
         var sweep = new Command("sweep",
-            "Background reaper configuration: the kill switch, the cadence and the rating threshold it deletes below. The reaper is ON by default — 'sweep disable' is how you disarm it. Per-entry TTLs are data, set by the memory_set_ttl tool, not configured here.")
+            "Background reaper configuration: the kill switch, the cadence and the rating threshold it deletes below. The reaper is ON by default — 'sweep disable' is how you disarm it. Per-entry TTLs are data, set by the set_memory_ttl tool, not configured here.")
         {
             new Command("enable", "Arms the background reaper (the default: it deletes expired entries on its cadence)"),
             new Command("disable", "Disarms the background reaper — nothing is deleted until it is enabled again"),
@@ -343,7 +343,7 @@ internal static class CliCommandTree
     private static Command QueryGuardCommand()
     {
         var queryGuard = new Command("queryguard",
-            "Read-path query guard: refuses a memory_search query that is itself machine output (e.g. a pasted background-process notification) and annotates one that merely contains log-like content. Armed by default — 'queryguard disable' is how you disarm it.")
+            "Read-path query guard: refuses a query query that is itself machine output (e.g. a pasted background-process notification) and annotates one that merely contains log-like content. Armed by default — 'queryguard disable' is how you disarm it.")
         {
             new Command("enable", "Arms the read-path query guard (the default)"),
             new Command("disable", "Disarms the read-path query guard — every query runs untouched, even ones a policy would otherwise refuse or annotate")
@@ -496,7 +496,7 @@ internal static class CliCommandTree
 
     private static Command IngestCommand() =>
         new("ingest",
-            "Ingestion configuration. The scope allowlist bounds every path the server reads from disk — memory_ingest_file, memory_ingest_directory, memory_watch_add and the file watcher. It is empty by default, so a project ingests nothing until a scope is added.")
+            "Ingestion configuration. The scope allowlist bounds every path the server reads from disk — ingest_file, ingest_directory, add_watch and the file watcher. It is empty by default, so a project ingests nothing until a scope is added.")
         {
             ScopeCommand("Scope allowlist (absolute paths, covers dir + subdirs) — the paths this server may read")
         };
@@ -504,15 +504,15 @@ internal static class CliCommandTree
     /// <summary>The watches table is data, not configuration, so registering and listing watches stays top level.</summary>
     private static Command WatchCommand() =>
         new("watch",
-            "Registered watches: add, remove, live status and the raw registration list. Watching is CONFIGURED under 'settings watch' (enable) and 'settings ingest scope' (allowlist); 'watch add' and the memory_watch_add MCP tool register through the same server-side checks.")
+            "Registered watches: add, remove, live status and the raw registration list. Watching is CONFIGURED under 'settings watch' (enable) and 'settings ingest scope' (allowlist); 'watch add' and the add_watch MCP tool register through the same server-side checks.")
         {
             new Command("add",
-                    "Registers a file or directory to be mirrored into the project's memory (same checks and result as memory_watch_add). Watching must be enabled and the path inside the ingest scope; a path inside an existing watch is refused, a broader one prunes the watches it contains.")
+                    "Registers a file or directory to be mirrored into the project's memory (same checks and result as add_watch). Watching must be enabled and the path inside the ingest scope; a path inside an existing watch is refused, a broader one prunes the watches it contains.")
                 { new Argument<string>("project-id") { HelpName = "project-id" }, new Argument<string>("path") { HelpName = "path" } },
-            new Command("remove", "Stops watching a path and removes its registration (same as memory_watch_remove); removing a path that is not watched is a no-op.")
+            new Command("remove", "Stops watching a path and removes its registration (same as remove_watch); removing a path that is not watched is a no-op.")
                 { new Argument<string>("project-id") { HelpName = "project-id" }, new Argument<string>("path") { HelpName = "path" } },
             new Command("status",
-                    "Shows each registered watch's live state (scanning/healthy/retrying/stopped), last sync and last error (same as memory_watch_status); without a project id, every project's watches.")
+                    "Shows each registered watch's live state (scanning/healthy/retrying/stopped), last sync and last error (same as get_watch_status); without a project id, every project's watches.")
                 { new Argument<string?>("project-id") { HelpName = "project-id", Arity = ArgumentArity.ZeroOrOne } },
             new Command("registered",
                     "Lists every REGISTERED watch (project, path, registered at, last change) from the watches table. Use 'watch status' for live state (scanning/healthy/…).")
@@ -524,7 +524,7 @@ internal static class CliCommandTree
         var watch = new Command("watch",
             "Watch configuration: enable/disable and concurrency per target. This node CONFIGURES watching — it does not register watches; use 'watch add' to register and 'watch registered' to list registrations.")
         {
-            new Command("enable", "Enables or disables watching for a target (configuration only — does not register a watch; use 'watch add' or memory_watch_add to register)")
+            new Command("enable", "Enables or disables watching for a target (configuration only — does not register a watch; use 'watch add' or add_watch to register)")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },
             new Command("disable", "Alias for enable … false")
                 { new Argument<string>("target") { HelpName = "project-id|*" }, new Argument<bool>("enabled") { HelpName = "true|false", Arity = ArgumentArity.ExactlyOne } },

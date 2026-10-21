@@ -84,7 +84,7 @@ public sealed class WorkspaceEntryUniquenessTests : IDisposable
     }
 
     /// <summary>Runs the exact statement SqliteMemoryStore.WriteAsync uses for its insert step
-    /// (MemorySql.InsertEntry) on its own connection, mirroring a retried memory_write.</summary>
+    /// (MemorySql.InsertEntry) on its own connection, mirroring a retried add_memory.</summary>
     private async Task InsertEntryAsync(string path, string hash, string workspaceId, long now)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

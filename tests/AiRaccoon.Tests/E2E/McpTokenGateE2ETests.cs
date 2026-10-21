@@ -87,7 +87,7 @@ public sealed class McpTokenGateE2ETests(McpTokenGateE2ETests.ServeFixture serve
             true);
 
         await using var client = await McpClient.CreateAsync(transport, cancellationToken: TestContext.Current.CancellationToken);
-        var result = await client.CallToolAsync("memory_stats",
+        var result = await client.CallToolAsync("get_store_statistics",
             new Dictionary<string, object?> { ["projectId"] = "acme" }, null, null, TestContext.Current.CancellationToken);
 
         // Content is IList<ContentBlock>: ToString() is the type name, so it can never be empty.

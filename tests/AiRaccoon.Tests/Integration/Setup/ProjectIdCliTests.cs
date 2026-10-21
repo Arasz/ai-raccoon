@@ -249,7 +249,7 @@ public sealed class ProjectIdCliTests : IAsyncLifetime
     }
 
     private static async Task<CallToolResult> SearchAsync(McpClient client, string projectId) =>
-        await client.CallToolAsync("memory_search",
+        await client.CallToolAsync("query",
             new Dictionary<string, object?> { ["projectId"] = projectId, ["query"] = "anything", ["sessionId"] = "project-id-cli" },
             null, null, Ct);
 

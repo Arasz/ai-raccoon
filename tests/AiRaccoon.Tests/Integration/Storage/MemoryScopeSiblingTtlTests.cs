@@ -14,7 +14,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 
 /// <summary>
 ///     H2: hash does not encode scope (ContentHash.Of(path, value)), so (project_id, hash) is not
-///     a unique row when identical content lives in more than one scope. memory_set_ttl must stamp
+///     a unique row when identical content lives in more than one scope. set_memory_ttl must stamp
 ///     only the project-scope row it was asked about, never a sibling sharing the same hash.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
