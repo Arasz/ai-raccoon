@@ -65,10 +65,16 @@ Two decisions inside that seam are worth keeping:
 | Mutation: the reserved id routes to its own project context | 6 tests red, then green again |
 
 The review round did not run in this environment, and that is a fact of the environment rather
-than of the diff: the delegated `code-reviewer` and `architect` subagents returned empty
-completions with zero tokens on every attempt, and the repository's own `claude-review` workflow
-skipped the review with "set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY" — no credential is
-configured for the repository. The review was therefore done in-session: the shared target's
+than of the diff. The delegated `code-reviewer` and `architect` subagents returned empty
+completions with zero tokens on **every** attempt — four dispatches across two personas and two
+providers (`openrouter/anthropic/claude-opus-5.5` and `openai/gpt-6.1-sol`, both passed correctly
+in the child's `--model` argv): the child receives the prompt, starts an assistant turn and ends it
+with an empty message, no error, exit 0. The repository's own `claude-review` workflow skipped the
+review for the same reason class — "set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY", no
+credential configured for the repository. The child process cannot call a model here, so no
+delegated or workflow review can produce a verdict.
+
+The review was therefore done in-session: the shared target's
 routing, refusals, delete scoping (`project_id`-scoped, so a shared watch never removes another
 owner's rows), the DI seam and the layering were each checked against the source, and the
 mutation check above stands in for the "watch the gate go red" discipline.
