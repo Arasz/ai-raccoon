@@ -98,4 +98,35 @@ public sealed class SharedProjectScopeTests
             TestData.DeleteTempRoot(tempRoot);
         }
     }
+
+    [Fact]
+    public void TheCompositionRoot_InjectsTheRegisteredScope_NotTheFallback()
+    {
+        var tempRoot = TestData.CreateTempRoot();
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
+            services.RegisterCoreMemoryServices(TestData.CreateInfrastructureOptions(tempRoot));
+            services.AddSingleton<ScopeConsumer>();
+
+            using var provider = services.BuildServiceProvider();
+            var consumer = provider.GetRequiredService<ScopeConsumer>();
+
+            // The consumers take the scope as an optional parameter; the registered service must
+            // still reach them, or the seam is decoration and production runs on the fallback.
+            consumer.Scope.ShouldBeSameAs(provider.GetRequiredService<ISharedProjectScope>());
+            consumer.Scope.ShouldNotBeSameAs(SharedProjectScope.Default);
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(tempRoot);
+        }
+    }
+
+    /// <summary>A consumer shaped like the real ones: the scope is an optional constructor parameter.</summary>
+    private sealed class ScopeConsumer(ISharedProjectScope? scope = null)
+    {
+        public ISharedProjectScope Scope { get; } = scope ?? SharedProjectScope.Default;
+    }
 }
