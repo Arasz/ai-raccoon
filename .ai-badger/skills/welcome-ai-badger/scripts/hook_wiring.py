@@ -228,6 +228,10 @@ class HookWiring:
         import badger_lib as bl
         import config_guard as cg
 
+        if "limited-env" in self.ctx.config.get("stacks", []):
+            self._remove_owned_claude_hooks()
+            return
+
         if "claude" not in self.ctx.config.get("agents", []):
             return
 
@@ -378,3 +382,40 @@ class HookWiring:
             )
         if settings_hooks:
             self.ctx.notes.append(f"wired {len(settings_hooks)} hook(s) into .claude/settings.json")
+
+    def _remove_owned_claude_hooks(self) -> None:
+        """Remove framework skill and tool hooks while preserving unrelated settings."""
+        import config_guard as cg
+
+        settings_path = self.ctx.target / ".claude" / "settings.json"
+        settings, note = cg.read_json_mapping(settings_path)
+        if settings is None:
+            if settings_path.exists():
+                self.ctx.notes.append(f"Claude hooks preserved: {note}")
+            return
+        hooks = settings.get("hooks")
+        if not isinstance(hooks, dict):
+            return
+        changed = False
+        for event, entries in list(hooks.items()):
+            if not isinstance(entries, list):
+                continue
+            kept_entries = []
+            for entry in entries:
+                handlers = entry.get("hooks", []) if isinstance(entry, dict) else []
+                if not isinstance(handlers, list):
+                    kept_entries.append(entry)
+                    continue
+                kept = []
+                for handler in handlers:
+                    command = handler.get("command") if isinstance(handler, dict) else None
+                    owned = isinstance(command, str) and (
+                        skill_script_id(command) is not None or tool_hooks.is_ours(command))
+                    if not owned:
+                        kept.append(handler)
+                changed |= len(kept) != len(handlers)
+                if kept or not handlers:
+                    kept_entries.append(dict(entry, hooks=kept) if isinstance(entry, dict) else entry)
+            hooks[event] = kept_entries
+        if changed:
+            cg.write_json_with_backup(settings_path, settings)

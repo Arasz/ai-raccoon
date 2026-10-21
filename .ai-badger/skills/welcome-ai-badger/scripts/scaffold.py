@@ -196,6 +196,8 @@ def demote_headings(text: str, levels: int = 2) -> str:
 
 # The shared context, the manifest's generated-config ledger, and the seven collaborators
 from scaffold_context import ScaffoldContext  # noqa: E402
+from adjustment_policy import (build_adjustment_context,
+                               instruction_only_adjustment_context)  # noqa: E402
 from generated_config import GeneratedConfigRecords  # noqa: E402
 from hook_wiring import HookWiring, merge_hooks  # noqa: E402
 from template_rendering import TemplateRendering, invariant_summary  # noqa: E402
@@ -573,6 +575,7 @@ class Scaffolder:
         # An adjustment is loaded by path: what it cannot resolve itself travels in the context.
         declared_mcp = sorted(self.mcp.split_servers_by_scope(self.mcp.declared_servers())[0])
         selected = self.config.get("agents", [])
+        instruction_only = "limited-env" in self.config.get("stacks", [])
         for agent_name in dict.fromkeys([*selected, *bl.AGENT_NAMES]):
             adj_path = self.root / "features" / agent_name / "adjustments" / "adjustment.json"
             if not adj_path.exists():
@@ -584,7 +587,9 @@ class Scaffolder:
                 continue
 
             for adj in adj_manifest.get("adjustments", []):
-                if agent_name not in selected and not adj.get("cleanupOnDeselection", False):
+                hook_feature = adj.get("feature") in {"hooks", "tools"}
+                if ((agent_name not in selected or (instruction_only and hook_feature))
+                        and not adj.get("cleanupOnDeselection", False)):
                     continue
                 script_name = adj.get("script")
                 if not script_name:
@@ -620,25 +625,22 @@ class Scaffolder:
                                     if any(s in bl.catalog_skills_for_stack(self.root, st)
                                            for st in agent_stacks)]
 
-                    context = {
-                        "framework_root": self.root,
-                        "config": self.config,
-                        "feature_dir": self.root / "features" / agent_name / "adjustments",
-                        "target_dir": self.aib,
-                        "target": self.target,
-                        # --no-install reaches the adjustments: user-global state
-                        # (~/.hermes/plugins) is never written when it is set.
-                        "install": self.install,
-                        "skills": agent_skills,
-                        "prune": self.prune_discovery,
-                        "personas": [item for _stack, item in bl.applicable_feature_items(
-                            self.index, self.config, "personas")],
-                        "index": self.index,
-                        "mcp_servers": declared_mcp,
-                        "mcp_declarations": self.mcp.declarations_for_agent(agent_name),
-                        "mcp_declined": self.mcp.declined_servers(),
-                        "tools": self.tools.prepare(),
-                    }
+                    adjustment_config, adjustment_tools, adjustment_install = (
+                        instruction_only_adjustment_context(
+                            self.config, self.tools.prepare(), self.install,
+                            agent_name, instruction_only and hook_feature,
+                        )
+                    )
+                    personas = [item for _stack, item in bl.applicable_feature_items(
+                        self.index, self.config, "personas")]
+                    context = build_adjustment_context(
+                        self.root, adjustment_config,
+                        self.root / "features" / agent_name / "adjustments",
+                        self.aib, self.target, adjustment_install, agent_skills,
+                        self.prune_discovery, personas, self.index, declared_mcp,
+                        self.mcp.declarations_for_agent(agent_name),
+                        self.mcp.declined_servers(), adjustment_tools,
+                    )
                     result = mod.adjust(context)
                     if result.get("applied"):
                         self.notes.append(
