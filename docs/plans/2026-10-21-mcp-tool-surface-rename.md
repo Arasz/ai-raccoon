@@ -24,32 +24,53 @@ into a read tool and one write tool.
 | `memory_ingest_directory` | `ingest_directory` | a directory is ingested |
 | `memory_delete` | `delete_entry` | deletes one entry by hash, from any corpus |
 | `memory_delete_context` | `delete_context` | deletes every entry under one context label |
-| `memory_share` | `share_memory` | promotes one memory into the shared tier |
-| `memory_share_extract` | `share_candidates` | scans a project's memories for the ones worth sharing; proposes them, or promotes the queued ones |
-| `memory_promotion_list` | `list_shared_candidates` | the propose-tier queue, ranked |
-| `memory_promotion_discard` | `discard_shared_candidate` | drops one queued candidate |
-| `memory_sweep` | `sweep_memory` | runs degradation: deletes entries whose rating fell below the threshold and whose age passed their TTL |
-| `memory_set_ttl` | `set_entry_ttl` | sets one entry's TTL |
-| `memory_workspace_begin` | `begin_workspace` | starts a sandbox |
+| `memory_share` | `move` | moves one memory into the shared tier |
+| `memory_share_extract` | `trigger_memory_sharing` | scans a project's memories for the ones worth sharing; proposes them, or promotes the queued ones |
+| `memory_promotion_list` | `get_memories_sharing_ranking` | the propose-tier queue, ranked |
+| `memory_promotion_discard` | `delete_memory_from_ranking` | drops one queued candidate |
+| `memory_sweep` | `trigger_memory_cleanup` | runs degradation: deletes entries whose rating fell below the threshold and whose age passed their TTL |
+| `memory_set_ttl` | `set_memory_ttl` | sets one memory's TTL — TTL is a memory-only property (see the note below) |
+| `memory_workspace_begin` | `initialize_workspace` | starts a sandbox |
 | `memory_workspace_status` | `get_workspace_status` | lists a workspace's outbox |
-| `memory_workspace_consolidate` | `consolidate_workspace` | promotes the kept hashes into the project and closes the sandbox |
+| `memory_workspace_consolidate` | `close_workspace` | closes a sandbox, promoting the kept hashes into the project |
 | `memory_workspace_discard` | `discard_workspace` | drops a sandbox and everything in it |
 | `memory_watch_add` | `add_watch` | registers a path watch |
 | `memory_watch_status` | `get_watch_status` | the watch's live state |
 | `memory_watch_remove` | `remove_watch` | unregisters a watch |
-| `memory_sync` | `sync_memory` | syncs the bank's committed contexts to cloud storage |
-| `memory_embed_pending` | `embed_pending` | embeds the entries whose embedding was deferred |
-| `memory_stats` | `get_stats` | entry counts and the contexts in use |
+| `memory_sync` | `sync_to_cloud` | syncs the bank's committed contexts to cloud storage |
+| `memory_embed_pending` | `embed_deferred_entries` | embeds the entries whose embedding was deferred |
+| `memory_stats` | `get_engine_statistics` | entry counts, the deferred-embedding count, and the contexts in use |
 | `project_id_get` | `get_project_id` | looks up the id registered under a name |
-| `project_id_token_get` | `get_project_id_token` | mints a new id |
+| `project_id_token_get` | `save_project_id_token` | mints a new id |
 
 The shape is verb-first, object-second, no `memory_` prefix: `query`, `get_*`, `add_*`,
-`ingest_*`, `delete_*`, `share_*`, `sweep_*`, `set_*`, `begin_*`, `consolidate_*`,
-`discard_*`, `list_*`.
+`ingest_*`, `delete_*`, `move`, `trigger_*`, `set_*`, `initialize_*`, `close_*`,
+`discard_*`, `sync_*`, `embed_*`, `save_*`.
 
-Two names are placeholders pending the owner's nod: `share_candidates` (for
-`memory_share_extract`) and `list_shared_candidates` (for `memory_promotion_list`) — the
-promotion tier and the "extract" tool overlap, and two names for one queue is a smell.
+The owner's corrections (2026-10-21) settled the sharing family — `move`, `trigger_memory_sharing`,
+`get_memories_sharing_ranking`, `delete_memory_from_ranking` — and the workspace family —
+`initialize_workspace`, `get_workspace_status`, `close_workspace`, `discard_workspace`.
+
+### TTL is a memory-only property — so `set_memory_ttl` is accurate
+
+The `entries` table carries `ttl_days`, `rating` and `access_count`; the `code_entries` table
+carries none of them — the schema comment says so in as many words ("no rating/ttl_days/
+access_count — no degradation, code is a re-derivable cache"). A code chunk can therefore never
+be swept, rated or given a TTL, and `set_memory_ttl` names the only population the operation
+can reach. The same holds for the File population: an ingested document chunk *is* an `entries`
+row and does carry a TTL, so the tool's reach is "every entry in the `entries` table", not
+"every agent-written memory" — the name says memory, and the mechanism says entries. Worth one
+word from the owner: if the tool must also set a TTL on an ingested document, `set_memory_ttl`
+understates it.
+
+### Two names that still do not sit in the shape
+
+- `move` is a bare verb where every other name is verb + object. `move_memory` would say what
+  moves; `move` says only that something does. Taken literally as the owner wrote it.
+- `get_engine_statistics` reports the bank's entry counts, the deferred-embedding count and the
+  contexts in use — it is not the embedding engine's statistics (those live in
+  `get_tools_latency`, the per-tool latency series). The name reads as the engine's; the
+  behaviour is the bank's.
 
 ## The entry type
 
@@ -125,4 +146,5 @@ indexable.
 - **(b) Transcripts.** The 1,496 `transcript` rows are agent-supplied notes whose source is a
   transcript file. Under the taxonomy they are `Memory` (by origin) or `File` (by locator). That
   single call moves `type=Memory` between 214 and 1,710 rows on this bank.
-- **(c) The two placeholder names** (`share_candidates`, `list_shared_candidates`).
+- **(c) The two placeholder names** — settled by the owner on 2026-10-21
+  (`trigger_memory_sharing`, `get_memories_sharing_ranking`).
