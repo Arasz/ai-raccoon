@@ -14,6 +14,9 @@ flowchart LR
     Server -.->|optional snapshot sync| Cloud[("S3 / Azure Blob")]
 ```
 
+Documents outside repositories can use the built-in `shared` ID for ingestion and watches;
+every project's default search includes them. See [shared document setup](docs/reference/agent-memory-server.md#documents-shared-across-projects).
+
 ## Quick Start
 
 Install the global tool:

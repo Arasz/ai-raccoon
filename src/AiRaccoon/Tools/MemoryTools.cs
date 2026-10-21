@@ -103,8 +103,8 @@ public sealed partial class MemoryTools(
 
     [McpServerTool(Name = TnMemorySearch)]
     [Description(
-        "Hybrid semantic search over the bank. scope=all (default) searches shared + project (+ workspace when named); "
-        + "scope=project searches the project only; scope=shared searches the shared promotion tier only. A project scope "
+        "Hybrid semantic search over the bank. projectId=shared directly reads shared documents and promoted knowledge (scope all/shared only, without labels/workspaces). scope=all (default) searches shared + project (+ workspace when named); "
+        + "scope=project searches the project only; scope=shared searches shared documents and promoted knowledge. A project scope "
         + "covers every context in the project unless contextLabel narrows it to one. sessionId is required: every agent "
         + "has a session, and the id is stored verbatim on the search_quality row. Kind defaults to both, with each "
         + "section ranked by its own hybrid. Every search records a search_quality row and returns meta.correlationId "

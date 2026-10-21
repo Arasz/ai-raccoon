@@ -17,9 +17,9 @@ public sealed class WatchTools(
 
     [McpServerTool(Name = TnWatchAdd)]
     [Description(
-        "Registers a file or directory to be mirrored into the project's memory. Watching must be enabled and the path inside the scope allowlist — both configured via the CLI ('ai-raccoon settings watch enable' / 'settings ingest scope add'). No overlapping watches: a path already covered by an existing watch is refused (watch-overlap, naming the covering watch); registering a broader watch prunes every watch it contains (reported in `pruned`; already-ingested entries are kept and the broader watch re-scans them). An exact re-add of an already-watched path is a no-op (`absorbedBy` reports it). Returns immediately — the initial scan runs in the background (status reports scanning).")]
+        "Registers a file or directory to be mirrored into the project's memory. Pass projectId=shared explicitly for documents available to all projects in this bank; no ID minting or registration needed. Watching must be enabled and the path inside the scope allowlist — both configured via the CLI ('ai-raccoon settings watch enable' / 'settings ingest scope add'). No overlapping watches: a path already covered by an existing watch is refused (watch-overlap, naming the covering watch); registering a broader watch prunes every watch it contains (reported in `pruned`; already-ingested entries are kept and the broader watch re-scans them). An exact re-add of an already-watched path is a no-op (`absorbedBy` reports it). Returns immediately — the initial scan runs in the background (status reports scanning).")]
     public async Task<ApiEnvelope<WatchAddResult>> Add(
-        [Description("The project id; watches are scoped to a project.")]
+        [Description("The project id; use shared explicitly for documents shared across projects.")]
         [Optional][DefaultParameterValue("")] string projectId,
         [Description("Absolute path of the file or directory to watch.")]
         string path,

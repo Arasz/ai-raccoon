@@ -11,6 +11,8 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [1.62.0 — shared document watches](1.62.0-shared-document-watches.md)
+
 - [1.61.1 — how to change the embed drain's rows-per-run, and the CLI help names the setting](1.61.1-embed-rows-per-run-how-to.md)
 - [1.61.0 — the embed drain's rows-per-run runs from 64 to 4096, and what that value costs](1.61.0-embed-rows-per-run-range.md)
 - [1.60.3 — the root help points at the monitoring command](1.60.3-observability-help-names-the-monitoring-verb.md)
