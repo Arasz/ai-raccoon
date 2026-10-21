@@ -211,7 +211,7 @@ them became the `AIRGEN002` assertion instead of an empty-diagnostics assertion.
 
 | Gate | Result |
 |---|---|
-| `dotnet build src/AiRaccoon/AiRaccoon.csproj -c Debug` | clean, 0 warnings, 0 errors |
+| `dotnet build -c Debug` (the whole solution) | clean, 0 warnings, 0 errors, 14.8 s |
 | `dotnet test tests/AiRaccoon.Generators.Tests` | 5 tests, 0 failed (the `AIRGEN002` test is green; it was red in s1) |
 | The generator has no product reference | `grep -c ProjectReference src/AiRaccoon.Generators/AiRaccoon.Generators.csproj` → 0 |
 | The scope test is **still red** | 6 tests, 4 failed — this step changes no behaviour, so the s1 reds stay red |
@@ -272,11 +272,12 @@ leaves the test running against the previous assembly and the mutation appears t
 |---|---|
 | The review that produced this task | `docs/work/2026-10-21-pr906-scope-check-review.md` — 16 findings, 8 measured, 7 read, 1 inferred |
 | The measured `memory_delete` probe | four-chunk document, one named chunk: `rows_before=4 rows_after=3 deleted=1` — the partial delete is measured, not reasoned |
-| `dotnet build src/AiRaccoon/AiRaccoon.csproj -c Debug` | clean, 0 warnings, 0 errors |
+| `dotnet build -c Debug` (the whole solution) | clean, 0 warnings, 0 errors, 14.8 s |
 | The generator's test project | 5 tests, 0 failed |
+| The MCP unit surface | 325 tests, 0 failed |
 | The scope test (the pin) | 6 tests, 0 failed |
 | The reserved target's delete | 1 test, 0 failed |
-| The whole Unit surface | 4302 tests, 0 failed, 1 skipped |
+| The whole Unit surface | 4302 tests, 0 failed, 1 skipped (re-run at the final state) |
 | The shared-project integration surface | 19 tests, 0 failed |
 | The ADR index gate (`AdrIndexTests`) | 7 tests, 0 failed |
 | The two mutations | seen red, then green — the evidence is above |
