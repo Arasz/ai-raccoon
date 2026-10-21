@@ -15,7 +15,7 @@ namespace AiRaccoon.Generators.Tests;
 public sealed class McpToolScopeGeneratorTests
 {
     [Fact]
-    public void Generate_ReportsDiagnosticWhenAToolDeclaresNoScope()
+    public void Generate_ReportsNothingForAToolThatDeclaresNoScope()
     {
         const string source = """
             namespace ModelContextProtocol.Server
@@ -39,59 +39,9 @@ public sealed class McpToolScopeGeneratorTests
 
         var result = Run(source);
 
-        result.Diagnostics.ShouldContain(diagnostic => diagnostic.Id == "AIRGEN002");
-        var diagnostic = result.Diagnostics.Single(diagnostic => diagnostic.Id == "AIRGEN002");
-        diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
-        diagnostic.GetMessage().ShouldContain("Scopeless");
-    }
-
-    [Fact]
-    public void Generate_EmitsTheScopeAsDataOnly()
-    {
-        const string source = """
-            namespace ModelContextProtocol.Server
-            {
-                [System.AttributeUsage(System.AttributeTargets.Method)]
-                public sealed class McpServerToolAttribute : System.Attribute
-                {
-                    public string? Name { get; set; }
-                }
-            }
-
-            namespace AiRaccoon.Tools
-            {
-                public enum ToolScope
-                {
-                    All,
-                    Shared,
-                    Project
-                }
-
-                [System.AttributeUsage(System.AttributeTargets.Method)]
-                public sealed class McpToolScopeAttribute : System.Attribute
-                {
-                    public McpToolScopeAttribute(ToolScope scope) { }
-                }
-
-                public sealed class ToolGroup
-                {
-                    [ModelContextProtocol.Server.McpServerTool(Name = "scoped_tool")]
-                    [McpToolScope(ToolScope.Project)]
-                    public void Scoped() { }
-                }
-            }
-            """;
-
-        var result = Run(source);
-
+        // The error belongs to the analyzer, so the build reports it once: the generator emits the
+        // classification and says nothing about a tool it cannot classify (ADR-0139).
         result.Diagnostics.ShouldBeEmpty();
-        var generated = result.GeneratedTrees
-            .Single(tree => tree.FilePath.EndsWith("McpToolScope.g.cs", StringComparison.Ordinal))
-            .GetText(TestContext.Current.CancellationToken).ToString();
-        generated.ShouldContain("McpToolScopeGenerated");
-        generated.ShouldContain("\"scoped_tool\", global::AiRaccoon.Tools.ToolScope.Project");
-        // Data only: the interface it feeds stays a hand-written adapter (ADR-0139).
-        generated.ShouldNotContain("IToolNameScope");
     }
 
     private static GeneratorDriverRunResult Run(string source)

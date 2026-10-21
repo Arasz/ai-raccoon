@@ -181,18 +181,24 @@ public sealed class McpToolInventoryGeneratorTests
 
     private static GeneratorDriverRunResult Run(string source)
     {
-        var syntaxTree = CSharpSyntaxTree.ParseText(SourceText.From(source));
-        var trustedAssemblies = (string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!;
-        var references = trustedAssemblies.Split(Path.PathSeparator)
-            .Select(path => MetadataReference.CreateFromFile(path));
-        var compilation = CSharpCompilation.Create(
-            "GeneratorTests",
-            [syntaxTree],
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var compilation = Compile(source);
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             new McpToolInventoryGenerator().AsSourceGenerator());
 
         return driver.RunGenerators(compilation).GetRunResult();
+    }
+
+    /// <summary>The compilation the harness runs the generator and the analyzer over.</summary>
+    internal static CSharpCompilation Compile(string source)
+    {
+        var syntaxTree = CSharpSyntaxTree.ParseText(SourceText.From(source));
+        var trustedAssemblies = (string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!;
+        var references = trustedAssemblies.Split(Path.PathSeparator)
+            .Select(path => MetadataReference.CreateFromFile(path));
+        return CSharpCompilation.Create(
+            "GeneratorTests",
+            [syntaxTree],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
     }
 }

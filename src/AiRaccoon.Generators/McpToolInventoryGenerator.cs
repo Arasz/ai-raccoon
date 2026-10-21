@@ -10,22 +10,13 @@ namespace AiRaccoon.Generators;
 [Generator]
 public sealed class McpToolInventoryGenerator : IIncrementalGenerator
 {
-    private const string ToolAttribute = "ModelContextProtocol.Server.McpServerToolAttribute";
-    private const string ToolNamespace = "AiRaccoon.Tools";
-    private const string ScopeAttribute = "AiRaccoon.Tools.McpToolScopeAttribute";
+    private const string ToolAttribute = ToolScopeFacts.ToolAttribute;
+    private const string ToolNamespace = ToolScopeFacts.ToolNamespace;
 
     private static readonly DiagnosticDescriptor MissingName = new(
         "AIRGEN001",
         "MCP tool name is required",
         "MCP tool method '{0}' must declare a non-empty Name",
-        "McpToolInventory",
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    private static readonly DiagnosticDescriptor MissingScope = new(
-        "AIRGEN002",
-        "MCP tool scope is required",
-        "MCP tool method '{0}' must declare its scope with [McpToolScope(ToolScope. …)]",
         "McpToolInventory",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -58,11 +49,7 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
 
     private static ToolCandidate? CreateTool(GeneratorAttributeSyntaxContext context)
     {
-        if (context.TargetSymbol is not IMethodSymbol method ||
-            method.ContainingType.TypeKind != TypeKind.Class ||
-            method.ContainingNamespace.ToDisplayString() != ToolNamespace ||
-            method.DeclaredAccessibility != Accessibility.Public ||
-            method.IsStatic)
+        if (context.TargetSymbol is not IMethodSymbol method || !ToolScopeFacts.IsToolMethod(method))
         {
             return null;
         }
@@ -71,59 +58,7 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
             .FirstOrDefault(argument => argument.Key == "Name");
         var name = nameArgument.Value.Value as string;
         return new ToolCandidate(method.Name, method.ContainingType, name, method.Locations.FirstOrDefault(),
-            ScopeOf(method));
-    }
-
-    /// <summary>
-    ///     The scope the method declares, read off the method symbol in the same pass that finds
-    ///     the tool: null when the method declares none, and the generator reports that as an error
-    ///     (AIRGEN002). A second syntax provider would have to be joined back to the candidates by
-    ///     symbol; reading the attribute here keeps one collector.
-    /// </summary>
-    private static string? ScopeOf(IMethodSymbol method)
-    {
-        foreach (var attribute in method.GetAttributes())
-        {
-            var attributeClass = attribute.AttributeClass;
-            if (attributeClass is null ||
-                attributeClass.Name != "McpToolScopeAttribute" ||
-                attributeClass.ContainingNamespace.ToDisplayString() != ToolNamespace)
-            {
-                continue;
-            }
-
-            if (attribute.ConstructorArguments.Length == 0)
-            {
-                return null;
-            }
-
-            // The argument's value is the enum's underlying int; the name comes from the enum's
-            // own fields, so the generated file names the scope rather than a number.
-            if (attribute.ConstructorArguments[0].Value is not int underlying)
-            {
-                return null;
-            }
-
-            var scopeType = attributeClass.Constructors.FirstOrDefault(c => c.Parameters.Length > 0)
-                ?.Parameters[0].Type;
-            if (scopeType is null)
-            {
-                return null;
-            }
-
-            foreach (var member in scopeType.GetMembers())
-            {
-                if (member is IFieldSymbol { HasConstantValue: true, IsStatic: true } field &&
-                    field.ConstantValue is int fieldValue && fieldValue == underlying)
-                {
-                    return $"global::{scopeType.ToDisplayString()}.{field.Name}";
-                }
-            }
-
-            return null;
-        }
-
-        return null;
+            ToolScopeFacts.DeclaredScope(method));
     }
 
     private static void Generate(
@@ -144,23 +79,9 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
                 continue;
             }
 
-            if (candidate.Scope is not { } scope)
-            {
-                // The scope is the tool's own decision, and it is required: a tool that states none
-                // would be allowed on the reserved shared target by default, which is the drift
-                // this closes (ADR-0139).
-                context.ReportDiagnostic(Diagnostic.Create(
-                    MissingScope,
-                    candidate.Location,
-                    candidate.MethodName));
-                continue;
-            }
-
-            if (!scopes.Any(scope => scope.Name == candidate.Name))
-            {
-                scopes.Add((candidate.Name!, scope));
-            }
-
+            // The inventory lists every named tool, because it mirrors the MCP surface; the scope
+            // map carries only the tools that declare a scope. A tool that declares none is the
+            // analyzer's error to report, not this generator's, so the build names it once.
             var useCount = toolTypes
                 .Where(type => !type.IsAbstract && IsOrInheritsFrom(type, candidate.ContainingType))
                 .Distinct(SymbolEqualityComparer.Default)
@@ -168,6 +89,11 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
             for (var index = 0; index < useCount; index++)
             {
                 names.Add(candidate.Name!);
+            }
+
+            if (candidate.Scope is { } scope && !scopes.Any(entry => entry.Name == candidate.Name))
+            {
+                scopes.Add((candidate.Name!, scope));
             }
         }
 
