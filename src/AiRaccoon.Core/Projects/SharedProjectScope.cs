@@ -23,9 +23,9 @@ public sealed class SharedProjectScope : ISharedProjectScope
         : ContextNaming.ProjectContext(projectId);
 
     /// <inheritdoc />
-    public bool CanExecuteInSharedScope(SearchQuery query) =>
-        !IsReserved(query.ProjectId) || (query.Scope != SearchScope.Project
-            && string.IsNullOrWhiteSpace(query.WorkspaceId) && string.IsNullOrWhiteSpace(query.ContextLabel));
+    public bool CanExecuteInSharedScope(SearchQuery query) => query.Scope is SearchScope.All or SearchScope.Shared
+        && (!IsReserved(query.ProjectId)
+            || string.IsNullOrWhiteSpace(query.WorkspaceId) && string.IsNullOrWhiteSpace(query.ContextLabel));
 
     /// <inheritdoc />
     public bool CanExecuteInSharedScope(MemoryWriteRequest request) => !IsReserved(request.ProjectId);

@@ -90,11 +90,23 @@ public sealed class SharedProjectScopeTests
     [InlineData("shared", SearchScope.All, "scratch", null, false)]
     [InlineData("shared", SearchScope.All, null, "docs", false)]
     [InlineData("shared", SearchScope.Shared, " ", " ", true)]
-    [InlineData("acme", SearchScope.Project, "scratch", "docs", true)]
+    [InlineData("acme", SearchScope.All, null, null, true)]
+    [InlineData("acme", SearchScope.Shared, null, null, true)]
+    [InlineData("acme", SearchScope.Project, "scratch", "docs", false)]
     public void CanExecuteInSharedScope_Search_ReturnsDecision(string projectId, SearchScope searchScope,
         string? workspaceId, string? contextLabel, bool allowed) =>
         _scope.CanExecuteInSharedScope(new SearchQuery(projectId, "example", Scope: searchScope,
             WorkspaceId: workspaceId, ContextLabel: contextLabel)).ShouldBe(allowed);
+
+    [Theory]
+    [InlineData("acme", SearchScope.All, true)]
+    [InlineData("acme", SearchScope.Project, true)]
+    [InlineData("acme", SearchScope.Shared, false)]
+    [InlineData("shared", SearchScope.All, false)]
+    [InlineData("shared", SearchScope.Project, false)]
+    public void CanSearchCode_OnlyRunsWhenTheQueryHasAProjectScope(string projectId, SearchScope searchScope,
+        bool allowed) =>
+        _scope.CanSearchCode(new SearchQuery(projectId, "example", Scope: searchScope)).ShouldBe(allowed);
 
     [Fact]
     public void EnsureCanExecuteInSharedScope_PreservesOperationAndSearchMessages()

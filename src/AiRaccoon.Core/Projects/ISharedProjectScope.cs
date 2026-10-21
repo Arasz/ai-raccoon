@@ -15,7 +15,7 @@ public interface ISharedProjectScope
     /// <summary>The context the id's rows live in: the shared context, or the id's own project context.</summary>
     string ContextFor(string projectId);
 
-    /// <summary>True when the search shape is supported, including ordinary projects.</summary>
+    /// <summary>True when the query includes shared memory and its project target supports that scope.</summary>
     bool CanExecuteInSharedScope(SearchQuery query);
 
     /// <summary>True when an ordinary-only operation is allowed; false for the reserved shared target.</summary>
