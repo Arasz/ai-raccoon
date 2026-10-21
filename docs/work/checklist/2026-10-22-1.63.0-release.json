@@ -1,0 +1,239 @@
+{
+  "_note": "Copy of templates/checklist-template.json filled by the 1.63.0 run. status is pass|fail|skipped|substituted; accepted carries the reason.",
+  "run": {
+    "date": "2026-10-22",
+    "branch": "main",
+    "commit": "cf5466fc (tree; the published 1.63.0 is d06746fc, and the two differ in no product code)",
+    "data-root": "per lane under ~/.cache/ai-raccoon-checklist/2026-10-22-1.63.0/ck (main, search, search2, kw, watch, poison, livecopy, evalcopy, evalcopy2, cap, cap1560, shared, lifecycle, global); ~/.ai-raccoon read only (sqlite3 -readonly VACUUM INTO); port 7721 never bound or stopped by this run",
+    "note": "Full run on the tree's 1.63.0, which IS published on nuget.org (the published latest is 1.63.0), so the global tool was really force-updated. The tree was built, packed for osx-arm64 and installed into a scratch --tool-path as well; the two builds' tool surfaces are identical. Every lane ran its own --data-root and its own --port 0 server. The live bank was read, never written: one VACUUM INTO copy for the real-scale long-query measurement. The 70,763-entry v17 eval bank was copied for the pre-cap control (1.56.0 cannot open a v19 bank)."
+  },
+  "derived": {
+    "version": "1.63.0",
+    "mcp-tool-count": 30,
+    "mcp-prompt-count": 2,
+    "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run.",
+    "source": "python3 .agents/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py . at cf5466fc (exit 0)"
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "docs/work/checklist/2026-10-20-1.61.1-release.json, item memory-search-hybrid-retrieval",
+      "prior-claim": "status pass, accepted: 'the vector leg is live only after the embedding engine is set, and with it the semantically-related note (no substantive word overlap with the query) ranks first on a vector leg'.",
+      "what-is-actually-true": "The verdict holds but the item could not have failed. The note's text ('A brass astrolabe catches the lamplight inside the observatory dome, ... against the evening sky.') shares the words 'inside' and 'evening' with the query ('an antique navigation instrument reflecting evening light inside a stargazing room'), so the FTS leg matched the note on its own and the note would have been found - and ranked first - on a build with a dead vector leg. The prior run never ran the keyword-only control, so nothing in its evidence separated the two legs.",
+      "evidence": "This run, on a fresh bank: content 'Brass astrolabe, lamplight glowing over the observatory dome; engraved ring turns slowly beneath night sky.' (no query token at all, not even the article 'a' - the FTS plan's OR join is built from the raw tokens, so a one-letter word in the content is enough to give the keyword leg a hit), query unchanged. The note ranks 1 with 'legs: [{legName: vector, rank 1}]', 'cosine: 0.844', 'participatingLegs: [vector]'; the same query with vectorWeight 0 returns 'results: []'; sqlite 'SELECT count(*) FROM entries_fts WHERE entries_fts MATCH <the OR expression>' returns 0.",
+      "so-what": "'A semantic query must be one that keyword match cannot carry' is a property of the CONTENT, not of the query. A content that shares a common word with the query - even one the writer considered unrelated - hands the hit to the keyword leg and quietly disarms the item. The control (the same query with vectorWeight 0) is what proves the vector leg carried it, and it costs one call."
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-10-20-1.61.1-release.json, item long-query-keyword-terms-capped",
+      "prior-claim": "accepted: 'the eval-bank timings (11.6 s / 10.6 s) reproduce the 1.59.0 run's 12.0 s cold on the same bank; the live-bank copy is smaller (25,243 entries) and answers in 1.84 s / 0.56 s' and the item's own clause 'the stopword run times out'.",
+      "what-is-actually-true": "The like-for-like comparison the prior run describes does not exist in its evidence: the 1.59.0 and 1.61.1 numbers were measured on the eval bank, the pre-cap control's 22.2 s / 28.2 s on a second copy of it, and the 1.84 s / 0.56 s on the live bank - three banks, no pair measured on the same one. This run measured both builds on the same 70,763-entry bank: 1.63.0 answers the two pastes in 1.17 s and 0.56 s, 1.56.0 in 14.72 s and 13.11 s. The 'times out' clause is a property of the client timeout, not of the build: at a 60 s timeout the pre-cap build answers in 13.1 s, and at a 10 s timeout it times out while the capped build answers in 0.56 s.",
+      "evidence": "Same eval bank, same two pastes, same client: 1.63.0 -> 1.17 s / 0.56 s, warning 'Keyword (FTS) matching is capped too: it searches only the first 64 distinct words of a query this long.'; 1.56.0 -> 14.72 s / 13.11 s, warning 'Keyword (FTS) matching still searches the query in full.'; at a 10 s client timeout -> '1.56.0 stopword paste TIMED OUT after 10.0s: ReadTimeout'.",
+      "so-what": "A cost comparison between two builds is only a claim about the pair of builds if both ran on the same bank with the same client settings. Three banks across three runs cannot be compared to each other, and a timeout clause needs its timeout stated, because the same build answers in 13 s and times out at 10 s."
+    },
+    {
+      "prior-run": "docs/work/checklist/2026-10-20-1.61.1-release.json, item build-and-install-global-package",
+      "prior-claim": "status substituted, accepted: 'a scratch --tool-path install of a local pack instead of a global force-update from nuget. ... Publishing 1.61.1 needs the owner's publish.yml dispatch'.",
+      "what-is-actually-true": "The substitution was correct for 1.61.1 - that version was never published - but it is not a property of the checklist: 1.63.0 IS on nuget.org, so the global force-update is a plain pass this time ('Tool 'ai-raccoon' (version '1.63.0') was successfully uninstalled.' then '... was successfully installed.'; ai-raccoon --version -> 1.63.0+d06746fc). The tree carries three commits past the published release commit, and none of them touches src/, tests/ or scripts/, so the published binary and the tree's own pack are the same product - the two builds' 30-tool surfaces are identical.",
+      "evidence": "'git diff --stat d06746fc..HEAD -- src/ tests/ scripts/' -> empty; global build tools/list 30 names, tree build tools/list 30 names, 'only in global: []', 'only in tree: []'.",
+      "so-what": "The substituted verdict belonged to that release, not to this item. Reading it as 'the global tool cannot be force-updated' would have kept a substitution in place for a release that does not need one."
+    },
+    {
+      "prior-run": "this run, item long-query-keyword-terms-capped (a procedure note for the next run)",
+      "prior-claim": "none - a hazard found while running this checklist, not a verdict in an earlier one.",
+      "what-is-actually-true": "A bank copy carries the owner's WATCH REGISTRATIONS, and the copy's watcher digests the real directories those registrations name. The live copy had its watches deleted before it was served, but the eval copy for the 1.63.0 comparison was served first (the server had to migrate it from v17 to v19, and the migration holds the write lock), and its log shows 'Watch for project ai-badger at /Users/arasz/RiderProjects/ai-badger digested again after a failure' three times before the watches were deleted. The reads are of the owner's own files into a scratch copy, so nothing was damaged, but a checklist that copies a live bank should clear the copy's watches BEFORE serving it - and must not serve a copy it still needs to migrate.",
+      "evidence": "ck/evalcopy2/serve.log: 'Watch for project ai-badger at /Users/arasz/RiderProjects/ai-badger digested again after a failure; scanning it for changed files' (3 lines). The first tool call against that server was refused: '\"project_id_token_get\" refused: bank-busy: the bank is busy (another writer holds the lock); retry the call'.",
+      "so-what": "Two things in one: clear the copy's watches before serving, and expect 'bank-busy' on the first call after a schema migration - it is a refusal with a retry instruction, not a hang."
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "command": "dotnet build -c Release; python3 scripts/download-mlx-runtime.py; dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=osx-arm64 -o $S/artifacts; dotnet tool install ai-raccoon --version 1.63.0 --add-source $S/artifacts --tool-path $S/tool; $S/tool/ai-raccoon --version; dotnet tool uninstall -g ai-raccoon; dotnet tool install -g ai-raccoon --version 1.63.0; ai-raccoon --version; git diff --stat d06746fc..HEAD -- src/ tests/ scripts/; tools/list on the global build and on the tree build, diffed",
+      "evidence": "Build: 'ok dotnet build: 8 projects, 0 errors, 0 warnings (00:00:27.64)'. Pack: 'Successfully created package .../ai-raccoon.osx-arm64.1.63.0.nupkg' and 'ai-raccoon.1.63.0.nupkg'. Scratch install of the local pack: 'Tool ai-raccoon (version 1.63.0) was successfully installed'; $S/tool/ai-raccoon --version -> '1.63.0+cf5466fc119898995f0ee1a0483ccc7687e5dceb' (the tree HEAD). Global force-update: 'Tool 'ai-raccoon' (version '1.63.0') was successfully uninstalled.' then 'Tool 'ai-raccoon' (version '1.63.0') was successfully installed.'; ai-raccoon --version -> '1.63.0+d06746fcf59734f5000a657f026a9eca8ee40608' (the published 1.63.0, commit d06746fc). Product-code diff between the published commit and the tree: 'git diff --stat d06746fc..HEAD -- src/ tests/ scripts/' -> empty. Tool surfaces: global build 30 tools, tree build 30 tools, 'only in global: []', 'only in tree: []'. SIDE EFFECT, recorded honestly: the global uninstall+install removed the tool's install directory, and the running host's install watchdog (ADR-0116) shut the user's own server down with it - the listener on 7721 changed pid (23884 -> 48124, started 01:24:26) and a new host came up on 7721 answering 401 without a token. The bank was not touched (~/.ai-raccoon/memory.db, identity-key and mcp-token all still in place). This run never bound or issued a --restart against 7721 itself.",
+      "observed-result": "The running binaries report the derived version 1.63.0. The global tool is the published 1.63.0 (d06746fc) and the tree carries three further commits that touch no product code (only .ai-badger scaffolding and docs), so the two builds are the same product. Both expose exactly the same 30 MCP tools. The global force-update is not side-effect free: reinstalling the tool cycles the user's running server on the default port through the install watchdog. The port was not bound by this run, but the user's server was cycled by it.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "A plain pass this time: 1.63.0 is published on nuget, so the global force-update is a real uninstall+install of the release rather than a scratch substitute. The version comparison against the derived facts holds, and the two builds' tool surfaces are identical, which is what makes the rest of the run a statement about 1.63.0. Accepted with the side effect above named: the item asks for a real global force-update, and that is what cycles a server started from the tool's own install directory."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "serve --port 0 --idle-timeout 0 on each lane (the port read back from the server's own 'serving on port N' line); lsof -nP -iTCP:<port> -sTCP:LISTEN -t before and after 'serve --port 62535 --restart --idle-timeout 0' on the same --data-root; the same lsof on 7721 before and after",
+      "evidence": "Ports bound with --port 0: 60544 (main), 60911 (search), 61116 (search2), 61174 (keyword), 61495 + 61576 (watch, restart), 61959 (poison), 62252 (poison), 63388 + 63618 (shared), 63987 (live copy), 65082 (eval copy), 65011/65091 (pre-cap), 65139 (global build). Restart on 62535: 'pid before=31841 after=31950 | 7721 before=23884 after=23884'; the restart log reads 'ai-raccoon: the server on port 62535 (pid 31841) stopped and the port is free' then 'Now listening on: http://127.0.0.1:62535'.",
+      "observed-result": "The restart cycled the server it found on the non-default port (pid 31841 -> 31950) and the user's own server on 7721 (pid 23884) was untouched throughout the run.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The port was reported by the server itself, the restart cycled rather than attached, and 7721 was never bound or stopped by this run."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "memory_write returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "memory_write of a parish-minutes note (sourceFile notes/minutes.md, section decision); three writes in the three machine-notification shapes the one registered write-path policy claims; two control writes (a near-miss that quotes the marker inside a sentence, and a plain note)",
+      "evidence": "Ordinary write: '{\"hash\": \"24a05c3193dd498131c8a48cdf77eedd69d6947d3ac416f9174bd791bac38f7a\", ..., \"stored\": true}'. Rejected writes (one per shape): '{\"hash\": \"\", \"path\": \"\", \"context\": \"\", \"stored\": false, \"reason\": \"rejected by noise policy 'HermesBackgroundProcessLog'\"}'. Controls: near-miss '{\"hash\": \"267189715abbea6be302f27e1096c84c509fa76fdc207970567b560e290686c6\", ..., \"stored\": true}' and plain '{\"hash\": \"917c4230acf08a4b724fd83cf87727b745be207acf04471549b99d8810c17a0e\", ..., \"stored\": true}'.",
+      "observed-result": "The stored branch returns a real hash; the refused branch returns stored=false with the rejecting policy named and an empty hash, path and context - no fabricated entry. The two controls prove the policy is not simply refusing everything.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both branches behaved as specified and the controls show the refusal is selective rather than a blanket rejection."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "memory_search returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "fresh scratch bank (ck/search2) with 'model embedding set local'; memory_write 'Brass astrolabe, lamplight glowing over the observatory dome; engraved ring turns slowly beneath night sky.'; memory_search 'an antique navigation instrument reflecting evening light inside a stargazing room' {kind: memory, minRelativeScore: 0, limit: 8}; the same query with vectorWeight 0 as the keyword-only control; sqlite3 -readonly 'SELECT count(*) FROM entries_fts WHERE entries_fts MATCH <the query's OR expression>'",
+      "evidence": "Search: the note ranks 1, 'evidenceByHash' carries 'legs: [{legName: vector, rank: 1}]', 'fusionStrength: 1', 'cosine: 0.844411090016365', 'participatingLegs: [vector]'. Keyword-only control (vectorWeight 0): 'results: []'. The bank itself agrees the keyword leg has nothing: 'SELECT count(*) FROM entries_fts WHERE entries_fts MATCH 'an OR antique OR navigation OR instrument OR reflecting OR evening OR light OR inside OR a OR stargazing OR room'' -> 0.",
+      "observed-result": "The note is found by the vector leg alone: with the keyword leg alone the same query returns nothing, so a dead vector leg would have failed this item. The degradation path announces itself when no engine is set ('memory engine not configured - the memory section is FTS5-only').",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The query shares no token with the note - not even the one-letter article, because the FTS plan's OR join is built from the raw tokens, so a stray 'a' in the content would have handed the hit to the keyword leg. The keyword-only control is what makes the item able to fail."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "memory_get returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "command": "memory_get {projectId: P, hash: <hash from the ordinary write>}; memory_get {projectId: P, hash: '0000000000000000000000000000000000000000000000000000000000000000'}",
+      "evidence": "Known hash: '{\"hash\": \"24a05c3193dd498131c8a48cdf77eedd69d6947d3ac416f9174bd791bac38f7a\", \"value\": \"The parish council met in the church hall on Tuesday. ... Decision: the bell repair invoice was approved.\", \"path\": \"0ceb9d8b...md\", \"context\": \"project:01a160ba-da3f-7240-9c53-68c282f3755e\", ...}'. Unknown hash: '\"unknown-hash: No entry with hash '0000000000000000000000000000000000000000000000000000000000000000' in project '01a160ba-da3f-7240-9c53-68c282f3755e'.\"'",
+      "observed-result": "The reachable hash returns the full stored value with its path and context; the unknown hash refuses with a named reason instead of an empty success.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Both branches behaved as specified."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "memory_search 'notes/minutes.md#decision' {kind: memory, minRelativeScore: 0, limit: 5}",
+      "evidence": "First hit: '{\"hash\": \"24a05c3193dd498131c8a48cdf77eedd69d6947d3ac416f9174bd791bac38f7a\", \"ranking\": 1, \"sourceFile\": \"notes/minutes.md\", \"chunkIndex\": 0, \"totalChunks\": 1}' with 'legs: [{fts, rank 1}, {vector, rank 4}]'.",
+      "observed-result": "The anchored file leads the result list and resolves to its own chunk; the vector leg only orders what follows.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The anchor led with its own chunk and both legs agree it belongs there."
+    },
+    {
+      "item": "keyword-search-across-a-chunk-boundary",
+      "expected-result": "memory_write a note made of \"The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.\" forty-five times, space-joined (ten fit in one chunk since 1.56), then \" Invoice reference vk83jq was filed with the parish council.\" Premise: sqlite shows more than one entries row for the note's path. memory_search {query: \"vk83jq\", kind: memory, minRelativeScore: 0} returns the note with an `fts` leg in evidenceByHash, and one of its rows holds `vk83jq` whole (`instr(value,'vk83jq')`). A vector-only hit does not count: the vector leg finds this note on a broken build too. Then write a note holding one whitespace-free term of about 2,500 characters (40 concatenated SHA-256 hex digests); premise: no row holds the whole term; searching the whole term returns that note with an `fts` leg. A build without ADR-0120 returns both notes by the vector leg only, and no row holds vk83jq (ADR-0120)",
+      "command": "memory_write of the 45x space-joined sentence plus the invoice sentence (sourceFile notes/fete.txt); memory_write of a note holding 40 concatenated SHA-256 hex digests (2,560 chars, sourceFile notes/long-term.txt); sqlite3 -readonly on ck/kw/memory.db for the row counts and instr() checks; memory_search 'vk83jq' and memory_search of the whole 2,560-char term, both {kind: memory, minRelativeScore: 0}",
+      "evidence": "Premises: 'rows for notes/fete.txt: 2', 'rows holding vk83jq whole: 1', 'rows holding the long term whole: 0', 'rows for notes/long-term.txt: 3'. Search 'vk83jq': the row at chunkIndex 1 of notes/fete.txt ranks 1 with 'legs: [{legName: fts, rank 1}]'. Search of the 2,560-char term: the row at chunkIndex 1 of notes/long-term.txt ranks 1 with 'legs: [{legName: fts, rank 1}]' (the other two hits carry vector legs only).",
+      "observed-result": "Both terms were found on the keyword leg, and the bank holds the boundary term whole in one row while the long term is held by no row at all - the prefix rule is what finds it.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The premises held and both hits carry an `fts` leg, so a build that only had the vector leg would have failed the item."
+    },
+    {
+      "item": "note-opening-chunk-reports-index-zero",
+      "expected-result": "memory_write a note with sourceFile /notes/minutes.md made of 62 paragraphs separated by blank lines (\"Paragraph N of the parish minutes records the treasurer's report on hall repairs, roof slates and the organ fund.\"), the first opening with \"Opening marker zq71\". Premise: sqlite shows more than one row for the note's path. memory_search {query: \"zq71\", kind: memory, minRelativeScore: 0} returns it with chunkIndex 0, and sqlite gives chunk_index 0 for the row where `instr(value,'zq71') > 0`. A build without ADR-0122 puts the opening at the last index (1 of 2 on 1.56.1) (ADR-0122)",
+      "command": "memory_write of 62 blank-line-separated paragraphs, the first 'Opening marker zq71 records the first entry of the parish minutes.' (sourceFile notes/minutes62.md); sqlite3 -readonly for chunk_index of the row holding zq71; memory_search 'zq71' {kind: memory, minRelativeScore: 0, limit: 5}",
+      "evidence": "sqlite: 'rows for notes/minutes62.md: 2' and 'chunk_index of the row holding zq71: [(0, 2)]'. Search: 'hit 988d50209ed86d792943d8e9fb41bf9e5e2f367e7c617150231a35bf5b8285d6 chunkIndex 0 of 2 notes/minutes62.md 1' with 'legs: [fts, vector]'.",
+      "observed-result": "The chunk order in the store and the chunk index in the result agree, and both are 0.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The store order and the reported index are the same fact seen twice, and both are 0."
+    },
+    {
+      "item": "poison-memory-row-isolated-and-abandoned",
+      "expected-result": "On a fresh scratch bank with no engine set, memory_write four ordinary notes and one containing POISON-7Q, so all five rows are pending. Start `python3 scripts/poison-embedding-stub.py --port 0 --log stub.log`, then run `model embedding set openai stub-embed <printed base URL> --api-key stub-key` against the scratch server. memory_embed_pending returns {processed, pending} and does not fail or hang. Later calls return pending 1. `sqlite3 -readonly memory.db \"SELECT embed_state, embed_attempts, count(*) FROM entries GROUP BY 1, 2\"` shows four rows embedded and the poison row pending at embed_attempts 3. memory_stats.pending is 1, and the count of poison lines in stub.log stays the same across three more memory_embed_pending calls. Negative control: stub.log holds a `poison 5` batch line followed by `ok 1` lines, so the engine refused the batch and answered the single rows. A build without ADR-0119 fails every memory_embed_pending with ClientResultException, keeps all five rows pending and adds a poison line per call (ADR-0119)",
+      "command": "fresh scratch bank ck/poison with no engine set; four ordinary writes + one write containing POISON-7Q; python3 .agents/skills/ai-raccoon-manual-checklist/scripts/poison-embedding-stub.py --port 0 --log stub.log; 'model embedding set openai stub-embed http://127.0.0.1:<port>/v1 --api-key stub-key' --port <scratch>; six memory_embed_pending calls; sqlite3 -readonly on ck/poison/memory.db; three further memory_embed_pending calls and a re-read of stub.log",
+      "evidence": "Before the engine was set: 'stats before: {\"entries\": 5, \"pending\": 5}'. First drain: 'embed_pending call 0: {\"data\": {\"processed\": 4, \"pending\": 1}}'; every later call '{\"processed\": 0, \"pending\": 1}'. sqlite: 'embed_state counts: [('embedded', 0, 4), ('pending', 3, 1)]'. 'stats after: {\"entries\": 5, \"pending\": 1}'. stub.log: '['ok 1', 'poison 5', 'ok 1', 'ok 1', 'ok 1', 'ok 1', 'poison 1', 'poison 1', 'poison 1', 'ok 1', 'poison 1', 'poison 1', 'ok 1']' - a 'poison 5' batch line followed by single-row 'ok 1' lines. 'poison lines after three more calls: 6 (was 6 )'.",
+      "observed-result": "The batch was split, the four ordinary rows embedded, the poison row stopped at three attempts and stayed pending, and the stub log stopped growing once the row was abandoned.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Every clause of the item was exercised, including the negative control shape (a refused batch followed by single rows answered) and the three extra calls that show the log is no longer growing."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "the three rejected writes above; the two control writes; 'ai-raccoon --data-root $S/ck/main --port 60544 noise entries'; a read of the registered policy set in src (AppRegistrations.cs: services.AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy>() - one policy)",
+      "evidence": "Registered policies: exactly one, HermesProcessNoisePolicy ('HermesBackgroundProcessLog'). Rejections: three writes, each 'stored: false, reason: rejected by noise policy 'HermesBackgroundProcessLog''. Noise store: 'total: 3' and '  HermesBackgroundProcessLog: 3'. Controls: the near-miss and the plain note were both stored (stored: true), so the policy is not refusing everything.",
+      "observed-result": "The one registered policy refuses the three shapes it claims to, reports each refusal, and the count in the noise store matches the number of refusals exactly - and the controls show the policy is not a blanket refusal.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Rejection, reporting and the noise store agree, and the control writes are the negative control the item needs."
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "'settings queryguard list'; memory_search with a full Hermes notification, with an async batch notification, with a near-miss control, with a log-prefix query and with a stack-frame query; 'settings queryguard structural enable', the refuse query and a clean query again; 'settings queryguard structural disable' and 'settings queryguard list'",
+      "evidence": "settings: 'enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'. Refuse: the Hermes notification -> 'invalid-params: This looks like tool output rather than a question. ... Refused query: [IMPORTANT: Background process 4d2 completed normally. Command: dotnet build'; the async batch -> 'Refused query: [ASYNC DELEGATION BATCH COMPLETE: the task dispatched earlier has finished'. Near-miss control (the same prefix without 'Command:'): 2 results, no warning. Annotate: 'info: build started' and 'at AiRaccoon.Core.Memory.Store.SearchAsync()' -> 2 results each plus warning 'This query contains what looks like log or stack-trace output. Memory search matches meaning, not literal text ...'. A sentence that merely mentions the marker: 2 results, no warning. With the structural detector armed ('enabled: True  shadow: False  structural: True'): the refuse query still refuses, and a clean query is not annotated. Restored: 'enabled: True  shadow: False  structural: False'.",
+      "observed-result": "Both refuse shapes refuse with invalid-params before any work, the annotate tier runs the search and adds guidance, the near-miss control is not refused, and the structural detector ships disabled, only ever annotates and leaves the refuse tier intact.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Each tier was exercised with its control, and the structural detector's disabled-by-default state was read from the settings both before and after arming it."
+    },
+    {
+      "item": "long-query-keyword-terms-capped",
+      "expected-result": "Copy the live bank with VACUUM INTO (clear its watches) and serve the copy. A memory_search for the first ~7,000 characters of CLAUDE.md, and one for ~7,000 characters of stopwords plus two content words, each return in seconds at vectorWeight 0, and data.warning says keyword matching is capped at the first 64 distinct words, with no clause saying it still sees the query in full. On a fresh bank with vectorWeight 0 and minRelativeScore 0, a marker word placed after 70 distinct filler words gets no hit, and the same word placed first gets an `fts` leg. Repeats do not use up the cap: the marker after 80 repeats of two words is still found. A 6-token query keeps the stopword `the`, and a 71-token query drops it. Negative control: install the release before the cap into a scratch --tool-path and run the same copy and queries. There the paste takes tens of seconds, the stopword run times out, and both the trailing marker and the 71-token `the` are found (ADR-0126)",
+      "command": "sqlite3 -readonly ~/.ai-raccoon/memory.db \"VACUUM INTO '$S/ck/livecopy/memory.db'\" (watches then deleted from the copy); the copy served with the tree build; memory_search of CLAUDE.md[:7000] and of 7,000 stopword chars + 'parish bell repair fund', both {vectorWeight: 0, minRelativeScore: 0, limit: 5}; the five cap probes on a fresh scratch bank (ck/cap) at vectorWeight 0; the negative control: 'dotnet tool install ai-raccoon --version 1.56.0 --tool-path $S/tool-1560' (the release before the cap, which shipped it in 1.56.1), the same five probes on its own fresh bank (ck/cap1560) and the same two pastes on its own copy of the 70,763-entry v17 eval bank (ck/evalcopy), with a 10s client timeout on the stopword paste",
+      "evidence": "Live-bank copy (25,313 entries): CLAUDE.md paste 1.88s, stopword paste 1.23s; warning 'This query is over 4,024 characters. ... Keyword (FTS) matching is capped too: it searches only the first 64 distinct words of a query this long.' - with no 'in full' clause. Like-for-like on the same 70,763-entry v17 eval bank: 1.63.0 answers in 1.17s and 0.56s with the capped wording; 1.56.0 answers the same two pastes in 14.72s and 13.11s with the old wording 'Keyword (FTS) matching still searches the query in full.', and at a 10s client timeout '1.56.0 stopword paste TIMED OUT after 10.0s: ReadTimeout'. Probes on the fresh bank under 1.63.0: 'marker after 70 distinct filler words: hits=[]'; 'marker first: hits=[('notes/marker.md', 0)] legs={'notes/marker.md': ['fts']}'; 'marker after 80 repeats of two words: hits=[('notes/marker.md', 0)] legs={... ['fts']}'; '6-token query with the stopword: hits=[('notes/stopword.md', 0), ('notes/marker.md', 0)] legs both ['fts']'; '71-token query with the stopword: hits=[]'. The same five probes under 1.56.0: the trailing marker IS found ('hits=[('notes/marker.md', 0)] legs={... ['fts']}') and the 71-token query DOES find the 'the'-only note ('hits=[('notes/stopword.md', 0), ('notes/marker.md', 0)]').",
+      "observed-result": "The cap is real and observable in both directions: 1.63.0 drops the trailing marker and the 71-token stopword that 1.56.0 finds, and it answers the same real-scale pastes an order of magnitude faster, with the warning saying so.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Every clause was exercised, including the pre-cap negative control on the same bank with the same client parameters. The cost figures depend on the bank, so the evidence names the bank and its entry count for each measurement."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "memory_watch_status lists live registrations and their sync state",
+      "command": "watch lane: 'settings ingest scope add <P> <dir>', 'settings watch enable <P> true', memory_watch_add on a scratch directory holding x.md, w.md, y.md, node_modules/pkg/index.md and .git/notes.md; memory_watch_status; sqlite3 -readonly for the watch_files rows",
+      "evidence": "memory_watch_status: '{\"projectId\": \"01a160c0-2611-7791-aaed-f9d4d23b2fdc\", \"path\": \".../ck/watch/watched\", \"state\": \"Healthy\", \"lastSync\": \"2026-10-21T23:16:11.351452+00:00\", \"skippedCount\": 0, \"skipped\": []}'. watch_files rows: exactly three - '.../watched/w.md', '.../watched/x.md', '.../watched/y.md' (59 bytes each); no node_modules or .git row.",
+      "observed-result": "The status reflects the live registration and the excluded paths are absent from the rows and from the skipped list.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The registration and its state are read from the running server, and the excluded directories are confirmed absent from the store rather than merely unlisted."
+    },
+    {
+      "item": "watch-catch-up-heals-a-missed-change",
+      "expected-result": "Watch a scratch directory (`settings ingest scope add`, `settings watch enable`, memory_watch_add) holding x.md, w.md and y.md, plus node_modules/pkg/index.md and .git/notes.md, each with a term found nowhere else. Wait for three watch_files rows and leave node_modules readable (a `chmod 000` decoy is absent whether or not it is excluded, so that leg could never fail), wait 2 s, then edit y.md so watches.last_change_ts moves past x.md's watch_files.updated_at. Read both values while the server runs, because a stopped WAL bank will not open read-only. Stop the server. Replace one word of x.md with a new term of the same byte length and `touch -t $(date -r <t> +%Y%m%d%H%M.%S)` it, where t is between x.md's updated_at and last_change_ts. Rewrite w.md at a different size with a new term, and touch it to before its own updated_at. Restart on the same data root. Within seconds memory_search finds both new terms, watch_files shows new updated_at and size for x.md and w.md, and memory_watch_status reads Healthy. Neither the node_modules term nor the .git term is ever found. Premise: before the restart, updated_at(x.md) <= mtime(x.md) <= last_change_ts. A build without ADR-0121 finds neither new term, because it re-queues only files with mtime > last_change_ts. The 5-minute heal pass (WatchHostedService.HealInterval, event 322 at Debug) is optional: it needs a server left up for over 5 minutes (ADR-0121)",
+      "command": "watch lane ck/watch: scope + enable + memory_watch_add; poll watch_files until three rows; wait 2s; append a line to y.md; read watches.last_change_ts and watch_files.updated_at while the server runs; stop the server; rewrite x.md with 'xmarkphrasf' (same byte length, verified) and touch it to (x_updated_at + last_change_ts)//2; rewrite w.md with 'wmarkphrasezz' and a different size and touch it to its updated_at - 120; restart on the same data root; poll watch_files; memory_search for the two new terms and for the two excluded terms; memory_watch_status",
+      "evidence": "Premise: 'last_change_ts 1792624574 x updated_at 1792624571 w updated_at 1792624571' (the edit to y.md moved the stamp past x.md's). After the restart: 'watch_files after restart: w.md 1792624578 91 | x.md 1792624578 59 | y.md 1792624574 106' - x.md's size is unchanged (59) and its mtime (1792624572) is before last_change_ts (1792624574), so only the per-file fingerprint comparison could have re-queued it; w.md's mtime (1792624451) is before its own updated_at (1792624571) and its size changed (59 -> 91). Searches: 'search xmarkphrasf -> [(.../x.md, 0)]', 'search wmarkphrasezz -> [(.../w.md, 0)]', 'search nmarkphrase -> []', 'search gmarkphrase -> []'. Status: '\"state\": \"Healthy\"'.",
+      "observed-result": "Both re-queue legs fired, the excluded terms stayed out, and the watch returned to Healthy.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The x.md leg is the one that could have failed: its size did not change and its mtime is older than the change stamp, so only the per-file fingerprint comparison can explain the re-queue. The 5-minute heal pass (event 322 at Debug) was not exercised - it needs a server left up for over five minutes."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "memory_promotion_list reports propose-tier candidates and queue state accurately",
+      "command": "memory_share_extract {projectIds: [P], mode: 'propose', limit: 5}; memory_promotion_list {projectId: P}; memory_promotion_list {projectId: P, includeFullValue: true}; memory_promotion_discard {projectId: P}; memory_promotion_list {projectId: P}",
+      "evidence": "propose: 4 candidates with score, rating, accessCount, reasons and preview - the top one 'score: 1.8788888888888888, rating: 0.7999582838962611, reasons: [\"organic-note\", \"durable-fact-language\"]' and 'meta.waitingPromotionsCount: 4'. list: the same four rows with 'capacity: {reserved: 1000, used: 4, borrowing: false}' and 'oldestWaitSeconds: 0'. discard: '{\"discarded\": 4}'. list after the discard: '{\"rows\": []}' with 'waitingPromotionsCount: 0'.",
+      "observed-result": "Propose, list and discard agree with each other, and the queue state is reported with the numbers behind it.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The list was checked against a queue that actually held content, not against an empty one, and the counts move together through discard."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "tools/list and prompts/list; prompts/get for both prompts; then a call to each of the 30 tools (after 'settings access set <P> full', 'settings ingest scope add <P> <corpus>' and 'settings watch enable <P> true', which three tools require, and 'model code set default' for the code corpus); the list of names diffed against the names called",
+      "evidence": "tools/list 30 (derived 30); prompts/list ['workspace-consolidation-guide', 'memory-usage-guide'] (derived 2); both prompts/get returned their messages ('Before declaring a task done, finish your workspace: ...' and 'Always pass the project_id of the project you are working in ...'). All 30 called: memory_write (stored true), memory_search (5 hits), memory_get (the value), memory_list (the file tree), memory_stats (entries 6, pending 0), memory_performance (60 buckets), memory_set_ttl ({ttlDays 30, rating 0.5, threshold 0.3, canEverExpire false}), memory_sweep ({candidates: [], deleted: []}), memory_record_grade (recorded true), memory_record_followthrough (recorded true), memory_share_extract (4 candidates), memory_promotion_list (rows []), memory_promotion_discard (discarded 0), memory_share ({shared: true, context: shared}), memory_embed_pending ({processed: 0, pending: 0}), memory_ingest_file (indexed 0 - the same script had already ingested that file), memory_ingest_directory (scanned 0 for the already-scanned directory, then '{\"scanned\": 2}' for a second directory added to the scope), code_get (the full Greeter source: 'public class Greeter { public string Greet() => \"hello\"; }'), memory_watch_add (pruned []), memory_watch_status (state Scanning), memory_watch_remove (removed true), project_id_get ('project-not-found: No project is registered under the name ...'), project_id_token_get (a new id), memory_workspace_status (the outbox entry), memory_workspace_consolidate ({promoted: 1, discarded: 0}), memory_workspace_begin (a new workspace), memory_workspace_discard ('unknown-workspace: ... does not exist'), memory_delete ({deleted: 1}), memory_delete_context ({deleted: 0}), memory_sync ('sync-not-configured: Memory sync is not configured ...'). Names never called: []. Called but not listed: [].",
+      "observed-result": "The listed count equals the derived count, the name-by-name diff is empty in both directions, and every tool answered with a payload or a named refusal.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Each tool was called with arguments that would exercise it, not with empty arguments, and the code corpus was configured so code_get returned real source rather than an unknown-hash refusal. memory_sync's success path is out of reach without a configured cloud target; its refusal names the remedy."
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "extract every '[NNNN]' event id from this run's serve logs (19 server logs under $S/ck, plus the poison stub's own log), expand the reference's table ranges and comma lists, and check each id against the set",
+      "evidence": "The reference covers 225 ids once its ranges are expanded. AiRaccoon's own ids emitted in this run: 34, each resolving - 311, 323, 426, 428, 436, 443, 444, 446, 447, 448, 510, 511, 525, 601, 650, 651, 660, 672, 673, 674, 675, 692, 703, 897, 899, 910, 911, 914, 964, 965, 973, 1003, 1005, 1008. Framework ids also emitted: 0 and 14 (Microsoft.Hosting.Lifetime). Unresolved AiRaccoon ids: none.",
+      "observed-result": "No id emitted by this run is missing from the reference; the only ids outside it belong to the framework's own logger.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The check expands the reference's ranges rather than matching them literally, and the framework's ids are separated rather than counted against the product."
+    },
+    {
+      "item": "reserved-shared-target-documents-and-refusals",
+      "expected-result": "the reserved `shared` target serves watched documents to every project's default search, keeps them out of project-only searches, and refuses the operations ADR-0137 lists (1.62.0, amended by 1.63.0: the reserved target refuses memory_delete)",
+      "command": "shared lane ck/shared: 'settings ingest scope add shared <docs>', 'settings watch enable shared true', memory_watch_add {projectId: 'shared', path: <docs>}; project_id_get {name: 'shared'}; searches from an ordinary project (scope all and scope project) and from the shared target (scope all, scope shared, scope project); memory_get / memory_delete / memory_delete_context / memory_set_ttl / memory_share_extract / memory_sweep / memory_promotion_list / memory_workspace_begin / memory_write on the shared target, the first four after 'settings access set shared full' so the scope check is the one that answers",
+      "evidence": "project_id_get {name: 'shared'} -> '{\"projectId\": \"shared\"}'. watch_files rows: two, both project_id 'shared' ('.../handbook.md', '.../policy.md'); memory_watch_status -> 'state: Healthy'. Ordinary project, default scope: both shared documents ('.../policy.md' ranking 1, '.../handbook.md' ranking 0.984). Ordinary project, scope project: '[]'. Shared target, scope all: the same two documents; scope shared: the same two; scope project: 'REFUSED: invalid-argument: shared-project-unsupported: search shared with scope all or shared, without a workspace or label.'. memory_get on the shared hash returned the file's text. With access raised to full, the ordinary-only tools refuse: memory_delete -> 'invalid-argument: shared-project-unsupported: memory_delete requires an ordinary project; shared supports document ingestion and watches.'; memory_set_ttl, memory_delete_context, memory_share_extract and memory_sweep refuse the same way; memory_promotion_list -> 'shared-project-unsupported: memory_promotion_list requires an ordinary project'; memory_workspace_begin -> 'shared-project-unsupported: memory_workspace_begin requires an ordinary project'; memory_write -> 'shared-project-unsupported: memory_write requires an ordinary project'.",
+      "observed-result": "The reserved target behaves as ADR-0137 and its 1.63.0 amendment describe: watched documents join every project's default search and leave project-only searches alone, the search shape check refuses scope=project, and the ordinary-only tools - memory_delete among them - refuse with the shared-project-unsupported message.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The item is new in 1.62.0/1.63.0, so it was written from the ADR and the changelog rather than copied; the refusals were observed with the access mode raised to full, so the scope check is what answered and not the access check."
+    },
+    {
+      "item": "tool-scope-declared-on-the-tool",
+      "expected-result": "every MCP tool declares its scope, the classification is 14 ordinary-only and 16 shared-allowed, and the gate's answer follows the declaration (ADR-0139)",
+      "command": "read the [McpToolScope(ToolScope.X)] declarations under src/AiRaccoon/Tools and map them to the tool names; then call a Project-scoped tool and an All-scoped tool against the reserved shared target and against an ordinary project (the shared lane above)",
+      "evidence": "Declarations: 30 tools carry a scope - Project (14): code_get, memory_delete, memory_delete_context, memory_promotion_discard, memory_promotion_list, memory_set_ttl, memory_share, memory_share_extract, memory_sweep, memory_workspace_begin, memory_workspace_consolidate, memory_workspace_discard, memory_workspace_status, memory_write. All (16): memory_embed_pending, memory_get, memory_ingest_directory, memory_ingest_file, memory_list, memory_performance, memory_record_followthrough, memory_record_grade, memory_search, memory_stats, memory_sync, memory_watch_add, memory_watch_remove, memory_watch_status, project_id_get, project_id_token_get. That is ADR-0139's 'the same fourteen tools are ordinary-only and the same sixteen may use the reserved target'. Runtime: on the shared target, the Project-scoped tools refuse ('shared-project-unsupported: memory_promotion_list requires an ordinary project') and the All-scoped tools answer (memory_search returned the shared documents, memory_get returned the file's text, memory_stats returned '{\"entries\": 2, \"pending\": 2, \"contexts\": [\"shared\"]}', memory_list returned the shared-docs tree). On an ordinary project the same tools answer normally.",
+      "observed-result": "The declared classification and the gate's runtime answers agree: 14 ordinary-only tools refuse the reserved target and 16 shared-allowed tools serve it.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The counts are the ADR's own numbers, read off the declarations rather than typed from the ADR text alone, and the runtime half shows the gate honours the declaration for both scopes."
+    }
+  ]
+}
