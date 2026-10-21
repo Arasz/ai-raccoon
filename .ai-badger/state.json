@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-10-20",
+  "lastUpdated": "2026-10-21",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-derive-tool-scope-from-declarations",
+      "title": "The MCP tool scope is declared on the tool and compiled; the reserved shared target refuses memory_delete",
+      "summary": "The review of PR #906 (docs/work/2026-10-21-pr906-scope-check-review.md) found that ToolNameScope's hand-written list of 7 names plus 2 prefix families default-allowed every name not on it, with nothing comparing it to the generated tool inventory, and that memory_delete - the one destructive tool allowed on the reserved shared target - was unspecified in ADR-0137 and the operator reference. The scope is now declared on each of the 30 tool methods with [McpToolScope(RequiresOrdinaryProject: ...)] and compiled by the existing Roslyn generator from the same candidate pass that gathers the tool surface: a tool that declares no scope is a build error (AIRGEN002), the hand-written list and both prefix families are gone, the generated file is data only and a thin ToolNameScope implements IToolNameScope over it, and a name that is not a declared tool is refused (the default flipped from allow to deny; it has one caller, and it only ever sees a declared tool's own name). memory_delete is refused on the reserved target: its content is owned by the watch and the file, and a delete there removed only the chunk whose hash was named (measured: rows_before=4 rows_after=3 deleted=1), advanced no watch fingerprint, and left the digest hash-skipping on a file it still claimed was current. ADR-0139 records the decision, ADR-0137 is amended (its CanSearchCode sentence named a method removed in 3849135e), the ADR index is updated - it is a derived mirror with a gate, so the 0139 row, the 0137 Amended cell and a 0138 skip row are part of the change - and the operator reference names the refusal. Evidence: 3 failing tests written first (the scope pin, the generator diagnostic, the reserved target's delete through the real tool), 2 mutations seen red and then green, the whole Unit surface 4302/0, the shared-project integration 19/0, AdrIndexTests 7/0. The plan review and the implementation review both ran; the plan review's 6 MUST findings were folded in, and one of the implementation review's two claims was checked against the source and found not to hold. VERSION 1.63.0. PR #907.",
+      "pr": 907,
+      "merged": false,
+      "mergeCommit": null,
+      "date": "2026-10-21",
+      "hasNotes": false
+    },
     {
       "id": "air-observability-counters-flag-cli-docs",
       "title": "The observability counters command names every exported counter, and the CLI documents the verb",

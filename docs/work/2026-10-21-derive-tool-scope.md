@@ -283,6 +283,32 @@ leaves the test running against the previous assembly and the mutation appears t
 | The two mutations | seen red, then green — the evidence is above |
 | CI (`build-fast` / `build-bdd` / `build-slow`) | pending — CI is the pass condition |
 
+### The implementation review
+
+A delegated review lane read the diff, the ADRs, the work record and the source, and returned
+**no blocker**: the default-deny flip is safe, the reserved target's refusal happens before any
+store write, and the emitted map cannot collide with the inventory's duplication of an inherited
+tool.
+
+Two of its observations were checked against the source rather than taken at face value:
+
+- *"The integration test proves the refusal only, not that the rows are alone."* It does prove
+  that: the test counts the reserved target's rows before the call and after it, and asserts
+  they are equal (`tests/AiRaccoon.Tests/Integration/SharedProjectTests.cs`, the
+  `SELECT count(*) FROM entries WHERE project_id = 'shared'` pair around the call). The lane did
+  not read those two lines.
+- *"The scope test pins the sets by name, so a wrong classification that matches the names
+  passes."* The names alone would pass — that is what the pin is for — but the guarantee is the
+  pair: the two mutations. A hand-written list with the same thirty names would not produce
+  `AIRGEN002`, so mutation 1 would fail, and a tool the pin does not know fails the exhaustive
+  assertion, so mutation 2 would fail too. The derivation is what is pinned, not the names.
+
+The blast radius of the default-deny flip was checked directly: `RequiresOrdinaryProject` has
+exactly one caller (`ScopeCheck.Check`, `src/AiRaccoon/Tools/ScopeCheck.cs:10`) and
+`ScopeCheck.Check` has exactly one caller (`ToolGate.RequireAsync`,
+`src/AiRaccoon/Tools/ToolGate.cs:60`), where the tool name is the tool's own constant. No other
+caller can be surprised by the flip.
+
 ## The documentation
 
 - **ADR-0139** (new) — the tool scope is declared on the tool and compiled; the alternatives
