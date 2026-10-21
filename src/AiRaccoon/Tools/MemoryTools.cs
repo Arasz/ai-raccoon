@@ -36,10 +36,10 @@ public sealed partial class MemoryTools(
 
 
     private const string TnMemoryWrite = "memory_write";
-    private const string TnMemoryGet = "memory_get";
-    private const string TnMemorySearch = "memory_search";
-    private const string TnMemoryList = "memory_list";
-    private const string TnMemoryStats = "memory_stats";
+    private const string TnGetEntry = "get_entry";
+    private const string TnQuery = "query";
+    private const string TnGetIndex = "get_index";
+    private const string TnGetStoreStatistics = "get_store_statistics";
     private const string TnMemoryDelete = "memory_delete";
     private const string TnMemoryDeleteContext = "memory_delete_context";
     private const string TnMemoryIngestFile = "memory_ingest_file";
@@ -82,10 +82,10 @@ public sealed partial class MemoryTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemoryGet)]
+    [McpServerTool(Name = TnGetEntry)]
     [McpToolScope(ToolScope.All)]
     [Description(
-        "Reads one entry's full content by its content hash, as returned by memory_write or memory_search. An unknown hash is refused as unknown-hash.")]
+        "Reads one entry's full content by its content hash, as returned by add_memory or query. An unknown hash is refused as unknown-hash.")]
     public async Task<ApiEnvelope<GetResult>> Get(
         [Description("The project id; every memory operation is scoped to a project.")]
         [Optional][DefaultParameterValue("")] string projectId,
@@ -93,7 +93,7 @@ public sealed partial class MemoryTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryGet, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetEntry, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var entry = await store.GetAsync(canonical, hash, cancellationToken)
@@ -103,7 +103,7 @@ public sealed partial class MemoryTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemorySearch)]
+    [McpServerTool(Name = TnQuery)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Hybrid semantic search over the bank. projectId=shared directly reads shared documents and promoted knowledge (scope all/shared only, without labels/workspaces). scope=all (default) searches shared + project (+ workspace when named); "
@@ -186,7 +186,7 @@ public sealed partial class MemoryTools(
             "Per-modality candidate depth policy before RRF fusion: \"max3x100\" or \"max5x50\" (bank setting retrieval.candidateWindow, else \"max3x100\").")]
         string? candidateWindow = null,
         [Description("Narrows the project scope to one context. Omit it to search every context in " +
-                     "the project (the default); memory_stats lists the labels in use.")]
+                     "the project (the default); get_store_statistics lists the labels in use.")]
         string? contextLabel = null,
         [Description(
             "Which corpus to search: both (default — the memory bank and the indexed code corpus, " +
@@ -200,7 +200,7 @@ public sealed partial class MemoryTools(
         double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnQuery, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
         var parsedScope = scope.ToLowerInvariant() switch
@@ -292,7 +292,7 @@ public sealed partial class MemoryTools(
     }
 
     /// <summary>
-    ///     memory_search's one warning string. QueryLengthGuard is always on -- a fact about the
+    ///     query's one warning string. QueryLengthGuard is always on -- a fact about the
     ///     embedding window, not a togglable policy -- so it is evaluated here unconditionally, never
     ///     through IQueryGuardService (a disabled guard must not silence it), against the active
     ///     memory engine's budget whichever kind was requested.
@@ -443,28 +443,28 @@ public sealed partial class MemoryTools(
         return searchQuery;
     }
 
-    [McpServerTool(Name = TnMemoryList)]
+    [McpServerTool(Name = TnGetIndex)]
     [McpToolScope(ToolScope.All)]
-    [Description("Lists the bank's indexed files as a JSON tree (memory_list_files).")]
+    [Description("Lists the bank's indexed files as a JSON tree.")]
     public async Task<ApiEnvelope<ListResult>> List(
         [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryList, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetIndex, cancellationToken);
         var files = await store.ListFilesAsync(canonical, cancellationToken);
         var result = new ListResult(JsonNode.Parse(files) ?? new JsonObject());
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemoryStats)]
+    [McpServerTool(Name = TnGetStoreStatistics)]
     [McpToolScope(ToolScope.All)]
     [Description("Reports entry count, pending (deferred-embedding) count, and the bank's committed contexts.")]
     public async Task<ApiEnvelope<StatsResult>> Stats(
         [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryStats, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetStoreStatistics, cancellationToken);
         var stats = await store.GetStatsAsync(canonical, cancellationToken);
         var result = new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);

@@ -13,12 +13,12 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tool over ICodeSearchService — no business logic here (see .ai-badger/instructions/mcp.instructions.md).</summary>
 public sealed class CodeTools(ICodeSearchService codeSearch, IToolGate gate)
 {
-    private const string TnCodeGet = "code_get";
+    private const string TnGetEntry = "get_entry";
 
-    [McpServerTool(Name = TnCodeGet)]
+    [McpServerTool(Name = TnGetEntry)]
     [McpToolScope(ToolScope.Project)]
     [Description(
-        "Reads one code chunk's full source by its content hash, as returned by memory_search kind=code/both. Mirrors memory_get. An unknown hash is refused as unknown-hash.")]
+        "Reads one code chunk's full source by its content hash, as returned by query kind=code/both. Mirrors get_entry. An unknown hash is refused as unknown-hash.")]
     public async Task<ApiEnvelope<CodeGetResult>> CodeGet(
         [Description("The project id; code is always project-scoped.")]
         [Optional][DefaultParameterValue("")] string projectId,
@@ -26,7 +26,7 @@ public sealed class CodeTools(ICodeSearchService codeSearch, IToolGate gate)
         string hash,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnCodeGet, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetEntry, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var entry = await codeSearch.GetAsync(canonical, hash, cancellationToken)
