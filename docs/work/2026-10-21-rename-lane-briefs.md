@@ -171,3 +171,96 @@ no old name gone. Another lane in the same wave did the work and its commit was 
 every lane in this task is verified by reading its branch's diff and running its own acceptance
 checks before the step is marked complete. A report without a commit hash and a `git show --stat`
 is not a report.
+
+---
+
+## Wave-3 briefs — the entry-type wave (drafted while wave 1 finished)
+
+The rename wave is merged into the task branch (`ad23b594`, 31 methods, 30 distinct names —
+the duplicate is `get_entry`, declared in both `MemoryTools.cs` and `CodeTools.cs`). The
+entry-type wave is the heavy one: a schema change with a ladder step, a new parameter on two
+tools, a TTL rule, and a stored-vocabulary migration.
+
+### Lane E1 — the classifier (the schema change)
+
+**Task.** Make Memory | Code | File a first-class classifier over the bank, denormalised onto
+`entries`, backfilled correctly, and exposed through ONE service that the query, the get and
+the TTL tool all use.
+
+**The finding.** The data already separates the populations, but the cheap discriminator cannot
+express one of them: on the live bank `entries` holds 25,303 rows — 214 `manual` (agent-added),
+1,496 `transcript` (agent-authored, session-sourced) and 25,089 `file` (ingested document
+chunks) — and the signature `source_file IS NULL AND total_chunks = 0` puts every transcript on
+the FILE side, because a transcript carries `source_file = hermes/<timestamp>_<id>` and is
+chunked. The truth is `memory_source.source_type` (`manual` | `transcript` | `file`), which the
+write path already computes in `SqliteMemoryStore.ClassifySource`.
+
+**The recommendation.** Add an `entry_type` column to `entries`, backfilled from
+`source_type` by a ladder step that reuses that same rule, and maintain it on every write path.
+**Evaluate this rather than executing it:** if the migration machinery in this codebase cannot
+carry an `ADD COLUMN` idempotently, say so and propose the alternative the file's own comments
+point at (the reprobe pattern, near `MemorySchema.cs:2076-2109`) — do not invent a third
+mechanism.
+
+**Acceptance criteria.**
+1. The classifier returns Memory for a manual entry, **Memory for a transcript entry**, File for
+   an ingested document chunk; Code names the `code_entries` corpus.
+2. A transcript row written **before** the migration is classified Memory.
+3. The backfill is idempotent and leaves no row with a NULL or unknown type.
+4. Every write path sets the type: the chunk-index recompute, the watch ingest path, the
+   promotion path, the shared-target rows, and the repair/reconcile path
+   (`ChunkBudgetReconciler` re-inserts entries).
+5. `dotnet build -warnaserror` green; the ladder step runs on a fresh bank and on a bank that
+   already has the column.
+
+### Lane E2 — the parameter on `query` and `get_entry`
+
+**Task.** Give `query` and `get_entry` the entry-type parameter, merge the two `get_entry`
+methods into one, and get the defaults and the refusals right.
+
+**The finding.** `query` has no type parameter, so the memory leg still returns agent notes and
+ingested chunks together. `get_entry` exists as TWO methods with the same wire name — the
+generator lists `get_entry` twice in the inventory and keeps only the FIRST scope in its map
+(`McpToolInventoryGenerator`: `names.Add(...)` is a list, and `scopes.Add(...)` is guarded by
+`!scopes.Any(entry => entry.Name == candidate.Name)`), so one of the two scopes is silently
+dropped today.
+
+**The recommendation.** Merge the two `get_entry` methods into ONE, declaring
+`ToolScope.All`: the merged tool reads the memory corpus (which includes the reserved shared
+target) and the code corpus (project-scoped only), and the entry-type parameter — not the
+scope — decides which corpus a call reaches. `query` defaults to Memory|Code|File (the sum),
+which answers exactly what today's default (`kind=both`) answers. `get_entry` has NO default:
+the type is required, because a hash alone does not say which corpus to read from, and a call
+without it is refused with a clear message. A hash present in two corpora is refused, not
+guessed. An unknown value is refused as invalid-params, never treated as the default.
+**The shared-target consequence to state, not to decide silently:** a `get_entry` call on the
+reserved `shared` target with type `Code` is ALLOWED and EMPTY (the old `code_get` was refused
+there). Put that in the tool's description and report it.
+
+### Lane E3 — the TTL rule
+
+**Task.** Make a TTL a Memory-only property: `set_memory_ttl` refuses a File entry, and no
+other path can put a TTL on one.
+
+**The finding.** `ttl_days` is written in exactly two places: `MemorySql.UpdateEntryTtl`
+(called from `SqliteMemoryStore`, the explicit set) and `ChunkBudgetReconciler`, which
+re-inserts entries with `ttlDays = template.TtlDays` and would carry a TTL across a re-chunk.
+Refusing at the tool alone leaves the reconciler open. Code entries have no `ttl_days` column
+at all. Measured baseline: no row of any type carries a TTL today, so there is no legacy data
+to migrate — the rule is forward-looking.
+
+### Lane E4 — the stored vocabulary
+
+**Task.** Widen `search_quality.kind` to the entry types and migrate the historical rows
+honestly.
+
+**The finding.** `search_quality.kind` is `CHECK(kind IN ('memory','code','both'))`
+(`MemorySchema.cs:141`) with the v12 ladder step and a backfill cutoff behind ADR-0097. The
+historical rows lie about themselves: a `memory` row covered agent notes AND ingested chunks,
+which the new `memory` does not. This is the SECOND migration in the task — the classifier's
+ladder step is v13, this one is v14, and they must not race.
+
+**The recommendation.** Decide the vocabulary, widen the CHECK, write the backfill, and say
+plainly in the ADR amendment what the backfill claims. A backfill that maps the old `memory`
+to the new `memory` would be a claim the data cannot support; if that is the honest answer,
+say it and pick the alternative.
