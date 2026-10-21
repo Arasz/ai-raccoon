@@ -60,16 +60,23 @@ public sealed class McpToolScopeGeneratorTests
 
             namespace AiRaccoon.Tools
             {
+                public enum ToolScope
+                {
+                    All,
+                    Shared,
+                    Project
+                }
+
                 [System.AttributeUsage(System.AttributeTargets.Method)]
                 public sealed class McpToolScopeAttribute : System.Attribute
                 {
-                    public McpToolScopeAttribute(bool requiresOrdinaryProject) { }
+                    public McpToolScopeAttribute(ToolScope scope) { }
                 }
 
                 public sealed class ToolGroup
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = "scoped_tool")]
-                    [McpToolScope(true)]
+                    [McpToolScope(ToolScope.Project)]
                     public void Scoped() { }
                 }
             }
@@ -82,7 +89,7 @@ public sealed class McpToolScopeGeneratorTests
             .Single(tree => tree.FilePath.EndsWith("McpToolScope.g.cs", StringComparison.Ordinal))
             .GetText(TestContext.Current.CancellationToken).ToString();
         generated.ShouldContain("McpToolScopeGenerated");
-        generated.ShouldContain("\"scoped_tool\", true");
+        generated.ShouldContain("\"scoped_tool\", global::AiRaccoon.Tools.ToolScope.Project");
         // Data only: the interface it feeds stays a hand-written adapter (ADR-0139).
         generated.ShouldNotContain("IToolNameScope");
     }

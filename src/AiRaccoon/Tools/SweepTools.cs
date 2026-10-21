@@ -21,7 +21,7 @@ public sealed class SweepTools(
     private const string TnMemorySetTtl = "memory_set_ttl";
 
     [McpServerTool(Name = TnMemorySweep)]
-    [McpToolScope(RequiresOrdinaryProject: true)]
+    [McpToolScope(ToolScope.Project)]
     [Description(
         "Runs memory degradation: lists (dry_run, default) or deletes entries whose rating is below the threshold and older than their per-entry TTL. Shared entries are never swept.")]
     public async Task<ApiEnvelope<SweepResult>> Sweep(
@@ -40,7 +40,7 @@ public sealed class SweepTools(
     }
 
     [McpServerTool(Name = TnMemorySetTtl)]
-    [McpToolScope(RequiresOrdinaryProject: true)]
+    [McpToolScope(ToolScope.Project)]
     [Description(
         "Sets or clears one entry's per-entry TTL — the age half of the memory_sweep rule, and the only way an entry becomes sweepable at all. "
         + "A TTL is necessary but NOT sufficient: memory_sweep deletes an entry only when its rating is ALSO below the sweep threshold. "

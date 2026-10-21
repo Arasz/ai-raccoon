@@ -24,10 +24,17 @@ public sealed class McpToolInventoryGeneratorTests
 
             namespace AiRaccoon.Tools
             {
+                public enum ToolScope
+                {
+                    All,
+                    Shared,
+                    Project
+                }
+
                 [System.AttributeUsage(System.AttributeTargets.Method)]
                 public sealed class McpToolScopeAttribute : System.Attribute
                 {
-                    public McpToolScopeAttribute(bool requiresOrdinaryProject) { }
+                    public McpToolScopeAttribute(ToolScope scope) { }
                 }
 
                 internal static class ToolNames
@@ -39,11 +46,11 @@ public sealed class McpToolInventoryGeneratorTests
                 public sealed class ToolGroup
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = ToolNames.Zebra)]
-                    [McpToolScope(false)]
+                    [McpToolScope(ToolScope.All)]
                     public void Zebra() { }
 
                     [ModelContextProtocol.Server.McpServerTool(Name = ToolNames.Alpha)]
-                    [McpToolScope(false)]
+                    [McpToolScope(ToolScope.All)]
                     public void Alpha() { }
                 }
             }
@@ -73,31 +80,38 @@ public sealed class McpToolInventoryGeneratorTests
 
             namespace AiRaccoon.Tools
             {
+                public enum ToolScope
+                {
+                    All,
+                    Shared,
+                    Project
+                }
+
                 [System.AttributeUsage(System.AttributeTargets.Method)]
                 public sealed class McpToolScopeAttribute : System.Attribute
                 {
-                    public McpToolScopeAttribute(bool requiresOrdinaryProject) { }
+                    public McpToolScopeAttribute(ToolScope scope) { }
                 }
 
                 public sealed class IncludedTools
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = "included_tool")]
-                    [McpToolScope(false)]
+                    [McpToolScope(ToolScope.All)]
                     public void Included() { }
 
                     [ModelContextProtocol.Server.McpServerTool(Name = "private_tool")]
-                    [McpToolScope(false)]
+                    [McpToolScope(ToolScope.All)]
                     private void Private() { }
 
                     [ModelContextProtocol.Server.McpServerTool(Name = "static_tool")]
-                    [McpToolScope(false)]
+                    [McpToolScope(ToolScope.All)]
                     public static void Static() { }
                 }
 
                 public abstract class AbstractTools
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = "abstract_tool")]
-                    [McpToolScope(false)]
+                    [McpToolScope(ToolScope.All)]
                     public void Abstract() { }
                 }
 
@@ -106,7 +120,7 @@ public sealed class McpToolInventoryGeneratorTests
                 public abstract class UnusedAbstractTools
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = "unused_abstract_tool")]
-                    [McpToolScope(false)]
+                    [McpToolScope(ToolScope.All)]
                     public void Unused() { }
                 }
             }
@@ -116,7 +130,7 @@ public sealed class McpToolInventoryGeneratorTests
                 public sealed class OtherTools
                 {
                     [ModelContextProtocol.Server.McpServerTool(Name = "outside_tool")]
-                    [McpToolScope(false)]
+                    [McpToolScope(ToolScope.All)]
                     public void Outside() { }
                 }
             }

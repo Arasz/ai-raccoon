@@ -17,7 +17,7 @@ public sealed class SyncTools(
     private const string TnMemorySync = "memory_sync";
 
     [McpServerTool(Name = TnMemorySync)]
-    [McpToolScope(RequiresOrdinaryProject: false)]
+    [McpToolScope(ToolScope.All)]
     [Description(
         "Syncs the bank's committed contexts (shared + project:<id>) to cloud object storage. " +
         "Configure with `ai-raccoon settings sync add s3 <url> --bucket <name>` or `ai-raccoon settings sync add azure " +

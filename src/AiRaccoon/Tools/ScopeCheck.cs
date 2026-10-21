@@ -6,6 +6,10 @@ namespace AiRaccoon.Tools;
 public sealed class ScopeCheck(IToolNameScope tools, ISharedProjectScope projects) : IScopeCheck
 {
     /// <inheritdoc />
-    public ScopeCheckResult Check(string canonicalProjectId, string toolName) =>
-        new(!tools.RequiresOrdinaryProject(toolName) || !projects.IsReserved(canonicalProjectId));
+    public ScopeCheckResult Check(string canonicalProjectId, string toolName)
+    {
+        var scope = tools.ScopeOf(toolName);
+        var target = projects.IsReserved(canonicalProjectId) ? ToolScope.Shared : ToolScope.Project;
+        return new ScopeCheckResult(scope == ToolScope.All || scope == target);
+    }
 }

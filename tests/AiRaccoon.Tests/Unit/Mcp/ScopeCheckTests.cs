@@ -6,17 +6,17 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
-///     The MCP tool scope: which tools may run against the reserved <c>shared</c> document target.
-///     The two sets below are the pin — the review record's F3 baseline with <c>memory_delete</c>
-///     moved across (F12/F12a) — and the classification they are compared against is derived from
-///     the tool surface, so a new tool cannot be added without stating whether it works there.
+///     The MCP tool scope: the scope each tool declares, and which targets it may run against.
+///     The two sets below are the pin — the review record's F3 baseline with `memory_delete`
+///     moved across (F12/F12a) — and the classification they are compared against is derived
+///     from the tool surface, so a new tool cannot be added without stating its scope.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class ScopeCheckTests
 {
-    /// <summary>Refused on the reserved target: the ordinary-only tools.</summary>
-    private static readonly string[] OrdinaryOnly =
+    /// <summary>Ordinary projects only: the tools the reserved target refuses.</summary>
+    private static readonly string[] ProjectScope =
     [
         "code_get",
         "memory_delete",
@@ -34,8 +34,8 @@ public sealed class ScopeCheckTests
         "memory_write"
     ];
 
-    /// <summary>Allowed on the reserved target: the reads, the ingestion, the watches, the telemetry.</summary>
-    private static readonly string[] SharedAllowed =
+    /// <summary>Any target: the tools the reserved target accepts — reads, ingestion, watches, telemetry.</summary>
+    private static readonly string[] AllScope =
     [
         "memory_embed_pending",
         "memory_get",
@@ -55,6 +55,7 @@ public sealed class ScopeCheckTests
         "project_id_token_get"
     ];
 
+    private readonly IToolNameScope _names = new ToolNameScope();
     private readonly IScopeCheck _scope = new ScopeCheck(new ToolNameScope(), new SharedProjectScope());
 
     [Fact]
@@ -62,20 +63,20 @@ public sealed class ScopeCheckTests
     {
         var names = McpToolInventory.Names().Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
 
-        string.Join(", ", RefusedOn("shared").Concat(AllowedOn("shared")).Order(StringComparer.Ordinal))
+        string.Join(", ", Classified().Order(StringComparer.Ordinal))
             .ShouldBe(string.Join(", ", names),
                 "every tool in the surface is either refused on the reserved target or allowed on it");
     }
 
     [Fact]
-    public void TheRefusedSet_IsExactlyTheOrdinaryOnlyTools() =>
-        string.Join(", ", RefusedOn("shared")).ShouldBe(string.Join(", ", OrdinaryOnly),
-            "the refused set is the ordinary-only tools, memory_delete among them");
+    public void TheProjectScopedTools_AreExactlyTheOrdinaryOnlyTools() =>
+        string.Join(", ", Declared(ToolScope.Project)).ShouldBe(string.Join(", ", ProjectScope),
+            "the tools that need an ordinary project, memory_delete among them");
 
     [Fact]
-    public void TheAllowedSet_IsExactlyTheSharedAllowedTools() =>
-        string.Join(", ", AllowedOn("shared")).ShouldBe(string.Join(", ", SharedAllowed),
-            "the allowed set is the tools the reserved target supports: reads, ingestion, watches, telemetry");
+    public void TheAllScopedTools_AreExactlyTheSharedAllowedTools() =>
+        string.Join(", ", Declared(ToolScope.All)).ShouldBe(string.Join(", ", AllScope),
+            "the tools the reserved target supports: reads, ingestion, watches, telemetry");
 
     [Fact]
     public void MemoryDelete_IsRefusedOnTheReservedTarget() =>
@@ -92,17 +93,39 @@ public sealed class ScopeCheckTests
     }
 
     [Fact]
-    public void ANameThatIsNotATool_IsRefusedOnTheReservedTarget() =>
+    public void ANameThatIsNotATool_IsRefusedOnTheReservedTarget()
+    {
+        _names.ScopeOf("unknown").ShouldBe(ToolScope.Project,
+            "a name that is not a declared tool is ordinary-project scoped: the map is the authority and the default is deny");
         _scope.Check("shared", "unknown").IsAllowed.ShouldBeFalse(
-            "a name that is not a declared tool is refused on the reserved target: the map is the authority and the default is deny");
+            "a name that is not a declared tool is refused on the reserved target");
+    }
 
-    private string[] RefusedOn(string projectId) =>
+    [Fact]
+    public void ASharedOnlyTool_IsRefusedOnAnOrdinaryProject()
+    {
+        var scope = new ScopeCheck(new FixedScope("shared_only_tool", ToolScope.Shared), new SharedProjectScope());
+
+        scope.Check("shared", "shared_only_tool").IsAllowed.ShouldBeTrue(
+            "a tool declared ToolScope.Shared runs against the reserved shared target");
+        scope.Check("acme", "shared_only_tool").IsAllowed.ShouldBeFalse(
+            "a tool declared ToolScope.Shared is refused on an ordinary project");
+    }
+
+    private IEnumerable<string> Declared(ToolScope scope) =>
         [.. McpToolInventory.Names().Distinct(StringComparer.Ordinal)
-            .Where(name => !_scope.Check(projectId, name).IsAllowed)
+            .Where(name => _names.ScopeOf(name) == scope)
             .Order(StringComparer.Ordinal)];
 
-    private string[] AllowedOn(string projectId) =>
+    private IEnumerable<string> Classified() =>
         [.. McpToolInventory.Names().Distinct(StringComparer.Ordinal)
-            .Where(name => _scope.Check(projectId, name).IsAllowed)
+            .Where(name => _scope.Check("shared", name).IsAllowed
+                           || _scope.Check("acme", name).IsAllowed)
             .Order(StringComparer.Ordinal)];
+
+    /// <summary>A scope map that gives one tool a fixed scope, for the rule's third value.</summary>
+    private sealed class FixedScope(string toolName, ToolScope scope) : IToolNameScope
+    {
+        public ToolScope ScopeOf(string name) => name == toolName ? scope : ToolScope.All;
+    }
 }
