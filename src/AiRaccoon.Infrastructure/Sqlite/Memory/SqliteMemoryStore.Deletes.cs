@@ -93,6 +93,7 @@ public sealed partial class SqliteMemoryStore
         };
         return await connection.InWriteTransactionAsync(async () =>
         {
+            await connection.RequireSharedAvailableAsync(projectId, _scope, cancellationToken);
             await connection.ExecuteAsync(
                     Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteBySourcePathPredicate), parameters, cancellationToken));
             var deleted = await connection.ExecuteAsync(

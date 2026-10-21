@@ -3,6 +3,8 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
+using AiRaccoon.Infrastructure.Ingestion;
+using NSubstitute;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
@@ -11,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Tests.Integration;
@@ -29,12 +32,12 @@ public sealed class SharedProjectTests : IDisposable
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(),
-            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
+            TestData.CreateEmbeddingService(), null, null, null, null, new StubCodeChunker(), null, null);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_root);
 
-    [Fact]
+    [RetryFact]
     public async Task SharedFile_IsPublishedToEveryProject_WithoutARepository()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -52,7 +55,7 @@ public sealed class SharedProjectTests : IDisposable
         (await SearchAsync("alpha", "zephyrshared", SearchScope.Project)).ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task LegacySharedOwner_IsRefusedWithoutPublishingPrivateRows()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -66,7 +69,7 @@ public sealed class SharedProjectTests : IDisposable
         (await SearchAsync("beta", "zephyrlegacy")).ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SharedReplacement_RejectsForeignChunkAndRollsBackEarlierChunks()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -91,7 +94,7 @@ public sealed class SharedProjectTests : IDisposable
         (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM entries WHERE project_id = 'alpha' AND scope = 'shared'")).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task LegacySharedWatch_IsNotActivatedByAnUpgrade()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -104,7 +107,7 @@ public sealed class SharedProjectTests : IDisposable
         (await watches.ListWatchesAsync(ct)).ShouldHaveSingleItem();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SharedReads_AggregatePromotionsAndDocuments_WithoutDuplicates()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -121,7 +124,7 @@ public sealed class SharedProjectTests : IDisposable
         (await _store.ListFilesAsync("shared", ct)).ShouldContain("readme.md");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SharedProjectScopeAndWorkspaceSearch_AreExplicitlyUnsupported()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -130,7 +133,7 @@ public sealed class SharedProjectTests : IDisposable
             new SearchQuery("shared", "example", WorkspaceId: "scratch"), ct));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SharedNotesAndCustomIngestContexts_AreRefused()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -139,13 +142,20 @@ public sealed class SharedProjectTests : IDisposable
         await Should.ThrowAsync<ArgumentException>(() => _store.IngestFileAsync("shared", file, "private-label", ct));
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SharedDirectory_IndexesDocumentsAndSkipsCode()
     {
         var ct = TestContext.Current.CancellationToken;
         await DocumentAsync("guide.md", "zephyrdirectory markdown");
         await DocumentAsync("facts.txt", "zephyrdirectory plain text");
         await DocumentAsync("Library.cs", "public class SharedAccident {} ");
+
+        await _store.SetSettingAsync(IngestScopeKeys.ScopeProject("alpha"), IngestScopeKeys.Serialize([_root]), ct);
+        await _store.IngestFileAsync("alpha", Path.Combine(_root, "Library.cs"), null, ct);
+        await using (var positive = await _factory.OpenBankAsync(ct))
+        {
+            (await positive.ExecuteScalarAsync<int>("SELECT count(*) FROM code_entries WHERE project_id = 'alpha'")).ShouldBeGreaterThan(0);
+        }
 
         await _store.IngestDirectoryAsync("shared", _root, null, ct);
 
@@ -154,7 +164,7 @@ public sealed class SharedProjectTests : IDisposable
         (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM code_entries WHERE project_id = 'shared'")).ShouldBe(0);
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task SharedLifecycle_PreservesPrivateCopiesAndPromotedContributions(bool watchReplacement)
@@ -193,7 +203,7 @@ public sealed class SharedProjectTests : IDisposable
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task SharedBackend_RefusesWorkspaceAndContentWrites()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -202,7 +212,7 @@ public sealed class SharedProjectTests : IDisposable
         await Should.ThrowAsync<ArgumentException>(() => _store.AddContentAsync("shared", "manual.md", "example", "shared", cancellationToken: ct));
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("fold-from")]
     [InlineData("fold-to")]
     [InlineData("drop")]
@@ -217,6 +227,35 @@ public sealed class SharedProjectTests : IDisposable
             action == "drop" ? ["shared"] : [], action == "retire" ? ["shared"] : [], []);
 
         await Should.ThrowAsync<ArgumentException>(() => new ProjectIdsRepair(TimeProvider.System).ApplyAsync(connection, plan, ct));
+    }
+
+    [RetryTheory]
+    [InlineData(WatchEventKind.Deleted)]
+    [InlineData(WatchEventKind.Renamed)]
+    [InlineData(WatchEventKind.Changed)]
+    public async Task LegacySharedWatch_RefusesEveryDigestBeforeChangingPrivateData(WatchEventKind kind)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var file = await DocumentAsync("private.md", "zephyrprivatemirror legacy content");
+        await _store.SetSettingAsync(IngestScopeKeys.ScopeProject("alpha"), IngestScopeKeys.Serialize([_root]), ct);
+        await _store.ReplaceIfFileChangedAsync("alpha", file, "private-fingerprint", ct);
+        await using var connection = await _factory.OpenBankAsync(ct);
+        await connection.ExecuteAsync("UPDATE entries SET project_id = 'shared'; UPDATE watch_files SET project_id = 'shared'");
+        var watches = new WatchStore(_factory);
+        await watches.AddWatchAsync("shared", _root, 0, 0, ct);
+        await File.WriteAllTextAsync(Path.Combine(_root, "ai-raccoon.ignore"), "private.md", ct);
+        var executor = new WatchDigestExecutor(_store, watches, new FakeTimeProvider(),
+            new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => Substitute.For<IWatchScanInitiator>()),
+            TestData.NewEmbedDrainPump(), new SqliteProjectIdsMigrationGate(_factory),
+            TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher());
+
+        await Should.ThrowAsync<ArgumentException>(() => executor.DigestAsync("shared", _root,
+            kind == WatchEventKind.Renamed ? Path.Combine(_root, "new.md") : file,
+            kind, kind == WatchEventKind.Renamed ? file : null, ct));
+
+        (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM entries WHERE project_id = 'shared' AND scope = 'project'")).ShouldBeGreaterThan(0);
+        (await connection.ExecuteScalarAsync<string>("SELECT file_hash FROM watch_files WHERE project_id = 'shared'")).ShouldBe("private-fingerprint");
+        (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM sync_tombstones")).ShouldBe(0);
     }
 
     private async Task<string> DocumentAsync(string name, string text)

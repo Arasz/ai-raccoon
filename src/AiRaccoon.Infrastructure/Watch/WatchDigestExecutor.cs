@@ -28,9 +28,12 @@ public sealed class WatchDigestExecutor(
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IProjectIdsMigrationGate migrationGate,
     IFileTypeMatcher fileTypeMatcher,
-    ICodeFileTypeMatcher codeFileTypeMatcher) : IWatchDigestExecutor
+    ICodeFileTypeMatcher codeFileTypeMatcher,
+    ISharedProjectScope? scope = null) : IWatchDigestExecutor
 {
     private static readonly FileSniffer Sniffer = new();
+
+    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
 
     public async Task<SkipReason?> DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
         string? oldPath, CancellationToken cancellationToken = default)
@@ -41,6 +44,16 @@ public sealed class WatchDigestExecutor(
         if (await migrationGate.IsMigratedAsync(cancellationToken))
         {
             projectId = ProjectIdAliasMap.Default.Fold(projectId);
+        }
+
+        if (_scope.IsReserved(projectId))
+        {
+            if (store is not IProjectRegistry registry)
+            {
+                throw new ArgumentException("shared-project-unsupported: this watch backend cannot validate shared ownership.");
+            }
+
+            await registry.IsRegisteredAsync(projectId, cancellationToken);
         }
 
         var normalizedWatch = IngestPath.Normalize(watchPath);
