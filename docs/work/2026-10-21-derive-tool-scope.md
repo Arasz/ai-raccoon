@@ -290,6 +290,7 @@ leaves the test running against the previous assembly and the mutation appears t
 | The ADR index gate (`AdrIndexTests`) | 7 tests, 0 failed |
 | The two mutations | seen red, then green — the evidence is above |
 | CI on the head | green: `build-fast` 2m49s, `build-bdd` 2m27s, `build-slow` 13m10s, `review`, `changes`, `scripts-harness` — run 39662564389 |
+| After the correction | solution build 0 errors 0 warnings; the generator project 7/0; the MCP unit surface 326/0; the shared-project integration surface 19/0; the docs unit surface 26/0; the whole Unit category 4303/0 with 1 skipped |
 
 ### The implementation review
 
