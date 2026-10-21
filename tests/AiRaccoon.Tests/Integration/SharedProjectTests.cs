@@ -1,14 +1,19 @@
+using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Ingestion;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Setup;
+using AiRaccoon.Tools;
 using NSubstitute;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -260,6 +265,45 @@ public sealed class SharedProjectTests : IDisposable
         (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM entries WHERE project_id = 'shared' AND scope = 'project'")).ShouldBeGreaterThan(0);
         (await connection.ExecuteScalarAsync<string>("SELECT file_hash FROM watch_files WHERE project_id = 'shared'")).ShouldBe("private-fingerprint");
         (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM sync_tombstones")).ShouldBe(0);
+    }
+
+    [RetryFact]
+    public async Task SharedDelete_IsRefused_AndLeavesTheDocumentAlone()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var file = await DocumentAsync("gated.md", "zephyrdelete gated document");
+        await _store.IngestFileAsync("shared", file, null, ct);
+        // The delete is a destructive operation, so the access mode has to allow it: what is
+        // under test is the reserved target's own refusal, not the access tier's.
+        await _store.SetSettingAsync(AccessModePolicy.GlobalSettingKey, "full", ct);
+
+        await using var connection = await _factory.OpenBankAsync(ct);
+        var hash = await connection.ExecuteScalarAsync<string>(
+            "SELECT hash FROM entries WHERE project_id = 'shared' LIMIT 1");
+        hash.ShouldNotBeNull("the ingested document has a chunk to delete");
+        var before = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM entries WHERE project_id = 'shared'");
+
+        var outcome = await Record.ExceptionAsync(() => MemoryTool().Delete("shared", hash!, ct));
+
+        (outcome?.Message ?? "no refusal").ShouldContain("shared-project-unsupported");
+        var after = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM entries WHERE project_id = 'shared'");
+        after.ShouldBe(before, "the refused delete left the document's rows alone");
+    }
+
+    /// <summary>The real tool over the real composition root: the gate, the scope check and the store.</summary>
+    private MemoryTools MemoryTool()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.RegisterMemoryServices(new InfrastructureOptions
+        {
+            DataRoot = _root,
+            Scope = InstallScope.User
+        });
+        using var provider = services.BuildServiceProvider();
+        return (MemoryTools)ActivatorUtilities.CreateInstance(provider, typeof(MemoryTools));
     }
 
     private async Task<string> DocumentAsync(string name, string text)

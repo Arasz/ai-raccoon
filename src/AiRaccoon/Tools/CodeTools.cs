@@ -16,6 +16,7 @@ public sealed class CodeTools(ICodeSearchService codeSearch, IToolGate gate)
     private const string TnCodeGet = "code_get";
 
     [McpServerTool(Name = TnCodeGet)]
+    [McpToolScope(ToolScope.Project)]
     [Description(
         "Reads one code chunk's full source by its content hash, as returned by memory_search kind=code/both. Mirrors memory_get. An unknown hash is refused as unknown-hash.")]
     public async Task<ApiEnvelope<CodeGetResult>> CodeGet(

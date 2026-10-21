@@ -20,6 +20,7 @@ public sealed class ShareTools(
     private const string TnMemoryShareExtract = "memory_share_extract";
 
     [McpServerTool(Name = TnMemoryShare)]
+    [McpToolScope(ToolScope.Project)]
     [Description(
         "Promotes an existing project entry into the flat shared context — the curated, cross-project, sweep-exempt tier. Nothing is shared without this explicit promotion.")]
     public async Task<ApiEnvelope<ShareResult>> Share(
@@ -38,6 +39,7 @@ public sealed class ShareTools(
     }
 
     [McpServerTool(Name = TnMemoryShareExtract)]
+    [McpToolScope(ToolScope.Project)]
     [Description(
         "Checks committed project memories and extracts the ones worth sharing. propose (default) ranks candidates and PERSISTS them into the propose tier — the waiting queue the agent reviews with memory_promotion_list. promote shares the top queued candidates into the curated, sweep-exempt shared tier and drains them. autoPromote (disabled by default) promotes the top queued candidates in the same call — it shares data BETWEEN PROJECTS, so it requires confirm=true as an explicit enable gate. Sharing stays explicit: propose first, review, then promote.")]
     public async Task<ApiEnvelope<ShareExtractResult>> ShareExtract(

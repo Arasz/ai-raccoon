@@ -4,6 +4,20 @@ Date: 2026-10-21
 
 Status: Accepted for implementation in 1.62.0.
 
+Amended 2026-10-21 — **the code-routing sentence below names a method that no longer exists, and
+the reserved target's refusal list now names `memory_delete`.** The Consequences section says
+that `CanSearchCode(SearchQuery)` "separately checks code routing"; that method was removed from
+`ISharedProjectScope` in commit `3849135e`, and the truth is that code routing follows the query
+scope: the dispatcher reads `SearchScope.Shared` directly and empties the code section for a
+shared-only request, so an ordinary all-scope search keeps its code leg. The first delivery's
+refusal list (project-only search, custom contexts, workspace search and writes, note writes,
+promotion and sweep operations) now also includes `memory_delete`: the reserved target's content
+is owned by its watch and its file, and a delete there removed only the chunk whose hash was
+named, advanced no watch fingerprint, and left the watch digest hash-skipping on a file it still
+claimed was current. The tool classification this record describes as "exact tool names and
+ordinal workspace/promotion prefixes" is now derived from the tool declarations themselves —
+see [ADR-0139](0139-attribute-derived-tool-scope.md).
+
 ## Context
 
 A documents directory need not belong to a repository. Requiring a minted project ID makes

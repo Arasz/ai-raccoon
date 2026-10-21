@@ -25,6 +25,7 @@ public sealed class WorkspaceTools(
     private const string TnMemoryWorkspaceDiscard = "memory_workspace_discard";
 
     [McpServerTool(Name = TnMemoryWorkspaceBegin)]
+    [McpToolScope(ToolScope.Project)]
     [Description(
         "Begins a workspace sandbox: returns a workspace_id whose context is isolated by design. While it is active, write with that workspace_id so notes stay in the outbox.")]
     public async Task<ApiEnvelope<WorkspaceBeginResult>> WorkspaceBegin(
@@ -44,6 +45,7 @@ public sealed class WorkspaceTools(
     }
 
     [McpServerTool(Name = TnMemoryWorkspaceStatus)]
+    [McpToolScope(ToolScope.Project)]
     [Description("Lists the entries currently in a workspace's outbox.")]
     public async Task<ApiEnvelope<WorkspaceStatusResult>> WorkspaceStatus(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
@@ -61,6 +63,7 @@ public sealed class WorkspaceTools(
     }
 
     [McpServerTool(Name = TnMemoryWorkspaceConsolidate)]
+    [McpToolScope(ToolScope.Project)]
     [Description(
         "Finishes a workspace: promotes the kept hashes (or ['all']) from the workspace outbox into the project's committed memory, then removes the workspace context.")]
     public async Task<ApiEnvelope<ConsolidationToolResult>> WorkspaceConsolidate(
@@ -81,6 +84,7 @@ public sealed class WorkspaceTools(
     }
 
     [McpServerTool(Name = TnMemoryWorkspaceDiscard)]
+    [McpToolScope(ToolScope.Project)]
     [Description("Discards a workspace without promoting anything: removes its outbox context and all its entries.")]
     public async Task<ApiEnvelope<WorkspaceDiscardResult>> WorkspaceDiscard(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
