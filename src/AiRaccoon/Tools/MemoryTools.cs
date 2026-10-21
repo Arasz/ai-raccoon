@@ -35,21 +35,21 @@ public sealed partial class MemoryTools(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
 
-    private const string TnMemoryWrite = "memory_write";
-    private const string TnMemoryGet = "memory_get";
-    private const string TnMemorySearch = "memory_search";
-    private const string TnMemoryList = "memory_list";
-    private const string TnMemoryStats = "memory_stats";
-    private const string TnMemoryDelete = "memory_delete";
-    private const string TnMemoryDeleteContext = "memory_delete_context";
-    private const string TnMemoryIngestFile = "memory_ingest_file";
-    private const string TnMemoryIngestDirectory = "memory_ingest_directory";
-    private const string TnMemoryEmbedPending = "memory_embed_pending";
+    private const string TnAddMemory = "add_memory";
+    private const string TnGetEntry = "get_entry";
+    private const string TnQuery = "query";
+    private const string TnGetIndex = "get_index";
+    private const string TnGetStoreStatistics = "get_store_statistics";
+    private const string TnDeleteEntry = "delete_entry";
+    private const string TnDeleteContext = "delete_context";
+    private const string TnIngestFile = "ingest_file";
+    private const string TnIngestDirectory = "ingest_directory";
+    private const string TnEmbedDeferredEntries = "embed_deferred_entries";
 
     private static readonly SearchQuery.Validator SearchQueryValidator = new();
     private static readonly MemoryWriteRequest.Validator MemoryWriteRequestValidator = new();
 
-    [McpServerTool(Name = TnMemoryWrite)]
+    [McpServerTool(Name = TnAddMemory)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace, and workspace_id wins over context when both are supplied (the sandbox has priority). A write may be refused (e.g. it matched a noise policy) — check stored: a refused write has stored=false and a reason naming what rejected it, and hash is empty.")]
@@ -71,7 +71,7 @@ public sealed partial class MemoryTools(
         string? section = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryWrite, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnAddMemory, cancellationToken);
 
         var request = new MemoryWriteRequest(canonical, content, context, agentId, workspaceId, sourceFile, section);
         await MemoryWriteRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
@@ -82,10 +82,10 @@ public sealed partial class MemoryTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemoryGet)]
+    [McpServerTool(Name = TnGetEntry)]
     [McpToolScope(ToolScope.All)]
     [Description(
-        "Reads one entry's full content by its content hash, as returned by memory_write or memory_search. An unknown hash is refused as unknown-hash.")]
+        "Reads one entry's full content by its content hash, as returned by add_memory or query. An unknown hash is refused as unknown-hash.")]
     public async Task<ApiEnvelope<GetResult>> Get(
         [Description("The project id; every memory operation is scoped to a project.")]
         [Optional][DefaultParameterValue("")] string projectId,
@@ -93,7 +93,7 @@ public sealed partial class MemoryTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryGet, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetEntry, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var entry = await store.GetAsync(canonical, hash, cancellationToken)
@@ -103,7 +103,7 @@ public sealed partial class MemoryTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemorySearch)]
+    [McpServerTool(Name = TnQuery)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Hybrid semantic search over the bank. projectId=shared directly reads shared documents and promoted knowledge (scope all/shared only, without labels/workspaces). scope=all (default) searches shared + project (+ workspace when named); "
@@ -186,7 +186,7 @@ public sealed partial class MemoryTools(
             "Per-modality candidate depth policy before RRF fusion: \"max3x100\" or \"max5x50\" (bank setting retrieval.candidateWindow, else \"max3x100\").")]
         string? candidateWindow = null,
         [Description("Narrows the project scope to one context. Omit it to search every context in " +
-                     "the project (the default); memory_stats lists the labels in use.")]
+                     "the project (the default); get_store_statistics lists the labels in use.")]
         string? contextLabel = null,
         [Description(
             "Which corpus to search: both (default — the memory bank and the indexed code corpus, " +
@@ -200,7 +200,7 @@ public sealed partial class MemoryTools(
         double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemorySearch, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnQuery, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
         var parsedScope = scope.ToLowerInvariant() switch
@@ -292,7 +292,7 @@ public sealed partial class MemoryTools(
     }
 
     /// <summary>
-    ///     memory_search's one warning string. QueryLengthGuard is always on -- a fact about the
+    ///     query's one warning string. QueryLengthGuard is always on -- a fact about the
     ///     embedding window, not a togglable policy -- so it is evaluated here unconditionally, never
     ///     through IQueryGuardService (a disabled guard must not silence it), against the active
     ///     memory engine's budget whichever kind was requested.
@@ -443,45 +443,45 @@ public sealed partial class MemoryTools(
         return searchQuery;
     }
 
-    [McpServerTool(Name = TnMemoryList)]
+    [McpServerTool(Name = TnGetIndex)]
     [McpToolScope(ToolScope.All)]
-    [Description("Lists the bank's indexed files as a JSON tree (memory_list_files).")]
+    [Description("Lists the bank's indexed files as a JSON tree.")]
     public async Task<ApiEnvelope<ListResult>> List(
         [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryList, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetIndex, cancellationToken);
         var files = await store.ListFilesAsync(canonical, cancellationToken);
         var result = new ListResult(JsonNode.Parse(files) ?? new JsonObject());
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemoryStats)]
+    [McpServerTool(Name = TnGetStoreStatistics)]
     [McpToolScope(ToolScope.All)]
     [Description("Reports entry count, pending (deferred-embedding) count, and the bank's committed contexts.")]
     public async Task<ApiEnvelope<StatsResult>> Stats(
         [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnMemoryStats, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetStoreStatistics, cancellationToken);
         var stats = await store.GetStatsAsync(canonical, cancellationToken);
         var result = new StatsResult(stats.EntryCount, stats.PendingCount, stats.Contexts);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemoryDelete)]
+    [McpServerTool(Name = TnDeleteEntry)]
     [McpToolScope(ToolScope.Project)]
     [Description(
-        "Deletes the whole memory behind a content hash: a multi-chunk memory_write's chunks share one write, so any of its chunk hashes deletes all of them, not just one. Idempotent: an unknown hash is not an error — it reports the true row count, 0 for an unknown hash.")]
+        "Deletes the whole memory behind a content hash: a multi-chunk add_memory's chunks share one write, so any of its chunk hashes deletes all of them, not just one. Idempotent: an unknown hash is not an error — it reports the true row count, 0 for an unknown hash.")]
     public async Task<ApiEnvelope<DeletedResult>> Delete(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("The content hash to delete — any chunk of a multi-chunk write reaches the whole write.")]
         string hash,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDelete, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnDeleteEntry, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var deleted = await store.DeleteAsync(canonical, hash, cancellationToken);
@@ -490,7 +490,7 @@ public sealed partial class MemoryTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemoryDeleteContext)]
+    [McpServerTool(Name = TnDeleteContext)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Deletes every entry stored under a context label (e.g. a project or workspace context). Idempotent: an unknown context is not an error — it reports deleted=0.")]
@@ -500,7 +500,7 @@ public sealed partial class MemoryTools(
         string context,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnMemoryDeleteContext, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Destructive, TnDeleteContext, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(context);
 
         var deleted = await store.DeleteContextAsync(canonical, context, cancellationToken);
@@ -509,7 +509,7 @@ public sealed partial class MemoryTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemoryIngestFile)]
+    [McpServerTool(Name = TnIngestFile)]
     [McpToolScope(ToolScope.All)]
     [Description("Indexes one file from disk into memory. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<IngestResult>> IngestFile(
@@ -520,7 +520,7 @@ public sealed partial class MemoryTools(
         string? context = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestFile, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnIngestFile, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var indexed = await store.IngestFileAsync(canonical, path, context, cancellationToken);
@@ -529,7 +529,7 @@ public sealed partial class MemoryTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemoryIngestDirectory)]
+    [McpServerTool(Name = TnIngestDirectory)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Recursively indexes a directory tree into memory, skipping unchanged files. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
@@ -541,7 +541,7 @@ public sealed partial class MemoryTools(
         string? context = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryIngestDirectory, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnIngestDirectory, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var scanned = await store.IngestDirectoryAsync(canonical, path, context, cancellationToken);
@@ -550,7 +550,7 @@ public sealed partial class MemoryTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnMemoryEmbedPending)]
+    [McpServerTool(Name = TnEmbedDeferredEntries)]
     [McpToolScope(ToolScope.All)]
     [Description("Embeds deferred entries in batches (used when no model was configured at write time).")]
     public async Task<ApiEnvelope<EmbedResult>> EmbedPending(
@@ -559,7 +559,7 @@ public sealed partial class MemoryTools(
         int? limit = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnMemoryEmbedPending, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnEmbedDeferredEntries, cancellationToken);
 
         var result = await store.EmbedPendingAsync(canonical, limit, cancellationToken);
         var embedResult = new EmbedResult(result.Processed, result.Pending);
