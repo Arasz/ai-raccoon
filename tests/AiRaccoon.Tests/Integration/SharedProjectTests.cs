@@ -128,9 +128,13 @@ public sealed class SharedProjectTests : IDisposable
     public async Task SharedProjectScopeAndWorkspaceSearch_AreExplicitlyUnsupported()
     {
         var ct = TestContext.Current.CancellationToken;
-        await Should.ThrowAsync<ArgumentException>(() => SearchAsync("shared", "example", SearchScope.Project));
-        await Should.ThrowAsync<ArgumentException>(() => _store.SearchAsync(
+        var projectScope = await Should.ThrowAsync<ArgumentException>(() =>
+            SearchAsync("shared", "example", SearchScope.Project));
+        projectScope.Message.ShouldContain("shared-project-unsupported");
+
+        var workspace = await Should.ThrowAsync<ArgumentException>(() => _store.SearchAsync(
             new SearchQuery("shared", "example", WorkspaceId: "scratch"), ct));
+        workspace.Message.ShouldContain("shared-project-unsupported");
     }
 
     [RetryFact]
