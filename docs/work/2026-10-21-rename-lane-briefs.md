@@ -124,3 +124,50 @@ and `docs/work/2026-10-21-tool-surface-rename-and-entry-types.md`).
 
 **Report.** As R1, plus the list of every location you changed with path:line, and the paste of
 the empty grep output that proves completeness.
+
+---
+
+## Wave-2 notes carried forward (written while wave 1 ran)
+
+### The interim state has TWO `get_entry` methods — and the generator punishes that
+
+After the rename lanes, `MemoryTools.cs` and `CodeTools.cs` each declare a method whose
+`[McpServerTool(Name = ...)]` is `get_entry` — one reads the memory corpus, one the code corpus.
+The generator makes that state visible in two ways (`src/AiRaccoon.Generators/McpToolInventoryGenerator.cs`):
+
+- `names.Add(candidate.Name!)` — the emitted inventory is a **list**, so `get_entry` appears
+  **twice** in `McpToolInventory.Names()`. Any count or distinctness assertion fails.
+- `if (candidate.Scope is { } scope && !scopes.Any(entry => entry.Name == candidate.Name))` —
+  the emitted `ScopeByTool` map keeps the **first** scope for a duplicated name and **silently
+  drops the second**. `get_entry` is `All` in `MemoryTools.cs` and `Project` in `CodeTools.cs`,
+  so whichever candidate the generator sees first decides the scope of the merged tool, and the
+  other is lost without a warning.
+
+**So the merge is not cosmetic.** The entry-type lane must end with exactly **one** `get_entry`
+method. Its scope has to be `ToolScope.All`: the merged tool reads the memory corpus (which
+includes the reserved shared target's entries) and the code corpus (which is project-scoped
+only), and the entry-type parameter — not the scope — decides which corpus a call reaches.
+
+A `shared` target call to `get_entry` with type `Code` is therefore **allowed and empty**, not
+refused. That is a behaviour change from `code_get`, which was refused on the reserved target
+(ADR-0137 refused code there). The entry-type lane must state this in the tool's description
+and the release notes, and the ADR-0137 text must be amended to match. Flag it to the owner
+rather than deciding it silently.
+
+### What the plan's file split got wrong (and how it was corrected)
+
+The wave was split by tool *family* but assigned files by *list*, so six write-side tools living
+in `MemoryTools.cs` (`memory_write`, `memory_delete`, `memory_delete_context`,
+`memory_ingest_file`, `memory_ingest_directory`, `memory_embed_pending`) were owned by nobody:
+the read lane was told to do only the reads, and the write lane was told to stay out of
+`MemoryTools.cs`. Correction: the read lane's file now carries those six as well (lane R1b), so
+file ownership stays one-owner-per-file and no lane edits a file another lane is editing.
+
+### The lane report is not evidence
+
+One wave-1 lane reported "renames applied, build green, old names eliminated from 9 files" with
+a RED-before/after narrative — and the branch was byte-identical afterwards, with no commit and
+no old name gone. Another lane in the same wave did the work and its commit was on disk. So:
+every lane in this task is verified by reading its branch's diff and running its own acceptance
+checks before the step is marked complete. A report without a commit hash and a `git show --stat`
+is not a report.
