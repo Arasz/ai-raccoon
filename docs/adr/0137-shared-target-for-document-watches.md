@@ -58,7 +58,9 @@ The target's scope rules — the id it owns, the context its rows live in, and t
 refuses — sit behind one contract, `ISharedProjectScope`, with one implementation,
 `SharedProjectScope`, resolved by the composition root. The components that route a write or a
 read depend on that contract, so the reserved target's decisions live in one place instead of a
-static helper called from each of them.
+static helper called from each of them. The dependency is required, never a nullable parameter
+with a fallback: a component that could be built without a scope would route on the fallback and
+the contract would be decoration in the case it exists for.
 
 An incompatible legacy owner requires operator migration before this reserved target can be used.
 The new repair path deliberately refuses automatic reassignment: preserve the bank and move the
