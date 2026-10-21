@@ -16,15 +16,16 @@ into a read tool and one write tool.
 | `memory_list` | `get_index` | it lists the bank's indexed *files*, not its memories — "index" is what it returns |
 | `memory_get` | `get_entry` | one entry by hash |
 | `code_get` | `get_entry` | the same entry by hash, from the code corpus — the two tools differ only in which corpus they read, which becomes the entry-type parameter |
-| `memory_performance` | `get_tools_latency` | it reports per-tool latency series, not "memory performance" |
+| `memory_performance` | `get_engine_statistics` | the engine's own statistics: the per-tool latency series and the embedding-engine state. Replaces the latency name — the latency series lives under a statistics name |
 | `memory_record_followthrough`, `memory_record_grade` | `get_quality_report` | the read side: what the server knows about past queries |
-| `memory_record_followthrough`, `memory_record_grade` | `set_query_result_grade` | the write side: one call that records the grade and, optionally, the files that were read |
+| `memory_record_followthrough`, `memory_record_grade` | `set_query_result_grade` | the write side: records the 1–5 usefulness grade for a query |
+| `memory_record_followthrough` | `set_memory_usage_record` | the other write: records that the agent opened a file the query served |
 | `memory_write` | `add_memory` | an agent adds a memory — "add", not "write" (nothing is written to a file) |
 | `memory_ingest_file` | `ingest_file` | a file is ingested |
 | `memory_ingest_directory` | `ingest_directory` | a directory is ingested |
 | `memory_delete` | `delete_entry` | deletes one entry by hash, from any corpus |
 | `memory_delete_context` | `delete_context` | deletes every entry under one context label |
-| `memory_share` | `move` | moves one memory into the shared tier |
+| `memory_share` | `share_memory` | moves one memory into the shared tier |
 | `memory_share_extract` | `trigger_memory_sharing` | scans a project's memories for the ones worth sharing; proposes them, or promotes the queued ones |
 | `memory_promotion_list` | `get_memories_sharing_ranking` | the propose-tier queue, ranked |
 | `memory_promotion_discard` | `delete_memory_from_ranking` | drops one queued candidate |
@@ -39,7 +40,7 @@ into a read tool and one write tool.
 | `memory_watch_remove` | `remove_watch` | unregisters a watch |
 | `memory_sync` | `sync_to_cloud` | syncs the bank's committed contexts to cloud storage |
 | `memory_embed_pending` | `embed_deferred_entries` | embeds the entries whose embedding was deferred |
-| `memory_stats` | `get_engine_statistics` | entry counts, the deferred-embedding count, and the contexts in use |
+| `memory_stats` | `get_store_statistics` | the store's own counts: entries, the deferred-embedding backlog, the contexts in use |
 | `project_id_get` | `get_project_id` | looks up the id registered under a name |
 | `project_id_token_get` | `save_project_id_token` | mints a new id |
 
@@ -133,18 +134,11 @@ indexable.
 
 ## Open decisions the owner still owes
 
-- **(a) Follow-through.** `memory_record_followthrough` records that the agent opened a file the
-  search served; `memory_record_grade` records a 1–5 usefulness grade. The owner asked for one
-  write tool, `set_query_result_grade`. The two facts are recorded at different moments (the
-  file is read during the session; the grade at the end), and `search_quality` stores them in
-  separate columns with separate timestamps (`follow_through_count`,
-  `follow_through_files`, `usefulness_grade`, `grade_note`). Merging them into one call means
-  the follow-through arrives late — it can still be recorded, in the same row, but the per-file
-  attribution window changes. The plan must pick: one merged write with an optional
-  follow-through payload, or two writes (`set_query_result_grade` and a separate
-  `record_result_use`).
-- **(b) Transcripts.** The 1,496 `transcript` rows are agent-supplied notes whose source is a
-  transcript file. Under the taxonomy they are `Memory` (by origin) or `File` (by locator). That
-  single call moves `type=Memory` between 214 and 1,710 rows on this bank.
+- **(a) Follow-through** — settled by the owner on 2026-10-21: the writes split. `set_query_result_grade`
+  records the 1–5 usefulness grade; `set_memory_usage_record` records the follow-through (the
+  file the agent opened out of the served set).
+- **(b) Transcripts** — the owner's question, answered above: a transcript is a file by structure
+  and memory by origin. The recommendation is Memory, and it decides the discriminator (the
+  `source_type` join, not the denormalised signature). Awaiting the nod.
 - **(c) The two placeholder names** — settled by the owner on 2026-10-21
   (`trigger_memory_sharing`, `get_memories_sharing_ranking`).
