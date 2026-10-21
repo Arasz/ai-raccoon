@@ -35,7 +35,7 @@ public sealed class ToolGateRetiredIdTests
     private static ToolGate NewGate(
         RecordingGuard guard,
         RecordingRegistrationGuard registration) =>
-        new(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration);
+        new(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration, TestData.SharedScope);
 
     [Theory]
     [InlineData(AccessRequirement.Write)]
@@ -98,7 +98,7 @@ public sealed class ToolGateRetiredIdTests
     public async Task RequireAsync_DroppedIdUnderADeny_ThrowsAccessDenied()
     {
         var gate = new ToolGate(new DenyingGuard(), new FakePromotionQueue(), new NeverMigratingStore(),
-            new RecordingRegistrationGuard());
+            new RecordingRegistrationGuard(), TestData.SharedScope);
         try
         {
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
@@ -146,7 +146,7 @@ public sealed class ToolGateRetiredIdTests
     public async Task RequireAsync_DroppedIdWithOpenRepairRequest_IsStillRefused(AccessRequirement requirement)
     {
         var gate = new ToolGate(new RecordingGuard(), new FakePromotionQueue(), new NeverMigratingStore(),
-            new RecordingRegistrationGuard());
+            new RecordingRegistrationGuard(), TestData.SharedScope);
         try
         {
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());

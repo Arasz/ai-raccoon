@@ -47,11 +47,11 @@ public sealed class StructurePopulationTests : IAsyncLifetime
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(TestData.RealJsonChunker(markdownChunker))]);
         var fileIngestor = new FileIngestor(matcher, sourceStore, _clock, embeddings,
             NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, _pump, new IndexableFileWalk());
+            NullWatchStore.Instance, _pump, new IndexableFileWalk(), TestData.SharedScope);
         var embedder = TestData.CreateEntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), _clock, new VecDimensionReconciler());
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, embedder, _clock,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), _pump,
-            NoOpMeasurementRecorder.Instance);
+            NoOpMeasurementRecorder.Instance, TestData.SharedScope);
     }
 
     public ValueTask DisposeAsync()

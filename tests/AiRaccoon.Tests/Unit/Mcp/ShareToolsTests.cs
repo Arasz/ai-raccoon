@@ -37,7 +37,7 @@ public sealed class ShareToolsTests
     {
         var service = new RecordingShareExtractService();
         var gate = new ToolGate(new AllowingGuard(), new FakePromotionQueue(), new NeverMigratingStore(),
-            new AllowingRegistrationGuard());
+            new AllowingRegistrationGuard(), TestData.SharedScope);
         return (service, new ShareTools(Substitute.For<IMemoryStore>(), gate, service));
     }
 
@@ -81,7 +81,7 @@ public sealed class ShareToolsTests
         var guard = new RecordingGuard();
         var service = new RecordingShareExtractService();
         var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(),
-            new AllowingRegistrationGuard());
+            new AllowingRegistrationGuard(), TestData.SharedScope);
         var tools = new ShareTools(Substitute.For<IMemoryStore>(), gate, service);
 
         var ex = await Should.ThrowAsync<McpException>(() =>
@@ -102,7 +102,7 @@ public sealed class ShareToolsTests
         var service = new ShareExtractService(Substitute.For<IMemoryStore>(),
             Substitute.For<ISharedExtractionRunner>(), new FakePromotionQueue());
         var gate = new ToolGate(new AllowingGuard(), new FakePromotionQueue(), new NeverMigratingStore(),
-            new AllowingRegistrationGuard());
+            new AllowingRegistrationGuard(), TestData.SharedScope);
         var tools = new ShareTools(Substitute.For<IMemoryStore>(), gate, service);
 
         var ex = await Should.ThrowAsync<ValidationException>(() =>

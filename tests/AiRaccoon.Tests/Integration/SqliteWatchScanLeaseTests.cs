@@ -29,7 +29,7 @@ public sealed class SqliteWatchScanLeaseTests : IDisposable
     {
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _store = new WatchStore(_factory);
+        _store = new WatchStore(_factory, TestData.SharedScope);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

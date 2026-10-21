@@ -58,13 +58,13 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         {
             return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
                 NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-                NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
+                NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
         }
 
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
         return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(), codeIngestor,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
     }
 
     [RetryFact]
@@ -253,13 +253,13 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
         return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             new IgnoreRulesProvider(), new CodeFileTypeMatcher(), codeIngestor,
-            watchStore ?? NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
+            watchStore ?? NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
     }
 
     private async Task<IWatchStore> RegisterWatchAsync(string path)
     {
         var opts = new InfrastructureOptions { DataRoot = _testDir, Rid = "osx-arm64", Scope = InstallScope.User };
-        var watchStore = new WatchStore(new SqliteConnectionFactory(opts, NullKeyProvider.Resolver(opts)));
+        var watchStore = new WatchStore(new SqliteConnectionFactory(opts, NullKeyProvider.Resolver(opts)), TestData.SharedScope);
         await watchStore.AddWatchAsync("test_project", path, 0, 0, TestContext.Current.CancellationToken);
         return watchStore;
     }

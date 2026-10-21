@@ -166,7 +166,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         var store = CreateStore();
 
         // Create the workspace record first — FK requires it.
-        var workspaceStore = new SqliteWorkspaceStore(_factory);
+        var workspaceStore = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
         await workspaceStore.BeginAsync(new Workspace("ws-1", "acme"), FixedNow, TestContext.Current.CancellationToken);
 
         var entry = await store.WriteAsync(
@@ -212,12 +212,12 @@ public sealed class WorkspaceIsolationTests : IDisposable
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var store = CreateStore();
-        var workspaceStore = new SqliteWorkspaceStore(_factory);
+        var workspaceStore = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
 
         // Create the workspace record first — FK requires it.
         await workspaceStore.BeginAsync(new Workspace("ws-1", "acme"), FixedNow, TestContext.Current.CancellationToken);
 
-        var service = new WorkspaceService(store, workspaceStore, new FakeTimeProvider(FixedNow));
+        var service = new WorkspaceService(store, workspaceStore, new FakeTimeProvider(FixedNow), TestData.SharedScope);
 
         var e1 = await store.WriteAsync(
             new MemoryWriteRequest("acme", "durable fact", WorkspaceId: "ws-1"),
@@ -251,7 +251,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         var store = CreateStore();
 
         // Create the workspace record first — FK requires it.
-        var workspaceStore = new SqliteWorkspaceStore(_factory);
+        var workspaceStore = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
         await workspaceStore.BeginAsync(new Workspace("ws-1", "acme"), FixedNow, TestContext.Current.CancellationToken);
 
         await store.WriteAsync(

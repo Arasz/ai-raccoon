@@ -65,7 +65,7 @@ public sealed class QueueRenameTests : IDisposable
                 [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
                 ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
                 ["qa-noise-project", "manual-sweep"]));
-        await new ProjectIdsRepair(new FakeTimeProvider(FixedNow)).ApplyAsync(connection, plan, ct);
+        await new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope).ApplyAsync(connection, plan, ct);
 
         (await CountAsync(connection, Winner, ct)).ShouldBe(157 + 89 + 1,
             "every queued row meets under the winner: 157 winner + 89 loser + the merged collision");

@@ -24,9 +24,9 @@ public sealed class CwdProjectIdResolver(
     ISettingsStore settings,
     IWatchRegisteredStore watches,
     ICwdProbe cwdProbe,
-    ISharedProjectScope? scope = null) : IProjectIdResolver
+    ISharedProjectScope scope) : IProjectIdResolver
 {
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     private static readonly string ScopePrefix = IngestScopeKeys.ScopeProject(string.Empty);
 

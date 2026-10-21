@@ -14,10 +14,10 @@ public sealed partial class ProjectRegistrationGuard(
     IProjectRegistry registry,
     ILogger<ProjectRegistrationGuard> logger,
     IProjectIdsMigrationGate migrationGate,
-    ISharedProjectScope? scope = null)
+    ISharedProjectScope scope)
     : IProjectRegistrationGuard
 {
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     // One warning per legacy id per process; the guard is a singleton and tool calls run concurrently.
     private readonly Lock warnedGate = new();

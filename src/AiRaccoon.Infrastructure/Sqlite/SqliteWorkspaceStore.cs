@@ -7,10 +7,10 @@ using WorkspaceRecord = AiRaccoon.Core.Isolation.Workspace;
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>Workspace lifecycle rows in the memory.db workspaces table; never synced.</summary>
-public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory, ISharedProjectScope? scope = null)
+public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory, ISharedProjectScope scope)
     : IWorkspaceStore
 {
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     public async Task BeginAsync(WorkspaceRecord workspace, DateTimeOffset startedAt,
         CancellationToken cancellationToken = default)

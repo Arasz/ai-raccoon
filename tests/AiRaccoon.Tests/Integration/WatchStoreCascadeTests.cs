@@ -266,7 +266,7 @@ public sealed class WatchStoreCascadeTests
                 DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User
             };
             Factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-            Store = new WatchStore(Factory);
+            Store = new WatchStore(Factory, TestData.SharedScope);
         }
 
         public SqliteConnectionFactory Factory { get; }

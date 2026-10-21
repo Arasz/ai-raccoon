@@ -41,8 +41,8 @@ public sealed class WorkspaceCloseRaceTests : IDisposable
         _memoryStore = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
-        _workspaceStore = new SqliteWorkspaceStore(_factory);
-        _service = new WorkspaceService(_memoryStore, _workspaceStore, new FakeTimeProvider(FixedNow));
+        _workspaceStore = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
+        _service = new WorkspaceService(_memoryStore, _workspaceStore, new FakeTimeProvider(FixedNow), TestData.SharedScope);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

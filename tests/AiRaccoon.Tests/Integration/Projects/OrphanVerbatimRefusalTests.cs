@@ -78,13 +78,13 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
     private MemoryTools BuildEnforcingTools(ILogger<ProjectRegistrationGuard>? guardLogger = null)
     {
         var marker = new SqliteProjectIdsMigrationGate(_factory);
-        var guard = new ProjectRegistrationGuard(_store, guardLogger ?? NullLogger<ProjectRegistrationGuard>.Instance, marker);
+        var guard = new ProjectRegistrationGuard(_store, guardLogger ?? NullLogger<ProjectRegistrationGuard>.Instance, marker, TestData.SharedScope);
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(),
-            new NeverMigratingStore(), guard);
+            new NeverMigratingStore(), guard, TestData.SharedScope);
         var settings = new InMemorySettings();
         return new MemoryTools(_store, gate,
-            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
-            new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue()),
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
+            new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope),
             NoOpMeasurementRecorder.Instance, settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
     }
 

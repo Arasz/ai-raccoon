@@ -196,13 +196,13 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
 
     private void ComposeStack()
     {
-        WatchStore = new WatchStore(Factory);
+        WatchStore = new WatchStore(Factory, TestData.SharedScope);
         var scanGuard = new WatchScanGuard();
         WatchCatchUp? catchUp = null;
         Pipeline = new WatchPipeline(new WatchScheduler(),
             new WatchDigestExecutor(Store, WatchStore, TimeProvider,
                 new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
-                new SqliteProjectIdsMigrationGate(Factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher()),
+                new SqliteProjectIdsMigrationGate(Factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope),
             new WatchRetryPolicy(), scanGuard, Store, TimeProvider,
             NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);
@@ -213,6 +213,6 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
             TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         Service = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver(),
             new SqliteProjectIdsMigrationGate(Factory));
-        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+        Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope));
     }
 }

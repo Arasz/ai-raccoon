@@ -25,7 +25,7 @@ public sealed class ToolGateTests
         var queue = new FakePromotionQueue();
         var migrations = new RecordingMigrations();
         var registration = new RecordingRegistrationGuard();
-        return (guard, queue, migrations, registration, new ToolGate(guard, queue, migrations, registration));
+        return (guard, queue, migrations, registration, new ToolGate(guard, queue, migrations, registration, TestData.SharedScope));
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public sealed class ToolGateTests
     public async Task RequireAsync_WhenMigrated_PassesFormerAliasesThrough()
     {
         var (guard, _, _, registration, _) = NewStack();
-        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration);
+        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration, TestData.SharedScope);
 
         var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
             "memory_write", TestContext.Current.CancellationToken);
@@ -199,7 +199,7 @@ public sealed class ToolGateTests
     public async Task RequireAsync_AliasDuringRepairWindow_FoldsToTheWinner()
     {
         var (guard, _, _, registration, _) = NewStack();
-        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration);
+        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration, TestData.SharedScope);
         try
         {
             ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap(

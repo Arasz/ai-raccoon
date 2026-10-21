@@ -31,10 +31,10 @@ public sealed class MemorySearchFusionSignalMetricsTests
     private MemoryTools CreateTools(IMeasurementRecorder? recorder = null) =>
         new(_store,
             new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(),
-                new AllowingRegistrationGuard()),
-            new SearchDispatcher(_store, _codeSearch, new NoOpSearchQualityService()),
+                new AllowingRegistrationGuard(), TestData.SharedScope),
+            new SearchDispatcher(_store, _codeSearch, new NoOpSearchQualityService(), TestData.SharedScope),
             new QueryGuardService(new InMemorySettings()),
-            new MemoryWriteService(_store, new FakePromotionQueue()),
+            new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope),
             recorder ?? _recorder,
             new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 

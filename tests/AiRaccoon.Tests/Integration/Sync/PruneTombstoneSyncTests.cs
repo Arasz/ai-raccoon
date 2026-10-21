@@ -53,7 +53,7 @@ public sealed class PruneTombstoneSyncTests : IDisposable
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new StubChunker(), _time,
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
-        _watchStore = new WatchStore(_factory);
+        _watchStore = new WatchStore(_factory, TestData.SharedScope);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -72,7 +72,7 @@ public sealed class PruneTombstoneSyncTests : IDisposable
         await _watchStore.AddWatchAsync(Project, watchDir, 0, 0, ct);
         var executor = new WatchDigestExecutor(_store, _watchStore, _time, new IgnoreRulesProvider(),
             new Lazy<IWatchScanInitiator>(() => new NoOpWatchScanInitiator()), TestData.NewEmbedDrainPump(),
-            new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher());
+            new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope);
         await executor.DigestAsync(Project, watchDir, file, WatchEventKind.Changed, null, ct);
 
         var keptHash = await HashForContentAsync(_factory, KeptParagraph, ct);

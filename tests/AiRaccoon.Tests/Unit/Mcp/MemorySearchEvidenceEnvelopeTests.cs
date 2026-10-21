@@ -37,10 +37,10 @@ public sealed class MemorySearchEvidenceEnvelopeTests
         // EVIDENCE fields are additive, not that a fresh bank carries the F6 warning.
         _settings.Values[EmbeddingSettingsKeys.Provider] = "local";
         var access = new MemoryAccessGuard(_store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
-        _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, new NoOpSearchQualityService()),
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
+        _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, _codeSearch, new NoOpSearchQualityService(), TestData.SharedScope),
             new QueryGuardService(_settings),
-            new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
+            new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope), new NoOpMeasurementRecorder(),
             _settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
     }
 

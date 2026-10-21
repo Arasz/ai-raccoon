@@ -116,7 +116,7 @@ public sealed class SweepScopeSiblingTests : IDisposable
 
     private async Task EnsureWorkspaceAsync(string workspaceId)
     {
-        var workspaceStore = new SqliteWorkspaceStore(_factory);
+        var workspaceStore = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
         await workspaceStore.BeginAsync(new Workspace(workspaceId, ProjectId), _clock.GetUtcNow(),
             TestContext.Current.CancellationToken);
     }

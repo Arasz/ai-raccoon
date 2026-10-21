@@ -120,11 +120,11 @@ public sealed class SearchLimitTruncationTests : IDisposable
     private static MemoryTools BuildTools(SqliteMemoryStore store)
     {
         var gate = new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(),
-            new NeverMigratingStore(), new AllowingRegistrationGuard());
+            new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
         return new MemoryTools(store, gate,
-            new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
+            new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
             new QueryGuardService(new InMemorySettings()),
-            new MemoryWriteService(store, new FakePromotionQueue()),
+            new MemoryWriteService(store, new FakePromotionQueue(), TestData.SharedScope),
             new NoOpMeasurementRecorder(),
             new InMemorySettings(),
             NullLogger<MemoryTools>.Instance,

@@ -11,9 +11,6 @@ public sealed class SharedProjectScope : ISharedProjectScope
     /// <summary>The machine-local marker that says the reserved target owns the shared watch rows.</summary>
     public const string WatchActivationKey = "shared.documents.watch-owner";
 
-    /// <summary>The stateless instance, for the call sites that construct no scope of their own.</summary>
-    public static readonly SharedProjectScope Default = new();
-
     /// <inheritdoc />
     public bool IsReserved(string? projectId) => IsReservedId(projectId);
 

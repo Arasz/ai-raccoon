@@ -229,26 +229,26 @@ public sealed class SingleProjectIdE2E : IAsyncLifetime
     private MemoryTools BuildEnforcingTools()
     {
         var marker = new SqliteProjectIdsMigrationGate(_factory);
-        var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, marker);
+        var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, marker, TestData.SharedScope);
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(),
-            new NeverMigratingStore(), guard);
+            new NeverMigratingStore(), guard, TestData.SharedScope);
         var settings = new InMemorySettings();
         return new MemoryTools(_store, gate,
-            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
-            new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue()),
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
+            new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope),
             NoOpMeasurementRecorder.Instance, settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
     }
 
     private PromotionTools PromotionToolsFor(FakePromotionQueue queue)
     {
         var marker = new SqliteProjectIdsMigrationGate(_factory);
-        var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, marker);
+        var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, marker, TestData.SharedScope);
         var gate = new ToolGate(new MemoryAccessGuard(_store), queue,
-            new NeverMigratingStore(), guard);
+            new NeverMigratingStore(), guard, TestData.SharedScope);
         return new PromotionTools(queue, gate);
     }
 
     private ProjectIdsRepairJob NewRepairJob() =>
         new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
-            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow));
+            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow), TestData.SharedScope);
 }

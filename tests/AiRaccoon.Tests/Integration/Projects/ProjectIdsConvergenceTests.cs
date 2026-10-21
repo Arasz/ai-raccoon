@@ -336,20 +336,20 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
 
     private ProjectIdsRepairJob NewRepairJob() =>
         new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
-            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow));
+            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow), TestData.SharedScope);
 
     private ToolGate NewRealGate()
     {
         var migrationGate = new SqliteProjectIdsMigrationGate(_factory);
-        var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, migrationGate);
+        var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, migrationGate, TestData.SharedScope);
         return new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(),
-            new NeverMigratingStore(), guard);
+            new NeverMigratingStore(), guard, TestData.SharedScope);
     }
 
     private MemoryTools NewRealTools(ToolGate gate) =>
         new(_store, gate,
-            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
-            new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue()),
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
+            new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope),
             NoOpMeasurementRecorder.Instance, new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
     private static IReadOnlyList<string> PinsCanon(ProjectIdsFoldPlan plan) =>
@@ -394,7 +394,7 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
             await inner.RequestRepairAsync(kind, cancellationToken, projectIdsMapJson);
             RequestCalls++;
             await using var connection = await factory.OpenBankAsync(cancellationToken);
-            await new ProjectIdsRepairJob(matcher, TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow))
+            await new ProjectIdsRepairJob(matcher, TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow), TestData.SharedScope)
                 .RunAsync(connection, cancellationToken);
             await store.EmbedPendingAsync(Winner, null, cancellationToken);
             await store.EmbedPendingAsync(SharedLoser, null, cancellationToken);

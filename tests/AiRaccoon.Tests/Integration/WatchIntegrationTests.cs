@@ -783,14 +783,14 @@ public sealed class WatchIntegrationTests
                 NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = DataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
             Memory = TestData.CreateMemoryStore(_factory, new FakeLogger<SqliteMemoryStore>(_logs), new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), Time,
                 TestData.CreateEmbeddingService(), codeChunker: codeChunker, modelMigrationLease: null, jsonChunker: null, noisePolicies: null, settings: null, ignoreRulesProvider: null, measurements: null);
-            WatchStore = new WatchStore(_factory);
+            WatchStore = new WatchStore(_factory, TestData.SharedScope);
             ScanGuard = new WatchScanGuard();
             EmbedDrainPump = TestData.NewEmbedDrainPump();
             WatchCatchUp? catchUp = null;
             Pipeline = new WatchPipeline(new WatchScheduler(),
                 new WatchDigestExecutor(Memory, WatchStore, Time,
                     new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
-                    new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher()),
+                    new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope),
                 new WatchRetryPolicy(),
                 ScanGuard, Memory, Time, new FakeLogger<WatchPipeline>(_logs));
             EventSource = new WatchEventSource(evt =>

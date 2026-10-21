@@ -62,9 +62,9 @@ public sealed record ProjectIdsRepairResult(
 ///         existing PendingEmbedJob/CodeReindexJob drain the rows this invalidates.
 ///     </para>
 /// </summary>
-public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectScope? scope = null)
+public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectScope scope)
 {
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
     /// <summary>Applies the whole plan, step by step; returns the per-surface counts.</summary>
     public async Task<ProjectIdsRepairResult> ApplyAsync(SqliteConnection connection, ProjectIdsFoldPlan plan,
         CancellationToken cancellationToken = default)

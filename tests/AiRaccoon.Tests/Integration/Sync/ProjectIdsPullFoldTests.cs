@@ -355,7 +355,7 @@ public sealed class ProjectIdsPullFoldTests : IDisposable
 
     private static ProjectIdsRepairJob RepairJob() =>
         new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
-            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow));
+            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow), TestData.SharedScope);
 
     /// <summary>
     ///     The factory banks run WAL: file bytes alone miss the -wal frames, so checkpoint first

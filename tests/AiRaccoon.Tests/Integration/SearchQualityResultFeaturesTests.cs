@@ -240,7 +240,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
             [new MemorySearchResult("hash-a", 0.9, "a.md", "first"),
              new MemorySearchResult("hash-b", 0.8, "b.md", "second")],
             TwoRowEvidence());
-        var dispatcher = new SearchDispatcher(store, new StubCodeSearch(), _sut);
+        var dispatcher = new SearchDispatcher(store, new StubCodeSearch(), _sut, TestData.SharedScope);
 
         var result = await dispatcher.DispatchAsync(new SearchQuery("proj-a", "query"),
             SearchKind.Memory, "all", "corr-failopen", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
@@ -254,7 +254,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
     {
         await EnsureSchemaAsync();
         var dispatcher = new SearchDispatcher(new StubSearchStore([], null),
-            new StubCodeSearch([new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)]), _sut);
+            new StubCodeSearch([new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)]), _sut, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(new SearchQuery("proj-a", "query"),
             SearchKind.Code, "all", "corr-code-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
@@ -277,7 +277,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
             ["hash-dropped"] = new RetrievalEvidence("hash-dropped", 0.99, [new LegRank("vector", 1)], 0.9)
         };
         var dispatcher = new SearchDispatcher(new StubSearchStore([served], null, evidence),
-            new StubCodeSearch(), _sut);
+            new StubCodeSearch(), _sut, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(new SearchQuery("proj-a", "query"),
             SearchKind.Memory, "all", "corr-bounded-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);

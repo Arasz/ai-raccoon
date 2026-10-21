@@ -1614,7 +1614,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
                 ["jsaa", "ai-badger", "ai-raccoon", "hermes-default", "deepseek-harness", "arasz-home-page", "vue-kanban", "dotnet-ignore", "interview-tasks"],
                 ["qa-noise-project", "manual-sweep"]));
         plan.IsEmpty.ShouldBeFalse("the seeded losers must schedule folds");
-        await new ProjectIdsRepair(Ctx.TimeProvider).ApplyAsync(connection, plan, CancellationToken.None);
+        await new ProjectIdsRepair(Ctx.TimeProvider, TestData.SharedScope).ApplyAsync(connection, plan, CancellationToken.None);
         // Model elapsed time between the repair and later edits: catch-up changed-since scans
         // gate on mtime > last_change_ts (1s granularity), and the repair preserves the
         // pre-repair watermark — without this advance a same-fake-second edit ties the watermark

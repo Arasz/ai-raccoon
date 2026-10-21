@@ -36,8 +36,8 @@ public sealed class ReadRegistrationTests
         _registry.RegisterAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("a read must never register a project"));
         var guard = new ProjectRegistrationGuard(_registry, NullLogger<ProjectRegistrationGuard>.Instance,
-            new NeverMigratedGate());
-        _gate = new ToolGate(Substitute.For<IMemoryAccessGuard>(), _queue, new NeverMigratingStore(), guard, _resolver);
+            new NeverMigratedGate(), TestData.SharedScope);
+        _gate = new ToolGate(Substitute.For<IMemoryAccessGuard>(), _queue, new NeverMigratingStore(), guard, TestData.SharedScope, _resolver);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -86,8 +86,8 @@ public sealed class ReadRegistrationTests
         var settings = new InMemorySettings();
         var store = Substitute.For<IMemoryStore>();
         var tools = new MemoryTools(store, _gate,
-            new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
-            new QueryGuardService(settings), new MemoryWriteService(store, new FakePromotionQueue()),
+            new SearchDispatcher(store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
+            new QueryGuardService(settings), new MemoryWriteService(store, new FakePromotionQueue(), TestData.SharedScope),
             NoOpMeasurementRecorder.Instance, settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
         await Should.ThrowAsync<UnregisteredProjectException>(() =>

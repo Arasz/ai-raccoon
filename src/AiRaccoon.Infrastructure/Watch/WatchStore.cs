@@ -61,10 +61,10 @@ public sealed record WatchFileStamp(long UpdatedAt, long? Size);
 /// <summary>Dapper impl of IWatchStore over the watches/watch_files tables (MemorySql consts); also
 /// the server-side default for <see cref="IWatchRegisteredStore" /> (ADR-0075 amendment) —
 /// overridden by LazyServerSettingsStore for the CLI graph, same shape as SqliteMaintenanceStatsStore.</summary>
-public sealed class WatchStore(ISqliteConnectionFactory factory, ISharedProjectScope? scope = null)
+public sealed class WatchStore(ISqliteConnectionFactory factory, ISharedProjectScope scope)
     : IWatchStore, IWatchRegisteredStore
 {
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     public async Task AddWatchAsync(string projectId, string path, long createdAt, long lastChangeTs,
         CancellationToken cancellationToken = default)

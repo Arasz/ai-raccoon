@@ -29,11 +29,11 @@ public sealed class WatchDigestExecutor(
     IProjectIdsMigrationGate migrationGate,
     IFileTypeMatcher fileTypeMatcher,
     ICodeFileTypeMatcher codeFileTypeMatcher,
-    ISharedProjectScope? scope = null) : IWatchDigestExecutor
+    ISharedProjectScope scope) : IWatchDigestExecutor
 {
     private static readonly FileSniffer Sniffer = new();
 
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     public async Task<SkipReason?> DigestAsync(string projectId, string watchPath, string filePath, WatchEventKind kind,
         string? oldPath, CancellationToken cancellationToken = default)

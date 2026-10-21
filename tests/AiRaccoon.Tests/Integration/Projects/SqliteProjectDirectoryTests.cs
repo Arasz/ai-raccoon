@@ -42,7 +42,7 @@ public sealed class SqliteProjectDirectoryTests : IAsyncLifetime
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
             new SqliteMemorySourceStore(_factory), new StubChunker(), TimeProvider.System,
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
-        _directory = new SqliteProjectDirectory(_factory, _store, _logger);
+        _directory = new SqliteProjectDirectory(_factory, _store, _logger, TestData.SharedScope);
         return ValueTask.CompletedTask;
     }
 

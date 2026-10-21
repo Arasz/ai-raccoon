@@ -32,13 +32,13 @@ public sealed partial class SqliteMemoryStore(
     ISettingsStore settings,
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IMeasurementRecorder measurements,
-    ISharedProjectScope? scope = null)
+    ISharedProjectScope scope)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
     private readonly INoiseEntryStore _noiseEntryStore = NoOpNoiseEntryStore.Instance;
     private readonly INoiseShadowObserver _noiseShadowObserver = NoOpNoiseShadowObserver.Instance;
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     public SqliteMemoryStore(
         ISqliteConnectionFactory factory,
@@ -53,7 +53,7 @@ public sealed partial class SqliteMemoryStore(
         IMeasurementRecorder measurements,
         INoiseShadowObserver noiseShadowObserver,
         INoiseEntryStore noiseEntryStore,
-        ISharedProjectScope? scope = null)
+        ISharedProjectScope scope)
         : this(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService, settings,
             embedDrainPump, measurements, scope)
     {
@@ -574,7 +574,7 @@ public sealed partial class SqliteMemoryStore(
     private async Task<SearchResults> ExecuteSearchForContexts(SqliteConnection connection, SearchQuery query, SearchParameters parameters, FtsQueryPlan plan, QueryVector queryVector,
         CancellationToken cancellationToken)
     {
-        var contexts = await SearchContexts.ResolveAsync(connection, query, cancellationToken, _scope);
+        var contexts = await SearchContexts.ResolveAsync(connection, query, _scope, cancellationToken);
         var searchResults = new SearchResults();
 
         foreach (var context in contexts)

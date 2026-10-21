@@ -18,10 +18,10 @@ public sealed class ToolGate(
     IPromotionQueue queue,
     IModelMigrationStore migrations,
     IProjectRegistrationGuard registration,
-    IProjectIdResolver? resolver = null,
-    ISharedProjectScope? scope = null) : IToolGate
+    ISharedProjectScope scope,
+    IProjectIdResolver? resolver = null) : IToolGate
 {
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
     public async Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken)

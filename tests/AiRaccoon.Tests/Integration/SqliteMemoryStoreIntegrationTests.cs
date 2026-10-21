@@ -39,7 +39,7 @@ public sealed class SqliteMemoryStoreIntegrationTests : IDisposable
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
-        _workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory), new FakeTimeProvider(FixedNow));
+        _workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory, TestData.SharedScope), new FakeTimeProvider(FixedNow), TestData.SharedScope);
         _queue = new SqlitePromotionQueueStore(_factory, new FakeTimeProvider(FixedNow));
     }
 

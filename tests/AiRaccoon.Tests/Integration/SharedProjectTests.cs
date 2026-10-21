@@ -98,7 +98,7 @@ public sealed class SharedProjectTests : IDisposable
     public async Task LegacySharedWatch_IsNotActivatedByAnUpgrade()
     {
         var ct = TestContext.Current.CancellationToken;
-        var watches = new WatchStore(_factory);
+        var watches = new WatchStore(_factory, TestData.SharedScope);
         await watches.AddWatchAsync("shared", _root, 0, 0, ct);
 
         var ex = await Should.ThrowAsync<ArgumentException>(() => ((IProjectRegistry)_store).IsRegisteredAsync("shared", ct));
@@ -207,7 +207,7 @@ public sealed class SharedProjectTests : IDisposable
     public async Task SharedBackend_RefusesWorkspaceAndContentWrites()
     {
         var ct = TestContext.Current.CancellationToken;
-        await Should.ThrowAsync<ArgumentException>(() => new SqliteWorkspaceStore(_factory)
+        await Should.ThrowAsync<ArgumentException>(() => new SqliteWorkspaceStore(_factory, TestData.SharedScope)
             .BeginAsync(new Workspace("scratch", "shared"), DateTimeOffset.UnixEpoch, ct));
         await Should.ThrowAsync<ArgumentException>(() => _store.AddContentAsync("shared", "manual.md", "example", "shared", cancellationToken: ct));
     }
@@ -226,7 +226,7 @@ public sealed class SharedProjectTests : IDisposable
                 : action == "fold-to" ? [new ProjectIdFold("alpha", "shared")] : [],
             action == "drop" ? ["shared"] : [], action == "retire" ? ["shared"] : [], []);
 
-        await Should.ThrowAsync<ArgumentException>(() => new ProjectIdsRepair(TimeProvider.System).ApplyAsync(connection, plan, ct));
+        await Should.ThrowAsync<ArgumentException>(() => new ProjectIdsRepair(TimeProvider.System, TestData.SharedScope).ApplyAsync(connection, plan, ct));
     }
 
     [RetryTheory]
@@ -241,13 +241,13 @@ public sealed class SharedProjectTests : IDisposable
         await _store.ReplaceIfFileChangedAsync("alpha", file, "private-fingerprint", ct);
         await using var connection = await _factory.OpenBankAsync(ct);
         await connection.ExecuteAsync("UPDATE entries SET project_id = 'shared'; UPDATE watch_files SET project_id = 'shared'");
-        var watches = new WatchStore(_factory);
+        var watches = new WatchStore(_factory, TestData.SharedScope);
         await watches.AddWatchAsync("shared", _root, 0, 0, ct);
         await File.WriteAllTextAsync(Path.Combine(_root, "ai-raccoon.ignore"), "private.md", ct);
         var executor = new WatchDigestExecutor(_store, watches, new FakeTimeProvider(),
             new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => Substitute.For<IWatchScanInitiator>()),
             TestData.NewEmbedDrainPump(), new SqliteProjectIdsMigrationGate(_factory),
-            TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher());
+            TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope);
 
         await Should.ThrowAsync<ArgumentException>(() => executor.DigestAsync("shared", _root,
             kind == WatchEventKind.Renamed ? Path.Combine(_root, "new.md") : file,

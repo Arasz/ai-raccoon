@@ -17,7 +17,7 @@ public class WorkspaceServiceTests
     private static WorkspaceService Service(IMemoryStore store, out FakeWorkspaceStore workspaceStore)
     {
         workspaceStore = new FakeWorkspaceStore();
-        return new WorkspaceService(store, workspaceStore, new FakeTimeProvider(FixedNow));
+        return new WorkspaceService(store, workspaceStore, new FakeTimeProvider(FixedNow), TestData.SharedScope);
     }
 
     [Fact]

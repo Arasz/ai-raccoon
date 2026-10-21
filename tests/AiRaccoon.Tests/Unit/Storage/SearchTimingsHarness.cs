@@ -30,11 +30,11 @@ internal static class SearchTimingsHarness
         embedder ??= TestData.CreateEntryEmbedder(TestData.CreateEmbeddingService(), ModelMigrationLease, TimeProvider, new VecDimensionReconciler());
         var fileIngestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(factory), timeProvider,
             TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
-            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
+            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
         return new SqliteMemoryStore(factory, new SqliteMemorySourceStore(factory), fileIngestor,
             embedder, timeProvider, logger ?? NullLogger<SqliteMemoryStore>.Instance,
             new NoiseFilteringService([]), new SqliteSettingsStore(factory), NullEmbedDrainPump.Instance,
-            NoOpMeasurementRecorder.Instance);
+            NoOpMeasurementRecorder.Instance, TestData.SharedScope);
     }
 
     /// <summary>

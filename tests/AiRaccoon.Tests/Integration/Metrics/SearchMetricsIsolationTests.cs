@@ -64,10 +64,10 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private MemoryTools BuildTools(IMeasurementRecorder recorder) =>
-        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()),
-            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
+        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope),
+            new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
             new QueryGuardService(new InMemorySettings()),
-            new MemoryWriteService(_store, new FakePromotionQueue()), recorder,
+            new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope), recorder,
             new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
     private async Task<int> CountMetricsRowsAsync()

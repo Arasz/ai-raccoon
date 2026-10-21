@@ -37,7 +37,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
             NullKeyProvider.Resolver(new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User }));
         _store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(_factory), new StubChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
-        _workspaces = new SqliteWorkspaceStore(_factory);
+        _workspaces = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
         await AllowIngestScopeAsync(_dataRoot);
     }
 
@@ -240,7 +240,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     [RetryFact]
     public async Task ConsolidateAsync_PromotesWithoutASourceFile_LeavingChunkColumnsAtTheUnknownSentinel()
     {
-        var workspaceService = new WorkspaceService(_store, _workspaces, new FakeTimeProvider(FixedNow));
+        var workspaceService = new WorkspaceService(_store, _workspaces, new FakeTimeProvider(FixedNow), TestData.SharedScope);
         var workspace = await workspaceService.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "scratch note", WorkspaceId: workspace.Id),

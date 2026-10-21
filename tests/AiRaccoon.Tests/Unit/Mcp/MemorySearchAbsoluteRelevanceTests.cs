@@ -31,10 +31,10 @@ public sealed class MemorySearchAbsoluteRelevanceTests
     public MemorySearchAbsoluteRelevanceTests()
     {
         var access = new MemoryAccessGuard(_store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
-        _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService()),
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
+        _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
             new QueryGuardService(new InMemorySettings()),
-            new MemoryWriteService(_store, new FakePromotionQueue()), new NoOpMeasurementRecorder(),
+            new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope), new NoOpMeasurementRecorder(),
             new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
     }
 

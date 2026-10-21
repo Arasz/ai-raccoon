@@ -10,9 +10,9 @@ namespace AiRaccoon.Infrastructure.Workspace;
 ///     discard (see docs/work/features-agent-memory/spec-issue-1.md §3.2).
 /// </summary>
 public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspaceStore, TimeProvider timeProvider,
-    ISharedProjectScope? scope = null) : IWorkspaceService
+    ISharedProjectScope scope) : IWorkspaceService
 {
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     public async Task<WorkspaceRecord> BeginAsync(string projectId, string? agentId = null, string? name = null,
         CancellationToken cancellationToken = default)

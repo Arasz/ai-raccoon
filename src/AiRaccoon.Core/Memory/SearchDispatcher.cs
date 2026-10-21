@@ -7,10 +7,10 @@ namespace AiRaccoon.Core.Memory;
 
 /// <inheritdoc cref="ISearchDispatcher" />
 public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService codeSearch, ISearchQualityService qualityService,
-    ISharedProjectScope? scope = null)
+    ISharedProjectScope scope)
     : ISearchDispatcher
 {
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     public async Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, SearchKind kind, string rawScope,
         string correlationId, string sessionId, int? codeLimit = null, double? codeMinRelativeScore = null,

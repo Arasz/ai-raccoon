@@ -224,6 +224,7 @@ public static partial class AppRegistrations
                 // with the other two repair relays, ahead of PendingEmbedJob.
                 new ProjectIdsRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<TimeProvider>(),
+                    sp.GetRequiredService<ISharedProjectScope>(),
                     sp.GetRequiredService<ILogger<ProjectIdsRepairJob>>()),
                 // ADR-0075 amendment: on-demand, same shape as the two repair jobs above —
                 // HasWorkAsync reads the promotion_queue_prune_requests row `extract prune --apply`

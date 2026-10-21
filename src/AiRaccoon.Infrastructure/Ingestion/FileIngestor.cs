@@ -30,11 +30,11 @@ public sealed class FileIngestor(
     IWatchStore watchStore,
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IndexableFileWalk walk,
-    ISharedProjectScope? scope = null) : IFileIngestor
+    ISharedProjectScope scope) : IFileIngestor
 {
     private static readonly FileSniffer Sniffer = new();
 
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     /// <summary>
     ///     Ignore rules apply ahead of routing, for both the memory and code pipelines —

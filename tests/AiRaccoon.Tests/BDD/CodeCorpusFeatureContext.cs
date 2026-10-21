@@ -59,7 +59,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         FakeEmbeddingService = new FakeCodeEmbeddingService();
         CodeEmbedder = new CodeEmbedder(FakeEmbeddingService, NullLogger<CodeEmbedder>.Instance, new VecDimensionReconciler());
 
-        WatchStore = new WatchStore(Factory);
+        WatchStore = new WatchStore(Factory, TestData.SharedScope);
         Store = ComposeStore();
         CodeSearch = new SqliteCodeSearchService(Factory, CodeEmbedder);
         CodeEngineStore = new SqliteCodeEngineStore(Factory, FakeEmbeddingService,
@@ -68,10 +68,10 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         SearchQuality = new SqliteSearchQualityService(Factory, NullLogger<SqliteSearchQualityService>.Instance);
         ReindexJob = new CodeReindexJob(CodeEmbedder, EmbedDrainPump);
 
-        var gate = new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard());
+        var gate = new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
         MemoryTools = new MemoryTools(Store, gate,
-            new SearchDispatcher(Store, CodeSearch, SearchQuality),
-            new QueryGuardService(Settings), new MemoryWriteService(Store, new FakePromotionQueue()),
+            new SearchDispatcher(Store, CodeSearch, SearchQuality, TestData.SharedScope),
+            new QueryGuardService(Settings), new MemoryWriteService(Store, new FakePromotionQueue(), TestData.SharedScope),
             new NoOpMeasurementRecorder(), Settings, NullLogger<MemoryTools>.Instance, FakeEmbeddingService);
         CodeTools = new CodeTools(CodeSearch, gate);
 
@@ -232,11 +232,11 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         var codeFileTypeMatcher = new CodeFileTypeMatcher();
         var codeIngestor = new CodeIngestor(codeFileTypeMatcher, new StubCodeChunker(), TimeProvider);
         var fileIngestor = new FileIngestor(matcher, sourceStore, TimeProvider, embeddings,
-            new IgnoreRulesProvider(), codeFileTypeMatcher, codeIngestor, WatchStore, EmbedDrainPump, new IndexableFileWalk());
+            new IgnoreRulesProvider(), codeFileTypeMatcher, codeIngestor, WatchStore, EmbedDrainPump, new IndexableFileWalk(), TestData.SharedScope);
         var noiseFilteringService = new NoiseFilteringService([]);
         return new SqliteMemoryStore(Factory, sourceStore, fileIngestor, embedder, TimeProvider,
             NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, Settings, EmbedDrainPump,
-            NoOpMeasurementRecorder.Instance);
+            NoOpMeasurementRecorder.Instance, TestData.SharedScope);
     }
 
     private void ComposeWatchStack()
@@ -246,7 +246,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         Pipeline = new WatchPipeline(new WatchScheduler(),
             new WatchDigestExecutor(Store, WatchStore, TimeProvider,
                 new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
-                new SqliteProjectIdsMigrationGate(Factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher()),
+                new SqliteProjectIdsMigrationGate(Factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope),
             new WatchRetryPolicy(), scanGuard, Store, TimeProvider,
             NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, _ => { }, NullLogger<WatchEventSource>.Instance);
@@ -257,6 +257,6 @@ public sealed class CodeCorpusFeatureContext : IDisposable
             TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         WatchServiceInstance = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver(),
             new SqliteProjectIdsMigrationGate(Factory));
-        WatchToolsInstance = new WatchTools(WatchServiceInstance, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard()));
+        WatchToolsInstance = new WatchTools(WatchServiceInstance, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope));
     }
 }

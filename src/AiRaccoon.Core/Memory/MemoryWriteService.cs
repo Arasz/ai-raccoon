@@ -41,9 +41,9 @@ public interface IMemoryWriteService
 
 /// <inheritdoc cref="IMemoryWriteService" />
 public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue,
-    ISharedProjectScope? scope = null) : IMemoryWriteService
+    ISharedProjectScope scope) : IMemoryWriteService
 {
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     /// <summary>
     ///     Derived from <see cref="PromotionScorer.MaxScore" /> — the scorer's declared output

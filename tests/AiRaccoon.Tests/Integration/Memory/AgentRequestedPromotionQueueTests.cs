@@ -46,7 +46,7 @@ public sealed class AgentRequestedPromotionQueueTests : IDisposable
         _queueStore = new SqlitePromotionQueueStore(_factory, clock);
         _queue = new PromotionQueueService(_queueStore, _store, new UniformCountEvictionPolicy(),
             new NoopMetrics(), NullLogger<PromotionQueueService>.Instance, clock);
-        _writes = new MemoryWriteService(_store, _queue);
+        _writes = new MemoryWriteService(_store, _queue, TestData.SharedScope);
         _runner = new SharedExtractionRunner(_store, new SharedExtractionService(), _queue, clock);
     }
 

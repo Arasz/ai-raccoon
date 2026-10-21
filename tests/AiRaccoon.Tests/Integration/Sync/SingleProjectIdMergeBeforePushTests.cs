@@ -220,7 +220,7 @@ public sealed class SingleProjectIdMergeBeforePushTests : IDisposable
 
     private static ProjectIdsRepairJob RepairJob() =>
         new(new FileTypeMatcher([new MarkdownFileTypeHandler(new StubChunker())]),
-            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow));
+            TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow), TestData.SharedScope);
 
     private static SyncService NewSyncService(FakeCloudStore cloud, SqliteConnectionFactory localFactory) =>
         new(cloud,

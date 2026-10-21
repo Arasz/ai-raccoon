@@ -31,7 +31,7 @@ public sealed class CwdProjectIdResolverTests : IDisposable
         return path;
     }
 
-    private CwdProjectIdResolver NewResolver(string cwd) => new(_settings, _settings, new PinnedCwdProbe(cwd));
+    private CwdProjectIdResolver NewResolver(string cwd) => new(_settings, _settings, new PinnedCwdProbe(cwd), TestData.SharedScope);
 
     private sealed class PinnedCwdProbe(string cwd) : ICwdProbe
     {

@@ -37,7 +37,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         _ingestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             new IgnoreRulesProvider(), NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
 
         using var scopeCmd = _conn.CreateCommand();
         scopeCmd.CommandText = "INSERT INTO settings (key, value) VALUES (@key, @scope);";
@@ -189,7 +189,7 @@ public sealed class FileIngestorIgnoreTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         var ingestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             new IgnoreRulesProvider(), new CsCodeFiles(), new DeletingCodeIngestor(trigger, [goneCode, goneMemory]),
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk());
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
 
         var result = await ingestor.IngestDirectoryAsync(_conn, "test_project", _testDir, null,
             TestContext.Current.CancellationToken);
@@ -228,12 +228,12 @@ public sealed class FileIngestorIgnoreTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             new IgnoreRulesProvider(), NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            watchStore, NullEmbedDrainPump.Instance, new IndexableFileWalk());
+            watchStore, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
     }
 
     private async Task<IWatchStore> RegisterWatchAsync(string path)
     {
-        var watchStore = new WatchStore(_factory);
+        var watchStore = new WatchStore(_factory, TestData.SharedScope);
         await watchStore.AddWatchAsync("test_project", path, 0, 0, TestContext.Current.CancellationToken);
         return watchStore;
     }

@@ -10,9 +10,9 @@ public sealed partial class SqliteProjectDirectory(
     ISqliteConnectionFactory factory,
     IProjectRegistry registry,
     ILogger<SqliteProjectDirectory> logger,
-    ISharedProjectScope? scope = null) : IProjectDirectory
+    ISharedProjectScope scope) : IProjectDirectory
 {
-    private readonly ISharedProjectScope _scope = scope ?? SharedProjectScope.Default;
+    private readonly ISharedProjectScope _scope = scope;
 
     /// <inheritdoc />
     public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default)
