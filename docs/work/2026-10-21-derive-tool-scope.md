@@ -272,13 +272,36 @@ leaves the test running against the previous assembly and the mutation appears t
 |---|---|
 | The review that produced this task | `docs/work/2026-10-21-pr906-scope-check-review.md` — 16 findings, 8 measured, 7 read, 1 inferred |
 | The measured `memory_delete` probe | four-chunk document, one named chunk: `rows_before=4 rows_after=3 deleted=1` — the partial delete is measured, not reasoned |
-| `dotnet build` | pending |
-| The touched test surfaces | pending |
-| CI (`build-fast` / `build-bdd` / `build-slow`) | pending |
+| `dotnet build src/AiRaccoon/AiRaccoon.csproj -c Debug` | clean, 0 warnings, 0 errors |
+| The generator's test project | 5 tests, 0 failed |
+| The scope test (the pin) | 6 tests, 0 failed |
+| The reserved target's delete | 1 test, 0 failed |
+| The whole Unit surface | 4302 tests, 0 failed, 1 skipped |
+| The shared-project integration surface | 19 tests, 0 failed |
+| The ADR index gate (`AdrIndexTests`) | 7 tests, 0 failed |
+| The two mutations | seen red, then green — the evidence is above |
+| CI (`build-fast` / `build-bdd` / `build-slow`) | pending — CI is the pass condition |
+
+## The documentation
+
+- **ADR-0139** (new) — the tool scope is declared on the tool and compiled; the alternatives
+  that were rejected and why; the consequences, including the default flip and the fact that the
+  generated file is never written to disk.
+- **ADR-0137** (amended in place, under an `Amended 2026-10-21` marker) — the `CanSearchCode`
+  sentence named a method that commit `3849135e` removed, and the reserved target's refusal list
+  now names `memory_delete` with the reason.
+- **`docs/adr/README.md`** — the 0139 row, the 0137 row's `Amended` cell, and a row reserving
+  0138 for the search-scope record that has not landed here. The index is a derived mirror with a
+  gate (`AdrIndexTests`), so it is part of this change rather than a merge-time chore: the 0138
+  row must be deleted when that record lands.
+- **`docs/reference/agent-memory-server.md`** — the reserved target's refusal list names the
+  delete, and the operator is told how the tool scope is declared and why a delete is refused
+  there.
 
 ## Still open
 
-- The ADR index row for ADR-0139 is added at merge time: another session's branch owns
-  `docs/adr/README.md` for ADR-0138.
+- The 0138 row in `docs/adr/README.md` must be deleted when the search-scope record lands: a
+  recorded skip that a later document fills is a stale note, and the numbering gate fails on it.
 - The release checklist under `docs/work/checklist/` is a separate manual pass and is out of
   scope for this change.
+- The CI jobs are the pass condition and have not run on this branch yet.
