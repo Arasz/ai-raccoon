@@ -343,7 +343,7 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
         var migrationGate = new SqliteProjectIdsMigrationGate(_factory);
         var guard = new ProjectRegistrationGuard(_store, NullLogger<ProjectRegistrationGuard>.Instance, migrationGate, TestData.SharedScope);
         return new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(),
-            new NeverMigratingStore(), guard, TestData.SharedScope);
+            new NeverMigratingStore(), guard, TestData.ScopeCheck);
     }
 
     private MemoryTools NewRealTools(ToolGate gate) =>

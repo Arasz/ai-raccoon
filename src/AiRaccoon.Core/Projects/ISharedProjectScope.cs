@@ -18,6 +18,9 @@ public interface ISharedProjectScope
     /// <summary>Refuses the search shapes the reserved target does not support.</summary>
     void RequireSearch(SearchQuery query);
 
+    /// <summary>Checks whether an operation can use an ordinary project.</summary>
+    ScopeCheckResult CheckOrdinary(string projectId, string operation);
+
     /// <summary>Refuses the operations the reserved target does not support.</summary>
     void RequireOrdinary(string projectId, string operation);
 }

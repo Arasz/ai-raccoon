@@ -78,7 +78,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     }
 
     private MemoryTools BuildMemoryTools() =>
-        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope),
+        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
             new QueryGuardService(new InMemorySettings()), new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope),
             NoOpMeasurementRecorder.Instance, new InMemorySettings(), NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
@@ -148,7 +148,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     public async Task MemoryShareExtract_UnderARespelledForm_ThreadsTheCanonicalId_ToTheExtractionRunner()
     {
         var extraction = new RecordingExtractionRunner();
-        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
+        var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
         var tools = new ShareTools(_store, gate, new ShareExtractService(_store, extraction, new FakePromotionQueue()));
 
         await tools.ShareExtract([_respelled], cancellationToken: TestContext.Current.CancellationToken);
@@ -161,7 +161,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     public async Task MemoryPromotionList_UnderARespelledForm_ListsUnderTheCanonicalId()
     {
         var queue = new FakePromotionQueue();
-        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
+        var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
         var tools = new PromotionTools(queue, gate);
 
         await tools.List(_respelled, cancellationToken: TestContext.Current.CancellationToken);
@@ -210,7 +210,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     {
         var queue = new FakePromotionQueue();
         var gate = new ToolGate(new MemoryAccessGuard(_store), queue, new NeverMigratingStore(),
-            new AllowingRegistrationGuard(), TestData.SharedScope);
+            new AllowingRegistrationGuard(), TestData.ScopeCheck);
         var tools = new PromotionTools(queue, gate);
 
         await tools.List("job-search-ai-assistant", cancellationToken: TestContext.Current.CancellationToken);
@@ -228,7 +228,7 @@ public sealed class CanonicalProjectIdReachesStorageTests : IAsyncLifetime
     {
         var extraction = new RecordingExtractionRunner();
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(),
-            new AllowingRegistrationGuard(), TestData.SharedScope);
+            new AllowingRegistrationGuard(), TestData.ScopeCheck);
         var tools = new ShareTools(_store, gate, new ShareExtractService(_store, extraction, new FakePromotionQueue()));
 
         await tools.ShareExtract(["job-search-ai-assistant"], cancellationToken: TestContext.Current.CancellationToken);

@@ -18,7 +18,7 @@ public sealed class PromotionToolsTests
     private static (FakePromotionQueue Queue, PromotionTools Tools) NewStack()
     {
         var queue = new FakePromotionQueue();
-        var gate = new ToolGate(new AllowingGuard(), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
+        var gate = new ToolGate(new AllowingGuard(), queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
         return (queue, new PromotionTools(queue, gate));
     }
 
@@ -128,7 +128,7 @@ public sealed class PromotionToolsTests
     public async Task List_AllProjects_WhileAModelMigrationIsOpen_Refuses()
     {
         var queue = new FakePromotionQueue();
-        var gate = new ToolGate(new AllowingGuard(), queue, new MigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
+        var gate = new ToolGate(new AllowingGuard(), queue, new MigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
         var tools = new PromotionTools(queue, gate);
 
         await Should.ThrowAsync<ModelMigrationInProgressException>(() =>

@@ -31,7 +31,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
     public MemorySearchAbsoluteRelevanceTests()
     {
         var access = new MemoryAccessGuard(_store);
-        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope), new NoOpMeasurementRecorder(),

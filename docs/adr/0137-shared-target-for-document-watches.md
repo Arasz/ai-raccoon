@@ -54,13 +54,18 @@ The same tier supports curated promotions and explicitly shared documents. Stora
 lives in the backend; the MCP tools and CLI retain their existing API shapes. A future owned-only
 shared query, shared workspace workflow or document extraction format requires a separate contract.
 
-The target's scope rules — the id it owns, the context its rows live in, and the operations it
-refuses — sit behind one contract, `ISharedProjectScope`, with one implementation,
-`SharedProjectScope`, resolved by the composition root. The components that route a write or a
-read depend on that contract, so the reserved target's decisions live in one place instead of a
-static helper called from each of them. The dependency is required, never a nullable parameter
-with a fallback: a component that could be built without a scope would route on the fallback and
-the contract would be decoration in the case it exists for.
+The backend's reserved-id, context routing and operation rules belong to `ISharedProjectScope`,
+implemented by `SharedProjectScope`. `CheckOrdinary` returns a `ScopeCheckResult`; the existing
+`RequireOrdinary` guard throws its error for backend callers. This keeps the refusal text and
+reserved-id decision in one place.
+
+At the MCP boundary, `IScopeCheck` exposes `Check(canonicalProjectId, toolName)`. Its `ScopeCheck`
+facade composes `IToolNameScope` with `ISharedProjectScope`: the first classifies exact tool names
+and ordinal workspace/promotion prefixes; the second checks the project. `ToolGate` evaluates
+the result after access, retired-id and registration checks and translates a refusal to the
+existing `ArgumentException`. The composition root supplies all three required dependencies.
+This explicit two-part composition needs no generic rule pipeline or per-client registry.
+Backend guards remain in place for CLI and API calls that do not pass through `ToolGate`.
 
 An incompatible legacy owner requires operator migration before this reserved target can be used.
 The new repair path deliberately refuses automatic reassignment: preserve the bank and move the

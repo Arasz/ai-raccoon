@@ -37,7 +37,7 @@ public sealed class ReadRegistrationTests
             .ThrowsAsync(new InvalidOperationException("a read must never register a project"));
         var guard = new ProjectRegistrationGuard(_registry, NullLogger<ProjectRegistrationGuard>.Instance,
             new NeverMigratedGate(), TestData.SharedScope);
-        _gate = new ToolGate(Substitute.For<IMemoryAccessGuard>(), _queue, new NeverMigratingStore(), guard, TestData.SharedScope, _resolver);
+        _gate = new ToolGate(Substitute.For<IMemoryAccessGuard>(), _queue, new NeverMigratingStore(), guard, TestData.ScopeCheck, _resolver);
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;

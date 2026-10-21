@@ -551,7 +551,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         ICodeSearchService? codeSearch = null)
     {
         var gate = new ToolGate(new MemoryAccessGuard(store), new FakePromotionQueue(),
-            new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
+            new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
         var settings = new InMemorySettings();
         return new MemoryTools(store, gate,
             new SearchDispatcher(store, codeSearch ?? new NoOpCodeSearchService(),

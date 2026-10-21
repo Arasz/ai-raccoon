@@ -41,7 +41,7 @@
         {
             "id": "D6",
             "card": "Watch scope",
-            "ruling": "Project-scoped only; no global/workspace-scoped watches; all three tools take projectId."
+            "ruling": "Watches require an explicit projectId owner; the reserved shared owner gives supported documents bank-wide visibility. No implicit global or workspace-scoped watches."
         },
         {
             "id": "D7",

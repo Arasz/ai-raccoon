@@ -25,7 +25,7 @@ public sealed class ToolGateTests
         var queue = new FakePromotionQueue();
         var migrations = new RecordingMigrations();
         var registration = new RecordingRegistrationGuard();
-        return (guard, queue, migrations, registration, new ToolGate(guard, queue, migrations, registration, TestData.SharedScope));
+        return (guard, queue, migrations, registration, new ToolGate(guard, queue, migrations, registration, TestData.ScopeCheck));
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public sealed class ToolGateTests
     public async Task RequireAsync_WhenMigrated_PassesFormerAliasesThrough()
     {
         var (guard, _, _, registration, _) = NewStack();
-        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration, TestData.SharedScope);
+        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration, TestData.ScopeCheck);
 
         var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
             "memory_write", TestContext.Current.CancellationToken);
@@ -199,7 +199,7 @@ public sealed class ToolGateTests
     public async Task RequireAsync_AliasDuringRepairWindow_FoldsToTheWinner()
     {
         var (guard, _, _, registration, _) = NewStack();
-        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration, TestData.SharedScope);
+        var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration, TestData.ScopeCheck);
         try
         {
             ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap(
@@ -214,6 +214,62 @@ public sealed class ToolGateTests
         finally
         {
             ProjectIdAliasMap.ResetDefault();
+        }
+    }
+
+    [Fact]
+    public async Task RequireAsync_UsesTheScopeResultAndForwardsTheCanonicalProjectId()
+    {
+        var scope = new RecordingScope { Result = new ScopeCheckResult("scope refused") };
+        var gate = new ToolGate(new RecordingGuard(), new FakePromotionQueue(), new NeverMigratingStore(),
+            new RecordingRegistrationGuard(), scope);
+        try
+        {
+            ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap(
+                [new ProjectIdAliasEntry("old-project", "winner")], ["winner"], []));
+            var error = await Should.ThrowAsync<ArgumentException>(() =>
+                gate.RequireAsync("old-project", AccessRequirement.Read, "memory_search", TestContext.Current.CancellationToken));
+            error.Message.ShouldBe("scope refused");
+            scope.Calls.ShouldBe([("winner", "memory_search")]);
+        }
+        finally
+        {
+            ProjectIdAliasMap.ResetDefault();
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RequireAsync_EarlierRefusalsDoNotReachScope(bool accessRefuses)
+    {
+        var scope = new RecordingScope();
+        var access = new RecordingGuard { Refuse = accessRefuses };
+        var registration = new RecordingRegistrationGuard { Refuse = !accessRefuses };
+        var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), registration, scope);
+        var error = await Record.ExceptionAsync(() =>
+            gate.RequireAsync("shared", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+        if (accessRefuses)
+        {
+            error.ShouldBeOfType<AccessDeniedException>();
+        }
+        else
+        {
+            error.ShouldBeOfType<UnregisteredProjectException>();
+        }
+
+        scope.Calls.ShouldBeEmpty();
+    }
+
+    private sealed class RecordingScope : IScopeCheck
+    {
+        public ScopeCheckResult Result { get; init; } = new(null);
+        public List<(string ProjectId, string ToolName)> Calls { get; } = [];
+
+        public ScopeCheckResult Check(string canonicalProjectId, string toolName)
+        {
+            Calls.Add((canonicalProjectId, toolName));
+            return Result;
         }
     }
 

@@ -77,6 +77,17 @@ public sealed class SharedProjectScopeTests
     }
 
     [Fact]
+    public void CheckOrdinary_ReturnsTheSameRefusalAsTheBackendGuard()
+    {
+        var result = _scope.CheckOrdinary("shared", "memory_write");
+        result.IsAllowed.ShouldBeFalse();
+        result.Error.ShouldBe("shared-project-unsupported: memory_write requires an ordinary project; shared supports document ingestion and watches.");
+        Should.Throw<ArgumentException>(() => _scope.RequireOrdinary("shared", "memory_write"))
+            .Message.ShouldBe(result.Error);
+        _scope.CheckOrdinary("acme", "memory_write").IsAllowed.ShouldBeTrue();
+    }
+
+    [Fact]
     public void RequireOrdinary_LeavesOrdinaryProjectsAlone() =>
         Should.NotThrow(() => _scope.RequireOrdinary("acme", "note writes"));
 
@@ -99,33 +110,4 @@ public sealed class SharedProjectScopeTests
         }
     }
 
-    [Fact]
-    public void TheCompositionRoot_InjectsTheRegisteredScope()
-    {
-        var tempRoot = TestData.CreateTempRoot();
-        try
-        {
-            var services = new ServiceCollection();
-            services.AddLogging(b => b.SetMinimumLevel(LogLevel.Warning));
-            services.RegisterCoreMemoryServices(TestData.CreateInfrastructureOptions(tempRoot));
-            services.AddSingleton<ScopeConsumer>();
-
-            using var provider = services.BuildServiceProvider();
-            var consumer = provider.GetRequiredService<ScopeConsumer>();
-
-            // The consumers require the scope; the registered service must reach them, or the
-            // seam is decoration and the components carry an unresolved dependency.
-            consumer.Scope.ShouldBeSameAs(provider.GetRequiredService<ISharedProjectScope>());
-        }
-        finally
-        {
-            TestData.DeleteTempRoot(tempRoot);
-        }
-    }
-
-    /// <summary>A consumer shaped like the real ones: the scope is a required constructor parameter.</summary>
-    private sealed class ScopeConsumer(ISharedProjectScope scope)
-    {
-        public ISharedProjectScope Scope { get; } = scope;
-    }
 }

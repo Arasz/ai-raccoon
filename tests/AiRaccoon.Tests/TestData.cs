@@ -43,6 +43,7 @@ public static class TestData
     /// <summary>The reserved shared target's scope, for the components a test builds by hand. One
     /// instance for the whole suite: the scope holds no state.</summary>
     public static readonly ISharedProjectScope SharedScope = new SharedProjectScope();
+    public static readonly AiRaccoon.Tools.IScopeCheck ScopeCheck = new AiRaccoon.Tools.ScopeCheck(new AiRaccoon.Tools.ToolNameScope(), SharedScope);
 
     /// <summary>Serializes tests that mutate the process-global AIRACCOON_DB_PASSPHRASE (shared by CliCommandRunnerTests and ConfigCommandsEncryptionTests).</summary>
     public static readonly SemaphoreSlim EnvVarGate = new(1, 1);

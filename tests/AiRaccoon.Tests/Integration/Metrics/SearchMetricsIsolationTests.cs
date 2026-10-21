@@ -64,7 +64,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     private MemoryTools BuildTools(IMeasurementRecorder recorder) =>
-        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope),
+        new(_store, new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck),
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),
             new QueryGuardService(new InMemorySettings()),
             new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope), recorder,

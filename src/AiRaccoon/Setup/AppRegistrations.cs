@@ -173,6 +173,8 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IProjectRegistrationGuard, ProjectRegistrationGuard>();
             services.AddRequiredSingleton<ICwdProbe, CurrentDirectoryCwdProbe>();
             services.AddRequiredSingleton<IProjectIdResolver, CwdProjectIdResolver>();
+            services.AddRequiredSingleton<IToolNameScope, ToolNameScope>();
+            services.AddRequiredSingleton<IScopeCheck, ScopeCheck>();
             services.AddRequiredSingleton<IToolGate, ToolGate>();
         }
 

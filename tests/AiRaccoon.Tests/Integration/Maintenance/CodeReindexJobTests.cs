@@ -258,7 +258,7 @@ public sealed class CodeReindexJobTests : IAsyncLifetime
 
         var settings = new SqliteSettingsStore(_factory);
         var memoryStore = new SettingsOnlyStore(settings);
-        var gate = new ToolGate(new MemoryAccessGuard(memoryStore), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.SharedScope);
+        var gate = new ToolGate(new MemoryAccessGuard(memoryStore), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
         var tools = new MemoryTools(memoryStore, gate,
             new SearchDispatcher(memoryStore, new SqliteCodeSearchService(_factory, new FakeCodeEmbedder()), new NoOpSearchQualityService(), TestData.SharedScope),
             new QueryGuardService(settings), new MemoryWriteService(memoryStore, new FakePromotionQueue(), TestData.SharedScope),

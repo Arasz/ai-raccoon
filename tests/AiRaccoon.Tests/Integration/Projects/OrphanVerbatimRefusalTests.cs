@@ -80,7 +80,7 @@ public sealed class OrphanVerbatimRefusalTests : IAsyncLifetime
         var marker = new SqliteProjectIdsMigrationGate(_factory);
         var guard = new ProjectRegistrationGuard(_store, guardLogger ?? NullLogger<ProjectRegistrationGuard>.Instance, marker, TestData.SharedScope);
         var gate = new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(),
-            new NeverMigratingStore(), guard, TestData.SharedScope);
+            new NeverMigratingStore(), guard, TestData.ScopeCheck);
         var settings = new InMemorySettings();
         return new MemoryTools(_store, gate,
             new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope),

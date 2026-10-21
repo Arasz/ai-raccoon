@@ -18,11 +18,9 @@ public sealed class ToolGate(
     IPromotionQueue queue,
     IModelMigrationStore migrations,
     IProjectRegistrationGuard registration,
-    ISharedProjectScope scope,
+    IScopeCheck scope,
     IProjectIdResolver? resolver = null) : IToolGate
 {
-    private readonly ISharedProjectScope _scope = scope;
-
     /// <summary>Refuses while a migration is open. Nothing else — the check a tool with no project yet can still make.</summary>
     public async Task RequireBankAvailableAsync(string toolName, CancellationToken cancellationToken)
     {
@@ -59,11 +57,10 @@ public sealed class ToolGate(
         }
 
         await registration.EnsureAsync(canonical, requirement, cancellationToken);
-        if (_scope.IsReserved(canonical) && (toolName.StartsWith("memory_workspace_", StringComparison.Ordinal)
-            || toolName.StartsWith("memory_promotion_", StringComparison.Ordinal)
-            || toolName is "memory_write" or "memory_share" or "memory_share_extract" or "memory_sweep" or "memory_set_ttl" or "code_get" or "memory_delete_context"))
+        var scopeResult = scope.Check(canonical, toolName);
+        if (!scopeResult.IsAllowed)
         {
-            _scope.RequireOrdinary(canonical, toolName);
+            throw new ArgumentException(scopeResult.Error);
         }
 
         return canonical;

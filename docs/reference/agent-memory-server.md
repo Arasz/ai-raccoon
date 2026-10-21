@@ -32,7 +32,8 @@ ai-raccoon watch status shared
 ID. Default searches from every project in this bank include those documents. Search directly
 with `projectId="shared"` and `scope="all"` (default) or `scope="shared"`; get/list/stats also
 accept the reserved ID. Ordinary `scope="project"` searches omit shared content. Reserved-target
-project-only searches, custom labels, workspaces, notes and promotion operations are refused.
+project-only searches, custom labels, workspaces, notes, promotion operations, TTL changes, sweeps,
+code retrieval and context deletion are refused.
 The target is never selected implicitly from cwd. Code is skipped; supported document formats
 remain `.md`, `.markdown`, `.txt`, `.json` and `.ipynb`.
 
