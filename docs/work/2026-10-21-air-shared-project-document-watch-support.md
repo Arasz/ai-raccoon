@@ -108,9 +108,8 @@ mutation check above stands in for the "watch the gate go red" discipline.
 ## Still open
 
 - **The merge needs one approving review.** The `default` ruleset on `main` requires one
-  approving review on the latest push, and no reviewer can run here (see above), so PR #906 sits
-  ready for review with green CI. One approval (the owner's, or a configured bot) unblocks
-  `gh pr merge 906 --squash`.
+  approving review on the latest push, and the takeover has independent code and QA verdicts, but no GitHub approval has been
+  posted yet. The current head needs a platform approval before a normal squash merge.
 - The reserved target is deliberately narrow in this delivery: no owned-only shared query, no
   shared workspace, no document formats beyond Markdown, plain text, JSON and notebooks, and no
   implicit selection from the working directory. Each of those is a separate contract.
@@ -141,3 +140,8 @@ Ten integration cases initially failed because the isolated output lacked
 The policy mutation removing `memory_write` produced one failure among 26 policy cases;
 restoring it returned the scope tests to green. These are follow-up results, separate from
 the broader original feature results above.
+
+Independent final code review approved the refactor with no findings. QA found no issues
+in the four scoped test classes. Bypassing the gate refusal produced two failures among
+21 tests (the direct gate and real DI tests); after restoration all 64 focused QA cases
+passed with zero skips. The final documentation audit found no unresolved mismatch.
