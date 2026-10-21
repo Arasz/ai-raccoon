@@ -33,17 +33,17 @@ public sealed class SharedProjectScope : ISharedProjectScope
     }
 
     /// <inheritdoc />
-    public ScopeCheckResult CheckOrdinary(string projectId, string operation) => new(IsReserved(projectId)
+    public string? CheckOrdinary(string projectId, string operation) => IsReserved(projectId)
         ? $"shared-project-unsupported: {operation} requires an ordinary project; shared supports document ingestion and watches."
-        : null);
+        : null;
 
     /// <inheritdoc />
     public void RequireOrdinary(string projectId, string operation)
     {
-        var result = CheckOrdinary(projectId, operation);
-        if (!result.IsAllowed)
+        var error = CheckOrdinary(projectId, operation);
+        if (error is not null)
         {
-            throw new ArgumentException(result.Error);
+            throw new ArgumentException(error);
         }
     }
 }

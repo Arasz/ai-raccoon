@@ -1,4 +1,4 @@
-namespace AiRaccoon.Core.Projects;
+namespace AiRaccoon.Tools;
 
 /// <summary>A scope decision; a null error allows the operation.</summary>
 public sealed record ScopeCheckResult(string? Error)

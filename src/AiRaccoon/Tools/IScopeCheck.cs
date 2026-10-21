@@ -1,5 +1,3 @@
-using AiRaccoon.Core.Projects;
-
 namespace AiRaccoon.Tools;
 
 /// <summary>Checks whether a tool can use the canonical project id.</summary>

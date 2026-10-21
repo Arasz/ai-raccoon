@@ -79,12 +79,11 @@ public sealed class SharedProjectScopeTests
     [Fact]
     public void CheckOrdinary_ReturnsTheSameRefusalAsTheBackendGuard()
     {
-        var result = _scope.CheckOrdinary("shared", "memory_write");
-        result.IsAllowed.ShouldBeFalse();
-        result.Error.ShouldBe("shared-project-unsupported: memory_write requires an ordinary project; shared supports document ingestion and watches.");
+        var error = _scope.CheckOrdinary("shared", "memory_write");
+        error.ShouldBe("shared-project-unsupported: memory_write requires an ordinary project; shared supports document ingestion and watches.");
         Should.Throw<ArgumentException>(() => _scope.RequireOrdinary("shared", "memory_write"))
-            .Message.ShouldBe(result.Error);
-        _scope.CheckOrdinary("acme", "memory_write").IsAllowed.ShouldBeTrue();
+            .Message.ShouldBe(error);
+        _scope.CheckOrdinary("acme", "memory_write").ShouldBeNull();
     }
 
     [Fact]

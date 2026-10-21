@@ -55,12 +55,13 @@ lives in the backend; the MCP tools and CLI retain their existing API shapes. A 
 shared query, shared workspace workflow or document extraction format requires a separate contract.
 
 The backend's reserved-id, context routing and operation rules belong to `ISharedProjectScope`,
-implemented by `SharedProjectScope`. `CheckOrdinary` returns a `ScopeCheckResult`; the existing
-`RequireOrdinary` guard throws its error for backend callers. This keeps the refusal text and
+implemented by `SharedProjectScope`. `CheckOrdinary` returns refusal text or null; the existing
+`RequireOrdinary` guard throws that refusal for backend callers. This keeps the refusal text and
 reserved-id decision in one place.
 
 At the MCP boundary, `IScopeCheck` exposes `Check(canonicalProjectId, toolName)`. Its `ScopeCheck`
-facade composes `IToolNameScope` with `ISharedProjectScope`: the first classifies exact tool names
+facade returns the host-owned `AiRaccoon.Tools.ScopeCheckResult` and composes `IToolNameScope`
+with `ISharedProjectScope`: the first classifies exact tool names
 and ordinal workspace/promotion prefixes; the second checks the project. `ToolGate` evaluates
 the result after access, retired-id and registration checks and translates a refusal to the
 existing `ArgumentException`. The composition root supplies all three required dependencies.
