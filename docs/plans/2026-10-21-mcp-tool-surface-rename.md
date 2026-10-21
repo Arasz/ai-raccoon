@@ -106,6 +106,18 @@ moved. That fixes three things at once:
 - `get_entry` has **no default**: the type is required, because a hash alone does not say which
   corpus to read from — and the merged `get_entry` must know where to look.
 
+**Settled by the owner on 2026-10-21: the entry type is part of the query path, for sure.** The
+classifier is not a `get_entry` detail that happens to be reused in search — it is a first-class
+part of the query path, so the search itself filters by entry type. Two consequences the
+implementation must honour:
+
+1. The classifier has to be available where the search selects candidates, not only where a hash
+   is resolved. A discriminator that needs a join per candidate row has to earn its cost in the
+   hot path; the denormalised column is the shape that does.
+2. The type filter and the scope filter (`all` | `project` | `shared`) compose: a `shared` query
+   with type `Code` is empty by construction, exactly as a `shared` query is empty for the code
+   leg today (ADR-0137), and the refusal text must not pretend otherwise.
+
 The parameter is a flag enum, so a caller can ask for Memory alone, Code alone, File alone, or
 any sum. It replaces `kind` (`memory|code|both`).
 
