@@ -45,33 +45,45 @@ into a read tool and one write tool.
 | `project_id_token_get` | `save_project_id_token` | mints a new id |
 
 The shape is verb-first, object-second, no `memory_` prefix: `query`, `get_*`, `add_*`,
-`ingest_*`, `delete_*`, `move`, `trigger_*`, `set_*`, `initialize_*`, `close_*`,
+`ingest_*`, `delete_*`, `share_*`, `trigger_*`, `set_*`, `initialize_*`, `close_*`,
 `discard_*`, `sync_*`, `embed_*`, `save_*`.
 
-The owner's corrections (2026-10-21) settled the sharing family — `move`, `trigger_memory_sharing`,
-`get_memories_sharing_ranking`, `delete_memory_from_ranking` — and the workspace family —
-`initialize_workspace`, `get_workspace_status`, `close_workspace`, `discard_workspace`.
+The owner's corrections (2026-10-21) settled the sharing family — `share_memory`,
+`trigger_memory_sharing`, `get_memories_sharing_ranking`, `delete_memory_from_ranking` — the
+workspace family — `initialize_workspace`, `get_workspace_status`, `close_workspace`,
+`discard_workspace` — the statistics family — `get_store_statistics` (the store) and
+`get_engine_statistics` (the engine) — and split the quality writes into
+`set_query_result_grade` (the grade) and `set_memory_usage_record` (the follow-through).
 
-### TTL is a memory-only property — so `set_memory_ttl` is accurate
+### TTL belongs to Memory only — the rule the implementation must enforce
 
-The `entries` table carries `ttl_days`, `rating` and `access_count`; the `code_entries` table
-carries none of them — the schema comment says so in as many words ("no rating/ttl_days/
-access_count — no degradation, code is a re-derivable cache"). A code chunk can therefore never
-be swept, rated or given a TTL, and `set_memory_ttl` names the only population the operation
-can reach. The same holds for the File population: an ingested document chunk *is* an `entries`
-row and does carry a TTL, so the tool's reach is "every entry in the `entries` table", not
-"every agent-written memory" — the name says memory, and the mechanism says entries. Worth one
-word from the owner: if the tool must also set a TTL on an ingested document, `set_memory_ttl`
-understates it.
+`ttl_days`, `rating` and `access_count` exist on `entries` and not on `code_entries` (the
+schema says so: "no rating/ttl_days/access_count — no degradation, code is a re-derivable
+cache"), so a Code entry can never carry a TTL. The owner's further rule is that a **File**
+entry must not carry one either: an ingested document is a mirror of a file on disk,
+re-derivable by re-ingesting, so a TTL on it would expire content the watcher would put back.
 
-### Two names that still do not sit in the shape
+`set_memory_ttl` therefore has to refuse a File entry by type, not merely by hash — the tool
+knows the entry's type from the same discriminator `query` and `get_entry` use. On the live bank
+no row of any type carries a TTL today (0 manual, 0 file, 0 transcript), so the rule is
+forward-looking and there is no legacy data to migrate; the sweep keeps honouring whatever
+`ttl_days` a row carries.
 
-- `move` is a bare verb where every other name is verb + object. `move_memory` would say what
-  moves; `move` says only that something does. Taken literally as the owner wrote it.
-- `get_engine_statistics` reports the bank's entry counts, the deferred-embedding count and the
-  contexts in use — it is not the embedding engine's statistics (those live in
-  `get_tools_latency`, the per-tool latency series). The name reads as the engine's; the
-  behaviour is the bank's.
+### A transcript: a file by structure, memory by origin
+
+Measured on the live bank, the 1,496 `transcript` rows are all chunked
+(`total_chunks > 0`), all carry `source_file = hermes/<timestamp>_<id>` (a session locator, no
+path, no extension), and all belong to the project `hermes-default`. Their content is the
+agent's own account of a session. The write path classifies them by the `hermes/` prefix
+(`SqliteMemoryStore.ClassifySource`), which is why they are `SourceType.Transcript` rather than
+`File`.
+
+So: structurally a transcript is a file's chunks and lands in the File population under the
+denormalised signature; semantically it is agent-authored memory whose locator happens to be a
+session. **Recommended: transcript → Memory**, and that forces the discriminator to be
+`memory_source.source_type` (`manual` | `transcript` → Memory, `file` → File) rather than the
+denormalised `source_file IS NULL AND total_chunks = 0` signature, which puts transcripts on the
+wrong side.
 
 ## The entry type
 
