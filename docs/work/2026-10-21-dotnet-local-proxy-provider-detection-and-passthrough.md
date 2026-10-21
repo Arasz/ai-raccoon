@@ -19,7 +19,7 @@ POST /mcp (ai-raccoon), 404 routing_unknown, 200 forwarded
 
 ```chart:range
 title: p50 request latency through each proxy (50 requests per run, 3 runs, milliseconds)
-direct to upstream: 0.22..0.25..0.25
+direct to upstream: 0.22..0.24..0.25
 rtk-proxy: 0.36..0.39..0.39
 this spike: 0.49..0.51..0.59
 ```
@@ -145,15 +145,15 @@ second run, so the first-byte figure has a cold-start tail that a single sample 
 
 Against a local fake upstream, 50 requests per run, three runs each, after a warm-up round:
 
-| Path | p50 range over 3 runs |
+| Path | p50 over 3 runs |
 |---|---|
-| direct to upstream | 0.22-0.25 ms |
-| through rtk-proxy 1.0.1 | 0.36-0.39 ms |
-| through the .NET spike | 0.49-0.59 ms |
+| direct to upstream | 0.22 / 0.24 / 0.25 ms |
+| through rtk-proxy 1.0.1 | 0.36 / 0.39 / 0.39 ms |
+| through the .NET spike | 0.49 / 0.51 / 0.59 ms |
 
-The .NET hop therefore adds roughly 0.1-0.3 ms over the Rust one on this machine. Both are small next
-to a provider round-trip, but the spike's figure is the one that matters for a .NET tool, and it is
-about 0.3 ms above a direct call.
+The Rust hop therefore adds about 0.15 ms over a direct call, and the .NET hop about 0.27 ms, so the
+.NET proxy costs roughly 0.12-0.20 ms more than the Rust one on this machine. Both are small next to
+a provider round-trip, but the .NET figure is the one that would matter for a .NET tool.
 
 **Evidence:** macOS 27.0.1 arm64, .NET SDK 10.0.402, Python 3.15.0. Fake upstream
 `http://127.0.0.1:7802` (Python `http.server`), rtk-proxy on 7810, spike on 7813, all warm. Script
