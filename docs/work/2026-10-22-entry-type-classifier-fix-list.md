@@ -711,7 +711,19 @@ rewritten. Everything here is open unless it says otherwise.
   and the scope it describes is the list above, in full.
 - **G2.** The framework side that speaks the new names (ai-badger #650, the feed-badger change)
   must land before the release ships.
-- **G3. The release work is untracked in the task graph.** The live plan
+- **G3. The release work is tracked — in the BRANCH's plan, not the rename plan.** *Corrected
+  2026-10-22 (review of `af142cb8`):* the note below was aimed at the wrong plan. This branch's
+  tracker is **`air-type-partition-search-ttl-measurement`** (revision 8,
+  `.ai-badger/task-tracking/plans/2026-10-22-air-type-partition-search-ttl-measurement.md`), and it
+  is accurate and current: `native-layout` complete (2/2), `type-contract` complete (2/2),
+  `typed-storage` 2/3 (the migration and the maintenance criteria passed; the quality-history
+  criterion open), `typed-search` 0/3, `memory-ttl` 0/3, `query-entry-api` 0/3, and
+  `measurement-release` 0/4 — the release is that last step ✓. Six of twenty criteria passed, and
+  every open one is a real piece of 2.1.0 work. The plan I had been reading —
+  `air-rename-mcp-tools-entry-types` (revision 39) — is the *rename* task, and its `release-docs`
+  step is the 2.0.0 one, which belongs to the release that already shipped.
+  The one thing neither plan carries as a step is the value domain, and that is right: it is the
+  owner's ruling, not a step. The original note, kept for the record:
   (`air-rename-mcp-tools-entry-types`, revision 39) has no 2.1.0 release step: its
   `release-docs` step is the 2.0.0 one, and it is in progress for a release that already
   shipped. The plan cannot be replaced while steps are in progress, so whoever owns the plan
@@ -981,3 +993,87 @@ that notices.
 - **The query path's third caller still has no home.** "An unknown kind is in no set" is right and
   is consistent with the no-filter default ✓ — but it is currently only in this review. When the
   typed query lands, it belongs in the contract next to the default's meaning, not in the SQL.
+
+## Review of `af142cb8` + `3e87cebe`: the maintenance criterion, and the reading on the repair path
+
+Verified on a clean checkout of `af142cb8`: `dotnet build` — 8 projects, 0 warnings, 0 errors; the fast
+lane — **5201 passed, 0 failed, 2 skipped**; the slow lane — **1611 passed, 0 failed, 14 skipped**.
+
+### The reading: yours is the right one, and my sentence was sloppy
+
+I meant *"the kind is not resolved from the shape"* — the evidence survives. What I wrote was *"the
+row is skipped"*, which conflates the kind with the row, and on a second reading it is wrong. Your
+reading — **skip the kind, repair the row** — is the correct behaviour today, for the reason you
+give: the repair exists to fix the row's *content* (chunk boundaries, backfill), and the kind is an
+attribute the rewrite carries, not the thing it repairs. Leaving the row unrepaired leaves broken
+content broken, which is its own hole — you saw that before I did, and you are right.
+
+So: **keep what you built.** No change to the two repair paths, and no "rows skipped" count is
+needed — the doctor is where the unknown population is counted (that is what B4 was about), and the
+repair does not need a second count of the same population. One line is worth adding to the
+classifier's doc, though: say that the *row* is still repaired and the *kind* is carried through
+untouched, so a reader does not read "carried through" as "the row was left alone".
+
+### What a future CHECK does to your reading — and the owner's question gets sharper again
+
+Under `CHECK (entry_type IN ('none','memory','file'))`, your reading cannot work as written: the
+unknown value cannot be stored, so the repair's write fails the constraint. The answer at that
+point is neither "skip the kind" nor "skip the row" — it is the **merge's** rule: an unknown kind
+lands as `'none'` (unclassified), because the row still gets repaired and the domain still holds.
+
+And the same holds for the rebuild itself, which is the part worth putting in front of the owner:
+**the rebuild copies every row into a column with a domain CHECK, so a row carrying an unknown kind
+would make the copy fail.** The rebuild must therefore land those rows as `'none'` and report the
+count — otherwise the CHECK is enforced and the evidence is destroyed silently.
+
+So the owner's question now carries five properties, not three: `NOT NULL`, `DEFAULT 'none'`, the
+domain `CHECK`, the copy's handling of unknown rows (landed as `'none'`, counted, reported), and the
+repair path's rule under the CHECK (unknown → `'none'`, i.e. the merge's rule).
+
+And the framing that makes the whole thing coherent, which is worth a line in the plan's scope
+list: **the CHECK and the tri-state read are alternatives, not complements.** The tri-state read
+makes the unknown state *visible* while the domain is unenforced; the CHECK makes the state
+*impossible*. After a rebuild the doctor's "unknown kind" count reads zero by construction and the
+"unclassified" count absorbs that population — so the unknown count is a *diagnostic while the
+domain is open*, not a permanent feature. Reading it as permanent is what would push somebody to
+keep both.
+
+### The chunk: the three properties are the right ones, and the first test is honest
+
+A typed layout loses its shape in three ways, and `af142cb8` closes all three: a re-embed must
+re-place the vector under the row's **current** kind, the code corpus must keep its own layout, and
+the reconciler must recreate the memory tables typed.
+
+The first test is the one I would have probed, and it is a real test rather than a restatement:
+it seeds a File row, embeds it, changes the kind with the same `UPDATE entries SET entry_type = …`
+a repair path makes, re-embeds, and asserts the vector **moved**. That is ADR-0141's rule — "context
+and type changes must delete and reinsert vectors, since native partition keys cannot be updated" —
+and it is exactly the property the repair paths depend on, since a repair that changes a row's
+provenance changes its kind and its vector has to follow. The other two cover the two remaining ways
+the typed shape can be lost: the code corpus (a code chunk is not a row of `entries` and carries no
+row kind, so `vec_code` has no kind partition) and the dimension reconciler (which drops and
+recreates the tables, and must recreate them typed).
+
+### A correction to my own status report
+
+My earlier "the tracker is behind the work" was aimed at the wrong plan. This branch's tracker is
+**`air-type-partition-search-ttl-measurement`** (revision 8,
+`.ai-badger/task-tracking/plans/2026-10-22-air-type-partition-search-ttl-measurement.md`), not the
+rename task I had been reading. It is accurate and current:
+
+| step | state |
+| --- | --- |
+| `native-layout` | complete, 2/2 |
+| `type-contract` | complete, 2/2 |
+| `typed-storage` | 2/3 — the migration and the maintenance criteria passed; the quality-history criterion open |
+| `typed-search` | 0/3 |
+| `memory-ttl` | 0/3 |
+| `query-entry-api` | 0/3 |
+| `measurement-release` | 0/4 |
+
+Six of twenty criteria passed, and every open one is a real piece of 2.1.0 work. So the G3 note I
+wrote in the record — "the 2.1.0 release work has no step in the task graph" — was also aimed at the
+wrong plan: the release is this plan's `measurement-release` step ✓, and the rename plan's
+`release-docs` is the 2.0.0 one that belongs to the release that already shipped. I will correct
+both in the record. The one thing neither plan carries as a step is the value domain, and that is
+correct: it is the owner's ruling, not a step.
