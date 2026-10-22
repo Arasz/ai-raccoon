@@ -70,7 +70,7 @@ internal static class MemorySchema
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 21;
+    internal const int CurrentVersion = 22;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -141,6 +141,11 @@ internal static class MemorySchema
             project_id        TEXT,
             session_id        TEXT,
             kind              TEXT CHECK(kind IN ('memory','code','both')),
+            -- The entry types a query asked for, as a bitmask of the query parameter's flag set
+            -- (Memory | Code | File). Beside the old corpus kind, not instead of it: the old
+            -- vocabulary is still what the runtime records, and the old rows' meaning is carried
+            -- here by the ladder's backfill.
+            kind_mask         INTEGER,
             result_count      INTEGER,
             top_source_files  TEXT,       -- JSON array of SourceFile paths
             -- Stage-1 per-result features (P6b): compact JSON array, one
@@ -917,6 +922,11 @@ internal static class MemorySchema
             await MigrateToV21Async(connection, cancellationToken);
         }
 
+        if (healthy && storedVersion < 22)
+        {
+            await MigrateToV22Async(connection, cancellationToken);
+        }
+
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
         // digest on a degraded (unhealthy) run would let EnsureCheapAsync trust a bank whose ladder
         // never completed, the same bug this reordering exists to close (Data F1 / D5).
@@ -1454,6 +1464,51 @@ internal static class MemorySchema
     ///     it unset until the read fills it; only a read spec reaches the rebuild.
     /// </summary>
     private sealed record VecRebuild(string Table, string Source, string Ctx, string Column, string Where, int Dimension = 0);
+
+    /// <summary>Preserves historical corpus selections as entry-type masks beside the original value.</summary>
+    private static async Task MigrateToV22Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
+                cancellationToken: cancellationToken)) > 0;
+        if (!hasTable)
+        {
+            return;
+        }
+
+        var columns = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('search_quality')", cancellationToken: cancellationToken)))
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (!columns.Contains("kind_mask", StringComparer.Ordinal))
+        {
+            try
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                        "ALTER TABLE search_quality ADD COLUMN kind_mask INTEGER NULL",
+                        cancellationToken: cancellationToken));
+            }
+            catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+            {
+                // Another connection added it between the probe and the ALTER.
+            }
+        }
+
+        // The historical meaning, carried over: the old 'memory' meant Memory AND File, the old
+        // 'both' meant everything. A row with no kind (older than the kind column) says nothing
+        // about which kinds it asked for, so its mask stays NULL.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE search_quality
+            SET kind_mask = CASE kind
+                WHEN 'memory' THEN 5
+                WHEN 'code' THEN 2
+                WHEN 'both' THEN 7
+                ELSE NULL
+            END
+            WHERE kind_mask IS NULL AND kind IS NOT NULL
+            """, cancellationToken: cancellationToken));
+    }
 
     /// <summary>
     ///     v20→v21 (ADR-0141): the memory vector tables gain the row's declared kind as a SECOND

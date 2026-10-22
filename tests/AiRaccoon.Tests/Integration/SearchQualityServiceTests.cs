@@ -545,15 +545,16 @@ public sealed class SearchQualityServiceTests : IDisposable
         var columns = (await connection.QueryAsync<string>("SELECT name FROM pragma_table_info('search_quality')")).ToList();
         columns.ShouldBe(
             [
-                "id", "correlation_id", "query", "scope", "project_id", "session_id", "kind",
+                "id", "correlation_id", "query", "scope", "project_id", "session_id", "kind", "kind_mask",
                 "result_count", "top_source_files", "result_features", "follow_through_count", "follow_through_files",
                 "usefulness_grade", "grade_note", "created_at"
             ],
             "P4 is codec-only — follow_through_files carries ranks as JSON, no column may be added " +
             "by rank work. result_features is the separate Stage-1 evidence column (M1 tolerant-ensure); " +
-            "this test still pins that rank work adds nothing further.");
+            "kind_mask is the entry-types work's column (the flag set a query asked for, beside the old " +
+            "corpus kind). This test still pins that rank work adds nothing further.");
         (await connection.ExecuteScalarAsync<long>("PRAGMA user_version")).ShouldBe(MemorySchema.CurrentVersion,
-            "P4 owns no ladder rung — v13 is current (ADR-0099)");
+            "P4 owns no ladder rung — the rank work adds no version of its own (ADR-0099)");
     }
 
     private async Task<string?> ReadFollowThroughFilesAsync(string correlationId)

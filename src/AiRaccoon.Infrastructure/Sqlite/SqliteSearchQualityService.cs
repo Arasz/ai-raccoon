@@ -71,9 +71,9 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
 
         await connection.ExecuteAsync(
             """
-            INSERT INTO search_quality (correlation_id, query, scope, project_id, session_id, kind,
+            INSERT INTO search_quality (correlation_id, query, scope, project_id, session_id, kind, kind_mask,
                 result_count, top_source_files, result_features, created_at)
-            VALUES (@CorrelationId, @Query, @Scope, @ProjectId, @SessionId, @Kind,
+            VALUES (@CorrelationId, @Query, @Scope, @ProjectId, @SessionId, @Kind, @KindMask,
                 @ResultCount, @TopSourceFiles, @ResultFeatures, @CreatedAt)
             """,
             new
@@ -84,6 +84,10 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
                 ProjectId = projectId,
                 SessionId = sessionId,
                 Kind = kind,
+                // The entry types the kind stands for, as the query parameter's flag set. The old
+                // corpus kind is still recorded beside it: the two are not the same vocabulary, and
+                // the old 'memory' means Memory AND File.
+                KindMask = (int?)SearchQualityKinds.MaskOf(kind),
                 ResultCount = resultCount,
                 TopSourceFiles = topFilesJson,
                 ResultFeatures = resultFeaturesJson,
