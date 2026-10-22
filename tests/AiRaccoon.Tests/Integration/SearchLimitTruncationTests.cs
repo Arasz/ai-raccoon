@@ -61,7 +61,7 @@ public sealed class SearchLimitTruncationTests : IDisposable
         await SeedAsync(ct);
         var tools = BuildTools(_store);
 
-        var envelope = await tools.Search(ProjectId, "widgets", kind: "memory", limit: 100,
+        var envelope = await tools.Search(ProjectId, "widgets", entryType: "memory,file", limit: 100,
             sessionId: "sess-test", cancellationToken: ct);
 
         envelope.Data!.Results.Count.ShouldBe(FloorSurvivors,
@@ -83,7 +83,7 @@ public sealed class SearchLimitTruncationTests : IDisposable
         await SeedAsync(ct);
         var tools = BuildTools(_store);
 
-        var envelope = await tools.Search(ProjectId, "widgets", kind: "memory", limit: 100,
+        var envelope = await tools.Search(ProjectId, "widgets", entryType: "memory,file", limit: 100,
             minRelativeScore: 0.0, sessionId: "sess-test", cancellationToken: ct);
 
         envelope.Data!.Results.Count.ShouldBe(SeedCount, "no score floor is active at minRelativeScore 0");
@@ -101,7 +101,7 @@ public sealed class SearchLimitTruncationTests : IDisposable
         await SeedAsync(ct);
         var tools = BuildTools(_store);
 
-        var envelope = await tools.Search(ProjectId, "widgets", kind: "memory",
+        var envelope = await tools.Search(ProjectId, "widgets", entryType: "memory,file",
             sessionId: "sess-test", cancellationToken: ct);
 
         envelope.Data!.Results.Count.ShouldBe(8, "the default limit is filled");

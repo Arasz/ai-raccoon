@@ -15,6 +15,10 @@ public interface IMemoryStore : IModelMigrationStore
     /// </summary>
     Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default);
 
+    /// <summary>Reads the selected declared row kind before choosing one matching hash.</summary>
+    Task<MemoryEntry?> GetAsync(string projectId, string hash, EntryKind entryKind,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     ///     Deletes the whole write behind <paramref name="hash" /> and returns the number of rows
     ///     removed (N7): every chunk of a multi-chunk write shares its path, so the write is gone

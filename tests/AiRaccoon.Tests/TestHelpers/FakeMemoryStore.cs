@@ -44,6 +44,14 @@ public class FakeMemoryStore : IMemoryStore, ISettingsStore
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(GetAsync));
 
+    public virtual async Task<MemoryEntry?> GetAsync(string projectId, string hash, EntryKind entryKind,
+        CancellationToken cancellationToken = default)
+    {
+        var entry = await GetAsync(projectId, hash, cancellationToken);
+        var requested = new EntryKindClassifier().ToStoredValue(entryKind);
+        return entry?.EntryKind == requested ? entry : null;
+    }
+
     public virtual Task<int> DeleteContextAsync(string projectId, string context,
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(DeleteContextAsync));

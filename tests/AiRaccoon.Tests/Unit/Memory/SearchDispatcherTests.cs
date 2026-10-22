@@ -25,7 +25,7 @@ public sealed class SearchDispatcherTests
         var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), codeSearch, new NoOpSearchQualityService(), TestData.SharedScope);
         var searchQuery = new SearchQuery("acme", "widget", Limit: 20, MinRelativeScore: 0.0);
 
-        await dispatcher.DispatchAsync(searchQuery, SearchKind.Code, "code", "corr-1", sessionId: "sess-test",
+        await dispatcher.DispatchAsync(searchQuery, EntryType.Code, "code", "corr-1", sessionId: "sess-test",
             codeLimit: 5, codeMinRelativeScore: 0.4, cancellationToken: TestContext.Current.CancellationToken);
 
         codeSearch.LastQuery.ShouldNotBeNull();
@@ -47,7 +47,7 @@ public sealed class SearchDispatcherTests
         var searchQuery = new SearchQuery("acme", "widget", RrfK: 30, FtsWeight: 2, VectorWeight: 5,
             CandidateWindow: CandidateWindowMode.Max5X50);
 
-        await dispatcher.DispatchAsync(searchQuery, SearchKind.Code, "code", "corr-1", sessionId: "sess-test",
+        await dispatcher.DispatchAsync(searchQuery, EntryType.Code, "code", "corr-1", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var source = (ISearchParametersSource)codeSearch.LastQuery!;
@@ -64,7 +64,7 @@ public sealed class SearchDispatcherTests
         var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), codeSearch, new NoOpSearchQualityService(), TestData.SharedScope);
         var searchQuery = new SearchQuery("acme", "widget", Limit: 20, MinRelativeScore: 0.3);
 
-        await dispatcher.DispatchAsync(searchQuery, SearchKind.Code, "code", "corr-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+        await dispatcher.DispatchAsync(searchQuery, EntryType.Code, "code", "corr-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         codeSearch.LastQuery!.Limit.ShouldBe(20);
         codeSearch.LastQuery.MinRelativeScore.ShouldBe(0.3);
@@ -76,7 +76,7 @@ public sealed class SearchDispatcherTests
         var codeSearch = new SpyCodeSearchService { ResultToReturn = new CodeSearchResults([], "a real, service-computed warning") };
         var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), codeSearch, new NoOpSearchQualityService(), TestData.SharedScope);
 
-        var result = await dispatcher.DispatchAsync(new SearchQuery("acme", "widget"), SearchKind.Code, "code", "corr-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await dispatcher.DispatchAsync(new SearchQuery("acme", "widget"), EntryType.Code, "code", "corr-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         result.CodeWarning.ShouldBe("a real, service-computed warning");
     }
@@ -88,7 +88,7 @@ public sealed class SearchDispatcherTests
         var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), codeSearch, new NoOpSearchQualityService(), TestData.SharedScope);
 
         await Should.ThrowAsync<CodeEngineUnloadableException>(() =>
-            dispatcher.DispatchAsync(new SearchQuery("acme", "widget"), SearchKind.Code, "code", "corr-1", sessionId: "sess-test",
+            dispatcher.DispatchAsync(new SearchQuery("acme", "widget"), EntryType.Code, "code", "corr-1", sessionId: "sess-test",
                 cancellationToken: TestContext.Current.CancellationToken));
     }
 
@@ -98,7 +98,7 @@ public sealed class SearchDispatcherTests
         var codeSearch = new SpyCodeSearchService { ThrowOnSearch = new CodeEngineUnloadableException("/models/broken", new InvalidOperationException("bad manifest")) };
         var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), codeSearch, new NoOpSearchQualityService(), TestData.SharedScope);
 
-        var result = await dispatcher.DispatchAsync(new SearchQuery("acme", "widget"), SearchKind.Memory, "memory", "corr-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+        var result = await dispatcher.DispatchAsync(new SearchQuery("acme", "widget"), EntryType.Memory | EntryType.File, "memory", "corr-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         result.Results.ShouldBeEmpty();
         codeSearch.WasCalled.ShouldBeFalse("kind=memory must never touch the code engine at all — the two are independent settings rows");
@@ -115,7 +115,7 @@ public sealed class SearchDispatcherTests
         var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), new SpyCodeSearchService(), quality, TestData.SharedScope);
         var searchQuery = new SearchQuery("acme", "widget");
 
-        await dispatcher.DispatchAsync(searchQuery: searchQuery, kind: SearchKind.Memory, rawScope: "memory",
+        await dispatcher.DispatchAsync(searchQuery: searchQuery, entryTypes: EntryType.Memory | EntryType.File, rawScope: "memory",
             correlationId: "corr-1", sessionId: "sess-abc-123",
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -129,15 +129,15 @@ public sealed class SearchDispatcherTests
     ///     the request, not the leg). Mutation: forward the leg instead → the Both case fails.
     /// </summary>
     [Theory]
-    [InlineData(SearchKind.Memory, "memory")]
-    [InlineData(SearchKind.Code, "code")]
-    [InlineData(SearchKind.Both, "both")]
-    public async Task DispatchAsync_ForwardsKind_ToQualityServiceLowercased(SearchKind kind, string expected)
+    [InlineData(EntryType.Memory | EntryType.File, "memory")]
+    [InlineData(EntryType.Code, "code")]
+    [InlineData(EntryTypeParameter.Default, "both")]
+    public async Task DispatchAsync_ForwardsKind_ToQualityServiceLowercased(EntryType kind, string expected)
     {
         var quality = new SpyQualityService();
         var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), new SpyCodeSearchService(), quality, TestData.SharedScope);
 
-        await dispatcher.DispatchAsync(searchQuery: new SearchQuery("acme", "widget"), kind: kind,
+        await dispatcher.DispatchAsync(searchQuery: new SearchQuery("acme", "widget"), entryTypes: kind,
             rawScope: "all", correlationId: "corr-1", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -158,7 +158,7 @@ public sealed class SearchDispatcherTests
         var dispatcher = new SearchDispatcher(new EmptyMemoryStore(), codeSearch,
             new NoOpSearchQualityService(), TestData.SharedScope);
 
-        await dispatcher.DispatchAsync(new SearchQuery(projectId, "widget", Scope: scope), SearchKind.Both,
+        await dispatcher.DispatchAsync(new SearchQuery(projectId, "widget", Scope: scope), EntryTypeParameter.Default,
             "all", "correlation", "session", cancellationToken: TestContext.Current.CancellationToken);
 
         codeSearch.WasCalled.ShouldBe(callsCode);
@@ -172,7 +172,7 @@ public sealed class SearchDispatcherTests
             new NoOpSearchQualityService(), TestData.SharedScope);
 
         await Should.ThrowAsync<ArgumentException>(() => dispatcher.DispatchAsync(
-            new SearchQuery("shared", "widget", Scope: SearchScope.Project), SearchKind.Both,
+            new SearchQuery("shared", "widget", Scope: SearchScope.Project), EntryTypeParameter.Default,
             "project", "correlation", "session", cancellationToken: TestContext.Current.CancellationToken));
 
         codeSearch.WasCalled.ShouldBeFalse();

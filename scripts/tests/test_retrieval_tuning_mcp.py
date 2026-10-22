@@ -260,9 +260,9 @@ class TestMemorySearchKind:
         try:
             client = make_client(stub)
             client.initialize()
-            results = client.query(project_id="ai-raccoon", query="widget", kind="code")
+            results = client.query(project_id="ai-raccoon", query="widget", entry_type="code")
             args = stub.requests[2]["body"]["params"]["arguments"]
-            assert args["kind"] == "code"
+            assert args["entryType"] == "code"
             assert results == [{"hash": "def456", "sourceFile": "src/Widget.cs", "lineStart": 10, "lineEnd": 24}]
         finally:
             stub.close()
@@ -285,7 +285,7 @@ class TestMemorySearchKind:
         try:
             client = make_client(stub)
             client.initialize()
-            results = client.query(project_id="ai-raccoon", query="widget", kind="both")
+            results = client.query(project_id="ai-raccoon", query="widget", entry_type="memory,code,file")
             assert results == [{"hash": "mem1"}]
         finally:
             stub.close()
@@ -314,6 +314,27 @@ class TestToolsList:
             client.initialize()
             tools = client.tools_list()
             assert [t["name"] for t in tools] == ["query", "get_store_statistics"]
+        finally:
+            stub.close()
+
+
+class TestTypedKnobQuery:
+    def test_typed_query_with_knobs_sends_type_and_attribution(self):
+        stub = StubMcpServer([
+            [200, "application/json", sse_frame(rpc_result(1, {}))],
+            [200, "application/json", sse_frame(rpc_result(2, {}))],
+            [200, "application/json", sse_frame(tools_call_result(3, json.dumps({"results": [], "code": [{"hash": "typed-code"}]})))],
+        ])
+        try:
+            client = make_client(stub)
+            client.initialize()
+            results = client.query_with_knobs("project", "widget", entry_type="code", rrf_k=20)
+            args = stub.requests[2]["body"]["params"]["arguments"]
+            assert args["entryType"] == "code"
+            assert args["sessionId"]
+            assert args["rrfK"] == 20
+            assert "kind" not in args
+            assert results == [{"hash": "typed-code"}]
         finally:
             stub.close()
 

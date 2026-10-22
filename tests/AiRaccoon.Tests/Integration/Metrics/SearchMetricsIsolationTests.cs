@@ -125,7 +125,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
 
-        var envelope = await _tools.Search("acme", "chassis", sessionId: "sess-test", kind: "memory",
+        var envelope = await _tools.Search("acme", "chassis", sessionId: "sess-test", entryType: "memory,file",
             cancellationToken: TestContext.Current.CancellationToken);
         var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
 
@@ -158,8 +158,8 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     {
         await _tools.Write("acme", "the chassis pattern decision", cancellationToken: TestContext.Current.CancellationToken);
 
-        var first = await _tools.Search("acme", "chassis", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
-        var second = await _tools.Search("acme", "chassis", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        var first = await _tools.Search("acme", "chassis", sessionId: "sess-test", entryType: "memory,file", cancellationToken: TestContext.Current.CancellationToken);
+        var second = await _tools.Search("acme", "chassis", sessionId: "sess-test", entryType: "memory,file", cancellationToken: TestContext.Current.CancellationToken);
         var firstCorrelationId = first.Meta.CorrelationId.ShouldNotBeNull();
         var secondCorrelationId = second.Meta.CorrelationId.ShouldNotBeNull();
         firstCorrelationId.ShouldNotBe(secondCorrelationId, "two genuinely separate runs, not one call counted twice");

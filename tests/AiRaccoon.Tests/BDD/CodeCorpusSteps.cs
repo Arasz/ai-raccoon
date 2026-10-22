@@ -88,6 +88,13 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
             new { path = IngestPath.Normalize(path) }));
     }
 
+    private static string EntryTypesForLegacyKind(string kind) => kind.ToLowerInvariant() switch
+    {
+        "memory" => "memory,file",
+        "both" => "memory,code,file",
+        _ => kind
+    };
+
     private async Task RunSearchAsync(string projectId, string query, string? kind = null, string? scope = null,
         string sessionId = "bdd-session")
     {
@@ -96,7 +103,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         {
             _lastSearchEnvelope = kind is null
                 ? await Ctx.MemoryTools.Search(projectId, query, sessionId: sessionId)
-                : await Ctx.MemoryTools.Search(projectId, query, sessionId: sessionId, scope: scope ?? "all", kind: kind);
+                : await Ctx.MemoryTools.Search(projectId, query, sessionId: sessionId, scope: scope ?? "all", entryType: EntryTypesForLegacyKind(kind));
             _lastSearchJson = JsonSerializer.SerializeToNode(_lastSearchEnvelope, McpJsonUtilities.DefaultOptions)!
                 .AsObject()["data"]!.AsObject();
         }
@@ -111,7 +118,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         _lastError = null;
         try
         {
-            _lastCodeGetEnvelope = await Ctx.EntryTools.GetEntry(projectId, hash);
+            _lastCodeGetEnvelope = await Ctx.EntryTools.GetEntry(projectId, hash, "code");
         }
         catch (Exception ex)
         {
@@ -622,7 +629,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     [Then("^query with kind \"([^\"]*)\" for the same project still succeeds$")]
     public async Task ThenSearchWithKindStillSucceeds(string kind)
     {
-        var envelope = await Ctx.MemoryTools.Search(DefaultProject, _searchQuery, sessionId: "sess-test", kind: kind);
+        var envelope = await Ctx.MemoryTools.Search(DefaultProject, _searchQuery, sessionId: "sess-test", entryType: EntryTypesForLegacyKind(kind));
         envelope.Data.ShouldNotBeNull();
     }
 

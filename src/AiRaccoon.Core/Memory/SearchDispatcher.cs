@@ -12,14 +12,21 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
 {
     private readonly ISharedProjectScope _scope = scope;
 
-    public async Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, SearchKind kind, string rawScope,
+    public async Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, EntryType entryTypes, string rawScope,
         string correlationId, string sessionId, int? codeLimit = null, double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
+        EntryTypeParameter.RefuseUnknownBits(entryTypes);
+        if (entryTypes == EntryType.None)
+        {
+            throw new ArgumentException("The entry type selection cannot be empty.", nameof(entryTypes));
+        }
+
+        searchQuery = searchQuery with { EntryTypes = entryTypes };
         _scope.EnsureCanExecuteInSharedScope(searchQuery);
         SearchResults? memorySearchResults = null;
         IReadOnlyList<MemorySearchResult> results = [];
-        if (kind != SearchKind.Code)
+        if ((entryTypes & (EntryType.Memory | EntryType.File)) != 0)
         {
             memorySearchResults = await store.SearchAsync(searchQuery, cancellationToken);
             results = memorySearchResults.Results;
@@ -27,7 +34,7 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
 
         IReadOnlyList<CodeSearchResult>? codeResults = null;
         string? codeWarning = null;
-        if (kind != SearchKind.Memory)
+        if (entryTypes.HasFlag(EntryType.Code))
         {
             // Code is project-scoped only (§3.1): a shared-only request has no code rows.
             if (searchQuery.Scope is SearchScope.Shared)
@@ -56,9 +63,11 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         // interpretable without storing code paths. The shared query text is stored as-is: a
         // memory query can already carry identifiers, so a code-adjacent query is the same leak
         // class memory rows already accept, not a new one.
-        var (qualityCount, qualityFiles) = kind == SearchKind.Code
-            ? (codeResults?.Count ?? 0, (IReadOnlyList<string>)[])
-            : (results.Count, [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)]);
+        var quality = entryTypes == EntryType.Code
+            ? new QualitySelection(codeResults?.Count ?? 0, [])
+            : new QualitySelection(results.Count, [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)]);
+        var legacyKind = entryTypes == EntryType.Code ? SearchKindWireNames.Code
+            : entryTypes.HasFlag(EntryType.Code) ? SearchKindWireNames.Both : SearchKindWireNames.Memory;
         // P6a threading: join the served rows to the P4 sidecar by hash, in served order.
         // Null sidecar stays null (absent-evidence writes exactly as before); a present sidecar
         // yields the served subset only, so the payload is bounded by the served rows.
@@ -79,10 +88,11 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
         }
 
         await qualityService.RecordSearchSafeAsync(correlationId: correlationId, query: searchQuery.Query,
-            scope: rawScope, projectId: searchQuery.ProjectId, kind: kind.ToWireString(),
-            sessionId: sessionId, resultCount: qualityCount, topSourceFiles: qualityFiles,
-            ct: cancellationToken, evidence: evidence);
+            scope: rawScope, projectId: searchQuery.ProjectId, kind: legacyKind,
+            sessionId: sessionId, resultCount: quality.Count, topSourceFiles: quality.Files,
+            ct: cancellationToken, evidence: evidence, entryTypes: entryTypes);
 
         return new SearchDispatchResult(results, memorySearchResults, codeResults, codeWarning);
     }
+    private sealed record QualitySelection(int Count, IReadOnlyList<string> Files);
 }

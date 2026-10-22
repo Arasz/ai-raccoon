@@ -243,7 +243,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         var dispatcher = new SearchDispatcher(store, new StubCodeSearch(), _sut, TestData.SharedScope);
 
         var result = await dispatcher.DispatchAsync(new SearchQuery("proj-a", "query"),
-            SearchKind.Memory, "all", "corr-failopen", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+            EntryType.Memory | EntryType.File, "all", "corr-failopen", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         result.Results.Count.ShouldBe(2, "G6 fail-open: a telemetry write failure still returns full results");
         result.Results.Select(r => r.Hash).ShouldBe(["hash-a", "hash-b"], "ordering untouched by the failed write");
@@ -257,7 +257,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
             new StubCodeSearch([new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)]), _sut, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(new SearchQuery("proj-a", "query"),
-            SearchKind.Code, "all", "corr-code-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+            EntryType.Code, "all", "corr-code-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         (await ReadResultFeaturesAsync("corr-code-1")).ShouldBeNull(
             "S8: kind=code has no memory sidecar — features null, row still written");
@@ -280,7 +280,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
             new StubCodeSearch(), _sut, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(new SearchQuery("proj-a", "query"),
-            SearchKind.Memory, "all", "corr-bounded-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
+            EntryType.Memory | EntryType.File, "all", "corr-bounded-1", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         var json = await ReadResultFeaturesAsync("corr-bounded-1");
         json.ShouldNotBeNull();

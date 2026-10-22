@@ -205,6 +205,19 @@ public sealed partial class SqliteMemoryStore(
         return row is null ? null : ToEntry(row);
     }
 
+    public async Task<MemoryEntry?> GetAsync(string projectId, string hash, EntryKind entryKind,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+        var storedKind = entryTypeClassifier.ToStoredValue(entryKind);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
+        await connection.RequireSharedAvailableAsync(projectId, _scope, cancellationToken);
+        var row = await connection.QueryFirstOrDefaultAsync<EntryRow>(
+            Def(MemorySql.SelectTypedEntryByHashForRead, new { hash, projectId, entryKind = storedKind }, cancellationToken));
+        return row is null ? null : ToEntry(row);
+    }
+
     public async Task<MemoryEntryResult> ShareAsync(string projectId, string hash,
         CancellationToken cancellationToken = default)
     {
@@ -830,7 +843,7 @@ public sealed partial class SqliteMemoryStore(
         }
     }
 
-    private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
+    private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt, EntryKind: row.EntryKind);
 
     private static string ContextStringOf(EntryRow row) => ContextStringOf(row.Scope, row.ContextLabel, row.WorkspaceId, row.ProjectId);
 

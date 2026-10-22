@@ -80,13 +80,13 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
 
         var ftsOnly = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
             rrfK: RrfK, ftsWeight: UnitWeight, vectorWeight: 0, sourceLambda: 0.0,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         var vectorOnly = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
             rrfK: RrfK, ftsWeight: 0, vectorWeight: UnitWeight, sourceLambda: 0.0,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         var both = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
             rrfK: RrfK, ftsWeight: UnitWeight, vectorWeight: UnitWeight, sourceLambda: 0.0,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
 
         var ftsHashes = ftsOnly.Data!.Results.Select(r => r.Hash).ToList();
         var vectorHashes = vectorOnly.Data!.Results.Select(r => r.Hash).ToList();
@@ -180,7 +180,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
 
         var envelope = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
-            sourceLambda: 0.0, kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            sourceLambda: 0.0, entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         var correlationId = envelope.Meta.CorrelationId.ShouldNotBeNull();
         var served = envelope.Data!.Results.Select(r => r.Hash).ToList();
         served.ShouldNotBeEmpty("the join proof needs served rows to carry features for");
@@ -244,9 +244,9 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         var tools = BuildTools(bank.Store);
 
         var wide = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         var wideAgain = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         var wideKeys = ServedKeys(wide);
         ServedKeys(wideAgain).ShouldBe(wideKeys, "the same query against the same bank serves the same sequence");
 
@@ -255,7 +255,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         wideKeys.ShouldContain(entries[0].Hash, "the project-scoped copy wins its content group");
 
         var floored = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.6,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         var wideByHash = wide.Data!.Results.ToDictionary(r => r.Hash, r => r.Ranking, StringComparer.Ordinal);
         ServedKeys(floored).ShouldBe(wideKeys.Where(h => wideByHash[h] >= 0.6).ToList(),
             "the relative floor filters the same normalized population — evidence changes no floor semantics");
@@ -270,11 +270,11 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         }
 
         var limited = await tools.Search("acme", "harbor", scope: "all", limit: 2, minRelativeScore: 0.0,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         ServedKeys(limited).ShouldBe(wideKeys.Take(2).ToList(), "limit truncates the same order — evidence moves no row");
 
         var both = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
-            kind: "both", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,code,file", cancellationToken: ct, sessionId: "sess-test");
         ServedKeys(both).ShouldBe(wideKeys, "the code leg never perturbs memory ordering");
         ServedRankings(both).ShouldBe(ServedRankings(wide), "memory rankings identical across kinds");
         var bothEvidence = both.Data!.EvidenceByHash.ShouldNotBeNull();
@@ -325,16 +325,16 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
 
         // Warm-up settles first-touch writes (access bumps) outside the traced window.
         await unequipped.Search("proj-1", "widgets", scope: "project", vectorWeight: 0,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
 
         traced.Clear();
         var plain = await unequipped.Search("proj-1", "widgets", scope: "project", vectorWeight: 0,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         var plainStatements = traced.ToList();
 
         traced.Clear();
         var wired = await equipped.Search("proj-1", "widgets", scope: "project", vectorWeight: 0,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         var wiredStatements = traced.ToList();
         var wiredCorrelationId = wired.Meta.CorrelationId.ShouldNotBeNull();
 
@@ -406,7 +406,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         traced.Clear();
         var both = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
             rrfK: RrfK, ftsWeight: UnitWeight, vectorWeight: UnitWeight, sourceLambda: 0.0,
-            kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
 
         var stats = both.Data!.FusionStats.ShouldNotBeNull();
         stats.ParticipatingLegs.ShouldBe(["fts", "vector"],
@@ -431,11 +431,11 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
 
         var wide = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
-            sourceLambda: 0.0, kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            sourceLambda: 0.0, entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         var floored = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.5,
-            sourceLambda: 0.0, kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            sourceLambda: 0.0, entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
         var tiny = await tools.Search("acme", "harbor", scope: "all", limit: 1, minRelativeScore: 0.0,
-            sourceLambda: 0.0, kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            sourceLambda: 0.0, entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
 
         var wideStats = wide.Data!.FusionStats.ShouldNotBeNull();
         var flooredStats = floored.Data!.FusionStats.ShouldNotBeNull();
@@ -477,9 +477,9 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
         var tools = BuildTools(bank.Store, codeSearch: codeSearch);
 
         var both = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
-            sourceLambda: 0.0, kind: "both", cancellationToken: ct, sessionId: "sess-test");
+            sourceLambda: 0.0, entryType: "memory,code,file", cancellationToken: ct, sessionId: "sess-test");
         var memory = await tools.Search("acme", "harbor", scope: "all", limit: 50, minRelativeScore: 0.0,
-            sourceLambda: 0.0, kind: "memory", cancellationToken: ct, sessionId: "sess-test");
+            sourceLambda: 0.0, entryType: "memory,file", cancellationToken: ct, sessionId: "sess-test");
 
         var code = both.Data!.Code.ShouldNotBeNull("the seeded code corpus must serve on kind=both");
         code.Select(c => c.Path).ShouldContain("src/Harbor.cs");

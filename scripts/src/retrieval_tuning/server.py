@@ -103,7 +103,7 @@ class ScratchServer:
             "min_relative_score": 0.0,
         }
         if corpus_entry.get("kind") is not None:
-            kwargs["kind"] = corpus_entry["kind"]
+            kwargs["entry_type"] = {"memory": "memory,file", "both": "memory,code,file"}.get(corpus_entry["kind"], corpus_entry["kind"])
         return self.client.query(**kwargs)
 
     def stop(self) -> None:

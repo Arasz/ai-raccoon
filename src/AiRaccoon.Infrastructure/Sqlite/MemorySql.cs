@@ -735,9 +735,19 @@ internal static class MemorySql
     public const string SelectEntryByHashForRead = """
                                                    SELECT hash AS Hash, path AS Path, value AS Value, scope AS Scope,
                                                           project_id AS ProjectId, context_label AS ContextLabel,
-                                                          workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                          workspace_id AS WorkspaceId, created_at AS CreatedAt, entry_type AS EntryKind
                                                    FROM entries
                                                    WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
+                                                   LIMIT 1
+                                                   """;
+
+    public const string SelectTypedEntryByHashForRead = """
+                                                   SELECT hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                          project_id AS ProjectId, context_label AS ContextLabel,
+                                                          workspace_id AS WorkspaceId, created_at AS CreatedAt, entry_type AS EntryKind
+                                                   FROM entries
+                                                   WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
+                                                     AND entry_type = @entryKind
                                                    LIMIT 1
                                                    """;
 

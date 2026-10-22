@@ -1,7 +1,7 @@
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
-///     Owns query's `kind` selection (docs/work/2026-08-21-code-search-implementation-plan.md
+///     Owns query's entry type selection (docs/work/2026-08-21-code-search-implementation-plan.md
 ///     §3.6): which of the memory/code legs run, the code leg's project-scoped-only rule (empty on
 ///     scope=shared) and its FTS5-only-mode warning, and the search_quality recording rule for
 ///     every kind (ADR-0094) — so the MCP tool layer stays a thin caller (mcp.instructions.md).
@@ -15,7 +15,7 @@ public interface ISearchDispatcher
     ///     calling agent's session id, forwarded verbatim to the quality service alongside (the
     ///     query itself stays attribution-free: it feeds backends that must ignore attribution).
     /// </summary>
-    Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, SearchKind kind, string rawScope,
+    Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, EntryType entryTypes, string rawScope,
         string correlationId, string sessionId, int? codeLimit = null, double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default);
 }

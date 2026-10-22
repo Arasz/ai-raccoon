@@ -119,16 +119,16 @@ class MCPClient:
         return result
 
     @staticmethod
-    def _extract_results(parsed: Any, kind: Optional[str] = None) -> list[dict]:
+    def _extract_results(parsed: Any, entry_type: Optional[str] = None) -> list[dict]:
         """Dig the ranked result list out of the tool text payload.
 
-        `kind="code"` reads the 'code' key (the code-corpus section, plan
+        `entry_type="code"` reads the 'code' key (the code-corpus section, plan
         docs/work/2026-08-21-code-search-implementation-plan.md §3.6); any other
-        kind (including None/"memory"/"both") reads the 'results' key — the
-        harness only ever scores one section per call, so kind="both" reads the
+        entry_type (including None/"memory"/"memory,code,file") reads the 'results' key — the
+        harness only ever scores one section per call, so entry_type="memory,code,file" reads the
         memory leg, matching every existing corpus entry's (non-code) scoring.
         """
-        key = "code" if kind == "code" else "results"
+        key = "code" if entry_type == "code" else "results"
         if isinstance(parsed, list):
             return parsed
         if isinstance(parsed, dict):
@@ -150,14 +150,14 @@ class MCPClient:
         scope: str = "all",
         limit: int = 5,
         min_relative_score: float = 0.0,
-        kind: Optional[str] = None,
+        entry_type: Optional[str] = None,
     ) -> list[dict]:
         """Settings-driven search: NO tuning args — the bank settings table drives the knobs.
 
-        `kind` (plan §12.2 H8) is omitted from the wire entirely when None, so the
-        default memory-only call is byte-identical to before this parameter existed;
+        `entry_type` (plan §12.2 H8) is omitted from the wire entirely when None, so the
+        default all-types call is byte-identical to before this parameter existed;
         pass "code" to search the code corpus (see docs/features/code-corpus/) or
-        "both" to search both (the memory leg is what gets scored).
+        "memory,code,file" to search both (the memory leg is what gets scored).
         """
         arguments = {
             "projectId": project_id,
@@ -167,9 +167,9 @@ class MCPClient:
             "minRelativeScore": min_relative_score,
             "sessionId": HARNESS_SESSION_ID,
         }
-        if kind is not None:
-            arguments["kind"] = kind
-        return self._extract_results(self._call_tool("query", arguments), kind=kind)
+        if entry_type is not None:
+            arguments["entryType"] = entry_type
+        return self._extract_results(self._call_tool("query", arguments), entry_type=entry_type)
 
     def ingest_directory(self, project_id: str, path: str, context: Optional[str] = None) -> dict:
         """ingest_directory: recursively indexes `path` (must be inside the
@@ -194,6 +194,7 @@ class MCPClient:
         consolidation_threshold: Optional[float] = None,
         doc_score_formula: Optional[str] = None,
         candidate_window: Optional[str] = None,
+        entry_type: Optional[str] = None,
     ) -> list[dict]:
         """Verification path only: per-call tuning args mirroring the MCP tool surface."""
         arguments = {
@@ -202,6 +203,7 @@ class MCPClient:
             "scope": scope,
             "limit": limit,
             "minRelativeScore": min_relative_score,
+            "sessionId": HARNESS_SESSION_ID,
         }
         per_call = {
             "rrfK": rrf_k,
@@ -211,6 +213,7 @@ class MCPClient:
             "consolidationThreshold": consolidation_threshold,
             "docScoreFormula": doc_score_formula,
             "candidateWindow": candidate_window,
+            "entryType": entry_type,
         }
         arguments.update({key: value for key, value in per_call.items() if value is not None})
-        return self._extract_results(self._call_tool("query", arguments))
+        return self._extract_results(self._call_tool("query", arguments), entry_type=entry_type)

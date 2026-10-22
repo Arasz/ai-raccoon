@@ -109,7 +109,7 @@ public sealed class RefusedQueryRedactionTests
         store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
         var tools = CreateTools(store, logger);
 
-        await tools.Search("acme", Canary, kind: "memory", sessionId: "sess-test",
+        await tools.Search("acme", Canary, entryType: "memory,file", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var record = fakeLogs.Collector.GetSnapshot().Single(r => r.Id.Id == 920);

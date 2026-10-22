@@ -61,7 +61,7 @@ public sealed class MemorySearchKindToolTests
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "should not leak")];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "code",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "code",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.ShouldBeEmpty("kind=code must not run the memory search at all");
@@ -76,7 +76,7 @@ public sealed class MemorySearchKindToolTests
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "both",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,code,file",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.ShouldHaveSingleItem().Hash.ShouldBe("mem-hash");
@@ -87,26 +87,26 @@ public sealed class MemorySearchKindToolTests
     public async Task Search_InvalidKind_IsRejectedWithInvalidParams()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "banana", cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "banana", cancellationToken: TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldBe("invalid-params: Invalid kind 'banana': expected memory, code, or both.");
+        ex.Message.ShouldStartWith("invalid-params: Invalid entry type 'banana'");
         _store.SearchCallCount.ShouldBe(0, "an invalid kind must fail fast, before any bank work");
     }
 
     /// <summary>Pins the wire default itself (mirrors SearchScoreFloorContractTests' shape): a
     /// silent default revert back to "memory" must show up here, not only in behavior tests.</summary>
     [Fact]
-    public void Search_KindParameter_DefaultsToBoth()
+    public void Search_EntryTypeParameter_DefaultsToAllTypes()
     {
         var parameter = typeof(MemoryTools)
             .GetMethod(nameof(MemoryTools.Search), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
             .ShouldNotBeNull()
             .GetParameters()
-            .SingleOrDefault(p => p.Name == "kind");
+            .SingleOrDefault(p => p.Name == "entryType");
 
-        parameter.ShouldNotBeNull("the MCP parameter must still be named 'kind'");
+        parameter.ShouldNotBeNull("the MCP parameter must be named 'entryType'");
         parameter.HasDefaultValue.ShouldBeTrue();
-        parameter.DefaultValue.ShouldBe("both");
+        parameter.DefaultValue.ShouldBe("memory,code,file");
     }
 
     /// <summary>S5: codeLimit/codeMinRelativeScore override limit/minRelativeScore for the code
@@ -115,7 +115,7 @@ public sealed class MemorySearchKindToolTests
     public async Task Search_CodeLimitZeroOrNegative_IsRejectedWithInvalidParams()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "code", codeLimit: 0,
+            _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "code", codeLimit: 0,
                 cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith("invalid-params: ");
@@ -129,7 +129,7 @@ public sealed class MemorySearchKindToolTests
     public async Task Search_CodeMinRelativeScoreOutOfRange_IsRejectedWithInvalidParams(double codeMinRelativeScore)
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "code", codeMinRelativeScore: codeMinRelativeScore,
+            _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "code", codeMinRelativeScore: codeMinRelativeScore,
                 cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith("invalid-params: ");
@@ -144,7 +144,7 @@ public sealed class MemorySearchKindToolTests
     {
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: kind,
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: kind,
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Code!.ShouldHaveSingleItem().Hash.ShouldBe("code-hash");
@@ -156,7 +156,7 @@ public sealed class MemorySearchKindToolTests
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "Both",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "Memory,Code,File",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.ShouldHaveSingleItem();
@@ -183,7 +183,7 @@ public sealed class MemorySearchKindToolTests
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
 
-        await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,file", cancellationToken: TestContext.Current.CancellationToken);
 
         _quality.RecordedCorrelationIds.ShouldHaveSingleItem();
     }
@@ -193,7 +193,7 @@ public sealed class MemorySearchKindToolTests
     {
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
-        await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "code", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "code", cancellationToken: TestContext.Current.CancellationToken);
 
         _quality.RecordedCorrelationIds.ShouldHaveSingleItem(
             "ADR-0094: every kind records -- a default (both) search with no row behind it is a dead quality signal");
@@ -205,7 +205,7 @@ public sealed class MemorySearchKindToolTests
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
-        await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "both", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,code,file", cancellationToken: TestContext.Current.CancellationToken);
 
         _quality.RecordedCorrelationIds.ShouldHaveSingleItem("ADR-0094: kind=both records exactly like kind=memory");
     }
@@ -220,7 +220,7 @@ public sealed class MemorySearchKindToolTests
         ];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
-        await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "both", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,code,file", cancellationToken: TestContext.Current.CancellationToken);
 
         _quality.LastResultCount.ShouldBe(2, "the row describes the memory leg");
         _quality.LastTopSourceFiles.ShouldBe(["p.md", "q.md"]);
@@ -237,7 +237,7 @@ public sealed class MemorySearchKindToolTests
             new CodeSearchResult("code-hash-2", 0.9, "Bar.cs", "class Bar", 20, 30),
         ];
 
-        await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "code", cancellationToken: TestContext.Current.CancellationToken);
+        await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "code", cancellationToken: TestContext.Current.CancellationToken);
 
         _quality.LastResultCount.ShouldBe(2, "a code row with a memory-leg 0 would make grades uninterpretable");
         _quality.LastTopSourceFiles.ShouldBeEmpty(
@@ -247,7 +247,7 @@ public sealed class MemorySearchKindToolTests
     [Fact]
     public async Task Search_KindCode_WithSharedScope_ReturnsEmptyCodeSection_WithoutCallingTheCodeSearch()
     {
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", scope: "shared", kind: "code",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", scope: "shared", entryType: "code",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Code.ShouldNotBeNull();
@@ -264,7 +264,7 @@ public sealed class MemorySearchKindToolTests
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
         _codeSearch.StubWarning = CodeSearchWarnings.EngineNotConfigured;
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "code",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "code",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var warning = envelope.Data!.Warning.ShouldNotBeNull();
@@ -284,7 +284,7 @@ public sealed class MemorySearchKindToolTests
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,file",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Warning.ShouldNotBeNull()
@@ -303,7 +303,7 @@ public sealed class MemorySearchKindToolTests
         _settings.Values[EmbeddingSettingsKeys.Provider] = "local";
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,file",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Warning.ShouldBeNull();
@@ -320,7 +320,7 @@ public sealed class MemorySearchKindToolTests
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
         _codeSearch.StubWarning = CodeSearchWarnings.EngineNotConfigured;
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "both",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,code,file",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Warning.ShouldNotBeNull()
@@ -338,7 +338,7 @@ public sealed class MemorySearchKindToolTests
     {
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "code",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "code",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Meta.CorrelationId.ShouldNotBeNullOrEmpty(
@@ -351,7 +351,7 @@ public sealed class MemorySearchKindToolTests
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         _codeSearch.StubResults = [new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)];
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "both",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,code,file",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Meta.CorrelationId.ShouldNotBeNullOrEmpty("ADR-0094: kind=both records exactly like kind=memory");
@@ -362,7 +362,7 @@ public sealed class MemorySearchKindToolTests
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
 
-        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory",
+        var envelope = await _tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,file",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Meta.CorrelationId.ShouldNotBeNullOrEmpty("kind=memory records search_quality, so the correlation id is real");
@@ -387,7 +387,7 @@ public sealed class MemorySearchKindToolTests
             new SearchDispatcher(_store, _codeSearch, _quality, TestData.SharedScope), new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope), recorder, _settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
-        await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "both", cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,code,file", cancellationToken: TestContext.Current.CancellationToken);
 
         recorder.Recorded.ShouldNotBeEmpty("kind=both must still record performance metrics -- only the query hash is excluded");
         recorder.Recorded.ShouldAllBe(m => m.QueryHash == null,
@@ -403,7 +403,7 @@ public sealed class MemorySearchKindToolTests
             new SearchDispatcher(_store, _codeSearch, _quality, TestData.SharedScope), new QueryGuardService(_settings),
             new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope), recorder, _settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
-        await tools.Search("acme", "widgets", sessionId: "sess-test", kind: "memory", cancellationToken: TestContext.Current.CancellationToken);
+        await tools.Search("acme", "widgets", sessionId: "sess-test", entryType: "memory,file", cancellationToken: TestContext.Current.CancellationToken);
 
         recorder.Recorded.ShouldNotBeEmpty();
         recorder.Recorded.ShouldAllBe(m => m.QueryHash != null, "kind=memory is not code-adjacent -- its query hash is unchanged");
@@ -413,7 +413,7 @@ public sealed class MemorySearchKindToolTests
     public async Task Search_KindCode_RefuseTierQuery_IsRefused_AndNeverReachesTheCodeSearch()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", RefuseTierQuery, sessionId: "sess-test", kind: "code", cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Search("acme", RefuseTierQuery, sessionId: "sess-test", entryType: "code", cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith("invalid-params: ");
         _codeSearch.SearchCallCount.ShouldBe(0, "the guard refuses before either corpus is queried");
@@ -423,7 +423,7 @@ public sealed class MemorySearchKindToolTests
     public async Task Search_KindBoth_RefuseTierQuery_IsRefused_AndNeverReachesEitherStore()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.Search("acme", RefuseTierQuery, sessionId: "sess-test", kind: "both", cancellationToken: TestContext.Current.CancellationToken));
+            _tools.Search("acme", RefuseTierQuery, sessionId: "sess-test", entryType: "memory,code,file", cancellationToken: TestContext.Current.CancellationToken));
 
         ex.Message.ShouldStartWith("invalid-params: ");
         _store.SearchCallCount.ShouldBe(0);
@@ -461,7 +461,7 @@ public sealed class MemorySearchKindToolTests
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
 
-        await _tools.Search("acme", "widgets", sessionId: "sess-abc-123", kind: "memory",
+        await _tools.Search("acme", "widgets", sessionId: "sess-abc-123", entryType: "memory,file",
             cancellationToken: TestContext.Current.CancellationToken);
 
         _quality.LastSessionId.ShouldBe("sess-abc-123");
@@ -480,7 +480,7 @@ public sealed class MemorySearchKindToolTests
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
 
         await Should.ThrowAsync<ArgumentException>(() =>
-            _tools.Search("acme", "widgets", sessionId: sessionId, kind: "memory",
+            _tools.Search("acme", "widgets", sessionId: sessionId, entryType: "memory,file",
                 cancellationToken: TestContext.Current.CancellationToken));
 
         _store.SearchCallCount.ShouldBe(0, "a blank session must fail fast, before any bank work");
@@ -504,11 +504,49 @@ public sealed class MemorySearchKindToolTests
             new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope), new NoOpMeasurementRecorder(),
             _settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
-        var envelope = await tools.Search("acme", "widgets", sessionId: "sess-xyz", kind: "memory",
+        var envelope = await tools.Search("acme", "widgets", sessionId: "sess-xyz", entryType: "memory,file",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data.ShouldNotBeNull();
         envelope.Meta.CorrelationId.ShouldNotBeNullOrEmpty();
+    }
+
+    [Theory]
+    [InlineData("memory", 1, true, false)]
+    [InlineData("code", 2, false, true)]
+    [InlineData("file", 4, true, false)]
+    [InlineData("memory,code", 3, true, true)]
+    [InlineData("memory,file", 5, true, false)]
+    [InlineData("code,file", 6, true, true)]
+    [InlineData("memory,code,file", 7, true, true)]
+    public async Task Search_EntryTypeSet_ReachesBackendAndQuality(string entryType, int mask, bool memory, bool code)
+    {
+        var envelope = await _tools.Search("acme", "widgets", "typed-session", entryType: entryType,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        _store.SearchCallCount.ShouldBe(memory ? 1 : 0);
+        _codeSearch.SearchCallCount.ShouldBe(code ? 1 : 0);
+        if (memory)
+        {
+            _store.LastQuery.ShouldNotBeNull().EntryTypes.ShouldBe((EntryType)mask);
+        }
+        _quality.LastEntryTypes.ShouldBe((EntryType)mask);
+        _quality.RecordedCorrelationIds.ShouldBe([envelope.Meta.CorrelationId!]);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("none")]
+    [InlineData("8")]
+    [InlineData("memory,both")]
+    public async Task Search_InvalidEntryType_DoesNotQueryOrRecord(string entryType)
+    {
+        var error = await Should.ThrowAsync<McpException>(() => _tools.Search("acme", "widgets", "session",
+            entryType: entryType, cancellationToken: TestContext.Current.CancellationToken));
+        error.Message.ShouldStartWith("invalid-params:");
+        _store.SearchCallCount.ShouldBe(0);
+        _codeSearch.SearchCallCount.ShouldBe(0);
+        _quality.RecordedCorrelationIds.ShouldBeEmpty();
     }
 
     /// <summary>Permits every guarded call; only SearchAsync is exercised by this suite.</summary>
@@ -518,10 +556,13 @@ public sealed class MemorySearchKindToolTests
 
         public IReadOnlyList<MemorySearchResult> StubResults { get; set; } = [];
 
+        public SearchQuery? LastQuery { get; private set; }
+
         public int SearchCallCount { get; private set; }
 
         public override Task<SearchResults> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
         {
+            LastQuery = query;
             SearchCallCount++;
             return Task.FromResult(new SearchResults(StubResults, SearchTimings.Empty));
         }
@@ -573,6 +614,8 @@ public sealed class MemorySearchKindToolTests
 
         public string? LastQuery { get; private set; }
 
+        public EntryType? LastEntryTypes { get; private set; }
+
         public int LastResultCount { get; private set; } = -1;
 
         public IReadOnlyList<string> LastTopSourceFiles { get; private set; } = [];
@@ -594,6 +637,7 @@ public sealed class MemorySearchKindToolTests
         {
             RecordedCorrelationIds.Add(correlationId);
             LastQuery = query;
+            LastEntryTypes = entryTypes;
             LastKind = kind;
             LastSessionId = sessionId;
             LastResultCount = resultCount;
@@ -609,6 +653,7 @@ public sealed class MemorySearchKindToolTests
         {
             RecordedCorrelationIds.Add(correlationId);
             LastQuery = query;
+            LastEntryTypes = entryTypes;
             LastKind = kind;
             LastSessionId = sessionId;
             LastResultCount = resultCount;
