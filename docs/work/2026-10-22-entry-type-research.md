@@ -1,5 +1,17 @@
 # 2.1.0 entry types and typed vector partitions
 
+## Consolidated scope after owner corrections
+
+This block supersedes the older provenance-based recommendations below. PR #912 (`6acc4b3`) supplies the existing EntryType, writer declarations and v20 migration and is incorporated into this task branch without releasing it. Writers declare Memory/File; migration and legacy fallback classify by nonempty source_file equal to path. A note citing a file remains Memory. Repairs preserve the declared kind. The owner requires an injected `IEntryTypeClassifier` and one resolve method call that encapsulates stored-kind/fallback handling.
+
+Keep get_entry's shipped response `entryType` as corpus (`memory` or `code`). Add `entryKind` for the Memory/File/Code taxonomy so File can be requested and reported without silently changing that legacy field. The input entryType is a typed flags enum: SDK 2.2.0 accepts `Memory, File` and `All`; validate zero, unknown bits and composite lookup arguments in the application. Scratch SDK schema/binding evidence is `/private/tmp/air-21-sdk-probe/result.txt`.
+
+The owner's FTS A/B found raw stopwords in long-query OR plans; a control sharing no content word matched on `a` alone in both 1.63.0 and 2.0.0. The earlier report's claim that keywords could not carry that query is invalid and must not support any 2.1.0 claim. FTS normalization changes are outside this task.
+
+Observed in this session: the old catalogue calls memory_search and receives `Unknown tool: memory_search` after the server upgrade. Release notes must require clients to reconnect and warn that cached agent instructions can name removed tools; the refreshed hook matcher targets query and does not gate stale memory_search calls. Document the forward-only bank migration and 2.0.0 incompatibility after upgrade.
+
+Objective remains full 2.1.0 entry-type parameter, Memory-only TTL, native typed partitioning and measured impact. Use the pinned read-only backup at `/private/tmp/air-2.1-impact/source/memory.db` (25,340 embedded entries, integrity/count/hash checks passed). Preserve existing historical File TTL during migration/sweep, reject future File setter calls including clear, and normalize File TTL on future imports/recreated rows. Wrong-project hashes remain indistinguishable from absent hashes. No live bank mutation.
+
 Baseline: `0b100b5c`, VERSION 2.0.0. The owner chose the high effort task loop and prefers entry type in the vector partition key. Measure the impact before selecting its encoding.
 
 ## Contract
