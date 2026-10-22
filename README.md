@@ -152,6 +152,11 @@ Design background: [Architecture](docs/explanation/architecture.md) and the [ADR
 - [CLAUDE.md](CLAUDE.md) holds repo conventions, including the mandatory TDD workflow.
 - Before packing the tool from source, run `python3 scripts/download-embedding-model.py`. The bundled
   model's weights are downloaded, not committed, and `dotnet pack` stops without them.
+- The same file is what a plain `dotnet build` needs to *run*: the weights are gitignored, so a
+  fresh clone or a `git archive` build has an incomplete `Models/` directory and every write and
+  every search answers `unexpected-error: EmbeddingModelRejectedException` — which reads as a
+  product bug and is not one. Copy `model_fp16.onnx_data` from an installed build's output
+  directory, or run `ai-raccoon model download`, and the build behaves like the installed tool.
 - Report security issues privately per [SECURITY.md](SECURITY.md).
 
 ## License
