@@ -6,7 +6,7 @@ packaging metadata. Filenames are bare nouns.
 ## Contents
 
 - [`agent-memory-server.md`](agent-memory-server.md): the MCP server's complete
-  agent-facing contract, 29 tools, 2 prompts, contexts, env vars, launch flags and
+  agent-facing contract, 30 tools, 2 prompts, contexts, env vars, launch flags and
   transports, error shapes.
 - [`ai-raccoon-ignore-template.ignore`](ai-raccoon-ignore-template.ignore): a commented
   starter `ai-raccoon.ignore` covering common noise families; copy it to a watched root

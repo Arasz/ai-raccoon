@@ -68,13 +68,13 @@ Writes land in `project:<id>` by default; naming a `workspaceId` routes them int
 workspace's isolated context, and it wins over `context` when both
 are supplied (the sandbox has priority, so a workspace write never lands project-wide).
 
-9 memory tools (including `get_entry`, ADR-0035), 4 workspace tools, 3 watch tools,
+10 memory and query tools (including `get_entry`, ADR-0035), 4 workspace tools, 3 watch tools,
 2 promotion tools, 2 share tools, 2 sweep tools (`trigger_memory_cleanup`, `set_memory_ttl`),
-2 search-feedback tools (`set_memory_usage_record`, `set_query_result_grade`),
-1 sync tool, 1 performance tool (`get_engine_statistics`), and `get_entry` reads the code corpus too,
-2 project tools (`get_project_id`, which returns the id registered under an exact name, and
-`save_project_id_token`, ADR-0089, which mints and registers a new project id; call
-`get_project_id` first).
+2 search-feedback tools (`set_memory_usage_record`, `set_query_result_grade`) and 1 quality
+read tool (`get_quality_report`), 1 sync tool, 1 performance tool (`get_engine_statistics`),
+and `get_entry` reads the code corpus too, 2 project tools (`get_project_id`, which returns
+the id registered under an exact name, and `save_project_id_token`, ADR-0089, which mints and
+registers a new project id; call `get_project_id` first).
 `memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config
 refactor: configuration is no longer an MCP tool — the CLI verbs are the single
 config channel (see [Command-line options](#command-line-options)).
