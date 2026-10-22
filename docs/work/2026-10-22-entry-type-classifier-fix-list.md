@@ -509,3 +509,73 @@ pull request", for every commit in it), so the findings live here and in the PR'
   ties the *stored* word to the *protocol* word. One is data in the user's bank, the other is a
   wire value: a corpus rename would rewrite the stored kind through this constant. Pin the stored
   vocabulary on its own and let a test say they agree.
+
+## Review of `10108e39`: the entry-type parameter's contract (S2, "flags")
+
+Verified on a clean checkout of that head: `dotnet build` — 8 projects, 0 warnings, 0 errors; the fast lane (`--filter "Speed=Fast&Performance!=Benchmark"`) — **5197 passed, 0 failed, 2 skipped**.
+
+**What landed well.** The vocabulary has one home; the seven asking sets are enumerated rather than implied; every refusal is stated as a refusal rather than as a fallback; the messages stay out of the MCP vocabulary (Core throws `ArgumentException`, the tool layer translates); and both refusals were watched fail before they were watched pass, which is the right way to land a gate.
+
+**Verdict: the shape is right.** Two gaps in the contract itself, one thing to decide before the tool wires it, and a wire form the SDK can actually carry.
+
+### Blocking
+
+**1. The default — the sum — is not "every row": a row whose kind is `none` is in no bit.**
+`src/AiRaccoon.Core/Memory/EntryTypeWireNames.cs:29` and the doc on `src/AiRaccoon.Core/Memory/EntryTypeTests.cs:39`.
+
+The plan says *"`query` defaults to **Memory | Code | File** (the sum), so the default answers exactly what today's default (`kind=both`) answers"*, and this chunk repeats it: *"the default answers exactly what today's default (`kind=both`) answers, and more"*. Today `kind=both` applies **no kind filter at all** — it returns every row of the memory corpus plus the code corpus. A default implemented as a filter over the three kinds returns the rows of kind `memory`, the rows of kind `file` and the code corpus, and **drops every row whose kind is `none`** — the unclassified rows the branch itself counts and reports (`SchemaDoctor`: *"entries without a kind: N"*). So for exactly the population the doctor watches, the new default answers *less* than today's default, which is the opposite of the claim, and the "and more" is only true in granularity (you can now ask for one kind).
+
+This is the same failure mode the empty-set refusal is designed to avoid, applied to the default instead: a query that quietly returns fewer rows than it used to reads as a broken bank. Either the default means *no filter* (every row, unclassified included), or the sum carries an implicit unclassified bucket, or the claim is amended to "every **classified** row" and the tool's description says that an unclassified row is outside every set. Whichever it is, it is a contract statement, and it is cheaper to write it now than to discover it in the query path.
+
+**2. `Single` does not refuse unknown bits.**
+`src/AiRaccoon.Core/Memory/EntryTypeWireNames.cs:80`.
+
+`Single` refuses the empty set and a composite, but it never calls `RefuseUnknownBits` — so `Single((EntryType)16)` returns that value unchanged: a lookup naming a kind this build has no corpus for is accepted. The guard you added for "the other door" (a set assembled elsewhere) is not on the door that matters most, because the lookup is where a set reaches a decision. One line: `Single` should call `RefuseUnknownBits(types)` before the single-bit test, and the test file should have a case for it.
+
+### The wire form (Q2) — keep it a string, and the comma list is the right shape
+
+I probed the repo's own SDK (2.2.0) with a `[Flags]` enum parameter:
+
+```text
+PROBE SCHEMA: {"type":"object","properties":{"types":{"type":"string"}, ...}}
+PROBE COMPOSITE SERIALIZED: {"types":"Memory, Code"}
+PROBE BIND "memory,code"  -> 3 (Memory, Code)
+PROBE BIND "Memory, Code" -> 3 (Memory, Code)
+PROBE BIND "0"            -> 0 (None)
+PROBE BIND "None"         -> 0 (None)
+PROBE BIND "bogus"        -> REFUSED: The JSON value could not be converted to AiRaccoon.Core.Memory.EntryType.
+```
+
+Three things follow, and they answer the question:
+
+- **The comma-separated list is exactly the SDK's own flags encoding** — `memory,code` binds to `Memory | Code`. The choice is SDK-compatible; a JSON array is not (it would need a second parsing path, and the SDK's schema for an array parameter is a different shape entirely). The research record's *"SDK 2.2.0 accepts `Memory, File` and `All`"* has no `All` member in this enum: on the wire, "all" is the three names spelled out — which is the sum, and that is fine.
+- **The SDK cannot refuse the empty set.** `"0"` and `"None"` both bind to `EntryType.None`. So the zero criterion has to live in the application, in the contract you just wrote — which is where it is.
+- **The SDK's refusal is not the tool's vocabulary.** An unknown name is refused by the binder with *"The JSON value could not be converted to …"*, not with the tool layer's `invalid-params: Invalid kind '…': expected memory, code, or both.` (`src/AiRaccoon/Tools/MemoryTools.cs:251`). The curated message only reaches the client if the **tool parses the string itself**.
+
+So: declare the tool's parameter as a `string` (as today's `kind` is) and have the tool layer call `EntryTypeWireNames.Parse`, translating the `ArgumentException` into `invalid-params: …`. Two reasons beyond the message: the MCP schema for a flags-enum parameter is a bare `{"type":"string"}` with **no enum list**, so the client learns the vocabulary from the description either way — and a string parameter lets that description quote *Core's* vocabulary (lowercase, one spelling) instead of the SDK's member casing (`"Memory, Code"`); and the repo's principle is one spelling per word, which the SDK's binder does not give you.
+
+### The empty set (Q1) — refuse it, and pair the refusal with the default
+
+Refusing the empty set is right, and the plan's zero criterion supports it. The reasoning also has a twin: the same argument (*"a query that quietly returns fewer rows than it used to reads as a broken bank"*) is what the default has to satisfy, and today the default does not — see blocking 1. Keep the two statements next to each other.
+
+Against the alternative — `"none"` meaning "unfiltered" — I would keep that out: "everything" is the *absence* of the parameter (the default), and giving the value a second spelling of "everything" makes "the sum" ambiguous (is the sum everything, or the three kinds?). One spelling for everything: the default.
+
+### Where the unknown-bit guard lives (Q3)
+
+In Core, beside the other rules — the place is right, and the *reason* is the SDK probe above: the binder cannot refuse anything, so every refusal has to be application-side. What is missing is coverage: `Single` does not call it (blocking 2), so the guard is applied on one path and not the other. `RefuseUnknownBits` is also the right shape for a set assembled elsewhere (a stored flag, a computed mask) — keep it public.
+
+### The lookup rule (Q4)
+
+`Single(types)` is the right shape, and the plan's *"no default; the type is required"* is honoured by `Parse`'s null refusal. Two things to pin when S6 wires it:
+
+- `Single` must be called on the **parsed** value, so a composite lookup is refused rather than resolved to an arbitrary corpus.
+- `Default` belongs to the query. It sits next to `Single` in the same class, which invites using it as a lookup default — the lookup has none, and the class doc should say which rule owns which.
+
+### Nits
+
+- `src/AiRaccoon.Core/Memory/EntryTypeWireNames.cs:23` — the word `file` is spelled in **two** places (`EntryKindWireNames.cs:21` and here), while the chunk's note says "each word is spelled in one place". `memory` and `code` are shared through `SearchKindWireNames`; `file` is new to both vocabularies and is the one word that can drift. Derive one from the other, or pin both in the test — the current test pins `memory` only (`EntryTypeTests.cs:102`).
+- `src/AiRaccoon.Core/Memory/EntryTypeWireNames.cs:32` — `KnownBits = Default` couples "the kinds this build knows" to "the set a query asks for by default". If the default ever stops being the union (a reason to leave `Code` out of it, say), the known-bit set moves with it. Name them separately.
+- The class name says "names"; the class carries the parameter's **rules** (`Parse`, `Single`, `RefuseUnknownBits`). `SearchKindWireNames` carries one conversion (`ToWireString`), which is a naming story; a parser and two refusal rules are a contract. A name like `EntryTypeParameter` — or a sibling that holds the rules — says what the thing is.
+- `src/AiRaccoon.Core/Memory/EntryTypeWireNames.cs:45` — `Parse` refuses null with *"The entry type is required"*, which is right for the lookup and wrong for the defaulted query. The tool layer must substitute the default before parsing, and the class doc says nothing about a default path.
+- `tests/AiRaccoon.Tests/Unit/Memory/EntryTypeTests.cs:55` — `Parse_RefusesTheEmptySet` includes `"none"`, which is refused as an **unknown name**, not as the empty set. Two different rejections under one test name; split them, because if the vocabulary ever grows a `none` spelling the test would still pass while the meaning moved.
+- The bits mix two axes: `Memory` and `File` are row kinds inside the memory corpus, `Code` is a corpus. So `Memory | File` is today's whole memory corpus, and `memory` alone is **not** today's `kind=memory` (which returns file rows too). A client migrating from `kind=memory` to `entryType=memory` loses file rows silently. The class doc should say what each bit selects.
