@@ -66,7 +66,7 @@
     },
     {
       "item": "memory-get-returns-content-by-hash",
-      "expected-result": "get_entry returns the full entry for a hash reachable from the caller; an unknown hash refuses rather than returning empty (ADR-0035)",
+      "expected-result": "get_entry requires one entryType and returns the selected Memory/File/Code entry for a reachable hash; unknown or mismatched types refuse without fallback (2.1.0 changelog, ADR-0035)",
       "command": "",
       "evidence": "",
       "observed-result": "",
@@ -187,6 +187,176 @@
     {
       "item": "observability-event-ids",
       "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "reserved-shared-target-documents-and-refusals",
+      "expected-result": "Shared watch publishes File rows to ordinary all-scope and shared all/shared queries; ordinary project-only has none; shared project-only and every ordinary-project-only tool refuse. Derive that set from declarations. Remove-watch retains content; re-add then delete-source removes mirrored document.",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "reserved-shared-name-registration-refused",
+      "expected-result": "Exact reserved name mint refuses; lookup returns shared; SQLite projects remains empty before ordinary reader registration. Legacy registration under name shared prevents activation, CLI exits17, MCP shared-project-conflict, entries0.",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "tool-scope-declared-on-the-tool",
+      "expected-result": "Derive tool scope membership from declarations and compare with the live surface; every ordinary-project-only tool refuses the reserved shared target before side effects.",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "renamed-tools-old-names-refused",
+      "expected-result": "Every legacy tool name from the 2.0.0 rename map refuses as MCP isError with unknown-tool and exact replacement guidance. Compare current tools and prompts to derived facts; a raw JSON-RPC unknown-tool error is insufficient.",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-query-all-selections",
+      "expected-result": "Seed distinguishable Memory/File/Code plus an unclassified control. Drive all seven nonempty entryType subsets and omitted default, including mixed case/spacing. Narrow sets return only declared selected types; default/all includes unclassified. Confirm kind_mask exactly 1..7. (2.1.0 changelog, ADR-0141)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-query-invalid-types",
+      "expected-result": "Empty set, unknown vocabulary and all-comma input are refused; duplicates/interior empty tokens follow current parser contract. (EntryTypeParameter, 2.1.0 changelog)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-get-selector-and-overlapping-hash",
+      "expected-result": "get_entry requires one entryType, refuses missing/empty/composite/unknown; overlapping Memory/Code hash resolves chosen corpus; wrong taxonomy is unknown-hash without fallback. (2.1.0 changelog)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-get-public-fields",
+      "expected-result": "get_entry entryType remains corpus memory/code and entryKind states memory/file/code. (2.1.0 changelog)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-file-and-note-declarations",
+      "expected-result": "Ingest a real document and add an agent note citing that same path. File mirror is File; note is Memory. Modify and re-ingest document; refreshed chunks remain File with no TTL. (2.1.0 changelog)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-memory-only-ttl",
+      "expected-result": "In full access mode set/clear Memory TTL; refuse setting and clearing File and Code-only hashes, and retain negative controls. (2.1.0 changelog, ADR-0030)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-historical-ttl-cleanup",
+      "expected-result": "Seed age/rating and explicit historical File TTL in scratch. Cleanup honors historical explicit TTL; TTL-free Memory/File and all Code survive. (2.1.0 changelog, ADR-0030)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-transcript-sync-memory",
+      "expected-result": "Drive isolated transcript/cloud merge where credentials allow: transcript chunks declare Memory and eligible TTL survives; File sync/rechunk does not introduce TTL. If unavailable record substituted focused sync test evidence explicitly. (2.1.0 changelog)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-legacy-migrations",
+      "expected-result": "Upgrade real copied v19 and mixed-marker v20/v21 fixtures through installed package to current schema. Compare all durable IDs/embedding bytes, all prior search-quality columns, legacy mask mapping, explicit-kind preservation, integrity and product reopen. Disable watch registrations and external services in copies before serving. (2.1.0 changelog, ADR-0141)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-vector-partitions-and-recall",
+      "expected-result": "Read both native ctx/type layouts and row-kind agreement; exercise typed vector-leg queries with bundled engine. Separately attach actual minority-type pretruncation oracle experiment for both modalities; never infer recall correctness merely from DDL. (ADR-0141)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-kind-domain-and-doctor",
+      "expected-result": "Fresh/released upgraded bank rejects out-of-domain stored kind; doctor counts unclassified and unknown development-bank markers. Default queries can return these, narrower sets exclude them. (2.1.0 changelog)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "typed-code-independent-engine",
+      "expected-result": "Code-only lookup/query works against separate corpus without memory engine dependency or memory-engine warning. (2.1.0 changelog, ADR-0085)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "consistent-live-database-backup",
+      "expected-result": "Create a consistent backup before upgrade, validate SQLite integrity, preserve a durable copy and record its digest.",
       "command": "",
       "evidence": "",
       "observed-result": "",
