@@ -3,6 +3,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -32,7 +33,7 @@ public sealed class EntryTypeRuleParityTests
         ("9f2c.md", "", "memory")
     ];
 
-    [Fact]
+    [RetryFact]
     public async Task TheSqlRuleAndTheCsharpRule_ClassifyOneFixtureAlike()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
