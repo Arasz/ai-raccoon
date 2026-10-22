@@ -193,28 +193,20 @@ public sealed partial class SqliteMemoryStore(
     }
 
     /// <summary>get_entry (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>
-    public async Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+    public async Task<MemoryEntry?> GetAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default, EntryKind? entryKind = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.RequireSharedAvailableAsync(projectId, _scope, cancellationToken);
-        var row = await connection.QueryFirstOrDefaultAsync<EntryRow>(
+        var row = entryKind is { } selectedKind
+            ? await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                Def(MemorySql.SelectTypedEntryByHashForRead,
+                    new { hash, projectId, entryKind = entryTypeClassifier.ToStoredValue(selectedKind) }, cancellationToken))
+            : await connection.QueryFirstOrDefaultAsync<EntryRow>(
                 Def(MemorySql.SelectEntryByHashForRead, new { hash, projectId }, cancellationToken));
-        return row is null ? null : ToEntry(row);
-    }
-
-    public async Task<MemoryEntry?> GetAsync(string projectId, string hash, EntryKind entryKind,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
-        var storedKind = entryTypeClassifier.ToStoredValue(entryKind);
-        await using var connection = await factory.OpenBankAsync(cancellationToken);
-        await connection.RequireSharedAvailableAsync(projectId, _scope, cancellationToken);
-        var row = await connection.QueryFirstOrDefaultAsync<EntryRow>(
-            Def(MemorySql.SelectTypedEntryByHashForRead, new { hash, projectId, entryKind = storedKind }, cancellationToken));
         return row is null ? null : ToEntry(row);
     }
 

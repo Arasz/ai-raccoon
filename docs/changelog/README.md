@@ -11,6 +11,8 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [2.1.0 — typed search and Memory-only TTL](2.1.0-typed-search-memory-ttl.md)
+
 - [2.0.1 — a call to a tool this server does not have is answered with the tool to call](2.0.1-unknown-tool-guidance.md)
 
 - [2.0.0 — the MCP tool surface is renamed: every tool has a new name, and there are no aliases](2.0.0-mcp-tool-surface-renamed.md)

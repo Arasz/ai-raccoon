@@ -813,7 +813,7 @@ internal static class MemorySql
                      WHERE hash = @hash AND {ProjectRows.Of()}
                      ORDER BY {ProjectRows.CommittedFirst()}, id
                      LIMIT 1)
-           AND ({EntryTypeFromDeclarationOrShape("entries.")}) = 'memory'
+           AND entries.entry_type = 'memory'
          """;
 
     // Reads the same row UpdateEntryTtl writes — the explicit ORDER BY is what makes "the entry

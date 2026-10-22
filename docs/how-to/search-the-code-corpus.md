@@ -17,9 +17,9 @@ still on that model keeps it until you run the command again.) See
 [Configure embedding engines](configure-embedding-engines.md#recipe-5-activate-the-code-corpuss-embedding-engine)
 for details.
 
-Without a code engine, `kind=code` and `kind=both` searches degrade to FTS5-only
+Without a code engine, `entryType=code` and `entryType=memory,code,file` searches degrade to FTS5-only
 (keyword matching, no vector similarity) and the server emits a warning. The
-default `kind=both` search behaves the same way: memory results come back
+default `entryType=memory,code,file` search behaves the same way: memory results come back
 normally, code results are keyword-only, and the response carries the warning.
 
 ## What gets indexed
@@ -49,7 +49,7 @@ Keyword matching splits identifiers, not just words: a query for `overlap` also 
 chunk defining `WatchOverlapResolver`, because `camelCase`/`PascalCase`/`snake_case`/
 `kebab-case` identifiers are split into a derived keyword column at ingest time and searched
 alongside the raw text ([ADR-0109](../adr/0109-code-fts-carries-a-derived-identifiers-column.md)).
-This applies to every kind=code/both search; there is no separate flag to enable it.
+This applies to every query including Code search; there is no separate flag to enable it.
 
 ### Code only
 
@@ -57,7 +57,8 @@ This applies to every kind=code/both search; there is no separate flag to enable
 {
   "projectId": "<your-project-id>",
   "query": "how does the RRF fusion work",
-  "kind": "code"
+  "sessionId": "<your-session-id>",
+  "entryType": "code"
 }
 ```
 
@@ -70,13 +71,14 @@ Returns a `code` array with hits carrying `lineStart`/`lineEnd` instead of
 {
   "projectId": "<your-project-id>",
   "query": "how does the RRF fusion work",
-  "kind": "memory"
+  "sessionId": "<your-session-id>",
+  "entryType": "memory,file"
 }
 ```
 
-Passing `kind=memory` searches only the memory bank. No `code`
+Passing `entryType=memory,file` searches only the memory bank. No `code`
 key appears in the response. This is the pre-1.34 behavior, still available
-explicitly — but the default is now `both`, so omit `kind` only when you want
+explicitly — but the default is all three types, so omit `entryType` only when you want
 both corpora.
 
 ### Both corpora (default)
@@ -84,11 +86,12 @@ both corpora.
 ```json
 {
   "projectId": "<your-project-id>",
-  "query": "how does the RRF fusion work"
+  "query": "how does the RRF fusion work",
+  "sessionId": "<your-session-id>"
 }
 ```
 
-Omitting `kind` (or passing `kind=both`) runs both hybrids independently and
+Omitting `entryType` (or passing `entryType=memory,code,file`) runs both hybrids independently and
 returns both sections. Useful when you do not know whether the answer lives in
 memory or in source. With no code engine configured, the memory section is
 normal and the code section is keyword-only (FTS5) with a warning.
@@ -101,7 +104,8 @@ Search results return snippets. To read the full source of a code hit, call
 ```json
 {
   "projectId": "<your-project-id>",
-  "hash": "<hash-from-search-result>"
+  "hash": "<hash-from-search-result>",
+  "entryType": "code"
 }
 ```
 
@@ -109,10 +113,10 @@ Returns `{hash, value, path, lineStart, lineEnd}`.
 
 ## Scoping
 
-Code search is always project-scoped. Passing `scope=shared` with `kind=code` or
-`kind=both` returns an empty code section (shared has no code rows).
+Code search is always project-scoped. Passing `scope=shared` with `entryType=code` or
+`entryType=memory,code,file` returns an empty code section (shared has no code rows).
 
-Workspace scope works normally: `kind=code` with a `workspaceId` searches that
+Workspace scope works normally: `entryType=code` with a `workspaceId` searches that
 workspace's project scope.
 
 ## Troubleshooting

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Dapper;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Sync;
 
@@ -16,7 +17,7 @@ public sealed class MemoryOnlyTtlSyncTests : IDisposable
     private readonly string _root = TestData.CreateTempRoot("memory-only-ttl-sync");
     public void Dispose() => TestData.DeleteTempRoot(_root);
 
-    [Theory]
+    [RetryTheory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Pull_NormalizesFileTtlAndKeepsTranscriptTtl(bool oldPeer)

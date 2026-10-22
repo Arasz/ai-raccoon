@@ -19,6 +19,8 @@ namespace AiRaccoon.Tests.Integration;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class EntryTypeMigrationTests
 {
+    private sealed record EntryTypeColumn(string Name, long NotNull, string? DefaultValue);
+
     [RetryFact]
     public async Task EnsureAsync_AddsTheEntryTypeColumn()
     {
@@ -82,8 +84,8 @@ public sealed class EntryTypeMigrationTests
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
-        var column = (await connection.QueryAsync<(string Name, long NotNull, string? DefaultValue)>(
-                "SELECT name, \"notnull\", dflt_value FROM pragma_table_info('entries') WHERE name = 'entry_type'"))
+        var column = (await connection.QueryAsync<EntryTypeColumn>(
+                "SELECT name, \"notnull\" AS \"NotNull\", dflt_value AS DefaultValue FROM pragma_table_info('entries') WHERE name = 'entry_type'"))
             .Single();
         column.NotNull.ShouldBe(1, "the kind column is NOT NULL: a row holds one kind, and 'none' says it has none");
         column.DefaultValue.ShouldBe("'none'");

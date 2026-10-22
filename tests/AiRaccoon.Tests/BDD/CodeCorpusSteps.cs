@@ -88,22 +88,15 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
             new { path = IngestPath.Normalize(path) }));
     }
 
-    private static string EntryTypesForLegacyKind(string kind) => kind.ToLowerInvariant() switch
-    {
-        "memory" => "memory,file",
-        "both" => "memory,code,file",
-        _ => kind
-    };
-
-    private async Task RunSearchAsync(string projectId, string query, string? kind = null, string? scope = null,
+    private async Task RunSearchAsync(string projectId, string query, string? entryType = null, string? scope = null,
         string sessionId = "bdd-session")
     {
         _lastError = null;
         try
         {
-            _lastSearchEnvelope = kind is null
+            _lastSearchEnvelope = entryType is null
                 ? await Ctx.MemoryTools.Search(projectId, query, sessionId: sessionId)
-                : await Ctx.MemoryTools.Search(projectId, query, sessionId: sessionId, scope: scope ?? "all", entryType: EntryTypesForLegacyKind(kind));
+                : await Ctx.MemoryTools.Search(projectId, query, sessionId: sessionId, scope: scope ?? "all", entryType: entryType);
             _lastSearchJson = JsonSerializer.SerializeToNode(_lastSearchEnvelope, McpJsonUtilities.DefaultOptions)!
                 .AsObject()["data"]!.AsObject();
         }
@@ -203,7 +196,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         return (await connection.QueryAsync<string>("SELECT name FROM sqlite_master WHERE type = 'table'")).ToList();
     }
 
-    // ── Rule: query's kind parameter selects and shapes the response envelope ──
+    // ── Rule: query's entryType parameter selects and shapes the response envelope ──
 
     [Given("^a project with memory entries and code chunks$")]
     public async Task GivenProjectWithMemoryAndCode()
@@ -220,14 +213,14 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     public Task GivenProjectWithCodeChunks() =>
         SeedCodeEntryAsync("code-hash-scope", "src/Scope.cs", $"sealed class ScopeToken {{ {_searchQuery} }}", 1, 2);
 
-    [When("^I call query for the project without a kind$")]
-    public Task WhenSearchWithoutKind() => RunSearchAsync(DefaultProject, _searchQuery);
+    [When("^I call query for the project without an entry type$")]
+    public Task WhenSearchWithoutEntryType() => RunSearchAsync(DefaultProject, _searchQuery);
 
-    [When("^I call query for the project with kind \"([^\"]*)\"$")]
-    public Task WhenSearchWithKind(string kind) => RunSearchAsync(DefaultProject, _searchQuery, kind: kind);
+    [When("^I call query for the project with entry type \"([^\"]*)\"$")]
+    public Task WhenSearchWithEntryType(string entryType) => RunSearchAsync(DefaultProject, _searchQuery, entryType: entryType);
 
-    [When("^I call query for the project with kind \"([^\"]*)\" and scope \"([^\"]*)\"$")]
-    public Task WhenSearchWithKindAndScope(string kind, string scope) => RunSearchAsync(DefaultProject, _searchQuery, kind: kind, scope: scope);
+    [When("^I call query for the project with entry type \"([^\"]*)\" and scope \"([^\"]*)\"$")]
+    public Task WhenSearchWithEntryTypeAndScope(string entryType, string scope) => RunSearchAsync(DefaultProject, _searchQuery, entryType: entryType, scope: scope);
 
     [Then("^the response contains a \"results\" key with the memory hits$")]
     public void ThenResponseHasResultsKeyWithHits()
@@ -254,14 +247,14 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         _lastSearchJson["code"]!.AsArray().Count.ShouldBeGreaterThan(0);
     }
 
-    [Then("^the tool errors with invalid-params naming the allowed kinds$")]
-    public void ThenToolErrorsInvalidParamsNamingKinds()
+    [Then("^the tool errors with invalid-params naming the allowed entry types$")]
+    public void ThenToolErrorsInvalidParamsNamingEntryTypes()
     {
-        _lastError.ShouldNotBeNull("expected query to refuse the invalid kind");
+        _lastError.ShouldNotBeNull("expected query to refuse the invalid entry type");
         _lastError!.Message.ShouldContain("invalid-params");
         _lastError.Message.ShouldContain("memory");
         _lastError.Message.ShouldContain("code");
-        _lastError.Message.ShouldContain("both");
+        _lastError.Message.ShouldContain("file");
     }
 
     [Then("^the code hit carries lineStart (\\d+) and lineEnd (\\d+)$")]
@@ -595,7 +588,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     [Then("^the code section is served from full-text search only$")]
     public async Task ThenCodeSectionServedFromFtsOnly()
     {
-        await RunSearchAsync(DefaultProject, _searchQuery, kind: "code");
+        await RunSearchAsync(DefaultProject, _searchQuery, entryType: "code");
         _lastSearchJson!["code"]!.AsArray().Count.ShouldBeGreaterThan(0);
     }
 
@@ -626,10 +619,10 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         _lastError!.Message.ShouldContain("model code set local");
     }
 
-    [Then("^query with kind \"([^\"]*)\" for the same project still succeeds$")]
-    public async Task ThenSearchWithKindStillSucceeds(string kind)
+    [Then("^query with entry type \"([^\"]*)\" for the same project still succeeds$")]
+    public async Task ThenSearchWithEntryTypeStillSucceeds(string entryType)
     {
-        var envelope = await Ctx.MemoryTools.Search(DefaultProject, _searchQuery, sessionId: "sess-test", entryType: EntryTypesForLegacyKind(kind));
+        var envelope = await Ctx.MemoryTools.Search(DefaultProject, _searchQuery, sessionId: "sess-test", entryType: entryType);
         envelope.Data.ShouldNotBeNull();
     }
 
@@ -755,12 +748,12 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         // Deliberately never runs the reindex job here -- rows stay pending, simulating the drain window.
     }
 
-    [When("^query is called for the project with kind \"([^\"]*)\"$")]
-    public Task WhenMemorySearchIsCalledForProjectWithKind(string kind) => RunSearchAsync(DefaultProject, _searchQuery, kind: kind);
+    [When("^query is called for the project with entry type \"([^\"]*)\"$")]
+    public Task WhenMemorySearchIsCalledForProjectWithEntryType(string entryType) => RunSearchAsync(DefaultProject, _searchQuery, entryType: entryType);
 
-    [When("^I call query for the project with kind \"([^\"]*)\" with session \"([^\"]*)\"$")]
-    public Task WhenSearchWithKindAndSession(string kind, string session) =>
-        RunSearchAsync(DefaultProject, _searchQuery, kind: kind, sessionId: session);
+    [When("^I call query for the project with entry type \"([^\"]*)\" with session \"([^\"]*)\"$")]
+    public Task WhenSearchWithEntryTypeAndSession(string entryType, string session) =>
+        RunSearchAsync(DefaultProject, _searchQuery, entryType: entryType, sessionId: session);
 
     [Then("^the call succeeds without a migration-in-progress refusal$")]
     public void ThenCallSucceedsWithoutMigrationRefusal()
@@ -807,10 +800,10 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         states.ShouldAllBe(s => s == "embedded");
     }
 
-    [Then("^kind=code search returns vector-ranked results for them again$")]
-    public async Task ThenKindCodeSearchReturnsVectorRankedResults()
+    [Then("^entryType=code search returns vector-ranked results for them again$")]
+    public async Task ThenEntryTypeCodeSearchReturnsVectorRankedResults()
     {
-        await RunSearchAsync(DefaultProject, _searchQuery, kind: "code");
+        await RunSearchAsync(DefaultProject, _searchQuery, entryType: "code");
         _lastSearchJson!["code"]!.AsArray().Count.ShouldBeGreaterThan(0);
         var warning = _lastSearchJson["warning"]?.GetValue<string>();
         (warning is null || !warning.Contains(CodeSearchWarnings.EngineNotConfigured, StringComparison.Ordinal))
@@ -865,8 +858,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
 
     /// <summary>
     ///     P3 (ADR-0097): the row for THIS call — correlation-filtered, not a bare COUNT(*) —
-    ///     carries the requested kind verbatim. Pre-P3 the column did not exist (NULL backfill
-    ///     excepted: only pre-cutoff rows read 'memory' without a kind on the write path).
+    ///     carries the legacy quality kind derived from entryType. Pre-P3 the column did not exist.
     /// </summary>
     [Then("^the search_quality row for that call carries kind \"([^\"]*)\"$")]
     public async Task ThenSearchQualityRowCarriesKind(string kind)

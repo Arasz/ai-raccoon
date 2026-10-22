@@ -164,7 +164,7 @@ public sealed class SearchQualityServiceTests : IDisposable
     /// <summary>
     ///     P3 (ADR-0097): kind is required on the write path — every recorded row names the leg
     ///     it describes. Both verbs take it as a required string after projectId / before
-    ///     sessionId; the dispatcher passes <c>SearchKind.ToString().ToLowerInvariant()</c>.
+    ///     sessionId; the dispatcher writes the legacy search-quality kind.
     /// </summary>
     [RetryTheory]
     [InlineData("memory")]

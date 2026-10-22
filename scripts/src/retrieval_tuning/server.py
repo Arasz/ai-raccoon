@@ -102,8 +102,9 @@ class ScratchServer:
             "limit": int(corpus_entry.get("searchLimit") or 5),
             "min_relative_score": 0.0,
         }
-        if corpus_entry.get("kind") is not None:
-            kwargs["entry_type"] = {"memory": "memory,file", "both": "memory,code,file"}.get(corpus_entry["kind"], corpus_entry["kind"])
+        entry_type = MCPClient.entry_type_for_legacy_kind(corpus_entry.get("kind"))
+        if entry_type is not None:
+            kwargs["entry_type"] = entry_type
         return self.client.query(**kwargs)
 
     def stop(self) -> None:

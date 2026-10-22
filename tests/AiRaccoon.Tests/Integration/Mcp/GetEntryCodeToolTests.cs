@@ -201,8 +201,8 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
     /// </summary>
     private sealed class EmptyStore : FakeMemoryStore
     {
-        public override Task<MemoryEntry?> GetAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
+        protected override Task<MemoryEntry?> GetAsyncCore(string projectId, string hash,
+            CancellationToken cancellationToken) =>
             Task.FromResult<MemoryEntry?>(null);
     }
 

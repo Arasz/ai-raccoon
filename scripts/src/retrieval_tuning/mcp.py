@@ -52,6 +52,11 @@ class MCPClient:
         self._req_id = 0
         self._initialized = False
 
+    @staticmethod
+    def entry_type_for_legacy_kind(kind: Optional[str]) -> Optional[str]:
+        """Map the frozen retrieval-harness kind vocabulary to the typed query API."""
+        return {"memory": "memory,file", "both": "memory,code,file"}.get(kind, kind)
+
     def _headers(self) -> dict:
         headers = {
             "Content-Type": "application/json",

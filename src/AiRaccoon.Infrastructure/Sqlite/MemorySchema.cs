@@ -1903,23 +1903,7 @@ internal static class MemorySchema
         return new WatchOverlapPruneResult([.. toPrune.Select(t => t.Pruned)], warnings);
     }
 
-    /// <summary>
-    ///     Adds <paramref name="table" />.embed_attempts if it is missing. Runs only on a digest
-    ///     mismatch (and for entries after the v17 rebuild), and tolerates losing the ALTER race to
-    ///     another connection opening the same stale bank: "duplicate column" means it is already there.
-    /// </summary>
-    /// <summary>
-    ///     The entry kind column, added to a legacy bank before anything can name it.
-    ///     <para>
-    ///         The typed vec0 trigger bodies name <c>NEW.entry_type</c>, and SQLite validates that
-    ///         reference when it parses the trigger — which happens as soon as any statement forces
-    ///         the schema to be re-read (an <c>ALTER TABLE ... RENAME</c> re-parses every trigger).
-    ///         So the column has to exist before the Ddl installs those bodies and before the
-    ///         ladder's older steps run. It is purely additive: the v20 step backfills it, and a
-    ///         bank that never reaches the backfill carries the default 'none' — the kind a row has
-    ///         not been given yet.
-    ///     </para>
-    /// </summary>
+    /// <summary>Adds the kind column before installing triggers and running older migrations.</summary>
     private static async Task EnsureEntryTypeColumnAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
     {
@@ -1951,6 +1935,7 @@ internal static class MemorySchema
         }
     }
 
+    /// <summary>Adds the retry counter, tolerating another opener winning the ALTER race.</summary>
     private static async Task EnsureEmbedAttemptsColumnAsync(SqliteConnection connection, string table,
         CancellationToken cancellationToken)
     {

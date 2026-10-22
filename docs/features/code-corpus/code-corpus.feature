@@ -11,7 +11,7 @@ Feature: Code corpus
     # Baseline (plan §1, §3.1): a second, code-only corpus in the SAME memory.db
     # (code_entries + code_fts + vec_code, float[768] fresh-bank default, reconciled to
     # the active engine's dimension per ADR-0093), fed by the existing watch/ingest
-    # machinery, reachable through query kind=memory|code|both and get_entry.
+    # machinery, reachable through query entryType=memory|file|code and get_entry.
     # Model at authoring: faxenoff/code-daemon-embed-v1, 768-dim, chunk budget 510
     # (min(510, ctx-2)). ADR-0108 (2026-09-23) replaced it: `model code set default` now
     # activates the bundled granite-embedding-small-english-r2 (fp16, 384-dim, nothing
@@ -24,48 +24,48 @@ Feature: Code corpus
     #   — deferred pending owner approval of the repos (OQ5); scripts/.../eval-sets/
     #   code-smoke.json is a small sanity fixture only, not that eval set.
 
-    Rule: query's kind parameter selects and shapes the response envelope
-        # Plan §3.6: keys are "results" (existing) and "code" (new); kind=memory
+    Rule: query's entryType parameter selects and shapes the response envelope
+        # Plan §3.6: keys are "results" (existing) and "code" (new); entryType=memory,file
         # serializes the exact legacy shape (no "code" key at all, via
-        # [JsonIgnore(Condition = WhenWritingNull)]); kind=code/both always carry both
-        # keys. Default kind is "both" since 1.34.0 (was "memory") — a default search
+        # [JsonIgnore(Condition = WhenWritingNull)]); code searches always carry both
+        # keys. Default entryType is all three values — a default search
         # runs both corpora's hybrids independently, no cross-corpus fusion.
-        Scenario: The default kind searches both corpora
+        Scenario: The default entry types search both corpora
             Given a project with memory entries and code chunks
-            When I call query for the project without a kind
+            When I call query for the project without an entry type
             Then the response contains a "results" key with the memory hits
             And the response contains a "code" key with the code hits
 
-        Scenario: kind=memory keeps the legacy envelope with no code key
+        Scenario: memory and file search keeps the legacy envelope with no code key
             Given a project with memory entries and code chunks
-            When I call query for the project with kind "memory"
+            When I call query for the project with entry type "memory,file"
             Then the response contains a "results" key with the memory hits
             And the response contains no "code" key
 
-        Scenario: kind=code returns only the code section
+        Scenario: entryType=code returns only the code section
             Given a project with memory entries and code chunks
-            When I call query for the project with kind "code"
+            When I call query for the project with entry type "code"
             Then the response contains an empty "results" key
             And the response contains a "code" key with the code hits
 
-        Scenario: kind=both returns both sections
+        Scenario: all entry types return both sections
             Given a project with memory entries and code chunks
-            When I call query for the project with kind "both"
+            When I call query for the project with entry type "memory,code,file"
             Then the response contains a "results" key with the memory hits
             And the response contains a "code" key with the code hits
 
-        Scenario: An invalid kind is refused
-            When I call query for the project with kind "docs"
-            Then the tool errors with invalid-params naming the allowed kinds
+        Scenario: An invalid entry type is refused
+            When I call query for the project with entry type "docs"
+            Then the tool errors with invalid-params naming the allowed entry types
 
         Scenario: Code hits carry line ranges instead of chunk position
             Given a project with a code chunk spanning lines 10 to 24
-            When I call query for the project with kind "code"
+            When I call query for the project with entry type "code"
             Then the code hit carries lineStart 10 and lineEnd 24
 
-        Scenario: kind=code with a shared or workspace scope returns an empty code section
+        Scenario: entryType=code with a shared or workspace scope returns an empty code section
             Given a project with code chunks
-            When I call query for the project with kind "code" and scope "shared"
+            When I call query for the project with entry type "code" and scope "shared"
             Then the code section is empty
             # code is always project-scoped (plan §3.6); this is documented, not an error.
 
@@ -154,27 +154,27 @@ Feature: Code corpus
             When a code file is ingested
             Then its chunks are stored in the code corpus with embed_state "pending"
 
-        Scenario: kind=code search degrades to FTS5-only with a warning when unconfigured
+        Scenario: entryType=code search degrades to FTS5-only with a warning when unconfigured
             Given a project with no code embedding engine configured
             And code chunks stored pending
-            When I call query for the project with kind "code"
+            When I call query for the project with entry type "code"
             Then the code section is served from full-text search only
             And the response carries a warning that vector search is unavailable
 
-        Scenario: the default kind=both search degrades to FTS5-only with a warning when unconfigured
+        Scenario: the default all-types search degrades to FTS5-only with a warning when unconfigured
             Given a project with no code embedding engine configured
             And code chunks stored pending
             And a memory entry matching the same query
-            When I call query for the project without a kind
+            When I call query for the project without an entry type
             Then the memory results are present and unaffected
             And the code section is served from full-text search only
             And the response carries a warning that vector search is unavailable
 
         Scenario: A configured-but-unloadable code engine refuses code search only
             Given a project whose code embedding engine manifest cannot be loaded
-            When I call query for the project with kind "code"
+            When I call query for the project with entry type "code"
             Then the tool errors with an actionable message naming the engine problem
-            And query with kind "memory" for the same project still succeeds
+            And query with entry type "memory,file" for the same project still succeeds
 
     Rule: The code corpus's vector index accepts any-dimension manifests and reconciles vec_code
         # Plan §3.3 (vec-code-unfix-dim): vec_code is a vec0 table like the memory bank's —
@@ -226,7 +226,7 @@ Feature: Code corpus
 
         Scenario: Memory tools are never blocked while code rows drain
             Given a code engine change with pending rows still draining
-            When query is called for the project with kind "memory"
+            When query is called for the project with entry type "memory,file"
             Then the call succeeds without a migration-in-progress refusal
             # No ToolGate interaction for the code drain — memory tools are never
             # closed the way a memory model migration closes them (plan §3.3).
@@ -235,40 +235,39 @@ Feature: Code corpus
             Given code rows left pending by a code engine change
             When the code-reindex maintenance job runs
             Then the pending rows are re-embedded under the new engine
-            And kind=code search returns vector-ranked results for them again
+            And entryType=code search returns vector-ranked results for them again
 
-    Rule: Every kind records a search-quality row, but code paths never enter one
+    Rule: Every query records a search-quality row, but code paths never enter one
         # ADR-0094 reverses the pre-0094 exclusion (which had designed the signal away from
-        # the default path the day PR #580 flipped the default kind to both): memory records as
+        # the default path the day PR #580 flipped the default to both): memory records as
         # before, both records the memory leg, code records its code count with an empty file
         # list. search_quality rows ride the sync snapshot, so code paths stay out (ADR-0085).
-        Scenario: A kind=code search writes a search_quality row
-            When I call query for the project with kind "code"
+        Scenario: An entryType=code search writes a search_quality row
+            When I call query for the project with entry type "code"
             Then a search_quality row is written for that call
             And no code paths are stored in search_quality
 
-        Scenario: A kind=both search writes a search_quality row
-            When I call query for the project with kind "both"
+        Scenario: An all-types search writes a search_quality row
+            When I call query for the project with entry type "memory,code,file"
             Then a search_quality row is written for that call
             And no code paths are stored in search_quality
 
-        Scenario: A kind=memory search still records exactly as today
-            When I call query for the project with kind "memory"
+        Scenario: A memory and file search still records exactly as today
+            When I call query for the project with entry type "memory,file"
             Then a search_quality row is written for that call
 
         # P1 (owner gate 2026-09-03, D1 CHANGE): sessionId is required at every layer —
         # every agent has a session. The row for THIS call (correlation-filtered) carries the
         # passed session verbatim; pre-P1 the Safe path hardcoded null, so this read back NULL.
         Scenario: A session-attributed search stores its session id verbatim
-            When I call query for the project with kind "memory" with session "sess-bdd-1"
+            When I call query for the project with entry type "memory,file" with session "sess-bdd-1"
             Then the search_quality row for that call carries session "sess-bdd-1"
 
-        # P3 (ADR-0097): kind is required on the write path — the row for THIS call
-        # (correlation-filtered) carries the requested kind verbatim.
-        Scenario: A kind=code search stores its kind verbatim
-            When I call query for the project with kind "code"
+        # P3 (ADR-0097): each query keeps its legacy quality kind, derived from its entryType.
+        Scenario: An entryType=code search stores legacy kind code
+            When I call query for the project with entry type "code"
             Then the search_quality row for that call carries kind "code"
 
-        Scenario: A kind=both search stores its kind verbatim
-            When I call query for the project with kind "both"
+        Scenario: An all-types search stores legacy kind both
+            When I call query for the project with entry type "memory,code,file"
             Then the search_quality row for that call carries kind "both"

@@ -1014,7 +1014,7 @@ public class MemoryToolsTests
             return Task.FromResult(new SearchResults([], SearchTimings.Empty, Fusion));
         }
 
-        public override Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
+        protected override Task<MemoryEntry?> GetAsyncCore(string projectId, string hash, CancellationToken cancellationToken) =>
             Task.FromResult(GetEntry);
 
         public override Task<MemoryStats> GetStatsAsync(string projectId,

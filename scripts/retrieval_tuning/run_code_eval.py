@@ -429,7 +429,7 @@ def run(args) -> dict:
                 scope=entry.get("targetScope") or "all",
                 limit=args.fetch_limit,
                 min_relative_score=0.0,
-                kind="code",
+                entry_type="code",
             )
             if args.save_hits:
                 hits.append(hit_record(entry, results))

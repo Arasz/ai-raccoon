@@ -95,10 +95,12 @@ public sealed class SetTtlToolTests : IDisposable
             _tools.SetTtl(ProjectId, entry.Hash, 0, TestContext.Current.CancellationToken));
     }
 
-    [Theory]
-    [InlineData(7)]
-    [InlineData(null)]
-    public async Task FileTtlMutation_IsRefusedWithoutChangingHistoricalTtl(int? ttlDays)
+    [RetryTheory]
+    [InlineData("file", 7)]
+    [InlineData("file", null)]
+    [InlineData("none", 7)]
+    [InlineData("none", null)]
+    public async Task NonMemoryTtlMutation_IsRefusedWithoutChangingHistoricalTtl(string entryType, int? ttlDays)
     {
         await FullAccessAsync();
         var entry = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "historical file"),
@@ -107,8 +109,8 @@ public sealed class SetTtlToolTests : IDisposable
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE entries SET entry_type = 'file', ttl_days = 19 WHERE hash = @hash",
-            new { hash = entry.Hash }, cancellationToken: TestContext.Current.CancellationToken));
+            "UPDATE entries SET entry_type = @entryType, ttl_days = 19 WHERE hash = @hash",
+            new { hash = entry.Hash, entryType }, cancellationToken: TestContext.Current.CancellationToken));
 
         await Should.ThrowAsync<UnknownHashException>(() =>
             _tools.SetTtl(ProjectId, entry.Hash, ttlDays, TestContext.Current.CancellationToken));
@@ -117,7 +119,7 @@ public sealed class SetTtlToolTests : IDisposable
             .TtlDays.ShouldBe(19);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task ChunkedTranscript_CanSetAndClearTtl()
     {
         await FullAccessAsync();
@@ -135,7 +137,7 @@ public sealed class SetTtlToolTests : IDisposable
         (await _store.GetMetadataAsync(ProjectId, entry.Hash, TestContext.Current.CancellationToken))!.TtlDays.ShouldBeNull();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task WrongProjectHash_HasTheSameRefusalAsMissingHash()
     {
         await FullAccessAsync();
@@ -146,7 +148,7 @@ public sealed class SetTtlToolTests : IDisposable
         (await _store.GetMetadataAsync("other", entry.Hash, TestContext.Current.CancellationToken))!.TtlDays.ShouldBeNull();
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData(-1)]
     [InlineData(0)]
     [InlineData(36501)]
@@ -163,7 +165,7 @@ public sealed class SetTtlToolTests : IDisposable
         (await _store.GetMetadataAsync(ProjectId, entry.Hash, TestContext.Current.CancellationToken))!.TtlDays.ShouldBe(9);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Sweep_HonorsHistoricalExplicitFileTtl()
     {
         await FullAccessAsync();

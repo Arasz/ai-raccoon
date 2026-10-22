@@ -40,17 +40,16 @@ public class FakeMemoryStore : IMemoryStore, ISettingsStore
     ///     derived fake's own GetAsync would not take part in interface dispatch, so it would
     ///     silently return "not found" (ADR-0035).
     /// </summary>
-    public virtual Task<MemoryEntry?> GetAsync(string projectId, string hash,
-        CancellationToken cancellationToken = default) =>
-        throw NotOverridden(nameof(GetAsync));
-
-    public virtual async Task<MemoryEntry?> GetAsync(string projectId, string hash, EntryKind entryKind,
-        CancellationToken cancellationToken = default)
+    public virtual async Task<MemoryEntry?> GetAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default, EntryKind? entryKind = null)
     {
-        var entry = await GetAsync(projectId, hash, cancellationToken);
-        var requested = new EntryKindClassifier().ToStoredValue(entryKind);
-        return entry?.EntryKind == requested ? entry : null;
+        var entry = await GetAsyncCore(projectId, hash, cancellationToken);
+        var requested = entryKind is { } kind ? new EntryKindClassifier().ToStoredValue(kind) : null;
+        return entry is null || requested is null || entry.EntryKind == requested ? entry : null;
     }
+
+    protected virtual Task<MemoryEntry?> GetAsyncCore(string projectId, string hash,
+        CancellationToken cancellationToken) => throw NotOverridden(nameof(GetAsync));
 
     public virtual Task<int> DeleteContextAsync(string projectId, string context,
         CancellationToken cancellationToken = default) =>

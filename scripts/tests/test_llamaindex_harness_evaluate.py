@@ -118,7 +118,8 @@ def test_airaccoon_fn_sends_session_id_and_extracts_hashes():
     name, args = client.calls[0]
     assert name == "query"
     assert args["sessionId"] == "sess-1"
-    assert args["limit"] == 8 and args["kind"] == "memory"
+    assert args["limit"] == 8 and args["entryType"] == "memory,file"
+    assert "kind" not in args
     # Prod leg serves the same post-floor shape as the harness leg (floor 0.6).
     assert args["minRelativeScore"] == pytest.approx(0.6)
 

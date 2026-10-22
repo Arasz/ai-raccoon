@@ -41,6 +41,7 @@ from pathlib import Path
 
 from . import scopes
 from retrieval_tuning import repo_data
+from retrieval_tuning.mcp import MCPClient
 
 EVAL_LIMIT = repo_data.KNOBS["EVAL_LIMIT"]
 
@@ -536,6 +537,7 @@ def build_airaccoon_fn(server, session_id: str) -> object:
 
     def fn(entry: dict) -> dict:
         try:
+            entry_type = MCPClient.entry_type_for_legacy_kind(repo_data.KNOBS["PARAMS"]["kind"])
             parsed = client._call_tool("query", {
                 "projectId": entry.get("targetProjectId") or "ai-raccoon",
                 "query": entry["query"],
@@ -545,11 +547,11 @@ def build_airaccoon_fn(server, session_id: str) -> object:
                     entry.get("targetScope") or scopes.DEFAULT_QUERY_SCOPE),
                 "limit": EVAL_LIMIT,
                 "minRelativeScore": repo_data.KNOBS["PARAMS"]["minRelativeScore"],
-                "kind": repo_data.KNOBS["PARAMS"]["kind"],      # the same post-floor, post-limit shape
+                "entryType": entry_type,      # the same post-floor, post-limit shape
                 "sessionId": session_id,
             })
             results = MCPClient._extract_results(
-                parsed, kind=repo_data.KNOBS["PARAMS"]["kind"])
+                parsed, entry_type=entry_type)
             hashes = []
             for row in results:
                 h = row.get("hash") if isinstance(row, dict) else None

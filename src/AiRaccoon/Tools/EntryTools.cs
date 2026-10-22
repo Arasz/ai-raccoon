@@ -50,7 +50,7 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
         else
         {
             var kind = requested == EntryType.Memory ? EntryKind.Memory : EntryKind.File;
-            var entry = await store.GetAsync(canonical, hash, kind, cancellationToken)
+            var entry = await store.GetAsync(canonical, hash, cancellationToken, entryKind: kind)
                 ?? throw new UnknownHashException(hash, canonical);
             var stored = _classifier.ReadStoredKind(entry.EntryKind);
             if (stored.State != StoredKindState.Declared || stored.Kind != kind)

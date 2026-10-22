@@ -13,11 +13,9 @@ public interface IMemoryStore : IModelMigrationStore
     ///     already uses for search hits. Null when the project owns no such hash. Abstract on
     ///     purpose: a default of "not found" is a wrong answer, not a safe one (ADR-0054).
     /// </summary>
-    Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default);
-
     /// <summary>Reads the selected declared row kind before choosing one matching hash.</summary>
-    Task<MemoryEntry?> GetAsync(string projectId, string hash, EntryKind entryKind,
-        CancellationToken cancellationToken = default);
+    Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default,
+        EntryKind? entryKind = null);
 
     /// <summary>
     ///     Deletes the whole write behind <paramref name="hash" /> and returns the number of rows
