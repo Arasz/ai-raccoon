@@ -157,6 +157,30 @@ public sealed class EntryKindClassifierTests
     }
 
     /// <summary>
+    ///     The three states read apart: a declared kind, an undeclared row, and a value this build
+    ///     does not know. The last one used to be lost — the kind read mapped every unknown value
+    ///     to the undeclared one, so a rewrite resolved it from the shape and the evidence was
+    ///     gone.
+    /// </summary>
+    [Fact]
+    public void ReadStoredKind_TellsTheThreeStatesApart()
+    {
+        var classifier = new EntryKindClassifier();
+
+        var declared = classifier.ReadStoredKind("file");
+        declared.State.ShouldBe(StoredKindState.Declared);
+        declared.Kind.ShouldBe(EntryKind.File);
+
+        classifier.ReadStoredKind("none").State.ShouldBe(StoredKindState.Undeclared);
+        classifier.ReadStoredKind(null).State.ShouldBe(StoredKindState.Undeclared);
+        classifier.ReadStoredKind("").State.ShouldBe(StoredKindState.Undeclared);
+
+        var unknown = classifier.ReadStoredKind("transcript");
+        unknown.State.ShouldBe(StoredKindState.Unknown);
+        unknown.Raw.ShouldBe("transcript", "the unknown value is kept, so the evidence survives");
+    }
+
+    /// <summary>
     ///     The stored kind carries no flag attribute and no Code member: a code chunk is not a row
     ///     of entries — it lives in the separate code_entries corpus, which the query parameter
     ///     reaches as a corpus, not as a row kind.

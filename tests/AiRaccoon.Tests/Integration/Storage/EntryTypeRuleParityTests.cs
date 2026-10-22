@@ -138,7 +138,10 @@ public sealed class EntryTypeRuleParityTests
         for (var i = 0; i < stored.Length; i++)
         {
             var kind = stored[i];
-            var expected = classifier.ToStoredValue(classifier.Resolve(kind, "docs/guide.md", "docs/guide.md"));
+            var read = classifier.ReadStoredKind(kind);
+            var expected = read.State == StoredKindState.Unknown
+                ? EntryKindWireNames.None
+                : classifier.ToStoredValue(classifier.Resolve(kind, "docs/guide.md", "docs/guide.md"));
             sqlKinds[i].ShouldBe(expected, $"the two rules disagree about the stored kind '{kind}'");
         }
     }

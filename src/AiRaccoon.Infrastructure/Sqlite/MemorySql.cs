@@ -30,7 +30,12 @@ internal static class MemorySql
     /// </summary>
     public static string EntryTypeFromDeclarationOrShape(string tableAlias) =>
         $"CASE WHEN {tableAlias}entry_type IN ('{EntryKindWireNames.Memory}', '{EntryKindWireNames.File}') "
-        + $"THEN {tableAlias}entry_type ELSE {EntryTypeFromShape(tableAlias)} END";
+        + $"THEN {tableAlias}entry_type "
+        + $"WHEN {tableAlias}entry_type IS NULL OR {tableAlias}entry_type = '{EntryKindWireNames.None}' "
+        + $"THEN {EntryTypeFromShape(tableAlias)} "
+        // A remote's UNKNOWN kind is data from another machine: it lands unclassified, where the
+        // doctor counts it, rather than being guessed at from the row's shape.
+        + $"ELSE '{EntryKindWireNames.None}' END";
 
     // ON CONFLICT DO NOTHING is bare — expression/partial indexes can't be a conflict target — so
     // concurrent same-bucket inserts converge; the loser re-reads by bucket key

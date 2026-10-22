@@ -45,6 +45,12 @@ public interface IEntryKindClassifier
     EntryKind FromStoredValue(string? value);
 
     /// <summary>
+    ///     A stored kind, read as one of its THREE states: a kind the row declares, a row that
+    ///     declares none, or a value this build does not know.
+    /// </summary>
+    StoredKind ReadStoredKind(string? value);
+
+    /// <summary>
     ///     The stored value a rewritten row keeps: its declared kind, or the kind its shape gives
     ///     for an undeclared row. An unknown stored value is carried through untouched — it is a
     ///     defect the doctor counts, and only the undeclared state may be resolved from the shape.

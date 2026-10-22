@@ -1497,6 +1497,42 @@ public class SyncServiceTests : IDisposable
     }
 
     /// <summary>
+    ///     A remote's UNKNOWN kind is data from another machine: it lands unclassified, where the
+    ///     doctor counts it, rather than being guessed at from the row's shape. Guessing would file
+    ///     another machine's defect as a fact about this one.
+    /// </summary>
+    [RetryFact]
+    public async Task MergeAsync_ARemotesUnknownKind_LandsUnclassified()
+    {
+        var cloud = new FakeCloudStore();
+
+        var remotePath = Path.Combine(_dataRoot, "unknown-kind-remote.db");
+        await using (var conn = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, created_at, updated_at, entry_type)
+                                 VALUES ('odd-kind', 'doc.md', 'chunk one', 'doc.md', 'Intro', 'project', 'acme', 1, 1, 'transcript')
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
+
+        var service = _bank.CreateService(cloud);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(TestContext.Current.CancellationToken);
+
+        await using var select = check.CreateCommand();
+        select.CommandText = "SELECT entry_type FROM entries WHERE hash = 'odd-kind'";
+        var kind = (string?)await select.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+        kind.ShouldBe("none", "a remote's unknown kind lands unclassified, where the doctor counts it");
+    }
+
+    /// <summary>
     ///     A remote on an older schema has no kind column at all. Its rows are filed by their own
     ///     shape — the same rule the v20 backfill applies — so a pulled row is never left with the
     ///     default 'none' that the typed query cannot place.

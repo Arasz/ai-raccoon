@@ -68,6 +68,32 @@ public sealed class EntryKindClassifier : IEntryKindClassifier
     };
 
     /// <summary>
+    ///     A stored kind, read as one of its THREE states: a kind the row declares, a row that
+    ///     declares none, or a value this build does not know.
+    ///     <para>
+    ///         The third state is the one that used to be lost: <see cref="FromStoredValue" /> maps
+    ///         every value it does not know to the undeclared kind, so an unknown value and an
+    ///         undeclared row read alike — and a rewrite then resolves the unknown one from the
+    ///         shape, which erases the evidence. Reading the three apart is what lets the repair
+    ///         path leave an unknown value alone and the doctor count it.
+    ///     </para>
+    /// </summary>
+    public StoredKind ReadStoredKind(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || value == EntryKindWireNames.None)
+        {
+            return StoredKind.Undeclared;
+        }
+
+        return FromStoredValue(value) switch
+        {
+            EntryKind.Memory => StoredKind.Of(EntryKind.Memory),
+            EntryKind.File => StoredKind.Of(EntryKind.File),
+            _ => StoredKind.OfUnknown(value)
+        };
+    }
+
+    /// <summary>
     ///     The stored value a rewritten row keeps. Three states, and they are not the same:
     ///     <list type="bullet">
     ///         <item>
@@ -87,15 +113,13 @@ public sealed class EntryKindClassifier : IEntryKindClassifier
     /// </summary>
     public string ResolveStoredValue(string? storedKind, string? path, string? sourceFile)
     {
-        // 'none' is the UNDECLARED marker, not an unknown value: it resolves from the shape like a
-        // null does. Anything else this build does not know is a defect, and it is carried through.
-        if (!string.IsNullOrEmpty(storedKind)
-            && storedKind != EntryKindWireNames.None
-            && FromStoredValue(storedKind) == EntryKind.None)
+        var read = ReadStoredKind(storedKind);
+        return read.State switch
         {
-            return storedKind;
-        }
-
-        return ToStoredValue(Resolve(storedKind, path, sourceFile));
+            // An unknown value is a defect: it is carried through untouched, because normalising it
+            // away would leave the doctor with nothing to report.
+            StoredKindState.Unknown => read.Raw!,
+            _ => ToStoredValue(Resolve(storedKind, path, sourceFile))
+        };
     }
 }
