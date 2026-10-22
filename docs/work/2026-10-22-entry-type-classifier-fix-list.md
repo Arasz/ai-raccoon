@@ -683,9 +683,22 @@ rewritten. Everything here is open unless it says otherwise.
 ### G. Release chores, after the gate is met
 
 - **G1.** Bump `VERSION` to 2.1.0 (the release split: 2.0.0 is the rename alone, the entry types
-  ride in 2.1.0), add `docs/changelog/2.1.0-*.md`, and update the changelog index.
+  ride in 2.1.0), add `docs/changelog/2.1.0-*.md`, and update the changelog index. The changelog
+  convention is that the entry is written in the PR that bumps `VERSION` and that it names every
+  PR shipping a part of the release — so the 2.1.0 entry names PR #913 and each follow-up PR,
+  and the scope it describes is the list above, in full.
 - **G2.** The framework side that speaks the new names (ai-badger #650, the feed-badger change)
   must land before the release ships.
+- **G3. The release work is untracked in the task graph.** The live plan
+  (`air-rename-mcp-tools-entry-types`, revision 39) has no 2.1.0 release step: its
+  `release-docs` step is the 2.0.0 one, and it is in progress for a release that already
+  shipped. The plan cannot be replaced while steps are in progress, so whoever owns the plan
+  adds a 2.1.0 release step (version, changelog entry, index line, the client-facing note) —
+  otherwise the release is the one thing on this list with no step behind it. The same note
+  applies to the `entry-type-classifier` step, which is marked complete: its ac4 ("no entry row
+  is left with a NULL or unknown `entry_type` after the migration") passed against a gate that
+  could not see the nullable-v20 population and the doctor's NULL blindness, so the findings
+  that close them belong to 2.1.0, not to a closed step.
 
 ### H. PR hygiene
 
