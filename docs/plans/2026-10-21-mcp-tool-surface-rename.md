@@ -6,7 +6,10 @@
 
 **Owner decisions already taken:** hard rename (a breaking change, no aliases); the ai-badger
 framework is updated before the release ships; high-effort loop; the quality surface splits
-into a read tool and one write tool.
+into a read tool and one write tool; an entry has exactly one type (settled 2026-10-22), so the
+stored kind is single-valued, `Code` names a corpus rather than a row kind, and the flag set
+belongs to the query parameter alone; the stored column is NOT NULL with the default `none`
+(same ruling), so a row that carries no kind yet says so in the column rather than by a null.
 
 ## The names
 
