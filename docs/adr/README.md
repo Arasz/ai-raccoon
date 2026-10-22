@@ -19,6 +19,10 @@ cell that omits an amendment the record shows, or names one it does not, is a re
 means the record was never amended. A supersession or a reversal is recorded in the summary
 cell and mirrored in the record's Status line.
 
+The tool names inside these records are the ones in force when each was written. The MCP
+surface was renamed in 2.0.0, and the [old → new map](../changelog/2.0.0-mcp-tool-surface-renamed.md)
+has every name; the records keep theirs, because a record is frozen.
+
 | ADR | Decision | Amended |
 |-----|----------|---------|
 | [0001 — FluentValidation in the core](0001-fluentvalidation-in-core.md) | Domain validation via FluentValidation | — |
