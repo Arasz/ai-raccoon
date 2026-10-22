@@ -707,3 +707,139 @@ rewritten. Everything here is open unless it says otherwise.
   pull request" (and "The commitOID is not part of the pull request"), for every commit in it, and
   the endpoint accepts neither `position` nor `subject_type`. The findings therefore live in the
   two review summaries and in this record. That is a GitHub-side question, not a code one.
+
+## Review of `db94682b` + `8656fddd`: the typed vector layout (ADR-0141, v21) and the fixes
+
+Verified on a clean checkout of `8656fddd`: `dotnet build` — 8 projects, 0 warnings, 0 errors; the fast
+lane — **5198 passed, 0 failed, 2 skipped**; the slow lane — **1607 passed, 0 failed, 14 skipped**.
+
+**What landed well.** The seven fixes are the fixes I asked for, and each carries a red proof: the
+nullable-v20 bank is classified before the vectors are rebuilt (the ordering was the point), the
+doctor counts a NULL kind, the sync merge names its kinds by the one vocabulary, `Single` refuses
+an unknown bit, and the two words are spelled in one place. The typed layout is measured before it
+is written down, and the two properties that matter are tested by name: a typed KNN reads only the
+asked-for kind, and an unrestricted query still reads the whole context — the compatibility
+property the ADR depends on, and the one that would have broken every existing search.
+
+**Verdict: the layout is right, the fixes are right, and one piece of B1 is still open.** Below is
+that piece, then my reading on the three questions you asked.
+
+### Blocking
+
+**1. The nullable-v20 column is healed, not fixed — the schema half of B1 is still open, and it is
+E1's step rather than a separate one.**
+`src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:1866` (`EnsureEntryTypeColumnAsync`), the v21
+normalization at `:1503`.
+
+The fix is right for the rows: a bank that went through the first v20 build has every row
+classified before the vectors are rebuilt, so no vector is filed under a NULL partition. What is
+still true is that **the column itself stays nullable, with no default, forever** —
+`EnsureEntryTypeColumnAsync` returns early when the column exists, and the v21 step's `UPDATE`
+classifies rows, it does not change the column's definition. So on exactly the population that
+carries the defect:
+
+- the schema still permits a row with no kind. Today's write paths all supply one
+  (`MemorySql.InsertEntry`, `InsertRebudgetEntry`, the sync merge), so this is latent, not live —
+  but it is enforced by the writers' discipline rather than by the schema, on the one population
+  where the discipline is the only thing standing between a row and a NULL kind;
+- and a NULL kind has a *silent* consequence the doctor cannot see: the typed trigger files the
+  vector under a **NULL partition** (`INSERT INTO vec_entries(rowid, ctx, type, embedding) VALUES
+  (NEW.id, …, NEW.entry_type, …)`), and a NULL partition matches no typed query
+  (`ctx=@ctx AND type=@type`), so the row's vector is an orphan — the doctor's unclassified count
+  sees the *row* (B2's fix ✓) and nothing reports the *vector*.
+
+The fix is the rebuild you are already contemplating for E1, and it is worth doing as **one step
+with three properties**: rebuild `entries` with `entry_type TEXT NOT NULL DEFAULT 'none' CHECK
+(entry_type IN ('none','memory','file'))` for the banks that already carry the column. That gives
+the NOT NULL contract on the nullable population, the value domain (E1), and — the reason it is
+worth the risk — a CHECK that stops the unknown-value population from being written at all, which
+is what makes B4's doctor count reachable. Two details for that rebuild: the v17 rebuild's own
+`CREATE TABLE entries` (`:1630`) has **no `entry_type` column** and its copy (`:1671`) does not
+carry one, so a v16→v21 bank loses the column at v17 and gets it back at v20 — a v21 rebuild has
+to carry the column in both the DDL and the copy; and the rebuild has to re-install the typed
+trigger bodies, because the rename re-parses them.
+
+### My reading on your three questions
+
+**B4 — the shape.** The defect is one line deep: `FromStoredValue` maps *any* value this build does
+not know to `EntryKind.None`, which is also the value that means "undeclared". So "unknown" and
+"undeclared" are one state, and `Resolve` then rewrites the row from its shape — the repair path
+erases the evidence, and the doctor's unknown count can never be non-zero.
+
+The shape I would take is a **tri-state read**, with three callers giving three different answers:
+
+- the classifier gains a tri-state read — `ReadStoredKind(value) → Declared(kind) | Undeclared |
+  Unknown(raw)` — where `Undeclared` is null or `'none'` and `Unknown` is anything outside the
+  domain;
+- the **repair path** branches: undeclared → write the shape's kind; unknown → **leave the row
+  alone and report it**. Rewriting an unknown value is what destroys the evidence; not rewriting it
+  is what makes the doctor's count reachable;
+- the **query path** may treat an unknown kind as "in no set" (it is neither memory nor file) —
+  but that is a decision to write down, not an accident of `FromStoredValue` returning `None`. The
+  default (no kind filter) includes it ✓, consistent with C1;
+- the **sync merge** has the same hole, one line over: `CASE WHEN r.entry_type IN (known) THEN
+  r.entry_type ELSE <shape> END` (`SyncService.cs:475`) rewrites a remote's *unknown* kind by its
+  shape. A remote's `'none'` legitimately falls back to the shape — it has not classified its rows
+  — but a remote's *unknown* kind is data from another machine and should land as unclassified
+  (`'none'`, visible) or be refused, not guessed.
+
+And `Resolve` itself: either it refuses an unknown value (a typed exception the repair path
+catches and reports) or it is renamed to say it only answers the declared/undeclared case. What it
+must not do is fall back silently for a value it did not understand.
+
+**E1 — the shape.** The rebuild, as in the blocking finding above: `entries` rebuilt with
+`NOT NULL DEFAULT 'none'` and the domain `CHECK`, carrying the column in the DDL and the copy,
+re-installing the typed bodies, and — the ordering you just got right in the v21 step — classifying
+the rows **before** the copy, so the typed vec rebuild sees a kind for every row. The v17 machinery
+is the right machinery: it already knows how to rebuild `entries` while preserving the rowids, the
+FTS companion rows and the vec companion rows, and the FTS/vec keying is on the rowid.
+
+**D3–D7 — which are load-bearing.** One of them, one more, and the rest are not:
+
+- **D4 is load-bearing** (`Parse(null)` says "required" where a defaulted query wants a default
+  path). The wiring is the next step and it will call `Parse`; with the current doc, "the entry
+  type is required" reads as "the query parameter is required", and a legitimate default query
+  fails. One line in the doc — "a parameter with a default substitutes the default before it is
+  parsed" — before S6, not after.
+- **D7 is worth doing and cheap.** The parity test is the only thing holding the C# rule and the
+  SQL rule together, and they agree today on boundaries the fixture does not pin: the C# rule
+  compares with `StringComparison.Ordinal` (case-sensitive) and SQLite's `=` on TEXT is BINARY
+  (case-sensitive) ✓ — but nothing pins the agreement, so changing the C# side to
+  `OrdinalIgnoreCase` leaves the fixture green while the rules diverge. The same for a null path
+  with a non-null source, and for both null.
+- **D3 and D5 are cosmetic.** The class name is a naming story, and "none" being refused as an
+  unknown name is a message detail. Neither changes behaviour, and I would not spend a step on them
+  before the wiring.
+- **D6 is done** ✓ — the class summary says what each bit selects, and the "a named set excludes
+  the rows that carry no kind" consequence is the price of "the default is the only unfiltered set".
+
+### Nits
+
+- **The ladder's intermediate states are internally inconsistent, and nothing says so.** The v17
+  rebuild creates an `entries` table with **no** kind column and installs the **typed** trigger
+  bodies on it; the v19 rebuild recreates the vec tables in the **untyped** shape while the typed
+  bodies stay attached. Both states are transient — the ladder runs inside one open, the v21 step
+  ends with the tables and the bodies matching ✓ — but a typed body is only valid on a typed table
+  *and* on a table that has the kind column, and that invariant is neither written down nor tested.
+  A probe on this SQLite confirms where the check actually happens: `CREATE TRIGGER` with a body
+  naming a missing column is **created** (`CREATE: CREATED`) and the failure surfaces when the
+  trigger fires or when a `RENAME` re-parses the schema — which is exactly why the v17 rebuild's
+  rename happens *before* the typed body is installed ✓. The cheap way to remove the fragility: give
+  the v17 rebuild's table the column (`entry_type TEXT NOT NULL DEFAULT 'none'`, with the copied
+  rows taking the default and the v20 backfill classifying them) and keep the typed bodies valid
+  from the moment they are installed.
+- **No test covers a bank with no kind column at all** — the exact population
+  `EnsureEntryTypeColumnAsync` exists for. The legacy fixtures restore the old *bodies* and the old
+  *vec tables*, but every one of them keeps the current `entries` shape, so the column's own
+  creation path is unexercised. `ALTER TABLE entries DROP COLUMN entry_type` is a cheap fixture.
+- **The default's promise is not testable yet, and the doc should name the gate.** "The sum is NO
+  KIND FILTER" is a promise the query path has to keep, and it is only observable once the query
+  path exists — the task graph already carries the gate (`entry-type-parameter` ac1: "query with
+  the default entry type returns the same result set today's default (kind=both) returns"), so
+  naming it in the doc tells the wiring what it must not break. The same goes in the client-facing
+  migration note: **a named set excludes the rows that carry no kind**, so those rows are reachable
+  only by the default — a client that upgrades and starts asking for `memory,file` loses them,
+  silently.
+- **The `EntryTypeWireNames` class doc's "WHAT THE DEFAULT MEANS" paragraph is the contract, and
+  it is currently the only place it exists.** When the wiring lands, that paragraph is what the
+  implementation is checked against; it is worth a second reader at that point rather than now.
