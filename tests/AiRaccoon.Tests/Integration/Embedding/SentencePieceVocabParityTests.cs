@@ -97,7 +97,7 @@ public sealed class SentencePieceVocabParityTests : IAsyncLifetime
         new[] { 0, 91, 95255, 67, 113490, 33938, 57574, 90, 70, 563, 12763, 136, 173, 18770, 6049, 7, 678, 159826, 289, 30648, 119485, 2 })]
     [InlineData("Wie heißt du? Ça va — naïve café, 東京 2026.",
         new[] { 0, 4887, 61202, 115, 32, 25909, 307, 292, 24, 9392, 272, 26216, 4, 6, 22888, 387, 4046, 5, 2 })]
-    [InlineData("query projectId scope=all",
+    [InlineData("memory_search projectId scope=all",
         new[] { 0, 98323, 454, 86250, 13452, 568, 71, 6, 70820, 1369, 5584, 2 })]
     public void TheWholeSequenceMatchesTheReferenceXlmRobertaIds(string text, int[] expected) =>
         Build().EncodeToIds(text, addSpecialTokens: true).ShouldBe(expected,

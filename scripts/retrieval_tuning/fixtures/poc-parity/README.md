@@ -33,7 +33,7 @@ three queries and fails if the port perturbs the gated-off path.
 One serve backend plus one proxy child per capture: `<build>/AiRaccoon --data-root <root>
 serve --port <lease>` owns the bank while `<build>/AiRaccoon --data-root <root> --port <lease>`
 carries the newline-delimited JSON-RPC conversation (`initialize` →
-`notifications/initialized` → batched `tools/call query` with
+`notifications/initialized` → batched `tools/call memory_search` with
 `sessionId="poc-parity-1"`). Env for capture and for the
 parity replay: all `MMR_*` variables stripped, then `MMR_DISABLE=1`.
 

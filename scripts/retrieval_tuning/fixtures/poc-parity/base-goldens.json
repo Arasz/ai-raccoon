@@ -56,7 +56,7 @@
         "hash": "d2ba6f10be83d427825df698ab4fc0943e43017b5f4c21d5c2ac8d3bdc062026",
         "path": "/Users/arasz/RiderProjects/ai-raccoon/docs/plans/file-watcher-implementation.md",
         "ranking": 0.9242424242424242,
-        "snippet": "…Overview\n\nImplement the file-watcher feature: three MCP tools (`add_watch…",
+        "snippet": "…Overview\n\nImplement the file-watcher feature: three MCP tools (`memory_watch_add…",
         "sourceFile": "/Users/arasz/RiderProjects/ai-raccoon/docs/plans/file-watcher-implementation.md"
       },
       {
