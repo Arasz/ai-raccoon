@@ -580,7 +580,13 @@ In Core, beside the other rules — the place is right, and the *reason* is the 
 - `tests/AiRaccoon.Tests/Unit/Memory/EntryTypeTests.cs:55` — `Parse_RefusesTheEmptySet` includes `"none"`, which is refused as an **unknown name**, not as the empty set. Two different rejections under one test name; split them, because if the vocabulary ever grows a `none` spelling the test would still pass while the meaning moved.
 - The bits mix two axes: `Memory` and `File` are row kinds inside the memory corpus, `Code` is a corpus. So `Memory | File` is today's whole memory corpus, and `memory` alone is **not** today's `kind=memory` (which returns file rows too). A client migrating from `kind=memory` to `entryType=memory` loses file rows silently. The class doc should say what each bit selects.
 
-## What needs to be done at `a7445a41`
+## The 2.1.0 scope: every entry in this list ships in 2.1.0
+
+**Ruled by the owner on 2026-10-22: all of it lands in 2.1.0.** The schema, the parameter, the
+TTL rule and the findings that make them honest arrive together — nothing on this list waits for
+a later release. Several PRs may carry the work; the release is one, and the 2.1.0 changelog
+entry names every PR that ships a part of it, PR #913 among them. The plan records the ruling in
+`docs/plans/2026-10-21-mcp-tool-surface-rename.md`, under "The 2.1.0 scope".
 
 The list is written against the head this branch carried when the PR description was last
 rewritten. Everything here is open unless it says otherwise.
@@ -596,6 +602,9 @@ rewritten. Everything here is open unless it says otherwise.
   rebuild" was wrong for the ladder's own path: the value-domain `CHECK` rides on
   `ALTER TABLE ... ADD COLUMN` without a rebuild, verified against a scratch bank. Only the banks
   that already carry the column need one.
+- The description now names the release: the "not here" table carries a "lands in" column, every
+  known gap is marked `→ 2.1.0`, and the scope paragraph states the owner's ruling that the whole
+  list ships in 2.1.0. The plan gained the same ruling in "The 2.1.0 scope".
 
 ### A. The merge gate (F7) — the PR cannot merge without these
 

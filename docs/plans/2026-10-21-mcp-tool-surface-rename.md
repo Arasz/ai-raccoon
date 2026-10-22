@@ -228,3 +228,29 @@ column, the ladder step and the write-path declarations — and no release. It m
 on its own: the ladder step migrates a user's bank to v20 on the first read-write open, and
 nothing in 2.0.0 can read a v20 bank. PR #913 therefore ships as groundwork with no version bump
 and no changelog entry, and it merges with the parameter and the TTL rule — or not at all.
+
+### The 2.1.0 scope (ruled by the owner on 2026-10-22)
+
+**Everything the review of this branch found ships in 2.1.0.** The list lives in
+`docs/work/2026-10-22-entry-type-classifier-fix-list.md` under "The 2.1.0 scope", and 2.1.0
+carries all of it:
+
+1. **The parameter's wiring** — `query` takes the entry-type parameter (default: the sum),
+   `get_entry` takes it (required, no default), the tool layer parses the string and turns a
+   refusal into `invalid-params`.
+2. **The Memory-only TTL rule**, on the one classifier: a transcript is Memory and may carry a
+   TTL, a File entry may not.
+3. **The blocking findings of the review of `abb21046`** — the nullable-v20 normalization step,
+   the doctor's NULL count, the sync merge's single SQL home — and **N3**: a repair path leaves
+   an unknown stored value visible instead of normalising it away.
+4. **The blocking findings of the review of `10108e39`** — the default's meaning, and `Single`
+   refusing unknown bits — and the nits beside them.
+5. **The value domain** — `CHECK (entry_type IN ('none','memory','file'))` on the DDL and on the
+   ladder's `ADD COLUMN`, so a row's kind is a domain and not a free string.
+6. **The typed query** — the search filters on the stored kind — and the **production typed vector
+   partitions** (schema v21, ADR-0141).
+
+Several PRs may carry the work; the release is one. The 2.1.0 changelog entry names every PR
+that ships a part of it, and PR #913 is one of them. Nothing on the list waits for a later
+release: the schema, the parameter, the TTL rule and the findings that make them honest all
+arrive together.
