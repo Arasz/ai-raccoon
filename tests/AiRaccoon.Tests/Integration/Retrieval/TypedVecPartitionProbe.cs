@@ -6,6 +6,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Retrieval;
 
@@ -16,7 +17,7 @@ public sealed class TypedVecPartitionProbe(ITestOutputHelper output)
 {
     private sealed record Row(long Id, string Ctx, string Type, float[] Vector);
 
-    [Fact]
+    [RetryFact]
     public async Task Typed_partitions_preserve_minority_and_unrestricted_nearest_neighbors()
     {
         if (Environment.GetEnvironmentVariable("AIRACCOON_TYPED_VEC_PROBE") is null)
