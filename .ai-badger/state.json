@@ -4,6 +4,16 @@
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+      "id": "air-type-partition-search-ttl-measurement",
+      "title": "Typed entry search and Memory-only TTL",
+      "summary": "2.1.0 adds Memory/File/Code selections across hybrid search, explicit typed lookup, native vector partitions and v22 migration. All required CI checks passed; owner authorized admin merge. Local-package verification is recorded separately in docs/work/checklist/2026-10-22-2.1.0-local-package.json.",
+      "pr": "Arasz/ai-raccoon#913",
+      "merged": true,
+      "mergeCommit": "4f7a0d64ea232422b6bfec1fd8a64085b3a03415",
+      "date": "2026-10-22",
+      "hasNotes": true
+    },
+    {
       "id": "air-unknown-tool-call-guidance",
       "title": "A call to a tool this server does not have is answered with the tool to call",
       "summary": "2.0.0 renamed every MCP tool and shipped no aliases, so a client still speaking the old names got the SDK's own JSON-RPC -32602 ('Unknown tool: memory_search') and nothing it could act on. Such a call is now a normal tool error (CallToolResult.IsError = true) with the wire prefix 'unknown-tool': a pre-2.0.0 name is answered with the name to call instead ('unknown-tool: \\'memory_search\\' was renamed to \\'query\\' in 2.0.0 - call \\'query\\' instead.'), any other name with the general message. The surface decides what exists (McpToolInventory, generated from the [McpServerTool] declarations), the rename map is the 2.0.0 changelog's table and a test compares the two, the refusal is logged at Information like every other expected failure, and the old names stay dead - this is an answer, not an alias. ADR-0140, VERSION 2.0.1.",
