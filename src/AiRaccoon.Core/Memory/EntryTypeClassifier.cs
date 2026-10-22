@@ -1,12 +1,20 @@
 namespace AiRaccoon.Core.Memory;
 
-/// <summary>
-///     The one rule that says which entry type a row holds. Everything that classifies — the
-///     write paths, the migration's backfill, the query path's filter — goes through here, so
-///     there is one answer to "is this row a memory or a document" in the codebase.
-/// </summary>
-public static class EntryTypeClassifier
+/// <summary>Resolves a declared entry kind, falling back to a legacy row's path and source file.</summary>
+public sealed class EntryTypeClassifier : IEntryTypeClassifier
 {
+    /// <summary>
+    ///     The kind a row holds. A declared kind wins; a row with none is classified by its own
+    ///     shape. The stored value is read through <see cref="FromStoredValue" />, so a row whose
+    ///     stored value is not a kind this build knows falls back to the shape rather than
+    ///     carrying a value nothing can read.
+    /// </summary>
+    public EntryType Resolve(string? storedType, string? path, string? sourceFile)
+    {
+        var declared = FromStoredValue(storedType);
+        return declared != EntryType.None ? declared : Classify(path, sourceFile);
+    }
+
     /// <summary>The wire name of a memory.</summary>
     public const string MemoryName = "memory";
 

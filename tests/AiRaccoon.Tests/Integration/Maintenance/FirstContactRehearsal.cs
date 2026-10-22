@@ -65,7 +65,7 @@ public sealed class FirstContactRehearsal(ITestOutputHelper output)
                 NullLogger<MaintenanceJobRunner>.Instance)
             .RunDueAsync(connection,
             [
-                new ChunkBackfillJob(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+                new ChunkBackfillJob(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
                     TestData.RealPlainTextChunker(), TimeProvider.System, TestData.CreateEmbeddingService()),
                 new Vec0ReclaimJob(),
                 new VacuumJob()

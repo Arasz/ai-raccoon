@@ -141,7 +141,7 @@ public sealed class ChunkBackfillChunkerRoutingTests : IDisposable
     }
 
     private ChunkBackfill Backfill() =>
-        new(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
+        new(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
             new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
 
     private static string HeadingsAndFenceInput(string marker) =>

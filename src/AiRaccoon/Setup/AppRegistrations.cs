@@ -189,6 +189,7 @@ public static partial class AppRegistrations
         private void RegisterBankMaintenanceBackgrounbdService()
         {
             services.AddRequiredSingleton<ISweepService, SweepService>();
+            services.AddRequiredSingleton<IEntryTypeClassifier, EntryTypeClassifier>();
             services.AddSingleton<MaintenanceJobRunner>();
             // The list is the schedule (ADR-0070). Order matters: a reclaim after the backfill
             // collects the pages the backfill's deletes freed as well, and PendingEmbedJob is LAST
@@ -198,13 +199,13 @@ public static partial class AppRegistrations
             // pass instead of the next one.
             services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(sp =>
             [
-                new ChunkBackfillJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
+                new ChunkBackfillJob(sp.GetRequiredService<IEntryTypeClassifier>(), sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
                     sp.GetRequiredService<IPlainTextChunker>(), sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<IEmbeddingService>()),
                 // Once ever, before the boundary repair: that repair renumbers a note from the positions it holds.
                 new NoteChunkOrderRepairJob(sp.GetRequiredService<ILogger<NoteChunkOrderRepairJob>>()),
                 // Once ever, right after the backfill for the same reason: it leaves re-chunked rows pending.
-                new ChunkBoundaryRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
+                new ChunkBoundaryRepairJob(sp.GetRequiredService<IEntryTypeClassifier>(), sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
                     sp.GetRequiredService<IPlainTextChunker>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<ILogger<ChunkBoundaryRepairJob>>()),

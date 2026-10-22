@@ -24,6 +24,7 @@ public sealed record ChunkBoundaryRepairReport(int FilesReingested, int GroupsRe
 ///     New rows are left pending for the embed drain.
 /// </summary>
 public sealed class ChunkBoundaryRepair(
+    IEntryTypeClassifier entryTypeClassifier,
     IFileTypeMatcher fileTypeMatcher,
     IMarkdownChunker noteChunker,
     IPlainTextChunker fallbackChunker,
@@ -357,7 +358,7 @@ public sealed class ChunkBoundaryRepair(
         }
     }
 
-    private static Task<long?> InsertAsync(SqliteConnection connection, Row row, string piece, long now,
+    private Task<long?> InsertAsync(SqliteConnection connection, Row row, string piece, long now,
         CancellationToken cancellationToken) =>
         connection.ExecuteScalarAsync<long?>(new CommandDefinition(MemorySql.InsertEntry + " RETURNING id",
             new
@@ -377,8 +378,8 @@ public sealed class ChunkBoundaryRepair(
                 sourceId = row.SourceId,
                 // The row keeps the kind its writer declared; the shape is only the fallback
                 // for a row that predates the column.
-                entryType = row.EntryType
-                            ?? EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(row.Path, row.SourceFile)),
+                entryType = EntryTypeClassifier.ToStoredValue(
+                    entryTypeClassifier.Resolve(row.EntryType, row.Path, row.SourceFile)),
                 chunkIndex = -1,
                 totalChunks = 0
             }, cancellationToken: cancellationToken));
