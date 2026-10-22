@@ -26,8 +26,8 @@ public sealed class UnregisteredIdRefusalTests(UnregisteredIdRefusalTests.Server
     {
         ["get_entry"] = new() { ["hash"] = new string('a', 64) },
         ["add_memory"] = new() { ["content"] = "x" },
-        ["get_entry"] = new() { ["hash"] = new string('a', 64) },
         ["query"] = new() { ["query"] = "x", ["sessionId"] = "sess-refusal" },
+        ["get_quality_report"] = new(),
         ["get_index"] = new(),
         ["get_store_statistics"] = new(),
         ["delete_entry"] = new() { ["hash"] = new string('a', 64) },
