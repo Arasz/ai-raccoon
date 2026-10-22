@@ -14,9 +14,11 @@ internal static class MemorySql
     // RecomputeChunkColumnsForContext/BankWide to fill in.
     public const string InsertEntry = """
                                       INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
-                                                           workspace_id, agent_id, created_at, updated_at, source_id, chunk_index, total_chunks)
+                                                           workspace_id, agent_id, created_at, updated_at, source_id, chunk_index, total_chunks,
+                                                           entry_type)
                                       VALUES (@hash, @path, @value, @sourceFile, @section, @scope, @projectId, @contextLabel,
-                                              @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId, @chunkIndex, @totalChunks)
+                                              @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId, @chunkIndex, @totalChunks,
+                                              @entryType)
                                       ON CONFLICT DO NOTHING
                                       """;
 
@@ -26,10 +28,10 @@ internal static class MemorySql
     public const string InsertRebudgetEntry = """
                                               INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                                    workspace_id, agent_id, created_at, updated_at, source_id, chunk_index, total_chunks,
-                                                                   ttl_days)
+                                                                   ttl_days, entry_type)
                                               VALUES (@hash, @path, @value, @sourceFile, @section, @scope, @projectId, @contextLabel,
                                                       @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId, @chunkIndex, @totalChunks,
-                                                      @ttlDays)
+                                                      @ttlDays, @entryType)
                                               ON CONFLICT DO NOTHING
                                               """;
 
