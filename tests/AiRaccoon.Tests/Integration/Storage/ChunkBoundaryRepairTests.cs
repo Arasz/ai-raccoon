@@ -847,7 +847,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var template = await connection.QueryFirstAsync(
-            "SELECT scope, project_id, source_id, created_at, total_chunks FROM entries WHERE path = @file", new { file });
+            "SELECT scope, project_id, source_id, created_at, total_chunks, entry_type FROM entries WHERE path = @file", new { file });
         await connection.ExecuteAsync(MemorySql.InsertEntry, new
         {
             hash = ContentHash.Of(file, value),
@@ -863,7 +863,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
             createdAt = (long)template.created_at,
             updatedAt = (long)template.created_at,
             sourceId = (long?)template.source_id,
-                entryType = (string?)template.entry_type,
+            entryType = (string?)template.entry_type,
             chunkIndex,
             totalChunks = (long)template.total_chunks
         });

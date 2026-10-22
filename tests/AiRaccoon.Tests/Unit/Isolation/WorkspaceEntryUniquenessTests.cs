@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Shouldly;
@@ -105,6 +106,7 @@ public sealed class WorkspaceEntryUniquenessTests : IDisposable
                 createdAt = now,
                 updatedAt = now,
                 sourceId = (long?)null,
+                entryType = EntryTypeClassifier.ToStoredValue(EntryType.Memory),
                 chunkIndex = -1,
                 totalChunks = 0
             },
