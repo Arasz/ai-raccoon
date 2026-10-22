@@ -362,7 +362,8 @@ public sealed class FileIngestor(
                                 createdAt = now,
                                 updatedAt = now,
                                 sourceId = source.Id,
-                                entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(path, path)),
+                                // The row mirrors the file it came from: a document.
+                                entryType = EntryTypeClassifier.ToStoredValue(EntryType.File),
                                 chunkIndex = row.Position,
                                 totalChunks
                             },

@@ -44,7 +44,7 @@ public sealed class ChunkBoundaryRepair(
                    scope AS Scope, project_id AS ProjectId, context_label AS ContextLabel, workspace_id AS WorkspaceId,
                    agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId, chunk_index AS ChunkIndex,
                    total_chunks AS TotalChunks,
-                   (SELECT ms.source_type FROM memory_source ms WHERE ms.id = entries.source_id) AS SourceType
+                   entry_type AS EntryType
             FROM entries
             WHERE value IS NOT NULL AND path IS NOT NULL
             """, cancellationToken: cancellationToken));
@@ -375,7 +375,10 @@ public sealed class ChunkBoundaryRepair(
                 createdAt = row.CreatedAt,
                 updatedAt = now,
                 sourceId = row.SourceId,
-                entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(row.Path, row.SourceFile)),
+                // The row keeps the kind its writer declared; the shape is only the fallback
+                // for a row that predates the column.
+                entryType = row.EntryType
+                            ?? EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(row.Path, row.SourceFile)),
                 chunkIndex = -1,
                 totalChunks = 0
             }, cancellationToken: cancellationToken));
@@ -407,7 +410,7 @@ public sealed class ChunkBoundaryRepair(
         long? SourceId,
         long ChunkIndex,
         long TotalChunks,
-        string? SourceType)
+        string? EntryType)
     {
         /// <summary>A file's own mirror row, as opposed to a add_memory note that may merely cite the file.</summary>
         public bool IsFileRow => SourceFile is not null && string.Equals(Path, SourceFile, StringComparison.Ordinal);

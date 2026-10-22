@@ -396,7 +396,11 @@ public sealed partial class SqliteMemoryStore(
                         createdAt = now,
                         updatedAt = now,
                         sourceId = source.Id,
-                        entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(path, source.SourceLocator)),
+                        // The writer declares the row's kind: an agent write is a memory, whatever
+                        // it cites. Deriving it from the row's shape would let a caller name the
+                        // note's own synthetic path (sha256 of the content) and be filed as a
+                        // document - the shape rule then reads a caller-supplied string.
+                        entryType = EntryTypeClassifier.ToStoredValue(EntryType.Memory),
                         chunkIndex = -1,
                         totalChunks = 0
                     },

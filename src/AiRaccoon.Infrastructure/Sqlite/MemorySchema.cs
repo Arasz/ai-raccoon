@@ -1426,7 +1426,8 @@ internal static class MemorySchema
             """
             UPDATE entries
             SET entry_type = CASE
-                WHEN entries.source_file IS NOT NULL AND entries.source_file = entries.path THEN 'file'
+                WHEN entries.source_file IS NOT NULL AND entries.source_file <> ''
+                     AND entries.source_file = entries.path THEN 'file'
                 ELSE 'memory'
             END
             WHERE entry_type IS NULL

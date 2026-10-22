@@ -17,7 +17,12 @@ public static class EntryTypeClassifier
     public const string FileName = "file";
 
     /// <summary>
-    ///     The entry type a row holds, from the row's own shape.
+    ///     The entry type a row holds, from the row's own shape — the FALLBACK for a row that
+    ///     predates the column (the migration's rule), not what a writer uses. A writer DECLARES
+    ///     its row's kind: the write path knows it is writing an agent's memory and the ingest
+    ///     path knows it is mirroring a file. Deriving the kind from the shape instead would let a
+    ///     caller name a note's own synthetic path (sha256 of the content) and have the note filed
+    ///     as a document — the rule would then read a caller-supplied string.
     ///     <para>
     ///         A row that MIRRORS a file on disk has <c>path = source_file</c>: the file's path is
     ///         both where it came from and what it is. Every other row in the entries table is
