@@ -68,7 +68,7 @@ internal static class MemorySchema
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 19;
+    internal const int CurrentVersion = 20;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -190,6 +190,7 @@ internal static class MemorySchema
                                               ttl_days INTEGER NULL,
                                               embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
                                               embedding BLOB NULL,
+                                              entry_type TEXT NULL,
                                               heading_path TEXT NULL,
                                               structure_embedding BLOB NULL,
                                               chunk_index INTEGER NOT NULL DEFAULT -1,
@@ -898,6 +899,11 @@ internal static class MemorySchema
             await MigrateToV19Async(connection, cancellationToken);
         }
 
+        if (healthy && storedVersion < 20)
+        {
+            await MigrateToV20Async(connection, cancellationToken);
+        }
+
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
         // digest on a degraded (unhealthy) run would let EnsureCheapAsync trust a bank whose ladder
         // never completed, the same bug this reordering exists to close (Data F1 / D5).
@@ -1386,6 +1392,50 @@ internal static class MemorySchema
     ///     partition key, so a KNN prunes every other context's chunks before reading them. A table
     ///     already partitioned is left alone, which makes the step safe to re-run after a crash.
     /// </summary>
+    /// <summary>
+    ///     v19→v20: the entry type a row holds, denormalised onto <c>entries.entry_type</c> so the
+    ///     query path can filter by it without a join. The backfill classifies by the row's SOURCE
+    ///     (memory_source.source_type): a manual source and a TRANSCRIPT source are memories (the
+    ///     agent wrote both), a file source is an ingested document. The row's own shape cannot
+    ///     say it — a transcript carries a source file and is chunked like a document — so the
+    ///     shape is only the fallback for a row with no provenance at all.
+    /// </summary>
+    private static async Task MigrateToV20Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('entries')", cancellationToken: cancellationToken)))
+            .Contains("entry_type", StringComparer.Ordinal);
+        if (!hasColumn)
+        {
+            try
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN entry_type TEXT NULL", cancellationToken: cancellationToken));
+            }
+            catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+            {
+                // Another connection added it between the probe and the ALTER: the column is there,
+                // which is all this step needed.
+            }
+        }
+
+        // Only NULL rows: an explicit type (a rerun, or a row the write path already typed) is
+        // never clobbered.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE entries
+            SET entry_type = CASE
+                WHEN (SELECT ms.source_type FROM memory_source ms WHERE ms.id = entries.source_id)
+                     IN ('manual', 'transcript') THEN 'memory'
+                WHEN (SELECT ms.source_type FROM memory_source ms WHERE ms.id = entries.source_id) = 'file'
+                     THEN 'file'
+                WHEN entries.source_file IS NULL AND entries.total_chunks = 0 THEN 'memory'
+                ELSE NULL
+            END
+            WHERE entry_type IS NULL
+            """, cancellationToken: cancellationToken));
+    }
+
     private static async Task MigrateToV19Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var rebuilds = new List<(string Table, int Dimension, string Source, string Ctx, string Column, string Where)>();

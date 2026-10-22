@@ -362,6 +362,7 @@ public sealed class FileIngestor(
                                 createdAt = now,
                                 updatedAt = now,
                                 sourceId = source.Id,
+                                entryType = EntryTypeClassifier.ToStoredValue(EntryType.File),
                                 chunkIndex = row.Position,
                                 totalChunks
                             },
