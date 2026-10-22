@@ -118,6 +118,15 @@ internal static partial class ToolRefusals
     /// </summary>
     internal const string BankBusyPrefix = "bank-busy";
 
+    /// <summary>
+    ///     The wire prefix for a call that named a tool this server does not have. The SDK throws
+    ///     <see cref="McpProtocolException" /> for a name it cannot resolve, and the MCP protocol
+    ///     says a tool error belongs in the result (<c>CallToolResult.IsError</c>) where a model
+    ///     can read it and call again — so the name is answered here, with the tool to call
+    ///     instead when the name was renamed (ADR-0140).
+    /// </summary>
+    internal const string UnknownToolPrefix = "unknown-tool";
+
     /// <summary>Expected refusals remain visible at Warning without being logged as errors.</summary>
     private static readonly HashSet<string> WarningPrefixes =
         ["sync-network", "sync-corrupt-file", "sync-tampered-remote", "unknown-hash", "embedding-install-replaced", "code-engine-unloadable", "bank-busy"];
@@ -146,6 +155,13 @@ internal static partial class ToolRefusals
             try
             {
                 return await next(request, cancellationToken);
+            }
+            catch (McpProtocolException) when (IsUnknownTool(request))
+            {
+                // The SDK cannot resolve the name: the caller gets the name to call instead, or
+                // the general unknown-tool message. A protocol error would leave it with a
+                // JSON-RPC -32602 and nothing to act on (ADR-0140).
+                return UnknownTool(request);
             }
             catch (McpProtocolException)
             {
@@ -272,6 +288,23 @@ internal static partial class ToolRefusals
         {
             Log.ToolTimedOutNoQuery(logger, name, elapsedMs);
         }
+    }
+
+    /// <summary>
+    ///     Whether the call named a tool this server does not have: the SDK's protocol error for
+    ///     such a name, and no other. A protocol error for a tool the server *does* have stays a
+    ///     protocol error.
+    /// </summary>
+    private static bool IsUnknownTool(RequestContext<CallToolRequestParams> request)
+    {
+        var name = request.Params?.Name;
+        return !string.IsNullOrEmpty(name) && !UnknownToolGuidance.IsKnownTool(name);
+    }
+
+    private static CallToolResult UnknownTool(RequestContext<CallToolRequestParams> request)
+    {
+        var name = request.Params?.Name ?? string.Empty;
+        return Refused(request, UnknownToolGuidance.Message(name), UnknownToolGuidance.Reason(name), LogLevel.Information);
     }
 
     private static CallToolResult Refused(RequestContext<CallToolRequestParams> request, string message,

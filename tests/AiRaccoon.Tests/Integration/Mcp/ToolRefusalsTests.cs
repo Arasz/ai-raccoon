@@ -499,7 +499,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
 
         var codePrefixes = ToolRefusals.RefusalPrefixes.Values
             .Concat(ToolRefusals.DirectThrowPrefixes)
-            .Concat([ToolRefusals.CancelledPrefix, ToolRefusals.BankBusyPrefix])
+            .Concat([ToolRefusals.CancelledPrefix, ToolRefusals.BankBusyPrefix, ToolRefusals.UnknownToolPrefix])
             .ToHashSet(StringComparer.Ordinal);
 
         var documentedButNotInCode = documentedPrefixes.Except(codePrefixes).ToList();
