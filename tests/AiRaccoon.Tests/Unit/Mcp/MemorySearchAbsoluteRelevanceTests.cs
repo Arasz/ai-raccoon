@@ -63,7 +63,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         };
         _store.StubStats = new FusionStats(0.0161, null, 0.0164, ["vector"]);
 
-        var envelope = await _tools.Search("acme", "quantum chromodynamics lattice gauge", kind: "memory",
+        var envelope = await _tools.Search("acme", "quantum chromodynamics lattice gauge", entryType: "memory,file",
             sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.ShouldBeEmpty(
@@ -89,7 +89,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         };
         _store.StubStats = new FusionStats(0.508, 0.4, 0.0328, ["fts", "vector"]);
 
-        var envelope = await _tools.Search("acme", "sourdough starter hydration", kind: "memory",
+        var envelope = await _tools.Search("acme", "sourdough starter hydration", entryType: "memory,file",
             sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(2, "a genuine match is kept whole");
@@ -121,7 +121,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         };
         _store.StubStats = new FusionStats(0.0161, null, 0.0164, ["fts"]);
 
-        var envelope = await _tools.Search("acme", "background process dotnet test output", kind: "memory",
+        var envelope = await _tools.Search("acme", "background process dotnet test output", entryType: "memory,file",
             sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(4, "rows without an absolute signal are kept, not dropped");
@@ -148,7 +148,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         };
         _store.StubStats = new FusionStats(0.508, null, 0.0328, ["fts"]);
 
-        var envelope = await _tools.Search("acme", "anchovy shipments ledger", kind: "memory",
+        var envelope = await _tools.Search("acme", "anchovy shipments ledger", entryType: "memory,file",
             sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(2);
@@ -176,7 +176,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         };
         _store.StubStats = new FusionStats(0.0161, null, 0.0328, ["fts", "vector"]);
 
-        var envelope = await _tools.Search("acme", "harbor tide charts", kind: "memory",
+        var envelope = await _tools.Search("acme", "harbor tide charts", entryType: "memory,file",
             sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(2, "the absolute-backed row is kept and the signal-less sibling with it");
@@ -207,7 +207,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         };
         _store.StubStats = new FusionStats(0.0161, null, 0.0164, ["vector"]);
 
-        var envelope = await _tools.Search("acme", "quantum chromodynamics lattice gauge", kind: "memory",
+        var envelope = await _tools.Search("acme", "quantum chromodynamics lattice gauge", entryType: "memory,file",
             minRelativeScore: 0.0, sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(4,
@@ -237,7 +237,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         _store.StubStats = new FusionStats(0.3, null, 0.0328, ["fts", "vector"]);
         _store.StubAllTermsMatched = new HashSet<string>(["t1"], StringComparer.Ordinal);
 
-        var envelope = await _tools.Search("acme", "AIR-4471", kind: "memory",
+        var envelope = await _tools.Search("acme", "AIR-4471", entryType: "memory,file",
             sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Select(row => row.Hash).ShouldBe(["t1"]);
@@ -265,7 +265,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         _store.StubStats = new FusionStats(0.0161, null, 0.0164, ["fts"]);
         _store.StubAllTermsMatched = new HashSet<string>(["k1"], StringComparer.Ordinal);
 
-        var envelope = await _tools.Search("acme", "AIR-4471", kind: "memory",
+        var envelope = await _tools.Search("acme", "AIR-4471", entryType: "memory,file",
             sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(2);
@@ -287,7 +287,7 @@ public sealed class MemorySearchAbsoluteRelevanceTests
         };
         _store.StubRelevanceFloor = 0.79;
 
-        var envelope = await _tools.Search("acme", "lighthouse lamp room", kind: "memory",
+        var envelope = await _tools.Search("acme", "lighthouse lamp room", entryType: "memory,file",
             sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(served);

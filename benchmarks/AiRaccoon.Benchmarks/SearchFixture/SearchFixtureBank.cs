@@ -116,11 +116,11 @@ public sealed class SearchFixtureBank : IAsyncDisposable
             new PumpTopic(Ceiling: 8, Capacity: 8, Coalesce: true));
         var fileIngestor = new FileIngestor(fileTypeMatcher, sourceStore, TimeProvider.System, embeddingService,
             NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, embedDrainPump, new IndexableFileWalk(), new SharedProjectScope() );
+            NullWatchStore.Instance, embedDrainPump, new IndexableFileWalk(), new SharedProjectScope(), new EntryKindClassifier() );
         var noiseFilteringService = new NoiseFilteringService([]);
         var store = new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, new SqliteSettingsStore(factory),
-            embedDrainPump, NoOpMeasurementRecorder.Instance, new SharedProjectScope() );
+            embedDrainPump, NoOpMeasurementRecorder.Instance, new SharedProjectScope(), new EntryKindClassifier() );
 
         // Rows land pending (no engine configured yet) so the fixture write loop pays for one
         // round trip per row, not one HTTP call per row; embedding happens once, batched, below.

@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -161,6 +162,10 @@ public sealed class Vec0PartitionKeyRestoreTests
              CREATE VIRTUAL TABLE vec_code USING vec0(ctx TEXT, embedding float[{CodeDimension}] distance_metric=cosine);
              """,
             cancellationToken: TestContext.Current.CancellationToken));
+
+            // The old tables come with the old embed triggers: a typed body names the kind
+            // partition column the old table does not have.
+            await LegacyVecShape.RestoreUntypedTriggersAsync(connection, TestContext.Current.CancellationToken);
 
         foreach (var (projectId, seed) in rows)
         {

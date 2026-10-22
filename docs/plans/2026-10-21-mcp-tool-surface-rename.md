@@ -6,7 +6,10 @@
 
 **Owner decisions already taken:** hard rename (a breaking change, no aliases); the ai-badger
 framework is updated before the release ships; high-effort loop; the quality surface splits
-into a read tool and one write tool.
+into a read tool and one write tool; an entry has exactly one type (settled 2026-10-22), so the
+stored kind is single-valued, `Code` names a corpus rather than a row kind, and the flag set
+belongs to the query parameter alone; the stored column is NOT NULL with the default `none`
+(same ruling), so a row that carries no kind yet says so in the column rather than by a null.
 
 ## The names
 
@@ -101,8 +104,12 @@ moved. That fixes three things at once:
 
 `query` and `get_entry` gain an **entry type** parameter with the values Memory, Code, File.
 
-- `query` defaults to **Memory | Code | File** (the sum), so the default answers exactly what
-  today's default (`kind=both`) answers.
+- `query` defaults to **Memory | Code | File** (the sum), and the sum is **no kind filter** — every
+  row, the unclassified ones included — so the default answers exactly what today's default
+  (`kind=both`) answers. A narrower set is a filter: it selects the rows of the named kinds, and a
+  row that carries no kind is in no kind, so it is outside every narrower set. The doctor counts
+  the unclassified rows (`entries without a kind: N`), so that population is visible rather than
+  quietly missing from a result.
 - `get_entry` has **no default**: the type is required, because a hash alone does not say which
   corpus to read from — and the merged `get_entry` must know where to look.
 
@@ -126,11 +133,16 @@ any sum. It replaces `kind` (`memory|code|both`).
 | entry type | rows | how it is stored today |
 |---|---|---|
 | Code | 72,290 rows on the live bank | the `code_entries` table — a separate corpus, own FTS and vec0 |
-| File | 25,089 rows on the live bank | `entries` where `source_file` is set and `total_chunks > 0` |
-| Memory | 214 rows on the live bank | `entries` where `source_file` is NULL and `total_chunks = 0` |
+| File | 23,200 rows on the live bank | `entries` where the row mirrors a file: `path = source_file` |
+| Memory | 2,371 rows on the live bank | every other `entries` row: 661 citing a file, 1,496 from a transcript, 215 manual |
 
-The `entries` partition is exact — zero rows in the two mixed cells — so no migration is needed
-to *read* the distinction. Two derivations are available and the plan must pick one:
+The `entries` partition is by SHAPE, not by provenance: a row that mirrors a file on disk has
+`path = source_file`, and every other row is agent-written memory. The provenance channel cannot
+make that distinction — the write path calls anything with a non-transcript source file a file,
+which filed 654 of 2,150 agent notes as documents — and the derived signature
+(`source_file IS NULL` AND `total_chunks = 0`) misses the 661 notes that cite a file.
+
+Two derivations are available and the plan must pick one:
 
 1. a join on `entries.source_id` → `memory_source.source_type` (`file` | `transcript` |
    `manual`), or
@@ -178,3 +190,71 @@ indexable.
   reaches the 1,496 historical rows if the type is denormalised). See the section above.
 - **(c) The two placeholder names** — settled by the owner on 2026-10-21
   (`trigger_memory_sharing`, `get_memories_sharing_ranking`).
+
+## The release split (decided 2026-10-22)
+
+**2.0.0 is the rename alone. The entry types ride in 2.1.0.**
+
+The rename is a client-side string change with no effect on the engine and **no schema change at
+all** — the bank is untouched by an upgrade to 2.0.0. The entry-type wave brings schema v20: the
+denormalised `entry_type`, the ladder step, and the 1,496 transcript rows moving onto the Memory
+side — with its own failure shapes (a half-done backfill that must resume, a row with no
+provenance falling back to its shape). Carrying both in one release would let an upgrade fail in
+two independent ways and make a rollback of either drag the other.
+
+The parameter also lands on the search's hot path, and a rename release is the wrong debugging
+story for it: "did this ranking regression come from the rename or from the new parameter?" is a
+question a release should not create.
+
+And the contract is already public: ai-raccoon #909 is up, ai-badger #650 is timed against it,
+and "2.0.0 = the 30 new names" is what callers are writing against. Keeping that claim true is
+worth more than saving one minor version.
+
+The entry-type work continues on `task/air-entry-type-classifier`, which builds on the rename —
+so it is 2.1.0 by construction, and the rename's own verification pass is not invalidated by it.
+
+**The schema cannot ship without the parameter.** Measured against the merged 2.0.0 binary, a
+v20 bank refuses to open: `bank schema v20 is newer than this binary supports (v19)`, the MCP
+server does not start, and every read-write verb fails the same way (`doctor` still runs and
+names the mismatch). ADR-0019's forward-version write guard is why — the ladder only ever moves
+forward, so there is no downgrade path. The v20 step fires on the first read-write open, not
+lazily.
+
+So a schema-only 2.1.0 is a one-way door: every user's bank becomes unreadable by 2.0.0, in
+exchange for a type no client can ask about, and a rollback is a dead end rather than a
+rollback. 2.1.0 therefore ships the schema v20, the entry-type parameter and the TTL rule
+together. The breaking-changes entry for 2.1.0 says so in as many words: "2.1.0 migrates your
+bank to v20; 2.0.0 can no longer open it."
+
+**The gate, as it applies to this branch.** The schema v20 work lives on
+`task/air-type-partition-search-ttl-measurement` (PR #913). It carries the classifier, the
+column, the ladder step and the write-path declarations — and no release. It must not be released
+on its own: the ladder step migrates a user's bank to v20 on the first read-write open, and
+nothing in 2.0.0 can read a v20 bank. PR #913 therefore ships as groundwork with no version bump
+and no changelog entry, and it merges with the parameter and the TTL rule — or not at all.
+
+### The 2.1.0 scope (ruled by the owner on 2026-10-22)
+
+**Everything the review of this branch found ships in 2.1.0.** The list lives in
+`docs/work/2026-10-22-entry-type-classifier-fix-list.md` under "The 2.1.0 scope", and 2.1.0
+carries all of it:
+
+1. **The parameter's wiring** — `query` takes the entry-type parameter (default: the sum),
+   `get_entry` takes it (required, no default), the tool layer parses the string and turns a
+   refusal into `invalid-params`.
+2. **The Memory-only TTL rule**, on the one classifier: a transcript is Memory and may carry a
+   TTL, a File entry may not.
+3. **The blocking findings of the review of `abb21046`** — the nullable-v20 normalization step,
+   the doctor's NULL count, the sync merge's single SQL home — and **N3**: a repair path leaves
+   an unknown stored value visible instead of normalising it away.
+4. **The blocking findings of the review of `10108e39`** — the default's meaning, and `Single`
+   refusing unknown bits — and the nits beside them.
+5. **The value domain** — `CHECK (entry_type IN ('none','memory','file'))` on the DDL and on the
+   ladder's `ADD COLUMN`, so a row's kind is a domain and not a free string.
+6. **The typed query** — the search filters on the stored kind — and the **production typed vector
+   partitions** (schema v21, ADR-0141).
+
+Several PRs may carry the work; the release is one. The 2.1.0 changelog entry names every PR
+that ships a part of it, and PR #913 is one of them. Nothing on the list waits for a later
+release: the schema, the parameter, the TTL rule and the findings that make them honest all
+arrive together.

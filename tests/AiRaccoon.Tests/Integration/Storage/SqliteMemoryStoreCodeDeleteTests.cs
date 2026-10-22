@@ -15,6 +15,7 @@ using Shouldly;
 using Xunit;
 using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -48,10 +49,10 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
         var pump = TestData.NewEmbedDrainPump();
         var fileIngestor = new FileIngestor(matcher, sourceStore, timeProvider, TestData.CreateEmbeddingService(),
             NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(), codeIngestor,
-            NullWatchStore.Instance, pump, new IndexableFileWalk(), TestData.SharedScope);
+            NullWatchStore.Instance, pump, new IndexableFileWalk(), TestData.SharedScope, new EntryKindClassifier());
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, embedder, timeProvider,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), pump,
-            NoOpMeasurementRecorder.Instance, TestData.SharedScope);
+            NoOpMeasurementRecorder.Instance, TestData.SharedScope, new EntryKindClassifier());
     }
 
     public void Dispose()

@@ -58,7 +58,7 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), _time,
             _embeddings, null, null, null, null, null, null, null);
         _reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            _embeddings, _time, () => _store, _reconcilerLog);
+            _embeddings, _time, () => _store, _reconcilerLog, new EntryKindClassifier());
         _embedder = TestData.CreateEntryEmbedder(_embeddings, new SqliteModelMigrationLease(_time), _time,
             new VecDimensionReconciler(), _reconciler, measurements: _measurements);
     }
@@ -197,7 +197,7 @@ public sealed class ModelMigrationRechunksAndReembedsTests : IDisposable
         (await _embedder.ReconcileFingerprintAsync(connection, Ct)).ShouldBeTrue(
             "the stamp drift opens the re-chunking migration");
         var reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            _embeddings, ScriptedTimeProvider.ForSpan(TimeSpan.FromSeconds(305.5)), () => _store, _reconcilerLog);
+            _embeddings, ScriptedTimeProvider.ForSpan(TimeSpan.FromSeconds(305.5)), () => _store, _reconcilerLog, new EntryKindClassifier());
         var embedder = TestData.CreateEntryEmbedder(_embeddings, new SqliteModelMigrationLease(_time), _time,
             new VecDimensionReconciler(), reconciler, measurements: _measurements);
 

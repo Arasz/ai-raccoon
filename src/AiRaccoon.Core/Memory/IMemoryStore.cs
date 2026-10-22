@@ -13,7 +13,9 @@ public interface IMemoryStore : IModelMigrationStore
     ///     already uses for search hits. Null when the project owns no such hash. Abstract on
     ///     purpose: a default of "not found" is a wrong answer, not a safe one (ADR-0054).
     /// </summary>
-    Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default);
+    /// <summary>Reads the selected declared row kind before choosing one matching hash.</summary>
+    Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default,
+        EntryKind? entryKind = null);
 
     /// <summary>
     ///     Deletes the whole write behind <paramref name="hash" /> and returns the number of rows
@@ -108,10 +110,10 @@ public interface IMemoryStore : IModelMigrationStore
     ///     Context-preserving unconditional replace-by-path: the same re-ingest as
     ///     <see cref="ReplaceAsync(string, string, string, CancellationToken)" />, but under
     ///     <paramref name="context" /> and pruning only that bucket's rows, so the same path stored
-    ///     in two contexts keeps both.
+    ///     in two contexts keeps both. Rechunking may preserve an existing Memory declaration and TTL.
     /// </summary>
     Task ReplaceAsync(string projectId, string path, string fileHash, string? context,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, bool preserveMemoryMetadata = false);
 
     /// <summary>Reads every settings row whose key starts with the prefix (config listing commands).</summary>
     Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,

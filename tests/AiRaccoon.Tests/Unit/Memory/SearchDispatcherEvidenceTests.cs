@@ -38,7 +38,7 @@ public sealed class SearchDispatcherEvidenceTests
 
         await dispatcher.DispatchAsync(
             new SearchQuery("acme", "widgets"),
-            SearchKind.Memory,
+            EntryType.Memory | EntryType.File,
             "all",
             "corr-evidence",
             sessionId: "sess-test",
@@ -80,7 +80,7 @@ public sealed class SearchDispatcherEvidenceTests
 
         await dispatcher.DispatchAsync(
             new SearchQuery("acme", "widgets"),
-            SearchKind.Memory,
+            EntryType.Memory | EntryType.File,
             "all",
             "corr-reorder",
             sessionId: "sess-test",
@@ -111,7 +111,7 @@ public sealed class SearchDispatcherEvidenceTests
 
         await dispatcher.DispatchAsync(
             new SearchQuery("acme", "widgets"),
-            SearchKind.Memory,
+            EntryType.Memory | EntryType.File,
             "all",
             "corr-orphan-first",
             sessionId: "sess-test",
@@ -146,7 +146,7 @@ public sealed class SearchDispatcherEvidenceTests
 
         var result = await dispatcher.DispatchAsync(
             new SearchQuery("acme", "widgets"),
-            SearchKind.Memory,
+            EntryType.Memory | EntryType.File,
             "all",
             "corr-null",
             sessionId: "sess-test",
@@ -168,7 +168,7 @@ public sealed class SearchDispatcherEvidenceTests
 
         var result = await dispatcher.DispatchAsync(
             new SearchQuery("acme", "widgets"),
-            SearchKind.Code,
+            EntryType.Code,
             "code",
             "corr-code",
             sessionId: "sess-test",
@@ -239,7 +239,8 @@ public sealed class SearchDispatcherEvidenceTests
             int resultCount,
             IReadOnlyList<string> topSourceFiles,
             CancellationToken ct = default,
-            IReadOnlyList<RetrievalEvidence>? evidence = null)
+            IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             LastResultCount = resultCount;
             LastTopSourceFiles = topSourceFiles;
@@ -257,7 +258,8 @@ public sealed class SearchDispatcherEvidenceTests
             int resultCount,
             IReadOnlyList<string> topSourceFiles,
             CancellationToken ct = default,
-            IReadOnlyList<RetrievalEvidence>? evidence = null)
+            IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             LastResultCount = resultCount;
             LastTopSourceFiles = topSourceFiles;

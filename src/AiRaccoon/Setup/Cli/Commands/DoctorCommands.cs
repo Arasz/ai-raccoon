@@ -205,6 +205,15 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         }
 
         await streams.WriteOutputLineAsync(MigrationLine(migration));
+        // The rows the typed query cannot place, and the rows carrying a kind this build does not
+        // know: a write path that omits the column lands 'none' silently, so the count is how the
+        // omission shows up here.
+        await streams.WriteOutputLineAsync($"entries without a kind: {report.EntryKinds.Unclassified}");
+        if (report.EntryKinds.Unknown > 0)
+        {
+            await streams.WriteOutputLineAsync($"entries with an unknown kind: {report.EntryKinds.Unknown}");
+        }
+
         await streams.WriteOutputLineAsync("doctor verifies schema shape only; it never repairs a bank");
 
         switch (report.Status)

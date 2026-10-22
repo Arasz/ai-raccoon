@@ -30,7 +30,8 @@ public sealed class FileIngestor(
     IWatchStore watchStore,
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IndexableFileWalk walk,
-    ISharedProjectScope scope) : IFileIngestor
+    ISharedProjectScope scope,
+    IEntryKindClassifier entryTypeClassifier) : IFileIngestor
 {
     private static readonly FileSniffer Sniffer = new();
 
@@ -42,7 +43,7 @@ public sealed class FileIngestor(
     ///     the caller enqueues the corpus's <see cref="EmbedDrainRequest" /> once it is safe to.
     /// </summary>
     public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
-        string? context, CancellationToken cancellationToken)
+        string? context, CancellationToken cancellationToken, bool preserveMemoryMetadata = false)
     {
         context = await ResolveContextAsync(connection, projectId, context, cancellationToken);
         await RequireInScopeAsync(connection, projectId, path, cancellationToken);
@@ -71,7 +72,7 @@ public sealed class FileIngestor(
         }
 
         var (rows, hashes) = await InsertChunksAsync(connection, projectId, path, content, handler, context,
-                cancellationToken);
+                cancellationToken, preserveMemoryMetadata);
         if (hashes.Count == 0 && !string.IsNullOrWhiteSpace(content))
         {
             return new FileIngestResult(0, false, hashes, Skipped: SkipReason.Unparseable);
@@ -274,14 +275,14 @@ public sealed class FileIngestor(
     /// the corpus's drain once it is safe to (see <see cref="IngestDirectoryAsync" />).</summary>
     private Task<InsertedChunks> InsertChunksAsync(SqliteConnection connection,
         string projectId, string path, string content, IFileTypeHandler handler, string? context,
-        CancellationToken cancellationToken) => _scope.IsReserved(projectId)
+        CancellationToken cancellationToken, bool preserveMemoryMetadata = false) => _scope.IsReserved(projectId)
         ? connection.InWriteTransactionAsync(() => InsertChunksCoreAsync(connection, projectId, path, content,
-            handler, context, cancellationToken), cancellationToken)
-        : InsertChunksCoreAsync(connection, projectId, path, content, handler, context, cancellationToken);
+            handler, context, cancellationToken, preserveMemoryMetadata), cancellationToken)
+        : InsertChunksCoreAsync(connection, projectId, path, content, handler, context, cancellationToken, preserveMemoryMetadata);
 
     private async Task<InsertedChunks> InsertChunksCoreAsync(SqliteConnection connection,
         string projectId, string path, string content, IFileTypeHandler handler, string? context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool preserveMemoryMetadata)
     {
         var hashes = new List<string>();
         if (BinaryContent.IsBinary(content))
@@ -315,6 +316,18 @@ public sealed class FileIngestor(
             context_label = bucket.ContextLabel,
             workspace_id = bucket.WorkspaceId
         };
+        var previous = preserveMemoryMetadata ? await connection.QueryFirstOrDefaultAsync<MirrorMetadata>(Def(
+            """
+            SELECT entry_type AS EntryType, ttl_days AS TtlDays
+            FROM entries WHERE path = @path AND source_file = @path
+              AND scope IS @scope AND project_id IS @project_id
+              AND context_label IS @context_label AND workspace_id IS @workspace_id
+            ORDER BY id LIMIT 1
+            """, bucketParams, cancellationToken)) : null;
+        var entryType = previous is null
+            ? EntryKindWireNames.File
+            : entryTypeClassifier.ResolveStoredValue(previous.EntryType, path, path);
+        var ttlDays = entryType == EntryKindWireNames.Memory ? previous?.TtlDays : null;
         var citing = (await connection.QueryAsync<(long Id, long ChunkIndex)>(Def(SelectCitingRows, bucketParams, cancellationToken)))
             .Select(row => new PartitionRow(row.Id, false, row.ChunkIndex)).ToList();
         var totalChunks = rows.Count + citing.Count;
@@ -342,11 +355,11 @@ public sealed class FileIngestor(
 
             if (existingId is null)
             {
-                // InsertEntry is ON CONFLICT DO NOTHING: affected rows already says whether this
+                // ON CONFLICT DO NOTHING: affected rows already says whether this
                 // call won the insert or a concurrent same-bucket insert got there first — no
                 // follow-up SELECT needed to find out.
                 var affected = await connection.ExecuteAsync(
-                        Def(MemorySql.InsertEntry,
+                        Def(MemorySql.InsertRebudgetEntry,
                             new
                             {
                                 hash,
@@ -362,6 +375,8 @@ public sealed class FileIngestor(
                                 createdAt = now,
                                 updatedAt = now,
                                 sourceId = source.Id,
+                                entryType,
+                                ttlDays,
                                 chunkIndex = row.Position,
                                 totalChunks
                             },
@@ -498,4 +513,6 @@ public sealed class FileIngestor(
         var relative = Path.GetRelativePath(root, path);
         return rules.IsIgnored(relative, false);
     }
+
+    private sealed record MirrorMetadata(string? EntryType, long? TtlDays);
 }

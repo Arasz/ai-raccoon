@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -45,7 +46,7 @@ public sealed class ChunkBackfillTrialRun
         connection.EnableExtensions();
         connection.LoadVector();
 
-        var backfill = new ChunkBackfill(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+        var backfill = new ChunkBackfill(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
             TestData.RealPlainTextChunker(), TimeProvider.System, TestData.CreateEmbeddingService());
         var started = DateTimeOffset.UtcNow;
         var report = await backfill.RunAsync(connection, dryRun: !apply, TestContext.Current.CancellationToken);

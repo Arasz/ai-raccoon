@@ -104,6 +104,7 @@ public sealed class Vec0ReclaimJob : IMaintenanceJob
 ///     rule gained per-file-type chunkers, so every bank still runs it once more under the new rule.
 /// </summary>
 public sealed class ChunkBackfillJob(
+    IEntryKindClassifier entryTypeClassifier,
     IFileTypeMatcher fileTypeMatcher,
     IMarkdownChunker chunker,
     IPlainTextChunker fallbackChunker,
@@ -121,7 +122,7 @@ public sealed class ChunkBackfillJob(
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
-        var report = await new ChunkBackfill(fileTypeMatcher, chunker, fallbackChunker, timeProvider, embeddingService)
+        var report = await new ChunkBackfill(entryTypeClassifier, fileTypeMatcher, chunker, fallbackChunker, timeProvider, embeddingService)
             .RunAsync(connection, false, cancellationToken);
         // Only a backfill that actually replaced rows leaves anything to embed.
         return report.RowsReplaced > 0;

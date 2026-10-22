@@ -13,4 +13,4 @@ Task-oriented recipes: the reader has a goal (configure server, switch embedding
 - [Rekey an encrypted bank](rekey-an-encrypted-bank.md) — move a Bitwarden/SSH-keyed bank from the pre-ADR-0012 key derivation to the current HKDF one with `ai-raccoon encryption migrate`.
 - [Repair fragmented project ids](repair-fragmented-project-ids.md): fold project ids that name the same project into one canonical id with `ai-raccoon repair project-ids`, using an alias-map template the tool writes for you.
 - [Run the Python scripts](run-the-python-scripts.md) — set up `uv`, install the declared dependencies, and run `scripts/` tooling and its test suite from a bare checkout.
-- [Search the code corpus](search-the-code-corpus.md) — search project source code via `query kind=code`, read chunks with `get_entry`, and set up the code embedding engine.
+- [Search the code corpus](search-the-code-corpus.md) — search project source code via `query entryType=code`, read chunks with `get_entry`, and set up the code embedding engine.

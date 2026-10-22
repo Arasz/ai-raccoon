@@ -381,7 +381,7 @@ covered by the same check.
 
 ### Recipe 5: Activate the code corpus's embedding engine
 
-The code corpus (`kind=code`/`kind=both` search) has its **own** embedding engine,
+The code corpus (`entryType=code` or all-types search) has its **own** embedding engine,
 configured independently of everything above — activating it never touches
 `embedding.provider`/`embedding.model`/`embedding.engine`, and vice versa.
 
@@ -436,7 +436,7 @@ On success the settings write (`embedding.codeModel`/`embedding.codeEngine`/
 already-embedded code row to `pending` commit together in one
 transaction — `vec_code` empties in that same commit, so there is no window where it
 holds vectors from the old engine. There is **no outbox and no migration wait**: the
-command returns immediately, memory tools are never blocked, and `kind=code` search
+command returns immediately, memory tools are never blocked, and `entryType=code` search
 degrades to FTS5-only until the `code-reindex` maintenance job re-embeds the pending
 rows on its own cadence.
 

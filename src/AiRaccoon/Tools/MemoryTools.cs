@@ -87,9 +87,9 @@ public sealed partial class MemoryTools(
         "Hybrid semantic search over the bank. projectId=shared directly reads shared documents and promoted knowledge (scope all/shared only, without labels/workspaces). scope=all (default) searches shared + project (+ workspace when named); "
         + "scope=project searches the project only; scope=shared searches shared documents and promoted knowledge. A project scope "
         + "covers every context in the project unless contextLabel narrows it to one. sessionId is required: every agent "
-        + "has a session, and the id is stored verbatim on the search_quality row. Kind defaults to both, with each "
+        + "has a session, and the id is stored verbatim on the search_quality row. Entry type defaults to memory,code,file, with each "
         + "section ranked by its own hybrid. Every search records a search_quality row and returns meta.correlationId "
-        + "for grade and follow-through. Memory and both store the memory leg count and files. Code stores the code "
+        + "for grade and follow-through. Selections including Memory or File store the memory leg count and files. Code-only stores the code "
         + "count with an empty file list. Code paths never enter the table. A result warning of '"
         + SearchWarnings.EngineNotConfiguredPrefix + "' means the memory section is keyword-only because the memory "
         + "embedding engine is not installed: relay '" + EmbeddingEngineSetup.DefaultModelCommand + "' to the user "
@@ -124,7 +124,7 @@ public sealed partial class MemoryTools(
             "long paste (a log, stack trace, test output), search its " +
             "identifying line (exception type, error code, failing test name) instead of the whole " +
             "dump. Keyword matching covers a query of 64 words or fewer in full; a longer query is " +
-            "capped to its first 64 distinct words, stopwords dropped. When kind is code or both, the " +
+            "capped to its first 64 distinct words, stopwords dropped. When entryType includes code, the " +
             "code leg has its own, separately-sized engine window and its own trim warning — a query " +
             "trimmed for one leg may still fit the other in full.")]
         string query,
@@ -166,12 +166,8 @@ public sealed partial class MemoryTools(
         [Description("Narrows the project scope to one context. Omit it to search every context in " +
                      "the project (the default); get_store_statistics lists the labels in use.")]
         string? contextLabel = null,
-        [Description(
-            "Which corpus to search: both (default — the memory bank and the indexed code corpus, " +
-            "each ranked by its own hybrid), memory (the memory bank only, today's legacy envelope), " +
-            "or code (the indexed code corpus only). Code is always project-scoped: scope=shared " +
-            "returns an empty code section. Code hits carry lineStart/lineEnd instead of chunkIndex/totalChunks.")]
-        string kind = "both",
+        [Description("Comma-separated entry types: memory, code, file. Default memory,code,file applies no type filter, including unclassified rows. Narrower sets select declared types only. Code is project-scoped; shared-only queries return no code hits.")]
+        string entryType = "memory,code,file",
         [Description("Code section only: maximum results, overriding limit for the code section (bank setting unaffected).")]
         int? codeLimit = null,
         [Description("Code section only: relative floor, overriding minRelativeScore for the code section.")]
@@ -188,14 +184,14 @@ public sealed partial class MemoryTools(
             "shared" => SearchScope.Shared,
             _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
         };
-        var parsedKind = ParseKind(kind);
+        var parsedTypes = ParseEntryTypes(entryType);
         ValidateCodeOverrides(codeLimit, codeMinRelativeScore);
 
         // Enum wire names are validated here (not silently defaulted) so a typo fails fast,
         // and provided tuning values are range-checked before any bank work.
         var searchQuery = BuildValidatedSearchQuery(canonical, query, parsedScope, workspaceId, limit,
             minRelativeScore, rrfK, ftsWeight, vectorWeight, contextLabel, sourceLambda,
-            consolidationThreshold, docScoreFormula, candidateWindow);
+            consolidationThreshold, docScoreFormula, candidateWindow) with { EntryTypes = parsedTypes };
 
         var guard = await queryGuard.EvaluateAsync(canonical, query, cancellationToken);
         if (guard.Shadowed is { } suppressed)
@@ -214,7 +210,7 @@ public sealed partial class MemoryTools(
         }
 
         var correlationId = Guid.CreateVersion7().ToString("N");
-        var dispatch = await searchDispatcher.DispatchAsync(searchQuery, parsedKind, scope, correlationId,
+        var dispatch = await searchDispatcher.DispatchAsync(searchQuery, parsedTypes, scope, correlationId,
             sessionId: sessionId, codeLimit: codeLimit, codeMinRelativeScore: codeMinRelativeScore,
             cancellationToken: cancellationToken);
 
@@ -225,11 +221,11 @@ public sealed partial class MemoryTools(
             // as defense-in-depth -- only the hash, not the whole recording
             // (integration review S6, unchanged by ADR-0094). search_quality itself now records
             // every kind (ADR-0094), with code paths never stored.
-            var queryHash = parsedKind == SearchKind.Memory ? ContentHash.OfValue(query) : null;
+            var queryHash = !parsedTypes.HasFlag(EntryType.Code) ? ContentHash.OfValue(query) : null;
             RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, canonical);
         }
 
-        var warning = await ComposeWarningAsync(guard.Verdict, query, parsedKind, dispatch.CodeWarning,
+        var warning = await ComposeWarningAsync(guard.Verdict, query, parsedTypes, dispatch.CodeWarning,
             cancellationToken);
         var result = BuildSearchResultList(dispatch, warning, searchQuery);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
@@ -242,14 +238,17 @@ public sealed partial class MemoryTools(
     }
 
     /// <summary>Mirrors the scope validation pattern: normalized case-insensitively, rejected fail-fast on a typo.</summary>
-    private static SearchKind ParseKind(string kind) =>
-        kind.ToLowerInvariant() switch
+    private static EntryType ParseEntryTypes(string value)
+    {
+        try
         {
-            SearchKindWireNames.Memory => SearchKind.Memory,
-            SearchKindWireNames.Code => SearchKind.Code,
-            SearchKindWireNames.Both => SearchKind.Both,
-            _ => throw new McpException($"invalid-params: Invalid kind '{kind}': expected memory, code, or both.")
-        };
+            return EntryTypeParameter.Parse(value);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new McpException($"invalid-params: {ex.Message}");
+        }
+    }
 
     /// <summary>S5: codeLimit/codeMinRelativeScore override limit/minRelativeScore for the code
     /// section only — SearchQueryValidator enforces the same two rules for their un-prefixed
@@ -276,11 +275,11 @@ public sealed partial class MemoryTools(
     ///     memory engine's budget whichever kind was requested.
     /// </summary>
     private async Task<string?> ComposeWarningAsync(QueryGuardVerdict guardVerdict, string query,
-        SearchKind kind, string? codeWarning, CancellationToken cancellationToken)
+        EntryType entryTypes, string? codeWarning, CancellationToken cancellationToken)
     {
         var lengthBudget = await MemoryQueryBudgetTokensAsync(cancellationToken);
         return SearchWarnings.Compose(guardVerdict, QueryLengthGuard.Evaluate(query, lengthBudget),
-            await MemoryEngineWarningAsync(kind, cancellationToken), codeWarning);
+            await MemoryEngineWarningAsync(entryTypes, cancellationToken), codeWarning);
     }
 
     /// <summary>
@@ -288,9 +287,9 @@ public sealed partial class MemoryTools(
     ///     (F6), the same state doctor reports. Null for kind=code, whose leg never runs — reading
     ///     the setting then would be work with no consumer.
     /// </summary>
-    private async Task<string?> MemoryEngineWarningAsync(SearchKind kind, CancellationToken cancellationToken)
+    private async Task<string?> MemoryEngineWarningAsync(EntryType entryTypes, CancellationToken cancellationToken)
     {
-        if (kind == SearchKind.Code)
+        if (entryTypes == EntryType.Code)
         {
             return null;
         }

@@ -95,13 +95,13 @@ public static class TestData
         var fileIngestor = codeChunker is null
             ? new FileIngestor(matcher, sourceStore, timeProvider, embeddings,
                 ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
-                NullCodeIngestor.Instance, NullWatchStore.Instance, pump, new IndexableFileWalk(), SharedScope)
+                NullCodeIngestor.Instance, NullWatchStore.Instance, pump, new IndexableFileWalk(), SharedScope, new EntryKindClassifier())
             : new FileIngestor(matcher, sourceStore, timeProvider, embeddings,
                 ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(),
-                new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider), NullWatchStore.Instance, pump, new IndexableFileWalk(), SharedScope);
+                new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider), NullWatchStore.Instance, pump, new IndexableFileWalk(), SharedScope, new EntryKindClassifier());
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
-            settings ?? new SqliteSettingsStore(factory), pump, measurements ?? NoOpMeasurementRecorder.Instance, SharedScope);
+            settings ?? new SqliteSettingsStore(factory), pump, measurements ?? NoOpMeasurementRecorder.Instance, SharedScope, new EntryKindClassifier());
     }
 
     /// <summary>
@@ -732,12 +732,14 @@ public sealed class NoOpSearchQualityService : ISearchQualityService
 
     public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
         string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
-        IReadOnlyList<RetrievalEvidence>? evidence = null) =>
+        IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null) =>
         Task.CompletedTask;
 
     public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
         string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
-        IReadOnlyList<RetrievalEvidence>? evidence = null) =>
+        IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null) =>
         Task.CompletedTask;
 
     public Task<bool> RecordFollowThroughAsync(string projectId, string correlationId, string filePath, int? servedRank = null,

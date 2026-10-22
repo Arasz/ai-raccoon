@@ -29,6 +29,8 @@ public sealed partial class SqliteMemoryStore
         public string? WorkspaceId { get; init; }
 
         public long CreatedAt { get; init; }
+
+        public string? EntryKind { get; init; }
     }
 
     internal sealed class SearchRow

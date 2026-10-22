@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -307,6 +308,10 @@ public sealed class VecCtxNullProjectTests
              PRAGMA user_version = 8;
              """,
             new { id, vector }, cancellationToken: TestContext.Current.CancellationToken));
+
+            // The old tables come with the old embed triggers: a typed body names the kind
+            // partition column the old table does not have.
+            await LegacyVecShape.RestoreUntypedTriggersAsync(connection, TestContext.Current.CancellationToken);
     }
 
     private static async Task<string?> VecCtxAsync(SqliteConnection connection, string table, long id) =>

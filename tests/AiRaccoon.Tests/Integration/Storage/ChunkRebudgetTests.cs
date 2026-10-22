@@ -63,7 +63,8 @@ public sealed class ChunkRebudgetTests : IDisposable
 
     /// <summary>One reconciler shape, so a test can swap only the clock the phase measures itself with.</summary>
     private ChunkBudgetReconciler NewReconciler(TimeProvider timeProvider) =>
-        new(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), _embeddings, timeProvider, () => _store, _log);
+        new(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), _embeddings, timeProvider, () => _store, _log,
+            new EntryKindClassifier());
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
@@ -380,6 +381,63 @@ public sealed class ChunkRebudgetTests : IDisposable
         after.ShouldAllBe(row => row.EmbedState == "pending", "its replacement rows arrive pending too");
     }
 
+    [RetryTheory]
+    [InlineData("memory", 7, true)]
+    [InlineData("file", null, true)]
+    [InlineData("memory", null, false)]
+    public async Task MirrorReplacement_OnlyRechunkPreservesDeclaredMemoryTtl(string kind, int? expectedTtl, bool rechunk)
+    {
+        var file = Path.Combine(_dataRoot, "declared-kind.md");
+        await File.WriteAllTextAsync(file, FileBody(), Ct);
+        await _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), Ct);
+        await _store.IngestFileAsync(ProjectId, file, null, Ct);
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET entry_type = @kind, ttl_days = 7", new { kind }, cancellationToken: Ct));
+        (await RowsAsync(connection, file)).Count.ShouldBeGreaterThan(1);
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        if (rechunk)
+        {
+            var report = await _reconciler.RunAsync(connection, Ct);
+            report.MirrorGroupsRechunked.ShouldBe(1);
+        }
+        else
+        {
+            (await _store.IngestFileAsync(ProjectId, file, null, Ct)).ShouldBeGreaterThan(0);
+        }
+        var after = await RowsAsync(connection, file);
+        after.ShouldNotBeEmpty();
+        after.ShouldAllBe(row => row.TtlDays == expectedTtl);
+        var kinds = await connection.QueryAsync<string>(new CommandDefinition(
+            "SELECT entry_type FROM entries WHERE path = @file", new { file }, cancellationToken: Ct));
+        kinds.ShouldAllBe(value => value == (rechunk ? kind : "file"));
+    }
+
+    [RetryTheory]
+    [InlineData("file", null)]
+    [InlineData("memory", 7)]
+    public async Task Rebudget_DeclaredKindControlsWhetherReplacementKeepsTtl(string kind, int? expectedTtl)
+    {
+        await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote(), SourceFile: "hermes/session"), Ct);
+        await using var connection = await OpenAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET entry_type = @kind, ttl_days = 7", new { kind }, cancellationToken: Ct));
+        var before = await RowsAsync(connection);
+        before.Count.ShouldBeGreaterThan(1);
+        _embeddings.ChunkBudgetOverride = NewBudget;
+
+        var report = await _reconciler.RunAsync(connection, Ct);
+
+        report.NoteGroupsRechunked.ShouldBe(1);
+        var after = await RowsAsync(connection);
+        after.ShouldNotBeEmpty();
+        after.ShouldAllBe(row => row.TtlDays == expectedTtl);
+        var kinds = await connection.QueryAsync<string>(new CommandDefinition(
+            "SELECT entry_type FROM entries", cancellationToken: Ct));
+        kinds.ShouldAllBe(value => value == kind);
+    }
+
     [RetryFact]
     public async Task Rebudget_ANoteWithTtlDays_CarriesTheTtlToItsRechunkedRows()
     {
@@ -513,7 +571,7 @@ public sealed class ChunkRebudgetTests : IDisposable
         var scanSpan = TimeSpan.FromSeconds(305.5);
         var clock = new FakeTimeProvider(FixedNow);
         var reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            new BudgetScanAdvancingEmbeddingService(_embeddings, clock, scanSpan), clock, () => _store, _log);
+            new BudgetScanAdvancingEmbeddingService(_embeddings, clock, scanSpan), clock, () => _store, _log, new EntryKindClassifier());
 
         var report = await reconciler.RunAsync(connection, Ct);
 

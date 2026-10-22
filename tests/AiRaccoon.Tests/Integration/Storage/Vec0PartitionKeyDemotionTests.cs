@@ -6,6 +6,7 @@ using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Tests.TestHelpers;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -174,6 +175,10 @@ public sealed class Vec0PartitionKeyDemotionTests
              """,
             cancellationToken: TestContext.Current.CancellationToken));
 
+            // The old tables come with the old embed triggers: a typed body names the kind
+            // partition column the old table does not have.
+            await LegacyVecShape.RestoreUntypedTriggersAsync(connection, TestContext.Current.CancellationToken);
+
         foreach (var (projectId, seed) in rows)
         {
             // Rows reach vec_entries/vec_structure only through the embed pass's UPDATE — there is no
@@ -219,6 +224,10 @@ public sealed class Vec0PartitionKeyDemotionTests
              CREATE VIRTUAL TABLE vec_entries USING vec0(ctx TEXT partition key, embedding float[{Dimension}] distance_metric=cosine);
              CREATE VIRTUAL TABLE vec_structure USING vec0(ctx TEXT partition key, embedding float[{Dimension}] distance_metric=cosine);
              """, cancellationToken: TestContext.Current.CancellationToken));
+
+            // The old tables come with the old embed triggers: a typed body names the kind
+            // partition column the old table does not have.
+            await LegacyVecShape.RestoreUntypedTriggersAsync(connection, TestContext.Current.CancellationToken);
 
         for (var i = 0; i < count; i++)
         {

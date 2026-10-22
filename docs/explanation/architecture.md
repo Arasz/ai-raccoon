@@ -9,6 +9,12 @@ contract (tool names, parameters, env vars), see
 
 ## Data model
 
+Since 2.1.0, `entries.entry_type` stores one kind, while `SearchQuery.EntryTypes` is the query's
+flag set. `search_quality.kind_mask` stores that set beside the historical corpus `kind`.
+Historical `memory` selections map to Memory plus File, rather than Memory alone. An all-type
+query omits the type predicate; a narrower query excludes undeclared and unknown rows.
+
+
 All tables live in a single `memory.db` file — no external extensions, no meta
 database, no provisioning. The schema is idempotent (IF NOT EXISTS on every DDL
 statement) and safe to run on every bank open.
@@ -179,7 +185,9 @@ permanent, per-project "no" — never synced, never swept, written only by the
   with AND semantics, so the exact chunk ranks first.
 - `vec_entries` — vec0 virtual table (dimension 384, matching the bundled
   granite-embedding-small-english-r2 engine, ADR-0108) for semantic search. Triggers sync it
-  with `embed_state` changes.
+  with `embed_state` changes. Both memory vector tables partition by context and stored entry
+  kind (`memory`, `file`, or `none`); typed KNN restricts these partitions before truncation.
+  See [ADR-0141](../adr/0141-typed-vector-partitions.md).
 - `vec_structure` — vec0 virtual table over heading-path embeddings (rowid = entry
   id). Populated by `EntryEmbedder` at the embed transition — it derives the
   heading path per chunk and embeds distinct non-empty paths once per batch —
@@ -248,7 +256,7 @@ single consumer (`EmbedDrainService`, ADR-0091) rather than draining inline itse
 signal drains up to `maintenance.embed-rows-per-run.global` pending rows (default 128, range
 64–4096) — no relay wait, no gate, memory tools stay fully available the whole time. A re-ingested
 code file also prunes `code_entries` rows its new chunk set no longer covers (#481). While rows
-drain, `kind=code` search naturally degrades to FTS5-only for them (`code_fts` is populated at
+drain, `entryType=code` search naturally degrades to FTS5-only for them (`code_fts` is populated at
 ingest time, independent of `embed_state`).
 
 > **Evidence:** `docs/work/2026-08-21-code-search-implementation-plan.md` §3.1/§3.2/§3.3/§3.8,
@@ -854,6 +862,10 @@ and the sweep threshold:
 ```
 ShouldDegrade = ttlDays IS SET AND rating < threshold AND ageDays > ttlDays
 ```
+
+`set_memory_ttl` mutates only Memory rows, including transcripts. A File set or clear
+request leaves the existing TTL unchanged. Sync and rechunking drop new File TTLs; the sweep
+still honors historical explicit values.
 
 There is no global TTL knob: an entry without a `ttl_days` value set by
 `set_memory_ttl` is never a candidate — so a bank that has never called that tool has

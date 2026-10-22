@@ -9,6 +9,9 @@ using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
 using ModelContextProtocol;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+using AiRaccoon.Infrastructure.Sqlite.Memory;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
@@ -36,7 +39,11 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
         var settings = new SqliteSettingsStore(_factory);
         var access = new MemoryAccessGuard(new SettingsOnlyStore(settings));
         var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
-        _tools = new EntryTools(new EmptyStore(), codeSearch, gate);
+        var store = TestData.CreateMemoryStore(_factory, NullLogger<SqliteMemoryStore>.Instance,
+            new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(),
+            new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero)),
+            TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
+        _tools = new EntryTools(store, codeSearch, gate);
         await using var warm = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
     }
 
@@ -52,7 +59,7 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
         await SeedAsync(id: 1, projectId: "acme", path: "src/Bar.cs", value: "sealed class NarwhalTusk { }",
             lineStart: 5, lineEnd: 9);
 
-        var envelope = await _tools.GetEntry("acme", "hash-1", TestContext.Current.CancellationToken);
+        var envelope = await _tools.GetEntry("acme", "hash-1", "code", TestContext.Current.CancellationToken);
 
         envelope.Data!.Hash.ShouldBe("hash-1");
         envelope.Data!.Value.ShouldBe("sealed class NarwhalTusk { }");
@@ -65,7 +72,7 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
     public async Task GetEntry_UnknownHash_ThrowsUnknownHashException()
     {
         var ex = await Should.ThrowAsync<UnknownHashException>(() =>
-            _tools.GetEntry("acme", "does-not-exist", TestContext.Current.CancellationToken));
+            _tools.GetEntry("acme", "does-not-exist", "code", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("does-not-exist");
         ex.Message.ShouldContain("acme");
@@ -77,7 +84,7 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
         await SeedAsync(id: 1, projectId: "other", path: "src/Bar.cs", value: "class X { }", lineStart: 1, lineEnd: 1);
 
         await Should.ThrowAsync<UnknownHashException>(() =>
-            _tools.GetEntry("acme", "hash-1", TestContext.Current.CancellationToken));
+            _tools.GetEntry("acme", "hash-1", "code", TestContext.Current.CancellationToken));
     }
 
     [RetryTheory]
@@ -90,7 +97,7 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
         var settings = new SqliteSettingsStore(_factory);
         await settings.SetSettingAsync(AccessModePolicy.ProjectSettingKey("acme"), mode, TestContext.Current.CancellationToken);
 
-        var envelope = await _tools.GetEntry("acme", "hash-1", TestContext.Current.CancellationToken);
+        var envelope = await _tools.GetEntry("acme", "hash-1", "code", TestContext.Current.CancellationToken);
 
         envelope.Data!.Hash.ShouldBe("hash-1");
     }
@@ -99,9 +106,80 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
     public async Task GetEntry_BlankProjectId_IsRefused()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.GetEntry("", "hash-1", TestContext.Current.CancellationToken));
+            _tools.GetEntry("", "hash-1", "code", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("projectId is required (no registered project's scope contains cwd");
+    }
+
+    [RetryFact]
+    public async Task GetEntry_OverlappingHash_SelectsRequestedKindBeforeChoosingRow()
+    {
+        await SeedAsync(1, "acme", "Code.cs", "code value", 1, 2);
+        await SeedMemoryAsync("hash-1", "note.md", "memory value", "memory", "project", "acme");
+        await SeedMemoryAsync("hash-1", "file.md", "file value", "file", "shared", null);
+
+        var memory = (await _tools.GetEntry("acme", "hash-1", "memory", TestContext.Current.CancellationToken)).Data!;
+        var file = (await _tools.GetEntry("acme", "hash-1", "file", TestContext.Current.CancellationToken)).Data!;
+        var code = (await _tools.GetEntry("acme", "hash-1", "code", TestContext.Current.CancellationToken)).Data!;
+
+        memory.Value.ShouldBe("memory value");
+        memory.EntryType.ShouldBe("memory");
+        memory.EntryKind.ShouldBe("memory");
+        file.Value.ShouldBe("file value");
+        file.EntryType.ShouldBe("memory");
+        file.EntryKind.ShouldBe("file");
+        code.Value.ShouldBe("code value");
+        code.EntryType.ShouldBe("code");
+        code.EntryKind.ShouldBe("code");
+    }
+
+    [RetryTheory]
+    [InlineData("none")]
+    [InlineData("future")]
+    public async Task GetEntry_UnclassifiedOrUnknownStoredKind_DoesNotGuessFromShape(string storedKind)
+    {
+        await SeedMemoryAsync("unclassified", "note.md", "agent note", storedKind, "project", "acme");
+        await Should.ThrowAsync<UnknownHashException>(() =>
+            _tools.GetEntry("acme", "unclassified", "memory", TestContext.Current.CancellationToken));
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        (await connection.ExecuteScalarAsync<string>("SELECT entry_type FROM entries WHERE hash='unclassified'"))
+            .ShouldBe(storedKind);
+    }
+
+    [RetryFact]
+    public async Task GetEntry_WrongTypeOrProject_NeverFallsBackToAnotherCorpus()
+    {
+        await SeedMemoryAsync("note", "note.md", "private note", "memory", "project", "other");
+        await SeedMemoryAsync("file", "file.md", "document", "file", "project", "acme");
+        await Should.ThrowAsync<UnknownHashException>(() =>
+            _tools.GetEntry("acme", "note", "memory", TestContext.Current.CancellationToken));
+        await Should.ThrowAsync<UnknownHashException>(() =>
+            _tools.GetEntry("acme", "file", "memory", TestContext.Current.CancellationToken));
+        var file = await _tools.GetEntry("acme", "file", "file", TestContext.Current.CancellationToken);
+        file.Data!.Value.ShouldBe("document");
+    }
+
+    [RetryTheory]
+    [InlineData("")]
+    [InlineData("memory,file")]
+    [InlineData("none")]
+    [InlineData("8")]
+    public async Task GetEntry_InvalidSelection_IsInvalidParams(string entryType)
+    {
+        var error = await Should.ThrowAsync<McpException>(() =>
+            _tools.GetEntry("acme", "hash-1", entryType, TestContext.Current.CancellationToken));
+        error.Message.ShouldStartWith("invalid-params:");
+    }
+
+    private async Task SeedMemoryAsync(string hash, string path, string value, string kind, string scope, string? projectId)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition("""
+            PRAGMA ignore_check_constraints=ON;
+            INSERT INTO entries(hash,path,value,entry_type,scope,project_id,created_at,updated_at)
+            VALUES(@hash,@path,@value,@kind,@scope,@projectId,1,1);
+            """, new { hash, path, value, kind, scope, projectId },
+            cancellationToken: TestContext.Current.CancellationToken));
     }
 
     private async Task SeedAsync(long id, string projectId, string path, string value, int lineStart, int lineEnd)
@@ -123,8 +201,8 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
     /// </summary>
     private sealed class EmptyStore : FakeMemoryStore
     {
-        public override Task<MemoryEntry?> GetAsync(string projectId, string hash,
-            CancellationToken cancellationToken = default) =>
+        protected override Task<MemoryEntry?> GetAsyncCore(string projectId, string hash,
+            CancellationToken cancellationToken) =>
             Task.FromResult<MemoryEntry?>(null);
     }
 

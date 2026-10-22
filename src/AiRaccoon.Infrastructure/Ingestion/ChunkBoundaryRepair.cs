@@ -24,6 +24,7 @@ public sealed record ChunkBoundaryRepairReport(int FilesReingested, int GroupsRe
 ///     New rows are left pending for the embed drain.
 /// </summary>
 public sealed class ChunkBoundaryRepair(
+    IEntryKindClassifier entryTypeClassifier,
     IFileTypeMatcher fileTypeMatcher,
     IMarkdownChunker noteChunker,
     IPlainTextChunker fallbackChunker,
@@ -43,7 +44,8 @@ public sealed class ChunkBoundaryRepair(
             SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, source_file AS SourceFile, section AS Section,
                    scope AS Scope, project_id AS ProjectId, context_label AS ContextLabel, workspace_id AS WorkspaceId,
                    agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId, chunk_index AS ChunkIndex,
-                   total_chunks AS TotalChunks
+                   total_chunks AS TotalChunks,
+                   entry_type AS EntryType
             FROM entries
             WHERE value IS NOT NULL AND path IS NOT NULL
             """, cancellationToken: cancellationToken));
@@ -356,7 +358,7 @@ public sealed class ChunkBoundaryRepair(
         }
     }
 
-    private static Task<long?> InsertAsync(SqliteConnection connection, Row row, string piece, long now,
+    private Task<long?> InsertAsync(SqliteConnection connection, Row row, string piece, long now,
         CancellationToken cancellationToken) =>
         connection.ExecuteScalarAsync<long?>(new CommandDefinition(MemorySql.InsertEntry + " RETURNING id",
             new
@@ -374,6 +376,10 @@ public sealed class ChunkBoundaryRepair(
                 createdAt = row.CreatedAt,
                 updatedAt = now,
                 sourceId = row.SourceId,
+                // The row keeps the kind its writer declared; the shape is only the fallback
+                // for a row that carries no kind.
+                entryType = entryTypeClassifier.ResolveStoredValue(
+                    row.EntryType, row.Path, row.SourceFile),
                 chunkIndex = -1,
                 totalChunks = 0
             }, cancellationToken: cancellationToken));
@@ -404,7 +410,8 @@ public sealed class ChunkBoundaryRepair(
         long CreatedAt,
         long? SourceId,
         long ChunkIndex,
-        long TotalChunks)
+        long TotalChunks,
+        string? EntryType)
     {
         /// <summary>A file's own mirror row, as opposed to a add_memory note that may merely cite the file.</summary>
         public bool IsFileRow => SourceFile is not null && string.Equals(Path, SourceFile, StringComparison.Ordinal);

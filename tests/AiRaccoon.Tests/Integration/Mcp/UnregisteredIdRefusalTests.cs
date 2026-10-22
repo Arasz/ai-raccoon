@@ -24,7 +24,7 @@ public sealed class UnregisteredIdRefusalTests(UnregisteredIdRefusalTests.Server
     /// <summary>The smallest valid arguments per tool, besides the project id, so the gate is what refuses.</summary>
     private static readonly Dictionary<string, Dictionary<string, object?>> MinimalArgs = new(StringComparer.Ordinal)
     {
-        ["get_entry"] = new() { ["hash"] = new string('a', 64) },
+        ["get_entry"] = new() { ["hash"] = new string('a', 64), ["entryType"] = "memory" },
         ["add_memory"] = new() { ["content"] = "x" },
         ["query"] = new() { ["query"] = "x", ["sessionId"] = "sess-refusal" },
         ["get_quality_report"] = new(),

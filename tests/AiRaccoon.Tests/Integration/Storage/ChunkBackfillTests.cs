@@ -7,6 +7,7 @@ using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -120,7 +121,7 @@ public sealed class ChunkBackfillTests : IDisposable
     }
 
     private static ChunkBackfill Backfill() =>
-        new(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
+        new(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
             new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
 
     private static string Paragraphs(int count) =>

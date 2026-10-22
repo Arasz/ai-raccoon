@@ -45,6 +45,7 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 
 ## What's new
 
+- **Choose Memory, File, or Code in a query (2.1.0).** `query entryType=memory` searches agent notes and transcripts; `file` selects mirrored documents and `code` selects source. Omit the parameter to search everything. `get_entry` now requires one type, and TTL changes apply only to Memory. [Upgrade notes](docs/changelog/2.1.0-typed-search-memory-ttl.md)
 - **Every MCP tool has a new name, and the old names are gone (2.0.0).** `memory_search` is now `query`, `memory_get` and `code_get` are one `get_entry`, `memory_write` is `add_memory`, and the whole 30-tool surface moved with them. There are no aliases, so a client that calls an old name gets nothing back. The [old → new map](docs/changelog/2.0.0-mcp-tool-surface-renamed.md) is one table. [Breaking changes](docs/reference/breaking-changes.md)
 - The reserved `shared` document target refuses a delete, and every MCP tool now declares the scope it may run in, so the build fails when a tool declares none. (1.63.0) [ADR-0139](docs/adr/0139-attribute-derived-tool-scope.md)
 - Documents outside a repository can use the built-in `shared` target: configure its path scope, then `ai-raccoon watch add shared /absolute/documents`. No project id to mint. (1.62.0) [Changelog](docs/changelog/1.62.0-shared-document-watches.md)
@@ -100,7 +101,7 @@ It asks for your password once, for `powermetrics` (add `--no-power` to skip it)
 |---|---|---|
 | Project-scoped memory | Notes partitioned by project id, in `~/.ai-raccoon` or `<project>/.ai-raccoon` | [Capabilities](docs/explanation/agent-memory-capabilities.md#storage-architecture-and-scope-partitioning) |
 | Hybrid search | FTS5 keyword and vec0 vector search, fused with Reciprocal Rank Fusion, with relevance floors and per-hit evidence | [Search pipeline](docs/explanation/agent-memory-capabilities.md#hybrid-search-pipeline-fts5--vec0--rrf) · [Parameters](docs/reference/search-parameters.md) |
-| Code corpus | A separate, never-synced index of 37 source extensions across C#, F#, Java, Kotlin, Scala, Python, Ruby, PHP, Lua, shell, TS/JS, Vue, Go, Rust, C/C++, Objective-C, Swift, HTML, CSS/SCSS, SQL, Terraform/HCL and Gherkin; `query kind=code` or `kind=both`, `get_entry` by hash | [How-to](docs/how-to/search-the-code-corpus.md) · [Dossier](docs/features/code-corpus/) |
+| Code corpus | A separate, never-synced index of 37 source extensions across C#, F#, Java, Kotlin, Scala, Python, Ruby, PHP, Lua, shell, TS/JS, Vue, Go, Rust, C/C++, Objective-C, Swift, HTML, CSS/SCSS, SQL, Terraform/HCL and Gherkin; `query entryType=code` or all types, `get_entry` by hash and type | [How-to](docs/how-to/search-the-code-corpus.md) · [Dossier](docs/features/code-corpus/) |
 | File watching | Watched directories re-ingest on change, honouring `ai-raccoon.ignore` ([template](docs/reference/ai-raccoon-ignore-template.ignore)) | [Dossier](docs/features/file-watcher/) |
 | Workspace sandboxes | Isolated in-progress notes that consolidate into the project or get discarded | [Workspaces](docs/explanation/agent-memory-capabilities.md#workspace-sandbox-context-lifecycle) |
 | Shared tier | Cross-project facts promoted by `share_memory`, exempt from decay | [Shared tier](docs/explanation/agent-memory-capabilities.md#propose-and-shared-promotion-tier) |

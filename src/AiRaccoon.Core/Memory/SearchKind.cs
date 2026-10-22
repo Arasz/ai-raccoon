@@ -9,8 +9,8 @@ public enum SearchKind
 }
 
 /// <summary>
-///     Single source for the search-kind wire/storage vocabulary: the MCP <c>kind</c> param,
-///     the <c>search_quality.kind</c> column (CHECK + backfill), and the dispatcher's stored value.
+///     Single source for the legacy search-kind storage vocabulary: the <c>search_quality.kind</c>
+///     column (CHECK + backfill) and the dispatcher's stored value.
 ///     A rename must update this class, not three string literals — the pin test
 ///     (<c>SearchKindWireNames_AreTheStableContract</c>) fails the build instead of a CHECK
 ///     violation failing silently at runtime (quality recording is fire-and-forget).

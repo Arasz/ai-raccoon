@@ -1445,6 +1445,146 @@ public class SyncServiceTests : IDisposable
         count.ShouldBeGreaterThanOrEqualTo(2, "at least file and manual sources must exist");
     }
 
+    /// <summary>
+    ///     A row pulled from a remote must arrive with its kind: the merge writes every column the
+    ///     local table has, so a column it omits lands as the default 'none' — and a row with no
+    ///     kind is a row the typed query cannot place. The remote's own kind is carried when it has
+    ///     one; a row from an older peer, which has no kind column at all, is filed by its own shape.
+    /// </summary>
+    [RetryFact]
+    public async Task MergeAsync_PulledRows_CarryTheirEntryType()
+    {
+        var cloud = new FakeCloudStore();
+
+        var remotePath = Path.Combine(_dataRoot, "remote.db");
+        await using (var conn = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            // A file row (path = source_file) and a manual note (no source file) — the two shapes
+            // the rule distinguishes.
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, created_at, updated_at, entry_type)
+                                 VALUES ('typed-file', 'doc.md#0', 'chunk one', 'doc.md', 'Intro', 'project', 'acme', 1, 1, 'file'),
+                                        ('typed-note', 'note.md', 'manual note', NULL, NULL, 'project', 'acme', 3, 3, 'memory')
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
+
+        var service = _bank.CreateService(cloud);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(TestContext.Current.CancellationToken);
+
+        await using var select = check.CreateCommand();
+        select.CommandText = "SELECT hash, entry_type FROM entries WHERE hash IN ('typed-file', 'typed-note')";
+        var types = new Dictionary<string, string?>();
+        await using (var reader = await select.ExecuteReaderAsync(TestContext.Current.CancellationToken))
+        {
+            while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+            {
+                types[reader.GetString(0)] = reader.IsDBNull(1) ? null : reader.GetString(1);
+            }
+        }
+
+        types.ShouldContainKey("typed-file");
+        types.ShouldContainKey("typed-note");
+        types["typed-file"].ShouldBe("file");
+        types["typed-note"].ShouldBe("memory");
+    }
+
+    /// <summary>
+    ///     A remote's UNKNOWN kind is data from another machine: it lands unclassified, where the
+    ///     doctor counts it, rather than being guessed at from the row's shape. Guessing would file
+    ///     another machine's defect as a fact about this one.
+    /// </summary>
+    [RetryFact]
+    public async Task MergeAsync_ARemotesUnknownKind_LandsUnclassified()
+    {
+        var cloud = new FakeCloudStore();
+
+        var remotePath = Path.Combine(_dataRoot, "unknown-kind-remote.db");
+        await using (var conn = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        {
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, created_at, updated_at, entry_type)
+                                 VALUES ('odd-kind', 'doc.md', 'chunk one', 'doc.md', 'Intro', 'project', 'acme', 1, 1, 'transcript')
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
+
+        var service = _bank.CreateService(cloud);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(TestContext.Current.CancellationToken);
+
+        await using var select = check.CreateCommand();
+        select.CommandText = "SELECT entry_type FROM entries WHERE hash = 'odd-kind'";
+        var kind = (string?)await select.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+        kind.ShouldBe("none", "a remote's unknown kind lands unclassified, where the doctor counts it");
+    }
+
+    /// <summary>
+    ///     A remote on an older schema has no kind column at all. Its rows are filed by their own
+    ///     shape — the same rule the v20 backfill applies — so a pulled row is never left with the
+    ///     default 'none' that the typed query cannot place.
+    /// </summary>
+    [RetryFact]
+    public async Task MergeAsync_RowsFromAnOlderPeer_AreFiledByTheirShape()
+    {
+        var cloud = new FakeCloudStore();
+
+        var remotePath = Path.Combine(_dataRoot, "legacy-remote.db");
+        await using (var conn = await _bank.CreateAndOpenAsync(remotePath, TestContext.Current.CancellationToken))
+        {
+            // Drop the column an older peer's bank never had.
+            await using var drop = conn.CreateCommand();
+            drop.CommandText = "ALTER TABLE entries DROP COLUMN entry_type";
+            await drop.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+
+            await using var insert = conn.CreateCommand();
+            insert.CommandText = """
+                                 INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, created_at, updated_at)
+                                 VALUES ('legacy-file', 'doc.md', 'chunk one', 'doc.md', 'Intro', 'project', 'acme', 1, 1),
+                                        ('legacy-note', 'note.md', 'manual note', NULL, NULL, 'project', 'acme', 3, 3)
+                                 """;
+            await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        cloud.Set("test-object", await File.ReadAllBytesAsync(remotePath, TestContext.Current.CancellationToken));
+
+        var service = _bank.CreateService(cloud);
+
+        await service.MemorySyncAsync("acme", "test-object", TestContext.Current.CancellationToken);
+
+        await using var check = new SqliteConnection($"Data Source={BankPath}");
+        await check.OpenAsync(TestContext.Current.CancellationToken);
+
+        await using var select = check.CreateCommand();
+        select.CommandText = "SELECT hash, entry_type FROM entries WHERE hash IN ('legacy-file', 'legacy-note')";
+        var types = new Dictionary<string, string?>();
+        await using (var reader = await select.ExecuteReaderAsync(TestContext.Current.CancellationToken))
+        {
+            while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+            {
+                types[reader.GetString(0)] = reader.IsDBNull(1) ? null : reader.GetString(1);
+            }
+        }
+
+        types.ShouldContainKey("legacy-file");
+        types.ShouldContainKey("legacy-note");
+        types["legacy-file"].ShouldBe("file");
+        types["legacy-note"].ShouldBe("memory");
+    }
+
     [RetryFact]
     public async Task MergeAsync_PreservesSourceFile_Section_ForFTS()
     {

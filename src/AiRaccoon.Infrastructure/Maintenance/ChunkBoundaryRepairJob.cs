@@ -13,6 +13,7 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     which the write paths no longer create. Sits before PendingEmbedJob, which embeds what it leaves.
 /// </summary>
 public sealed partial class ChunkBoundaryRepairJob(
+    IEntryKindClassifier entryTypeClassifier,
     IFileTypeMatcher fileTypeMatcher,
     IMarkdownChunker noteChunker,
     IPlainTextChunker fallbackChunker,
@@ -31,7 +32,7 @@ public sealed partial class ChunkBoundaryRepairJob(
 
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var report = await new ChunkBoundaryRepair(fileTypeMatcher, noteChunker, fallbackChunker, embeddingService, timeProvider)
+        var report = await new ChunkBoundaryRepair(entryTypeClassifier, fileTypeMatcher, noteChunker, fallbackChunker, embeddingService, timeProvider)
             .RunAsync(connection, store, cancellationToken);
         Log.Repaired(logger, report.FilesReingested, report.GroupsRepaired, report.RowsWritten, report.NotesUnproven,
             report.FilesRepositioned);

@@ -99,7 +99,7 @@ public sealed class GoldenMemorySearchResponseTests : IAsyncLifetime
             new QueryGuardService(_settings), new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope),
             new NoOpMeasurementRecorder(), _settings, NullLogger<MemoryTools>.Instance, new CountingEmbeddingService());
 
-        var response = await tools.Search("acme", "quick fox", sessionId: "sess-test", kind: "memory",
+        var response = await tools.Search("acme", "quick fox", sessionId: "sess-test", entryType: "memory,file",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var captured = RoundCosines(NormalizeCorrelationId(JsonSerializer.SerializeToNode(response, JsonOptions)!.AsObject()));

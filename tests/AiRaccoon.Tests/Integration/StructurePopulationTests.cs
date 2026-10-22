@@ -14,6 +14,7 @@ using Shouldly;
 using Xunit;
 using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -47,11 +48,11 @@ public sealed class StructurePopulationTests : IAsyncLifetime
             [new MarkdownFileTypeHandler(markdownChunker), new JsonFileTypeHandler(TestData.RealJsonChunker(markdownChunker))]);
         var fileIngestor = new FileIngestor(matcher, sourceStore, _clock, embeddings,
             NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, _pump, new IndexableFileWalk(), TestData.SharedScope);
+            NullWatchStore.Instance, _pump, new IndexableFileWalk(), TestData.SharedScope, new EntryKindClassifier());
         var embedder = TestData.CreateEntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), _clock, new VecDimensionReconciler());
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, embedder, _clock,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory), _pump,
-            NoOpMeasurementRecorder.Instance, TestData.SharedScope);
+            NoOpMeasurementRecorder.Instance, TestData.SharedScope, new EntryKindClassifier());
     }
 
     public ValueTask DisposeAsync()

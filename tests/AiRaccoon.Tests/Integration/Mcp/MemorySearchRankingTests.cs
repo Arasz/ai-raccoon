@@ -74,14 +74,14 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
         var ticket = await SeedProseBankAsync(ct);
 
-        var recall = await _tools.Search(ProjectId, "AIR-4471", Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+        var recall = await _tools.Search(ProjectId, "AIR-4471", Session, entryType: "memory,file", minRelativeScore: 0.0, cancellationToken: ct);
         var evidence = recall.Data!.EvidenceByHash.ShouldNotBeNull()[ticket.Hash];
         var floor = TestData.CreateEmbeddingService().RelevanceFloor(new EmbeddingSettings("local", null, null, null))
                     ?? SearchRelevance.AbsoluteRelevanceFloor;
         evidence.Cosine.ShouldNotBeNull().ShouldBeLessThan(floor,
             "premise: the identifier row's content cosine sits under the engine's absolute floor");
 
-        var envelope = await _tools.Search(ProjectId, "AIR-4471", Session, kind: "memory", cancellationToken: ct);
+        var envelope = await _tools.Search(ProjectId, "AIR-4471", Session, entryType: "memory,file", cancellationToken: ct);
 
         envelope.Data!.Results.Select(result => result.Hash).ShouldContain(ticket.Hash,
             "a row containing every query term is an answer, whatever its cosine");
@@ -95,7 +95,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
         await SeedProseBankAsync(ct);
 
-        var envelope = await _tools.Search(ProjectId, "quantum chromodynamics lattice gauge", Session, kind: "memory", cancellationToken: ct);
+        var envelope = await _tools.Search(ProjectId, "quantum chromodynamics lattice gauge", Session, entryType: "memory,file", cancellationToken: ct);
 
         envelope.Data!.Results.ShouldBeEmpty();
     }
@@ -110,13 +110,13 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
         await SeedProseBankAsync(ct);
 
-        var recall = await _tools.Search(ProjectId, "how to braise a wombat in aspic", Session, kind: "memory",
+        var recall = await _tools.Search(ProjectId, "how to braise a wombat in aspic", Session, entryType: "memory,file",
             minRelativeScore: 0.0, cancellationToken: ct);
         recall.Data!.EvidenceByHash.ShouldNotBeNull().Values
             .ShouldContain(item => item.Legs.Any(leg => leg.LegName == "fts"),
                 "premise: the stop-word fallback gives the keyword leg hits");
 
-        var envelope = await _tools.Search(ProjectId, "how to braise a wombat in aspic", Session, kind: "memory", cancellationToken: ct);
+        var envelope = await _tools.Search(ProjectId, "how to braise a wombat in aspic", Session, entryType: "memory,file", cancellationToken: ct);
 
         envelope.Data!.Results.ShouldBeEmpty();
     }
@@ -138,7 +138,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         await _store.EmbedPendingAsync(ProjectId, null, ct);
         var runbook = await IngestAsync("deploy-runbook.md", RunbookText(), ct);
 
-        var envelope = await _tools.Search(ProjectId, $"{runbook}#rollback", Session, kind: "memory",
+        var envelope = await _tools.Search(ProjectId, $"{runbook}#rollback", Session, entryType: "memory,file",
             minRelativeScore: minRelativeScore, cancellationToken: ct);
 
         envelope.Data!.Results.ShouldNotBeEmpty("the anchored section is an answer, not noise under a cosine floor");
@@ -159,7 +159,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         var runbook = await IngestAsync("deploy-runbook.md", RunbookText(), ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
 
-        var envelope = await _tools.Search(ProjectId, $"{runbook}#rollback", Session, kind: "memory", cancellationToken: ct);
+        var envelope = await _tools.Search(ProjectId, $"{runbook}#rollback", Session, entryType: "memory,file", cancellationToken: ct);
 
         envelope.Data!.Results.ShouldNotBeEmpty();
         (await SectionOfAsync(envelope.Data!.Results[0].Hash, ct)).ShouldBe("Rollback", StringCompareShould.IgnoreCase);
@@ -180,7 +180,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         var named = await IngestAsync("ferry-notes.md",
             "# Ferry notes\n\n## Fares\n\nKittens nap on warm windowsills while gardeners water tomatoes.\n", ct);
 
-        var envelope = await _tools.Search(ProjectId, "ferry-notes.md#fares", Session, kind: "memory",
+        var envelope = await _tools.Search(ProjectId, "ferry-notes.md#fares", Session, entryType: "memory,file",
             minRelativeScore: 0.0, cancellationToken: ct);
 
         envelope.Data!.Results.ShouldNotBeEmpty();
@@ -198,7 +198,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         await IngestAsync("harbour-guide.md", $"# Harbour guide\n\n## Roster\n\n{roster}\n\n## Coastal duties\n\n{duties}\n", ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
 
-        var envelope = await _tools.Search(ProjectId, "harbour-guide.md#Coastal duties", Session, kind: "memory",
+        var envelope = await _tools.Search(ProjectId, "harbour-guide.md#Coastal duties", Session, entryType: "memory,file",
             minRelativeScore: 0.0, cancellationToken: ct);
 
         envelope.Data!.Results.ShouldNotBeEmpty();
@@ -218,7 +218,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         await _store.EmbedPendingAsync(ProjectId, null, ct);
 
         var envelope = await _tools.Search(ProjectId, "deploy-runbook.md#how does the team check the change calendar", Session,
-            kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+            entryType: "memory,file", minRelativeScore: 0.0, cancellationToken: ct);
 
         envelope.Data!.EvidenceByHash.ShouldNotBeNull().Values
             .ShouldContain(evidence => evidence.Legs.Any(leg => leg.LegName == "fts"), "the keyword leg must still search the words");
@@ -239,7 +239,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         await IngestAsync("deploy-runbook.md", RunbookText(), ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
 
-        var envelope = await _tools.Search(ProjectId, "staging certificate rotation", Session, kind: "memory",
+        var envelope = await _tools.Search(ProjectId, "staging certificate rotation", Session, entryType: "memory,file",
             minRelativeScore: 0.0, cancellationToken: ct);
 
         var legs = envelope.Data!.EvidenceByHash.ShouldNotBeNull()[note.Hash].Legs;
@@ -262,7 +262,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
         var observatory = await IngestAsync("observatory.md", ObservatoryText(), ct);
         await _store.EmbedPendingAsync(ProjectId, null, ct);
 
-        var envelope = await _tools.Search(ProjectId, "vk83jq", Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+        var envelope = await _tools.Search(ProjectId, "vk83jq", Session, entryType: "memory,file", minRelativeScore: 0.0, cancellationToken: ct);
 
         var evidence = envelope.Data!.EvidenceByHash.ShouldNotBeNull();
         evidence[note.Hash].Legs.ShouldContain(leg => leg.LegName == "fts" && leg.Rank == 1, "premise: the keyword leg ranks the note first");
@@ -304,7 +304,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
             hardCut.ShouldBeInRange(identifier + 1, identifier + 5, "premise: a budget-only cut lands inside the identifier");
         }
 
-        var envelope = await _tools.Search(ProjectId, "vk83jq", Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+        var envelope = await _tools.Search(ProjectId, "vk83jq", Session, entryType: "memory,file", minRelativeScore: 0.0, cancellationToken: ct);
 
         envelope.Data!.EvidenceByHash.ShouldNotBeNull().Values
             .ShouldContain(evidence => evidence.Legs.Any(leg => leg.LegName == "fts"), "one chunk must hold the whole identifier");
@@ -328,7 +328,7 @@ public sealed class MemorySearchRankingTests : IAsyncLifetime
             values.ShouldAllBe(value => !value.Contains(term), "premise: no row holds the whole term");
         }
 
-        var envelope = await _tools.Search(ProjectId, term, Session, kind: "memory", minRelativeScore: 0.0, cancellationToken: ct);
+        var envelope = await _tools.Search(ProjectId, term, Session, entryType: "memory,file", minRelativeScore: 0.0, cancellationToken: ct);
 
         envelope.Data!.EvidenceByHash.ShouldNotBeNull().Values
             .ShouldContain(evidence => evidence.Legs.Any(leg => leg.LegName == "fts"), "the row holding the term's start must match");

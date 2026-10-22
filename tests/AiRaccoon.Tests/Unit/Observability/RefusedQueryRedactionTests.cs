@@ -109,7 +109,7 @@ public sealed class RefusedQueryRedactionTests
         store.Settings[QueryGuardConfigKeys.ShadowGlobal] = "true";
         var tools = CreateTools(store, logger);
 
-        await tools.Search("acme", Canary, kind: "memory", sessionId: "sess-test",
+        await tools.Search("acme", Canary, entryType: "memory,file", sessionId: "sess-test",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var record = fakeLogs.Collector.GetSnapshot().Single(r => r.Id.Id == 920);
@@ -182,7 +182,8 @@ public sealed class RefusedQueryRedactionTests
 
         public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
             string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles,
-            CancellationToken ct = default, IReadOnlyList<RetrievalEvidence>? evidence = null)
+            CancellationToken ct = default, IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             Queries.Add(query);
             return Task.CompletedTask;
@@ -190,7 +191,8 @@ public sealed class RefusedQueryRedactionTests
 
         public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
             string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles,
-            CancellationToken ct = default, IReadOnlyList<RetrievalEvidence>? evidence = null)
+            CancellationToken ct = default, IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             Queries.Add(query);
             return Task.CompletedTask;

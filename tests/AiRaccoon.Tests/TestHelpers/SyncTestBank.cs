@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS entries (
     structure_embedding BLOB NULL,
     chunk_index INTEGER NOT NULL DEFAULT 0,
     total_chunks INTEGER NOT NULL DEFAULT 0,
-    source_id INTEGER NULL
+    source_id INTEGER NULL,
+    entry_type TEXT NOT NULL DEFAULT 'none'
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, agent_id TEXT NULL,

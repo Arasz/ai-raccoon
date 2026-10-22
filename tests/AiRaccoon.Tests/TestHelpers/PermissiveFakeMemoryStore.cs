@@ -28,8 +28,8 @@ public class PermissiveFakeMemoryStore : FakeMemoryStore
         CancellationToken cancellationToken = default) =>
         Task.FromResult(1);
 
-    public override Task<MemoryEntry?> GetAsync(string projectId, string hash,
-        CancellationToken cancellationToken = default) =>
+    protected override Task<MemoryEntry?> GetAsyncCore(string projectId, string hash,
+        CancellationToken cancellationToken) =>
         Task.FromResult<MemoryEntry?>(null);
 
     public override Task<int> DeleteContextAsync(string projectId, string context,
@@ -99,7 +99,7 @@ public class PermissiveFakeMemoryStore : FakeMemoryStore
         Task.CompletedTask;
 
     public override Task ReplaceAsync(string projectId, string path, string fileHash, string? context,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default, bool preserveMemoryMetadata = false) =>
         Task.CompletedTask;
 
     public override Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,

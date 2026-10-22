@@ -13,6 +13,7 @@ using Shouldly;
 using Xunit;
 using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -55,12 +56,12 @@ public sealed class ReplaceHoldsTheLockOnlyForTheWriteTests : IDisposable
         var realIngestor = new FileIngestor(
             new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]), sourceStore, time,
             embeddings, NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryKindClassifier());
         var blockingIngestor = new BlockingFileIngestor(realIngestor);
         var store = new SqliteMemoryStore(_factory, sourceStore, blockingIngestor,
             TestData.CreateEntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), time, new VecDimensionReconciler()), time,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory),
-            NullEmbedDrainPump.Instance, NoOpMeasurementRecorder.Instance, TestData.SharedScope);
+            NullEmbedDrainPump.Instance, NoOpMeasurementRecorder.Instance, TestData.SharedScope, new EntryKindClassifier());
 
         await store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), ct);
 
@@ -102,11 +103,11 @@ public sealed class ReplaceHoldsTheLockOnlyForTheWriteTests : IDisposable
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId,
-            string path, string? context, CancellationToken cancellationToken)
+            string path, string? context, CancellationToken cancellationToken, bool preserveMemoryMetadata = false)
         {
             Entered.TrySetResult();
             await _release.Task;
-            return await inner.IngestFileAsync(connection, projectId, path, context, cancellationToken);
+            return await inner.IngestFileAsync(connection, projectId, path, context, cancellationToken, preserveMemoryMetadata);
         }
 
         public Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId,

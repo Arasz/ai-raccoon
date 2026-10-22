@@ -12,49 +12,56 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// </summary>
 internal static class WriteChunks
 {
-    public static async Task InsertAsync(SqliteConnection connection, string hash, string path, string chunk,
-        MemorySource source, MemoryWriteRequest request,
-        BucketColumns bucket, long now,
-        CancellationToken cancellationToken)
+    extension(SqliteConnection connection)
     {
-        var exists = await connection.ExecuteScalarAsync<long?>(
-                new CommandDefinition(MemorySql.EntryExistsByPathAndHashInBucket,
-                    new
-                    {
-                        hash,
-                        path,
-                        scope = bucket.Scope,
-                        projectId = bucket.ProjectId,
-                        contextLabel = bucket.ContextLabel,
-                        workspaceId = bucket.WorkspaceId
-                    }, cancellationToken: cancellationToken)) is not null;
-        if (exists)
+        /// <summary>Appends one chunk of an agent write to its group, unless the row is already there.</summary>
+        public async Task InsertAsync(string hash, string path, string chunk,
+            MemorySource source, MemoryWriteRequest request,
+            BucketColumns bucket, long now,
+            IEntryKindClassifier entryTypeClassifier,
+            CancellationToken cancellationToken)
         {
-            return;
-        }
+            var exists = await connection.ExecuteScalarAsync<long?>(
+                    new CommandDefinition(MemorySql.EntryExistsByPathAndHashInBucket,
+                        new
+                        {
+                            hash,
+                            path,
+                            scope = bucket.Scope,
+                            projectId = bucket.ProjectId,
+                            contextLabel = bucket.ContextLabel,
+                            workspaceId = bucket.WorkspaceId
+                        }, cancellationToken: cancellationToken)) is not null;
+            if (exists)
+            {
+                return;
+            }
 
-        await connection.ExecuteAsync(
-                new CommandDefinition(MemorySql.InsertEntry,
-                    new
-                    {
-                        hash,
-                        path,
-                        value = chunk,
-                        sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : null,
-                        section = request.Section,
-                        scope = bucket.Scope,
-                        projectId = bucket.ProjectId,
-                        contextLabel = bucket.ContextLabel,
-                        workspaceId = bucket.WorkspaceId,
-                        agentId = request.AgentId,
-                        createdAt = now,
-                        updatedAt = now,
-                        sourceId = source.Id,
-                        // Position unknown here — this is an append to a (ctx, source_file) group, not
-                        // a re-chunk of a whole document; RecomputeChunkColumnsForContext fills it in.
-                        chunkIndex = -1,
-                        totalChunks = 0
-                    },
-                    cancellationToken: cancellationToken));
+            await connection.ExecuteAsync(
+                    new CommandDefinition(MemorySql.InsertEntry,
+                        new
+                        {
+                            hash,
+                            path,
+                            value = chunk,
+                            sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : null,
+                            section = request.Section,
+                            scope = bucket.Scope,
+                            projectId = bucket.ProjectId,
+                            contextLabel = bucket.ContextLabel,
+                            workspaceId = bucket.WorkspaceId,
+                            agentId = request.AgentId,
+                            createdAt = now,
+                            updatedAt = now,
+                            sourceId = source.Id,
+                            // An agent write is a memory, whatever it cites (see the write path).
+                            entryType = entryTypeClassifier.ToStoredValue(EntryKind.Memory),
+                            // Position unknown here — this is an append to a (ctx, source_file) group, not
+                            // a re-chunk of a whole document; RecomputeChunkColumnsForContext fills it in.
+                            chunkIndex = -1,
+                            totalChunks = 0
+                        },
+                        cancellationToken: cancellationToken));
+        }
     }
 }

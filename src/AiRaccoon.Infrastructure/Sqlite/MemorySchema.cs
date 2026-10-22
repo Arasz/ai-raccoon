@@ -63,12 +63,14 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV17Async" /> (F34, the workspace-XOR-scope CHECK rejects NEITHER, not
     ///     just BOTH),
     ///     <see cref="MigrateToV18Async" /> (rowless watch fingerprints dropped once),
-    ///     <see cref="MigrateToV19Async" /> (ADR-0133, `ctx` is the vec0 partition key again). Not every schema change needs a ladder
+    ///     <see cref="MigrateToV19Async" /> (ADR-0133, `ctx` is the vec0 partition key again),
+    ///     <see cref="MigrateToV20Async" /> (the entry kind, denormalised onto the row),
+    ///     <see cref="MigrateToV21Async" /> (ADR-0141, the kind is a second vec0 partition key). Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 19;
+    internal const int CurrentVersion = 22;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -109,7 +111,7 @@ internal static class MemorySchema
                                                                WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
                                                                BEGIN
                                                                    DELETE FROM vec_entries WHERE rowid = NEW.id;
-                                                                   INSERT INTO vec_entries(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.embedding);
+                                                                   INSERT INTO vec_entries(rowid, ctx, type, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.entry_type, NEW.embedding);
                                                                END;
                                                                """;
 
@@ -119,7 +121,7 @@ internal static class MemorySchema
                                                                  WHEN NEW.structure_embedding IS NOT NULL
                                                                  BEGIN
                                                                      DELETE FROM vec_structure WHERE rowid = NEW.id;
-                                                                     INSERT INTO vec_structure(rowid, ctx, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.structure_embedding);
+                                                                     INSERT INTO vec_structure(rowid, ctx, type, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.entry_type, NEW.structure_embedding);
                                                                  END;
                                                                  """;
 
@@ -139,6 +141,11 @@ internal static class MemorySchema
             project_id        TEXT,
             session_id        TEXT,
             kind              TEXT CHECK(kind IN ('memory','code','both')),
+            -- The entry types a query asked for, as a bitmask of the query parameter's flag set
+            -- (Memory | Code | File). Beside the old corpus kind, not instead of it: the old
+            -- vocabulary is still what the runtime records, and the old rows' meaning is carried
+            -- here by the ladder's backfill.
+            kind_mask         INTEGER,
             result_count      INTEGER,
             top_source_files  TEXT,       -- JSON array of SourceFile paths
             -- Stage-1 per-result features (P6b): compact JSON array, one
@@ -190,6 +197,7 @@ internal static class MemorySchema
                                               ttl_days INTEGER NULL,
                                               embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
                                               embedding BLOB NULL,
+                                              entry_type TEXT NOT NULL DEFAULT 'none' CHECK(entry_type IN ('none','memory','file')),
                                               heading_path TEXT NULL,
                                               structure_embedding BLOB NULL,
                                               chunk_index INTEGER NOT NULL DEFAULT -1,
@@ -226,11 +234,13 @@ internal static class MemorySchema
                                           -- dimension if the model is not all-MiniLM (384). `ctx` is the vec0 partition key, so a
                                           -- KNN reads only its own context's chunks (ADR-0133, ladder step v19); cosine is declared
                                           -- explicitly so a bare MATCH cannot fall back to L2.
-                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
+                                          -- `type` is the second partition key (ADR-0141, ladder step v21): the row's declared
+                                          -- kind, so a typed query restricts BEFORE the KNN truncation instead of after it.
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_entries USING vec0(ctx TEXT partition key, type TEXT partition key, embedding float[384] distance_metric=cosine);
 
                                           -- Structure modality: heading-path vectors, rowid = entry id. Written by the
                                           -- embed transition (EntryEmbedder, ADR-0004); the triggers below keep it consistent.
-                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine);
+                                          CREATE VIRTUAL TABLE IF NOT EXISTS vec_structure USING vec0(ctx TEXT partition key, type TEXT partition key, embedding float[384] distance_metric=cosine);
 
                                           CREATE TRIGGER IF NOT EXISTS vec_structure_ad AFTER DELETE ON entries BEGIN
                                               DELETE FROM vec_structure WHERE rowid = OLD.id;
@@ -721,6 +731,10 @@ internal static class MemorySchema
         var needsDigestStamp = storedDigest != SchemaDigest;
         if (needsDigestStamp)
         {
+            // Before the Ddl: the typed vec0 trigger bodies name NEW.entry_type, and SQLite
+            // validates that reference when it parses the trigger.
+            await EnsureEntryTypeColumnAsync(connection, cancellationToken);
+
             await using var command = connection.CreateCommand();
             command.CommandText = Ddl;
             await command.ExecuteNonQueryAsync(cancellationToken);
@@ -896,6 +910,21 @@ internal static class MemorySchema
         if (healthy && storedVersion < 19)
         {
             await MigrateToV19Async(connection, cancellationToken);
+        }
+
+        if (healthy && storedVersion < 20)
+        {
+            await MigrateToV20Async(connection, cancellationToken);
+        }
+
+        if (healthy && storedVersion < 21)
+        {
+            await MigrateToV21Async(connection, cancellationToken);
+        }
+
+        if (healthy && storedVersion < 22)
+        {
+            await MigrateToV22Async(connection, cancellationToken);
         }
 
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
@@ -1382,32 +1411,218 @@ internal static class MemorySchema
     }
 
     /// <summary>
+    ///     v19→v20: the entry KIND a row holds, denormalised onto <c>entries.entry_type</c> so the
+    ///     query path can filter by it without a join. An entry has exactly one kind (the owner's
+    ///     ruling of 2026-10-22), so the column is NOT NULL with the default <c>none</c>: a row that
+    ///     carries no kind yet says so in the column rather than by a null. The backfill classifies
+    ///     every row by its SHAPE: a row that MIRRORS a file on disk has <c>path = source_file</c>
+    ///     and is a document; every other row is agent-written memory — its path is a synthetic
+    ///     <c>&lt;sha256&gt;.md</c> and its source file is a locator (a transcript it came from, or a
+    ///     file it cites). The provenance channel cannot make that distinction: the write path calls
+    ///     anything with a non-transcript source file a file, which filed 654 of 2,150 agent notes as
+    ///     documents.
+    /// </summary>
+    private static async Task MigrateToV20Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('entries')", cancellationToken: cancellationToken)))
+            .Contains("entry_type", StringComparer.Ordinal);
+        if (!hasColumn)
+        {
+            try
+            {
+                // NOT NULL with a non-null default: SQLite accepts it on ADD COLUMN and does not
+                // rewrite the table, so only the backfill below costs anything. Every legacy row
+                // arrives as 'none' — the kind it has not been given yet.
+                await connection.ExecuteAsync(new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none' CHECK(entry_type IN ('none','memory','file'))", cancellationToken: cancellationToken));
+            }
+            catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+            {
+                // Another connection added it between the probe and the ALTER: the column is there,
+                // which is all this step needed.
+            }
+        }
+
+        // Only rows that carry no kind: an explicit kind (a rerun, or a row the write path already
+        // typed) is never clobbered. 'none' is the marker the NOT NULL column carries, and NULL is
+        // the marker a bank touched by an earlier build of this schema carries — the same state
+        // written two ways, so the backfill has to read both. A bank with the column as NULL is
+        // real: this schema shipped as nullable first, and a row left NULL there is a row no
+        // typed query can place.
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"""
+            UPDATE entries
+            SET entry_type = {MemorySql.EntryTypeFromShape("entries.")}
+            WHERE entry_type IS NULL OR entry_type = 'none'
+            """, cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
+    ///     One vec table the v19 step rebuilds: which table, the columns it copies, and the
+    ///     dimension read from it. The dimension is read from the table itself, so a spec carries
+    ///     it unset until the read fills it; only a read spec reaches the rebuild.
+    /// </summary>
+    private sealed record VecRebuild(string Table, string Source, string Ctx, string Column, string Where, int Dimension = 0);
+
+    /// <summary>Preserves historical corpus selections as entry-type masks beside the original value.</summary>
+    private static async Task MigrateToV22Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
+                cancellationToken: cancellationToken)) > 0;
+        if (!hasTable)
+        {
+            return;
+        }
+
+        var columns = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('search_quality')", cancellationToken: cancellationToken)))
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (!columns.Contains("kind_mask", StringComparer.Ordinal))
+        {
+            try
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                        "ALTER TABLE search_quality ADD COLUMN kind_mask INTEGER NULL",
+                        cancellationToken: cancellationToken));
+            }
+            catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+            {
+                // Another connection added it between the probe and the ALTER.
+            }
+        }
+
+        // The historical meaning, carried over: the old 'memory' meant Memory AND File, the old
+        // 'both' meant everything. A row with no kind (older than the kind column) says nothing
+        // about which kinds it asked for, so its mask stays NULL.
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE search_quality
+            SET kind_mask = CASE kind
+                WHEN 'memory' THEN 5
+                WHEN 'code' THEN 2
+                WHEN 'both' THEN 7
+                ELSE NULL
+            END
+            WHERE kind_mask IS NULL AND kind IS NOT NULL
+            """, cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
+    ///     v20→v21 (ADR-0141): the memory vector tables gain the row's declared kind as a SECOND
+    ///     vec0 partition key, so a typed query restricts natively — before the KNN truncation —
+    ///     instead of postfiltering a truncated list, which starves a minority kind. The tables are
+    ///     rebuilt from the stored embedding blobs: the vectors are already paid for, and a native
+    ///     partition key cannot be updated in place, so the row has to be reinserted.
+    ///     <para>
+    ///         The rebuild preserves the row ids, the dimension and the bytes: the same vectors,
+    ///         addressed the same way. The kind comes from the row's own <c>entry_type</c> column —
+    ///         the denormalised kind the v20 step backfilled — so the vector lands in the partition
+    ///         its row is in.
+    ///     </para>
+    /// </summary>
+    private static async Task MigrateToV21Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var rebuilds = new List<VecRebuild>();
+        foreach (var spec in new[]
+                 {
+                     new VecRebuild("vec_entries", "entries", MemorySql.ContextKeyExpression(""), "embedding",
+                         "embed_state = 'embedded' AND embedding IS NOT NULL"),
+                     new VecRebuild("vec_structure", "entries", MemorySql.ContextKeyExpression(""), "structure_embedding",
+                         "structure_embedding IS NOT NULL")
+                 })
+        {
+            var sql = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table",
+                new { table = spec.Table }, cancellationToken: cancellationToken));
+            if (sql is null)
+            {
+                continue;
+            }
+
+            rebuilds.Add(spec with
+            {
+                Dimension = await ReadVecDimensionAsync(connection, spec.Table, cancellationToken)
+            });
+        }
+
+        if (rebuilds.Count == 0)
+        {
+            return;
+        }
+
+        await connection.InWriteTransactionAsync(async () =>
+        {
+            // The kinds first: the rebuild files each vector under its row's kind, so a row whose
+            // kind is still NULL would file its vector under a NULL partition - a row no typed
+            // query could reach. A bank that went through the first v20 build carries a NULLABLE
+            // column and its NULL rows, and the ladder never returns early for it, so the
+            // normalization lands here rather than in the v20 step.
+            await connection.ExecuteAsync(new CommandDefinition(
+                $"""
+                 UPDATE entries
+                 SET entry_type = {MemorySql.EntryTypeFromShape("entries.")}
+                 WHERE entry_type IS NULL OR entry_type = 'none'
+                 """, cancellationToken: cancellationToken));
+
+            foreach (var r in rebuilds)
+            {
+                await RebuildTypedVecTableAsync(connection, r.Table, r.Dimension, r.Source, r.Ctx, r.Column, r.Where,
+                    cancellationToken);
+            }
+
+            // The typed trigger bodies belong to the typed tables: they insert the row's kind as
+            // the second partition key. Installed with the tables, in the same transaction, so the
+            // bank is never left holding a typed table and an untyped body (or the other way
+            // round) - a body that names a column its table does not have fails the moment a row is
+            // embedded.
+            await connection.ExecuteAsync(new CommandDefinition(
+                $"""
+                 DROP TRIGGER IF EXISTS vec_entries_au;
+                 DROP TRIGGER IF EXISTS vec_structure_au;
+
+                 {VecEntriesUpdateTriggerDdl}
+
+                 {VecStructureUpdateTriggerDdl}
+                 """,
+                cancellationToken: cancellationToken));
+        }, cancellationToken);
+
+        await VacuumBestEffortAsync(connection, cancellationToken);
+    }
+
+    /// <summary>
     ///     v18→v19 (ADR-0133): rebuilds vec_entries, vec_structure and vec_code with `ctx` as the vec0
     ///     partition key, so a KNN prunes every other context's chunks before reading them. A table
     ///     already partitioned is left alone, which makes the step safe to re-run after a crash.
     /// </summary>
     private static async Task MigrateToV19Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var rebuilds = new List<(string Table, int Dimension, string Source, string Ctx, string Column, string Where)>();
-        foreach (var (table, source, ctx, column, where) in new[]
+        var rebuilds = new List<VecRebuild>();
+        foreach (var spec in new[]
                  {
-                     ("vec_entries", "entries", MemorySql.ContextKeyExpression(""), "embedding",
+                     new VecRebuild("vec_entries", "entries", MemorySql.ContextKeyExpression(""), "embedding",
                          "embed_state = 'embedded' AND embedding IS NOT NULL"),
-                     ("vec_structure", "entries", MemorySql.ContextKeyExpression(""), "structure_embedding",
+                     new VecRebuild("vec_structure", "entries", MemorySql.ContextKeyExpression(""), "structure_embedding",
                          "structure_embedding IS NOT NULL"),
-                     ("vec_code", "code_entries", "project_id", "embedding",
+                     new VecRebuild("vec_code", "code_entries", "project_id", "embedding",
                          "embed_state = 'embedded' AND embedding IS NOT NULL")
                  })
         {
             var sql = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
                 "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table",
-                new { table }, cancellationToken: cancellationToken));
+                new { table = spec.Table }, cancellationToken: cancellationToken));
             if (sql is null || sql.Contains("partition key", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            rebuilds.Add((table, await ReadVecDimensionAsync(connection, table, cancellationToken), source, ctx, column, where));
+            rebuilds.Add(spec with
+            {
+                Dimension = await ReadVecDimensionAsync(connection, spec.Table, cancellationToken)
+            });
         }
 
         if (rebuilds.Count == 0)
@@ -1688,11 +1903,39 @@ internal static class MemorySchema
         return new WatchOverlapPruneResult([.. toPrune.Select(t => t.Pruned)], warnings);
     }
 
-    /// <summary>
-    ///     Adds <paramref name="table" />.embed_attempts if it is missing. Runs only on a digest
-    ///     mismatch (and for entries after the v17 rebuild), and tolerates losing the ALTER race to
-    ///     another connection opening the same stale bank: "duplicate column" means it is already there.
-    /// </summary>
+    /// <summary>Adds the kind column before installing triggers and running older migrations.</summary>
+    private static async Task EnsureEntryTypeColumnAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'entries'",
+                cancellationToken: cancellationToken)) > 0;
+        if (!hasTable)
+        {
+            return; // the Ddl block creates the table with the column already in it
+        }
+
+        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
+                "SELECT name FROM pragma_table_info('entries')", cancellationToken: cancellationToken)))
+            .Contains("entry_type", StringComparer.Ordinal);
+        if (hasColumn)
+        {
+            return;
+        }
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                    "ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none' CHECK(entry_type IN ('none','memory','file'))",
+                    cancellationToken: cancellationToken));
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+        {
+            // Another connection added it between the probe and the ALTER.
+        }
+    }
+
+    /// <summary>Adds the retry counter, tolerating another opener winning the ALTER race.</summary>
     private static async Task EnsureEmbedAttemptsColumnAsync(SqliteConnection connection, string table,
         CancellationToken cancellationToken)
     {
@@ -2016,14 +2259,33 @@ internal static class MemorySchema
     ///     same constants the creation sites use, so a stored body and the intended one cannot
     ///     drift.
     /// </summary>
-    private static async Task EnsureVecCtxTriggerBodiesAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    private static async Task EnsureVecCtxTriggerBodiesAsync(SqliteConnection connection,
+        CancellationToken cancellationToken)
     {
-        var stored = (await connection.QueryAsync<TriggerRow>(
+        // One read covers the bodies and the tables they belong to: the typed body inserts the
+        // row's kind as the second partition key, so it belongs to the TYPED table. A bank below
+        // v21 still holds the untyped table and the untyped body: the ladder's v21 step rebuilds
+        // the table and installs the typed body together. Installing the typed body here instead
+        // would leave the bank holding a body that names a column its table does not have, and the
+        // next embedded row would fail.
+        var objects = (await connection.QueryAsync<ObjectSqlRow>(
                 new CommandDefinition(
-                    "SELECT name AS Name, sql AS Sql FROM sqlite_master " +
-                    "WHERE type = 'trigger' AND name IN ('vec_entries_au', 'vec_structure_au')",
+                    "SELECT type AS Type, name AS Name, sql AS Sql FROM sqlite_master " +
+                    "WHERE name IN ('vec_entries_au', 'vec_structure_au', 'vec_entries', 'vec_structure')",
                     cancellationToken: cancellationToken)))
-            .ToDictionary(row => row.Name, row => row.Sql, StringComparer.Ordinal);
+            .ToList();
+
+        var tables = objects.Where(o => o.Type == "table")
+            .ToDictionary(o => o.Name, o => o.Sql ?? string.Empty, StringComparer.Ordinal);
+        if (tables.Count != 2
+            || !tables["vec_entries"].Contains("type TEXT partition key", StringComparison.OrdinalIgnoreCase)
+            || !tables["vec_structure"].Contains("type TEXT partition key", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var stored = objects.Where(o => o.Type == "trigger")
+            .ToDictionary(o => o.Name, o => o.Sql, StringComparer.Ordinal);
 
         if (stored.Count == 2
             && Normalize(stored["vec_entries_au"]!) == Normalize(VecEntriesUpdateTriggerDdl)
@@ -2548,9 +2810,41 @@ internal static class MemorySchema
                     cancellationToken: cancellationToken));
     }
 
+    /// <summary>
+    ///     Drops and recreates one MEMORY vec0 table in the <see cref="TypedVecTableDdl" /> shape,
+    ///     repopulating it from the source rows' own kind. The kind is the row's
+    ///     <c>entry_type</c> column: the same column the row is filtered by, so a vector never lands
+    ///     in a partition its row is not in.
+    /// </summary>
+    private static async Task RebuildTypedVecTableAsync(SqliteConnection connection, string table, int dimension,
+        string sourceTable, string ctxExpression, string sourceColumn, string wherePredicate,
+        CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+                new CommandDefinition($"DROP TABLE IF EXISTS {table}", cancellationToken: cancellationToken));
+        await connection.ExecuteAsync(
+                new CommandDefinition(TypedVecTableDdl(table, dimension), cancellationToken: cancellationToken));
+        await connection.ExecuteAsync(
+                new CommandDefinition(
+                    $"""
+                     INSERT INTO {table}(rowid, ctx, type, embedding)
+                     SELECT id, {ctxExpression}, entry_type, {sourceColumn} FROM {sourceTable} WHERE {wherePredicate}
+                     """,
+                    cancellationToken: cancellationToken));
+    }
+
     /// <summary>The one runtime DDL for a vec0 table: `ctx` partitions the chunks, cosine is explicit (ADR-0133).</summary>
     internal static string VecTableDdl(string table, int dimension) =>
         $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT partition key, embedding float[{dimension}] distance_metric=cosine)";
+
+    /// <summary>
+    ///     The typed runtime DDL for a MEMORY vec0 table (ADR-0141): a second partition key for the
+    ///     row's declared kind, so a typed query restricts before the KNN truncation rather than
+    ///     after it. The code corpus keeps the untyped shape — a code chunk is not a row of
+    ///     <c>entries</c> and carries no row kind.
+    /// </summary>
+    internal static string TypedVecTableDdl(string table, int dimension) =>
+        $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT partition key, type TEXT partition key, embedding float[{dimension}] distance_metric=cosine)";
 
     /// <summary>Reads the embedding dimension a vec0 table was declared with, falling back to 384 when the table (or a recognizable declaration) is absent.</summary>
     private static async Task<int> ReadVecDimensionAsync(SqliteConnection connection, string table,
@@ -2574,6 +2868,8 @@ internal static class MemorySchema
     private sealed record PragmaColumnRow(string Name, string Type, long NotNull, long Pk);
 
     private sealed record TriggerRow(string Name, string? Sql);
+
+    private sealed record ObjectSqlRow(string Type, string Name, string? Sql);
 
     private sealed record TombstoneRow(string ProjectId, string Hash, string Scope, long DeletedAt);
 

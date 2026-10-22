@@ -9,6 +9,7 @@ using NSubstitute;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Maintenance;
 
@@ -65,7 +66,7 @@ public sealed class FirstContactRehearsal(ITestOutputHelper output)
                 NullLogger<MaintenanceJobRunner>.Instance)
             .RunDueAsync(connection,
             [
-                new ChunkBackfillJob(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+                new ChunkBackfillJob(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
                     TestData.RealPlainTextChunker(), TimeProvider.System, TestData.CreateEmbeddingService()),
                 new Vec0ReclaimJob(),
                 new VacuumJob()

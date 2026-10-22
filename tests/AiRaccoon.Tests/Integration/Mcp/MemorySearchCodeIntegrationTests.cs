@@ -59,7 +59,7 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
         await SeedAsync(id: 1, projectId: "acme", path: "src/Wombat.cs", value: "sealed class WombatRunner { }",
             lineStart: 1, lineEnd: 3);
 
-        var envelope = await _tools.Search("acme", "WombatRunner", sessionId: "sess-test", kind: "code",
+        var envelope = await _tools.Search("acme", "WombatRunner", sessionId: "sess-test", entryType: "code",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var hit = envelope.Data!.Code.ShouldNotBeNull().ShouldHaveSingleItem();
@@ -75,7 +75,7 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
         await SeedAsync(id: 1, projectId: "acme", path: "src/Wombat.cs", value: "sealed class WombatRunner { }",
             lineStart: 1, lineEnd: 3);
 
-        var envelope = await _tools.Search("acme", "WombatRunner", sessionId: "sess-test", scope: "shared", kind: "code",
+        var envelope = await _tools.Search("acme", "WombatRunner", sessionId: "sess-test", scope: "shared", entryType: "code",
             cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Code.ShouldNotBeNull();
@@ -95,7 +95,7 @@ public sealed class MemorySearchCodeIntegrationTests : IAsyncLifetime
         await SeedAsync(id: 1, projectId: "acme", path: "src/Wombat.cs", value: "sealed class WombatRunner { }",
             lineStart: 1, lineEnd: 3);
 
-        var envelope = await _tools.Search("acme", "WombatRunner", sessionId: "sess-test", kind: "memory",
+        var envelope = await _tools.Search("acme", "WombatRunner", sessionId: "sess-test", entryType: "memory,file",
             cancellationToken: TestContext.Current.CancellationToken);
 
         var data = JsonSerializer.SerializeToNode(envelope, McpJsonUtilities.DefaultOptions)!.AsObject()["data"]!.AsObject();

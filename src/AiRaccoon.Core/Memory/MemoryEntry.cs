@@ -11,4 +11,5 @@ public sealed record MemoryEntry(
     string Value,
     long CreatedAt,
     bool Stored = true,
-    string? Reason = null);
+    string? Reason = null,
+    string? EntryKind = null);

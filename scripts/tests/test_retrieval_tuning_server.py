@@ -201,4 +201,4 @@ class TestStartServerWithFakeBinary:
             }
         )
         assert results == [{"hash": "code-hash"}]
-        assert client.kwargs["kind"] == "code"
+        assert client.kwargs["entry_type"] == "code"

@@ -8,6 +8,7 @@ using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -35,7 +36,7 @@ public sealed class FileIngestorSkipReasonTests : IDisposable
         ]);
         _ingestor = new FileIngestor(matcher, new SqliteMemorySourceStore(factory), TimeProvider.System,
             TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
-            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
+            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryKindClassifier());
 
         using var scope = _conn.CreateCommand();
         scope.CommandText = "INSERT INTO settings (key, value) VALUES (@key, @scope);";
@@ -92,7 +93,7 @@ public sealed class FileIngestorSkipReasonTests : IDisposable
         var codeIngestor = new BinaryAwareCodeIngestor();
         var ingestor = new FileIngestor(new FileTypeMatcher([]), new SqliteMemorySourceStore(_factory), TimeProvider.System,
             TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(),
-            codeIngestor, NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
+            codeIngestor, NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryKindClassifier());
 
         var result = await ingestor.IngestFileAsync(_conn, Project, path, null, TestContext.Current.CancellationToken);
 

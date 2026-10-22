@@ -9,6 +9,7 @@ using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -56,10 +57,10 @@ public sealed class FileIngestorEmbedDrainTests : IDisposable
             ? new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
                 NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(),
                 new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System),
-                NullWatchStore.Instance, pump, new IndexableFileWalk(), TestData.SharedScope)
+                NullWatchStore.Instance, pump, new IndexableFileWalk(), TestData.SharedScope, new EntryKindClassifier())
             : new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
                 NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-                NullWatchStore.Instance, pump, new IndexableFileWalk(), TestData.SharedScope);
+                NullWatchStore.Instance, pump, new IndexableFileWalk(), TestData.SharedScope, new EntryKindClassifier());
     }
 
     [RetryFact]

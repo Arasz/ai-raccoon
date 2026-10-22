@@ -59,13 +59,13 @@ public sealed partial class SqliteMemoryStore
     ///     behaves as the plain replace.
     /// </summary>
     public async Task ReplaceAsync(string projectId, string path, string fileHash, string? context,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool preserveMemoryMetadata = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileHash);
 
-        await ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, context, cancellationToken);
+        await ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, context, cancellationToken, preserveMemoryMetadata);
     }
 
     /// <summary>
@@ -206,10 +206,11 @@ public sealed partial class SqliteMemoryStore
     }
 
     private async Task<ReplaceResult> ReplaceIfChangedCoreAsync(string projectId, string path, string fileHash,
-        Func<SqliteConnection, Task<bool>>? guard, string? context, CancellationToken cancellationToken)
+        Func<SqliteConnection, Task<bool>>? guard, string? context, CancellationToken cancellationToken,
+        bool preserveMemoryMetadata = false)
     {
         var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, context,
-            true, cancellationToken);
+            true, cancellationToken, preserveMemoryMetadata);
         return new ReplaceResult(result.Ran, result.Corpus, result.Skipped);
     }
 
@@ -226,7 +227,7 @@ public sealed partial class SqliteMemoryStore
     /// </summary>
     private async Task<ReplaceCoreResult> ReplaceCoreAsync(string projectId, string path,
         string? fileHash, Func<SqliteConnection, Task<bool>>? guard, string? context, bool fingerprint,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool preserveMemoryMetadata = false)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
@@ -260,7 +261,7 @@ public sealed partial class SqliteMemoryStore
             // ICodeIngestor internally (FileIngestor.IngestFileAsync) — one call covers both corpora.
             // Autocommit, outside any lock: this is the chunker the write lock used to be held through.
             var ingestResult = await fileIngestor
-                .IngestFileAsync(connection, projectId, path, context, cancellationToken);
+                .IngestFileAsync(connection, projectId, path, context, cancellationToken, preserveMemoryMetadata);
 
             var waitFrom = timeProvider.GetTimestamp();
             await connection.ExecuteAsync(

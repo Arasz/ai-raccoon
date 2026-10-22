@@ -32,7 +32,8 @@ public sealed partial class SqliteMemoryStore(
     ISettingsStore settings,
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IMeasurementRecorder measurements,
-    ISharedProjectScope scope)
+    ISharedProjectScope scope,
+    IEntryKindClassifier entryTypeClassifier)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
@@ -53,9 +54,10 @@ public sealed partial class SqliteMemoryStore(
         IMeasurementRecorder measurements,
         INoiseShadowObserver noiseShadowObserver,
         INoiseEntryStore noiseEntryStore,
-        ISharedProjectScope scope)
+        ISharedProjectScope scope,
+        IEntryKindClassifier entryTypeClassifier)
         : this(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService, settings,
-            embedDrainPump, measurements, scope)
+            embedDrainPump, measurements, scope, entryTypeClassifier)
     {
         _noiseShadowObserver = noiseShadowObserver;
         _noiseEntryStore = noiseEntryStore;
@@ -126,8 +128,8 @@ public sealed partial class SqliteMemoryStore(
         var hash = ContentHash.Of(path, chunks[0]);
         foreach (var chunk in chunks)
         {
-            await WriteChunks.InsertAsync(connection, ContentHash.Of(path, chunk), path, chunk, source, request,
-                bucket, now, cancellationToken);
+            await connection.InsertAsync(ContentHash.Of(path, chunk), path, chunk, source, request,
+                bucket, now, entryTypeClassifier, cancellationToken);
         }
 
         var row = bucket.Scope == SharedScope
@@ -191,14 +193,19 @@ public sealed partial class SqliteMemoryStore(
     }
 
     /// <summary>get_entry (ADR-0035): the caller's own rows plus the cross-project shared tier; null when no such hash is reachable.</summary>
-    public async Task<MemoryEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default)
+    public async Task<MemoryEntry?> GetAsync(string projectId, string hash,
+        CancellationToken cancellationToken = default, EntryKind? entryKind = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.RequireSharedAvailableAsync(projectId, _scope, cancellationToken);
-        var row = await connection.QueryFirstOrDefaultAsync<EntryRow>(
+        var row = entryKind is { } selectedKind
+            ? await connection.QueryFirstOrDefaultAsync<EntryRow>(
+                Def(MemorySql.SelectTypedEntryByHashForRead,
+                    new { hash, projectId, entryKind = entryTypeClassifier.ToStoredValue(selectedKind) }, cancellationToken))
+            : await connection.QueryFirstOrDefaultAsync<EntryRow>(
                 Def(MemorySql.SelectEntryByHashForRead, new { hash, projectId }, cancellationToken));
         return row is null ? null : ToEntry(row);
     }
@@ -396,6 +403,11 @@ public sealed partial class SqliteMemoryStore(
                         createdAt = now,
                         updatedAt = now,
                         sourceId = source.Id,
+                        // The writer declares the row's kind: an agent write is a memory, whatever
+                        // it cites. Deriving it from the row's shape would let a caller name the
+                        // note's own synthetic path (sha256 of the content) and be filed as a
+                        // document - the shape rule then reads a caller-supplied string.
+                        entryType = entryTypeClassifier.ToStoredValue(EntryKind.Memory),
                         chunkIndex = -1,
                         totalChunks = 0
                     },
@@ -658,11 +670,11 @@ public sealed partial class SqliteMemoryStore(
     {
         var vectorParameters = DynamicParameters.VectorParameters(query, parameters, queryVector, ctx);
         var contentRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(MemorySql.VectorSearchByFilter, vectorParameters,
+                    new CommandDefinition(MemorySql.VectorSearchByTypes(query.EntryTypes), vectorParameters,
                         cancellationToken: cancellationToken)))
             .ToList();
         var structureRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(MemorySql.StructureVectorSearchByFilter, vectorParameters,
+                    new CommandDefinition(MemorySql.VectorSearchByTypes(query.EntryTypes, structure: true), vectorParameters,
                         cancellationToken: cancellationToken)))
             .ToList();
 
@@ -823,7 +835,7 @@ public sealed partial class SqliteMemoryStore(
         }
     }
 
-    private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt);
+    private static MemoryEntry ToEntry(EntryRow row) => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt, EntryKind: row.EntryKind);
 
     private static string ContextStringOf(EntryRow row) => ContextStringOf(row.Scope, row.ContextLabel, row.WorkspaceId, row.ProjectId);
 

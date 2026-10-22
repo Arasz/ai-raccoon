@@ -47,7 +47,7 @@ public sealed class MemorySearchFloorTruncationTests
     {
         StubSixCandidates(_store, lowCosineCount: 4);
 
-        var envelope = await _tools.Search("acme", "harbor tide charts", kind: "memory", limit: 10,
+        var envelope = await _tools.Search("acme", "harbor tide charts", entryType: "memory,file", limit: 10,
             sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(2, "the four rows below the absolute relevance floor are dropped");
@@ -66,7 +66,7 @@ public sealed class MemorySearchFloorTruncationTests
     {
         StubSixCandidates(_store, lowCosineCount: 0);
 
-        var envelope = await _tools.Search("acme", "harbor tide charts", kind: "memory", limit: 10,
+        var envelope = await _tools.Search("acme", "harbor tide charts", entryType: "memory,file", limit: 10,
             sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data!.Results.Count.ShouldBe(6, "every candidate clears the floors");

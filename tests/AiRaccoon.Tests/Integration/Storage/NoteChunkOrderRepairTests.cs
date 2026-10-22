@@ -231,7 +231,7 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
         var rows = (await connection.QueryAsync<StoredRow>(
             """
             SELECT hash AS Hash, value AS Value, source_file AS SourceFile, scope AS Scope, project_id AS ProjectId,
-                   source_id AS SourceId, created_at AS CreatedAt
+                   source_id AS SourceId, created_at AS CreatedAt, entry_type AS EntryType
             FROM entries WHERE path = @path ORDER BY chunk_index
             """, new { path })).ToList();
         rows.Count.ShouldBeGreaterThan(2, "premise: the note spans several rows");
@@ -253,6 +253,7 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
                 createdAt = row.CreatedAt,
                 updatedAt = row.CreatedAt,
                 sourceId = row.SourceId,
+                entryType = row.EntryType,
                 chunkIndex = -1,
                 totalChunks = 0
             });
@@ -283,5 +284,5 @@ public sealed class NoteChunkOrderRepairTests : IAsyncLifetime
         return [.. await connection.QueryAsync<long>("SELECT chunk_index FROM entries WHERE path = @path ORDER BY chunk_index", new { path })];
     }
 
-    private sealed record StoredRow(string Hash, string Value, string? SourceFile, string? Scope, string? ProjectId, long? SourceId, long CreatedAt);
+    private sealed record StoredRow(string Hash, string Value, string? SourceFile, string? Scope, string? ProjectId, long? SourceId, long CreatedAt, string? EntryType);
 }

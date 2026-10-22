@@ -5,6 +5,38 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// <summary>SQL over our memory.db tables (see docs/work/archive/2026-08-03-native-memory-plan.md §2.2); kept in one place so the store stays thin.</summary>
 internal static class MemorySql
 {
+    /// <summary>
+    ///     The kind a row holds when nothing declared one, as SQL over the given table alias: a row
+    ///     that MIRRORS a file on disk has path = source_file; every other row is agent-written
+    ///     memory.
+    ///     <para>
+    ///         This is the SQL twin of <see cref="EntryKindClassifier.Classify" />, and the two must
+    ///         agree — a comparison test runs both over one fixture. Two call sites need it: the v20
+    ///         backfill and the sync merge, so the rule is written once rather than twice.
+    ///     </para>
+    /// </summary>
+    public static string EntryTypeFromShape(string tableAlias) =>
+        $"CASE WHEN {tableAlias}source_file IS NOT NULL AND {tableAlias}source_file <> '' "
+        + $"AND {tableAlias}source_file = {tableAlias}path THEN 'file' ELSE 'memory' END";
+
+    /// <summary>
+    ///     The kind a row keeps when it comes from somewhere else: the kind it declares, when it
+    ///     declares one this build knows, and otherwise the kind its shape implies. The SQL twin of
+    ///     the classifier's resolve: a declared kind wins, and only an UNDECLARED row (no kind, or
+    ///     the <c>none</c> marker) is resolved from the shape.
+    ///     <para>
+    ///         The kinds it knows are named by the one vocabulary, so the domain has one home.
+    ///     </para>
+    /// </summary>
+    public static string EntryTypeFromDeclarationOrShape(string tableAlias) =>
+        $"CASE WHEN {tableAlias}entry_type IN ('{EntryKindWireNames.Memory}', '{EntryKindWireNames.File}') "
+        + $"THEN {tableAlias}entry_type "
+        + $"WHEN {tableAlias}entry_type IS NULL OR {tableAlias}entry_type = '{EntryKindWireNames.None}' "
+        + $"THEN {EntryTypeFromShape(tableAlias)} "
+        // A remote's UNKNOWN kind is data from another machine: it lands unclassified, where the
+        // doctor counts it, rather than being guessed at from the row's shape.
+        + $"ELSE '{EntryKindWireNames.None}' END";
+
     // ON CONFLICT DO NOTHING is bare — expression/partial indexes can't be a conflict target — so
     // concurrent same-bucket inserts converge; the loser re-reads by bucket key
     // (docs/work/archive/2026-08-06-extraction-followups-plan.md).
@@ -14,9 +46,11 @@ internal static class MemorySql
     // RecomputeChunkColumnsForContext/BankWide to fill in.
     public const string InsertEntry = """
                                       INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
-                                                           workspace_id, agent_id, created_at, updated_at, source_id, chunk_index, total_chunks)
+                                                           workspace_id, agent_id, created_at, updated_at, source_id, chunk_index, total_chunks,
+                                                           entry_type)
                                       VALUES (@hash, @path, @value, @sourceFile, @section, @scope, @projectId, @contextLabel,
-                                              @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId, @chunkIndex, @totalChunks)
+                                              @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId, @chunkIndex, @totalChunks,
+                                              @entryType)
                                       ON CONFLICT DO NOTHING
                                       """;
 
@@ -26,10 +60,10 @@ internal static class MemorySql
     public const string InsertRebudgetEntry = """
                                               INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                                    workspace_id, agent_id, created_at, updated_at, source_id, chunk_index, total_chunks,
-                                                                   ttl_days)
+                                                                   ttl_days, entry_type)
                                               VALUES (@hash, @path, @value, @sourceFile, @section, @scope, @projectId, @contextLabel,
                                                       @workspaceId, @agentId, @createdAt, @updatedAt, @sourceId, @chunkIndex, @totalChunks,
-                                                      @ttlDays)
+                                                      @ttlDays, @entryType)
                                               ON CONFLICT DO NOTHING
                                               """;
 
@@ -165,28 +199,38 @@ internal static class MemorySql
     // (docs/plans/2026-08-08-search-knn-perf.md §3.1/§3.4). Row position is the RRF rank; `ORDER BY
     // v.distance, e.path` preserves the existing distance-tie break. Vector hits carry a fallback
     // snippet built in C# (the FTS list's snippet() wins for docs both modalities retrieve).
-    public const string VectorSearchByFilter = """
+    private const string VectorSearchTemplate = """
                                                SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                       v.distance AS Distance, e.source_file AS SourceFile,
                                                       e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
-                                               FROM vec_entries v
+                                               FROM (SELECT rowid, distance FROM vec_entries
+                                                     WHERE ctx = @ctx AND {typeFilter} embedding MATCH @queryVector AND k = @limit) v
                                                JOIN entries e ON e.id = v.rowid
-                                               WHERE v.ctx = @ctx AND v.embedding MATCH @queryVector AND k = @limit
-                                               ORDER BY v.distance, e.path
+                                               ORDER BY v.distance + 0, e.path
+                                               LIMIT @limit
                                                """;
 
     // Structure modality: cosine KNN over the heading-path vectors (vec_structure),
     // same shape as the content query (source identity included) so both lists fuse in C# by
     // entry hash.
-    public const string StructureVectorSearchByFilter = """
+    private const string StructureVectorSearchTemplate = """
                                                         SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                                v.distance AS Distance, e.source_file AS SourceFile,
                                                                e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
-                                                        FROM vec_structure v
+                                                        FROM (SELECT rowid, distance FROM vec_structure
+                                                              WHERE ctx = @ctx AND {typeFilter} embedding MATCH @queryVector AND k = @limit) v
                                                         JOIN entries e ON e.id = v.rowid
-                                                        WHERE v.ctx = @ctx AND v.embedding MATCH @queryVector AND k = @limit
-                                                        ORDER BY v.distance, e.path
+                                                        ORDER BY v.distance + 0, e.path
+                                                        LIMIT @limit
                                                         """;
+
+    public static string SearchByTypes(EntryType types) => types == EntryTypeParameter.Default
+        ? SearchByFilter
+        : SearchByFilter.Replace("AND {filter}", "AND ({filter}) AND e.entry_type IN @entryTypes");
+
+    public static string VectorSearchByTypes(EntryType types, bool structure = false) =>
+        (structure ? StructureVectorSearchTemplate : VectorSearchTemplate).Replace("{typeFilter}",
+            types == EntryTypeParameter.Default ? "" : "type IN @entryTypes AND ");
 
     // @scope null is delete_entry (N7/F26): every row sharing the write's path goes, not just
     // the reported hash — a manual add_memory's N chunks share one content-addressed path. The
@@ -691,9 +735,19 @@ internal static class MemorySql
     public const string SelectEntryByHashForRead = """
                                                    SELECT hash AS Hash, path AS Path, value AS Value, scope AS Scope,
                                                           project_id AS ProjectId, context_label AS ContextLabel,
-                                                          workspace_id AS WorkspaceId, created_at AS CreatedAt
+                                                          workspace_id AS WorkspaceId, created_at AS CreatedAt, entry_type AS EntryKind
                                                    FROM entries
                                                    WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
+                                                   LIMIT 1
+                                                   """;
+
+    public const string SelectTypedEntryByHashForRead = """
+                                                   SELECT hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                          project_id AS ProjectId, context_label AS ContextLabel,
+                                                          workspace_id AS WorkspaceId, created_at AS CreatedAt, entry_type AS EntryKind
+                                                   FROM entries
+                                                   WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
+                                                     AND entry_type = @entryKind
                                                    LIMIT 1
                                                    """;
 
@@ -759,6 +813,7 @@ internal static class MemorySql
                      WHERE hash = @hash AND {ProjectRows.Of()}
                      ORDER BY {ProjectRows.CommittedFirst()}, id
                      LIMIT 1)
+           AND entries.entry_type = 'memory'
          """;
 
     // Reads the same row UpdateEntryTtl writes — the explicit ORDER BY is what makes "the entry
@@ -931,7 +986,7 @@ internal static class MemorySql
                                                         section AS Section, scope AS Scope, project_id AS ProjectId,
                                                         context_label AS ContextLabel, workspace_id AS WorkspaceId,
                                                         agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId,
-                                                        chunk_index AS ChunkIndex, ttl_days AS TtlDays
+                                                        chunk_index AS ChunkIndex, ttl_days AS TtlDays, entry_type AS EntryType
                                                  FROM entries
                                                  WHERE path = @path AND scope IS @scope AND project_id IS @projectId
                                                    AND context_label IS @contextLabel AND workspace_id IS @workspaceId

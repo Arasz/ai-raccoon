@@ -1,0 +1,2787 @@
+{
+  "provider": "Microsoft.Data.Sqlite.SqliteConnection",
+  "sqlite": "3.54.0",
+  "vec": "v0.1.9",
+  "corpusSha256": "6166FCC9141B5C707F2EB09A5CFD9D5DED71E52F1656AF08DAAE19C52022D9F2",
+  "dimensions": 384,
+  "seed": 2197,
+  "count": 3000,
+  "distribution": [
+    {
+      "Key": {
+        "Ctx": "sparse:0",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:1",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:2",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:3",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:4",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:5",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:6",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:7",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:8",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:9",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:10",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:11",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "sparse:12",
+        "Type": "memory"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "dense:3",
+        "Type": "memory"
+      },
+      "count": 416
+    },
+    {
+      "Key": {
+        "Ctx": "dense:4",
+        "Type": "memory"
+      },
+      "count": 415
+    },
+    {
+      "Key": {
+        "Ctx": "dense:5",
+        "Type": "memory"
+      },
+      "count": 415
+    },
+    {
+      "Key": {
+        "Ctx": "dense:6",
+        "Type": "memory"
+      },
+      "count": 415
+    },
+    {
+      "Key": {
+        "Ctx": "dense:0",
+        "Type": "memory"
+      },
+      "count": 415
+    },
+    {
+      "Key": {
+        "Ctx": "dense:1",
+        "Type": "memory"
+      },
+      "count": 415
+    },
+    {
+      "Key": {
+        "Ctx": "dense:2",
+        "Type": "memory"
+      },
+      "count": 414
+    },
+    {
+      "Key": {
+        "Ctx": "dense:2",
+        "Type": "file"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "dense:4",
+        "Type": "file"
+      },
+      "count": 5
+    },
+    {
+      "Key": {
+        "Ctx": "dense:6",
+        "Type": "file"
+      },
+      "count": 4
+    },
+    {
+      "Key": {
+        "Ctx": "dense:1",
+        "Type": "file"
+      },
+      "count": 4
+    },
+    {
+      "Key": {
+        "Ctx": "dense:3",
+        "Type": "file"
+      },
+      "count": 4
+    },
+    {
+      "Key": {
+        "Ctx": "dense:5",
+        "Type": "file"
+      },
+      "count": 4
+    },
+    {
+      "Key": {
+        "Ctx": "dense:0",
+        "Type": "file"
+      },
+      "count": 4
+    }
+  ],
+  "results": [
+    {
+      "layout": "baseline",
+      "buildMs": 400.9808,
+      "chunks": 20,
+      "capacity": 1024,
+      "vectorBytes": 31457280,
+      "samples": [
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "actual": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "distances": [
+            0.8548645377159119,
+            0.8945079445838928,
+            0.8962346911430359,
+            0.8965528607368469,
+            0.8991132378578186,
+            0.901781439781189,
+            0.9085990786552429,
+            0.9112927317619324,
+            0.9121041893959045,
+            0.9130750298500061
+          ],
+          "correct": true,
+          "timings": [
+            0.8342,
+            0.6139,
+            0.562,
+            0.5165,
+            0.5021,
+            0.4972,
+            0.4948,
+            0.5031,
+            0.5873,
+            0.6133,
+            0.6668,
+            0.9386,
+            0.8967,
+            0.9003,
+            0.9862,
+            0.8327,
+            0.7922,
+            0.8108,
+            0.8555,
+            0.7826
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            1400,
+            700,
+            2100,
+            2800
+          ],
+          "actual": [],
+          "distances": [
+            0.8548645377159119,
+            0.8945079445838928,
+            0.8962346911430359,
+            0.8965528607368469,
+            0.8991132378578186,
+            0.901781439781189,
+            0.9085990786552429,
+            0.9112927317619324,
+            0.9121041893959045,
+            0.9130750298500061
+          ],
+          "correct": false,
+          "timings": [
+            0.8035,
+            0.7637,
+            0.7798,
+            0.6114,
+            0.5379,
+            0.5247,
+            0.7339,
+            0.8847,
+            0.8147,
+            0.8604,
+            0.8647,
+            0.8015,
+            0.7709,
+            0.7566,
+            0.8587,
+            0.7919,
+            0.7335,
+            0.7167,
+            0.7121,
+            0.7271
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "actual": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "distances": [
+            0.8548645377159119,
+            0.8945079445838928,
+            0.8962346911430359,
+            0.8965528607368469,
+            0.8991132378578186,
+            0.901781439781189,
+            0.9085990786552429,
+            0.9112927317619324,
+            0.9121041893959045,
+            0.9130750298500061
+          ],
+          "correct": true,
+          "timings": [
+            0.7738,
+            0.7792,
+            0.7497,
+            0.5795,
+            0.7161,
+            0.8922,
+            0.8107,
+            0.6277,
+            0.558,
+            0.5146,
+            0.5084,
+            0.5022,
+            0.4744,
+            0.652,
+            0.9896,
+            0.7681,
+            0.6876,
+            0.5579,
+            0.5194,
+            0.507
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "actual": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "distances": [
+            0.8548645377159119,
+            0.8945079445838928,
+            0.8962346911430359,
+            0.8965528607368469,
+            0.8991132378578186,
+            0.901781439781189,
+            0.9085990786552429,
+            0.9112927317619324,
+            0.9121041893959045,
+            0.9130750298500061
+          ],
+          "correct": true,
+          "timings": [
+            0.9059,
+            0.7261,
+            0.5552,
+            0.5197,
+            0.6322,
+            0.6757,
+            1.0472,
+            0.5644,
+            0.6885,
+            0.5016,
+            0.4666,
+            0.4677,
+            0.4601,
+            0.458,
+            0.4585,
+            0.4673,
+            0.4549,
+            0.5791,
+            0.9149,
+            0.7637
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "actual": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "distances": [
+            0.916665256023407,
+            0.9739446640014648,
+            0.9941918849945068,
+            0.9982092976570129,
+            1.0771228075027466
+          ],
+          "correct": true,
+          "timings": [
+            0.3327,
+            0.3136,
+            0.3185,
+            0.3099,
+            0.3638,
+            0.5792,
+            0.3157,
+            0.4051,
+            0.6965,
+            0.7657,
+            0.7461,
+            0.6952,
+            0.685,
+            0.6538,
+            0.7065,
+            0.7182,
+            0.6239,
+            0.6211,
+            0.6135,
+            0.6147
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [],
+          "actual": [],
+          "distances": [
+            0.916665256023407,
+            0.9739446640014648,
+            0.9941918849945068,
+            0.9982092976570129,
+            1.0771228075027466
+          ],
+          "correct": true,
+          "timings": [
+            0.5778,
+            0.3645,
+            0.3337,
+            0.3123,
+            0.3282,
+            0.3038,
+            0.3061,
+            0.3071,
+            0.7198,
+            0.4472,
+            0.3552,
+            0.6702,
+            0.4699,
+            0.3387,
+            0.3163,
+            0.5719,
+            0.3705,
+            0.4728,
+            0.3274,
+            0.3095
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "actual": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "distances": [
+            0.916665256023407,
+            0.9739446640014648,
+            0.9941918849945068,
+            0.9982092976570129,
+            1.0771228075027466
+          ],
+          "correct": true,
+          "timings": [
+            0.3601,
+            0.3147,
+            0.309,
+            0.3045,
+            0.305,
+            0.3321,
+            0.3037,
+            0.3024,
+            0.3045,
+            0.3037,
+            0.3055,
+            0.5135,
+            0.7197,
+            0.6217,
+            0.5956,
+            0.599,
+            0.6032,
+            0.6027,
+            0.6105,
+            0.6003
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "actual": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "distances": [
+            0.916665256023407,
+            0.9739446640014648,
+            0.9941918849945068,
+            0.9982092976570129,
+            1.0771228075027466
+          ],
+          "correct": true,
+          "timings": [
+            0.3616,
+            0.3312,
+            0.549,
+            0.942,
+            0.8539,
+            0.6271,
+            0.3663,
+            1.0295,
+            0.8169,
+            0.8023,
+            0.3685,
+            0.5049,
+            0.3556,
+            0.5037,
+            0.5577,
+            0.5552,
+            0.3354,
+            0.5856,
+            0.3665,
+            0.3142
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "actual": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "distances": [
+            0.8494623899459839,
+            0.8780180215835571,
+            0.8799046277999878,
+            0.8859052062034607,
+            0.8869042992591858,
+            0.8885423541069031,
+            0.8922968506813049,
+            0.8943915367126465,
+            0.8952295780181885,
+            0.8976921439170837
+          ],
+          "correct": true,
+          "timings": [
+            0.4604,
+            0.4557,
+            0.4561,
+            0.637,
+            0.9487,
+            0.5314,
+            0.4774,
+            0.5001,
+            0.4707,
+            0.4645,
+            0.4565,
+            0.4528,
+            0.4535,
+            0.4508,
+            0.4517,
+            0.502,
+            0.6432,
+            0.9161,
+            0.796,
+            0.7049
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            2800,
+            1400,
+            2100,
+            700
+          ],
+          "actual": [],
+          "distances": [
+            0.8494623899459839,
+            0.8780180215835571,
+            0.8799046277999878,
+            0.8859052062034607,
+            0.8869042992591858,
+            0.8885423541069031,
+            0.8922968506813049,
+            0.8943915367126465,
+            0.8952295780181885,
+            0.8976921439170837
+          ],
+          "correct": false,
+          "timings": [
+            0.4552,
+            0.4558,
+            0.6463,
+            0.8597,
+            0.7365,
+            0.7443,
+            0.8125,
+            0.6923,
+            0.6803,
+            0.9757,
+            0.6533,
+            0.9395,
+            0.4932,
+            0.467,
+            0.4609,
+            0.4531,
+            0.6482,
+            1.0523,
+            0.859,
+            0.9081
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "actual": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "distances": [
+            0.8494623899459839,
+            0.8780180215835571,
+            0.8799046277999878,
+            0.8859052062034607,
+            0.8869042992591858,
+            0.8885423541069031,
+            0.8922968506813049,
+            0.8943915367126465,
+            0.8952295780181885,
+            0.8976921439170837
+          ],
+          "correct": true,
+          "timings": [
+            0.4627,
+            0.7453,
+            0.8964,
+            0.7775,
+            0.843,
+            0.8927,
+            0.8863,
+            0.6282,
+            1.0343,
+            1.0097,
+            0.5863,
+            0.6691,
+            0.4895,
+            0.952,
+            0.5219,
+            0.4783,
+            0.8435,
+            0.9585,
+            0.7682,
+            0.4915
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "actual": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "distances": [
+            0.8494623899459839,
+            0.8780180215835571,
+            0.8799046277999878,
+            0.8859052062034607,
+            0.8869042992591858,
+            0.8885423541069031,
+            0.8922968506813049,
+            0.8943915367126465,
+            0.8952295780181885,
+            0.8976921439170837
+          ],
+          "correct": true,
+          "timings": [
+            0.4562,
+            0.5842,
+            0.9604,
+            0.8884,
+            0.8942,
+            0.7325,
+            0.6545,
+            1.5824,
+            1.0228,
+            0.9651,
+            1.0037,
+            0.8945,
+            0.8797,
+            0.8012,
+            0.7837,
+            0.7764,
+            0.7508,
+            0.7727,
+            0.7451,
+            0.7415
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "actual": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "distances": [
+            0.9229294061660767,
+            0.9638159871101379,
+            0.9837014675140381,
+            0.9932320713996887,
+            1.0199079513549805
+          ],
+          "correct": true,
+          "timings": [
+            0.6488,
+            0.663,
+            0.6578,
+            0.7792,
+            0.7084,
+            0.7175,
+            0.6502,
+            0.5998,
+            0.6545,
+            0.6573,
+            0.5664,
+            0.5918,
+            0.6495,
+            0.4044,
+            0.4971,
+            0.705,
+            0.7046,
+            0.7132,
+            0.6747,
+            0.633
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [],
+          "actual": [],
+          "distances": [
+            0.9229294061660767,
+            0.9638159871101379,
+            0.9837014675140381,
+            0.9932320713996887,
+            1.0199079513549805
+          ],
+          "correct": true,
+          "timings": [
+            0.7082,
+            0.9039,
+            0.8366,
+            0.7634,
+            0.7548,
+            0.4652,
+            0.3628,
+            0.3222,
+            0.3981,
+            0.4437,
+            0.3485,
+            0.3207,
+            0.3126,
+            0.3221,
+            0.3114,
+            0.3115,
+            0.3087,
+            0.3078,
+            0.311,
+            0.345
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "actual": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "distances": [
+            0.9229294061660767,
+            0.9638159871101379,
+            0.9837014675140381,
+            0.9932320713996887,
+            1.0199079513549805
+          ],
+          "correct": true,
+          "timings": [
+            0.7027,
+            0.6776,
+            0.6854,
+            0.6979,
+            0.7222,
+            0.703,
+            0.6871,
+            0.6905,
+            0.6265,
+            0.5227,
+            0.7252,
+            0.5406,
+            0.3747,
+            0.3341,
+            0.3327,
+            0.3216,
+            0.313,
+            0.3122,
+            0.3169,
+            0.5185
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_baseline WHERE ctx=@ctx AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "actual": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "distances": [
+            0.9229294061660767,
+            0.9638159871101379,
+            0.9837014675140381,
+            0.9932320713996887,
+            1.0199079513549805
+          ],
+          "correct": true,
+          "timings": [
+            0.6715,
+            0.3454,
+            0.4474,
+            0.7046,
+            0.716,
+            0.6898,
+            0.8887,
+            0.7119,
+            0.6821,
+            0.6957,
+            0.7402,
+            0.4026,
+            0.3305,
+            0.3249,
+            0.404,
+            1.1243,
+            0.3445,
+            0.3535,
+            0.3235,
+            0.325
+          ]
+        }
+      ]
+    },
+    {
+      "layout": "composite",
+      "buildMs": 484.0208,
+      "chunks": 27,
+      "capacity": 1024,
+      "vectorBytes": 42467328,
+      "samples": [
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx IN (@memory,@file) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "actual": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "distances": [
+            0.8548645377159119,
+            0.8945079445838928,
+            0.8962346911430359,
+            0.8965528607368469,
+            0.8991132378578186,
+            0.901781439781189,
+            0.9085990786552429,
+            0.9112927317619324,
+            0.9121041893959045,
+            0.9130750298500061
+          ],
+          "correct": true,
+          "timings": [
+            1.1794,
+            0.8814,
+            0.8022,
+            0.7803,
+            0.7819,
+            0.7698,
+            1.3138,
+            1.7011,
+            1.1287,
+            1.426,
+            0.8388,
+            0.8306,
+            0.9605,
+            0.8085,
+            0.7732,
+            1.3838,
+            1.5007,
+            1.6708,
+            1.948,
+            1.5437
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx=@typed AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            1400,
+            700,
+            2100,
+            2800
+          ],
+          "actual": [
+            1400,
+            700,
+            2100,
+            2800
+          ],
+          "distances": [
+            0.9402427673339844,
+            0.9952256679534912,
+            0.9966428279876709,
+            1.0437272787094116
+          ],
+          "correct": true,
+          "timings": [
+            0.3235,
+            0.3263,
+            0.312,
+            0.3098,
+            0.3072,
+            0.3067,
+            0.3083,
+            0.3063,
+            0.3066,
+            0.3073,
+            0.3063,
+            0.4353,
+            0.767,
+            0.6556,
+            0.5027,
+            0.7735,
+            0.4625,
+            0.8257,
+            0.3898,
+            0.4176
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx=@typed AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "actual": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "distances": [
+            0.8548645377159119,
+            0.8945079445838928,
+            0.8962346911430359,
+            0.8965528607368469,
+            0.8991132378578186,
+            0.901781439781189,
+            0.9085990786552429,
+            0.9112927317619324,
+            0.9121041893959045,
+            0.9130750298500061
+          ],
+          "correct": true,
+          "timings": [
+            0.4661,
+            0.7446,
+            1.0039,
+            0.7919,
+            2.6543,
+            1.2418,
+            0.8788,
+            0.8657,
+            0.9072,
+            0.8384,
+            0.8227,
+            0.8273,
+            0.8687,
+            0.869,
+            3.4875,
+            1.1445,
+            1.0058,
+            0.8236,
+            0.7683,
+            0.7452
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx IN (@memory,@file) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "actual": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "distances": [
+            0.8548645377159119,
+            0.8945079445838928,
+            0.8962346911430359,
+            0.8965528607368469,
+            0.8991132378578186,
+            0.901781439781189,
+            0.9085990786552429,
+            0.9112927317619324,
+            0.9121041893959045,
+            0.9130750298500061
+          ],
+          "correct": true,
+          "timings": [
+            0.8894,
+            0.8175,
+            0.7854,
+            0.7697,
+            0.7755,
+            0.7613,
+            0.7565,
+            0.7683,
+            1.3882,
+            1.2675,
+            1.2286,
+            1.2163,
+            1.2587,
+            1.2387,
+            1.3872,
+            1.5694,
+            0.9357,
+            0.8144,
+            0.8857,
+            1.619
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx IN (@memory,@file) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "actual": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "distances": [
+            0.916665256023407,
+            0.9739446640014648,
+            0.9941918849945068,
+            0.9982092976570129,
+            1.0771228075027466
+          ],
+          "correct": true,
+          "timings": [
+            0.3587,
+            0.3449,
+            0.34,
+            0.3325,
+            0.3258,
+            0.3397,
+            0.341,
+            0.5139,
+            0.3315,
+            0.3324,
+            0.3279,
+            0.5746,
+            0.3835,
+            0.3406,
+            0.3385,
+            0.3333,
+            0.3311,
+            0.3297,
+            0.3282,
+            0.3296
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx=@typed AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [],
+          "actual": [],
+          "distances": [],
+          "correct": true,
+          "timings": [
+            0.0275,
+            0.0273,
+            0.0278,
+            0.026,
+            0.0259,
+            0.0258,
+            0.0252,
+            0.0322,
+            0.0252,
+            0.0266,
+            0.0247,
+            0.025,
+            0.0252,
+            0.0249,
+            0.0246,
+            0.0255,
+            0.0244,
+            0.0245,
+            0.0261,
+            0.024
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx=@typed AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "actual": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "distances": [
+            0.916665256023407,
+            0.9739446640014648,
+            0.9941918849945068,
+            0.9982092976570129,
+            1.0771228075027466
+          ],
+          "correct": true,
+          "timings": [
+            0.3142,
+            0.3114,
+            0.3172,
+            0.3148,
+            0.3107,
+            0.3077,
+            0.3177,
+            0.3978,
+            0.3129,
+            0.3143,
+            0.3115,
+            0.3303,
+            0.6118,
+            0.9752,
+            0.7311,
+            0.9647,
+            0.3609,
+            0.3274,
+            0.3202,
+            0.3212
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx IN (@memory,@file) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "actual": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "distances": [
+            0.916665256023407,
+            0.9739446640014648,
+            0.9941918849945068,
+            0.9982092976570129,
+            1.0771228075027466
+          ],
+          "correct": true,
+          "timings": [
+            0.8045,
+            0.3456,
+            0.3266,
+            0.3218,
+            0.3194,
+            0.3175,
+            0.3195,
+            0.3186,
+            0.319,
+            0.3172,
+            0.3163,
+            0.5299,
+            0.5538,
+            0.3475,
+            0.3286,
+            0.3295,
+            0.3325,
+            0.3272,
+            0.3221,
+            0.3288
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx IN (@memory,@file) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "actual": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "distances": [
+            0.8494623899459839,
+            0.8780180215835571,
+            0.8799046277999878,
+            0.8859052062034607,
+            0.8869042992591858,
+            0.8885423541069031,
+            0.8922968506813049,
+            0.8943915367126465,
+            0.8952295780181885,
+            0.8976921439170837
+          ],
+          "correct": true,
+          "timings": [
+            0.7664,
+            1.0228,
+            0.9247,
+            1.1306,
+            1.696,
+            5.2534,
+            1.2435,
+            1.0767,
+            1.733,
+            1.1047,
+            1.0032,
+            1.2477,
+            1.4004,
+            1.2702,
+            1.0106,
+            1.3958,
+            0.9837,
+            1.3951,
+            1.4625,
+            1.5468
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx=@typed AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            2800,
+            1400,
+            2100,
+            700
+          ],
+          "actual": [
+            2800,
+            1400,
+            2100,
+            700
+          ],
+          "distances": [
+            0.9836714863777161,
+            1.0151089429855347,
+            1.0511507987976074,
+            1.0525909662246704
+          ],
+          "correct": true,
+          "timings": [
+            0.3432,
+            0.3579,
+            0.3679,
+            0.3919,
+            0.4293,
+            0.3662,
+            0.5402,
+            0.4179,
+            0.8302,
+            0.355,
+            0.3307,
+            0.3305,
+            0.3575,
+            0.3513,
+            0.3517,
+            0.3246,
+            0.3416,
+            0.3565,
+            0.3829,
+            0.3732
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx=@typed AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "actual": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "distances": [
+            0.8494623899459839,
+            0.8780180215835571,
+            0.8799046277999878,
+            0.8859052062034607,
+            0.8869042992591858,
+            0.8885423541069031,
+            0.8922968506813049,
+            0.8943915367126465,
+            0.8952295780181885,
+            0.8976921439170837
+          ],
+          "correct": true,
+          "timings": [
+            0.4794,
+            0.4876,
+            0.505,
+            0.5028,
+            0.5218,
+            0.6083,
+            1.2422,
+            1.0181,
+            0.5584,
+            0.4978,
+            0.4839,
+            0.5767,
+            0.995,
+            0.5348,
+            0.4842,
+            0.4761,
+            0.5769,
+            0.4881,
+            0.4789,
+            0.7281
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx IN (@memory,@file) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "actual": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "distances": [
+            0.8494623899459839,
+            0.8780180215835571,
+            0.8799046277999878,
+            0.8859052062034607,
+            0.8869042992591858,
+            0.8885423541069031,
+            0.8922968506813049,
+            0.8943915367126465,
+            0.8952295780181885,
+            0.8976921439170837
+          ],
+          "correct": true,
+          "timings": [
+            0.8485,
+            0.8633,
+            0.8579,
+            0.8542,
+            0.8346,
+            0.8386,
+            0.9892,
+            1.823,
+            1.0706,
+            0.8269,
+            0.809,
+            0.8205,
+            0.7957,
+            0.7757,
+            0.7738,
+            0.7786,
+            0.7769,
+            0.7855,
+            0.9055,
+            1.7605
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx IN (@memory,@file) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "actual": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "distances": [
+            0.9229294061660767,
+            0.9638159871101379,
+            0.9837014675140381,
+            0.9932320713996887,
+            1.0199079513549805
+          ],
+          "correct": true,
+          "timings": [
+            0.6555,
+            0.4383,
+            0.3865,
+            0.373,
+            0.3633,
+            0.3608,
+            0.3643,
+            0.361,
+            0.3602,
+            0.3607,
+            0.3599,
+            0.3631,
+            0.3612,
+            0.3602,
+            0.3601,
+            0.3486,
+            0.3518,
+            0.3587,
+            0.3552,
+            0.3562
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx=@typed AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [],
+          "actual": [],
+          "distances": [],
+          "correct": true,
+          "timings": [
+            0.0253,
+            0.0259,
+            0.0257,
+            0.0247,
+            0.0255,
+            0.0249,
+            0.0242,
+            0.0247,
+            0.0251,
+            0.0266,
+            0.0247,
+            0.0254,
+            0.0242,
+            0.0246,
+            0.0243,
+            0.0244,
+            0.024,
+            0.025,
+            0.0239,
+            0.0238
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx=@typed AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "actual": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "distances": [
+            0.9229294061660767,
+            0.9638159871101379,
+            0.9837014675140381,
+            0.9932320713996887,
+            1.0199079513549805
+          ],
+          "correct": true,
+          "timings": [
+            0.308,
+            0.3066,
+            0.3066,
+            0.3337,
+            0.3185,
+            0.4161,
+            0.531,
+            0.8068,
+            0.4833,
+            0.4355,
+            0.4778,
+            0.6909,
+            0.3861,
+            0.4732,
+            0.5496,
+            0.3793,
+            0.365,
+            0.409,
+            0.6724,
+            0.5732
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_composite WHERE ctx IN (@memory,@file) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "actual": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "distances": [
+            0.9229294061660767,
+            0.9638159871101379,
+            0.9837014675140381,
+            0.9932320713996887,
+            1.0199079513549805
+          ],
+          "correct": true,
+          "timings": [
+            0.5362,
+            0.7269,
+            0.712,
+            0.6076,
+            0.6517,
+            0.7757,
+            0.5147,
+            0.4991,
+            0.7017,
+            0.4698,
+            0.438,
+            0.3633,
+            0.3396,
+            0.328,
+            0.3262,
+            0.4867,
+            0.376,
+            0.4827,
+            0.7322,
+            0.3486
+          ]
+        }
+      ]
+    },
+    {
+      "layout": "native",
+      "buildMs": 431.5531,
+      "chunks": 27,
+      "capacity": 1024,
+      "vectorBytes": 42467328,
+      "samples": [
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "actual": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "distances": [
+            0.8548645377159119,
+            0.8945079445838928,
+            0.8962346911430359,
+            0.8965528607368469,
+            0.8991132378578186,
+            0.901781439781189,
+            0.9085990786552429,
+            0.9112927317619324,
+            0.9121041893959045,
+            0.9130750298500061
+          ],
+          "correct": true,
+          "timings": [
+            0.9573,
+            0.8205,
+            0.8117,
+            0.9341,
+            0.8497,
+            0.8335,
+            0.7937,
+            0.8952,
+            0.8078,
+            0.7784,
+            0.7719,
+            0.8798,
+            0.788,
+            0.8165,
+            0.8139,
+            0.8308,
+            1.0992,
+            0.8212,
+            0.803,
+            0.7947
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type=@type AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            1400,
+            700,
+            2100,
+            2800
+          ],
+          "actual": [
+            1400,
+            700,
+            2100,
+            2800
+          ],
+          "distances": [
+            0.9402427673339844,
+            0.9952256679534912,
+            0.9966428279876709,
+            1.0437272787094116
+          ],
+          "correct": true,
+          "timings": [
+            0.6435,
+            0.5352,
+            0.784,
+            0.4464,
+            0.3745,
+            0.5655,
+            0.7482,
+            0.6985,
+            0.6439,
+            0.5917,
+            0.6014,
+            0.61,
+            0.5942,
+            0.6761,
+            0.7497,
+            0.6272,
+            0.7379,
+            0.752,
+            0.4115,
+            0.4727
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type=@type AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "actual": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "distances": [
+            0.8548645377159119,
+            0.8945079445838928,
+            0.8962346911430359,
+            0.8965528607368469,
+            0.8991132378578186,
+            0.901781439781189,
+            0.9085990786552429,
+            0.9112927317619324,
+            0.9121041893959045,
+            0.9130750298500061
+          ],
+          "correct": true,
+          "timings": [
+            0.4972,
+            0.4916,
+            0.8332,
+            0.6713,
+            0.6924,
+            0.4707,
+            0.4538,
+            0.4517,
+            0.5129,
+            0.7522,
+            0.5646,
+            0.5387,
+            0.5406,
+            0.5291,
+            0.5272,
+            0.5348,
+            0.5632,
+            0.6798,
+            0.7887,
+            0.7897
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "dense:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type IN (\u0027memory\u0027,\u0027file\u0027) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "actual": [
+            567,
+            1134,
+            1561,
+            588,
+            1939,
+            1463,
+            1596,
+            2919,
+            2884,
+            2695
+          ],
+          "distances": [
+            0.8548645377159119,
+            0.8945079445838928,
+            0.8962346911430359,
+            0.8965528607368469,
+            0.8991132378578186,
+            0.901781439781189,
+            0.9085990786552429,
+            0.9112927317619324,
+            0.9121041893959045,
+            0.9130750298500061
+          ],
+          "correct": true,
+          "timings": [
+            1.2188,
+            1.2495,
+            0.8397,
+            1.0418,
+            1.2502,
+            1.2464,
+            0.8305,
+            0.7813,
+            0.8171,
+            0.7829,
+            0.7993,
+            0.8887,
+            0.85,
+            0.776,
+            0.7692,
+            1.3566,
+            0.8414,
+            0.7692,
+            0.7669,
+            0.8077
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "actual": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "distances": [
+            0.916665256023407,
+            0.9739446640014648,
+            0.9941918849945068,
+            0.9982092976570129,
+            1.0771228075027466
+          ],
+          "correct": true,
+          "timings": [
+            0.311,
+            0.3123,
+            0.3527,
+            0.5578,
+            0.769,
+            0.3336,
+            0.3116,
+            0.3085,
+            0.3065,
+            0.3051,
+            0.3059,
+            0.3039,
+            0.3046,
+            0.3043,
+            0.392,
+            0.7561,
+            0.6822,
+            0.6954,
+            0.7017,
+            0.6975
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type=@type AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [],
+          "actual": [],
+          "distances": [],
+          "correct": true,
+          "timings": [
+            0.0339,
+            0.0332,
+            0.0335,
+            0.0318,
+            0.0427,
+            0.0335,
+            0.0328,
+            0.0325,
+            0.0339,
+            0.0325,
+            0.0325,
+            0.0317,
+            0.0321,
+            0.033,
+            0.0323,
+            0.0316,
+            0.032,
+            0.0324,
+            0.0315,
+            0.0324
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type=@type AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "actual": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "distances": [
+            0.916665256023407,
+            0.9739446640014648,
+            0.9941918849945068,
+            0.9982092976570129,
+            1.0771228075027466
+          ],
+          "correct": true,
+          "timings": [
+            0.7159,
+            0.6956,
+            0.6748,
+            0.6645,
+            0.644,
+            0.5977,
+            0.6439,
+            0.6327,
+            0.6586,
+            0.6111,
+            0.6302,
+            0.6791,
+            0.6763,
+            0.7394,
+            0.8734,
+            0.732,
+            0.7902,
+            0.8125,
+            0.4427,
+            0.5842
+          ]
+        },
+        {
+          "modality": "content",
+          "ctx": "sparse:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type IN (\u0027memory\u0027,\u0027file\u0027) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "actual": [
+            4,
+            3,
+            2,
+            1,
+            5
+          ],
+          "distances": [
+            0.916665256023407,
+            0.9739446640014648,
+            0.9941918849945068,
+            0.9982092976570129,
+            1.0771228075027466
+          ],
+          "correct": true,
+          "timings": [
+            0.753,
+            0.7388,
+            0.4163,
+            0.382,
+            0.3694,
+            0.3643,
+            0.3598,
+            0.3621,
+            0.3592,
+            0.3629,
+            0.362,
+            0.3605,
+            0.3631,
+            0.3583,
+            0.3562,
+            0.7146,
+            0.6491,
+            0.5802,
+            0.61,
+            0.7546
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "actual": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "distances": [
+            0.8494623899459839,
+            0.8780180215835571,
+            0.8799046277999878,
+            0.8859052062034607,
+            0.8869042992591858,
+            0.8885423541069031,
+            0.8922968506813049,
+            0.8943915367126465,
+            0.8952295780181885,
+            0.8976921439170837
+          ],
+          "correct": true,
+          "timings": [
+            0.8415,
+            1.2111,
+            0.9433,
+            0.8304,
+            0.8253,
+            0.8247,
+            0.8222,
+            1.0784,
+            1.3942,
+            1.3538,
+            1.1879,
+            1.011,
+            0.9422,
+            0.9128,
+            0.8587,
+            0.7877,
+            0.816,
+            0.7771,
+            0.8146,
+            1.0951
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type=@type AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            2800,
+            1400,
+            2100,
+            700
+          ],
+          "actual": [
+            2800,
+            1400,
+            2100,
+            700
+          ],
+          "distances": [
+            0.9836714863777161,
+            1.0151089429855347,
+            1.0511507987976074,
+            1.0525909662246704
+          ],
+          "correct": true,
+          "timings": [
+            0.5304,
+            0.508,
+            0.5188,
+            0.6151,
+            0.5801,
+            0.4115,
+            0.3672,
+            0.3633,
+            0.5624,
+            0.719,
+            0.7356,
+            0.7431,
+            0.8257,
+            0.729,
+            0.7658,
+            0.8051,
+            0.8496,
+            0.7761,
+            0.4901,
+            0.4418
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type=@type AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "actual": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "distances": [
+            0.8494623899459839,
+            0.8780180215835571,
+            0.8799046277999878,
+            0.8859052062034607,
+            0.8869042992591858,
+            0.8885423541069031,
+            0.8922968506813049,
+            0.8943915367126465,
+            0.8952295780181885,
+            0.8976921439170837
+          ],
+          "correct": true,
+          "timings": [
+            0.5185,
+            0.595,
+            0.5795,
+            0.5482,
+            0.658,
+            0.7609,
+            0.5521,
+            0.9111,
+            0.8338,
+            0.8053,
+            1.0606,
+            0.6117,
+            0.5177,
+            0.4785,
+            0.6164,
+            0.776,
+            0.6899,
+            0.6172,
+            0.6992,
+            0.8555
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "dense:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type IN (\u0027memory\u0027,\u0027file\u0027) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "actual": [
+            1148,
+            1771,
+            1379,
+            434,
+            2037,
+            1946,
+            1498,
+            1043,
+            1680,
+            2807
+          ],
+          "distances": [
+            0.8494623899459839,
+            0.8780180215835571,
+            0.8799046277999878,
+            0.8859052062034607,
+            0.8869042992591858,
+            0.8885423541069031,
+            0.8922968506813049,
+            0.8943915367126465,
+            0.8952295780181885,
+            0.8976921439170837
+          ],
+          "correct": true,
+          "timings": [
+            1.5307,
+            1.5312,
+            1.4046,
+            1.3562,
+            1.3261,
+            1.1035,
+            1.0023,
+            1.2087,
+            1.3934,
+            1.4998,
+            1.6116,
+            2.2965,
+            2.4527,
+            1.9445,
+            1.8649,
+            1.5187,
+            1.7245,
+            1.2295,
+            2.289,
+            1.419
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": null,
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "actual": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "distances": [
+            0.9229294061660767,
+            0.9638159871101379,
+            0.9837014675140381,
+            0.9932320713996887,
+            1.0199079513549805
+          ],
+          "correct": true,
+          "timings": [
+            1.1015,
+            0.9518,
+            0.8397,
+            0.9467,
+            0.9013,
+            0.4553,
+            0.4884,
+            0.5358,
+            0.8663,
+            0.8544,
+            0.559,
+            0.4322,
+            0.4853,
+            0.3703,
+            0.5227,
+            0.7131,
+            0.6996,
+            0.6881,
+            0.6022,
+            1.2427
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": "file",
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type=@type AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [],
+          "actual": [],
+          "distances": [],
+          "correct": true,
+          "timings": [
+            0.0385,
+            0.0373,
+            0.0351,
+            0.0382,
+            0.0445,
+            0.0367,
+            0.0344,
+            0.0356,
+            0.0355,
+            0.0857,
+            0.0432,
+            0.0381,
+            0.0373,
+            0.0381,
+            0.0364,
+            0.037,
+            0.0385,
+            0.0745,
+            0.0736,
+            0.0509
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": "memory",
+          "sql": "SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type=@type AND embedding MATCH @vec AND k=10 ORDER BY distance",
+          "expected": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "actual": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "distances": [
+            0.9229294061660767,
+            0.9638159871101379,
+            0.9837014675140381,
+            0.9932320713996887,
+            1.0199079513549805
+          ],
+          "correct": true,
+          "timings": [
+            0.3585,
+            0.6667,
+            0.7758,
+            0.7292,
+            0.7522,
+            0.4201,
+            0.3676,
+            0.4698,
+            0.4988,
+            0.4042,
+            0.3977,
+            0.378,
+            0.5775,
+            0.8536,
+            0.397,
+            0.3517,
+            0.3518,
+            1.1668,
+            0.7663,
+            0.671
+          ]
+        },
+        {
+          "modality": "structure",
+          "ctx": "sparse:0",
+          "type": "both",
+          "sql": "SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_native WHERE ctx=@ctx AND type IN (\u0027memory\u0027,\u0027file\u0027) AND embedding MATCH @vec AND k=10) ORDER BY distance \u002B 0 LIMIT 10",
+          "expected": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "actual": [
+            3,
+            5,
+            1,
+            2,
+            4
+          ],
+          "distances": [
+            0.9229294061660767,
+            0.9638159871101379,
+            0.9837014675140381,
+            0.9932320713996887,
+            1.0199079513549805
+          ],
+          "correct": true,
+          "timings": [
+            0.9235,
+            0.783,
+            0.7698,
+            0.7512,
+            0.7512,
+            0.7299,
+            0.7769,
+            0.7555,
+            0.7147,
+            0.702,
+            0.7068,
+            0.7022,
+            0.7714,
+            4.223,
+            3.575,
+            0.8477,
+            0.6857,
+            0.7504,
+            0.7572,
+            0.891
+          ]
+        }
+      ]
+    }
+  ]
+}
