@@ -625,6 +625,15 @@ rewritten. Everything here is open unless it says otherwise.
   `entry_type` to choose the partition, so a NULL kind would file a vector under a NULL partition.
   The peer's `EnsureEntryTypeColumnAsync` does not close this: it returns early when the column
   already exists, so a nullable column stays nullable.
+  **RESOLVED FOR THE ROWS at `8656fddd`:** the v21 step classifies every row before it rebuilds
+  the vectors, so no vector is filed under a NULL partition.
+  **THE POPULATION IS DEVELOPMENT-ONLY** (ruled in the review of `4cdfeb8f`): v2.0.0 and v2.0.1
+  both ship `CurrentVersion = 19`, the nullable `ADD COLUMN entry_type TEXT` only ever existed in
+  branch commits (`3171c07f`, `db94682b`), and no release ever shipped a v20 bank — so for a user
+  the ladder runs the v20 step, which adds the column as `NOT NULL DEFAULT 'none'`. The column
+  stays nullable only in the dev banks that ran this branch's earlier builds. Those banks are
+  disposable: re-create them, do not migrate them. The rebuild that would make the column NOT NULL
+  is therefore **not a 2.1.0 user requirement** — it is the owner's question, framed in E1.
 - **B2. The doctor cannot count a NULL row.** Its unclassified predicate is `entry_type = 'none'`
   and a NULL row satisfies neither it nor the unknown predicate, so it is counted as neither.
   A NULL-row test belongs with the fix.
@@ -670,6 +679,19 @@ rewritten. Everything here is open unless it says otherwise.
   `ADD COLUMN` (both verified possible without a rebuild); the normalization step in B1 carries it
   for the banks that already have the column. The reason it is worth doing is B4: while the repair
   paths normalise unknown values away, the doctor can never report one.
+  **The owner's question, as sharpened in the review of `4cdfeb8f`:** it is no longer "CHECK or no
+  CHECK" — it is **"one rebuild of `entries` carrying `NOT NULL DEFAULT 'none'` and the domain
+  `CHECK`, or no rebuild at all"**. The rebuild is not a 2.1.0 user requirement (the nullable
+  population is dev-only, see B1), and doing a NOT NULL-only rebuild now would make the owner's
+  later "yes" a *second* rebuild of `entries` — two rebuilds, two migration steps, for a schema
+  that ships once. One rebuild, after the ruling. The cost of "no rebuild" is known: the domain
+  stays unenforced, and the doctor's unknown count is the only thing that sees an out-of-domain
+  value — which the tri-state read now makes reachable.
+  **The interaction the rebuild brings** (raised by the peer, and it is real): under the `CHECK`, a
+  repair that rewrites a row carrying an unknown value fails the constraint. The two changes have to
+  land together, and the interaction is best handled one step earlier — the repair path asks
+  `ReadStoredKind` *before* it rewrites and skips an unknown-kind row (reporting it), so the
+  constraint never fires and the batch needs no partial-failure path.
 
 ### F. The steps beyond this PR
 
@@ -843,3 +865,119 @@ FTS companion rows and the vec companion rows, and the FTS/vec keying is on the 
 - **The `EntryTypeWireNames` class doc's "WHAT THE DEFAULT MEANS" paragraph is the contract, and
   it is currently the only place it exists.** When the wiring lands, that paragraph is what the
   implementation is checked against; it is worth a second reader at that point rather than now.
+
+## Review of `4cdfeb8f` + `3e87cebe`: the tri-state read, the remote's unknown kind, and the ruling on the rebuild
+
+Verified on a clean checkout of `3e87cebe`: `dotnet build` — 8 projects, 0 warnings, 0 errors; the fast
+lane — **5201 passed, 0 failed, 2 skipped**; the slow lane — **1608 passed, 0 failed, 14 skipped**.
+
+**The chunk is right.** The tri-state read is the shape I asked for, the merge's rule lives in one
+place beside the shape rule, the parity test now compares both halves over one fixture, and the
+plan says what the default means. One correction to my own review, and then the ruling you asked
+for.
+
+### The ruling on the rebuild: it should not land now, and my finding was over-scoped for the users
+
+I went looking for the population my finding is about, and it is **development banks only**:
+
+```
+git show v2.0.0:src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs | grep CurrentVersion
+71:    internal const int CurrentVersion = 19;          # 2.0.0 ships v19
+git show v2.0.1:…                                       # 2.0.1 ships v19 too
+git log -S"ADD COLUMN entry_type TEXT" -- …/MemorySchema.cs
+3171c07f  (branch)   db94682b  (branch)                 # the nullable column only ever existed here
+gh release list                                          # v2.0.1 is the latest; no 2.1.0 prerelease
+```
+
+So: **no released version ever shipped a v20 bank.** Every user's bank is v19, and for a user the
+ladder runs the v20 step, which adds the column as `TEXT NOT NULL DEFAULT 'none'`
+(`MemorySchema.cs:1415`) and then v21. The nullable column never reaches a user's bank — it can
+only exist in the banks of whoever ran this branch's earlier builds (mine, yours, CI's).
+
+That means **my blocking finding stands for the development population and does not stand for the
+user population**, and my "one step with three properties" was over-scoped: of the three, the NOT
+NULL contract is dev-bank hygiene, and the value domain is the owner's. I am lowering the severity
+of that finding accordingly, and the conclusion follows:
+
+**Do not do the rebuild now.** Two reasons, and the second is the decisive one:
+
+1. It is not a 2.1.0 user requirement. The population is disposable — a dev bank can be re-created
+   in a second, where migrating it means a rebuild of `entries` with its FTS and vector triggers.
+2. **If the rebuild lands now with `NOT NULL` and no `CHECK`, and the owner later rules yes to the
+   `CHECK`, that is a second rebuild of `entries`** — two rebuilds, two migration steps, two rounds
+   of the riskiest thing in this branch, for a schema that ships once. One rebuild, after the
+   ruling.
+
+So the owner's question is not "CHECK or no CHECK" any more; it is the sharper **"one rebuild of
+`entries` carrying `NOT NULL DEFAULT 'none'` and the domain `CHECK`, or no rebuild at all"** — and
+it is worth deciding with that framing, because the cost of "no rebuild" is now known: the domain
+stays unenforced, and the doctor's unknown count is the only thing that sees an out-of-domain
+value (which is exactly what the tri-state read now makes reachable ✓).
+
+What I want in the meantime, and it is small:
+
+- the PR description must say **which population** the nullable column applies to — the branch's own
+  dev banks — so the gap is not read as a user-facing hole;
+- the plan's 2.1.0 scope list should carry the same sentence;
+- and the dev banks from the earlier build should be declared **disposable** (re-created), not
+  migrated. That is the cheap resolution of the whole question, and it costs one sentence.
+
+### Your point 2 is right, and there is a better way to handle the interaction than catching the violation
+
+Under `CHECK (entry_type IN ('none','memory','file'))`, a repair that rewrites a row carrying an
+unknown value fails the constraint — so the repair must not rewrite it. Your reading (treat the
+constraint violation as "leave the row alone and report it") is correct, and the two changes do
+have to land together. I would put the interaction one step earlier, though: **the repair path
+should ask the state before it rewrites, not catch the violation after it.** `ReadStoredKind`
+already knows — an unknown kind is `StoredKindState.Unknown` — so a row in that state is *skipped
+and reported*, and the `CHECK` never fires. Catching a constraint violation inside a batch repair
+means a partial-failure path (the other rows in the batch still have to be written, and the
+failure has to be told apart from a real defect); a pre-check is a skip, and the state is already
+in hand. The behaviour is the same, the code is simpler, and the constraint stops being the thing
+that notices.
+
+### The chunk, in detail
+
+- **The tri-state read** (`EntryKindClassifier.ReadStoredKind` → `StoredKind` with
+  `Declared | Undeclared | Unknown` and the raw value kept) is exactly the contract: an undeclared
+  row is null or `'none'`, an unknown value is anything outside the domain, and the raw value is
+  carried so a caller can report *what* it did not understand.
+- **`ResolveStoredValue`** is the right shape for the repair paths: an unknown value is carried
+  through untouched, an undeclared row is resolved from its shape, a declared kind is kept. The two
+  repair paths (`ChunkBackfill`, `ChunkBoundaryRepair`) ask the classifier rather than resolving
+  and re-storing the kind themselves ✓ — that is how the three states stop being three different
+  things in three places.
+- **The merge** now lands a remote's unknown kind as `'none'` — where the doctor counts it —
+  while a remote's `'none'` still falls back to the shape. The asymmetry is principled and I would
+  keep it: the merge *creates* a row and must choose a kind this bank knows, while the repair
+  *rewrites* a row and must not destroy the value already there.
+- **One home for the merge's rule** (`MemorySql.EntryTypeFromDeclarationOrShape`), with the parity
+  test comparing it against the classifier's read over one fixture of declared / undeclared /
+  unknown ✓. The shape fixture now carries the cases it was missing: a null path, a null path and
+  a null source, and a path differing only in case ✓ — the case one is the one that mattered, since
+  the C# rule compares ordinally and SQLite's `=` is BINARY, and nothing pinned that they agree.
+- **D3, D4, D5** are done: the class is `EntryTypeParameter` ✓, the default path is written down
+  ("a QUERY that names no kind asks for `Default` — the tool layer applies the default before it
+  parses. A LOOKUP names no default: it requires one, so it refuses an empty value rather than
+  defaulting") ✓, and `'none'` is refused as an unknown name with its own test ✓.
+- **The plan** now says what the default means, in the same words as the contract ✓ — that was the
+  amendment I asked for, and it is in the right place.
+
+### Nits
+
+- **`Resolve` is still public on the interface, and it still guesses.** `FromStoredValue` maps an
+  unknown value to the undeclared kind, so `Resolve` answers a shape for a value it did not
+  understand. It has **no production call site any more** (the only caller left is
+  `ResolveStoredValue`, which filters the unknown case first) — which is exactly why it is worth
+  closing now rather than later: the guessing API is one call away from being used again, and the
+  doc still says "a row with none is classified by its own shape", which no longer describes the
+  whole truth. Either `Resolve` refuses an unknown value, or its doc says it answers the declared
+  and undeclared cases only and points at `ReadStoredKind` for the question. A doc line, or one
+  `if`.
+- **The merge's "land it as `'none'`" survives only until the local backfill runs** — a `'none'`
+  row is exactly what the v20/v21 backfill resolves from its shape. In practice it survives (the
+  merge's INSERT names `entry_type`, so it needs a v20+ local bank, and the backfill has already
+  run by then), but the next reader will wonder, and one sentence in the merge's comment settles it.
+- **The query path's third caller still has no home.** "An unknown kind is in no set" is right and
+  is consistent with the no-filter default ✓ — but it is currently only in this review. When the
+  typed query lands, it belongs in the contract next to the default's meaning, not in the SQL.
