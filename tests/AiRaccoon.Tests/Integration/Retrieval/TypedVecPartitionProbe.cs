@@ -15,6 +15,8 @@ namespace AiRaccoon.Tests.Integration.Retrieval;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class TypedVecPartitionProbe(ITestOutputHelper output)
 {
+    private sealed record Neighbor(long Rowid, double Distance);
+
     private sealed record Row(long Id, string Ctx, string Type, float[] Vector);
 
     [RetryFact]
@@ -87,7 +89,7 @@ public sealed class TypedVecPartitionProbe(ITestOutputHelper output)
                             var args = new { ctx, type, memory = ctx + "|memory", file = ctx + "|file", typed = ctx + "|" + type, vec = Bytes(query) };
                             try
                             {
-                                var neighbors = (await connection.QueryAsync<(long Rowid, double Distance)>(sql, args)).ToArray();
+                                var neighbors = (await connection.QueryAsync<Neighbor>(sql, args)).ToArray();
                                 var actual = neighbors.Select(n => n.Rowid).ToArray();
                                 if (layout == "baseline" && type == "file")
                                 {
@@ -137,7 +139,7 @@ public sealed class TypedVecPartitionProbe(ITestOutputHelper output)
                 }
                 var tiePredicate = layout == "composite" ? "ctx IN ('ties|memory','ties|file')" : "ctx='ties'";
                 var tieSql = $"SELECT rowid,distance FROM (SELECT rowid,distance FROM probe_{layout} WHERE {tiePredicate} AND embedding MATCH @vec AND k={K}) ORDER BY distance+0 LIMIT {K}";
-                var ties = (await connection.QueryAsync<(long Rowid, double Distance)>(tieSql, new { vec = Bytes(tiedVector) })).ToArray();
+                var ties = (await connection.QueryAsync<Neighbor>(tieSql, new { vec = Bytes(tiedVector) })).ToArray();
                 ties.Length.ShouldBe(K);
                 ties.Select(t => t.Rowid).Distinct().Count().ShouldBe(K);
                 foreach (var tie in ties)

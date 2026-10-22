@@ -97,6 +97,7 @@ public sealed class SchemaDoctorTests
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync("PRAGMA ignore_check_constraints = ON");
         await connection.ExecuteAsync(new CommandDefinition(
             "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at, entry_type) "
             + "VALUES ('h1', 'p1', 'v', 'project', 'proj', 1, 1, 'transcript')",

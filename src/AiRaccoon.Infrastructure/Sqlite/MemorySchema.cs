@@ -197,7 +197,7 @@ internal static class MemorySchema
                                               ttl_days INTEGER NULL,
                                               embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
                                               embedding BLOB NULL,
-                                              entry_type TEXT NOT NULL DEFAULT 'none',
+                                              entry_type TEXT NOT NULL DEFAULT 'none' CHECK(entry_type IN ('none','memory','file')),
                                               heading_path TEXT NULL,
                                               structure_embedding BLOB NULL,
                                               chunk_index INTEGER NOT NULL DEFAULT -1,
@@ -1435,7 +1435,7 @@ internal static class MemorySchema
                 // rewrite the table, so only the backfill below costs anything. Every legacy row
                 // arrives as 'none' — the kind it has not been given yet.
                 await connection.ExecuteAsync(new CommandDefinition(
-                        "ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none'", cancellationToken: cancellationToken));
+                        "ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none' CHECK(entry_type IN ('none','memory','file'))", cancellationToken: cancellationToken));
             }
             catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
             {
@@ -1942,7 +1942,7 @@ internal static class MemorySchema
         try
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                    "ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none'",
+                    "ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none' CHECK(entry_type IN ('none','memory','file'))",
                     cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))

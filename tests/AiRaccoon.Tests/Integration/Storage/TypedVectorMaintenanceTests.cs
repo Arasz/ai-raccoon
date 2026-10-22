@@ -18,6 +18,9 @@ namespace AiRaccoon.Tests.Integration.Storage;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class TypedVectorMaintenanceTests
 {
+    private sealed record KindRow(string Hash, string? Kind);
+    private sealed record VectorBlobRow(long Rowid, byte[] Embedding);
+
     private const int Dimension = 384;
 
     /// <summary>One seeded row: its kind, and the vector it carries.</summary>
@@ -132,9 +135,9 @@ public sealed class TypedVectorMaintenanceTests
     /// <summary>The kind each vector is filed under, read back from the partition column.</summary>
     private static async Task<Dictionary<string, string>> ReadVectorKindsAsync(SqliteConnection connection)
     {
-        var rows = await connection.QueryAsync<(string Hash, string Kind)>(
-            "SELECT e.hash, v.type FROM vec_entries v JOIN entries e ON e.id = v.rowid");
-        return rows.ToDictionary(r => r.Hash, r => r.Kind);
+        var rows = await connection.QueryAsync<KindRow>(
+            "SELECT e.hash, v.type AS Kind FROM vec_entries v JOIN entries e ON e.id = v.rowid");
+        return rows.ToDictionary(r => r.Hash, r => r.Kind!);
     }
 
     private static async Task<string?> TableSqlAsync(SqliteConnection connection, string table) =>

@@ -19,6 +19,9 @@ namespace AiRaccoon.Tests.Integration.Storage;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class TypedEntryMigrationTests
 {
+    private sealed record KindRow(string Hash, string? Kind);
+    private sealed record VectorBlobRow(long Rowid, byte[] Embedding);
+
     private const int Dimension = 384;
 
     /// <summary>One seeded row: its kind, and the vector it carries.</summary>
@@ -86,8 +89,8 @@ public sealed class TypedEntryMigrationTests
         kinds.Values.ShouldContain(EntryKindWireNames.File);
         kinds.Values.ShouldContain(EntryKindWireNames.Memory);
 
-        var rowKinds = await connection.QueryAsync<(string Hash, string Kind)>(
-            "SELECT hash, entry_type FROM entries");
+        var rowKinds = await connection.QueryAsync<KindRow>(
+            "SELECT hash, entry_type AS Kind FROM entries");
         foreach (var (hash, kind) in rowKinds)
         {
             kinds.ShouldContainKey(hash);
@@ -176,8 +179,8 @@ public sealed class TypedEntryMigrationTests
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
-        var kinds = await connection.QueryAsync<(string Hash, string? Kind)>(
-            "SELECT hash, entry_type FROM entries");
+        var kinds = await connection.QueryAsync<KindRow>(
+            "SELECT hash, entry_type AS Kind FROM entries");
         foreach (var (hash, kind) in kinds)
         {
             kind.ShouldNotBeNull($"the row {hash} must carry a kind after the upgrade");
@@ -247,7 +250,7 @@ public sealed class TypedEntryMigrationTests
     /// <summary>The vectors the bank holds: rowid to the raw bytes.</summary>
     private static async Task<Dictionary<long, byte[]>> ReadVectorsAsync(SqliteConnection connection)
     {
-        var rows = await connection.QueryAsync<(long Rowid, byte[] Embedding)>(
+        var rows = await connection.QueryAsync<VectorBlobRow>(
             "SELECT rowid, embedding FROM vec_entries");
         return rows.ToDictionary(r => r.Rowid, r => r.Embedding);
     }
@@ -255,9 +258,9 @@ public sealed class TypedEntryMigrationTests
     /// <summary>The kind each vector is filed under, read back from the partition column.</summary>
     private static async Task<Dictionary<string, string>> ReadVectorKindsAsync(SqliteConnection connection)
     {
-        var rows = await connection.QueryAsync<(string Hash, string Kind)>(
-            "SELECT e.hash, v.type FROM vec_entries v JOIN entries e ON e.id = v.rowid");
-        return rows.ToDictionary(r => r.Hash, r => r.Kind);
+        var rows = await connection.QueryAsync<KindRow>(
+            "SELECT e.hash, v.type AS Kind FROM vec_entries v JOIN entries e ON e.id = v.rowid");
+        return rows.ToDictionary(r => r.Hash, r => r.Kind!);
     }
 
     /// <summary>Stamps the bank as an older version and clears the digest, so the ladder runs.</summary>
