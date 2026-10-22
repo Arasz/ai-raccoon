@@ -200,3 +200,16 @@ worth more than saving one minor version.
 
 The entry-type work continues on `task/air-entry-type-classifier`, which builds on the rename —
 so it is 2.1.0 by construction, and the rename's own verification pass is not invalidated by it.
+
+**The schema cannot ship without the parameter.** Measured against the merged 2.0.0 binary, a
+v20 bank refuses to open: `bank schema v20 is newer than this binary supports (v19)`, the MCP
+server does not start, and every read-write verb fails the same way (`doctor` still runs and
+names the mismatch). ADR-0019's forward-version write guard is why — the ladder only ever moves
+forward, so there is no downgrade path. The v20 step fires on the first read-write open, not
+lazily.
+
+So a schema-only 2.1.0 is a one-way door: every user's bank becomes unreadable by 2.0.0, in
+exchange for a type no client can ask about, and a rollback is a dead end rather than a
+rollback. 2.1.0 therefore ships the schema v20, the entry-type parameter and the TTL rule
+together. The breaking-changes entry for 2.1.0 says so in as many words: "2.1.0 migrates your
+bank to v20; 2.0.0 can no longer open it."
