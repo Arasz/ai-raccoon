@@ -67,14 +67,19 @@ internal static partial class SettingsEndpoint
                         try
                         {
                             key = ProjectSettingsKeys.WithProjectId(write.Key, folded.ProjectId);
+
+                            // The refusal check belongs inside the try: the reserved shared target
+                            // refuses a per-project write by throwing (shared-project-conflict), and
+                            // an escaping ArgumentException became a 500 — the CLI then told the
+                            // caller it was a server bug instead of naming the owner to repair.
+                            if (await RefuseProjectAsync(key, write.Value, folded, store, registration, ctx) is { } refusal)
+                            {
+                                return Refused(refusal);
+                            }
                         }
                         catch (ArgumentException exception)
                         {
                             return Results.BadRequest(exception.Message);
-                        }
-                        if (await RefuseProjectAsync(key, write.Value, folded, store, registration, ctx) is { } refusal)
-                        {
-                            return Refused(refusal);
                         }
                     }
 
