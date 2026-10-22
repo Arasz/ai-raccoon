@@ -1,0 +1,265 @@
+{
+  "_note": "The post-rename pass over 2.0.0. The 1.63.0 report (docs/work/checklist/2026-10-22-1.63.0-release.json) is the baseline; this run re-derives every item against the merged 2.0.0 build, because the rename changed the tool names every step calls. The running binary is the package built from origin/main (the 2.0.0 merge commit), installed into a scratch tool path - the user's global tool was not touched by this run (it was upgraded to 2.0.0 separately, during the run, and the live server was read for the rename item only).",
+  "run": {
+    "date": "2026-10-22",
+    "branch": "origin/main (the 2.0.0 merge, 3ea9825a)",
+    "commit": "0b100b5c (the tip of origin/main at the time of the run; VERSION 2.0.0)",
+    "data-root": "~/.cache/ai-raccoon-checklist/2026-10-22-1.63.0/ck/p20-* (one scratch root per lane)",
+    "note": "A scratch --data-root per lane, never ~/.ai-raccoon. The live bank was read only through a copy (ck/livecopy, 25,313 rows) for the long-query timing item, and read-only for the live-server rename check."
+  },
+  "derived": {
+    "version": "2.0.0",
+    "mcp-tool-count": "30",
+    "mcp-prompt-count": "2",
+    "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run. The running binary agrees: --version 2.0.0, tools/list 30, prompts/list 2."
+  },
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "this run, against the 1.63.0 report's item 'memory-search-hybrid-retrieval'",
+      "prior-claim": "The 1.63.0 run recorded that the semantic query 'an antique navigation instrument reflecting evening light inside a stargazing room' is one 'that keyword match cannot carry', and backed it with two observations: a keyword-only control (vectorWeight 0) returning 'results: []', and the bank agreeing that the keyword leg has nothing - 'SELECT count(*) FROM entries_fts WHERE entries_fts MATCH ...' -> 0.",
+      "what-is-actually-true": "The premise does not hold, and did not hold in 1.63.0 either - the prior run's two observations were a measurement artefact, not a property of the keyword leg. The FTS plan for a query with more than four content tokens is an OR-join over the RAW tokens, and the raw token list keeps stopwords (FtsQueryNormalizer.BuildPlan: 'var orTerms = rawTokens.Count <= MaxOrTerms ? rawTokens.Select(Term).ToList() : ...'), so the OR-join contains 'a' and 'an'. A note that contains the letter-word 'a' therefore matches the query on the keyword leg alone. Measured on 2.0.0: a control note ('There is a bell in the tower and it rings at noon every day of the year without fail.') that shares NO content word with the query is returned by the keyword-only query with 'legs: [{legName: fts, rank: 1}]'. Measured on 1.63.0 with the same content and the same query: the OR-list matches 1 row and the token 'a' alone matches it - identical behaviour, so this is not a 2.0.0 regression. The FtsQueryNormalizer is byte-identical between d06746fc and origin/main. The prior run's 0 must have been read before the note's FTS row existed: measured here, the FTS row is present IMMEDIATELY after the write, so a 0 means the note was not there yet, not that the keyword leg was empty.",
+      "evidence": "2.0.0: 'query (keyword only, vectorWeight 0) -> results: [(notes/control.md, 1)]' with 'legs: [{legName: fts, rank: 1}]' for a control that shares no content word with the query. The A/B against 1.63.0: '-- 1.63.0: the OR-list matches 1 row(s); the token a alone matches 1; rows/chunk_index [(1, '0')]' and '-- 2.0.0: the OR-list matches 1 row(s); the token a alone matches 1; rows/chunk_index [(1, '0')]'. The normalizer is unchanged: 'git diff d06746fc origin/main -- src/AiRaccoon.Infrastructure/Sqlite/Memory/FtsQueryNormalizer.cs' -> empty.",
+      "so-what": "The hybrid search works, but the keyword leg is far weaker than the prior run's evidence claimed: for any query longer than four content words, the OR-join carries stopwords, so the FTS leg matches most English notes and the vector leg's contribution is masked in the fusion. Any measurement that used 'the FTS leg finds nothing' as a control was measuring the wrong thing. The fix belongs in the OR-join (use the stopword-free token set, as the long-query branch already does), and it is a retrieval-quality change rather than a release blocker for 2.0.0 - but the 1.63.0 report's claim that this query 'cannot be carried by keyword match' should not be carried forward."
+    },
+    {
+      "prior-run": "this run, against the 1.63.0 report's item 'memory-search-hybrid-retrieval' (the premise itself)",
+      "prior-claim": "The 1.63.0 report's evidence for the item's premise is the pair of observations above.",
+      "what-is-actually-true": "The item still PASSES on 2.0.0 - the written note is returned at ranking 1 with both legs ('fts' rank 1, 'vector' rank 1, cosine 0.8498, fusionStrength 1) - so the outcome was right. The reason was wrong, and a reason that is right about the outcome and wrong about the cause is the kind of stale fact that survives releases.",
+      "evidence": "'query (hybrid) -> results: [(notes/astrolabe.md, 1)]' with 'legs: [{legName: fts, rank: 1}, {legName: vector, rank: 1}]' and 'cosine: 0.8497814685106277'.",
+      "so-what": "The item is kept, and its reason is re-derived; the premise is flagged so the next run does not lean on it again."
+    },
+    {
+      "prior-run": "this run, against the 1.63.0 report's item 'reserved-name-registration-is-not-refused' (the 1.63.0 fail)",
+      "prior-claim": "Minting a project under the reserved literal name 'shared' registered a second, private project that no name lookup could ever find again, and the reserved target activated and published over it. The activation guard (SharedProjectStorage.RequireSharedAvailableAsync) tested the reserved ID, not the name.",
+      "what-is-actually-true": "Fixed on 2.0.0, and the fix is visible in the bank rather than only in the message. The mint is refused with a reason, nothing is registered, and the projects table stays EMPTY while the reserved target publishes its document normally - so there is no private owner left to strand. The whole chain agrees: refusal, empty projects table, target activation, and the ordinary-only tools' refusals.",
+      "evidence": "'mint a PRIVATE project named shared first: invalid-argument: reserved-name: shared is the reserved shared target; it needs no minted id and cannot be registered under another id. Nothing was registered.'; 'get_project_id {name: shared}: {\"data\": {\"projectId\": \"shared\"}}'; 'projects table: []'; 'get_store_statistics {projectId: shared}: {\"entries\": 1, \"pending\": 1, \"contexts\": [\"shared\"]}'.",
+      "so-what": "The 1.63.0 report's only fail is closed on the merged main, verified by the bank state and not only by the message. The 1.63.0 report keeps its fail - its subject was 1.63.0, where the defect exists."
+    },
+    {
+      "prior-run": "this run, against the 1.63.0 report's appendix '2.0.0 tool names'",
+      "prior-claim": "The appendix recorded the 2.0.0 names and the 17 All / 13 Project split as read off the branch heads (99ef8b8c and 638b1043), so a later pass would not have to re-derive them.",
+      "what-is-actually-true": "The appendix is exactly right: the live surface of the merged 2.0.0 build is the same 30 names, with no additions and no omissions, and the scope split on the merged source is 17 All / 13 Project with the same membership. The prediction held from the branch to the merge.",
+      "evidence": "'live names not in the appendix: []', 'appendix names not live: []', 'identical sets: True'. The declarations on origin/main: 'All (17): add_watch, embed_deferred_entries, get_engine_statistics, get_entry, get_index, get_project_id, get_quality_report, get_store_statistics, get_watch_status, ingest_directory, ingest_file, query, remove_watch, save_project_id_token, set_memory_usage_record, set_query_result_grade, sync_to_cloud' and 'Project (13): add_memory, close_workspace, delete_context, delete_entry, delete_memory_from_ranking, discard_workspace, get_memories_sharing_ranking, get_workspace_status, initialize_workspace, set_memory_ttl, share_memory, trigger_memory_cleanup, trigger_memory_sharing'.",
+      "so-what": "The appendix was a usable handoff: it named every tool and its scope, and the merged build matched it name for name."
+    },
+    {
+      "prior-run": "this run, against the rename itself (the surface change 2.0.0 makes)",
+      "prior-claim": "The rename's own plan treats it as a hard rename with no alias layer: 'A hard rename breaks every existing client; an alias layer is new work' (docs/work/2026-10-21-tool-surface-rename-and-entry-types.md). The checklist confirms the server side is exact - 30 new names, 30 refusals - so what is left is the client side.",
+      "what-is-actually-true": "A client that was CONNECTED across the upgrade keeps its cached tool list, and it is now a list of 30 dead names. This session is the demonstration: the server was upgraded to 2.0.0 during the run, and the agent harness still advertises the 30 pre-rename names. Calling one of them now returns 'Unknown tool: memory_search' (JSON-RPC -32602), and the new names are not callable at all from the same session - 'tools.mcp__ai_raccoon__query does not exist'. The client is not broken; it is holding a stale catalogue. The same shape bites the agent instructions: the framework's refreshed hook matcher targets 'query', so the memory-first gate no longer fires on a 'memory_search' call, and the gate's own message tells the agent to search memory with a tool it can no longer call. The refusal is also a raw JSON-RPC error with no guidance in it: a client that calls a renamed name learns only that the tool is unknown, not that it was renamed.",
+      "evidence": "In this session, after the live server moved to 2.0.0: 'mcp__ai_raccoon__memory_search' -> 'Error: Request failed (remote): Unknown tool: memory_search'. The harness's catalogue still lists the 30 old names ('count=30', mcp__ai_raccoon__memory_search, ... mcp__ai_raccoon__project_id_token_get) and no new one. A raw call at the live server: 'calling the OLD name on the live server: {\"_rpc_error\": {\"code\": -32602, \"message\": \"Unknown tool: memory_search\"}}' against 'calling the NEW name on the live server: {\"data\": {\"results\": [...]}}' - so the server is right and the client's catalogue is stale. The gate's message during the same window: 'Memory-first: search memory for ... first, then re-run this search.' - an instruction to use a name the server no longer serves.",
+      "so-what": "Three things belong in 2.0.0's release notes and one belongs in a follow-up: (1) a client must reconnect after the upgrade - the tool list is fetched at connect time, so an open session silently keeps a catalogue of dead names; (2) an agent's cached instructions can name tools that no longer exist, and the framework's hook matcher was updated to the new name, so the gate goes dormant until the client refreshes; (3) the unknown-tool error carries no rename hint, which is what the 2.0.1 'unknown tool call guidance' branch is for - this run's evidence supports that work; and (4) the 1.63.0 -> 2.0.0 upgrade is a hard break for every existing client, which the rename plan accepted deliberately."
+    }
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release build and pack succeed; the packaged tool reports 2.0.0 and its live surface matches the derived 30 tools and 2 prompts; the user's global tool is left alone.",
+      "command": "dotnet build src/AiRaccoon/AiRaccoon.csproj -c Release (in a git archive of origin/main); cp the 92.9 MB Models/granite-embedding-small-english-r2/model_fp16.onnx_data into the source tree (gitignored, absent from a fresh checkout); python3 scripts/download-mlx-runtime.py; dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=osx-arm64 -o $S/artifacts20; dotnet tool install ai-raccoon --version 2.0.0 --add-source $S/artifacts20 --tool-path $S/tool20; $S/tool20/ai-raccoon --version; ai-raccoon --version; tools/list + prompts/list against the scratch server",
+      "evidence": "Build: 'ok dotnet build: 4 projects, 0 errors, 0 warnings'. The first pack FAILED with the product's own guard: 'The bundled embedding model's weights (Models/granite-embedding-small-english-r2/model_fp16.onnx_data) are missing, so this package could not load its default engine. Run python3 scripts/download-embedding-model.py first.' After copying the weights and fetching the MLX runtime: 'Successfully created package .../ai-raccoon.osx-arm64.2.0.0.nupkg' (143.1M) and 'Successfully created package .../ai-raccoon.2.0.0.nupkg' (8.6K). The scratch install: 'Tool ai-raccoon (version 2.0.0) was successfully installed.' and '$S/tool20/ai-raccoon --version' -> '2.0.0'. The user's global tool: 'ai-raccoon --version' -> '2.0.0+3ea9825a06165a474368d55f4c3e249a6c454e11' (upgraded separately, during this run, from the published package - this checklist did not touch it). Against the scratch 2.0.0 server: 'tools/list count: 30', 'prompts/list count: 2' - both equal to the derived facts.",
+      "observed-result": "The build, the pack and the packaged tool all agree with the tree: 2.0.0, 30 tools, 2 prompts. The pack's two guards (model weights, MLX runtime) are real and they fire on a fresh checkout - the checklist had to satisfy both before a package could be produced.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "The server starts on an ephemeral port read back from its own output, and --restart cycles the process on the same port and data root.",
+      "command": "$S/tool20/ai-raccoon --data-root ck/p20-life serve --port 0 --idle-timeout 0; lsof -nP -iTCP:<port> -sTCP:LISTEN -t; $S/tool20/ai-raccoon --data-root ck/p20-life serve --restart --port <port> --idle-timeout 0 (backgrounded); lsof again",
+      "evidence": "'serve --port 0 -> the server's own line names port 57854' (the port is read back from the server's own 'serving on port N' line, never assumed). 'lsof on that port while running: 61992'. After the restart: 'lsof on that port after the restart: 62008' - a different pid on the same port, and the server's own line reads 'ai-raccoon: 2.0.0 serving on port 57854 from .../tool20/.store/ai-raccoon/2.0.0/...'.",
+      "observed-result": "The server binds an ephemeral port, reports it, and --restart replaces the process on that port against the same data root. Port 7721 was never touched.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "expected-result": "add_memory stores a note and returns a hash; the three machine-notification shapes are refused with a reason and no fabricated hash; the two control writes (a near-miss that quotes the marker inside a sentence, and a plain note) are stored.",
+      "command": "post20/main_lane.py against a 2.0.0 scratch server (ck/p20-main): add_memory of the parish-minutes note (sourceFile notes/minutes.md, section decision); add_memory of the three Hermes notification shapes; add_memory of the two controls",
+      "evidence": "'write-ordinary' -> '\"hash\": \"24a05c3193dd498131c8a48cdf77eedd69d6947d3ac416f9174bd791bac38f7a\", \"path\": \"0ceb9d8b...b28.md\", \"stored\": true'. The three notification shapes each -> '\"hash\": \"\", \"path\": \"\", \"stored\": false, \"reason\": \"rejected by noise policy HermesBackgroundProcessLog\"'. The controls: 'write-control-nearmiss' -> stored=true with a hash, 'write-control-plain' -> stored=true with a hash.",
+      "observed-result": "The write path stores and reports truthfully, and the rejection is explicit - a refused write returns a reason and an empty hash rather than an entry that does not exist.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "query returns the written entry through hybrid BM25 + vector RRF ranking.",
+      "command": "post20/search_lane.py against ck/p20-search with 'model embedding set local' first: add_memory of the astrolabe note; query 'an antique navigation instrument reflecting evening light inside a stargazing room' {kind: memory, minRelativeScore: 0, limit: 8}; the same query with vectorWeight 0; sqlite3 -readonly for the FTS count",
+      "evidence": "'query (hybrid) -> results: [(notes/astrolabe.md, 1)]'; 'evidenceByHash: ... legs: [{legName: fts, rank: 1}, {legName: vector, rank: 1}], cosine: 0.8497814685106277; fusionStrength: 1'; 'fusionStats: {participatingLegs: [fts, vector]}'. The keyword-only control (vectorWeight 0) ALSO returns the note, and the FTS count for the OR-list is 1 - see the finding against the prior run: the keyword leg carries this query on the token 'a'.",
+      "observed-result": "The hybrid search works and both legs fire, but the item's premise - that keyword match cannot carry this query - does not hold, and did not hold in 1.63.0 either. The outcome passes; the prior run's reason was wrong.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "The search itself is correct on 2.0.0. The weak premise is recorded as a finding against the prior run, not as a defect of this build."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "expected-result": "get_entry returns the full entry for a hash reachable from the caller, and an unknown hash refuses rather than returning empty.",
+      "command": "post20/read_lane.py against ck/p20-main: get_entry {projectId: P, hash: <the ordinary write's hash>}; get_entry {projectId: P, hash: 0000...0000}",
+      "evidence": "'get-by-hash' -> '\"hash\": \"24a05c3193dd498131c8a48cdf77eedd69d6947d3ac416f9174bd791bac38f7a\", \"value\": \"The parish council met in the church hall on Tuesday. ... Decision: the bell repair invoice was approved.\", \"path\": \"0ceb9d8b...b28.md\", \"context\": \"project:01a16273-...\", \"entryType\": \"memory\"'. 'get-unknown-hash' -> 'unknown-hash: No entry with hash '0000000000000000000000000000000000000000000000000000000000000000' in project '01a16273-243c-72b9-a54d-67d3e89b401a'.'",
+      "observed-result": "The merged get_entry reads either corpus by hash, names the corpus it read ('entryType': 'memory'), and refuses an unknown hash by name instead of returning an empty entry. The field's meaning is the corpus discriminator, not the 2.1.0 taxonomy - see the finding about that collision.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "A file#section anchor resolves its exact chunk.",
+      "command": "post20/read_lane.py: query 'notes/minutes.md#decision' {kind: memory, minRelativeScore: 0, limit: 5}",
+      "evidence": "'anchor' -> one result, '\"sourceFile\": \"notes/minutes.md\", \"chunkIndex\": 0, \"totalChunks\": 1', ranking 1, with 'legs: [{legName: fts, rank: 1}]'",
+      "observed-result": "The anchor resolves the section's own chunk under the renamed tool.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "keyword-search-across-a-chunk-boundary",
+      "expected-result": "A keyword search finds an identifier that sits where a chunk boundary would fall, and a term longer than a whole chunk; both hits must carry an fts leg.",
+      "command": "post20/keyword_lane.py against ck/p20-kw: add_memory of the 45x space-joined fete sentence plus the invoice sentence (sourceFile notes/fete.txt); add_memory of a note holding 40 concatenated SHA-256 hex digests (2,560 chars, sourceFile notes/long-term.txt); sqlite3 -readonly for the premises; query 'vk83jq'; query of the 2,560-char term",
+      "evidence": "Premises: 'rows for notes/fete.txt: 2', 'rows holding vk83jq whole: 1', 'rows holding the long term whole: 0', 'rows for notes/long-term.txt: 3'. Search 'vk83jq': the row at chunkIndex 1 of notes/fete.txt ranks 1 with 'legs: [{legName: fts, rank: 1}]'. Search of the 2,560-char term: the row at chunkIndex 1 of notes/long-term.txt ranks 1 with 'legs: [{legName: fts, rank: 1}]' (the other two hits carry vector legs only).",
+      "observed-result": "Both keyword hits are carried by the FTS leg, not by the vector leg finding the words around the identifier.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "note-opening-chunk-reports-index-zero",
+      "expected-result": "A note that cites a source file numbers its chunks in text order, so its opening reports chunkIndex 0.",
+      "command": "post20_extra.py chunk: add_memory of 62 blank-line-separated paragraphs, the first 'Opening marker zq71 records the first entry of the parish minutes.' (sourceFile notes/minutes62.md); query 'zq71'; sqlite3 -readonly for the row's chunk_index",
+      "evidence": "'add_memory -> stored=True hash=988d50209ed86d792943d8e9fb41bf9e5e2f367e7c617150231a35bf5b8285d6'; 'query zq71 -> [[notes/minutes62.md, 0]]'; 'sqlite: rows holding zq71 -> chunk_index/total_chunks [(0, 2)]'",
+      "observed-result": "The opening paragraph is chunk 0 in both the search result and the row itself.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "poison-memory-row-isolated-and-abandoned",
+      "expected-result": "A row the embedding engine refuses is split from its batch and abandoned after three attempts, while the other rows embed normally.",
+      "command": "post20/poison_lane.py against ck/p20-poison: a bank with no engine set, four ordinary writes + one write holding POISON-7Q; python3 .agents/skills/ai-raccoon-manual-checklist/scripts/poison-embedding-stub.py --port 0 --log stub.log; 'model embedding set openai stub-embed <url>'; embed_deferred_entries x4; then three more calls",
+      "evidence": "'stats before: {\"entries\": 5, \"pending\": 5, ...}'; 'embed_pending call 0: {\"data\": {\"processed\": 4, \"pending\": 1}}'; calls 1-5: '{\"data\": {\"processed\": 0, \"pending\": 1}}' - the poison row is never processed again. 'embed_state counts: [(embedded, 0, 4), (pending, 3, 1)]' - the four ordinary rows embedded, the poison row is alone and pending. 'stub log: [ok 1, poison 5, ...]' with 'poison lines: 6' and 'poison lines after three more calls: 6 (was 6 )' - the abandoned row is not retried.",
+      "observed-result": "The refused row is isolated from its batch, retried three times and then abandoned, and the four healthy rows embed normally. Under the renamed tool the call is embed_deferred_entries.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "expected-result": "Each registered write-path policy rejects what it claims to, the rejected content stays retrievable from the noise store, and the control writes are stored.",
+      "command": "the three rejected writes and the two control writes from the write item; 'ai-raccoon --data-root $S/ck/p20-main --port <port> noise entries'; a read of the registered policy set in src (AppRegistrations.cs)",
+      "evidence": "The three notification shapes are refused with 'rejected by noise policy HermesBackgroundProcessLog' and no hash; the two controls are stored. The registered policy is the one the shape belongs to (the Hermes process-log policy), so the rejection is attributable rather than incidental. The noise store CLI answers on the same bank.",
+      "observed-result": "The registered policy rejects exactly the shapes it claims to, and the controls pass - a policy that rejected everything would fail this item.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "read-path-query-guard",
+      "expected-result": "The refuse and annotate tiers behave as specified, and a detector that ships disabled is still disabled until explicitly armed.",
+      "command": "'settings queryguard list'; query with a stack-frame query; 'settings queryguard structural enable'; the same query again; queries with a log-prefix and a control sentence",
+      "evidence": "'settings queryguard list -> enabled: True  shadow: False  structural: False  threshold: 0.98939822280316'. The stack-frame query before arming: 'results=0' with the annotation 'This query contains what looks like log or stack-trace output. Memory search matches meaning, not literal text - if you're not intentionally searching for this exact fragment, try rephrasing as a question about what you want to find.' After 'settings queryguard structural enable -> query guard structural detector enabled' the same query carries the same annotation. The control sentence stored ('stored=True hash=8997f022...').",
+      "observed-result": "The guard annotates a stack-frame-shaped query and leaves the shipped-disabled detectors alone until they are armed; the control is unaffected.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "long-query-keyword-terms-capped",
+      "expected-result": "A pasted query of thousands of characters returns in seconds on a bank of real scale, because its keyword terms are capped.",
+      "command": "sqlite3 -readonly ~/.ai-raccoon/memory.db \"VACUUM INTO '$S/ck/livecopy/memory.db'\" (the live bank's copy, 25,313 rows, read-only source); the copy served with the 2.0.0 tool; query of CLAUDE.md[:7000] and of 7,000 stopword chars + 'parish bell repair fund'",
+      "evidence": "'the scale bank: rows 25313 user_version 19'. 'paste length: 7000'; 'claude-md paste (7000 chars): 1.18s results=5' with the warning 'This query is over 4,024 characters. Semantic search only embeds roughly the first 1,022 tokens of a query ... Keyword (FTS) matching is capped too: it searches only the first 64 distinct words of a query this long.'. 'stopword paste (7000 chars): 0.59s results=5' with the same warning.",
+      "observed-result": "Both 7,000-character pastes answer in about a second on a 25,313-row bank, and the cap is announced in the response rather than silently truncating.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "Watch status reflects live registrations.",
+      "command": "the watch lane ck/p20-watch: 'settings ingest scope add <P> <dir>', 'settings watch enable <P> true', add_watch on a scratch directory holding x.md, w.md, y.md, node_modules/pkg/index.md and .git/notes.md; get_watch_status",
+      "evidence": "'add_watch -> {\"data\": {\"projectId\": \"01a16274-...\", \"path\": \".../ck/p20-watch/watched\", \"pruned\": []}}'. 'watch status: {\"data\": {\"watches\": [{\"projectId\": \"01a16274-...\", \"path\": \".../watched\", \"state\": \"Healthy\", \"lastSync\": \"2026-10-22T07:12:17.329036+00:00\", \"skippedCount\": 0, \"skipped\": []}]}}'. The watch_files rows cover only the three ordinary files - the node_modules and .git paths are absent.",
+      "observed-result": "The watch registers, reports Healthy with a last-sync time, and the ignored paths stay out of the index.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "watch-catch-up-heals-a-missed-change",
+      "expected-result": "A restart re-digests a file that changed without an event, judged against that file's own fingerprint.",
+      "command": "the watch lane ck/p20-watch: a change to y.md while the server runs (last_change_ts moves, y's updated_at does not); the server is stopped; x.md is rewritten with 'xmarkphrasf' (same byte count); the server restarts; the searches and the watch status are read again",
+      "evidence": "'last_change_ts 1792653140 x updated_at 1792653137 w updated_at 1792653137' - the global last-change moved while x's own fingerprint did not. 'x mtime 1792653138 (between 1792653137 and 1792653140 )'; 'w mtime 1792653017 (before its updated_at 1792653137 )'. After the restart: 'search xmarkphrasf -> [(.../watched/x.md, 0)]', 'search wmarkphrasezz -> [(.../watched/w.md, 0)]', and the unchanged files keep their old content. 'watch status after restart: ... state: Healthy, skippedCount: 0'.",
+      "observed-result": "The restart heals the file that changed without an event - judged by that file's own fingerprint, not by the global timestamp - and leaves the untouched files alone.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "The propose tier reports candidates and queue state accurately, and the discard is reflected in the queue.",
+      "command": "ck/p20-promo4: 'model embedding set local' (the candidate query requires embed_state='embedded', so the notes must be embedded to be eligible); four durable-fact notes; embed_deferred_entries until pending is 0; trigger_memory_sharing {projectIds: [P], mode: 'propose', limit: 5}; get_memories_sharing_ranking {projectId: P}; delete_memory_from_ranking {projectId: P, hash}; get_memories_sharing_ranking again",
+      "evidence": "'trigger_memory_sharing (propose) -> {\"candidates\": [{\"hash\": \"d0d65dd7ac8a...\", \"valuePreview\": \"The parish council always meets in the church hall...\"}]}' with 'meta: {\"waitingPromotionsCount\": 3, \"capacity\": {\"reserved\": 1000, \"used\": 3, \"borrowing\": false}, \"oldestWaitSeconds\": 0}'. 'get_memories_sharing_ranking -> {\"rows\": [{\"hash\": \"d0d65dd7ac8a...\", \"score\": 3.2601093613298335, \"reasons\": [\"organic-note\", \"durable-fact-language\", \"durable-rule-language\"], \"createdAt\": 1792653500, ...}]}'. 'delete_memory_from_ranking (d0d65dd7ac8a) -> {\"data\": {\"discarded\": 1}, \"meta\": {\"waitingPromotionsCount\": 2, ...}}' and the queue after the discard holds two rows.",
+      "observed-result": "Propose, list and discard agree with each other, and the queue state carries the numbers behind it. The candidates are real (score and reasons), not an empty list - which is why the bank needed the embedding engine: the candidate query requires embed_state='embedded'.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "Every derived tool and prompt is reachable.",
+      "command": "tools/list and prompts/list; prompts/get for both prompts; then a call to each of the 30 tools (after 'settings access set <P> full', 'settings ingest scope add <P> <corpus>' and 'settings watch enable <P> true', which three tools require)",
+      "evidence": "'tools/list count: 30'; 'prompts/list count: 2'; 'prompts/get workspace-consolidation-guide -> {\"description\": \"Ritual for finishing a workspace: review the outbox, promote durable facts, drop noise.\", ...}'; 'prompts/get memory-usage-guide -> {\"description\": \"How to use the ai-raccoon memory server: project ids, workspace isolation, promotion to shared, and search scopes.\", ...}'. 'tools that answered a call: 30' - every one of the 30 answered, none errored.",
+      "observed-result": "All 30 tools and both prompts are reachable under their new names; none of the 30 calls errored.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "observability-event-ids",
+      "expected-result": "Every event id emitted by this run's servers resolves against the logging event-id reference.",
+      "command": "the 20 server logs of this run (ck/p20-*/*.log, copied to p20logs/) plus the poison stub's own log; expand the reference's table ranges and comma lists in docs/reference/logging-event-ids.md and check each emitted id against the set",
+      "evidence": "'documented ids: 225'. 'AiRaccoon ids emitted: 22 [428, 443, 444, 446, 447, 510, 525, 601, 650, 651, 660, 672, 673, 674, 692, 703, 899, 910, 911, 912, 1003, 1005]' - every one resolves. The only ids outside the reference are '0' and '14', both from 'Microsoft.Hosting.Lifetime[14]' and 'Microsoft.Hosting.Lifetime[0]' - the framework's own logger, not this product's. 'UNRESOLVED COUNT: 2' (both framework).",
+      "observed-result": "No id emitted by this run is missing from the reference; the only ids outside it belong to the framework's own logger - the same two the 1.63.0 run reported.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "reserved-shared-target-documents-and-refusals",
+      "expected-result": "The reserved shared target serves watched documents to every project, refuses scope=project, and refuses the ordinary-only tools.",
+      "command": "ck/p20-shared: 'settings ingest scope add shared <docs>', 'settings watch enable shared true', add_watch {projectId: 'shared', path: <docs>}; get_project_id {name: 'shared'}; query {projectId: 'shared', scope: 'all'}; get_store_statistics {projectId: 'shared'}; the scope gate against the reserved target with access raised to full",
+      "evidence": "'get_project_id {name: shared} -> {\"data\": {\"projectId\": \"shared\"}}'. 'add_watch {projectId: shared} -> {\"data\": {\"projectId\": \"shared\", \"path\": \".../shared-docs\", \"pruned\": []}}'. 'query {projectId: shared, scope: all} -> the handbook document at ranking 1'. 'get_store_statistics {projectId: shared} -> {\"entries\": 1, \"pending\": 1, \"contexts\": [\"shared\"]}'. With access raised to full, the destructive ordinary-only tools refuse: 'delete_entry -> invalid-argument: shared-project-unsupported: delete_entry requires an ordinary project; shared supports document ingestion and watches.'; 'set_memory_ttl -> ... shared-project-unsupported ...'; 'delete_context -> ... shared-project-unsupported ...'.",
+      "observed-result": "The reserved target behaves as ADR-0137 describes under the renamed tools, and the ordinary-only tools refuse it with the same message as in 1.63.0.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "reserved-name-registration-is-not-refused",
+      "expected-result": "Minting a project under the reserved literal name 'shared' is refused and registers nothing.",
+      "command": "ck/p20-shared: save_project_id_token {name: 'shared'} FIRST, before the reserved target is used; then get_project_id {name: 'shared'}; then the target's own activation (ingest scope, watch enable, add_watch); sqlite3 -readonly for the projects table",
+      "evidence": "'== 1. mint a PRIVATE project named shared first: \"invalid-argument: reserved-name: shared is the reserved shared target; it needs no minted id and cannot be registered under another id. Nothing was registered.\"'. '== 2. get_project_id {name: shared}: {\"data\": {\"projectId\": \"shared\"}}' - the reserved id, no private project behind it. The target then activates and publishes the document normally. '== 7. projects table: []' - the projects table is EMPTY: no private owner was registered under the reserved name, and the reserved target published over nothing.",
+      "observed-result": "The 1.63.0 failure is fixed and the fix is visible in the bank: the mint is refused with a reason, nothing is registered, and the reserved target activates over an empty projects table instead of over a private owner.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "This was the 1.63.0 report's only fail. It now passes on 2.0.0, verified live: the refusal, the empty projects table, and the target's normal operation afterwards."
+    },
+    {
+      "item": "tool-scope-declared-on-the-tool",
+      "expected-result": "Every MCP tool declares its scope, the classification is 17 shared-allowed and 13 ordinary-only, and the gate's answer follows the declaration (ADR-0139).",
+      "command": "read the [McpToolScope(ToolScope.X)] declarations under src/AiRaccoon/Tools on origin/main, resolving each [McpServerTool(Name = TnX)] constant; then call the All-scoped and Project-scoped tools against the reserved shared target and against an ordinary project",
+      "evidence": "Declarations: 30 tools carry a scope. All (17): add_watch, embed_deferred_entries, get_engine_statistics, get_entry, get_index, get_project_id, get_quality_report, get_store_statistics, get_watch_status, ingest_directory, ingest_file, query, remove_watch, save_project_id_token, set_memory_usage_record, set_query_result_grade, sync_to_cloud. Project (13): add_memory, close_workspace, delete_context, delete_entry, delete_memory_from_ranking, discard_workspace, get_memories_sharing_ranking, get_workspace_status, initialize_workspace, set_memory_ttl, share_memory, trigger_memory_cleanup, trigger_memory_sharing. Runtime on the reserved target: the All-scoped tools answer (query returns the shared document, get_store_statistics -> {\"entries\": 1, \"pending\": 1, \"contexts\": [\"shared\"]}, get_index returns the shared-docs tree, get_watch_status -> Healthy) and every Project-scoped tool refuses with 'invalid-argument: shared-project-unsupported: <tool> requires an ordinary project; shared supports document ingestion and watches.'. Against an ordinary project the same tools answer normally ('add_memory -> {\"hash\": \"3062d870...\"}').",
+      "observed-result": "The declared classification and the gate's runtime answers agree, and the split is 17 All / 13 Project - the same split the 1.63.0 report recorded for 2.0.0 from the branch, now read off the merged source.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "renamed-tools-old-names-refused",
+      "expected-result": "The 2.0.0 names serve the surface and every 1.63.0 name is refused; the live surface is exactly the 30 names the 1.63.0 report's appendix predicted.",
+      "command": "tools/list against the packaged 2.0.0 tool; then a call to each of the 30 names the 1.63.0 report recorded, against the same server; the same two calls against the user's LIVE 2.0.0 server on port 7721 (read-only)",
+      "evidence": "'tools/list count: 30'. The live names match the 1.63.0 report's appendix exactly: 'live names not in the appendix: []', 'appendix names not live: []', 'identical sets: True'. Every 1.63.0 name is refused: 'code_get -> {\"_rpc_error\": {\"code\": -32602, \"message\": \"Unknown tool: code_get\"}}', and the same for memory_delete, memory_delete_context, memory_embed_pending, memory_get, memory_ingest_directory, memory_ingest_file, memory_list, memory_performance, memory_promotion_discard, memory_promotion_list, memory_record_followthrough, memory_record_grade, memory_search, memory_set_ttl, memory_share, memory_share_extract, memory_stats, memory_sweep, memory_sync, memory_watch_add, memory_watch_remove, memory_watch_status, memory_workspace_begin, memory_workspace_consolidate, memory_workspace_discard, memory_workspace_status, memory_write, project_id_get, project_id_token_get' - 'refused as unknown: 30 | not refused: []'. On the live server: 'the LIVE server's tool count: 30', 'old names still present: []', 'calling the OLD name on the live server: {\"_rpc_error\": {\"code\": -32602, \"message\": \"Unknown tool: memory_search\"}}', 'calling the NEW name on the live server: {\"data\": {\"results\": [{\"hash\": \"6cbff1de6b...\", \"ranking\": 1, ...}]}}'.",
+      "observed-result": "The rename is complete and exact: 30 new names, 30 refusals, and the live server agrees. The refusal is a raw JSON-RPC error, however - see the finding about the message a client sees.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": ""
+    }
+  ]
+}
