@@ -29,23 +29,27 @@ public sealed class EntryTypeMigrationTests
     }
 
     /// <summary>
-    ///     The backfill classifies by source: a manual source is a memory, a TRANSCRIPT source is
-    ///     a memory too (the agent wrote it), and a file source is a document.
+    ///     The backfill classifies by the row's SHAPE: a row that mirrors a file on disk has
+    ///     path = source_file and is a document; every other row is agent-written memory - a note
+    ///     that cites a file, a note that came from a transcript, a note with no source at all.
     /// </summary>
     [RetryFact]
-    public async Task EnsureAsync_ClassifiesEveryRowByItsSource()
+    public async Task EnsureAsync_ClassifiesEveryRowByItsShape()
     {
         await using var connection = await OpenLegacyBankAsync();
-        await SeedEntryAsync(connection, "note-hash", "manual", sourceFile: null);
-        await SeedEntryAsync(connection, "transcript-hash", "transcript", sourceFile: "hermes/20260806_215718_fd7f66");
-        await SeedEntryAsync(connection, "document-hash", "file", sourceFile: "docs/guide.md");
+        await SeedEntryAsync(connection, "document-hash", path: "docs/guide.md", sourceFile: "docs/guide.md");
+        await SeedEntryAsync(connection, "citing-note-hash", path: "9f2c.md", sourceFile: "notes/probe.md");
+        await SeedEntryAsync(connection, "transcript-hash", path: "9f2c.md", sourceFile: "hermes/20260806_215718_fd7f66");
+        await SeedEntryAsync(connection, "plain-note-hash", path: "9f2c.md", sourceFile: null);
 
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
-        (await ReadEntryTypeAsync(connection, "note-hash")).ShouldBe("memory");
+        (await ReadEntryTypeAsync(connection, "document-hash")).ShouldBe("file");
+        (await ReadEntryTypeAsync(connection, "citing-note-hash")).ShouldBe("memory",
+            "a note that cites a file is agent-written memory - re-ingesting that file would not bring it back");
         (await ReadEntryTypeAsync(connection, "transcript-hash")).ShouldBe("memory",
             "a transcript is agent-written memory - the session is only its locator");
-        (await ReadEntryTypeAsync(connection, "document-hash")).ShouldBe("file");
+        (await ReadEntryTypeAsync(connection, "plain-note-hash")).ShouldBe("memory");
     }
 
     /// <summary>The backfill only fills NULL types: a rerun never clobbers an explicit one.</summary>
@@ -68,8 +72,8 @@ public sealed class EntryTypeMigrationTests
     public async Task EnsureAsync_WithTheColumnPresentButTheBackfillHalfDone_FinishesIt()
     {
         await using var connection = await OpenLegacyBankAsync();
-        await SeedEntryAsync(connection, "note-hash", "manual", sourceFile: null);
-        await SeedEntryAsync(connection, "document-hash", "file", sourceFile: "docs/guide.md");
+        await SeedEntryAsync(connection, "note-hash", path: "9f2c.md", sourceFile: null);
+        await SeedEntryAsync(connection, "document-hash", path: "docs/guide.md", sourceFile: "docs/guide.md");
         await connection.ExecuteAsync("ALTER TABLE entries ADD COLUMN entry_type TEXT");
         await connection.ExecuteAsync("UPDATE entries SET entry_type = 'memory' WHERE hash = 'note-hash'");
         await StampV19Async(connection);
@@ -82,11 +86,11 @@ public sealed class EntryTypeMigrationTests
     }
 
     /// <summary>
-    ///     A row with no provenance at all (a bank older than source normalisation) falls back to
-    ///     the row's own shape: no source file and no chunks is a note, anything else is a document.
+    ///     A row with no source at all (a bank older than source normalisation) is a memory: it
+    ///     mirrors no file.
     /// </summary>
     [RetryFact]
-    public async Task EnsureAsync_ARowWithoutASource_FallsBackToItsShape()
+    public async Task EnsureAsync_ARowWithoutASource_IsAMemory()
     {
         await using var connection = await OpenLegacyBankAsync();
         await connection.ExecuteAsync(
@@ -97,24 +101,24 @@ public sealed class EntryTypeMigrationTests
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
         (await ReadEntryTypeAsync(connection, "legacy-hash")).ShouldBe("memory",
-            "a row with no source file and no chunks is a note");
+            "a row that mirrors no file is agent-written memory");
     }
 
-    private static async Task SeedEntryAsync(SqliteConnection connection, string hash, string sourceType,
+    private static async Task SeedEntryAsync(SqliteConnection connection, string hash, string path,
         string? sourceFile)
     {
         await connection.ExecuteAsync(
             "INSERT OR IGNORE INTO memory_source (source_type, source_locator, section) "
             + "VALUES (@SourceType, @Locator, NULL)",
-            new { SourceType = sourceType, Locator = sourceFile ?? $"locator-{hash}" });
+            new { SourceType = sourceFile is null ? "manual" : "file", Locator = sourceFile ?? $"locator-{hash}" });
         var sourceId = await connection.ExecuteScalarAsync<long>(
             "SELECT id FROM memory_source WHERE source_type = @SourceType AND source_locator = @Locator",
-            new { SourceType = sourceType, Locator = sourceFile ?? $"locator-{hash}" });
+            new { SourceType = sourceFile is null ? "manual" : "file", Locator = sourceFile ?? $"locator-{hash}" });
         await connection.ExecuteAsync(
             "INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, created_at, "
             + "updated_at, source_id, chunk_index, total_chunks) "
-            + "VALUES (@Hash, 'p.md', 'v', @SourceFile, NULL, 'project', 'proj-a', 1, 1, @SourceId, 0, 1)",
-            new { Hash = hash, SourceFile = sourceFile, SourceId = sourceId });
+            + "VALUES (@Hash, @Path, 'v', @SourceFile, NULL, 'project', 'proj-a', 1, 1, @SourceId, 0, 1)",
+            new { Hash = hash, Path = path, SourceFile = sourceFile, SourceId = sourceId });
     }
 
     private static async Task<string?> ReadEntryTypeAsync(SqliteConnection connection, string hash) =>

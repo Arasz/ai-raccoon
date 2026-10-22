@@ -366,6 +366,7 @@ public sealed partial class ChunkBudgetReconciler(
                         updatedAt = now,
                         sourceId = template.SourceId,
                         ttlDays = template.TtlDays,
+                        entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(group.Path, template.SourceFile)),
                         // Plain notes keep WriteChunks' sentinel; the phase-end repair positions citing notes.
                         chunkIndex = -1,
                         totalChunks = 0

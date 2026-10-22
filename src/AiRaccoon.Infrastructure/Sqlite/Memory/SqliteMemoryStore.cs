@@ -396,7 +396,7 @@ public sealed partial class SqliteMemoryStore(
                         createdAt = now,
                         updatedAt = now,
                         sourceId = source.Id,
-                        entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.FromSource(source.SourceType)),
+                        entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(path, source.SourceLocator)),
                         chunkIndex = -1,
                         totalChunks = 0
                     },
