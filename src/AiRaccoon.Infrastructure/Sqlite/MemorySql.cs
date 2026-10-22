@@ -199,28 +199,38 @@ internal static class MemorySql
     // (docs/plans/2026-08-08-search-knn-perf.md §3.1/§3.4). Row position is the RRF rank; `ORDER BY
     // v.distance, e.path` preserves the existing distance-tie break. Vector hits carry a fallback
     // snippet built in C# (the FTS list's snippet() wins for docs both modalities retrieve).
-    public const string VectorSearchByFilter = """
+    private const string VectorSearchTemplate = """
                                                SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                       v.distance AS Distance, e.source_file AS SourceFile,
                                                       e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
-                                               FROM vec_entries v
+                                               FROM (SELECT rowid, distance FROM vec_entries
+                                                     WHERE ctx = @ctx AND {typeFilter} embedding MATCH @queryVector AND k = @limit) v
                                                JOIN entries e ON e.id = v.rowid
-                                               WHERE v.ctx = @ctx AND v.embedding MATCH @queryVector AND k = @limit
-                                               ORDER BY v.distance, e.path
+                                               ORDER BY v.distance + 0, e.path
+                                               LIMIT @limit
                                                """;
 
     // Structure modality: cosine KNN over the heading-path vectors (vec_structure),
     // same shape as the content query (source identity included) so both lists fuse in C# by
     // entry hash.
-    public const string StructureVectorSearchByFilter = """
+    private const string StructureVectorSearchTemplate = """
                                                         SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                                v.distance AS Distance, e.source_file AS SourceFile,
                                                                e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
-                                                        FROM vec_structure v
+                                                        FROM (SELECT rowid, distance FROM vec_structure
+                                                              WHERE ctx = @ctx AND {typeFilter} embedding MATCH @queryVector AND k = @limit) v
                                                         JOIN entries e ON e.id = v.rowid
-                                                        WHERE v.ctx = @ctx AND v.embedding MATCH @queryVector AND k = @limit
-                                                        ORDER BY v.distance, e.path
+                                                        ORDER BY v.distance + 0, e.path
+                                                        LIMIT @limit
                                                         """;
+
+    public static string SearchByTypes(EntryType types) => types == EntryTypeParameter.Default
+        ? SearchByFilter
+        : SearchByFilter.Replace("AND {filter}", "AND ({filter}) AND e.entry_type IN @entryTypes");
+
+    public static string VectorSearchByTypes(EntryType types, bool structure = false) =>
+        (structure ? StructureVectorSearchTemplate : VectorSearchTemplate).Replace("{typeFilter}",
+            types == EntryTypeParameter.Default ? "" : "type IN @entryTypes AND ");
 
     // @scope null is delete_entry (N7/F26): every row sharing the write's path goes, not just
     // the reported hash — a manual add_memory's N chunks share one content-addressed path. The

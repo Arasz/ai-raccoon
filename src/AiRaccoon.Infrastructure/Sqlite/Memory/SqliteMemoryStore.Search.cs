@@ -49,7 +49,7 @@ public sealed partial class SqliteMemoryStore
         ByHashIndex byHashIndex, CancellationToken cancellationToken)
     {
         var queryParameters = DynamicParameters.SearchParameters(query, parameters, plan, queryVector, contextFilter);
-        return QueryFtsBatchAsync(connection, contextFilter, byHashIndex, plan.Expression, queryParameters, cancellationToken);
+        return QueryFtsBatchAsync(connection, contextFilter, byHashIndex, plan.Expression, queryParameters, query.EntryTypes, cancellationToken);
     }
 
     private Task<IReadOnlyList<MemorySearchResult>> QueryFallbackFtsBatchAsync(
@@ -59,17 +59,17 @@ public sealed partial class SqliteMemoryStore
         Guard.IsNotNull(plan.Fallback);
 
         var queryParameters = DynamicParameters.FallbackSearchParameters(query, parameters, plan, queryVector, contextFilter);
-        return QueryFtsBatchAsync(connection, contextFilter, byHashIndex, plan.Fallback, queryParameters, cancellationToken);
+        return QueryFtsBatchAsync(connection, contextFilter, byHashIndex, plan.Fallback, queryParameters, query.EntryTypes, cancellationToken);
     }
 
     private async Task<IReadOnlyList<MemorySearchResult>> QueryFtsBatchAsync(SqliteConnection connection, ContextFilter contextFilter,
-        ByHashIndex byHashIndex, string expression, DynamicParameters queryParameters, CancellationToken cancellationToken)
+        ByHashIndex byHashIndex, string expression, DynamicParameters queryParameters, EntryType entryTypes, CancellationToken cancellationToken)
     {
         try
         {
             var rows = (await connection.QueryAsync<SearchRow>(
                     new CommandDefinition(
-                        MemorySql.SearchByFilter.Replace("{filter}", contextFilter.Filter), queryParameters,
+                        MemorySql.SearchByTypes(entryTypes).Replace("{filter}", contextFilter.Filter), queryParameters,
                         cancellationToken: cancellationToken))).ToList();
 
             foreach (var row in rows)

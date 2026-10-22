@@ -665,11 +665,11 @@ public sealed partial class SqliteMemoryStore(
     {
         var vectorParameters = DynamicParameters.VectorParameters(query, parameters, queryVector, ctx);
         var contentRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(MemorySql.VectorSearchByFilter, vectorParameters,
+                    new CommandDefinition(MemorySql.VectorSearchByTypes(query.EntryTypes), vectorParameters,
                         cancellationToken: cancellationToken)))
             .ToList();
         var structureRows = (await connection.QueryAsync<VectorRow>(
-                    new CommandDefinition(MemorySql.StructureVectorSearchByFilter, vectorParameters,
+                    new CommandDefinition(MemorySql.VectorSearchByTypes(query.EntryTypes, structure: true), vectorParameters,
                         cancellationToken: cancellationToken)))
             .ToList();
 
