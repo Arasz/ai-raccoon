@@ -65,12 +65,12 @@ public sealed class EntryTypeClassifierTests
     [InlineData("9f2c.md", "hermes/20260806_215718_fd7f66", EntryType.Memory)]
     [InlineData("9f2c.md", null, EntryType.Memory)]
     public void Classify_KeysOnTheRowsShape(string? path, string? sourceFile, EntryType expected) =>
-        EntryTypeClassifier.Classify(path, sourceFile).ShouldBe(expected);
+        new EntryTypeClassifier().Classify(path, sourceFile).ShouldBe(expected);
 
     /// <summary>An empty source file is no locator at all: the row is a memory.</summary>
     [Fact]
     public void Classify_AnEmptySourceFile_IsAMemory() =>
-        EntryTypeClassifier.Classify("docs/guide.md", "").ShouldBe(EntryType.Memory);
+        new EntryTypeClassifier().Classify("docs/guide.md", "").ShouldBe(EntryType.Memory);
 
     /// <summary>The stored form and the wire form agree in both directions.</summary>
     [Theory]
@@ -78,14 +78,15 @@ public sealed class EntryTypeClassifierTests
     [InlineData(EntryType.Code, "code")]
     [InlineData(EntryType.File, "file")]
     public void ToStoredValue_NamesEveryType(EntryType type, string expected) =>
-        EntryTypeClassifier.ToStoredValue(type).ShouldBe(expected);
+        new EntryTypeClassifier().ToStoredValue(type).ShouldBe(expected);
 
     [Fact]
     public void FromStoredValue_ReadsBackWhatToStoredValueWrote()
     {
+        var classifier = new EntryTypeClassifier();
         foreach (var type in new[] { EntryType.Memory, EntryType.Code, EntryType.File })
         {
-            EntryTypeClassifier.FromStoredValue(EntryTypeClassifier.ToStoredValue(type)).ShouldBe(type);
+            classifier.FromStoredValue(classifier.ToStoredValue(type)).ShouldBe(type);
         }
     }
 
@@ -93,9 +94,10 @@ public sealed class EntryTypeClassifierTests
     [Fact]
     public void AnUnknownStoredValue_IsNone()
     {
-        EntryTypeClassifier.FromStoredValue(null).ShouldBe(EntryType.None);
-        EntryTypeClassifier.FromStoredValue("transcript").ShouldBe(EntryType.None);
-        EntryTypeClassifier.ToStoredValue(EntryType.None).ShouldBeNull();
+        var classifier = new EntryTypeClassifier();
+        classifier.FromStoredValue(null).ShouldBe(EntryType.None);
+        classifier.FromStoredValue("transcript").ShouldBe(EntryType.None);
+        classifier.ToStoredValue(EntryType.None).ShouldBeNull();
     }
 
     /// <summary>The types are flags, so a caller can ask for a set of them.</summary>

@@ -12,6 +12,7 @@ using Shouldly;
 using Xunit;
 using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -40,10 +41,10 @@ public sealed class DirectIngestEmbedDeferralTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         var fileIngestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, _embeddings,
             NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, _pump, new IndexableFileWalk(), TestData.SharedScope);
+            NullWatchStore.Instance, _pump, new IndexableFileWalk(), TestData.SharedScope, new EntryTypeClassifier());
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, _entryEmbedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory),
-            _pump, NoOpMeasurementRecorder.Instance, TestData.SharedScope);
+            _pump, NoOpMeasurementRecorder.Instance, TestData.SharedScope, new EntryTypeClassifier());
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

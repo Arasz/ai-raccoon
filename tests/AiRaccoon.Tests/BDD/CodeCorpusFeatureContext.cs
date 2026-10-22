@@ -232,11 +232,11 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         var codeFileTypeMatcher = new CodeFileTypeMatcher();
         var codeIngestor = new CodeIngestor(codeFileTypeMatcher, new StubCodeChunker(), TimeProvider);
         var fileIngestor = new FileIngestor(matcher, sourceStore, TimeProvider, embeddings,
-            new IgnoreRulesProvider(), codeFileTypeMatcher, codeIngestor, WatchStore, EmbedDrainPump, new IndexableFileWalk(), TestData.SharedScope);
+            new IgnoreRulesProvider(), codeFileTypeMatcher, codeIngestor, WatchStore, EmbedDrainPump, new IndexableFileWalk(), TestData.SharedScope, new EntryTypeClassifier());
         var noiseFilteringService = new NoiseFilteringService([]);
         return new SqliteMemoryStore(Factory, sourceStore, fileIngestor, embedder, TimeProvider,
             NullLogger<SqliteMemoryStore>.Instance, noiseFilteringService, Settings, EmbedDrainPump,
-            NoOpMeasurementRecorder.Instance, TestData.SharedScope);
+            NoOpMeasurementRecorder.Instance, TestData.SharedScope, new EntryTypeClassifier());
     }
 
     private void ComposeWatchStack()

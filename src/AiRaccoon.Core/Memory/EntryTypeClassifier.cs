@@ -46,13 +46,13 @@ public sealed class EntryTypeClassifier : IEntryTypeClassifier
     ///         have been filed as documents.
     ///     </para>
     /// </summary>
-    public static EntryType Classify(string? path, string? sourceFile) =>
+    public EntryType Classify(string? path, string? sourceFile) =>
         !string.IsNullOrEmpty(sourceFile) && string.Equals(path, sourceFile, StringComparison.Ordinal)
             ? EntryType.File
             : EntryType.Memory;
 
     /// <summary>The stored form of a type: the wire name, or null for <see cref="EntryType.None" />.</summary>
-    public static string? ToStoredValue(EntryType type) => type switch
+    public string? ToStoredValue(EntryType type) => type switch
     {
         EntryType.Memory => MemoryName,
         EntryType.Code => CodeName,
@@ -61,7 +61,7 @@ public sealed class EntryTypeClassifier : IEntryTypeClassifier
     };
 
     /// <summary>The type a stored value names; <see cref="EntryType.None" /> for null or an unknown value.</summary>
-    public static EntryType FromStoredValue(string? value) => value switch
+    public EntryType FromStoredValue(string? value) => value switch
     {
         MemoryName => EntryType.Memory,
         CodeName => EntryType.Code,

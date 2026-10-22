@@ -11,6 +11,7 @@ using NSubstitute;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration;
 
@@ -47,7 +48,7 @@ public class FileIngestorSectionColumnTests : IDisposable
         _embedder = TestData.CreateEntryEmbedder(TestData.CreateEmbeddingService(), _modelMigrationLease, _timeProvider, new VecDimensionReconciler());
         _ingestor = new FileIngestor(matcher, new SqliteMemorySourceStore(factory), TimeProvider.System,
             TestData.CreateEmbeddingService(), NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
-            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
+            NullCodeIngestor.Instance, NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryTypeClassifier());
 
         using var scopeCmd = _conn.CreateCommand();
         scopeCmd.CommandText = "INSERT INTO settings (key, value) VALUES (@key, @scope);";

@@ -30,7 +30,8 @@ public sealed class FileIngestor(
     IWatchStore watchStore,
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IndexableFileWalk walk,
-    ISharedProjectScope scope) : IFileIngestor
+    ISharedProjectScope scope,
+    IEntryTypeClassifier entryTypeClassifier) : IFileIngestor
 {
     private static readonly FileSniffer Sniffer = new();
 
@@ -363,7 +364,7 @@ public sealed class FileIngestor(
                                 updatedAt = now,
                                 sourceId = source.Id,
                                 // The row mirrors the file it came from: a document.
-                                entryType = EntryTypeClassifier.ToStoredValue(EntryType.File),
+                                entryType = entryTypeClassifier.ToStoredValue(EntryType.File),
                                 chunkIndex = row.Position,
                                 totalChunks
                             },

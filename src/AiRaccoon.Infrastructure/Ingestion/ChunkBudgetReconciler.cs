@@ -73,7 +73,8 @@ public sealed partial class ChunkBudgetReconciler(
     IEmbeddingService embeddingService,
     TimeProvider timeProvider,
     Func<IMemoryStore> memoryStore,
-    ILogger<ChunkBudgetReconciler> logger) : IChunkBudgetReconciler
+    ILogger<ChunkBudgetReconciler> logger,
+    IEntryTypeClassifier entryTypeClassifier) : IChunkBudgetReconciler
 {
     /// <summary>How many server starts a permanently-unprovable group may withhold the stamp before it is
     /// left terminal for this budget (config-D F5) — the bound that stops the migration re-opening forever.</summary>
@@ -167,7 +168,9 @@ public sealed partial class ChunkBudgetReconciler(
                 continue;
             }
 
-            await ReplaceNoteGroupAsync(connection, group, rows, pieces, pieceHashes, now, cancellationToken);
+            await ReplaceNoteGroupAsync(connection, group, rows, pieces, pieceHashes, now,
+                // A note group is agent-written: a memory, whatever it cites.
+                entryTypeClassifier.ToStoredValue(EntryType.Memory), cancellationToken);
             notesRechunked++;
             if (rows[0].SourceFile is not null)
             {
@@ -330,7 +333,7 @@ public sealed partial class ChunkBudgetReconciler(
     /// </summary>
     private static async Task ReplaceNoteGroupAsync(SqliteConnection connection, NoteGroup group,
         IReadOnlyList<GroupRow> rows, IReadOnlyList<string> pieces, IReadOnlySet<string> pieceHashes,
-        long now, CancellationToken cancellationToken)
+        long now, string? entryType, CancellationToken cancellationToken)
     {
         var template = rows[0];
         await connection.InWriteTransactionAsync(async () =>
@@ -366,8 +369,7 @@ public sealed partial class ChunkBudgetReconciler(
                         updatedAt = now,
                         sourceId = template.SourceId,
                         ttlDays = template.TtlDays,
-                        // A note group is agent-written: a memory, whatever it cites.
-                        entryType = EntryTypeClassifier.ToStoredValue(EntryType.Memory),
+                        entryType = entryType,
                         // Plain notes keep WriteChunks' sentinel; the phase-end repair positions citing notes.
                         chunkIndex = -1,
                         totalChunks = 0

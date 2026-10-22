@@ -79,6 +79,11 @@ public static partial class AppRegistrations
             // depend on the contract and not on a static helper. Registered in the core graph —
             // the CLI graph builds the same stores.
             services.AddRequiredSingleton<ISharedProjectScope, SharedProjectScope>();
+            // The rule that says which kind a row holds, injected rather than called statically: the
+            // write paths that declare a kind and the repair paths that carry one all ask the same
+            // object. Registered in the CORE graph, not the server-only one — the CLI graph builds
+            // the same stores, and the store and the file ingestor both take it.
+            services.AddRequiredSingleton<IEntryTypeClassifier, EntryTypeClassifier>();
             services.RegisterStores();
         }
 
@@ -189,7 +194,6 @@ public static partial class AppRegistrations
         private void RegisterBankMaintenanceBackgrounbdService()
         {
             services.AddRequiredSingleton<ISweepService, SweepService>();
-            services.AddRequiredSingleton<IEntryTypeClassifier, EntryTypeClassifier>();
             services.AddSingleton<MaintenanceJobRunner>();
             // The list is the schedule (ADR-0070). Order matters: a reclaim after the backfill
             // collects the pages the backfill's deletes freed as well, and PendingEmbedJob is LAST
@@ -422,7 +426,8 @@ public static partial class AppRegistrations
                     sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<TimeProvider>(),
                     () => sp.GetRequiredService<IMemoryStore>(),
-                    sp.GetRequiredService<ILogger<ChunkBudgetReconciler>>()));
+                    sp.GetRequiredService<ILogger<ChunkBudgetReconciler>>(),
+                    sp.GetRequiredService<IEntryTypeClassifier>()));
             // The drain's one log + metric surface (LANE P4): registered beside EntryEmbedder so
             // the narrower CLI graph RegisterCoreMemoryServices builds on its own can resolve it
             // too — EmbedDrainService (RegisterEmbedDrainServices) resolves the same singleton.

@@ -32,7 +32,8 @@ public sealed partial class SqliteMemoryStore(
     ISettingsStore settings,
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IMeasurementRecorder measurements,
-    ISharedProjectScope scope)
+    ISharedProjectScope scope,
+    IEntryTypeClassifier entryTypeClassifier)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
@@ -53,9 +54,10 @@ public sealed partial class SqliteMemoryStore(
         IMeasurementRecorder measurements,
         INoiseShadowObserver noiseShadowObserver,
         INoiseEntryStore noiseEntryStore,
-        ISharedProjectScope scope)
+        ISharedProjectScope scope,
+        IEntryTypeClassifier entryTypeClassifier)
         : this(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService, settings,
-            embedDrainPump, measurements, scope)
+            embedDrainPump, measurements, scope, entryTypeClassifier)
     {
         _noiseShadowObserver = noiseShadowObserver;
         _noiseEntryStore = noiseEntryStore;
@@ -126,8 +128,8 @@ public sealed partial class SqliteMemoryStore(
         var hash = ContentHash.Of(path, chunks[0]);
         foreach (var chunk in chunks)
         {
-            await WriteChunks.InsertAsync(connection, ContentHash.Of(path, chunk), path, chunk, source, request,
-                bucket, now, cancellationToken);
+            await connection.InsertAsync(ContentHash.Of(path, chunk), path, chunk, source, request,
+                bucket, now, entryTypeClassifier, cancellationToken);
         }
 
         var row = bucket.Scope == SharedScope
@@ -400,7 +402,7 @@ public sealed partial class SqliteMemoryStore(
                         // it cites. Deriving it from the row's shape would let a caller name the
                         // note's own synthetic path (sha256 of the content) and be filed as a
                         // document - the shape rule then reads a caller-supplied string.
-                        entryType = EntryTypeClassifier.ToStoredValue(EntryType.Memory),
+                        entryType = entryTypeClassifier.ToStoredValue(EntryType.Memory),
                         chunkIndex = -1,
                         totalChunks = 0
                     },

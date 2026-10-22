@@ -9,6 +9,7 @@ using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -58,13 +59,13 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         {
             return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
                 NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-                NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
+                NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryTypeClassifier());
         }
 
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
         return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(), codeIngestor,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryTypeClassifier());
     }
 
     [RetryFact]
@@ -253,7 +254,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
         return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             new IgnoreRulesProvider(), new CodeFileTypeMatcher(), codeIngestor,
-            watchStore ?? NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
+            watchStore ?? NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryTypeClassifier());
     }
 
     private async Task<IWatchStore> RegisterWatchAsync(string path)

@@ -106,7 +106,7 @@ public sealed class ChunkBackfill(
                             sourceId = row.SourceId,
                             // The row keeps the kind its writer declared; the shape is only the
                             // fallback for a row that predates the column.
-                            entryType = EntryTypeClassifier.ToStoredValue(
+                            entryType = entryTypeClassifier.ToStoredValue(
                                 entryTypeClassifier.Resolve(row.EntryType, row.Path, row.SourceFile)),
                             // Position unknown here — the bank-wide recompute below fills it in.
                             chunkIndex = -1,

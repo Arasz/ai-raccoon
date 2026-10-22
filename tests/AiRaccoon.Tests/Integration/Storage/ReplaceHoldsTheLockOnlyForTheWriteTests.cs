@@ -13,6 +13,7 @@ using Shouldly;
 using Xunit;
 using xRetry.v3;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -55,12 +56,12 @@ public sealed class ReplaceHoldsTheLockOnlyForTheWriteTests : IDisposable
         var realIngestor = new FileIngestor(
             new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]), sourceStore, time,
             embeddings, NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope);
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryTypeClassifier());
         var blockingIngestor = new BlockingFileIngestor(realIngestor);
         var store = new SqliteMemoryStore(_factory, sourceStore, blockingIngestor,
             TestData.CreateEntryEmbedder(embeddings, Substitute.For<IModelMigrationLease>(), time, new VecDimensionReconciler()), time,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory),
-            NullEmbedDrainPump.Instance, NoOpMeasurementRecorder.Instance, TestData.SharedScope);
+            NullEmbedDrainPump.Instance, NoOpMeasurementRecorder.Instance, TestData.SharedScope, new EntryTypeClassifier());
 
         await store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), ct);
 

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
+using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 

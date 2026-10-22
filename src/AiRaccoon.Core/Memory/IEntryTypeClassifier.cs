@@ -27,4 +27,17 @@ public interface IEntryTypeClassifier
     ///     classified by its own shape.
     /// </summary>
     EntryType Resolve(string? storedType, string? path, string? sourceFile);
+
+    /// <summary>
+    ///     The kind a row holds, from the row's own shape — the fallback for a row that predates
+    ///     the column. A writer declares its row's kind; this is what a row without a declaration
+    ///     is filed as.
+    /// </summary>
+    EntryType Classify(string? path, string? sourceFile);
+
+    /// <summary>The stored form of a type: the wire name, or null for <see cref="EntryType.None" />.</summary>
+    string? ToStoredValue(EntryType type);
+
+    /// <summary>The type a stored value names; <see cref="EntryType.None" /> for null or an unknown value.</summary>
+    EntryType FromStoredValue(string? value);
 }
