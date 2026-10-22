@@ -26,10 +26,12 @@ public sealed class SettingsRefusalBodyTests
             new HttpClient(new RefusingHandler(Refusal)) { BaseAddress = new Uri("http://127.0.0.1:1/") },
             "test-token", CliSettingsBackend.RequestDeadline);
 
-        var error = await Should.ThrowAsync<SettingsServerRefusedException>(() =>
+        var error = await Should.ThrowAsync<HttpRequestException>(() =>
             store.SetSettingAsync("ingest.scope.shared", "[\"/machine\"]", TestContext.Current.CancellationToken));
 
         error.Message.ShouldContain(Refusal);
+        error.StatusCode.ShouldBe(HttpStatusCode.BadRequest,
+            "the status must stay on the exception - the CLI maps it to the exit code that names the case");
     }
 
     /// <summary>

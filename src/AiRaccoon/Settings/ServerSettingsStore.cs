@@ -362,9 +362,13 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
 
         if (!response.IsSuccessStatusCode)
         {
+            // An HttpRequestException with the status, so the CLI's status-to-exit-code mapping
+            // still names the case (400 -> RequestRejected, 404 -> EndpointMissing) - but the
+            // message carries the server's refusal, which names what to do ("repair that owner").
             var body = await ReadRefusalBodyAsync(response.Content, cancellationToken);
-            throw new SettingsServerRefusedException(
-                $"ai-raccoon: the settings server refused this request ({(int)response.StatusCode} {response.ReasonPhrase}): {body}");
+            throw new HttpRequestException(
+                $"ai-raccoon: the settings server refused this request ({(int)response.StatusCode} {response.ReasonPhrase}): {body}",
+                inner: null, response.StatusCode);
         }
     }
 }
