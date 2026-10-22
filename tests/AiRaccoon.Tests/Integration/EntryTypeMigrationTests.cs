@@ -8,10 +8,12 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration;
 
 /// <summary>
-///     v20: <c>entries.entry_type</c> — the entry type a row holds, denormalised so the query
-///     path can filter by it. The backfill classifies every row from its SOURCE, because the
-///     row's own shape cannot say it: a transcript carries a source file and is chunked like an
-///     ingested document, so the cheap signature would file every transcript as a document.
+///     v20: <c>entries.entry_type</c> — the KIND a row holds, denormalised so the query path can
+///     filter by it. The column is NOT NULL with the default <c>none</c>: an entry has exactly one
+///     kind, and a row that carries none yet says so in the column rather than by a null. The
+///     backfill classifies every row by its SHAPE, because the row's own source cannot say it: a
+///     transcript carries a source file and is chunked like an ingested document, so the cheap
+///     signature would file every transcript as a document.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
@@ -52,7 +54,9 @@ public sealed class EntryTypeMigrationTests
         (await ReadEntryTypeAsync(connection, "plain-note-hash")).ShouldBe("memory");
     }
 
-    /// <summary>The backfill only fills NULL types: a rerun never clobbers an explicit one.</summary>
+    /// <summary>
+    ///     The backfill only fills rows that carry no kind: a rerun never clobbers an explicit one.
+    /// </summary>
     [RetryFact]
     public async Task EnsureAsync_PreservesAnExplicitType_WhenRerun()
     {
@@ -64,7 +68,25 @@ public sealed class EntryTypeMigrationTests
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
 
         (await ReadEntryTypeAsync(connection, "note-hash")).ShouldBe("file",
-            "the backfill only fills NULL types - a rerun must never clobber an explicit type");
+            "the backfill only fills rows that carry no kind - a rerun must never clobber an explicit one");
+    }
+
+    /// <summary>
+    ///     The column is NOT NULL with the default <c>none</c>: a row that carries no kind says so
+    ///     in the column, and the column cannot hold a null at all.
+    /// </summary>
+    [RetryFact]
+    public async Task EnsureAsync_TheColumnIsNotNull_WithNoneAsItsDefault()
+    {
+        await using var connection = await OpenLegacyBankAsync();
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var column = (await connection.QueryAsync<(string Name, long NotNull, string? DefaultValue)>(
+                "SELECT name, \"notnull\", dflt_value FROM pragma_table_info('entries') WHERE name = 'entry_type'"))
+            .Single();
+        column.NotNull.ShouldBe(1, "the kind column is NOT NULL: a row holds one kind, and 'none' says it has none");
+        column.DefaultValue.ShouldBe("'none'");
     }
 
     /// <summary>Crash-dirty: the column exists with only half the rows backfilled.</summary>
@@ -74,7 +96,7 @@ public sealed class EntryTypeMigrationTests
         await using var connection = await OpenLegacyBankAsync();
         await SeedEntryAsync(connection, "note-hash", path: "9f2c.md", sourceFile: null);
         await SeedEntryAsync(connection, "document-hash", path: "docs/guide.md", sourceFile: "docs/guide.md");
-        await connection.ExecuteAsync("ALTER TABLE entries ADD COLUMN entry_type TEXT");
+        await connection.ExecuteAsync("ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none'");
         await connection.ExecuteAsync("UPDATE entries SET entry_type = 'memory' WHERE hash = 'note-hash'");
         await StampV19Async(connection);
 
@@ -83,6 +105,25 @@ public sealed class EntryTypeMigrationTests
         (await ReadEntryTypeAsync(connection, "note-hash")).ShouldBe("memory");
         (await ReadEntryTypeAsync(connection, "document-hash")).ShouldBe("file",
             "the half-done backfill must finish on the rerun");
+    }
+
+    /// <summary>
+    ///     A bank touched by an earlier build of this schema carries the column as NULLABLE, and a
+    ///     row the backfill has not reached is NULL there. The rerun has to finish those rows too,
+    ///     or a NULL row is a row the typed query cannot place — the same state written two ways.
+    /// </summary>
+    [RetryFact]
+    public async Task EnsureAsync_WithTheNullableColumnOfAnEarlierBuild_FinishesItsNullRows()
+    {
+        await using var connection = await OpenLegacyBankAsync();
+        await SeedEntryAsync(connection, "document-hash", path: "docs/guide.md", sourceFile: "docs/guide.md");
+        await connection.ExecuteAsync("ALTER TABLE entries ADD COLUMN entry_type TEXT");
+        await StampV19Async(connection);
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        (await ReadEntryTypeAsync(connection, "document-hash")).ShouldBe("file",
+            "a NULL row from a bank touched by an earlier build must still be classified");
     }
 
     /// <summary>

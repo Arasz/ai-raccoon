@@ -170,7 +170,7 @@ public sealed partial class ChunkBudgetReconciler(
 
             await ReplaceNoteGroupAsync(connection, group, rows, pieces, pieceHashes, now,
                 // A note group is agent-written: a memory, whatever it cites.
-                entryTypeClassifier.ToStoredValue(EntryType.Memory), cancellationToken);
+                entryTypeClassifier.ToStoredValue(EntryKind.Memory), cancellationToken);
             notesRechunked++;
             if (rows[0].SourceFile is not null)
             {

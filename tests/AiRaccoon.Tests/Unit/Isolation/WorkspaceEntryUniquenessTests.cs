@@ -106,7 +106,7 @@ public sealed class WorkspaceEntryUniquenessTests : IDisposable
                 createdAt = now,
                 updatedAt = now,
                 sourceId = (long?)null,
-                entryType = new EntryTypeClassifier().ToStoredValue(EntryType.Memory),
+                entryType = new EntryTypeClassifier().ToStoredValue(EntryKind.Memory),
                 chunkIndex = -1,
                 totalChunks = 0
             },

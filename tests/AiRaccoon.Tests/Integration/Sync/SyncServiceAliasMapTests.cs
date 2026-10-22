@@ -70,7 +70,8 @@ public sealed class SyncServiceAliasMapTests : IDisposable
             structure_embedding BLOB NULL,
             chunk_index INTEGER NOT NULL DEFAULT 0,
             total_chunks INTEGER NOT NULL DEFAULT 0,
-            source_id INTEGER NULL
+            source_id INTEGER NULL,
+            entry_type TEXT NOT NULL DEFAULT 'none'
         );
         CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_shared_bucket
             ON entries(path, hash) WHERE scope = 'shared';

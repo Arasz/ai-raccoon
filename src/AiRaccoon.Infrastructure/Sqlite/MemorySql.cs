@@ -5,6 +5,20 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// <summary>SQL over our memory.db tables (see docs/work/archive/2026-08-03-native-memory-plan.md §2.2); kept in one place so the store stays thin.</summary>
 internal static class MemorySql
 {
+    /// <summary>
+    ///     The kind a row holds when nothing declared one, as SQL over the given table alias: a row
+    ///     that MIRRORS a file on disk has path = source_file; every other row is agent-written
+    ///     memory.
+    ///     <para>
+    ///         This is the SQL twin of <see cref="EntryTypeClassifier.Classify" />, and the two must
+    ///         agree — a comparison test runs both over one fixture. Two call sites need it: the v20
+    ///         backfill and the sync merge, so the rule is written once rather than twice.
+    ///     </para>
+    /// </summary>
+    public static string EntryTypeFromShape(string tableAlias) =>
+        $"CASE WHEN {tableAlias}source_file IS NOT NULL AND {tableAlias}source_file <> '' "
+        + $"AND {tableAlias}source_file = {tableAlias}path THEN 'file' ELSE 'memory' END";
+
     // ON CONFLICT DO NOTHING is bare — expression/partial indexes can't be a conflict target — so
     // concurrent same-bucket inserts converge; the loser re-reads by bucket key
     // (docs/work/archive/2026-08-06-extraction-followups-plan.md).

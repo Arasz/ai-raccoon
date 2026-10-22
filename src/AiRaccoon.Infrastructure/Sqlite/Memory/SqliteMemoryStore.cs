@@ -402,7 +402,7 @@ public sealed partial class SqliteMemoryStore(
                         // it cites. Deriving it from the row's shape would let a caller name the
                         // note's own synthetic path (sha256 of the content) and be filed as a
                         // document - the shape rule then reads a caller-supplied string.
-                        entryType = entryTypeClassifier.ToStoredValue(EntryType.Memory),
+                        entryType = entryTypeClassifier.ToStoredValue(EntryKind.Memory),
                         chunkIndex = -1,
                         totalChunks = 0
                     },

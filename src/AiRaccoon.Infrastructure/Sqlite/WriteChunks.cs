@@ -55,7 +55,7 @@ internal static class WriteChunks
                             updatedAt = now,
                             sourceId = source.Id,
                             // An agent write is a memory, whatever it cites (see the write path).
-                            entryType = entryTypeClassifier.ToStoredValue(EntryType.Memory),
+                            entryType = entryTypeClassifier.ToStoredValue(EntryKind.Memory),
                             // Position unknown here — this is an append to a (ctx, source_file) group, not
                             // a re-chunk of a whole document; RecomputeChunkColumnsForContext fills it in.
                             chunkIndex = -1,

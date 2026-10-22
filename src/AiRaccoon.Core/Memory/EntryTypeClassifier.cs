@@ -1,36 +1,39 @@
 namespace AiRaccoon.Core.Memory;
 
-/// <summary>Resolves a declared entry kind, falling back to a legacy row's path and source file.</summary>
+/// <summary>
+///     Resolves the kind a row holds: the kind its writer declared, or — for a row that carries
+///     none — the kind the row's own shape implies.
+/// </summary>
 public sealed class EntryTypeClassifier : IEntryTypeClassifier
 {
+    /// <summary>The stored name of a memory.</summary>
+    public const string MemoryName = "memory";
+
+    /// <summary>The stored name of an ingested document.</summary>
+    public const string FileName = "file";
+
+    /// <summary>The stored name of a row that carries no kind yet.</summary>
+    public const string NoneName = "none";
+
     /// <summary>
     ///     The kind a row holds. A declared kind wins; a row with none is classified by its own
     ///     shape. The stored value is read through <see cref="FromStoredValue" />, so a row whose
     ///     stored value is not a kind this build knows falls back to the shape rather than
     ///     carrying a value nothing can read.
     /// </summary>
-    public EntryType Resolve(string? storedType, string? path, string? sourceFile)
+    public EntryKind Resolve(string? storedKind, string? path, string? sourceFile)
     {
-        var declared = FromStoredValue(storedType);
-        return declared != EntryType.None ? declared : Classify(path, sourceFile);
+        var declared = FromStoredValue(storedKind);
+        return declared != EntryKind.None ? declared : Classify(path, sourceFile);
     }
 
-    /// <summary>The wire name of a memory.</summary>
-    public const string MemoryName = "memory";
-
-    /// <summary>The wire name of a code chunk.</summary>
-    public const string CodeName = "code";
-
-    /// <summary>The wire name of an ingested document.</summary>
-    public const string FileName = "file";
-
     /// <summary>
-    ///     The entry type a row holds, from the row's own shape — the FALLBACK for a row that
-    ///     predates the column (the migration's rule), not what a writer uses. A writer DECLARES
-    ///     its row's kind: the write path knows it is writing an agent's memory and the ingest
-    ///     path knows it is mirroring a file. Deriving the kind from the shape instead would let a
-    ///     caller name a note's own synthetic path (sha256 of the content) and have the note filed
-    ///     as a document — the rule would then read a caller-supplied string.
+    ///     The kind a row holds, from the row's own shape — the FALLBACK for a row that carries no
+    ///     kind, not what a writer uses. A writer DECLARES its row's kind: the write path knows it
+    ///     is writing an agent's memory and the ingest path knows it is mirroring a file. Deriving
+    ///     the kind from the shape instead would let a caller name a note's own synthetic path
+    ///     (sha256 of the content) and have the note filed as a document — the rule would then read
+    ///     a caller-supplied string.
     ///     <para>
     ///         A row that MIRRORS a file on disk has <c>path = source_file</c>: the file's path is
     ///         both where it came from and what it is. Every other row in the entries table is
@@ -46,26 +49,30 @@ public sealed class EntryTypeClassifier : IEntryTypeClassifier
     ///         have been filed as documents.
     ///     </para>
     /// </summary>
-    public EntryType Classify(string? path, string? sourceFile) =>
+    public EntryKind Classify(string? path, string? sourceFile) =>
         !string.IsNullOrEmpty(sourceFile) && string.Equals(path, sourceFile, StringComparison.Ordinal)
-            ? EntryType.File
-            : EntryType.Memory;
+            ? EntryKind.File
+            : EntryKind.Memory;
 
-    /// <summary>The stored form of a type: the wire name, or null for <see cref="EntryType.None" />.</summary>
-    public string? ToStoredValue(EntryType type) => type switch
+    /// <summary>
+    ///     The stored form of a kind: the wire name, or <c>none</c> for the unclassified kind. A
+    ///     SET has no stored form — a row holds one kind — so a set is refused loudly rather than
+    ///     written as a value nothing can read.
+    /// </summary>
+    public string ToStoredValue(EntryKind kind) => kind switch
     {
-        EntryType.Memory => MemoryName,
-        EntryType.Code => CodeName,
-        EntryType.File => FileName,
-        _ => null
+        EntryKind.None => NoneName,
+        EntryKind.Memory => MemoryName,
+        EntryKind.File => FileName,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind,
+            "A row holds one kind; a set of kinds is the query parameter's vocabulary, not a row's")
     };
 
-    /// <summary>The type a stored value names; <see cref="EntryType.None" /> for null or an unknown value.</summary>
-    public EntryType FromStoredValue(string? value) => value switch
+    /// <summary>The kind a stored value names; <see cref="EntryKind.None" /> for null or an unknown value.</summary>
+    public EntryKind FromStoredValue(string? value) => value switch
     {
-        MemoryName => EntryType.Memory,
-        CodeName => EntryType.Code,
-        FileName => EntryType.File,
-        _ => EntryType.None
+        MemoryName => EntryKind.Memory,
+        FileName => EntryKind.File,
+        _ => EntryKind.None
     };
 }

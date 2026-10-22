@@ -457,15 +457,27 @@ public partial class SyncService(
                     // suppresses the content it describes.
                     var scopedFold =
                         $"CASE WHEN {ProjectRows.Scope("r.")} THEN {foldedRemoteProject} ELSE r.project_id END";
+                    // The kind a merged row carries. A remote on schema v20 carries its own kind:
+                    // take it, but only when it names a kind this build knows — a remote's 'none'
+                    // (or a value this build does not know) is not a declaration, so the row is
+                    // classified by its SHAPE instead, exactly as the v20 backfill does. A remote
+                    // WITHOUT the column (an older peer) has no kind to take, so its rows are
+                    // classified by shape too.
+                    var remoteHasEntryType = await ColumnExistsAsync(conn, "remote", "entries",
+                        "entry_type", cancellationToken);
+                    var mergedEntryType = remoteHasEntryType
+                        ? $"CASE WHEN r.entry_type IN ('memory', 'file') THEN r.entry_type "
+                          + $"ELSE {MemorySql.EntryTypeFromShape("r.")} END"
+                        : MemorySql.EntryTypeFromShape("r.");
                     mergeEntries.CommandText = $"""
                                                INSERT OR IGNORE INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
                                                                                workspace_id, agent_id, created_at, updated_at,
                                                                                access_count, last_accessed_at, rating, ttl_days,
-                                                                               embed_state, embedding, chunk_index)
+                                                                               embed_state, embedding, chunk_index, entry_type)
                                                SELECT r.hash, r.path, r.value, r.source_file, r.section, r.scope, {scopedFold}, r.context_label,
                                                       r.workspace_id, r.agent_id, r.created_at, r.updated_at,
                                                       r.access_count, r.last_accessed_at, r.rating, r.ttl_days,
-                                                      'pending', NULL, -1
+                                                      'pending', NULL, -1, {mergedEntryType}
                                                FROM remote.entries r
                                                WHERE r.workspace_id IS NULL
                                                  -- A remote pushed by an older peer may still hold a row with

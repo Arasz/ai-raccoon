@@ -113,7 +113,7 @@ public sealed class EntryTypeWriteTests : IDisposable
         (await ReadEntryTypeAsync("acme")).ShouldBe("file");
     }
 
-    /// <summary>Every row the write paths produce carries a type - none is left unclassified.</summary>
+    /// <summary>Every row the write paths produce carries a kind - none is left unclassified.</summary>
     [RetryFact]
     public async Task NoWrittenRow_IsLeftUnclassified()
     {
@@ -121,8 +121,8 @@ public sealed class EntryTypeWriteTests : IDisposable
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         var untyped = await connection.ExecuteScalarAsync<long>(
-            "SELECT count(*) FROM entries WHERE entry_type IS NULL");
-        untyped.ShouldBe(0, "a row without a type is a row the query cannot place");
+            "SELECT count(*) FROM entries WHERE entry_type = 'none'");
+        untyped.ShouldBe(0, "a row without a kind is a row the query cannot place");
     }
 
     private async Task<string?> ReadEntryTypeAsync(string projectId)

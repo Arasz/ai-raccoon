@@ -190,7 +190,7 @@ internal static class MemorySchema
                                               ttl_days INTEGER NULL,
                                               embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
                                               embedding BLOB NULL,
-                                              entry_type TEXT NULL,
+                                              entry_type TEXT NOT NULL DEFAULT 'none',
                                               heading_path TEXT NULL,
                                               structure_embedding BLOB NULL,
                                               chunk_index INTEGER NOT NULL DEFAULT -1,
@@ -1393,13 +1393,16 @@ internal static class MemorySchema
     ///     already partitioned is left alone, which makes the step safe to re-run after a crash.
     /// </summary>
     /// <summary>
-    ///     v19→v20: the entry type a row holds, denormalised onto <c>entries.entry_type</c> so the
-    ///     query path can filter by it without a join. The backfill classifies every row by its
-    ///     SHAPE: a row that MIRRORS a file on disk has <c>path = source_file</c> and is a document;
-    ///     every other row is agent-written memory — its path is a synthetic <c>&lt;sha256&gt;.md</c>
-    ///     and its source file is a locator (a transcript it came from, or a file it cites). The
-    ///     provenance channel cannot make that distinction: the write path calls anything with a
-    ///     non-transcript source file a file, which filed 654 of 2,150 agent notes as documents.
+    ///     v19→v20: the entry KIND a row holds, denormalised onto <c>entries.entry_type</c> so the
+    ///     query path can filter by it without a join. An entry has exactly one kind (the owner's
+    ///     ruling of 2026-10-22), so the column is NOT NULL with the default <c>none</c>: a row that
+    ///     carries no kind yet says so in the column rather than by a null. The backfill classifies
+    ///     every row by its SHAPE: a row that MIRRORS a file on disk has <c>path = source_file</c>
+    ///     and is a document; every other row is agent-written memory — its path is a synthetic
+    ///     <c>&lt;sha256&gt;.md</c> and its source file is a locator (a transcript it came from, or a
+    ///     file it cites). The provenance channel cannot make that distinction: the write path calls
+    ///     anything with a non-transcript source file a file, which filed 654 of 2,150 agent notes as
+    ///     documents.
     /// </summary>
     private static async Task MigrateToV20Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -1410,8 +1413,11 @@ internal static class MemorySchema
         {
             try
             {
+                // NOT NULL with a non-null default: SQLite accepts it on ADD COLUMN and does not
+                // rewrite the table, so only the backfill below costs anything. Every legacy row
+                // arrives as 'none' — the kind it has not been given yet.
                 await connection.ExecuteAsync(new CommandDefinition(
-                        "ALTER TABLE entries ADD COLUMN entry_type TEXT NULL", cancellationToken: cancellationToken));
+                        "ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none'", cancellationToken: cancellationToken));
             }
             catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
             {
@@ -1420,17 +1426,17 @@ internal static class MemorySchema
             }
         }
 
-        // Only NULL rows: an explicit type (a rerun, or a row the write path already typed) is
-        // never clobbered.
+        // Only rows that carry no kind: an explicit kind (a rerun, or a row the write path already
+        // typed) is never clobbered. 'none' is the marker the NOT NULL column carries, and NULL is
+        // the marker a bank touched by an earlier build of this schema carries — the same state
+        // written two ways, so the backfill has to read both. A bank with the column as NULL is
+        // real: this schema shipped as nullable first, and a row left NULL there is a row no
+        // typed query can place.
         await connection.ExecuteAsync(new CommandDefinition(
-            """
+            $"""
             UPDATE entries
-            SET entry_type = CASE
-                WHEN entries.source_file IS NOT NULL AND entries.source_file <> ''
-                     AND entries.source_file = entries.path THEN 'file'
-                ELSE 'memory'
-            END
-            WHERE entry_type IS NULL
+            SET entry_type = {MemorySql.EntryTypeFromShape("entries.")}
+            WHERE entry_type IS NULL OR entry_type = 'none'
             """, cancellationToken: cancellationToken));
     }
 
